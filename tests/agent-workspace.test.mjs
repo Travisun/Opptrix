@@ -118,6 +118,34 @@ test('delete/overwrite without sticky requires confirm handler', async () => {
   })
 })
 
+test('openReadableFile serves authorized files and rejects unknown root / traversal', async () => {
+  await withTmpDataDir(async () => {
+    const svc = new WorkspaceService()
+    const sessionId = 'file-stream-test'
+    await svc.ensureDefaultRoot(sessionId)
+    await svc.mkdir(sessionId, 'default', 'charts')
+    await svc.writeFile(sessionId, 'default', 'charts/a.png', 'fakepng')
+    const opened = await svc.openReadableFile(sessionId, 'default', 'charts/a.png')
+    assert.equal(opened.mime, 'image/png')
+    assert.ok(opened.size > 0)
+    assert.equal(opened.basename, 'a.png')
+
+    const probe = await svc.probeReadablePath(sessionId, 'default', 'charts/a.png')
+    assert.equal(probe.exists, true)
+    const missing = await svc.probeReadablePath(sessionId, 'default', 'charts/missing.png')
+    assert.equal(missing.exists, false)
+
+    await assert.rejects(
+      () => svc.openReadableFile(sessionId, 'grant_nosuch', 'x.png'),
+      /未知 root_id|未授权/,
+    )
+    await assert.rejects(
+      () => svc.openReadableFile(sessionId, 'default', '../outside.png'),
+      /路径|穿越|绝对|授权/,
+    )
+  })
+})
+
 test('sticky persists for session and clears on deleteSession', async () => {
   const sticky = new StickyPolicyStore()
   const sessionId = 'sticky-sess'

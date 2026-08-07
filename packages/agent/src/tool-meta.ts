@@ -717,6 +717,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '用户问可访问哪些目录、本对话有哪些授权工作区、能读哪些文件夹时首选。',
     compliance: '只读；返回 root_id/label/mode 与公共工作区摘要；勿用 get_project_info 代替；额外目录需 request_folder_access 或界面授权。',
   },
+  resolve_workspace_path_uri: {
+    packId: 'workspace',
+    usageGuide:
+      '消息内要引用工作区图片/视频/音频/文件时，生成 opptrix-ws:// URI；也可在写出文件后校验 exists。',
+    compliance:
+      'root_id + 相对 path；仅授权 root；返回 uri/exists/kind_hint，禁止返回本机绝对路径；消息引用须用 uri，禁止 file://。',
+  },
   shell_platform_status: {
     packId: 'workspace',
     usageGuide: '运行代码或安装依赖前，确认系统隔离环境是否就绪；不可用时向用户说明缺少组件。',

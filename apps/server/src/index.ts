@@ -5,7 +5,7 @@ import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
 import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
-import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore } from '@opptrix/agent-workspace'
+import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
@@ -1133,6 +1133,48 @@ app.delete<{ Params: { id: string; grantId: string } }>(
     return { status: 'removed' }
   },
 )
+
+app.get<{
+  Params: { id: string }
+  Querystring: { root_id?: string; path?: string }
+}>('/api/sessions/:id/workspace/file', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) {
+    return reply.code(404).send({ error: '对话不存在' })
+  }
+  const rootId = String(req.query.root_id ?? '').trim()
+  const relPath = String(req.query.path ?? '').trim()
+  if (!rootId) return reply.code(400).send({ error: '请指定工作区' })
+  if (!relPath) return reply.code(400).send({ error: '请指定文件路径' })
+
+  try {
+    const file = await getWorkspaceService().openReadableFile(req.params.id, rootId, relPath)
+    reply.header('Content-Type', file.mime)
+    reply.header('Content-Length', String(file.size))
+    reply.header('Content-Disposition', `inline; filename="${encodeURIComponent(file.basename)}"`)
+    return reply.send(fs.createReadStream(file.abs))
+  } catch (e) {
+    if (e instanceof PathEscapeError) {
+      return reply.code(403).send({ error: '无法访问该路径' })
+    }
+    if (e instanceof DenyPathError) {
+      return reply.code(403).send({ error: '该路径受保护，无法打开' })
+    }
+    if (e instanceof WorkspaceError) {
+      const message = e.message
+      if (message.includes('未知 root_id')) {
+        return reply.code(403).send({ error: '未授权访问该工作区' })
+      }
+      if (message.includes('不存在') || message.includes('不是文件')) {
+        return reply.code(404).send({ error: '文件不存在' })
+      }
+      if (message.includes('绝对路径') || message.includes('穿越')) {
+        return reply.code(403).send({ error: '无法访问该路径' })
+      }
+      return reply.code(400).send({ error: '无法打开文件' })
+    }
+    return reply.code(400).send({ error: '无法打开文件' })
+  }
+})
 
 app.post<{ Params: { id: string }; Body: { message_index: number } }>(
   '/api/sessions/:id/fork',

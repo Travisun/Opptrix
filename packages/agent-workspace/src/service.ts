@@ -38,6 +38,37 @@ import {
   type ShellRunResult,
 } from './shell/index.js'
 
+const EXT_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.aac': 'audio/aac',
+}
+
+function mimeFromBasename(name: string): string {
+  const lower = name.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  if (dot < 0) return 'application/octet-stream'
+  return EXT_MIME[lower.slice(dot)] ?? 'application/octet-stream'
+}
+
 export interface ConfirmHandler {
   (payload: {
     title: string
@@ -222,6 +253,55 @@ export class WorkspaceService {
       content: slice.toString('utf8'),
       truncated,
       size: buf.length,
+    }
+  }
+
+  /**
+   * Resolve an authorized file for HTTP streaming (read-only).
+   * Does not expose absolute paths to callers beyond the return value for the server stream.
+   */
+  async openReadableFile(
+    sessionId: string,
+    rootId: string,
+    relPath: string,
+  ): Promise<{ abs: string; size: number; mime: string; basename: string }> {
+    const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
+    assertReadable(grant)
+    let st
+    try {
+      st = await fs.stat(abs)
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+      if (code === 'ENOENT') {
+        throw new WorkspaceError('文件不存在')
+      }
+      throw err
+    }
+    if (!st.isFile()) {
+      throw new WorkspaceError('路径不是文件')
+    }
+    const basename = path.basename(abs)
+    return {
+      abs,
+      size: st.size,
+      mime: mimeFromBasename(basename),
+      basename,
+    }
+  }
+
+  /** Check whether path is under an authorized root (no absolute path in result). */
+  async probeReadablePath(
+    sessionId: string,
+    rootId: string,
+    relPath: string,
+  ): Promise<{ exists: boolean }> {
+    const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
+    assertReadable(grant)
+    try {
+      const st = await fs.stat(abs)
+      return { exists: st.isFile() }
+    } catch {
+      return { exists: false }
     }
   }
 

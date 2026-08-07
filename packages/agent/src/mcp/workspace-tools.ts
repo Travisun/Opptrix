@@ -18,7 +18,13 @@ import {
   type ShellSecretRef,
 } from '@opptrix/agent-workspace'
 import { prepareFuyaoDumpForAgent, type FuyaoDumpKind, type FuyaoDumpMode } from '@opptrix/market-data-store'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import {
+  buildOpptrixWsUri,
+  hintOpptrixWsKind,
+  isValidOpptrixWsRootId,
+  normalizeOpptrixWsRelPath,
+  resolveUserDataRoot,
+} from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
 import { TOOL_META } from '../tool-meta.js'
 import { getLocalDataCatalog, listLocalDataApis } from '../local-data-catalog.js'
@@ -518,6 +524,58 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           const b = requireBridge()
           const grants = await ws.listGrants(b.sessionId)
           return summarizeWorkspaceGrants(grants)
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'resolve_workspace_path_uri',
+      category: '工作区',
+      description:
+        '将已授权工作区内的相对路径解析为消息可用的 opptrix-ws:// URI（图片/视频/音频/文件引用）；不返回本机绝对路径',
+      parameters: S({
+        root_id: { type: 'string', description: '工作区 root_id（default / shared / grant_*）' },
+        path: { type: 'string', description: '相对文件路径' },
+      }, ['root_id', 'path']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const rootId = String(args.root_id ?? '').trim()
+          const relRaw = String(args.path ?? '').trim()
+          if (!isValidOpptrixWsRootId(rootId)) {
+            return {
+              ok: false,
+              error: 'root_id 无效（仅允许 default、shared 或 grant_*）',
+            }
+          }
+          const norm = normalizeOpptrixWsRelPath(relRaw)
+          if (!norm.ok) {
+            return { ok: false, error: norm.reason }
+          }
+          await ws.ensureDefaultRoot(b.sessionId)
+          const grants = await ws.listGrants(b.sessionId)
+          if (!grants.some(g => g.root_id === rootId)) {
+            return {
+              ok: false,
+              error: '未授权访问该工作区',
+              root_id: rootId,
+              path: norm.path,
+            }
+          }
+          const uri = buildOpptrixWsUri(rootId, norm.path)
+          const { exists } = await ws.probeReadablePath(b.sessionId, rootId, norm.path)
+          return {
+            ok: true,
+            uri,
+            root_id: rootId,
+            path: norm.path,
+            exists,
+            kind_hint: hintOpptrixWsKind(norm.path),
+            note: exists
+              ? '可在消息中直接使用该 uri 引用文件'
+              : '路径已授权且合法，但当前尚无该文件；写出后再引用即可',
+          }
         } catch (err) {
           return toolError(err)
         }

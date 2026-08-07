@@ -262,6 +262,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   http_fetch: 'workspace',
   request_folder_access: 'workspace',
   list_workspace_grants: 'workspace',
+  resolve_workspace_path_uri: 'workspace',
 
   shell_platform_status: 'workspace',
   shell_run: 'workspace',

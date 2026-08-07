@@ -233,6 +233,7 @@ const useStyles = makeStyles({
 interface Props {
   className?: string
   style?: React.CSSProperties
+  sessionId?: string | null
   selection: MessageSelection
   onQuote: () => void
   onEphemeralAsk: (
@@ -276,6 +277,7 @@ function TurnCopyButton({ content }: { content: string }) {
 export default function MessageSelectionToolbar({
   className,
   style,
+  sessionId = null,
   selection,
   onQuote,
   onEphemeralAsk,
@@ -483,7 +485,7 @@ export default function MessageSelectionToolbar({
                   <div className={s.turnUser}>{turn.content}</div>
                 ) : (
                   <div className={s.turnAssistant}>
-                    <MarkdownMessage content={turn.content} />
+                    <MarkdownMessage content={turn.content} sessionId={sessionId} />
                     <div className={s.turnFooter}>
                       <TurnCopyButton content={turn.content} />
                     </div>

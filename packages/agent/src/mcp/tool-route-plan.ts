@@ -566,6 +566,19 @@ const INTENT_RULES: IntentRule[] = [
     hint: '本地工作区读写/下载 → workspace_* / download_file；先 activate workspace pack',
   },
   {
+    intent: 'workspace_message_uri',
+    priority: 91,
+    patterns: [
+      /(?:消息|回复|聊天)(?:里|中)?(?:引用|插入|贴上|展示).*(?:工作区|图片|文件|视频|音频)/,
+      /(?:引用|展示).*(?:工作区).*(?:图片|文件|视频|音频)|opptrix-ws:\/\//i,
+      /resolve_workspace_path_uri/i,
+    ],
+    preferredTools: ['resolve_workspace_path_uri', 'workspace_list', 'list_workspace_grants'],
+    avoidTools: ['browser_navigate', 'create_canvas'],
+    confidence: 'high',
+    hint: '消息内引用工作区文件 → resolve_workspace_path_uri 得到 opptrix-ws://；禁止 file:// 与绝对路径',
+  },
+  {
     intent: 'http_api',
     priority: 92,
     patterns: [

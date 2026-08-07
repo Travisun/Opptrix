@@ -10,17 +10,26 @@ import 'katex/dist/katex.min.css'
 import '../styles/markdown.css'
 import { createMarkdownComponents } from './markdownComponents'
 import { markdownSanitizeSchema } from './markdownSanitize'
+import { rewriteOpptrixWsUrisInMarkdown } from './opptrixWsMarkdown'
 
 interface Props {
   content: string
   className?: string
+  sessionId?: string | null
 }
 
-function MarkdownMessage({ content, className }: Props) {
-  const components = useMemo(() => createMarkdownComponents(), [])
+function MarkdownMessage({ content, className, sessionId }: Props) {
+  const components = useMemo(
+    () => createMarkdownComponents({ sessionId }),
+    [sessionId],
+  )
   const rehypePlugins = useMemo(
     () => [rehypeRaw, [rehypeSanitize, markdownSanitizeSchema], rehypeKatex],
     [],
+  )
+  const rendered = useMemo(
+    () => rewriteOpptrixWsUrisInMarkdown(content, sessionId),
+    [content, sessionId],
   )
 
   return (
@@ -30,7 +39,7 @@ function MarkdownMessage({ content, className }: Props) {
         rehypePlugins={rehypePlugins as Pluggable[]}
         components={components}
       >
-        {content}
+        {rendered}
       </ReactMarkdown>
     </div>
   )

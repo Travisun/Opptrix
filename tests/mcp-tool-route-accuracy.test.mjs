@@ -80,6 +80,7 @@ const PRIMARY_CASES = [
   { message: '打开 https://example.com 看看内容', expectPrimary: 'browser_navigate', intent: 'web_browse' },
   { message: '把工作区文件列表列出来', expectPrimary: 'workspace_list', intent: 'workspace_files' },
   { message: '下载这个 PDF 保存到工作区', expectPrimary: 'workspace_list', intent: 'workspace_files' },
+  { message: '在消息里引用工作区图片', expectPrimary: 'resolve_workspace_path_uri', intent: 'workspace_message_uri' },
   { message: '有哪些本地数据 API', expectPrimary: 'list_local_data_apis', intent: 'local_data_catalog' },
   { message: 'list_local_data_apis 看下目录', expectPrimary: 'list_local_data_apis', intent: 'local_data_catalog' },
   { message: '下载扶摇增量日K parquet 包', expectPrimary: 'prepare_fuyao_dump', intent: 'fuyao_dump' },
