@@ -139,7 +139,7 @@ const useStyles = makeStyles({
     paddingTop: '8px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px',
+    gap: '10px',
     boxSizing: 'border-box',
   },
   contentColumnElectron: {
@@ -147,7 +147,7 @@ const useStyles = makeStyles({
   },
   contentColumnMobile: {
     paddingTop: '8px',
-    gap: '5px',
+    gap: '10px',
   },
   contentColumnEmpty: {
     flex: 1,

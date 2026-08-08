@@ -4,10 +4,10 @@
  */
 .opptrix-md {
   /* Typography & rhythm */
-  --opptrix-md-line-height: 1.58;
+  --opptrix-md-line-height: 1.47;
   --opptrix-md-block-gap: 0.45em;
-  --opptrix-md-heading-gap-top: 0.75em;
-  --opptrix-md-heading-gap-bottom: 0.3em;
+  --opptrix-md-heading-gap-top: 0.55em;
+  --opptrix-md-heading-gap-bottom: 0.2em;
   --opptrix-md-list-indent: 1.15em;
   --opptrix-md-list-item-gap: 0.15em;
 

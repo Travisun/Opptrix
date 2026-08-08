@@ -6,10 +6,10 @@
  */
 export const markdownTokens = {
   /** Base typography */
-  lineHeight: 1.58,
+  lineHeight: 1.47,
   blockGap: '0.45em',
-  headingGapTop: '0.75em',
-  headingGapBottom: '0.3em',
+  headingGapTop: '0.55em',
+  headingGapBottom: '0.2em',
   listIndent: '1.15em',
   listItemGap: '0.15em',
 

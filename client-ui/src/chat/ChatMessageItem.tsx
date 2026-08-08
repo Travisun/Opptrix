@@ -22,14 +22,9 @@ const useStyles = makeStyles({
     ...fadeInUp,
   },
   entryUser: {
-    alignSelf: 'flex-end',
-    maxWidth: '78%',
+    alignSelf: 'stretch',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-end',
-  },
-  entryUserMobile: {
-    maxWidth: '90%',
   },
   entryAssistant: {
     alignSelf: 'stretch',
@@ -45,8 +40,9 @@ const useStyles = makeStyles({
   },
   userBubble: {
     maxWidth: '100%',
-    padding: '11px 15px',
-    borderRadius: opptrixTokens.radiusLg,
+    padding: '8px 12px',
+    borderRadius: opptrixTokens.radiusXl,
+    border: `1px solid ${opptrixCssVars.border}`,
     backgroundColor: opptrixCssVars.userBubble,
     color: opptrixCssVars.textPrimary,
     whiteSpace: 'pre-wrap',
@@ -227,9 +223,7 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
       className={mergeClasses(
         s.entry,
         s.entryInteractive,
-        isUser
-          ? mergeClasses(s.entryUser, isMobile && s.entryUserMobile)
-          : s.entryAssistant,
+        isUser ? s.entryUser : s.entryAssistant,
       )}
       data-message-index={index}
       data-message-role={message.role}
