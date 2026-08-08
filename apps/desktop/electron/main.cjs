@@ -1291,6 +1291,32 @@ function registerWindowIpc() {
     return dir
   })
 
+  /** 仅允许打开 resolveUserDataRoot()/agent-workspace 之下的目录 */
+  ipcMain.handle('open-local-directory', async (_event, dirPath) => {
+    const raw = String(dirPath ?? '').trim()
+    if (!raw || raw.includes('..')) {
+      throw new Error('目录路径无效')
+    }
+    const resolved = path.resolve(raw)
+    if (resolved.includes('..')) {
+      throw new Error('目录路径无效')
+    }
+    const dataRoot = path.resolve(
+      String(process.env.OPPTRIX_DATA_DIR ?? '').trim() || path.join(require('node:os').homedir(), '.opptrix'),
+    )
+    const workspaceRoot = path.resolve(dataRoot, 'agent-workspace')
+    const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`
+    if (resolved !== workspaceRoot && !resolved.startsWith(prefix)) {
+      throw new Error('目录路径无效')
+    }
+    if (!fsSync.existsSync(resolved)) {
+      fsSync.mkdirSync(resolved, { recursive: true })
+    }
+    const err = await shell.openPath(resolved)
+    if (err) throw new Error(`无法打开目录：${err}`)
+    return resolved
+  })
+
   ipcMain.handle('translation-start-download', async (event, modelId) => {
     const sender = event.sender
     return startTranslationModelDownload(repoRoot(), String(modelId ?? ''), progress => {

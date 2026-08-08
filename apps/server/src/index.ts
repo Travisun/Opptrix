@@ -1094,6 +1094,11 @@ app.patch<{
     if (model !== undefined) {
       const updated = await agent.setSessionModel(req.params.id, model)
       if (!updated) return reply.code(404).send({ error: 'session not found' })
+      const trimmed = typeof model === 'string' ? model.trim() : ''
+      if (trimmed) {
+        cfg = saveConfig({ default_model: trimmed })
+        syncAgentProviders()
+      }
       return {
         session: agent.sessionMeta(updated.session),
         contextHint: updated.contextHint,

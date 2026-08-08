@@ -41,6 +41,8 @@ declare global {
       translationGetModels?: () => Promise<TranslationModelsResult>
       translationGetDownloadDir?: () => Promise<string>
       translationOpenDownloadDir?: () => Promise<string>
+      /** Open a path under agent-workspace in the system file manager (validated in main) */
+      openLocalDirectory?: (dirPath: string) => Promise<string>
       translationStartDownload?: (modelId: string) => Promise<{ filePath: string; filename: string }>
       translationCancelDownload?: () => Promise<boolean>
       translationTranslateArticle?: (payload: TranslationArticleRequest) => Promise<TranslationArticleResult>

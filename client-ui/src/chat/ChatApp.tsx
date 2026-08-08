@@ -38,7 +38,7 @@ import {
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
-  clearSessionArchiveFolder, renameSession,
+  clearSessionArchiveFolder, renameSession, listWorkspaceGrants,
 } from '../api/client'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -65,6 +65,7 @@ import SessionRolePersonaDrawer from './SessionRolePersonaDrawer'
 import { FolderListRegular } from '@fluentui/react-icons'
 import { sessionToMarkdown } from './sessionExportMarkdown'
 import { saveTextFileWithDialog } from '../platform/saveTextFile'
+import { copyTextToClipboard } from '../platform/clipboard'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
@@ -365,8 +366,10 @@ export default function ChatApp() {
   const streamUiRef = useRef<ChatStreamUiRef['current']>(null)
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
+  const [defaultModel, setDefaultModel] = useState<string | undefined>()
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
   const [sessionLlmParams, setSessionLlmParamsState] = useState<SessionLlmParams | undefined>()
+  const resolvedSessionModel = sessionModel ?? defaultModel
   const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null)
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
@@ -576,8 +579,9 @@ export default function ChatApp() {
 
   const refreshModels = useCallback(async () => {
     try {
-      const { models } = await listAvailableModels()
+      const { models, default_model } = await listAvailableModels()
       setAvailableModels(models)
+      setDefaultModel(default_model?.trim() || undefined)
       return models
     } catch {
       // 失败时保留已有列表，避免首启超时把选择器清空
@@ -759,8 +763,9 @@ export default function ChatApp() {
       setActiveSessionMeta(session)
       setMessages([])
       setContextRef(null)
-      setSessionModelState(undefined)
-      setSessionLlmParamsState(undefined)
+      setSessionModelState(session.model)
+      setSessionLlmParamsState(session.llmParams)
+      if (session.model?.trim()) setDefaultModel(session.model.trim())
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
@@ -827,8 +832,9 @@ export default function ChatApp() {
       setActiveSessionMeta(session)
       setMessages([])
       setContextRef(null)
-      setSessionModelState(undefined)
-      setSessionLlmParamsState(undefined)
+      setSessionModelState(session.model)
+      setSessionLlmParamsState(session.llmParams)
+      if (session.model?.trim()) setDefaultModel(session.model.trim())
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
@@ -975,6 +981,26 @@ export default function ChatApp() {
     }
   }, [activeId, activeSessionMeta, messages])
 
+  const handleOpenSessionDir = useCallback(async () => {
+    if (!activeId) return
+    try {
+      const { grants } = await listWorkspaceGrants(activeId)
+      const absPath = grants.find(g => g.is_default)?.abs_path?.trim()
+      if (!absPath) {
+        setError('暂时无法打开会话目录，请稍后重试')
+        return
+      }
+      if (isElectron() && window.electronAPI?.openLocalDirectory) {
+        await window.electronAPI.openLocalDirectory(absPath)
+        return
+      }
+      const copied = await copyTextToClipboard(absPath)
+      setError(copied ? '已复制会话目录路径' : '暂时无法打开会话目录，请稍后重试')
+    } catch {
+      setError('暂时无法打开会话目录，请稍后重试')
+    }
+  }, [activeId])
+
   const handleSidebarListTabChange = useCallback((tab: SidebarListTab) => {
     setSidebarListTab(tab)
     if (tab === 'archive') void refreshArchived()
@@ -1025,13 +1051,13 @@ export default function ChatApp() {
   }, [abortSessionStream, activeId])
 
   const loadingRef = useRef(loading)
-  const sessionModelRef = useRef(sessionModel)
+  const sessionModelRef = useRef(resolvedSessionModel)
   activeIdRef.current = activeId
   viewRef.current = view
   sessionsRef.current = sessions
   activeSessionMetaRef.current = activeSessionMeta
   loadingRef.current = loading
-  sessionModelRef.current = sessionModel
+  sessionModelRef.current = resolvedSessionModel
 
   const submitImplRef = useRef<(text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => Promise<void>>(async () => {})
 
@@ -1081,6 +1107,10 @@ export default function ChatApp() {
         const { session } = await createSession()
         sessionId = session.id
         setActiveId(sessionId)
+        setActiveSessionMeta(session)
+        setSessionModelState(session.model)
+        setSessionLlmParamsState(session.llmParams)
+        if (session.model?.trim()) setDefaultModel(session.model.trim())
         await refreshSessions()
       } catch (e) {
         setError(e instanceof Error ? e.message : '创建对话失败')
@@ -1261,6 +1291,9 @@ export default function ChatApp() {
     const { session } = await createSession()
     setActiveId(session.id)
     setActiveSessionMeta(session)
+    setSessionModelState(session.model)
+    setSessionLlmParamsState(session.llmParams)
+    if (session.model?.trim()) setDefaultModel(session.model.trim())
     await refreshSessions()
     return session.id
   }, [refreshSessions])
@@ -1448,17 +1481,21 @@ export default function ChatApp() {
       activeId,
       message,
       selection.text,
-      sessionModel,
+      resolvedSessionModel,
       priorTurns,
     )
     return reply
-  }, [activeId, sessionModel])
+  }, [activeId, resolvedSessionModel])
 
   const handleModelChange = useCallback(async (ref: string) => {
     setSessionModelState(ref)
-    if (!activeId) return
+    if (!activeId) {
+      setDefaultModel(ref)
+      return
+    }
     try {
       const res = await setSessionModel(activeId, ref)
+      setDefaultModel(ref)
       setSessions(prev => prev.map(sess =>
         sess.id === activeId ? { ...sess, model: ref } : sess,
       ))
@@ -1562,6 +1599,7 @@ export default function ChatApp() {
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
       onExport={handleExportSession}
+      onOpenSessionDir={handleOpenSessionDir}
       onEditRolePersona={activeId ? openRolePersonaDrawer : undefined}
     />
   ) : null
@@ -1577,6 +1615,7 @@ export default function ChatApp() {
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
       onExport={handleExportSession}
+      onOpenSessionDir={handleOpenSessionDir}
       onEditRolePersona={activeId ? openRolePersonaDrawer : undefined}
     />
   ) : null
@@ -1904,7 +1943,7 @@ export default function ChatApp() {
                   streamUiRef={streamUiRef}
                   error={error}
                   availableModels={availableModels}
-                  sessionModel={sessionModel}
+                  sessionModel={resolvedSessionModel}
                   sessionLlmParams={sessionLlmParams}
                   contextUsage={contextUsage}
                   isMobile={isMobile}

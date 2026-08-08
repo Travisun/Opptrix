@@ -836,7 +836,7 @@ Content-Type: application/json
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/sessions` | `{ sessions: SessionMeta[] }` 活跃会话（含 `expertId` / `expertIcon`；**不含** `rolePersona` 全文） |
-| POST | `/api/sessions` | 创建会话；body 见下；响应 `{ session: SessionMeta }`；同时写入 `rolePersona` 快照 |
+| POST | `/api/sessions` | 创建会话；body 见下；响应 `{ session: SessionMeta }`；同时写入 `rolePersona` 快照；有配置时 `session.model` 继承全局 `default_model` |
 | GET | `/api/sessions/:id` | 会话详情 + 消息列表（当前 `session` 子对象不含 `expertId`；专家绑定以列表或创建响应为准） |
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
@@ -868,7 +868,7 @@ Content-Type: application/json
 
 - 每轮聊天按当前模型窗长（优先 [models.dev](https://models.dev) 模糊匹配，失败降级启发式，默认 128k）估算用量；接近上限时 micro / structured 压缩，SSE 推送 `context_compact`。
 - UI transcript（`turns`）不变；模型侧使用 `sessionMemory` + 近端消息。详见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
-- `PATCH /api/sessions/:id` 切换 `model` 时按新窗口再检查；响应可含 `contextHint`（有压缩时）。
+- `PATCH /api/sessions/:id` 切换 `model` 时按新窗口再检查；响应可含 `contextHint`（有压缩时）。设置非空会话模型会同步更新全局 `default_model` 并刷新 Agent registry；清空（`null` / 空串）只改本会话，不破坏默认模型。新建会话继承当前 `default_model`。
 - 同一路由可 PATCH `llmParams`（`temperature` / `maxTokens` / `reasoningEffort`）；按会话持久化，旧会话缺省时请求体温度 1、`max_tokens` 4096、不发 `reasoning_effort`。GET session 的 `session.llmParams` 供 Composer 选模面板读写。
 
 **SSE `context_compact` 事件**
@@ -955,7 +955,7 @@ Content-Type: application/json
 | `id` | string | 会话 id |
 | `title` | string | 标题 |
 | `createdAt` / `updatedAt` | string | ISO 8601 |
-| `model` | string | 可选；`providerId:modelName` |
+| `model` | string | 可选；`providerId:modelName`；新建时若已配置则继承 `default_model` |
 | `archivedAt` | string \| null | 归档时间 |
 | `archiveFolderId` | string \| null | 归档文件夹 |
 | `expertId` | string \| null | 绑定专家 id；`null` 为默认投研研究员会话 |
