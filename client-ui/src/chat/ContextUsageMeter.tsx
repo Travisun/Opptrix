@@ -15,7 +15,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    lineHeight: '34px',
+    lineHeight: 1.4,
   },
 })
 

@@ -9,7 +9,12 @@ import { sandboxSettings, type SandboxPlatformStatus } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { isElectron, electronPlatform } from '../../platform/detect'
 import { useSettingsToast } from './SettingsToast'
-import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
+import {
+  SettingsAddBar,
+  SettingsListPanel,
+  SettingsListRow,
+} from './SettingsPrimitives'
 
 const useStyles = makeStyles({
   sectionBlock: {
@@ -29,67 +34,6 @@ const useStyles = makeStyles({
   },
   statusWarn: {
     color: opptrixCssVars.warning,
-  },
-  listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  listHeader: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '10px 14px',
-    minHeight: '44px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-  },
-  listHeaderMeta: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.45,
-    flex: 1,
-    minWidth: 0,
-  },
-  listHeaderActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexShrink: 0,
-  },
-  listRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '10px',
-    padding: '8px 14px',
-    minHeight: '38px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': {
-      borderBottom: 'none',
-    },
-  },
-  listRowMain: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  listRowTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
-  },
-  listRowMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
   },
   footerHint: {
     padding: '10px 14px 12px',
@@ -183,15 +127,22 @@ export default function SandboxEnvironmentStatusCard() {
   if (!status) {
     return (
       <div className={s.sectionBlock}>
-        <Text block>暂时无法获取环境状态，请稍后重试。</Text>
-        <OpptrixButton
-          variant="secondary"
-          size="small"
-          icon={<ArrowSyncRegular fontSize={14} />}
-          onClick={() => { void load() }}
-        >
-          刷新状态
-        </OpptrixButton>
+        <SettingsListPanel>
+          <SettingsListRow
+            title="暂时无法获取环境状态"
+            meta="请稍后重试"
+            trailing={(
+              <OpptrixButton
+                variant="secondary"
+                size="small"
+                icon={<ArrowSyncRegular fontSize={14} />}
+                onClick={() => { void load() }}
+              >
+                刷新状态
+              </OpptrixButton>
+            )}
+          />
+        </SettingsListPanel>
       </div>
     )
   }
@@ -228,55 +179,51 @@ export default function SandboxEnvironmentStatusCard() {
 
   return (
     <div className={s.sectionBlock}>
-      <div className={s.listPanel}>
-        <div className={s.listHeader}>
-          <Text className={s.listHeaderMeta} block>
-            {status.message}
-          </Text>
-          <div className={s.listHeaderActions}>
-            <OpptrixButton
-              variant="ghost"
-              size="small"
-              icon={<ArrowSyncRegular fontSize={14} />}
-              disabled={refreshing || installing}
-              onClick={() => { void load({ silent: true }) }}
-            >
-              {refreshing ? '刷新中…' : '刷新状态'}
-            </OpptrixButton>
-            {showSetup && (
+      <SettingsListPanel>
+        <SettingsAddBar
+          meta={status.message}
+          actions={(
+            <>
               <OpptrixButton
-                variant="primary"
+                variant="ghost"
                 size="small"
-                disabled={installing || refreshing}
-                onClick={() => { void handleInstall() }}
+                icon={<ArrowSyncRegular fontSize={14} />}
+                disabled={refreshing || installing}
+                onClick={() => { void load({ silent: true }) }}
               >
-                {installing ? '正在设置…' : '完成设置'}
+                {refreshing ? '刷新中…' : '刷新状态'}
               </OpptrixButton>
-            )}
-          </div>
-        </div>
+              {showSetup && (
+                <OpptrixButton
+                  variant="primary"
+                  size="small"
+                  disabled={installing || refreshing}
+                  onClick={() => { void handleInstall() }}
+                >
+                  {installing ? '正在设置…' : '完成设置'}
+                </OpptrixButton>
+              )}
+            </>
+          )}
+        />
 
-        <div className={s.listRow}>
-          <div className={s.listRowMain}>
-            <Text className={s.listRowTitle} block>总体就绪</Text>
-            <Text className={s.listRowMeta} block>
-              {status.ready ? '命令隔离环境已准备完成' : '部分组件尚未就绪'}
-            </Text>
-          </div>
-          <span className={mergeClasses(s.statusBadge, status.ready && s.statusReady)}>
-            {status.ready
-              ? <><CheckmarkCircleRegular fontSize={14} /> 已就绪</>
-              : '待完成'}
-          </span>
-        </div>
+        <SettingsListRow
+          title="总体就绪"
+          meta={status.ready ? '命令隔离环境已准备完成' : '部分能力尚未就绪'}
+          trailing={(
+            <span className={mergeClasses(s.statusBadge, status.ready && s.statusReady)}>
+              {status.ready
+                ? <><CheckmarkCircleRegular fontSize={14} /> 已就绪</>
+                : '待完成'}
+            </span>
+          )}
+        />
 
-        <div className={s.listRow}>
-          <div className={s.listRowMain}>
-            <Text className={s.listRowTitle} block>隔离保护</Text>
-            <Text className={s.listRowMeta} block>{isolationMeta.desc}</Text>
-          </div>
-          {isolationMeta.badge}
-        </div>
+        <SettingsListRow
+          title="隔离保护"
+          meta={isolationMeta.desc}
+          trailing={isolationMeta.badge}
+        />
 
         {(status.setup_hint || showSetup) && (
           <div className={s.footerHint}>
@@ -290,7 +237,7 @@ export default function SandboxEnvironmentStatusCard() {
             )}
           </div>
         )}
-      </div>
+      </SettingsListPanel>
     </div>
   )
 }

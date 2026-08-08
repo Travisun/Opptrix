@@ -11,7 +11,7 @@ import OpptrixField from '../../components/opptrix/OpptrixField'
 import OpptrixInput from '../../components/opptrix/OpptrixInput'
 import OpptrixSegmentedControl from '../../components/opptrix/OpptrixSegmentedControl'
 import OpptrixTextarea from '../../components/opptrix/OpptrixTextarea'
-import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
 import AgentSkillPreview from './AgentSkillPreview'
 import SettingsMonospaceEditor from './SettingsMonospaceEditor'
 
@@ -45,10 +45,7 @@ const useStyles = makeStyles({
     minHeight: '220px',
   },
   previewWrap: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusMd,
-    padding: '4px 8px',
-    backgroundColor: opptrixCssVars.canvas,
+    padding: '2px 0',
   },
   actions: {
     display: 'flex',

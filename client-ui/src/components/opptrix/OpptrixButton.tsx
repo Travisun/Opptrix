@@ -38,7 +38,7 @@ const pressMotion = {
 const useStyles = makeStyles({
   primary: {
     ...primaryInteractive,
-    borderRadius: opptrixTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusSm,
     fontWeight: 600,
     ...pressMotion,
     ':active': {
@@ -48,6 +48,7 @@ const useStyles = makeStyles({
   },
   secondary: {
     ...secondaryInteractive,
+    borderRadius: opptrixTokens.radiusSm,
     fontWeight: 500,
     ...pressMotion,
     ':active': {
@@ -143,6 +144,8 @@ const useStyles = makeStyles({
     paddingLeft: buttonSizes.medium.paddingX,
     paddingRight: buttonSizes.medium.paddingX,
     minHeight: buttonSizes.medium.minHeight,
+    height: buttonSizes.medium.minHeight,
+    lineHeight: '1.2',
     '--opptrix-btn-icon-size': '16px',
   },
   sizeLarge: {

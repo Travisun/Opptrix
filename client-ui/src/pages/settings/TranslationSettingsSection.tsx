@@ -19,11 +19,14 @@ import {
   SettingsGroup,
   SettingsRow,
   SettingsStaticBlock,
-  SettingsTextField,
+  settingsHairlineBorder,
+  settingsSurfaceRadius,
+  settingsSurfaceTint,
 } from './SettingsPrimitives'
+import SettingsRemoteModelSelector from './SettingsRemoteModelSelector'
 import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
-import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
 import {
   isElectron,
@@ -53,11 +56,10 @@ const useStyles = makeStyles({
     flex: 1,
   },
   sectionLabel: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '16px',
     flexShrink: 0,
   },
   sectionLabelSpaced: {
@@ -73,9 +75,9 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
   },
   listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
     overflow: 'hidden',
     height: '360px',
     display: 'flex',
@@ -173,8 +175,11 @@ const useStyles = makeStyles({
   intervalSelect: {
     minWidth: '160px',
   },
-  remoteModelSelect: {
-    minWidth: '220px',
+  remoteModelControl: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    minWidth: '140px',
+    maxWidth: '240px',
   },
   progressBlock: {
     flexShrink: 0,
@@ -465,7 +470,6 @@ export default function TranslationSettingsSection() {
   ], SETTINGS_SAVE_MS)
 
   const selectedProvider = providers.find(p => p.id === settings.translation.remote_provider_id) ?? null
-  const providerModels = selectedProvider?.models ?? []
   const isTranslationModelFilename = (filename: string) => /hy[-_]?mt/i.test(filename) && !/smolvlm/i.test(filename)
   const offlineOptions = [
     { value: '__auto__', label: '自动匹配 HY-MT' },
@@ -503,7 +507,7 @@ export default function TranslationSettingsSection() {
     if (settings.translation.service_mode === 'remote') {
       return status?.remoteConfigured
         ? '将始终使用远程大模型翻译。'
-        : '请先在下方选择远程提供商与模型名称。'
+        : '请先在下方选择用于翻译的远程模型。'
     }
     if (status?.ready) {
       return `当前使用本地模型：${status.modelName ?? '已加载'}`
@@ -724,81 +728,36 @@ export default function TranslationSettingsSection() {
           {providers.length === 0 ? (
             <SettingsStaticBlock>
               <Text block style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
-                尚未配置模型提供商。请先在「模型」页添加 OpenAI 兼容接口，再回来选择远程翻译用的提供商与模型。
+                尚未配置模型。请先在「模型」页添加后，再回来选择用于远程翻译的模型。
               </Text>
             </SettingsStaticBlock>
           ) : (
-            <>
-              <SettingsRow
-                title="提供商"
-                desc="使用系统已配置的 API 提供商"
-                control={(
-                  <OpptrixSelect
-                    className={s.remoteModelSelect}
-                    size="small"
-                    selectedOptions={[settings.translation.remote_provider_id ?? '']}
-                    onOptionSelect={(_, d) => {
-                      const providerId = d.optionValue || null
-                      const provider = providers.find(p => p.id === providerId)
+            <SettingsRow
+              title="翻译模型"
+              desc={selectedProvider
+                ? `当前提供商：${selectedProvider.name}`
+                : '按提供商分组，一次选定即可'}
+              control={(
+                <div className={s.remoteModelControl}>
+                  <SettingsRemoteModelSelector
+                    providers={providers}
+                    providerId={settings.translation.remote_provider_id}
+                    model={settings.translation.remote_model}
+                    onChange={({ providerId, model }) => {
                       setSettings(prev => ({
                         ...prev,
                         translation: {
                           ...prev.translation,
                           remote_provider_id: providerId,
-                          remote_model: provider?.models[0] ?? null,
+                          remote_model: model,
                         },
                       }))
                     }}
-                  >
-                    <OpptrixOption value="">未选择</OpptrixOption>
-                    {providers.map(p => (
-                      <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
-                    ))}
-                  </OpptrixSelect>
-                )}
-              />
-              <SettingsRow
-                title="模型名称"
-                desc="从提供商已启用模型中选择，或手动输入"
-                stack
-                control={providerModels.length > 0 ? (
-                  <OpptrixSelect
-                    className={s.remoteModelSelect}
-                    size="small"
-                    selectedOptions={[settings.translation.remote_model ?? '']}
-                    onOptionSelect={(_, d) => {
-                      setSettings(prev => ({
-                        ...prev,
-                        translation: {
-                          ...prev.translation,
-                          remote_model: d.optionValue || null,
-                        },
-                      }))
-                    }}
-                  >
-                    <OpptrixOption value="">未选择</OpptrixOption>
-                    {providerModels.map(model => (
-                      <OpptrixOption key={model} value={model}>{model}</OpptrixOption>
-                    ))}
-                  </OpptrixSelect>
-                ) : (
-                  <SettingsTextField
-                    value={settings.translation.remote_model ?? ''}
-                    onChange={value => {
-                      setSettings(prev => ({
-                        ...prev,
-                        translation: {
-                          ...prev.translation,
-                          remote_model: value.trim() || null,
-                        },
-                      }))
-                    }}
-                    placeholder="例如 deepseek-chat"
                   />
-                )}
-                last
-              />
-            </>
+                </div>
+              )}
+              last
+            />
           )}
         </SettingsGroup>
       </div>

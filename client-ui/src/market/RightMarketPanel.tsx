@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, memo } from 'react'
-import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
@@ -43,6 +43,12 @@ import { hasApplicationCapability } from './capabilities'
 
 type MarketTab = 'watchlist' | 'portfolio' | 'detail'
 
+const MARKET_TITLE_TABS: Array<{ value: MarketTab; label: string }> = [
+  { value: 'watchlist', label: '关注' },
+  { value: 'portfolio', label: '组合' },
+  { value: 'detail', label: '详情' },
+]
+
 const useStyles = makeStyles({
   root: {
     height: '100%',
@@ -50,6 +56,10 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
+  },
+  /** Electron: let ancestor `.opptrix-right-panel` / app-main tint show through (no solid cover). */
+  rootElectron: {
+    backgroundColor: 'transparent',
   },
   titleBar: {
     flexShrink: 0,
@@ -60,10 +70,13 @@ const useStyles = makeStyles({
     gap: '0',
     paddingLeft: '0',
     paddingRight: '8px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
     backgroundColor: opptrixCssVars.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,
+  },
+  titleBarElectronFill: {
+    backgroundColor: 'transparent',
   },
   titleBarWeb: {
     height: '40px',
@@ -86,7 +99,8 @@ const useStyles = makeStyles({
     flex: '0 0 auto',
     display: 'flex',
     alignItems: 'center',
-    minWidth: 0,
+    gap: `${DESKTOP_TOOL_GAP}px`,
+    width: 'fit-content',
     maxWidth: '100%',
     height: '28px',
     paddingLeft: '15px',
@@ -97,21 +111,15 @@ const useStyles = makeStyles({
     pointerEvents: 'auto',
     '&::-webkit-scrollbar': { display: 'none' },
   },
-  tabs: {
-    minHeight: 'unset',
-    height: '28px',
-    flexWrap: 'nowrap',
-    width: 'max-content',
-    gap: `${DESKTOP_TOOL_GAP}px`,
-    alignItems: 'center',
-  },
   /** Text pill — same hit height as ChromeToolButton md (28×28), ghost / accentSoft. */
   tab: {
     ...ghostInteractive,
     boxSizing: 'border-box',
+    flex: '0 0 auto',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+    width: 'auto',
     minWidth: 'unset',
     height: '28px',
     minHeight: '28px',
@@ -124,42 +132,19 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 400,
     lineHeight: 1,
-    // Fluent pending (::before) + selected (::after) underline indicators
-    '::before': { display: 'none' },
-    ':hover::before': { display: 'none' },
-    ':active::before': { display: 'none' },
-    '::after': {
-      display: 'none',
-      content: '""',
-      height: '0',
-      width: '0',
-      backgroundColor: 'transparent',
-      border: 'none',
-    },
-    ':enabled:hover::after': { display: 'none' },
-    ':enabled:active::after': { display: 'none' },
-    // Content slot — flatten Fluent line-box so visual height matches 28px tool
-    '& .fui-Tab__content': {
-      fontWeight: 400,
-      display: 'inline-flex',
-      alignItems: 'center',
-      lineHeight: 1,
-      height: '100%',
-    },
-    // Suppress Fluent Tabster focus box-shadow; keep ghostInteractive focusVisibleRing
-    '&[data-fui-focus-visible]': { boxShadow: 'none' },
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
     ':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
       color: opptrixCssVars.textPrimary,
     },
-    '&[aria-selected="true"]': {
+  },
+  tabSelected: {
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.accent,
+    ':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
       color: opptrixCssVars.accent,
-      '& .fui-Tab__content': { fontWeight: 400 },
-      ':hover': {
-        backgroundColor: opptrixCssVars.accentSoft,
-        color: opptrixCssVars.accent,
-      },
     },
   },
   titleBarDragLead: {
@@ -167,7 +152,8 @@ const useStyles = makeStyles({
     alignSelf: 'stretch',
     minWidth: '8px',
   },
-  dragFill: {
+  /** Fills leftover title-bar space so tabs stay content-sized (never stretch). */
+  titleBarSpacer: {
     flex: '1 1 auto',
     minWidth: '8px',
     alignSelf: 'stretch',
@@ -383,7 +369,7 @@ function RightMarketPanel({
     onFocusStockConsumed?.()
   }, [focusStockCode, handlePortfolioSelect, onFocusStockConsumed])
 
-  const showDetailTab = tab === 'detail'
+  const showDetailTab = selected != null
   /** Full-width panel: reserve global toolbar band as a dedicated drag zone (not tab padding). */
   const titleBarDragLeadWidth = electronChrome
     && panelFullWidth
@@ -398,19 +384,21 @@ function RightMarketPanel({
     }
   }, [tab, selected])
 
-  const handleTabSelect = useCallback((_: unknown, data: { value: unknown }) => {
-    setTab(data.value as MarketTab)
-  }, [])
+  const titleTabs = useMemo(
+    () => MARKET_TITLE_TABS.filter(item => item.value !== 'detail' || showDetailTab),
+    [showDetailTab],
+  )
 
   const showWorkspaceActions = Boolean(onToggleRightPanel || onToggleChatColumn)
 
   return (
-    <div className={s.root}>
+    <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
       <div
         className={mergeClasses(
           s.titleBar,
           !electronChrome && s.titleBarWeb,
           electronChrome && s.titleBarElectron,
+          electronChrome && s.titleBarElectronFill,
           electronChrome && 'opptrix-right-panel-title-bar',
           electronChrome && (electronWin ? s.titleBarElectronWin : s.titleBarElectronMac),
         )}
@@ -422,25 +410,41 @@ function RightMarketPanel({
             aria-hidden
           />
         )}
-        <div className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}>
-          <TabList
-            className={s.tabs}
-            size="small"
-            selectedValue={tab}
-            onTabSelect={handleTabSelect}
-          >
-            <Tab className={s.tab} value="watchlist">关注</Tab>
-            <Tab className={s.tab} value="portfolio">组合</Tab>
-            {showDetailTab ? <Tab className={s.tab} value="detail">详情</Tab> : null}
-          </TabList>
+        <div
+          className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}
+          role="tablist"
+          aria-label="行情面板"
+        >
+          {titleTabs.map(item => {
+            const selectedTab = tab === item.value
+            return (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                aria-selected={selectedTab}
+                className={mergeClasses(
+                  s.tab,
+                  selectedTab && s.tabSelected,
+                  'opptrix-focusable',
+                )}
+                onClick={() => {
+                  if (item.value !== tab) setTab(item.value)
+                }}
+              >
+                {item.label}
+              </button>
+            )
+          })}
         </div>
 
-        {electronChrome && (
-          <div
-            className={mergeClasses(s.dragFill, 'opptrix-right-panel-title-drag')}
-            aria-hidden
-          />
-        )}
+        <div
+          className={mergeClasses(
+            s.titleBarSpacer,
+            electronChrome && 'opptrix-right-panel-title-drag',
+          )}
+          aria-hidden
+        />
 
         {showWorkspaceActions && (
           <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>

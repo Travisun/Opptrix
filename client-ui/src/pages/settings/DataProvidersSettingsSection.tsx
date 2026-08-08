@@ -28,7 +28,7 @@ export default function DataProvidersSettingsSection() {
     return (
       <div className={s.root}>
         <Text className={s.tabHint} block>
-        配置连接、启用数据源，并拖拽调整行情回退顺序。
+          点击数据源或「配置」编辑连接，打开开关启用。拖拽列表调整行情回退顺序；越靠前越优先，仅已启用且配置完成的源会参与回退。
         </Text>
         <ProviderCatalogLoading />
       </div>
@@ -42,7 +42,7 @@ export default function DataProvidersSettingsSection() {
   return (
     <div className={s.root}>
       <Text className={s.tabHint} block>
-        配置连接并启用数据源。拖拽列表调整行情回退顺序；越靠前越优先，仅已启用且密钥配置完成的源会实际参与回退。
+        点击数据源或「配置」编辑连接，打开开关启用。拖拽列表调整行情回退顺序；越靠前越优先，仅已启用且配置完成的源会参与回退。
       </Text>
       <ProviderCatalogListPanel
         catalog={catalog}

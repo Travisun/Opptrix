@@ -8,7 +8,8 @@ import type { ColorScheme } from './tokens'
 import { getOpptrixTokens } from './tokens'
 
 function buildBrandRamp(accent: string, foreground: string): BrandVariants {
-  const isLight = accent === '#1D1D1F' || accent.toLowerCase() === '#1d1d1f'
+  const a = accent.toLowerCase()
+  const isLight = a === '#141414' || a === '#1d1d1f'
   if (isLight) {
     return {
       10: '#0a0a0a',

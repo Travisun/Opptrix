@@ -26,6 +26,9 @@ export const focusVisibleRing = {
   ':focus-visible': focusRing,
 } as const
 
+/** 二级标题栏 / 侧栏发丝底边，与 WorkspaceSplitDivider tone=subtle 对齐 */
+export const chromeHairlineBorderBottom = `1px solid ${opptrixCssVars.separatorHairline}` as const
+
 export const interactiveTransition = {
   transitionProperty: 'background-color, color, opacity, border-color, box-shadow',
   transitionDuration: motion.fast,
@@ -126,7 +129,7 @@ export const ghostInteractive = {
 export const primaryInteractive = {
   ...interactiveTransition,
   border: 'none',
-  borderRadius: opptrixTokens.radiusMd,
+  borderRadius: opptrixTokens.radiusSm,
   backgroundColor: opptrixCssVars.accent,
   color: opptrixCssVars.accentForeground,
   ':hover': {
@@ -144,11 +147,12 @@ export const primaryInteractive = {
   ...focusVisibleRing,
 } as const
 
+/** Secondary — Cursor monaco-button 轻填充；accent 仍墨色 */
 export const secondaryInteractive = {
   ...interactiveTransition,
   border: 'none',
-  borderRadius: opptrixTokens.radiusMd,
-  backgroundColor: opptrixCssVars.canvasAlt,
+  borderRadius: opptrixTokens.radiusSm,
+  backgroundColor: opptrixCssVars.surfaceHover,
   color: opptrixCssVars.textPrimary,
   ':hover': {
     backgroundColor: opptrixCssVars.canvasMuted,
@@ -275,8 +279,8 @@ export const buttonSizes = {
     fontSize: 'var(--opptrix-font-sm)',
   },
   medium: {
-    minHeight: '32px',
-    paddingX: '14px',
+    minHeight: '28px',
+    paddingX: '12px',
     paddingY: '0px',
     fontSize: 'var(--opptrix-font-base)',
   },

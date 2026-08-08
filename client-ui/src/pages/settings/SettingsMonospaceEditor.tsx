@@ -2,12 +2,16 @@ import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { makeStyles } from '@fluentui/react-components'
-import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
+import {
+  settingsHairlineBorder,
+  settingsSurfaceRadius,
+} from './SettingsPrimitives'
 
 const useStyles = makeStyles({
   editorWrap: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusMd,
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
     overflow: 'hidden',
     backgroundColor: opptrixCssVars.canvasAlt,
     minHeight: '280px',

@@ -1375,12 +1375,29 @@ export async function renameSession(id: string, title: string) {
 
 export async function setSessionModel(id: string, model: string | null) {
   return jsonFetch<{
-    session: Pick<SessionMeta, 'id' | 'title' | 'model' | 'updatedAt'>
+    session: Pick<SessionMeta, 'id' | 'title' | 'model' | 'llmParams' | 'updatedAt'>
     contextHint?: string
   }>(`/sessions/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model }),
+  })
+}
+
+export async function setSessionLlmParams(
+  id: string,
+  llmParams: {
+    temperature?: number
+    maxTokens?: number
+    reasoningEffort?: 'low' | 'medium' | 'high' | null
+  },
+) {
+  return jsonFetch<{
+    session: Pick<SessionMeta, 'id' | 'title' | 'model' | 'llmParams' | 'updatedAt'>
+  }>(`/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ llmParams }),
   })
 }
 

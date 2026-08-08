@@ -16,9 +16,15 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive, motion } from '../../theme/mixins'
 import {
+  SettingsAddBar,
   SettingsGroup,
+  SettingsListPanel,
+  SettingsListRow,
   SettingsRow,
   SettingsStaticBlock,
+  settingsHairlineBorder,
+  settingsSurfaceRadius,
+  settingsSurfaceTint,
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import SettingsMonospaceEditor from './SettingsMonospaceEditor'
@@ -74,39 +80,6 @@ const useStyles = makeStyles({
   saveHintActive: {
     color: opptrixCssVars.textSecondary,
   },
-  statusPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
-    overflow: 'hidden',
-  },
-  statusHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '10px 14px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: '10px',
-    padding: '8px 14px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  statusLabel: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-  },
-  statusValue: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textPrimary,
-    textAlign: 'right' as const,
-    wordBreak: 'break-all' as const,
-  },
   statusReady: { color: opptrixCssVars.success },
   statusWarn: { color: opptrixCssVars.warning },
   meta: {
@@ -119,9 +92,9 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
     padding: '10px 14px',
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
   },
   progressLabel: {
     fontSize: 'var(--opptrix-font-md)',
@@ -333,48 +306,54 @@ export default function PythonEnvironmentSettingsSection() {
           <Text className={s.tabHint} block>
             查看当前可用的 Python，以及运行脚本时将采用哪一套环境。
           </Text>
-          <div className={s.statusPanel}>
-            <div className={s.statusHeader}>
-              <Text className={s.meta} block>
-                {status?.message ?? '正在获取状态…'}
-              </Text>
-              <OpptrixButton
-                variant="secondary"
-                icon={<ArrowSyncRegular />}
-                onClick={() => { void refreshStatus() }}
-                disabled={statusLoading}
-              >
-                刷新
-              </OpptrixButton>
-            </div>
+          <SettingsListPanel>
+            <SettingsAddBar
+              meta={status?.message ?? '正在获取状态…'}
+              actions={(
+                <OpptrixButton
+                  variant="secondary"
+                  icon={<ArrowSyncRegular />}
+                  onClick={() => { void refreshStatus() }}
+                  disabled={statusLoading}
+                >
+                  刷新
+                </OpptrixButton>
+              )}
+            />
             {statusLoading && !status ? (
               <SettingsStaticBlock>
                 <Spinner size="tiny" label="正在检测 Python…" />
               </SettingsStaticBlock>
             ) : status && (
               <>
-                <div className={s.statusRow}>
-                  <Text className={s.statusLabel}>当前采用</Text>
-                  <Text className={mergeClasses(s.statusValue, status.ready ? s.statusReady : s.statusWarn)}>
-                    {status.ready && <CheckmarkCircleRegular style={{ verticalAlign: '-2px', marginRight: 4 }} />}
-                    {sourceLabel(status.active_source)}
-                  </Text>
-                </div>
-                <div className={s.statusRow}>
-                  <Text className={s.statusLabel}>系统 Python</Text>
-                  <Text className={s.statusValue}>
-                    {status.system_path ? formatVersion(status.system_version) : '未检测到'}
-                  </Text>
-                </div>
-                <div className={s.statusRow}>
-                  <Text className={s.statusLabel}>Opptrix 托管</Text>
-                  <Text className={s.statusValue}>
-                    {status.opptrix_path ? formatVersion(status.opptrix_version) : '未安装'}
-                  </Text>
-                </div>
+                <SettingsListRow
+                  title="当前采用"
+                  trailing={(
+                    <Text className={mergeClasses(status.ready ? s.statusReady : s.statusWarn)}>
+                      {status.ready && <CheckmarkCircleRegular style={{ verticalAlign: '-2px', marginRight: 4 }} />}
+                      {sourceLabel(status.active_source)}
+                    </Text>
+                  )}
+                />
+                <SettingsListRow
+                  title="系统 Python"
+                  trailing={(
+                    <Text>
+                      {status.system_path ? formatVersion(status.system_version) : '未检测到'}
+                    </Text>
+                  )}
+                />
+                <SettingsListRow
+                  title="Opptrix 托管"
+                  trailing={(
+                    <Text>
+                      {status.opptrix_path ? formatVersion(status.opptrix_version) : '未安装'}
+                    </Text>
+                  )}
+                />
               </>
             )}
-          </div>
+          </SettingsListPanel>
           {(!status?.opptrix_path || status?.recommend_install || installJob?.state === 'failed') && (
             <SettingsGroup>
               <SettingsRow

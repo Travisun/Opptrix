@@ -2,7 +2,7 @@
 
 Opptrix 实现 [Agent Skills 开放标准](https://agentskills.io/specification) 的 Phase 1：内置技能、用户导入/编辑、会话激活与渐进披露。
 
-UI 对用户称「**工作流技能**」，避免与专家「技能专长」（persona）混淆。
+UI 对用户称「**工作流技能**」，避免与专家「技能专长」（persona）混淆。设置页预览 Dialog 以单层滚动展示名称、说明与克制的步骤正文（不复用聊天级 Markdown）。
 
 > **说明**：原独立包 `@opptrix/skills`（硬编码早报/收盘/产业链任务）已并入本包的**内置工作流技能**，不再作为现行依赖。
 

@@ -1067,10 +1067,21 @@ app.put<{ Params: { id: string }; Body: { rolePersona?: string } }>(
     }
   },
 )
-app.patch<{ Params: { id: string }; Body: { title?: string; model?: string | null } }>(
+app.patch<{
+  Params: { id: string }
+  Body: {
+    title?: string
+    model?: string | null
+    llmParams?: {
+      temperature?: number
+      maxTokens?: number
+      reasoningEffort?: 'low' | 'medium' | 'high' | null
+    }
+  }
+}>(
   '/api/sessions/:id',
   async (req, reply) => {
-    const { title, model } = req.body ?? {}
+    const { title, model, llmParams } = req.body ?? {}
     if (title !== undefined) {
       const updated = agent.renameSession(req.params.id, title)
       if (!updated) return reply.code(404).send({ error: 'session not found' })
@@ -1084,7 +1095,15 @@ app.patch<{ Params: { id: string }; Body: { title?: string; model?: string | nul
         contextHint: updated.contextHint,
       }
     }
-    return reply.code(400).send({ error: 'title or model required' })
+    if (llmParams !== undefined) {
+      if (!llmParams || typeof llmParams !== 'object') {
+        return reply.code(400).send({ error: 'llmParams invalid' })
+      }
+      const updated = agent.setSessionLlmParams(req.params.id, llmParams)
+      if (!updated) return reply.code(404).send({ error: 'session not found' })
+      return { session: agent.sessionMeta(updated) }
+    }
+    return reply.code(400).send({ error: 'title, model or llmParams required' })
   },
 )
 

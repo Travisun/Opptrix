@@ -53,7 +53,7 @@ import {
   type UserPromptOption,
   UserPromptCancelledError,
 } from './user-prompt.js'
-import { SessionStore, sessionToMeta, type SessionRecord, type SessionContextRef, type CreateSessionOptions } from './sessions.js'
+import { SessionStore, sessionToMeta, type SessionRecord, type SessionContextRef, type CreateSessionOptions, type ReasoningEffort } from './sessions.js'
 import { getExpertCatalogService } from './experts/catalog-service.js'
 import {
   resolveInitialRolePersona,
@@ -529,6 +529,17 @@ export class AgentEngine {
     return { session: record, contextHint: budget.hint }
   }
 
+  setSessionLlmParams(
+    sessionId: string,
+    patch: {
+      temperature?: number
+      maxTokens?: number
+      reasoningEffort?: ReasoningEffort | null
+    },
+  ): SessionRecord | null {
+    return this.sessions.updateLlmParams(sessionId, patch)
+  }
+
   /** 按模型窗预算压缩；返回用户可见轻提示文案（无变更则 undefined） */
   private async applyContextBudget(
     record: SessionRecord,
@@ -797,7 +808,11 @@ export class AgentEngine {
       { role: 'user', content: prompt },
     ]
 
-    const turn = await llm.chat(messages)
+    const turn = await llm.chat(messages, undefined, undefined, {
+      temperature: record.llmParams?.temperature,
+      maxTokens: record.llmParams?.maxTokens,
+      reasoningEffort: record.llmParams?.reasoningEffort,
+    })
     if (turn.finishReason === 'error') {
       return { reply: chatMessageContentToText(turn.message.content) || turn.error || '请求失败' }
     }
@@ -1066,6 +1081,9 @@ export class AgentEngine {
         }
         const turn = await llm.chat(budgeted.modelView, openAiTools, signal, {
           sessionId,
+          temperature: record.llmParams?.temperature,
+          maxTokens: record.llmParams?.maxTokens,
+          reasoningEffort: record.llmParams?.reasoningEffort,
           onDelta: (delta) => {
             if (delta.hasToolCalls) {
               stopTokenProgress = true

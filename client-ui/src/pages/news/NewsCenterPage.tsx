@@ -25,6 +25,10 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
+  /** Electron: let app-main tint show through (sidebar/detail keep own surfaces). */
+  rootElectron: {
+    backgroundColor: 'transparent',
+  },
   toolbarMeta: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
@@ -42,7 +46,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '10px',
     padding: '10px 16px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
@@ -201,7 +205,7 @@ function NewsCenterContent({
   ) : null
 
   return (
-    <div className={mergeClasses(s.root, 'opptrix-news-center')}>
+    <div className={mergeClasses(s.root, electronChrome && s.rootElectron, 'opptrix-news-center')}>
       {electronTitleBar}
       {webHead}
 

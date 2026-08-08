@@ -24,7 +24,7 @@ if (isElectron()) {
   } else if (platform === 'darwin') {
     document.documentElement.classList.add('opptrix-platform-darwin')
   }
-  // mac vibrancy / win acrylic — 侧栏透明穿透到系统毛玻璃
+  // mac vibrancy / win mica — 侧栏透明穿透到系统毛玻璃
   if (platform === 'darwin' || platform === 'win32') {
     document.documentElement.classList.add('opptrix-electron-vibrancy')
   }

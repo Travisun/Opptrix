@@ -3,7 +3,7 @@ export const DESKTOP_TITLEBAR_HEIGHT = 43
 /**
  * Non-mac Electron: dedicated window-frame titlebar above content chrome.
  * Hosts min/max/close; background matches the left sidebar glass strategy.
- * macOS keeps system traffic lights in the content chrome band (hiddenInset).
+ * macOS uses compact custom traffic lights in the content chrome band (hiddenInset).
  */
 export const DESKTOP_FRAME_TITLEBAR_HEIGHT = 37
 
@@ -24,7 +24,7 @@ export const DESKTOP_CHROME_BAND_HEIGHT = DESKTOP_TITLEBAR_HEIGHT - DESKTOP_CHRO
  */
 export const DESKTOP_WIN_WINDOW_CONTROLS_RESERVE = 12
 
-/** macOS native traffic-light zone before app toolbar (windowed) */
+/** macOS compact custom traffic-light zone before app toolbar (windowed) */
 export const DESKTOP_TRAFFIC_LIGHT_WIDTH = 80
 /** macOS toolbar inset when traffic lights move to the top bar in fullscreen */
 export const DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN = 12
@@ -41,11 +41,16 @@ export const DESKTOP_TITLE_GAP = 12
 /** Toolbar tools: sidebar, new chat, back, forward */
 export const DESKTOP_TOOLBAR_TOOL_COUNT = 4
 
-/** Settings nav column (Codex-style) */
-export const DESKTOP_SETTINGS_SIDEBAR_WIDTH = 210
+/** Settings nav column default (px) — Codex-style; also default for drag persistence */
+export const DESKTOP_SETTINGS_SIDEBAR_WIDTH = 260
+/** Settings sidebar drag bounds */
+export const SETTINGS_SIDEBAR_MIN_WIDTH = 200
+export const SETTINGS_SIDEBAR_MAX_WIDTH = 360
+/** Keep a usable settings content column while dragging the nav */
+export const SETTINGS_CONTENT_MIN_WIDTH = 420
 
 /** Default session sidebar width (px) — persisted via `opptrix-sidebar-width` */
-export const SIDEBAR_DEFAULT_WIDTH = 200
+export const SIDEBAR_DEFAULT_WIDTH = 250
 /** Inline sidebar must clear title-bar chrome (traffic lights + toolbar tools) so session title does not overlap icons */
 export const SIDEBAR_MIN_WIDTH =
   DESKTOP_TRAFFIC_LIGHT_WIDTH +

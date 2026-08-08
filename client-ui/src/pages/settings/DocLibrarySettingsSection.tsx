@@ -9,7 +9,7 @@ import {
   type ParseEnginesStatus,
   type SemanticModelStatus,
 } from '../../api/client'
-import { SettingsGroup, SettingsRow } from './SettingsPrimitives'
+import { SettingsGroup, SettingsRow, SettingsSectionLabel } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 
 const useStyles = makeStyles({
@@ -18,14 +18,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '12px',
     marginBottom: '20px',
-  },
-  sectionLabel: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    padding: '0 2px 8px',
   },
   hint: {
     fontSize: 'var(--opptrix-font-md)',
@@ -183,7 +175,7 @@ export default function DocLibrarySettingsSection() {
 
   return (
     <div className={s.root}>
-      <Text className={s.sectionLabel} block>研报检索</Text>
+      <SettingsSectionLabel spaced>研报检索</SettingsSectionLabel>
       <Text className={s.hint} block>
         研报与资讯入库后，可在对话中按含义或关键词查找；扫描件需先完成文字识别准备。
       </Text>

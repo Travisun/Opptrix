@@ -39,13 +39,17 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
+  /** Electron: let app-main tint show through (cards keep own surfaces). */
+  rootElectron: {
+    backgroundColor: 'transparent',
+  },
   webHead: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     padding: '10px 16px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
@@ -369,7 +373,7 @@ export default function ExpertMarketPage({
   }
 
   return (
-    <div className={s.root}>
+    <div className={mergeClasses(s.root, electronChrome && s.rootElectron, 'opptrix-experts')}>
       {electronChrome ? (
         <StandaloneElectronTitleBar
           title="专家"

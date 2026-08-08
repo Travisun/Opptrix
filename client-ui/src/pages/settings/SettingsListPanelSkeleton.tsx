@@ -1,11 +1,16 @@
 import { Skeleton, SkeletonItem, makeStyles } from '@fluentui/react-components'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import {
+  settingsHairlineBorder,
+  settingsSurfaceRadius,
+  settingsSurfaceTint,
+} from './SettingsPrimitives'
 
 const useStyles = makeStyles({
   listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
     overflow: 'hidden',
     height: '360px',
     display: 'flex',

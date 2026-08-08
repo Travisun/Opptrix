@@ -3,7 +3,7 @@ import {
   Text, Spinner, Switch, makeStyles, mergeClasses,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
 } from '@fluentui/react-components'
-import { ChevronRightRegular, DeleteRegular, EditRegular, SystemRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
+import { DeleteRegular, EditRegular, AddRegular, SystemRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ProviderWizard from './ProviderWizard'
@@ -26,8 +26,9 @@ import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettin
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
-  SettingsGroup, SettingsRow, SettingsStaticBlock,
-  SettingsTextField, SettingsProviderRow, SettingsActionRow,
+  SettingsGroup, SettingsRow, SettingsEmptyState,
+  SettingsTextField, SettingsProviderRow, SettingsPanelHeader,
+  SettingsSectionLabel,
 } from './settings/SettingsPrimitives'
 import {
   getConfig, patchConfig, deleteProvider, getHealth, news,
@@ -46,12 +47,10 @@ import FontScalePreferencePicker from './settings/FontScalePreferencePicker'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
-import { WORKSPACE_CHAT_MIN_WIDTH } from '../desktop/constants'
-import { desktopFrameTitlebarHeight } from '../desktop/layout'
-import StandaloneElectronTitleBar from '../desktop/StandaloneElectronTitleBar'
+import WorkspaceSplitDivider from '../chat/WorkspaceSplitDivider'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
 import { useSidebarOverlayMode } from '../hooks/useBreakpoint'
-import { getSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
+import { useSettingsSidebarWidth } from '../hooks/useSettingsSidebarWidth'
 
 const SCORECARD_SAVE_MS = 650
 
@@ -129,14 +128,16 @@ const useStyles = makeStyles({
     paddingRight: '12px',
   },
   contentHeaderFlush: {
-    paddingTop: '16px',
+    /** 无次级 title band 时略增顶距，避免贴窗沿 */
+    paddingTop: '28px',
   },
   pageSubtitleFlush: {
     maxWidth: 'none',
   },
   contentHeader: {
     flexShrink: 0,
-    paddingTop: '24px',
+    /** 去掉 mac 次级「设置」header 后补足原先 title band 的呼吸空间 */
+    paddingTop: '40px',
     paddingBottom: '4px',
   },
   contentBack: {
@@ -144,29 +145,28 @@ const useStyles = makeStyles({
     marginLeft: '-2px',
   },
   pageTitle: {
-    fontSize: 'var(--opptrix-font-3xl)',
-    fontWeight: 600,
-    letterSpacing: '-0.02em',
-    lineHeight: 1.3,
+    fontSize: '17px',
+    fontWeight: 500,
+    lineHeight: '21px',
     color: opptrixCssVars.textPrimary,
   },
   pageSubtitle: {
-    fontSize: 'var(--opptrix-font-lg)',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 400,
     color: opptrixCssVars.textSecondary,
-    lineHeight: 1.55,
-    marginTop: '8px',
+    lineHeight: '18px',
+    marginTop: '4px',
     maxWidth: '52ch',
   },
   contentBody: {
     padding: '16px 0 32px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    gap: '14px',
   },
   contentBodyCompact: {
     padding: '10px 0 20px',
-    gap: '8px',
+    gap: '12px',
   },
   contentScrollFill: {
     display: 'flex',
@@ -190,14 +190,7 @@ const useStyles = makeStyles({
   sectionBlock: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
-  },
-  sectionLabel: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textSecondary,
-    letterSpacing: '-0.01em',
-    paddingLeft: '2px',
+    gap: '8px',
   },
   saveHint: {
     fontSize: 'var(--opptrix-font-md)',
@@ -338,6 +331,10 @@ interface SettingsPageProps {
    * Pass `desktopChromeToolbarReserve(fullscreen)` from ChatApp.
    */
   chromeToolbarReserve?: number
+  /** Settings nav width — omit to own drag/persist via useSettingsSidebarWidth */
+  sidebarWidth?: number
+  sidebarDragging?: boolean
+  onBeginSidebarDrag?: (clientX: number) => void
 }
 
 export default function SettingsPage(props: SettingsPageProps) {
@@ -353,7 +350,10 @@ function SettingsPageView({
   sidebarVisible = true,
   onSidebarClose,
   initialSection,
-  chromeToolbarReserve = 0,
+  chromeToolbarReserve: _chromeToolbarReserve = 0,
+  sidebarWidth: sidebarWidthProp,
+  sidebarDragging: sidebarDraggingProp,
+  onBeginSidebarDrag,
 }: SettingsPageProps) {
   const toast = useSettingsToast()
   const { confirm } = useOpptrixDialogAlert()
@@ -379,11 +379,19 @@ function SettingsPageView({
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-  const sessionSidebarWidth = useMemo(
-    () => getSessionSidebarWidth(viewportWidth, WORKSPACE_CHAT_MIN_WIDTH),
-    [viewportWidth],
-  )
-  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, sessionSidebarWidth)
+  const ownsSidebarWidth = sidebarWidthProp == null
+  const {
+    width: internalSidebarWidth,
+    isDragging: internalSidebarDragging,
+    beginDrag: internalBeginSidebarDrag,
+  } = useSettingsSidebarWidth({
+    enabled: !isMobile && ownsSidebarWidth,
+    viewportWidth,
+  })
+  const settingsSidebarWidth = sidebarWidthProp ?? internalSidebarWidth
+  const settingsSidebarDragging = sidebarDraggingProp ?? internalSidebarDragging
+  const beginSettingsSidebarDrag = onBeginSidebarDrag ?? internalBeginSidebarDrag
+  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, settingsSidebarWidth)
   const [section, setSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection))
   const [search, setSearch] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -400,8 +408,6 @@ function SettingsPageView({
   const scorecardBaseline = useRef<string | null>(null)
   const newsSearchLoaded = useRef(false)
   const electronChrome = isElectron() && !isMobile
-  /** Non-mac: primary frame titlebar replaces the secondary "设置" title band. */
-  const showSecondaryTitleBar = electronChrome && desktopFrameTitlebarHeight() === 0
   const searchActive = Boolean(search.trim()) && !isMobile
   const needsConfig = section === 'general' || section === 'models'
 
@@ -447,11 +453,12 @@ function SettingsPageView({
       .then(res => {
         const entries: SettingsSearchEntry[] = []
         for (const sub of res.subscriptions) {
+          const groupTitle = res.groups.find(g => g.id === sub.group_id)?.title
           entries.push({
             section: 'news_feed',
             group: '订阅源',
             title: sub.title,
-            desc: sub.url,
+            desc: groupTitle ?? '未分组',
           })
         }
         for (const group of res.groups) {
@@ -560,9 +567,6 @@ function SettingsPageView({
   })()
 
   const contentFlush = isMobile || sidebarOverlayMode
-  // Panel: title sits beside the glass sidebar → compact inset (~12).
-  // Overlay: sidebar is gone → reserve for traffic-light / toolbar chrome.
-  const titleChromeReserve = sidebarOverlayMode ? chromeToolbarReserve : 0
 
   const renderSection = () => {
     if (loading && needsConfig) return <Spinner size="tiny" label="加载配置…" />
@@ -572,7 +576,7 @@ function SettingsPageView({
         return (
           <>
             <div className={s.sectionBlock}>
-              <Text className={s.sectionLabel} block>外观</Text>
+              <SettingsSectionLabel spaced>外观</SettingsSectionLabel>
               <SettingsGroup>
                 <SettingsRow
                   title="主题"
@@ -610,7 +614,7 @@ function SettingsPageView({
             </div>
 
             <div className={s.sectionBlock}>
-              <Text className={s.sectionLabel} block>偏好</Text>
+              <SettingsSectionLabel spaced>偏好</SettingsSectionLabel>
               <SettingsGroup>
                 <SettingsRow
                   title="评分卡"
@@ -631,7 +635,7 @@ function SettingsPageView({
             </div>
 
             <div className={s.sectionBlock}>
-              <Text className={s.sectionLabel} block>连接</Text>
+              <SettingsSectionLabel spaced>连接</SettingsSectionLabel>
               <SettingsGroup>
                 <SettingsRow
                   title="后端连接"
@@ -651,20 +655,30 @@ function SettingsPageView({
       case 'models':
         return (
           <div className={s.sectionBlock}>
-            <Text className={s.sectionLabel} block>提供商</Text>
             <SettingsGroup>
+              <SettingsPanelHeader
+                title="提供商"
+                action={(
+                  <OpptrixButton
+                    variant="secondary"
+                    size="small"
+                    icon={<AddRegular />}
+                    onClick={() => openProviderWizard()}
+                  >
+                    添加
+                  </OpptrixButton>
+                )}
+              />
               {providers.length === 0 ? (
-                <SettingsStaticBlock>
-                  <Text className={s.aboutMeta} block>
-                    还没有配置任何提供商。添加后即可开始多模型对话。
-                  </Text>
-                </SettingsStaticBlock>
+                <SettingsEmptyState
+                  title="还没有配置提供商"
+                  desc="点击上方「添加」，选择预置服务或自定义后即可开始对话"
+                />
               ) : (
                 providers.map((p, i) => (
                   <SettingsProviderRow
                     key={p.id}
                     name={p.name}
-                    baseUrl={p.base_url}
                     models={p.models}
                     avatar={p.name.charAt(0).toUpperCase()}
                     first={i === 0}
@@ -687,14 +701,6 @@ function SettingsPageView({
                   />
                 ))
               )}
-              <SettingsActionRow
-                title="添加提供商"
-                desc="选择预置服务或自定义，填写密钥即可使用"
-                icon={<ChevronRightRegular fontSize={16} color={opptrixCssVars.textTertiary} />}
-                onClick={() => openProviderWizard()}
-                dividerAbove
-                last
-              />
             </SettingsGroup>
           </div>
         )
@@ -749,20 +755,32 @@ function SettingsPageView({
     >
       <div className={mergeClasses(s.pageBody, isMobile && s.pageBodyMobile)}>
       {!sidebarOverlayMode && (
-        <SettingsSidebar
-          mode="panel"
-          active={section}
-          onSelect={setSection}
-          onBack={onBack}
-          search={search}
-          onSearchChange={setSearch}
-          dynamicSearchEntries={dynamicSearchEntries}
-          isMobile={isMobile}
-        />
+        <>
+          <SettingsSidebar
+            mode="panel"
+            width={settingsSidebarWidth}
+            active={section}
+            onSelect={setSection}
+            onBack={onBack}
+            search={search}
+            onSearchChange={setSearch}
+            dynamicSearchEntries={dynamicSearchEntries}
+            isMobile={isMobile}
+          />
+          {!isMobile && (
+            <WorkspaceSplitDivider
+              electronChrome={electronChrome}
+              isDragging={settingsSidebarDragging}
+              onBeginDrag={beginSettingsSidebarDrag}
+              ariaLabel="调整设置侧栏宽度"
+            />
+          )}
+        </>
       )}
       {sidebarOverlayMode && (
         <SettingsSidebar
           mode="overlay"
+          width={settingsSidebarWidth}
           visible={sidebarVisible}
           onClose={onSidebarClose}
           active={section}
@@ -781,14 +799,6 @@ function SettingsPageView({
           'opptrix-settings-content',
         )}
       >
-        {showSecondaryTitleBar && (
-          <StandaloneElectronTitleBar
-            title="设置"
-            chromeToolbarReserve={titleChromeReserve}
-            className="opptrix-settings-title-bar"
-            dragRegionClassName="opptrix-settings-title-drag"
-          />
-        )}
         <div className={mergeClasses(
           s.contentScroll,
           'opptrix-scroll',

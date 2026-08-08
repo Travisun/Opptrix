@@ -17,8 +17,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--opptrix-canvas, #FFFFFF);
-  color: var(--opptrix-text, #1D1D1F);
+  background: var(--opptrix-canvas, #FCFCFC);
+  color: var(--opptrix-text, #141414);
   overscroll-behavior: none;
   touch-action: manipulation;
   font-size: var(--opptrix-font-base);
@@ -27,31 +27,33 @@ body {
 
 :root,
 [data-theme="light"] {
-  --opptrix-accent: #1D1D1F;
+  /* Cursor Light–aligned neutrals (theme-cursor): editor #FCFCFC > sidebar #F3F3F3 */
+  --opptrix-accent: #141414;
   --opptrix-accent-hover: #000000;
-  --opptrix-accent-soft: rgba(29, 29, 31, 0.07);
-  --opptrix-accent-muted: #E5E5EA;
-  --opptrix-accent-foreground: #FFFFFF;
-  --opptrix-canvas: #FFFFFF;
-  --opptrix-canvas-alt: #F5F5F7;
-  --opptrix-canvas-muted: #EBEBED;
-  --opptrix-surface: #FFFFFF;
-  --opptrix-surface-muted: rgba(255, 255, 255, 0.42);
-  --opptrix-surface-hover: rgba(255, 255, 255, 0.62);
-  --opptrix-surface-glass: rgba(255, 255, 255, 0.72);
+  --opptrix-accent-soft: rgba(20, 20, 20, 0.08);
+  --opptrix-accent-muted: rgba(20, 20, 20, 0.14);
+  --opptrix-accent-foreground: #FCFCFC;
+  --opptrix-canvas: #FCFCFC;
+  --opptrix-canvas-alt: #F3F3F3;
+  --opptrix-canvas-muted: #EEEEEE;
+  --opptrix-surface: #FCFCFC;
+  --opptrix-surface-muted: rgba(252, 252, 252, 0.72);
+  --opptrix-surface-hover: rgba(20, 20, 20, 0.08);
+  --opptrix-surface-glass: rgba(252, 252, 252, 0.72);
   --opptrix-glass: rgba(255, 255, 255, 0.14);
   --opptrix-glass-strong: rgba(255, 255, 255, 0.22);
-  --opptrix-glass-nav-selected: rgba(255, 255, 255, 0.38);
+  --opptrix-glass-nav-selected: rgba(20, 20, 20, 0.08);
   --opptrix-sidebar-glass: rgba(255, 255, 255, 0.14);
-  --opptrix-sidebar-selected: rgba(255, 255, 255, 0.38);
-  --opptrix-user-bubble: #F2F2F7;
-  --opptrix-gray-100: #F2F2F7;
-  --opptrix-gray-200: #E5E5EA;
-  --opptrix-gray-300: #D1D1D6;
-  --opptrix-separator: rgba(60, 60, 67, 0.06);
-  --opptrix-separator-strong: rgba(60, 60, 67, 0.11);
-  --opptrix-border: rgba(60, 60, 67, 0.08);
-  --opptrix-border-strong: rgba(60, 60, 67, 0.14);
+  --opptrix-sidebar-selected: rgba(20, 20, 20, 0.08);
+  --opptrix-user-bubble: #F3F3F3;
+  --opptrix-gray-100: #F3F3F3;
+  --opptrix-gray-200: #EEEEEE;
+  --opptrix-gray-300: rgba(20, 20, 20, 0.20);
+  --opptrix-separator: rgba(20, 20, 20, 0.08);
+  --opptrix-separator-strong: rgba(20, 20, 20, 0.12);
+  --opptrix-separator-hairline: rgba(20, 20, 20, 0.08);
+  --opptrix-border: rgba(20, 20, 20, 0.08);
+  --opptrix-border-strong: rgba(20, 20, 20, 0.20);
   --opptrix-font-xs: 10px;
   --opptrix-font-sm: 11px;
   --opptrix-font-md: 12px;
@@ -62,39 +64,39 @@ body {
   --opptrix-font-3xl: 20px;
   --opptrix-font-4xl: 24px;
   --opptrix-font-display: 36px;
-  --opptrix-text: #1D1D1F;
-  --opptrix-text-primary: #1D1D1F;
-  --opptrix-text-secondary: #6E6E73;
-  --opptrix-text-tertiary: #AEAEB2;
+  --opptrix-text: #141414;
+  --opptrix-text-primary: #141414;
+  --opptrix-text-secondary: rgba(20, 20, 20, 0.74);
+  --opptrix-text-tertiary: rgba(20, 20, 20, 0.60);
   --opptrix-success: #34C759;
   --opptrix-success-soft: rgba(52, 199, 89, 0.1);
   --opptrix-warning: #FF9500;
   --opptrix-warning-soft: rgba(255, 149, 0, 0.1);
   --opptrix-error: #FF3B30;
   --opptrix-error-soft: rgba(255, 59, 48, 0.1);
-  --opptrix-info-soft: rgba(29, 29, 31, 0.06);
-  --opptrix-input-bg: #F5F5F7;
-  --opptrix-input-bg-hover: #EBEBED;
-  --opptrix-input-bg-focus: #FFFFFF;
+  --opptrix-info-soft: rgba(20, 20, 20, 0.06);
+  --opptrix-input-bg: #FCFCFC;
+  --opptrix-input-bg-hover: #F3F3F3;
+  --opptrix-input-bg-focus: #FCFCFC;
   --opptrix-input-border: transparent;
-  --opptrix-input-border-focus: #1D1D1F;
-  --opptrix-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
-  --opptrix-focus-border: rgba(60, 60, 67, 0.18);
-  --opptrix-composer-float-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
-  --opptrix-composer-float-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.07), 0 6px 16px rgba(0, 0, 0, 0.05);
-  --opptrix-composer-float-shadow-focus: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.06);
-  --opptrix-popover-border-color: rgba(60, 60, 67, 0.14);
-  --opptrix-popover-shadow: 0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
-  --opptrix-glass-panel-border-color: rgba(60, 60, 67, 0.12);
-  --opptrix-glass-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.065);
-  --opptrix-settings-panel-border-color: #E5E5EA;
-  --opptrix-glass-surface-bg: rgba(255, 255, 255, 0.72);
-  --opptrix-glass-surface-border: rgba(60, 60, 67, 0.12);
-  --opptrix-segmented-track: rgba(118, 118, 128, 0.12);
-  --opptrix-segmented-thumb-bg: rgba(255, 255, 255, 0.92);
-  --opptrix-segmented-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.08);
-  --opptrix-overlay-sidebar-hover: #F2F2F7;
-  --opptrix-overlay-sidebar-selected: #F2F2F7;
+  --opptrix-input-border-focus: rgba(20, 20, 20, 0.20);
+  --opptrix-focus-glow: 0 0 0 3px rgba(20, 20, 20, 0.10);
+  --opptrix-focus-border: rgba(20, 20, 20, 0.20);
+  --opptrix-composer-float-shadow: 0 1px 4px rgba(20, 20, 20, 0.06), 0 4px 12px rgba(20, 20, 20, 0.04);
+  --opptrix-composer-float-shadow-hover: 0 2px 6px rgba(20, 20, 20, 0.07), 0 6px 16px rgba(20, 20, 20, 0.05);
+  --opptrix-composer-float-shadow-focus: 0 2px 8px rgba(20, 20, 20, 0.08), 0 8px 20px rgba(20, 20, 20, 0.06);
+  --opptrix-popover-border-color: rgba(20, 20, 20, 0.12);
+  --opptrix-popover-shadow: 0 2px 8px rgba(20, 20, 20, 0.05), 0 1px 2px rgba(20, 20, 20, 0.03);
+  --opptrix-glass-panel-border-color: rgba(20, 20, 20, 0.12);
+  --opptrix-glass-panel-shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 4px 14px rgba(20, 20, 20, 0.065);
+  --opptrix-settings-panel-border-color: rgba(20, 20, 20, 0.12);
+  --opptrix-glass-surface-bg: rgba(252, 252, 252, 0.72);
+  --opptrix-glass-surface-border: rgba(20, 20, 20, 0.12);
+  --opptrix-segmented-track: rgba(20, 20, 20, 0.08);
+  --opptrix-segmented-thumb-bg: rgba(252, 252, 252, 0.96);
+  --opptrix-segmented-thumb-shadow: 0 1px 2px rgba(20, 20, 20, 0.06), 0 2px 8px rgba(20, 20, 20, 0.08);
+  --opptrix-overlay-sidebar-hover: rgba(20, 20, 20, 0.08);
+  --opptrix-overlay-sidebar-selected: rgba(20, 20, 20, 0.08);
   --opptrix-motion-fast: 140ms;
   --opptrix-motion-normal: 220ms;
   --opptrix-ease: cubic-bezier(0.4, 0, 0.2, 1);
@@ -105,31 +107,33 @@ body {
 }
 
 [data-theme="dark"] {
-  --opptrix-accent: #F5F5F7;
+  /* Cursor Dark–aligned neutrals */
+  --opptrix-accent: #F0F0F0;
   --opptrix-accent-hover: #FFFFFF;
-  --opptrix-accent-soft: rgba(255, 255, 255, 0.08);
-  --opptrix-accent-muted: #3A3A3C;
-  --opptrix-accent-foreground: #1C1C1E;
-  --opptrix-canvas: #1C1C1E;
-  --opptrix-canvas-alt: #2C2C2E;
-  --opptrix-canvas-muted: #3A3A3C;
-  --opptrix-surface: #2C2C2E;
-  --opptrix-surface-muted: rgba(44, 44, 46, 0.55);
-  --opptrix-surface-hover: rgba(58, 58, 60, 0.72);
-  --opptrix-surface-glass: rgba(44, 44, 46, 0.72);
-  --opptrix-glass: rgba(44, 44, 46, 0.45);
-  --opptrix-glass-strong: rgba(58, 58, 60, 0.62);
-  --opptrix-glass-nav-selected: rgba(72, 72, 74, 0.72);
-  --opptrix-sidebar-glass: rgba(44, 44, 46, 0.45);
-  --opptrix-sidebar-selected: rgba(72, 72, 74, 0.72);
-  --opptrix-user-bubble: #2C2C2E;
-  --opptrix-gray-100: #2C2C2E;
-  --opptrix-gray-200: #3A3A3C;
-  --opptrix-gray-300: #48484A;
-  --opptrix-separator: rgba(255, 255, 255, 0.06);
-  --opptrix-separator-strong: rgba(255, 255, 255, 0.11);
-  --opptrix-border: rgba(255, 255, 255, 0.08);
-  --opptrix-border-strong: rgba(255, 255, 255, 0.14);
+  --opptrix-accent-soft: rgba(240, 240, 240, 0.08);
+  --opptrix-accent-muted: rgba(240, 240, 240, 0.14);
+  --opptrix-accent-foreground: #181818;
+  --opptrix-canvas: #181818;
+  --opptrix-canvas-alt: #141414;
+  --opptrix-canvas-muted: #2A2A2A;
+  --opptrix-surface: #181818;
+  --opptrix-surface-muted: rgba(24, 24, 24, 0.72);
+  --opptrix-surface-hover: rgba(240, 240, 240, 0.067);
+  --opptrix-surface-glass: rgba(24, 24, 24, 0.72);
+  --opptrix-glass: rgba(24, 24, 24, 0.45);
+  --opptrix-glass-strong: rgba(40, 40, 40, 0.62);
+  --opptrix-glass-nav-selected: rgba(240, 240, 240, 0.12);
+  --opptrix-sidebar-glass: rgba(24, 24, 24, 0.45);
+  --opptrix-sidebar-selected: rgba(240, 240, 240, 0.12);
+  --opptrix-user-bubble: #2A2A2A;
+  --opptrix-gray-100: #2A2A2A;
+  --opptrix-gray-200: #3A3A3A;
+  --opptrix-gray-300: #4A4A4A;
+  --opptrix-separator: rgba(240, 240, 240, 0.075);
+  --opptrix-separator-strong: rgba(240, 240, 240, 0.12);
+  --opptrix-separator-hairline: rgba(240, 240, 240, 0.075);
+  --opptrix-border: rgba(240, 240, 240, 0.075);
+  --opptrix-border-strong: rgba(240, 240, 240, 0.15);
   --opptrix-font-xs: 10px;
   --opptrix-font-sm: 11px;
   --opptrix-font-md: 12px;
@@ -140,39 +144,39 @@ body {
   --opptrix-font-3xl: 20px;
   --opptrix-font-4xl: 24px;
   --opptrix-font-display: 36px;
-  --opptrix-text: #F5F5F7;
-  --opptrix-text-primary: #F5F5F7;
-  --opptrix-text-secondary: #AEAEB2;
-  --opptrix-text-tertiary: #6E6E73;
+  --opptrix-text: #F0F0F0;
+  --opptrix-text-primary: #F0F0F0;
+  --opptrix-text-secondary: rgba(240, 240, 240, 0.74);
+  --opptrix-text-tertiary: rgba(240, 240, 240, 0.60);
   --opptrix-success: #30D158;
   --opptrix-success-soft: rgba(48, 209, 88, 0.14);
   --opptrix-warning: #FF9F0A;
   --opptrix-warning-soft: rgba(255, 159, 10, 0.14);
   --opptrix-error: #FF453A;
   --opptrix-error-soft: rgba(255, 69, 58, 0.14);
-  --opptrix-info-soft: rgba(255, 255, 255, 0.06);
-  --opptrix-input-bg: #2C2C2E;
-  --opptrix-input-bg-hover: #3A3A3C;
-  --opptrix-input-bg-focus: #48484A;
+  --opptrix-info-soft: rgba(240, 240, 240, 0.06);
+  --opptrix-input-bg: rgba(240, 240, 240, 0.039);
+  --opptrix-input-bg-hover: rgba(240, 240, 240, 0.07);
+  --opptrix-input-bg-focus: rgba(240, 240, 240, 0.10);
   --opptrix-input-border: transparent;
-  --opptrix-input-border-focus: #F5F5F7;
-  --opptrix-focus-glow: 0 0 0 3px rgba(255, 255, 255, 0.12);
-  --opptrix-focus-border: rgba(255, 255, 255, 0.18);
+  --opptrix-input-border-focus: rgba(240, 240, 240, 0.15);
+  --opptrix-focus-glow: 0 0 0 3px rgba(240, 240, 240, 0.12);
+  --opptrix-focus-border: rgba(240, 240, 240, 0.15);
   --opptrix-composer-float-shadow: 0 1px 4px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.22);
   --opptrix-composer-float-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.32), 0 6px 16px rgba(0, 0, 0, 0.26);
   --opptrix-composer-float-shadow-focus: 0 2px 8px rgba(0, 0, 0, 0.36), 0 8px 20px rgba(0, 0, 0, 0.30);
-  --opptrix-popover-border-color: rgba(255, 255, 255, 0.14);
+  --opptrix-popover-border-color: rgba(240, 240, 240, 0.12);
   --opptrix-popover-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
-  --opptrix-glass-panel-border-color: rgba(255, 255, 255, 0.12);
+  --opptrix-glass-panel-border-color: rgba(240, 240, 240, 0.12);
   --opptrix-glass-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.32);
-  --opptrix-settings-panel-border-color: #3A3A3C;
-  --opptrix-glass-surface-bg: rgba(44, 44, 46, 0.72);
-  --opptrix-glass-surface-border: rgba(255, 255, 255, 0.12);
-  --opptrix-segmented-track: rgba(118, 118, 128, 0.24);
-  --opptrix-segmented-thumb-bg: rgba(72, 72, 74, 0.96);
+  --opptrix-settings-panel-border-color: rgba(240, 240, 240, 0.12);
+  --opptrix-glass-surface-bg: rgba(24, 24, 24, 0.72);
+  --opptrix-glass-surface-border: rgba(240, 240, 240, 0.12);
+  --opptrix-segmented-track: rgba(240, 240, 240, 0.10);
+  --opptrix-segmented-thumb-bg: rgba(40, 40, 40, 0.96);
   --opptrix-segmented-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.24);
-  --opptrix-overlay-sidebar-hover: #3A3A3C;
-  --opptrix-overlay-sidebar-selected: #48484A;
+  --opptrix-overlay-sidebar-hover: rgba(240, 240, 240, 0.067);
+  --opptrix-overlay-sidebar-selected: rgba(240, 240, 240, 0.12);
 }
 
 html.opptrix-desktop {
@@ -180,9 +184,10 @@ html.opptrix-desktop {
   --opptrix-chrome-top-offset: 5px;
 }
 
-/* ── Electron: 壳层透明以露出窗口材质（vibrancy/acrylic），主内容区自行实底 ──
+/* ── Electron: 壳层透明以露出窗口材质（vibrancy/mica） ──
  * 路线 1：BrowserWindow 本身不开 transparent；圆角/阴影由系统窗形提供。
- * 网页层透明仅用于 mac vibrancy / win acrylic 透过侧栏等区域。
+ * vibrancy 开启时侧栏/主区用 color-mix 轻穿透（对齐 Cursor glass）；
+ * 启动 / onboarding 仍实底。
  */
 html.opptrix-electron {
   --opptrix-app-bg: transparent;
@@ -230,7 +235,7 @@ html.opptrix-electron .opptrix-onboarding-shell {
 
 html.opptrix-electron .opptrix-onboarding-title-bar {
   background: var(--opptrix-canvas) !important;
-  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  border-bottom: 1px solid var(--opptrix-separator-hairline) !important;
   pointer-events: none;
   -webkit-app-region: no-drag;
 }
@@ -320,14 +325,14 @@ html.opptrix-electron .opptrix-settings-panel {
 
 html.opptrix-electron .opptrix-chat-title-bar {
   background: var(--opptrix-canvas) !important;
-  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  border-bottom: 1px solid var(--opptrix-separator-hairline) !important;
   pointer-events: none;
   -webkit-app-region: no-drag;
 }
 
 html.opptrix-electron .opptrix-news-title-bar {
   background: var(--opptrix-canvas) !important;
-  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  border-bottom: 1px solid var(--opptrix-separator-hairline) !important;
   position: relative;
   z-index: 1200;
   pointer-events: none;
@@ -343,7 +348,7 @@ html.opptrix-electron .opptrix-news-title-drag {
 
 html.opptrix-electron .opptrix-market-dynamics-title-bar {
   background: var(--opptrix-canvas) !important;
-  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  border-bottom: 1px solid var(--opptrix-separator-hairline) !important;
   position: relative;
   z-index: 1200;
   pointer-events: none;
@@ -359,7 +364,7 @@ html.opptrix-electron .opptrix-market-dynamics-title-drag {
 
 html.opptrix-electron .opptrix-experts-title-bar {
   background: var(--opptrix-canvas) !important;
-  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  border-bottom: 1px solid var(--opptrix-separator-hairline) !important;
   position: relative;
   z-index: 1200;
   pointer-events: none;
@@ -426,7 +431,7 @@ html.opptrix-electron .opptrix-experts-title-drag {
 
 html.opptrix-electron .opptrix-right-panel-title-bar {
   background: var(--opptrix-canvas) !important;
-  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  border-bottom: 1px solid var(--opptrix-separator-hairline) !important;
   position: relative;
   z-index: 1200;
   pointer-events: none;
@@ -453,11 +458,11 @@ html.opptrix-electron .opptrix-right-panel {
 
 /* Non-mac window-frame titlebar — same glass recipe as left sidebar */
 html.opptrix-electron .opptrix-window-frame-titlebar {
-  border-bottom: 1px solid var(--opptrix-separator-strong);
+  border-bottom: 1px solid var(--opptrix-separator-hairline);
 }
 
 /* ── Electron shell glass ──
- * 有原生毛玻璃（mac vibrancy / win acrylic）时侧栏透明穿透窗口层；
+ * 有原生毛玻璃（mac vibrancy / win mica）时侧栏透明穿透窗口层；
  * 否则（Linux 等）保留 CSS backdrop-filter 毛玻璃。
  */
 html.opptrix-electron .opptrix-glass-sidebar {
@@ -466,18 +471,11 @@ html.opptrix-electron .opptrix-glass-sidebar {
   -webkit-backdrop-filter: blur(40px) saturate(180%);
 }
 
+/* Cursor glass sidebar ≈ color-mix(sidebar 42% / dark 36%, transparent) */
 html.opptrix-electron-vibrancy .opptrix-glass-sidebar {
-  background: transparent !important;
+  background: color-mix(in srgb, var(--opptrix-canvas-alt) 42%, transparent) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-}
-
-/*
- * Windows acrylic alone is too see-through through a fully clear sidebar.
- * Keep material visible under a denser frosted tint (chat + settings sidebars).
- */
-html.opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar {
-  background: rgba(255, 255, 255, 0.62) !important;
 }
 
 /* data-theme lives on <html> — must be html[data-theme=...], not [data-theme] html */
@@ -488,16 +486,46 @@ html[data-theme="dark"].opptrix-electron:not(.opptrix-electron-vibrancy) .opptri
 }
 
 html[data-theme="dark"].opptrix-electron-vibrancy .opptrix-glass-sidebar {
-  background: transparent !important;
+  background: color-mix(in srgb, var(--opptrix-canvas-alt) 36%, transparent) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-html[data-theme="dark"].opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar {
-  background: rgba(44, 44, 46, 0.72) !important;
+/*
+ * Vibrancy main workspace (Cursor chrome/editor ≈ 84% light / 72% dark).
+ * Single-layer tint on workspace hosts only — nested chrome / panels stay
+ * transparent so color-mix does not stack (~97% opaque). Onboarding / startup stay solid.
+ */
+html.opptrix-electron-vibrancy .opptrix-app-main,
+html.opptrix-electron-vibrancy .opptrix-settings-content {
+  background: color-mix(in srgb, var(--opptrix-canvas) 84%, transparent) !important;
 }
 
-/* ── Settings sidebar: web / non-vibrancy fill; vibrancy matches chat (transparent) ── */
+html[data-theme="dark"].opptrix-electron-vibrancy .opptrix-app-main,
+html[data-theme="dark"].opptrix-electron-vibrancy .opptrix-settings-content {
+  background: color-mix(in srgb, var(--opptrix-canvas) 72%, transparent) !important;
+}
+
+/* Nested surfaces inherit host tint — no second color-mix layer */
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-chat-panel,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-chat-panel > *,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-chat-title-bar,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-news-title-bar,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-market-dynamics-title-bar,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-experts-title-bar,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-right-panel,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-right-panel-title-bar,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-right-panel > *,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-news-center,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-market-dynamics,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-experts,
+html.opptrix-electron-vibrancy .opptrix-app-main .opptrix-expert-editor,
+html.opptrix-electron-vibrancy .opptrix-settings-content .opptrix-settings-title-bar,
+html.opptrix-electron-vibrancy .opptrix-settings-panel {
+  background: transparent !important;
+}
+
+/* ── Settings sidebar: web / non-vibrancy fill; vibrancy 同侧栏 42%/36% color-mix ── */
 html .opptrix-settings-sidebar {
   --opptrix-settings-sidebar-fill: color-mix(in srgb, var(--opptrix-canvas-alt) 85%, var(--opptrix-canvas-muted) 15%);
 }
@@ -561,10 +589,9 @@ html.opptrix-electron .opptrix-overlay-sidebar {
 }
 
 .opptrix-sidebar-edge {
-  /* Soften the shared sidebar edge to 80% strength (20% lighter / grayer)
-     without touching the separatorStrong token used elsewhere. */
-  border-right: 1px solid color-mix(in srgb, var(--opptrix-separator-strong) 80%, transparent);
-  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.032);
+  /* 发丝分割：与顶栏/分栏共用 separator-hairline */
+  border-right: 1px solid var(--opptrix-separator-hairline);
+  box-shadow: none;
 }
 
 /* Overlay draw sidebar — gray hover / focus / active + selected session */
@@ -751,16 +778,37 @@ html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-extern
 }
 
 /* ── ContentEditable composer editor ── */
+.opptrix-composer-editor {
+  position: relative;
+}
+
 .opptrix-composer-editor:focus,
 .opptrix-composer-editor:focus-visible {
   outline: none !important;
 }
 
-/* Placeholder when the editor is empty. */
+/*
+ * Placeholder when empty — absolute so it does NOT participate in document flow.
+ * Chromium often leaves <br>/<div><br></div> after delete; in-flow ::before would
+ * put the caret visually after the placeholder text.
+ */
 .opptrix-composer-editor[data-empty='true']::before {
   content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 4px; /* match editor padding-top */
+  right: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--opptrix-text-tertiary);
   pointer-events: none;
+}
+
+/* 语音聆听/识别中：即便仍带 data-empty，也不显示 placeholder */
+.opptrix-composer-editor[data-speech-listening='true']::before {
+  content: none;
+  display: none;
 }
 
 /* Inline reference chip — behaves like a single atomic character in the text flow. */
@@ -926,6 +974,58 @@ select:focus-visible {
   border-radius: 9999px !important;
 }
 
+/* Composer 麦克风 ghost：清 Fluent subtle/primary 伪层与背景残留 */
+.opptrix-round-icon-btn-ghost.fui-Button {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+.opptrix-round-icon-btn-ghost.fui-Button:hover {
+  background-color: var(--opptrix-surface-hover) !important;
+  background-image: none !important;
+}
+.opptrix-round-icon-btn-ghost.fui-Button:active,
+.opptrix-round-icon-btn-ghost.fui-Button:focus {
+  background-image: none !important;
+}
+.opptrix-round-icon-btn-ghost.fui-Button::after {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+}
+
+/* Composer 录音中麦：锁浅色图标 + 偏红底，压过 Fluent/Opptrix ghost hover */
+.opptrix-composer-mic-recording.fui-Button,
+.opptrix-composer-mic-recording.fui-Button:hover,
+.opptrix-composer-mic-recording.fui-Button:active,
+.opptrix-composer-mic-recording.fui-Button:focus,
+.opptrix-composer-mic-recording.fui-Button:focus-visible {
+  color: var(--opptrix-accent-foreground) !important;
+  background-image: none !important;
+}
+.opptrix-composer-mic-recording.fui-Button {
+  background-color: var(--opptrix-error) !important;
+}
+.opptrix-composer-mic-recording.fui-Button:hover {
+  background-color: color-mix(in srgb, var(--opptrix-error) 88%, var(--opptrix-text-primary)) !important;
+}
+.opptrix-composer-mic-recording.fui-Button:active {
+  background-color: color-mix(in srgb, var(--opptrix-error) 80%, var(--opptrix-text-primary)) !important;
+}
+.opptrix-composer-mic-recording.fui-Button .fui-Button__icon,
+.opptrix-composer-mic-recording.fui-Button:hover .fui-Button__icon,
+.opptrix-composer-mic-recording.fui-Button:active .fui-Button__icon,
+.opptrix-composer-mic-recording.fui-Button svg,
+.opptrix-composer-mic-recording.fui-Button:hover svg,
+.opptrix-composer-mic-recording.fui-Button:active svg {
+  color: var(--opptrix-accent-foreground) !important;
+  fill: currentColor !important;
+}
+.opptrix-composer-mic-recording.fui-Button::after {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+}
+
 /* ── Dialog (Codex modal) ── */
 .opptrix-dialog-surface.fui-DialogSurface {
   background: var(--opptrix-canvas) !important;
@@ -953,6 +1053,33 @@ select:focus-visible {
   padding: 0 !important;
   margin: 0 !important;
   overflow: visible !important;
+}
+
+/* 工作流技能预览 / 编辑 — Title 固定，Content 单层滚动，避免双重滚动与撑破视口 */
+.opptrix-skill-dialog.fui-DialogSurface {
+  max-height: min(72vh, 640px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.opptrix-skill-dialog .fui-DialogBody {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.opptrix-skill-dialog .fui-DialogTitle {
+  flex-shrink: 0 !important;
+}
+
+.opptrix-skill-dialog .fui-DialogContent {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 /* 添加/编辑提供商向导 — 小窗口内 footer 始终可见，中间列表滚动 */
@@ -1006,30 +1133,30 @@ select:focus-visible {
   display: none !important;
 }
 
-/* ── Frosted glass dialog — matches MessageSelectionToolbar ── */
+/* ── Frosted glass dialog — Cursor pretty-dialog 紧凑度（accent 仍墨色） ── */
 .opptrix-glass-dialog-surface.fui-DialogSurface {
-  background: var(--opptrix-glass-surface-bg) !important;
+  background: color-mix(in srgb, var(--opptrix-canvas) 92%, transparent) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   border: 1px solid var(--opptrix-glass-surface-border) !important;
-  border-radius: 16px !important;
+  border-radius: 12px !important;
   padding: 0 !important;
   max-width: 440px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1) !important;
 }
 
 .opptrix-glass-dialog-surface .fui-DialogBody {
-  padding: 14px 16px 16px !important;
-  gap: 10px !important;
+  padding: 14px 16px 14px !important;
+  gap: 8px !important;
 }
 
 .opptrix-glass-dialog-surface .fui-DialogTitle {
-  font-size: 14px !important;
-  font-weight: 650 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
   color: var(--opptrix-text) !important;
   padding: 0 !important;
   margin: 0 !important;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .opptrix-glass-dialog-surface .fui-DialogTitle__action .fui-Button,
@@ -1150,11 +1277,15 @@ select:focus-visible {
   box-shadow: none !important;
 }
 
-/* 二次确认 Dialog — 紧凑毛玻璃 */
+/* 二次确认 Dialog — Cursor pretty-dialog 紧凑询问框 */
 .opptrix-dialog-alert-surface.fui-DialogSurface {
   max-width: min(360px, calc(100vw - 32px)) !important;
   min-width: 280px;
-  border-radius: 14px !important;
+  background: color-mix(in srgb, var(--opptrix-canvas) 92%, transparent) !important;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--opptrix-glass-surface-border) !important;
+  border-radius: 12px !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(60, 60, 67, 0.06) !important;
 }
 
@@ -1162,14 +1293,14 @@ select:focus-visible {
   display: flex !important;
   flex-direction: column !important;
   gap: 0 !important;
-  padding: 18px 18px 14px !important;
+  padding: 14px 16px 12px !important;
 }
 
 .opptrix-dialog-alert-surface .opptrix-dialog-alert-title.fui-DialogTitle {
-  font-size: 15px !important;
-  font-weight: 650 !important;
-  line-height: 1.35 !important;
-  letter-spacing: -0.02em;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  letter-spacing: -0.01em;
   color: var(--opptrix-text-primary, #1D1D1F) !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -1177,9 +1308,9 @@ select:focus-visible {
 
 .opptrix-dialog-alert-surface .opptrix-dialog-alert-content.fui-DialogContent {
   padding: 0 !important;
-  margin: 8px 0 0 !important;
-  font-size: 13px;
-  line-height: 1.55;
+  margin: 6px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--opptrix-text-secondary, #6B6B6B);
 }
 
@@ -1189,16 +1320,16 @@ select:focus-visible {
   justify-content: flex-end !important;
   align-items: center !important;
   flex-wrap: nowrap !important;
-  gap: 8px !important;
-  padding: 14px 0 0 !important;
+  gap: 6px !important;
+  padding: 10px 0 0 !important;
   margin: 0 !important;
   width: 100% !important;
   box-sizing: border-box;
 }
 
 .opptrix-dialog-alert-surface .opptrix-dialog-alert-actions .fui-Button {
-  min-width: 72px;
-  min-height: 32px;
+  min-width: 64px;
+  min-height: 28px;
   margin: 0 !important;
 }
 
@@ -1369,7 +1500,7 @@ select:focus-visible {
   border-radius: var(--opptrix-radius-lg, 14px);
 }
 
-/* Composer agent user prompt — ask_user 选择题面板（输入框上方） */
+/* Composer agent user prompt — ask_user（对齐 Cursor glass chat bubble） */
 .opptrix-composer-user-prompt-panel {
   position: relative;
   z-index: 2;
@@ -1380,7 +1511,11 @@ select:focus-visible {
   box-sizing: border-box;
   padding: 12px 14px;
   margin-bottom: 8px;
-  border-radius: var(--opptrix-radius-lg, 14px);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--opptrix-canvas) 96%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   animation: opptrix-composer-tooltip-in 220ms cubic-bezier(0, 0, 0.2, 1) both;
   transform-origin: bottom center;
@@ -1394,18 +1529,18 @@ select:focus-visible {
 
 .opptrix-composer-user-prompt-panel__title {
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--opptrix-text-tertiary, #9A9A9A);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--opptrix-text-secondary, #6B6B6B);
 }
 
 .opptrix-composer-user-prompt-panel__prompt {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.45;
-  color: var(--opptrix-text, #1A1A1A);
+  color: var(--opptrix-text-primary, var(--opptrix-text, #1A1A1A));
 }
 
 .opptrix-composer-user-prompt-panel__options {
@@ -1423,7 +1558,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   margin-top: -2px;
 }
 
@@ -1432,14 +1567,14 @@ select:focus-visible {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  min-height: 36px;
-  padding: 10px 12px;
+  min-height: 32px;
+  padding: 8px 10px;
   border: none;
   border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
   color: var(--opptrix-text, #1A1A1A);
@@ -1447,7 +1582,7 @@ select:focus-visible {
 }
 
 .opptrix-composer-user-prompt-panel__option:hover:not(:disabled) {
-  background: rgba(60, 60, 67, 0.08);
+  background: rgba(20, 20, 20, 0.08);
 }
 
 .opptrix-composer-user-prompt-panel__option:disabled {
@@ -1456,17 +1591,17 @@ select:focus-visible {
 }
 
 .opptrix-composer-user-prompt-panel__option--selected {
-  background: rgba(60, 60, 67, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(60, 60, 67, 0.14);
+  background: rgba(20, 20, 20, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 20, 0.12);
 }
 
 [data-theme="dark"] .opptrix-composer-user-prompt-panel__option:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 [data-theme="dark"] .opptrix-composer-user-prompt-panel__option--selected {
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .opptrix-composer-user-prompt-panel__custom {
@@ -1499,13 +1634,13 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 6px;
 }
 
-/* 密钥保险箱录入 — 更大按钮、更松排版 */
+/* 密钥保险箱录入 — 略松排版，按钮仍紧凑 */
 .opptrix-composer-user-prompt-panel--secret {
-  gap: 14px;
-  padding: 14px 16px 16px;
+  gap: 12px;
+  padding: 12px 14px 14px;
 }
 
 .opptrix-composer-user-prompt-panel__hint {
@@ -1533,10 +1668,10 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 6px;
   width: 100%;
   margin-top: 2px;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
@@ -1544,23 +1679,32 @@ select:focus-visible {
   border-top-color: rgba(255, 255, 255, 0.08);
 }
 
+/* confirm / text / secret — pretty-dialog 紧凑按钮行 */
 .opptrix-composer-user-prompt-panel__action-btn {
   flex: 0 0 auto;
-  width: 112px;
-  min-height: 36px !important;
-  height: 36px !important;
+  min-width: 64px;
+  width: auto;
+  min-height: 28px !important;
+  height: 28px !important;
   padding-left: 12px !important;
   padding-right: 12px !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.opptrix-composer-user-prompt-panel--confirm .opptrix-composer-user-prompt-panel__actions {
+  border-top: none;
+  padding-top: 10px;
+  margin-top: 0;
 }
 
 /* Composer tooltip menus — @ mention, quick tasks, model picker */
 .opptrix-composer-tooltip-menu {
   display: flex;
   flex-direction: column;
+  /* 默认宽；ModelSelector 参数面板等通过 inline width/maxWidth 加宽 */
   width: 248px;
-  max-width: min(268px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
   box-sizing: border-box;
   border-radius: var(--opptrix-radius-lg, 14px);
   overflow: hidden;
@@ -1972,7 +2116,7 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
   padding: 0;
   border: none;
   border-radius: 9999px;
-  background: transparent;
+  background: var(--opptrix-surface-hover, rgba(60, 60, 67, 0.08));
   color: var(--opptrix-text-secondary, #6B6B6B);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
@@ -1985,7 +2129,62 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
 .opptrix-composer-quick-add:hover,
 .opptrix-composer-quick-add--open {
   color: var(--opptrix-text, #1A1A1A);
-  background: rgba(60, 60, 67, 0.08);
+  background: var(--opptrix-gray-200, rgba(60, 60, 67, 0.14));
+}
+
+.opptrix-composer-plus-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.opptrix-composer-plus-menu__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.opptrix-composer-plus-menu__title {
+  font-size: var(--opptrix-font-base);
+  font-weight: 500;
+  color: var(--opptrix-text, #1A1A1A);
+  line-height: 1.3;
+}
+
+.opptrix-composer-plus-menu__hint {
+  font-size: var(--opptrix-font-md);
+  font-weight: 400;
+  color: var(--opptrix-text-tertiary, #8E8E93);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.opptrix-composer-plus-menu__chevron {
+  flex-shrink: 0;
+  color: var(--opptrix-text-tertiary, #8E8E93);
+  margin-left: auto;
+}
+
+.opptrix-composer-plus-menu__item--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.opptrix-composer-plus-menu__empty {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: var(--opptrix-font-base);
+  line-height: 1.45;
+  color: var(--opptrix-text-secondary, #6B6B6B);
 }
 
 .opptrix-composer-grants {

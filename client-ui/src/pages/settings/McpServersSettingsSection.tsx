@@ -28,6 +28,13 @@ import { useSettingsToast } from './SettingsToast'
 import SettingsMonospaceEditor from './SettingsMonospaceEditor'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive, motion } from '../../theme/mixins'
+import {
+  SettingsEmptyState,
+  SettingsGroup,
+  SettingsRow,
+  SettingsSectionLabel,
+  SettingsStaticBlock,
+} from './SettingsPrimitives'
 
 const useStyles = makeStyles({
   root: {
@@ -71,68 +78,15 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textPrimary,
     boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
   },
-
-  // ── 预设卡片 ──
-  presetCard: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusMd,
-    padding: '14px 16px 12px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    backgroundColor: opptrixCssVars.canvasAlt,
-  },
-  presetCardActive: {
-    backgroundColor: opptrixCssVars.surface,
-  },
-  presetHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-  },
-  presetTitleWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  presetTitle: {
-    fontSize: 'var(--opptrix-font-lg)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
-  },
-  presetDesc: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-  },
-  presetSwitchRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexShrink: 0,
-  },
-  presetServiceList: {
+  homepageLink: {
     fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-    padding: 0,
-    margin: 0,
-    listStyle: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
+    color: opptrixCssVars.accent,
+    textDecoration: 'none',
+    fontWeight: 500,
+    marginLeft: '6px',
   },
-  presetInput: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 'var(--opptrix-font-md)',
-  },
-  presetActions: {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'center',
+  keyBlock: {
+    width: '100%',
   },
 
   // ── 高级入口 ──
@@ -309,7 +263,7 @@ export default function McpServersSettingsSection() {
     if (enabled) {
       const apiKey = (apiKeys[presetId] ?? '').trim()
       if (!apiKey || apiKey.length < 4) {
-        showToast('请先填写有效的 API Key', 'warning')
+        showToast('请先填写有效的数据密钥', 'warning')
         return
       }
       setApplying(prev => ({ ...prev, [presetId]: true }))
@@ -448,74 +402,78 @@ export default function McpServersSettingsSection() {
       {mode === 'preset' && (
         <>
           <Text className={s.tabHint} block>
-            开箱即用的 MCP 服务，填写 API Key 后打开开关即可启用。
-            同花顺（扶摇）一个配置实际覆盖三个后端服务。
+            选用预置服务，填入数据密钥后打开开关即可使用。同花顺（扶摇）一次配置可覆盖多项能力。
           </Text>
+          <SettingsSectionLabel spaced>预置服务</SettingsSectionLabel>
 
           {presetsLoading ? (
-            <Spinner size="tiny" label="加载预设…" />
+            <Spinner size="tiny" label="正在加载预置服务…" />
+          ) : presets.length === 0 ? (
+            <SettingsGroup>
+              <SettingsEmptyState
+                title="还没有可用的预置服务"
+                desc="可切换到高级配置自行添加，或稍后再试。"
+              />
+            </SettingsGroup>
           ) : (
-            presets.map(preset => {
-              const configured = isPresetConfigured(preset)
-              return (
-                <div key={preset.id} className={mergeClasses(s.presetCard, configured && s.presetCardActive)}>
-                  {/* 头部：标题 + Switch */}
-                  <div className={s.presetHeader}>
-                    <div className={s.presetTitleWrap}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className={s.presetTitle}>{preset.title}</span>
-                        {preset.homepage && (
-                          <a
-                            href={preset.homepage}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              fontSize: 'var(--opptrix-font-sm)',
-                              color: opptrixCssVars.accent,
-                              textDecoration: 'none',
-                              fontWeight: 500,
-                            }}
-                          >
-                            官网 ↗
-                          </a>
-                        )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {presets.map(preset => {
+                const configured = isPresetConfigured(preset)
+                const serviceHint = preset.services.length > 1
+                  ? preset.services.map(svc => svc.title).join('、')
+                  : null
+                return (
+                  <SettingsGroup key={preset.id}>
+                    <SettingsRow
+                      title={preset.title}
+                      desc={(
+                        <>
+                          <span>{preset.description}</span>
+                          {preset.homepage && (
+                            <a
+                              href={preset.homepage}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={s.homepageLink}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              了解更多
+                            </a>
+                          )}
+                          {serviceHint && (
+                            <span style={{ display: 'block', marginTop: 2 }}>
+                              包含：{serviceHint}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      control={(
+                        <Switch
+                          checked={configured}
+                          disabled={applying[preset.id]}
+                          onChange={(_, d) => { void handleTogglePreset(preset.id, !!d.checked) }}
+                        />
+                      )}
+                    />
+                    <SettingsStaticBlock>
+                      <div className={s.keyBlock}>
+                        <McpApiKeyField
+                          value={apiKeys[preset.id] ?? ''}
+                          configured={configured}
+                          testing={testing[preset.id]}
+                          onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
+                          onBlur={() => { void handleSavePresetKey(preset.id) }}
+                          onTest={() => { void handleTestPreset(preset) }}
+                          placeholder={preset.services.length > 1 ? '输入共用数据密钥' : '输入数据密钥'}
+                        />
                       </div>
-                      <div className={s.presetDesc}>{preset.description}</div>
-                    </div>
-                    <div className={s.presetSwitchRow}>
-                      <Switch
-                        checked={configured}
-                        disabled={applying[preset.id]}
-                        onChange={(_, d) => { void handleTogglePreset(preset.id, !!d.checked) }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 底层服务列表 */}
-                  <ul className={s.presetServiceList}>
-                    {preset.services.map(svc => (
-                      <li key={svc.serverId}>
-                        • {svc.title}（{svc.serverId}）
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* API Key 输入 + 测试按钮 */}
-                  <McpApiKeyField
-                    value={apiKeys[preset.id] ?? ''}
-                    configured={configured}
-                    testing={testing[preset.id]}
-                    onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
-                    onBlur={() => { void handleSavePresetKey(preset.id) }}
-                    onTest={() => { void handleTestPreset(preset) }}
-                    placeholder={`输入 API Key${preset.services.length > 1 ? `（共用 ${preset.services[0].apiKeyHeader}）` : ''}`}
-                  />
-                </div>
-              )
-            })
+                    </SettingsStaticBlock>
+                  </SettingsGroup>
+                )
+              })}
+            </div>
           )}
 
-          {/* 切换到 JSON */}
           <OpptrixButton
             variant="ghost"
             block
@@ -523,7 +481,7 @@ export default function McpServersSettingsSection() {
             onClick={() => setMode('json')}
           >
             <CodeRegular fontSize={14} />
-            高级：编辑完整 JSON 配置
+            高级：编辑完整配置
           </OpptrixButton>
         </>
       )}
@@ -531,12 +489,12 @@ export default function McpServersSettingsSection() {
       {mode === 'json' && (
         <>
           <Text className={s.tabHint} block>
-            编辑标准 MCP 服务器配置（mcpServers 映射格式）。保存后全量替换现有配置。
-            支持 stdio（command + args + env）、http（url + headers）。
+            适合自定义外部服务。保存后将替换当前全部配置；请确认内容无误后再保存。
           </Text>
+          <SettingsSectionLabel spaced>高级配置</SettingsSectionLabel>
 
           {loading ? (
-            <Spinner size="tiny" label="加载配置…" />
+            <Spinner size="tiny" label="正在加载配置…" />
           ) : (
             <>
               <SettingsMonospaceEditor
@@ -552,7 +510,7 @@ export default function McpServersSettingsSection() {
 
               <div className={s.toolbar}>
                 <Text className={s.tabHint} block style={{ padding: 0 }}>
-                  {dirty ? '已修改' : '已同步'}
+                  {dirty ? '有未保存的修改' : '已与当前配置同步'}
                 </Text>
                 <div className={s.toolbarRight}>
                   <OpptrixButton
@@ -588,7 +546,7 @@ export default function McpServersSettingsSection() {
             onClick={() => setMode('preset')}
           >
             <CloudRegular fontSize={14} />
-            切换回预设模式
+            切换回预置服务
           </OpptrixButton>
         </>
       )}

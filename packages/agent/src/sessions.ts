@@ -13,6 +13,54 @@ export type { ChatToolStep, ChatAttachmentMeta }
 
 const NAMESPACE = 'session'
 
+/** OpenAI 兼容会话级采样参数（未设字段走 LLM 默认：温度 1、max_tokens 4096） */
+export type ReasoningEffort = 'low' | 'medium' | 'high'
+
+export interface SessionLlmParams {
+  temperature?: number
+  maxTokens?: number
+  /** 未设则请求体不带 reasoning_effort */
+  reasoningEffort?: ReasoningEffort
+}
+
+export const DEFAULT_SESSION_TEMPERATURE = 1
+export const DEFAULT_SESSION_MAX_TOKENS = 4096
+
+export function normalizeSessionLlmParams(raw: unknown): SessionLlmParams | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const out: SessionLlmParams = {}
+  if (typeof o.temperature === 'number' && Number.isFinite(o.temperature)) {
+    out.temperature = Math.min(2, Math.max(0, o.temperature))
+  }
+  if (typeof o.maxTokens === 'number' && Number.isFinite(o.maxTokens) && o.maxTokens >= 1) {
+    out.maxTokens = Math.min(1_000_000, Math.floor(o.maxTokens))
+  }
+  if (o.reasoningEffort === 'low' || o.reasoningEffort === 'medium' || o.reasoningEffort === 'high') {
+    out.reasoningEffort = o.reasoningEffort
+  }
+  return out.temperature !== undefined || out.maxTokens !== undefined || out.reasoningEffort !== undefined
+    ? out
+    : undefined
+}
+
+/** 合并补丁；`reasoningEffort: null` 清除该字段 */
+export function mergeSessionLlmParams(
+  current: SessionLlmParams | undefined,
+  patch: {
+    temperature?: number
+    maxTokens?: number
+    reasoningEffort?: ReasoningEffort | null
+  },
+): SessionLlmParams | undefined {
+  const next: SessionLlmParams = { ...(current ?? {}) }
+  if (patch.temperature !== undefined) next.temperature = patch.temperature
+  if (patch.maxTokens !== undefined) next.maxTokens = patch.maxTokens
+  if (patch.reasoningEffort === null) delete next.reasoningEffort
+  else if (patch.reasoningEffort !== undefined) next.reasoningEffort = patch.reasoningEffort
+  return normalizeSessionLlmParams(next)
+}
+
 export interface SessionMeta {
   id: string
   title: string
@@ -20,6 +68,8 @@ export interface SessionMeta {
   updatedAt: string
   /** providerId:modelName */
   model?: string
+  /** 会话级 LLM 参数（旧会话可能缺失） */
+  llmParams?: SessionLlmParams
   archivedAt?: string | null
   archiveFolderId?: string | null
   expertId?: string | null
@@ -150,6 +200,7 @@ function migrateTurns(record: SessionRecord): SessionRecord {
 }
 
 function normalizeRecord(raw: SessionRecord): SessionRecord {
+  const llmParams = normalizeSessionLlmParams(raw.llmParams)
   const record: SessionRecord = {
     ...raw,
     turns: raw.turns ?? [],
@@ -158,6 +209,7 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     expertIcon: raw.expertIcon ?? null,
     rolePersona: raw.rolePersona ?? null,
     sessionMemory: raw.sessionMemory ?? null,
+    llmParams,
   }
   return migrateTurns(record)
 }
@@ -169,6 +221,7 @@ function toMeta(raw: SessionRecord): SessionMeta {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     model: raw.model,
+    llmParams: raw.llmParams,
     archivedAt: raw.archivedAt ?? null,
     archiveFolderId: raw.archiveFolderId ?? null,
     expertId: raw.expertId ?? null,
@@ -345,6 +398,22 @@ export class SessionStore {
     return record
   }
 
+  /** 更新会话级 OpenAI 兼容采样参数 */
+  updateLlmParams(
+    id: string,
+    patch: {
+      temperature?: number
+      maxTokens?: number
+      reasoningEffort?: ReasoningEffort | null
+    },
+  ): SessionRecord | null {
+    const record = this.get(id)
+    if (!record) return null
+    record.llmParams = mergeSessionLlmParams(record.llmParams, patch)
+    this.save(record)
+    return record
+  }
+
   toDisplayMessages(record: SessionRecord): DisplayMessage[] {
     if (record.turns?.length) {
       return record.turns.map(t => ({
@@ -386,6 +455,7 @@ export class SessionStore {
       createdAt: now,
       updatedAt: now,
       model: source.model,
+      llmParams: source.llmParams,
       expertId: source.expertId ?? null,
       expertIcon: source.expertIcon ?? null,
       rolePersona: source.rolePersona ?? null,

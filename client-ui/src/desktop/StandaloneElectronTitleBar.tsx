@@ -21,7 +21,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
     backgroundColor: opptrixCssVars.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,

@@ -69,6 +69,8 @@ export function useComposerSpeech({
 
   const [phase, setPhase] = useState<ComposerSpeechPhase>('idle')
   const [statusHint, setStatusHint] = useState<string | null>(null)
+  /** 录音电平 0–1，供 UI 脉冲/缩放；非 recording 时为 0 */
+  const [levelRms, setLevelRms] = useState(0)
 
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -105,6 +107,7 @@ export function useComposerSpeech({
       levelPollRef.current = null
     }
     heardSpeechRef.current = false
+    setLevelRms(0)
     const ctx = audioContextRef.current
     audioContextRef.current = null
     if (ctx) {
@@ -241,6 +244,8 @@ export function useComposerSpeech({
     levelPollRef.current = window.setInterval(() => {
       if (phaseRef.current !== 'recording') return
       const rms = computeRms(analyser, samples)
+      // 略放大便于可视；钳到 0–1
+      setLevelRms(Math.min(1, rms * 12))
       const speaking = rms >= SPEECH_RMS_THRESHOLD
       const elapsed = Date.now() - recordStartedAtRef.current
 
@@ -314,7 +319,7 @@ export function useComposerSpeech({
       recorder.start(250)
       startSilenceWatch(stream)
       setPhaseSafe('recording')
-      setStatusHint('正在聆听…说完会自动结束')
+      setStatusHint('正在聆听…说完会自动结束，也可点击或空格结束；Esc 取消')
       maxTimerRef.current = window.setTimeout(() => {
         stopRecording()
       }, MAX_RECORD_MS)
@@ -378,11 +383,17 @@ export function useComposerSpeech({
       if (e.key === 'Escape') {
         e.preventDefault()
         cancel()
+        return
+      }
+      const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar'
+      if (isSpace && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        stopRecording()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [cancel, phase])
+  }, [cancel, phase, stopRecording])
 
   const openMicSettings = useCallback(() => {
     void window.electronAPI?.mediaOpenMicSettings?.()
@@ -392,6 +403,7 @@ export function useComposerSpeech({
     available,
     phase,
     statusHint,
+    levelRms,
     isBusy: phase === 'requesting' || phase === 'recording' || phase === 'transcribing',
     isRecording: phase === 'recording',
     toggle,

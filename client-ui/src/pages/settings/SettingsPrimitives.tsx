@@ -7,19 +7,26 @@ import {
 import {
   EyeRegular, EyeOffRegular,
   Wifi1Regular, CheckmarkRegular,
+  OpenRegular,
 } from '@fluentui/react-icons'
 import type { ReactNode } from 'react'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { inputShellInteractive, motion, nativeIconInteractive } from '../../theme/mixins'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
+/** Cursor settings sub-section tint (`--cursor-bg-quinary` ≈ ink 4%). */
+export const settingsSurfaceTint = 'color-mix(in srgb, var(--opptrix-text-primary) 4%, transparent)'
+export const settingsHairlineBorder = `1px solid ${settingsSurfaceTint}`
+/** Group / list panel corner radius (Cursor sub-section-list). */
+export const settingsSurfaceRadius = '12px'
+
 const useStyles = makeStyles({
   group: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusXl,
-    backgroundColor: opptrixCssVars.canvas,
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
     overflow: 'hidden',
-    transitionProperty: 'border-color',
+    transitionProperty: 'border-color, background-color',
     transitionDuration: motion.fast,
     transitionTimingFunction: motion.ease,
     '@media (prefers-reduced-motion: reduce)': {
@@ -30,14 +37,14 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '16px',
-    padding: '11px 20px',
+    gap: '20px',
+    padding: '12px 14px',
     minHeight: '42px',
     '@media (max-width: 660px)': {
       flexDirection: 'column',
       alignItems: 'stretch',
       gap: '8px',
-      padding: '10px 16px',
+      padding: '12px 14px',
     },
   },
   rowStack: {
@@ -53,22 +60,22 @@ const useStyles = makeStyles({
     gap: '2px',
   },
   rowTitle: {
-    fontSize: 'var(--opptrix-font-lg)',
-    fontWeight: 500,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 400,
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.4,
-    letterSpacing: '-0.01em',
+    lineHeight: '18px',
   },
   rowDesc: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.4,
+    fontSize: 'var(--opptrix-font-base)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '18px',
   },
   rowControl: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    gap: '8px',
     width: '100%',
     '@media (min-width: 661px)': {
       width: 'auto',
@@ -87,7 +94,7 @@ const useStyles = makeStyles({
   rowDivider: {
     height: '1px',
     backgroundColor: opptrixCssVars.separator,
-    margin: '0 20px',
+    margin: '0 14px',
   },
   rowDividerFull: {
     margin: '0',
@@ -97,21 +104,19 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '12px',
-    padding: '12px 20px',
-    minHeight: '44px',
+    padding: '8px 14px',
+    minHeight: '32px',
   },
   panelHeaderTitle: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
     color: opptrixCssVars.textSecondary,
-    letterSpacing: '0.04em',
-    textTransform: 'uppercase',
-    lineHeight: 1.3,
+    lineHeight: '16px',
   },
   inlineInput: {...inputShellInteractive,
     width: '100%',
-    minWidth: '160px',
-    maxWidth: '240px',
+    minWidth: '120px',
+    maxWidth: '160px',
     minHeight: '30px',
     padding: '0 10px',
     display: 'flex',
@@ -126,14 +131,14 @@ const useStyles = makeStyles({
     width: '100%',
   },
   staticBlock: {
-    padding: '12px 20px',
+    padding: '12px 14px',
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
   },
   providerRow: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: '10px',
     width: '100%',
   },
@@ -149,6 +154,29 @@ const useStyles = makeStyles({
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
+  },
+  /** 可点的「N 个模型」副标题 — 打开模型列表 Dialog */
+  modelCountTrigger: {
+    alignSelf: 'flex-start',
+    margin: 0,
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    fontSize: 'var(--opptrix-font-base)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '18px',
+    textAlign: 'left',
+    transitionProperty: 'color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
+    ':hover': {
+      color: opptrixCssVars.textPrimary,
+      textDecoration: 'underline',
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionProperty: 'none',
+    },
   },
   modelsDialogSurface: {
     maxWidth: '400px',
@@ -167,11 +195,10 @@ const useStyles = makeStyles({
     paddingTop: '2px',
   },
   modelPopoverTitle: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '16px',
   },
   modelPopoverList: {
     display: 'flex',
@@ -275,47 +302,107 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
   },
-  card: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusXl,
-    backgroundColor: opptrixCssVars.canvas,
-    padding: '14px 20px',
+  /** 外链行：单层可点，trailing 为外开图标（勿用 Chevron 冒充） */
+  externalLinkRow: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    transitionProperty: 'border-color',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '12px 14px',
+    minHeight: '42px',
+    margin: 0,
+    border: 'none',
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    textAlign: 'left',
+    cursor: 'pointer',
+    color: 'inherit',
+    font: 'inherit',
+    transitionProperty: 'background-color',
     transitionDuration: motion.fast,
     transitionTimingFunction: motion.ease,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionProperty: 'none',
+    },
   },
-  sectionHeader: {
-    padding: '16px 20px 8px',
+  externalLinkLeading: {
+    color: opptrixCssVars.textTertiary,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+  },
+  externalLinkMain: {
+    flex: 1,
+    minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
   },
-  sectionKicker: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
+  externalLinkTitle: {
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 400,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: '18px',
+  },
+  externalLinkDesc: {
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    lineHeight: 1.3,
+    lineHeight: '18px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  externalLinkTrailing: {
+    color: opptrixCssVars.textTertiary,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
+  card: {
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
+    padding: '12px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    overflow: 'hidden',
+    transitionProperty: 'border-color, background-color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
+  },
+  sectionHeader: {
+    padding: '0 2px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  sectionKicker: {
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '16px',
   },
   sectionTitle: {
-    fontSize: 'var(--opptrix-font-3xl)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    letterSpacing: '-0.02em',
-    lineHeight: 1.25,
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '16px',
   },
   sectionSubtitle: {
-    fontSize: 'var(--opptrix-font-base)',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-    marginTop: '2px',
+    lineHeight: '16px',
   },
   emptyState: {
-    padding: '24px 20px',
+    padding: '24px 14px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -329,16 +416,106 @@ const useStyles = makeStyles({
     marginBottom: '4px',
   },
   emptyStateTitle: {
-    fontSize: 'var(--opptrix-font-lg)',
-    fontWeight: 500,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 400,
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.4,
+    lineHeight: '18px',
   },
   emptyStateDesc: {
+    fontSize: 'var(--opptrix-font-base)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '18px',
+    maxWidth: '240px',
+  },
+  /** Group 上方页级 section 标签（对齐 SettingsPage sectionLabel） */
+  sectionLabel: {
     fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
+    color: opptrixCssVars.textSecondary,
+    lineHeight: '16px',
+    paddingLeft: '2px',
+  },
+  sectionLabelSpaced: {
+    padding: '0 2px 8px',
+  },
+  listPanel: {
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  listScroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+  },
+  listHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '10px 14px',
+    minHeight: '44px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+  },
+  listHeaderMeta: {
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.45,
+    flex: 1,
+    minWidth: 0,
+  },
+  listHeaderActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexShrink: 0,
+    flexWrap: 'wrap',
+  },
+  listRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '8px 14px',
+    minHeight: '38px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ':last-child': {
+      borderBottom: 'none',
+    },
+  },
+  listRowMain: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  listRowTitle: {
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 400,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: '18px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  listRowMeta: {
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
-    maxWidth: '240px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  listRowControls: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
   },
 })
 
@@ -598,6 +775,49 @@ export function SettingsActionRow({
   )
 }
 
+/**
+ * 外链行 — 在浏览器/系统中打开 URL。
+ * trailing 固定为外开图标；勿用 ChevronRight 冒充页内导航。
+ */
+export function SettingsExternalLinkRow({
+  title,
+  desc,
+  onClick,
+  icon,
+  last = false,
+  dividerFullWidth = true,
+}: {
+  title: string
+  desc?: string
+  onClick: () => void
+  icon?: ReactNode
+  last?: boolean
+  dividerFullWidth?: boolean
+}) {
+  const s = useStyles()
+  return (
+    <>
+      <button
+        type="button"
+        className={mergeClasses(s.externalLinkRow, 'opptrix-focusable')}
+        onClick={onClick}
+      >
+        {icon != null && <span className={s.externalLinkLeading}>{icon}</span>}
+        <span className={s.externalLinkMain}>
+          <Text className={s.externalLinkTitle} block>{title}</Text>
+          {desc != null && desc !== '' && (
+            <Text className={s.externalLinkDesc} block>{desc}</Text>
+          )}
+        </span>
+        <span className={s.externalLinkTrailing} aria-hidden>
+          <OpenRegular fontSize={16} />
+        </span>
+      </button>
+      {!last && <SettingsDivider fullWidth={dividerFullWidth} />}
+    </>
+  )
+}
+
 export function SettingsDivider({ fullWidth = false }: { fullWidth?: boolean } = {}) {
   const s = useStyles()
   return <div className={mergeClasses(s.rowDivider, fullWidth && s.rowDividerFull)} aria-hidden />
@@ -622,19 +842,170 @@ export function SettingsPanelHeader({
   )
 }
 
-function ProviderModelsViewer({ name, models }: { name: string; models: string[] }) {
+/** Group 上方页级标签 — font-md / 400 / textSecondary（禁止 base+600） */
+export function SettingsSectionLabel({
+  children,
+  spaced = false,
+}: {
+  children: ReactNode
+  spaced?: boolean
+}) {
   const s = useStyles()
-  const [open, setOpen] = useState(false)
+  return (
+    <Text className={mergeClasses(s.sectionLabel, spaced && s.sectionLabelSpaced)} block>
+      {children}
+    </Text>
+  )
+}
+
+/** 列表面板容器（订阅 / 任务 / 状态列表等） */
+export function SettingsListPanel({
+  children,
+  className,
+  height,
+}: {
+  children: ReactNode
+  className?: string
+  /** 固定高度列表面板（如订阅列表 360px） */
+  height?: string | number
+}) {
+  const s = useStyles()
+  return (
+    <div
+      className={mergeClasses(s.listPanel, className)}
+      style={height != null ? { height } : undefined}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** 列表可滚动区 — 置于 AddBar 与 ListRow 之间 */
+export function SettingsListScroll({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  const s = useStyles()
+  return (
+    <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover', className)}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * 列表顶栏 — 左侧说明 + 右侧添加/导入等操作。
+ * 与 `SettingsPanelHeader`（Group 内小标题）互补：本组件用于独立 listPanel。
+ */
+export function SettingsAddBar({
+  meta,
+  actions,
+}: {
+  meta?: ReactNode
+  actions?: ReactNode
+}) {
+  const s = useStyles()
+  return (
+    <div className={s.listHeader}>
+      {meta != null && (
+        typeof meta === 'string'
+          ? <Text className={s.listHeaderMeta} block>{meta}</Text>
+          : <div className={s.listHeaderMeta}>{meta}</div>
+      )}
+      {actions != null && <div className={s.listHeaderActions}>{actions}</div>}
+    </div>
+  )
+}
+
+/**
+ * 列表行 — 默认只展示名称（+ 可选一行说明），trailing 放开关/按钮。
+ * 默认不暴露 URL / 路径 / 技术 id；需要时由调用方把次要信息放进 meta 或折叠区。
+ */
+export function SettingsListRow({
+  title,
+  meta,
+  trailing,
+  titleTitle,
+}: {
+  title: ReactNode
+  meta?: ReactNode
+  trailing?: ReactNode
+  /** 原生 title 悬停全文 */
+  titleTitle?: string
+}) {
+  const s = useStyles()
+  return (
+    <div className={s.listRow}>
+      <div className={s.listRowMain}>
+        {typeof title === 'string'
+          ? <Text className={s.listRowTitle} block title={titleTitle ?? title}>{title}</Text>
+          : <div className={s.listRowTitle} title={titleTitle}>{title}</div>}
+        {meta != null && (
+          typeof meta === 'string'
+            ? <Text className={s.listRowMeta} block>{meta}</Text>
+            : <div className={s.listRowMeta}>{meta}</div>
+        )}
+      </div>
+      {trailing != null && <div className={s.listRowControls}>{trailing}</div>}
+    </div>
+  )
+}
+
+/**
+ * 大模型提供商行 — 头像 + 名称 + 模型数副标题；右侧仅编辑/删除。
+ * 有模型时副标题可点，打开已启用模型列表 Dialog；不展示 baseUrl。
+ */
+export function SettingsProviderRow({
+  name,
+  models,
+  avatar,
+  action,
+  first = false,
+}: {
+  name: string
+  /** 可选；不再渲染（兼容旧调用方） */
+  baseUrl?: string
+  models: string[]
+  avatar: string
+  action?: ReactNode
+  first?: boolean
+}) {
+  const s = useStyles()
+  const [modelsOpen, setModelsOpen] = useState(false)
+  const hasModels = models.length > 0
+  const modelLabel = hasModels ? `${models.length} 个模型` : '尚未添加模型'
 
   return (
-    <>
-      <OpptrixButton
-        variant="icon"
-        icon={<EyeRegular fontSize={14} />}
-        aria-label={`查看 ${name} 的模型`}
-        onClick={() => setOpen(true)}
-      />
-      <Dialog open={open} onOpenChange={(_, data) => setOpen(data.open)}>
+    <div className={mergeClasses(s.row, !first && s.rowTopBorder)}>
+      <div className={s.rowMain}>
+        <div className={s.providerRow}>
+          <div className={s.providerAvatar}>{avatar}</div>
+          <div className={s.rowMain}>
+            <Text className={s.rowTitle} block>{name}</Text>
+            {hasModels ? (
+              <button
+                type="button"
+                className={mergeClasses(s.modelCountTrigger, 'opptrix-focusable')}
+                onClick={() => setModelsOpen(true)}
+                aria-label={`查看 ${name} 的模型`}
+              >
+                {modelLabel}
+              </button>
+            ) : (
+              <Text className={s.rowDesc} block>{modelLabel}</Text>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className={s.rowControl}>
+        <div className={s.rowActions}>
+          {action}
+        </div>
+      </div>
+      <Dialog open={modelsOpen} onOpenChange={(_, data) => setModelsOpen(data.open)}>
         <DialogSurface className={mergeClasses(s.modelsDialogSurface, 'opptrix-dialog-surface')}>
           <DialogBody>
             <DialogTitle className={s.modelsDialogTitle}>{name}</DialogTitle>
@@ -651,45 +1022,6 @@ function ProviderModelsViewer({ name, models }: { name: string; models: string[]
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
-  )
-}
-
-export function SettingsProviderRow({
-  name,
-  baseUrl,
-  models,
-  avatar,
-  action,
-  first = false,
-}: {
-  name: string
-  baseUrl: string
-  models: string[]
-  avatar: string
-  action?: ReactNode
-  first?: boolean
-}) {
-  const s = useStyles()
-  return (
-    <div className={mergeClasses(s.row, !first && s.rowTopBorder)}>
-      <div className={s.rowMain}>
-        <div className={s.providerRow}>
-          <div className={s.providerAvatar}>{avatar}</div>
-          <div className={s.rowMain}>
-            <Text className={s.rowTitle} block>{name}</Text>
-            <Text className={s.rowDesc} block style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-              {baseUrl}
-            </Text>
-          </div>
-        </div>
-      </div>
-      <div className={s.rowControl}>
-        <div className={s.rowActions}>
-          {models.length > 0 && <ProviderModelsViewer name={name} models={models} />}
-          {action}
-        </div>
-      </div>
     </div>
   )
 }

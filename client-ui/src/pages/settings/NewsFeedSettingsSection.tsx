@@ -13,9 +13,6 @@ import {
 import {
   AddRegular,
   ArrowSyncRegular,
-  ChevronDownRegular,
-  ChevronRightRegular,
-  CopyRegular,
   DeleteRegular,
   DocumentArrowDownRegular,
   DocumentArrowUpRegular,
@@ -29,7 +26,12 @@ import OpptrixField from '../../components/opptrix/OpptrixField'
 import OpptrixInput from '../../components/opptrix/OpptrixInput'
 import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
 import {
+  SettingsAddBar,
+  SettingsEmptyState,
   SettingsGroup,
+  SettingsListPanel,
+  SettingsListRow,
+  SettingsListScroll,
   SettingsRow,
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
@@ -37,7 +39,7 @@ import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAle
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { SettingsListPanelSkeleton } from './SettingsListPanelSkeleton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
-import { findDuplicateSubscription, formatSubscriptionUrlShort } from '../news/newsUtils'
+import { findDuplicateSubscription } from '../news/newsUtils'
 import {
   buildSubscriptionExportFile,
   downloadSubscriptionExportFile,
@@ -57,100 +59,6 @@ const MAX_ARTICLE_OPTIONS = [
 const SETTINGS_SAVE_MS = 500
 
 const useStyles = makeStyles({
-  listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
-    overflow: 'hidden',
-    height: '360px',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  listHeader: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '10px 14px',
-    minHeight: '44px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-  },
-  listHeaderMeta: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-    flex: 1,
-    minWidth: 0,
-  },
-  listHeaderActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexShrink: 0,
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-  },
-  listScroll: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto',
-    overscrollBehavior: 'contain',
-  },
-  listRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: '4px',
-    padding: '8px 12px',
-    minHeight: '34px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': {
-      borderBottom: 'none',
-    },
-  },
-  listRowPrimary: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '10px',
-    minWidth: 0,
-  },
-  listRowMain: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1px',
-  },
-  listRowTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  listRowMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.4,
-  },
-  listRowControls: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  listRowSecondary: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: '4px',
-    minWidth: 0,
-    paddingRight: '2px',
-  },
   groupSelect: {
     minWidth: '88px',
     maxWidth: '108px',
@@ -166,14 +74,6 @@ const useStyles = makeStyles({
   tabSectionBlock: {
     marginTop: 0,
   },
-  sectionLabel: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    padding: '0 2px 8px',
-  },
   saveHint: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
@@ -182,27 +82,6 @@ const useStyles = makeStyles({
   },
   saveHintActive: {
     color: opptrixCssVars.textSecondary,
-  },
-  emptyBlock: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px 18px',
-    textAlign: 'center',
-  },
-  emptyTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 650,
-    color: opptrixCssVars.textPrimary,
-    marginBottom: '6px',
-  },
-  emptyDesc: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.5,
   },
   dialogBody: {
     display: 'flex',
@@ -248,75 +127,6 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.error,
     lineHeight: 1.4,
-  },
-  urlToggle: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    padding: '1px 0',
-    border: 'none',
-    background: 'none',
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    cursor: 'pointer',
-    textAlign: 'left',
-    lineHeight: 1.45,
-    borderRadius: opptrixTokens.radiusSm,
-    ':hover': {
-      color: opptrixCssVars.textSecondary,
-    },
-  },
-  urlToggleLabel: {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    minWidth: 0,
-  },
-  urlPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '8px 10px',
-    borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixCssVars.canvasAlt,
-  },
-  urlPanelHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-    minWidth: 0,
-  },
-  urlPanelLabel: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.3,
-  },
-  urlPanelActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    flexShrink: 0,
-  },
-  urlPanelAction: {
-    minHeight: '24px',
-    height: '24px',
-    paddingLeft: '8px',
-    paddingRight: '8px',
-    fontSize: 'var(--opptrix-font-sm)',
-  },
-  urlFull: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.45,
-    wordBreak: 'break-all',
-    userSelect: 'text',
   },
   importSummary: {
     fontSize: 'var(--opptrix-font-base)',
@@ -406,7 +216,6 @@ export default function NewsFeedSettingsSection() {
   const [addTitle, setAddTitle] = useState('')
   const [validating, setValidating] = useState(false)
   const [preview, setPreview] = useState<{ title: string; item_count: number } | null>(null)
-  const [expandedSubIds, setExpandedSubIds] = useState<Record<string, boolean>>({})
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<NewsSubscriptionExportFile | null>(null)
@@ -549,19 +358,6 @@ export default function NewsFeedSettingsSection() {
       toast.showError(e instanceof Error ? e.message : '刷新失败')
     } finally {
       setRefreshing(false)
-    }
-  }
-
-  const toggleSubUrl = (id: string) => {
-    setExpandedSubIds(prev => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  const copySubscriptionUrl = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url)
-      toast.showSuccess('已复制订阅地址')
-    } catch {
-      toast.showError('无法复制，请手动选择地址')
     }
   }
 
@@ -786,133 +582,81 @@ export default function NewsFeedSettingsSection() {
       {viewMode === 'subscriptions' && (
       <div className={s.tabPanel}>
       <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
-      <div className={s.listPanel}>
-        <div className={s.listHeader}>
-          <Text className={s.listHeaderMeta} block>
-            {subs.length > 0
-              ? `已添加 ${subs.length} 个订阅源`
-              : '添加订阅后，资讯将按时间聚合到新闻中心'}
-          </Text>
-          <div className={s.listHeaderActions}>
-            <OpptrixButton
-              variant="secondary"
-              icon={<DocumentArrowDownRegular />}
-              disabled={exporting || subs.length === 0}
-              onClick={handleExport}
-            >
-              导出
-            </OpptrixButton>
-            <OpptrixButton
-              variant="secondary"
-              icon={<DocumentArrowUpRegular />}
-              onClick={handleImportPick}
-            >
-              导入
-            </OpptrixButton>
-            <OpptrixButton variant="primary" icon={<AddRegular />} onClick={openDialog}>
-              添加订阅
-            </OpptrixButton>
-          </div>
-        </div>
+      <SettingsListPanel height="360px">
+        <SettingsAddBar
+          meta={subs.length > 0
+            ? `已添加 ${subs.length} 个订阅源`
+            : '添加订阅后，资讯将按时间聚合到新闻中心'}
+          actions={(
+            <>
+              <OpptrixButton
+                variant="secondary"
+                icon={<DocumentArrowDownRegular />}
+                disabled={exporting || subs.length === 0}
+                onClick={handleExport}
+              >
+                导出
+              </OpptrixButton>
+              <OpptrixButton
+                variant="secondary"
+                icon={<DocumentArrowUpRegular />}
+                onClick={handleImportPick}
+              >
+                导入
+              </OpptrixButton>
+              <OpptrixButton variant="primary" icon={<AddRegular />} onClick={openDialog}>
+                添加订阅
+              </OpptrixButton>
+            </>
+          )}
+        />
 
         {subs.length === 0 ? (
-          <div className={s.emptyBlock}>
-            <Text className={s.emptyTitle} block>还没有订阅源</Text>
-            <Text className={s.emptyDesc} block>
-              点击「添加订阅」，粘贴 RSS、Atom 或 RSSHub 的完整订阅链接即可。
-            </Text>
-          </div>
+          <SettingsEmptyState
+            title="还没有订阅源"
+            desc="点击「添加订阅」，粘贴 RSS、Atom 或 RSSHub 的完整订阅链接即可。"
+          />
         ) : (
-          <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-            {subs.map(sub => {
-              const expanded = !!expandedSubIds[sub.id]
-              return (
-                <div key={sub.id} className={s.listRow}>
-                  <div className={s.listRowPrimary}>
-                    <div className={s.listRowMain}>
-                      <Text className={s.listRowTitle} block title={sub.title}>{sub.title}</Text>
-                    </div>
-                    <div className={s.listRowControls}>
-                      <OpptrixSelect
-                        className={s.groupSelect}
-                        size="small"
-                        selectedOptions={[sub.group_id ?? '']}
-                        onOptionSelect={(_, d) => {
-                          void handleMoveGroup(sub.id, d.optionValue ?? '')
-                        }}
-                      >
-                        <OpptrixOption value="">未分组</OpptrixOption>
-                        {groups.map(g => (
-                          <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
-                        ))}
-                      </OpptrixSelect>
-                      <Switch
-                        checked={sub.enabled}
-                        onChange={(_, d) => { void toggleEnabled(sub, d.checked) }}
-                      />
-                      <OpptrixButton
-                        variant="icon"
-                        icon={<DeleteRegular />}
-                        aria-label="删除"
-                        onClick={() => { void handleDelete(sub.id) }}
-                      />
-                    </div>
-                  </div>
-                  <div className={s.listRowSecondary}>
-                    {sub.last_error && (
-                      <Text className={s.subError} block>暂时无法更新：{sub.last_error}</Text>
-                    )}
-                    {!expanded ? (
-                      <button
-                        type="button"
-                        className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
-                        aria-expanded={false}
-                        aria-label="查看订阅地址"
-                        onClick={() => toggleSubUrl(sub.id)}
-                      >
-                        <ChevronRightRegular fontSize={11} />
-                        <span className={s.urlToggleLabel}>
-                          {formatSubscriptionUrlShort(sub.url)}
-                        </span>
-                      </button>
-                    ) : (
-                      <div className={s.urlPanel}>
-                        <div className={s.urlPanelHeader}>
-                          <Text className={s.urlPanelLabel} block>订阅地址</Text>
-                          <div className={s.urlPanelActions}>
-                            <OpptrixButton
-                              variant="ghost"
-                              size="small"
-                              className={s.urlPanelAction}
-                              icon={<CopyRegular fontSize={12} />}
-                              onClick={() => { void copySubscriptionUrl(sub.url) }}
-                            >
-                              复制
-                            </OpptrixButton>
-                            <OpptrixButton
-                              variant="ghost"
-                              size="small"
-                              className={s.urlPanelAction}
-                              icon={<ChevronDownRegular fontSize={12} />}
-                              aria-expanded
-                              onClick={() => toggleSubUrl(sub.id)}
-                            >
-                              收起
-                            </OpptrixButton>
-                          </div>
-                        </div>
-                        <Text className={s.urlFull} block>
-                          {sub.url}
-                        </Text>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <SettingsListScroll>
+            {subs.map(sub => (
+              <SettingsListRow
+                key={sub.id}
+                title={sub.title}
+                meta={sub.last_error
+                  ? <Text className={s.subError} block>暂时无法更新：{sub.last_error}</Text>
+                  : undefined}
+                trailing={(
+                  <>
+                    <OpptrixSelect
+                      className={s.groupSelect}
+                      size="small"
+                      selectedOptions={[sub.group_id ?? '']}
+                      onOptionSelect={(_, d) => {
+                        void handleMoveGroup(sub.id, d.optionValue ?? '')
+                      }}
+                    >
+                      <OpptrixOption value="">未分组</OpptrixOption>
+                      {groups.map(g => (
+                        <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
+                      ))}
+                    </OpptrixSelect>
+                    <Switch
+                      checked={sub.enabled}
+                      onChange={(_, d) => { void toggleEnabled(sub, d.checked) }}
+                    />
+                    <OpptrixButton
+                      variant="icon"
+                      icon={<DeleteRegular />}
+                      aria-label="删除"
+                      onClick={() => { void handleDelete(sub.id) }}
+                    />
+                  </>
+                )}
+              />
+            ))}
+          </SettingsListScroll>
         )}
-        </div>
+      </SettingsListPanel>
       </div>
     </div>
       )}
@@ -920,39 +664,34 @@ export default function NewsFeedSettingsSection() {
       {viewMode === 'groups' && (
       <div className={s.tabPanel}>
       <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
-        <div className={s.listPanel}>
-          <div className={s.listHeader}>
-            <Text className={s.listHeaderMeta} block>
-              {groups.length > 0
-                ? `已创建 ${groups.length} 个分组`
-                : '创建文件夹，将订阅源归类整理'}
-            </Text>
-            <div className={s.listHeaderActions}>
+        <SettingsListPanel height="360px">
+          <SettingsAddBar
+            meta={groups.length > 0
+              ? `已创建 ${groups.length} 个分组`
+              : '创建文件夹，将订阅源归类整理'}
+            actions={(
               <OpptrixButton variant="primary" icon={<FolderRegular />} onClick={() => openGroupDialog()}>
                 新建分组
               </OpptrixButton>
-            </div>
-          </div>
+            )}
+          />
 
           {groups.length === 0 ? (
-            <div className={s.emptyBlock}>
-              <Text className={s.emptyTitle} block>还没有分组</Text>
-              <Text className={s.emptyDesc} block>
-                点击「新建分组」，例如「财经资讯」「科技动态」，便于在新闻中心按类浏览。
-              </Text>
-            </div>
+            <SettingsEmptyState
+              title="还没有分组"
+              desc="点击「新建分组」，例如「财经资讯」「科技动态」，便于在新闻中心按类浏览。"
+            />
           ) : (
-            <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+            <SettingsListScroll>
               {groups.map(g => {
                 const count = subs.filter(sub => sub.group_id === g.id).length
                 return (
-                  <div key={g.id} className={s.listRow}>
-                    <div className={s.listRowPrimary}>
-                      <div className={s.listRowMain}>
-                        <Text className={s.listRowTitle} block title={g.title}>{g.title}</Text>
-                        <Text className={s.listRowMeta} block>{count} 个订阅源</Text>
-                      </div>
-                      <div className={s.listRowControls}>
+                  <SettingsListRow
+                    key={g.id}
+                    title={g.title}
+                    meta={`${count} 个订阅源`}
+                    trailing={(
+                      <>
                         <OpptrixButton
                           variant="icon"
                           icon={<EditRegular />}
@@ -965,14 +704,14 @@ export default function NewsFeedSettingsSection() {
                           aria-label={`删除 ${g.title}`}
                           onClick={() => { void handleDeleteGroup(g.id) }}
                         />
-                      </div>
-                    </div>
-                  </div>
+                      </>
+                    )}
+                  />
                 )
               })}
-            </div>
+            </SettingsListScroll>
           )}
-        </div>
+        </SettingsListPanel>
       </div>
       </div>
       )}

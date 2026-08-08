@@ -3,8 +3,9 @@ import {
   NavigationRegular, SettingsRegular,
 } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
-import type { AvailableModel } from '../types/chat'
+import type { AvailableModel, SessionLlmParams } from '../types/chat'
 import ModelSelector from './ModelSelector'
+import type { SessionLlmParamsPatch } from './ModelSelector'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, hairlineBottom } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
@@ -84,7 +85,9 @@ interface MobileTopBarProps {
   backendOk: boolean
   availableModels?: AvailableModel[]
   sessionModel?: string
+  sessionLlmParams?: SessionLlmParams | null
   onModelChange?: (ref: string) => void
+  onLlmParamsChange?: (patch: SessionLlmParamsPatch) => void
   onOpenDrawer: () => void
   onNewChat: () => void
   onOpenSettings: () => void
@@ -94,7 +97,9 @@ export default function MobileTopBar({
   title, llmLabel, backendOk,
   availableModels = [],
   sessionModel,
+  sessionLlmParams,
   onModelChange,
+  onLlmParamsChange,
   onOpenDrawer, onNewChat, onOpenSettings,
 }: MobileTopBarProps) {
   const s = useStyles()
@@ -120,6 +125,9 @@ export default function MobileTopBar({
               models={availableModels}
               value={sessionModel}
               isMobile
+              showParams
+              llmParams={sessionLlmParams}
+              onLlmParamsChange={onLlmParamsChange}
               onChange={onModelChange}
             />
           ) : (

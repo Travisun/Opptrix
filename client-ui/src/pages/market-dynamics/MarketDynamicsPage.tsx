@@ -31,13 +31,17 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
+  /** Electron: let app-main tint show through (sidebar/detail keep own surfaces). */
+  rootElectron: {
+    backgroundColor: 'transparent',
+  },
   webHead: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     padding: '10px 16px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
@@ -75,7 +79,7 @@ const useStyles = makeStyles({
     maxWidth: 'none',
     maxHeight: '38%',
     borderRight: 'none',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   detail: {
     flex: 1,
@@ -200,7 +204,7 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
   const stacked = layout === 'stacked'
 
   return (
-    <div className={mergeClasses(s.root, 'opptrix-market-dynamics')}>
+    <div className={mergeClasses(s.root, electronChrome && s.rootElectron, 'opptrix-market-dynamics')}>
       {titleBar}
       {webHead}
 

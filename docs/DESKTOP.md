@@ -364,17 +364,17 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 
 ### Window blur + sidebar
 
-路线 1（系统窗形）：隐藏标题栏，**保留系统圆角与阴影**；**不开**整窗 `transparent: true`，也**不用** CSS 大圆角裁切外轮廓。侧栏毛玻璃仍靠平台材质。
+路线 1（系统窗形）：隐藏标题栏，**保留系统圆角与阴影**；**不开**整窗 `transparent: true`，也**不用** CSS 大圆角裁切外轮廓。侧栏毛玻璃仍靠平台材质（对齐 Cursor）。
 
-| 平台 | 窗口层 | 固定左侧栏 |
-|------|--------|------------|
-| macOS | `titleBarStyle: 'hiddenInset'` + `vibrancy: 'sidebar'`（**不开** `transparent`） | CSS 透明，露系统毛玻璃；缩放不会漏裸桌面 |
-| Windows | `frame: false` + `backgroundMaterial: 'acrylic'`（**不开** `transparent`） | 同上；Win11 系统圆角默认开启 |
-| Linux | `frame: false` + 实色窗口底 | 保留 CSS `.opptrix-glass-sidebar` 毛玻璃（无原生 acrylic） |
+| 平台 | 窗口层 | 窗底色（浅 / 深） | 固定左侧栏 |
+|------|--------|-------------------|------------|
+| macOS | `titleBarStyle: 'hiddenInset'` + `vibrancy: 'sidebar'`（**不开** `transparent`） | `#00FFFFFF` / `#40000000`（深色约 25% 黑罩压暗毛玻璃） | `color-mix(canvasAlt 42%/36%)` 轻穿透（对齐 Cursor sidebar） |
+| Windows | `frame: false` + `backgroundMaterial: 'mica'`（**不开** `transparent`） | `#00FFFFFF` / `#00000000` | 同上比例（无过重白罩）；Win11 系统圆角默认开启 |
+| Linux | `frame: false` + 实色窗口底 | 实色 splash / canvas | 保留 CSS `.opptrix-glass-sidebar` 毛玻璃（无原生材质） |
 
-启动时窗口底先实色 splash（`SPLASH_CANVAS`）；shell ready 后 mac/win 将 `backgroundColor` 设为 `#00000000`，仅让网页透明区透出 vibrancy/acrylic（窗口本身仍非 transparent）。最大化/全屏时系统窗形自动直角，无需 CSS squared 逻辑。
+启动时窗口底先实色 splash（`SPLASH_CANVAS`）；shell ready 后 mac/win 按主题切换上表底色并启用 vibrancy/mica，仅让网页透明区透出系统材质（窗口本身仍非 transparent）。切换浅/深色时 `applyNativeThemeSource` 会重新 `enableWindowBlurBackground`。最大化/全屏时系统窗形自动直角，无需 CSS squared 逻辑。
 
-窄窗浮层侧栏仍盖在实色主内容上，继续用 CSS 毛玻璃。文档标记类：`html.opptrix-electron-vibrancy`。
+窄窗浮层侧栏仍盖在实色主内容上，继续用 CSS 毛玻璃。文档标记类：`html.opptrix-electron-vibrancy`。vibrancy 开启时对齐 Cursor glass：`color-mix` 侧栏约 **42% / 36%**（`canvasAlt`，浅/深）、主工作区约 **84% / 72%**（`canvas`）；启动 / onboarding 仍实色。Win mica 用同比例，无过重白罩。
 
 ### Title bar z-index
 
@@ -389,8 +389,8 @@ Stacking order (low → high), defined in `client-ui/src/desktop/constants.ts` a
 | Clickable session title | `1310` | `DESKTOP_Z_TITLE_INTERACTIVE` — title text above drag layer |
 | Window-frame titlebar | `2100` | Non-mac `WindowFrameTitleBar` — min/max/close; above onboarding |
 
-On **macOS**, traffic lights stay in the content chrome band (`hiddenInset`) and workspace splitters may extend into that band. On **Windows / Linux**, `WindowFrameTitleBar` adds a dedicated glass strip above content chrome: app icon + `FrameAppMenu` on the left, Win11-style caption buttons (46×titlebar, close = red/white hover) on the right. Splitters stay below the frame titlebar and do not pierce it.
+On **macOS**, native traffic lights are hidden (`setWindowButtonVisibility(false)`); compact HTML stand-ins (`MacTrafficLights`, ~14px) sit in the content chrome band (`hiddenInset`), and workspace splitters may extend into that band. On **Windows / Linux**, `WindowFrameTitleBar` adds a dedicated glass strip above content chrome: app icon + `FrameAppMenu` on the left, Win11-style caption buttons (46×titlebar, close = red/white hover) on the right. Splitters stay below the frame titlebar and do not pierce it.
 
 Standalone pages (news / market / experts / settings) reuse `StandaloneElectronTitleBar` with left inset from `desktopChromeToolbarReserve` when the session sidebar is fully collapsed (same as chat `desktopTitleLeft(false)`), and right inset from `desktopTitleBarActionsRight()`. Settings sidebar matches the session sidebar’s top-through glass; `StandaloneElectronTitleBar` only covers the settings content column (panel mode uses the compact title inset; overlay mode keeps `chromeToolbarReserve`).
 
-Narrow windows (&lt; current session sidebar width × 2.5): left sidebar becomes a **full-height overlay** (`top: 0; bottom: 0`), light glass, **no fullscreen scrim**. At ≥ × 3, growing the window auto-expands the inline sidebar. Sidebar width defaults to 200px, draggable between ~196–360px, persisted in `localStorage` (`opptrix-sidebar-width`). Minimum window width: `DESKTOP_CHAT_MIN_WIDTH` (510px), synced with `apps/desktop/electron/main.cjs`.
+Narrow windows (&lt; current session sidebar width × 2.5): left sidebar becomes a **full-height overlay** (`top: 0; bottom: 0`), light glass, **no fullscreen scrim**. At ≥ × 3, growing the window auto-expands the inline sidebar. Sidebar width defaults to 250px, draggable between ~196–360px, persisted in `localStorage` (`opptrix-sidebar-width`). Minimum window width: `DESKTOP_CHAT_MIN_WIDTH` (510px), synced with `apps/desktop/electron/main.cjs`.

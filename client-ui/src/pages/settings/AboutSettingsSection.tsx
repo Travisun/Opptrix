@@ -3,7 +3,13 @@ import { ProgressBar, Spinner, Switch, Text, makeStyles, mergeClasses } from '@f
 import {
   ArrowDownloadRegular,
   ArrowSyncRegular,
-  ChevronRightRegular,
+  ChatHelpRegular,
+  CodeRegular,
+  DocumentTextRegular,
+  GlobeRegular,
+  LockClosedRegular,
+  ShieldErrorRegular,
+  WarningRegular,
 } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { getHealth } from '../../api/client'
@@ -26,7 +32,7 @@ import {
   formatAboutCopyrightLine,
 } from './aboutLinks'
 import {
-  SettingsActionRow,
+  SettingsExternalLinkRow,
   SettingsGroup,
   SettingsRow,
 } from './SettingsPrimitives'
@@ -63,13 +69,13 @@ const useStyles = makeStyles({
   sectionBlock: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '8px',
   },
   sectionLabel: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
     color: opptrixCssVars.textSecondary,
-    letterSpacing: '-0.01em',
+    lineHeight: '16px',
     paddingLeft: '2px',
   },
   license: {
@@ -77,6 +83,7 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.55,
     paddingLeft: '2px',
+    marginTop: '4px',
   },
   updateStatusBlock: {
     display: 'flex',
@@ -138,6 +145,11 @@ const useStyles = makeStyles({
     display: 'flex',
     gap: '8px',
     flexShrink: 0,
+  },
+  linkIcon: {
+    fontSize: '18px',
+    width: '18px',
+    height: '18px',
   },
 })
 
@@ -226,7 +238,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
           本软件仅供学习与研究参考，不构成投资建议，也不能代替券商下单或自动交易。请自行核实信息并独立做出投资决策。
         </Text>
         <Text className={s.note} block>
-          你的对话、关注列表和 API 密钥等数据默认保存在本机，由你自行管理；使用哪家大模型、哪些数据源，可在设置中调整。
+          你的对话、关注列表和数据密钥等默认保存在本机，由你自行管理；使用哪家大模型、哪些数据源，可在设置中调整。
         </Text>
       </div>
 
@@ -351,33 +363,29 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>法律与官网</Text>
         <SettingsGroup>
-          <SettingsActionRow
+          <SettingsExternalLinkRow
             title="官方网站"
-            desc="了解产品动态、使用指南与更多说明"
+            desc="产品动态与使用指南"
+            icon={<GlobeRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_WEBSITE)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
           />
-          <SettingsActionRow
+          <SettingsExternalLinkRow
             title="用户协议"
-            desc="使用 Opptrix 前请阅读并知悉相关条款"
+            desc="使用前请阅读相关条款"
+            icon={<DocumentTextRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_USER_AGREEMENT)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
           />
-          <SettingsActionRow
+          <SettingsExternalLinkRow
             title="隐私政策"
-            desc="了解我们如何收集、使用与保护你的信息"
+            desc="我们如何保护你的信息"
+            icon={<LockClosedRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_PRIVACY_POLICY)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
           />
-          <SettingsActionRow
+          <SettingsExternalLinkRow
             title="免责声明"
-            desc="关于投资风险、数据局限与 AI 生成内容的说明"
+            desc="投资风险与内容局限说明"
+            icon={<WarningRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_DISCLAIMER)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
             last
           />
         </SettingsGroup>
@@ -386,26 +394,23 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>项目与支持</Text>
         <SettingsGroup>
-          <SettingsActionRow
-            title="访问项目主页"
-            desc="在 GitHub 查看介绍、文档与源代码"
+          <SettingsExternalLinkRow
+            title="项目主页"
+            desc="介绍、文档与源代码"
+            icon={<CodeRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_GITHUB_HOME)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
           />
-          <SettingsActionRow
-            title="反馈问题或功能建议"
-            desc="遇到异常或希望新增功能时，可在 Issues 留言"
+          <SettingsExternalLinkRow
+            title="反馈与建议"
+            desc="遇到问题或希望新增功能时留言"
+            icon={<ChatHelpRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_GITHUB_ISSUES)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
           />
-          <SettingsActionRow
-            title="报告安全漏洞"
-            desc="按安全说明私下报告；请勿在公开渠道披露细节"
+          <SettingsExternalLinkRow
+            title="安全漏洞"
+            desc="请私下报告，勿在公开渠道披露细节"
+            icon={<ShieldErrorRegular className={s.linkIcon} />}
             onClick={() => openExternalUrl(OPPTRIX_SECURITY_POLICY)}
-            icon={<ChevronRightRegular fontSize={16} />}
-            dividerFullWidth
             last
           />
         </SettingsGroup>

@@ -14,10 +14,15 @@ import {
   type ScheduledJob,
 } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
-import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
 import {
+  SettingsAddBar,
+  SettingsEmptyState,
   SettingsGroup,
+  SettingsListPanel,
+  SettingsListRow,
   SettingsRow,
+  SettingsSectionLabel,
   SettingsStaticBlock,
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
@@ -29,12 +34,10 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '20px',
   },
-  sectionLabel: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textSecondary,
-    letterSpacing: '-0.01em',
-    paddingLeft: '2px',
+  sectionBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
   },
   statusBadge: {
     display: 'inline-flex',
@@ -54,64 +57,16 @@ const useStyles = makeStyles({
   statusError: {
     color: opptrixCssVars.error,
   },
-  listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  listHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '10px 14px',
-    minHeight: '44px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-  },
-  listHeaderMeta: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.45,
-    flex: 1,
-    minWidth: 0,
-  },
-  listRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '10px',
-    padding: '8px 14px',
-    minHeight: '38px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': {
-      borderBottom: 'none',
-    },
-  },
-  listRowMain: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  listRowTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
-  },
-  listRowMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-  },
   emptyHint: {
     fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
+  },
+  jobTitle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
   },
 })
 
@@ -260,8 +215,8 @@ export default function ScheduleSettingsSection() {
 
   return (
     <div className={s.root}>
-      <div>
-        <Text className={s.sectionLabel} block>总开关</Text>
+      <div className={s.sectionBlock}>
+        <SettingsSectionLabel>总开关</SettingsSectionLabel>
         <SettingsGroup>
           <SettingsRow
             title="计划任务"
@@ -289,8 +244,8 @@ export default function ScheduleSettingsSection() {
         </SettingsGroup>
       </div>
 
-      <div>
-        <Text className={s.sectionLabel} block>后台常驻</Text>
+      <div className={s.sectionBlock}>
+        <SettingsSectionLabel>后台常驻</SettingsSectionLabel>
         <SettingsGroup>
           <SettingsRow
             title="随应用启动"
@@ -305,76 +260,70 @@ export default function ScheduleSettingsSection() {
         </SettingsGroup>
       </div>
 
-      <div>
-        <Text className={s.sectionLabel} block>系统定时</Text>
-        <div className={s.listPanel}>
-          <div className={s.listHeader}>
-            <Text className={s.listHeaderMeta} block>
-              {os?.message ?? '正在获取同步状态…'}
-            </Text>
-            <OpptrixButton
-              variant="ghost"
-              size="small"
-              icon={<ArrowSyncRegular fontSize={14} />}
-              disabled={syncing}
-              onClick={() => { void handleResync() }}
-            >
-              {syncing ? '注册中…' : '重新注册'}
-            </OpptrixButton>
-          </div>
-          <div className={s.listRow}>
-            <div className={s.listRowMain}>
-              <Text className={s.listRowTitle} block>同步状态</Text>
-              <Text className={s.listRowMeta} block>
-                {summary
-                  ? `共 ${summary.total} 个任务，${summary.enabled} 个启用`
-                  : '暂无任务摘要'}
-              </Text>
-            </div>
-            {osStatusBadge(os, s)}
-          </div>
+      <div className={s.sectionBlock}>
+        <SettingsSectionLabel>系统定时</SettingsSectionLabel>
+        <SettingsListPanel>
+          <SettingsAddBar
+            meta={os?.message ?? '正在获取同步状态…'}
+            actions={(
+              <OpptrixButton
+                variant="ghost"
+                size="small"
+                icon={<ArrowSyncRegular fontSize={14} />}
+                disabled={syncing}
+                onClick={() => { void handleResync() }}
+              >
+                {syncing ? '注册中…' : '重新注册'}
+              </OpptrixButton>
+            )}
+          />
+          <SettingsListRow
+            title="同步状态"
+            meta={summary
+              ? `共 ${summary.total} 个任务，${summary.enabled} 个启用`
+              : '暂无任务摘要'}
+            trailing={osStatusBadge(os, s)}
+          />
           {os?.error && (
-            <div className={s.listRow}>
-              <Text className={s.listRowMeta} block>{os.error}</Text>
-            </div>
+            <SettingsListRow title={os.error} />
           )}
-        </div>
+        </SettingsListPanel>
       </div>
 
-      <div>
-        <Text className={s.sectionLabel} block>任务列表</Text>
+      <div className={s.sectionBlock}>
+        <SettingsSectionLabel>任务列表</SettingsSectionLabel>
         {jobs.length === 0 ? (
-          <SettingsStaticBlock>
-            <Text className={s.emptyHint} block>
-              还没有计划任务。
-              你可以让助手帮你创建，例如「每个交易日收盘后总结大盘」。
-            </Text>
-          </SettingsStaticBlock>
+          <SettingsGroup>
+            <SettingsEmptyState
+              icon={<CalendarClockRegular fontSize={22} />}
+              title="还没有计划任务"
+              desc="你可以让助手帮你创建，例如「每个交易日收盘后总结大盘」。"
+            />
+          </SettingsGroup>
         ) : (
-          <div className={s.listPanel}>
+          <SettingsListPanel>
             {jobs.map((job, index) => (
-              <div
+              <SettingsListRow
                 key={listRowKey(index, job.id, job.title)}
-                className={s.listRow}
-              >
-                <div className={s.listRowMain}>
-                  <Text className={s.listRowTitle} block>
-                    <CalendarClockRegular fontSize={14} style={{ marginRight: 6, verticalAlign: '-2px' }} />
+                title={(
+                  <span className={s.jobTitle}>
+                    <CalendarClockRegular fontSize={14} />
                     {job.title}
-                  </Text>
-                  <Text className={s.listRowMeta} block>
-                    {jobKindLabel(job.kind)} · 下次 {formatNextRun(job.next_run_at)} · {lastStatusLabel(job.last_status)}
-                  </Text>
-                </div>
-                <Switch
-                  checked={job.enabled}
-                  disabled={!settings.master_enabled}
-                  onChange={(_, data) => { void toggleJob(job, Boolean(data.checked)) }}
-                  aria-label={`${job.title} 启用开关`}
-                />
-              </div>
+                  </span>
+                )}
+                titleTitle={job.title}
+                meta={`${jobKindLabel(job.kind)} · 下次 ${formatNextRun(job.next_run_at)} · ${lastStatusLabel(job.last_status)}`}
+                trailing={(
+                  <Switch
+                    checked={job.enabled}
+                    disabled={!settings.master_enabled}
+                    onChange={(_, data) => { void toggleJob(job, Boolean(data.checked)) }}
+                    aria-label={`${job.title} 启用开关`}
+                  />
+                )}
+              />
             ))}
-          </div>
+          </SettingsListPanel>
         )}
       </div>
     </div>

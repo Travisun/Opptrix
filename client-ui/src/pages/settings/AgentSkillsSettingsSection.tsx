@@ -1,28 +1,39 @@
-import { useCallback, useEffect, useState, type MouseEvent } from 'react'
-import { Spinner, Text, makeStyles, Textarea, mergeClasses } from '@fluentui/react-components'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  Spinner,
+  Text,
+  makeStyles,
+  mergeClasses,
+  Dialog,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+} from '@fluentui/react-components'
 import {
   DeleteRegular,
-  DocumentArrowUpRegular,
   ArrowSyncRegular,
-  ChevronDownRegular,
-  ChevronRightRegular,
-  CopyAddRegular,
+  EditRegular,
+  EyeRegular,
 } from '@fluentui/react-icons'
 import {
   listAgentSkills,
   getAgentSkill,
-  importAgentSkill,
   deleteAgentSkill,
-  forkAgentSkill,
   type PublicAgentSkill,
 } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import AgentSkillEditor from './AgentSkillEditor'
 import AgentSkillPreview from './AgentSkillPreview'
-import { SettingsGroup, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
+import {
+  SettingsEmptyState,
+  SettingsGroup,
+  SettingsPanelHeader,
+  SettingsRow,
+} from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
-import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -36,140 +47,41 @@ const useStyles = makeStyles({
     lineHeight: 1.5,
     padding: '0 2px 4px',
   },
-  list: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
-    overflow: 'hidden',
-  },
-  row: {
-    display: 'flex',
-    flexDirection: 'column',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  rowHeader: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '12px 14px',
-    cursor: 'pointer',
-    backgroundColor: 'transparent',
-    border: 'none',
-    width: '100%',
-    textAlign: 'left',
-    boxSizing: 'border-box',
-    ':hover': {
-      backgroundColor: opptrixCssVars.canvasAlt,
-    },
-  },
-  rowHeaderExpanded: {
-    backgroundColor: opptrixCssVars.canvasAlt,
-  },
-  rowMain: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  titleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  chevron: {
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-    marginTop: '2px',
-  },
-  title: {
-    fontSize: 'var(--opptrix-font-md)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-  },
-  meta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-  },
-  desc: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.45,
-  },
-  detail: {
-    padding: '0 14px 14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  detailActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  importBox: {
-    width: '100%',
-    minHeight: '140px',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-    fontSize: 'var(--opptrix-font-sm)',
-    lineHeight: 1.45,
-  },
-  actions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-    marginTop: '8px',
-  },
-  empty: {
-    padding: '20px 14px',
-    color: opptrixCssVars.textSecondary,
-    fontSize: 'var(--opptrix-font-md)',
-    lineHeight: 1.5,
-  },
   loadingWrap: {
     padding: '24px',
     display: 'flex',
     justifyContent: 'center',
   },
   detailLoading: {
-    padding: '16px 0',
+    padding: '24px 0',
     display: 'flex',
     justifyContent: 'center',
   },
-  sectionLabel: {
-    fontSize: 'var(--opptrix-font-md)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    marginBottom: '6px',
-  },
-  sectionDesc: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.45,
-    marginBottom: '10px',
-  },
-  headerActions: {
+  rowActions: {
     display: 'flex',
-    gap: '6px',
+    alignItems: 'center',
+    gap: '4px',
     flexShrink: 0,
-    alignItems: 'flex-start',
+  },
+  dialogSurface: {
+    maxWidth: '640px',
+    width: 'calc(100vw - 40px)',
+    maxHeight: 'min(72vh, 640px)',
+  },
+  dialogBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflow: 'hidden',
+  },
+  dialogContent: {
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowY: 'auto',
+    overflowX: 'hidden',
   },
 })
-
-function sourceLabel(source: PublicAgentSkill['source']): string {
-  switch (source) {
-    case 'builtin':
-      return '内置'
-    case 'imported':
-      return '已导入'
-    case 'agent_created':
-      return '助手创建'
-    default:
-      return '我的'
-  }
-}
 
 function isEditableSource(source: PublicAgentSkill['source']): boolean {
   return source === 'user' || source === 'imported' || source === 'agent_created'
@@ -187,12 +99,10 @@ export default function AgentSkillsSettingsSection() {
   const { confirm } = useOpptrixDialogAlert()
   const [skills, setSkills] = useState<PublicAgentSkill[]>([])
   const [loading, setLoading] = useState(true)
-  const [importText, setImportText] = useState('')
-  const [importing, setImporting] = useState(false)
-  const [expandedName, setExpandedName] = useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [activeName, setActiveName] = useState<string | null>(null)
   const [detail, setDetail] = useState<PublicAgentSkill | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [forking, setForking] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -210,56 +120,33 @@ export default function AgentSkillsSettingsSection() {
     void load()
   }, [load])
 
-  const loadDetail = useCallback(async (name: string) => {
+  const openSkillDialog = useCallback(async (skill: PublicAgentSkill) => {
+    setActiveName(skill.name)
+    setDialogOpen(true)
     setDetailLoading(true)
     setDetail(null)
     try {
-      const { skill } = await getAgentSkill(name)
-      setDetail(skill)
+      const { skill: full } = await getAgentSkill(skill.name)
+      setDetail(full)
     } catch (e) {
       showToast(
         mapSkillError(e instanceof Error ? e.message : '', '暂时无法打开这份技能'),
         'error',
       )
-      setExpandedName(null)
+      setDialogOpen(false)
+      setActiveName(null)
     } finally {
       setDetailLoading(false)
     }
   }, [showToast])
 
-  const toggleExpand = (skill: PublicAgentSkill) => {
-    if (expandedName === skill.name) {
-      setExpandedName(null)
-      setDetail(null)
-      return
-    }
-    setExpandedName(skill.name)
-    void loadDetail(skill.name)
+  const closeDialog = () => {
+    setDialogOpen(false)
+    setActiveName(null)
+    setDetail(null)
   }
 
-  const onImport = async () => {
-    if (!importText.trim()) {
-      showToast('请先粘贴技能说明', 'error')
-      return
-    }
-    setImporting(true)
-    try {
-      await importAgentSkill(importText)
-      setImportText('')
-      showToast('工作流技能已导入', 'success')
-      await load()
-    } catch (e) {
-      showToast(
-        mapSkillError(e instanceof Error ? e.message : '', '导入失败，请检查内容后重试'),
-        'error',
-      )
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  const onDelete = async (skill: PublicAgentSkill, event?: React.MouseEvent) => {
-    event?.stopPropagation()
+  const onDelete = async (skill: PublicAgentSkill) => {
     if (skill.source === 'builtin') return
     const ok = await confirm({
       title: '删除工作流技能',
@@ -271,10 +158,7 @@ export default function AgentSkillsSettingsSection() {
     try {
       await deleteAgentSkill(skill.name)
       showToast(`已删除「${skill.name}」`, 'success')
-      if (expandedName === skill.name) {
-        setExpandedName(null)
-        setDetail(null)
-      }
+      if (activeName === skill.name) closeDialog()
       await load()
     } catch (e) {
       showToast(
@@ -284,23 +168,8 @@ export default function AgentSkillsSettingsSection() {
     }
   }
 
-  const onFork = async (skill: PublicAgentSkill) => {
-    setForking(true)
-    try {
-      const { skill: forked } = await forkAgentSkill(skill.name)
-      showToast(`已另存为我的副本「${forked.name}」`, 'success')
-      await load()
-      setExpandedName(forked.name)
-      setDetail(forked)
-    } catch (e) {
-      showToast(
-        mapSkillError(e instanceof Error ? e.message : '', '另存失败，请稍后重试'),
-        'error',
-      )
-    } finally {
-      setForking(false)
-    }
-  }
+  const dialogSkill = detail && activeName && detail.name === activeName ? detail : null
+  const dialogEditable = dialogSkill ? isEditableSource(dialogSkill.source) : false
 
   return (
     <div className={s.root}>
@@ -309,10 +178,9 @@ export default function AgentSkillsSettingsSection() {
       </Text>
 
       <SettingsGroup>
-        <SettingsRow
-          title="已安装技能"
-          desc={loading ? '正在加载技能列表…' : `共 ${skills.length} 个`}
-          control={(
+        <SettingsPanelHeader
+          title={loading ? '正在加载…' : `已安装 · ${skills.length}`}
+          action={(
             <OpptrixButton
               variant="secondary"
               size="small"
@@ -324,124 +192,85 @@ export default function AgentSkillsSettingsSection() {
             </OpptrixButton>
           )}
         />
-        <div className={s.list}>
-          {loading ? (
-            <div className={s.loadingWrap}>
-              <Spinner size="small" label="正在加载技能列表…" />
-            </div>
-          ) : skills.length === 0 ? (
-            <div className={s.empty}>
-              还没有可用的工作流技能。
-              粘贴技能说明并导入后，即可在对话中启用。
-            </div>
-          ) : (
-            skills.map(skill => {
-              const expanded = expandedName === skill.name
-              const editable = isEditableSource(skill.source)
-              return (
-                <div key={skill.name} className={s.row}>
-                  <button
-                    type="button"
-                    className={mergeClasses(s.rowHeader, expanded && s.rowHeaderExpanded)}
-                    onClick={() => toggleExpand(skill)}
-                    aria-expanded={expanded}
-                  >
-                    <div className={s.rowMain}>
-                      <div className={s.titleRow}>
-                        <span className={s.chevron} aria-hidden>
-                          {expanded
-                            ? <ChevronDownRegular fontSize={14} />
-                            : <ChevronRightRegular fontSize={14} />}
-                        </span>
-                        <span className={s.title}>{skill.name}</span>
-                      </div>
-                      <span className={s.meta}>{sourceLabel(skill.source)}</span>
-                      <span className={s.desc}>{skill.description}</span>
-                    </div>
-                    {editable ? (
-                      <div
-                        className={s.headerActions}
-                        onClick={e => e.stopPropagation()}
-                        onKeyDown={e => e.stopPropagation()}
-                      >
-                        <OpptrixButton
-                          variant="secondary"
-                          size="small"
-                          icon={<DeleteRegular />}
-                          onClick={e => void onDelete(skill, e)}
-                        >
-                          删除
-                        </OpptrixButton>
-                      </div>
-                    ) : null}
-                  </button>
 
-                  {expanded ? (
-                    <div className={s.detail}>
-                      {detailLoading || !detail || detail.name !== skill.name ? (
-                        <div className={s.detailLoading}>
-                          <Spinner size="tiny" label="正在打开技能…" />
-                        </div>
-                      ) : skill.source === 'builtin' ? (
-                        <>
-                          <AgentSkillPreview skill={detail} />
-                          <div className={s.detailActions}>
-                            <OpptrixButton
-                              variant="primary"
-                              size="small"
-                              icon={<CopyAddRegular />}
-                              onClick={() => void onFork(skill)}
-                              disabled={forking}
-                            >
-                              {forking ? '正在保存副本…' : '另存为我的副本'}
-                            </OpptrixButton>
-                          </div>
-                        </>
-                      ) : (
-                        <AgentSkillEditor
-                          skill={detail}
-                          onSaved={updated => {
-                            setDetail(updated)
-                            void load()
-                          }}
-                          onError={msg => showToast(msg, 'error')}
-                          onSuccess={msg => showToast(msg, 'success')}
-                        />
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              )
-            })
-          )}
-        </div>
-      </SettingsGroup>
-
-      <SettingsGroup>
-        <SettingsStaticBlock>
-          <div className={s.sectionLabel}>导入技能</div>
-          <div className={s.sectionDesc}>
-            粘贴完整技能说明（含标题区与步骤正文），导入后即可使用
+        {loading ? (
+          <div className={s.loadingWrap}>
+            <Spinner size="small" label="正在加载技能列表…" />
           </div>
-          <Textarea
-            className={s.importBox}
-            value={importText}
-            onChange={(_, d) => setImportText(d.value)}
-            placeholder={'---\nname: my-workflow\ndescription: 说明何时使用…\n---\n\n# 步骤\n1. …'}
-            resize="vertical"
+        ) : skills.length === 0 ? (
+          <SettingsEmptyState
+            title="还没有工作流技能"
+            desc="内置技能或助手创建的技能会显示在这里"
           />
-          <div className={s.actions}>
-            <OpptrixButton
-              variant="primary"
-              icon={<DocumentArrowUpRegular />}
-              onClick={() => void onImport()}
-              disabled={importing || !importText.trim()}
-            >
-              {importing ? '正在导入…' : '导入技能'}
-            </OpptrixButton>
-          </div>
-        </SettingsStaticBlock>
+        ) : (
+          skills.map((skill, index) => {
+            const editable = isEditableSource(skill.source)
+            return (
+              <SettingsRow
+                key={skill.name}
+                title={skill.name}
+                last={index === skills.length - 1}
+                control={(
+                  <div className={s.rowActions}>
+                    <OpptrixButton
+                      variant="icon"
+                      icon={editable ? <EditRegular /> : <EyeRegular />}
+                      aria-label={editable ? `编辑 ${skill.name}` : `查看 ${skill.name}`}
+                      onClick={() => void openSkillDialog(skill)}
+                    />
+                    {editable ? (
+                      <OpptrixButton
+                        variant="icon"
+                        icon={<DeleteRegular />}
+                        aria-label={`删除 ${skill.name}`}
+                        onClick={() => void onDelete(skill)}
+                      />
+                    ) : null}
+                  </div>
+                )}
+              />
+            )
+          })
+        )}
       </SettingsGroup>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(_, data) => {
+          if (!data.open) closeDialog()
+        }}
+      >
+        <DialogSurface
+          className={mergeClasses(
+            s.dialogSurface,
+            'opptrix-dialog-surface',
+            'opptrix-skill-dialog',
+          )}
+        >
+          <DialogBody className={s.dialogBody}>
+            <DialogTitle>{activeName ?? '工作流技能'}</DialogTitle>
+            <DialogContent className={mergeClasses(s.dialogContent, 'opptrix-scroll')}>
+              {detailLoading || !dialogSkill ? (
+                <div className={s.detailLoading}>
+                  <Spinner size="tiny" label="正在打开技能…" />
+                </div>
+              ) : dialogEditable ? (
+                <AgentSkillEditor
+                  skill={dialogSkill}
+                  onSaved={updated => {
+                    setDetail(updated)
+                    void load()
+                  }}
+                  onError={msg => showToast(msg, 'error')}
+                  onSuccess={msg => showToast(msg, 'success')}
+                />
+              ) : (
+                <AgentSkillPreview skill={dialogSkill} />
+              )}
+            </DialogContent>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   )
 }

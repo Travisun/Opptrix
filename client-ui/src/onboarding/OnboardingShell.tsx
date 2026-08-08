@@ -32,7 +32,7 @@ export const useOnboardingShellStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingLeft: '12px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
     backgroundColor: opptrixCssVars.canvas,
   },
   electronTitleBarMac: {

@@ -11,10 +11,10 @@ const layoutTokens = {
   focusRingOffset: '2px',
   activeOpacity: 0.72,
 
-  sidebarWidth: '200px',
-  sidebarWidthPx: 200,
-  settingsSidebarWidth: '210px',
-  settingsSidebarWidthPx: 210,
+  sidebarWidth: '250px',
+  sidebarWidthPx: 250,
+  settingsSidebarWidth: '260px',
+  settingsSidebarWidthPx: 260,
   settingsContentWidth: '100%',
   settingsContentMaxWidth: '620px',
   /** Expert market / catalog pages — wider than settings for dual-column cards */
@@ -30,9 +30,10 @@ const layoutTokens = {
   chatThreadPaddingLeft: '32px',
   chatThreadPaddingXMobile: '15px',
   chatComposerPadding: '12px',
+  /** Composer 输入卡圆角（偏 pill，对齐 Cursor 单行输入卡；勿改全局 radiusXl） */
+  chatComposerRadius: '20px',
   chatComposerBottomInset: '25px',
   chatComposerBottomInsetPx: 25,
-  chatComposerGroundExtend: '10px',
   chatThreadScrollPadBottom: '212px',
   chatThreadScrollPadBottomMobile: '196px',
   chatThreadAlignInset: '3px',
@@ -82,42 +83,54 @@ export const FONT_SCALES = {
 
 export type FontScaleName = keyof typeof FONT_SCALES
 
+/**
+ * Light palette — aligned to Cursor Light (`theme-cursor/cursor-light-color-theme.json`):
+ * main editor `#FCFCFC`, sidebar/chrome `#F3F3F3`, ink `#141414` + alpha borders/hover.
+ * Brand accent stays Opptrix ink (`#141414`), not Cursor button blue (`#2778C1`).
+ */
 export const opptrixTokensLight = {
-  accent: '#1D1D1F',
+  accent: '#141414',
   accentHover: '#000000',
-  accentSoft: 'rgba(29, 29, 31, 0.07)',
-  accentMuted: '#E5E5EA',
-  accentForeground: '#FFFFFF',
+  accentSoft: 'rgba(20, 20, 20, 0.08)',
+  accentMuted: 'rgba(20, 20, 20, 0.14)',
+  accentForeground: '#FCFCFC',
 
-  canvas: '#FFFFFF',
-  canvasAlt: '#F5F5F7',
-  canvasMuted: '#EBEBED',
+  /** Main content — Cursor `editor.background` (brighter than sidebar) */
+  canvas: '#FCFCFC',
+  /** Left sidebar / chrome — Cursor `sideBar.background` */
+  canvasAlt: '#F3F3F3',
+  /** Muted fill — one step below chrome (no Cursor direct map) */
+  canvasMuted: '#EEEEEE',
 
-  surface: '#FFFFFF',
-  surfaceMuted: 'rgba(255, 255, 255, 0.42)',
-  surfaceHover: 'rgba(255, 255, 255, 0.62)',
-  surfaceGlass: 'rgba(255, 255, 255, 0.72)',
+  surface: '#FCFCFC',
+  surfaceMuted: 'rgba(252, 252, 252, 0.72)',
+  /** List / row hover — Cursor `list.hoverBackground` `#14141414` */
+  surfaceHover: 'rgba(20, 20, 20, 0.08)',
+  surfaceGlass: 'rgba(252, 252, 252, 0.72)',
 
   glass: 'rgba(255, 255, 255, 0.14)',
   glassStrong: 'rgba(255, 255, 255, 0.22)',
-  glassNavSelected: 'rgba(255, 255, 255, 0.38)',
+  glassNavSelected: 'rgba(20, 20, 20, 0.08)',
 
   sidebarGlass: 'rgba(255, 255, 255, 0.14)',
-  sidebarSelected: 'rgba(255, 255, 255, 0.38)',
+  sidebarSelected: 'rgba(20, 20, 20, 0.08)',
 
-  userBubble: '#F2F2F7',
-  gray100: '#F2F2F7',
-  gray200: '#E5E5EA',
-  gray300: '#D1D1D6',
+  userBubble: '#F3F3F3',
+  gray100: '#F3F3F3',
+  gray200: '#EEEEEE',
+  gray300: 'rgba(20, 20, 20, 0.20)',
 
-  separator: 'rgba(60, 60, 67, 0.14)',
-  separatorStrong: 'rgba(60, 60, 67, 0.22)',
-  border: 'rgba(60, 60, 67, 0.10)',
-  borderStrong: 'rgba(60, 60, 67, 0.18)',
+  /** Cursor `sideBar.border` / `panel.border` `#14141414` */
+  separator: 'rgba(20, 20, 20, 0.08)',
+  separatorStrong: 'rgba(20, 20, 20, 0.12)',
+  border: 'rgba(20, 20, 20, 0.08)',
+  borderStrong: 'rgba(20, 20, 20, 0.20)',
 
-  textPrimary: '#1D1D1F',
-  textSecondary: '#6E6E73',
-  textTertiary: '#AEAEB2',
+  textPrimary: '#141414',
+  /** Cursor sidebar/secondary `#141414BD` ≈ 74% */
+  textSecondary: 'rgba(20, 20, 20, 0.74)',
+  /** Cursor muted `#14141499` ≈ 60% */
+  textTertiary: 'rgba(20, 20, 20, 0.60)',
 
   success: '#34C759',
   successSoft: 'rgba(52, 199, 89, 0.1)',
@@ -125,77 +138,88 @@ export const opptrixTokensLight = {
   warningSoft: 'rgba(255, 149, 0, 0.1)',
   error: '#FF3B30',
   errorSoft: 'rgba(255, 59, 48, 0.1)',
-  infoSoft: 'rgba(29, 29, 31, 0.06)',
+  infoSoft: 'rgba(20, 20, 20, 0.06)',
 
-  inputBg: '#F5F5F7',
-  inputBgHover: '#EBEBED',
-  inputBgFocus: '#FFFFFF',
+  /** Cursor `input.background` / `dropdown.background` */
+  inputBg: '#FCFCFC',
+  inputBgHover: '#F3F3F3',
+  inputBgFocus: '#FCFCFC',
   inputBorder: 'transparent',
-  inputBorderFocus: '#1D1D1F',
+  inputBorderFocus: 'rgba(20, 20, 20, 0.20)',
 
-  focusGlow: '0 0 0 3px rgba(29, 29, 31, 0.10)',
-  focusBorder: 'rgba(60, 60, 67, 0.18)',
+  focusGlow: '0 0 0 3px rgba(20, 20, 20, 0.10)',
+  focusBorder: 'rgba(20, 20, 20, 0.20)',
 
-  composerFloatShadow: '0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04)',
-  composerFloatShadowHover: '0 2px 6px rgba(0, 0, 0, 0.07), 0 6px 16px rgba(0, 0, 0, 0.05)',
-  composerFloatShadowFocus: '0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.06)',
+  composerFloatShadow: '0 1px 4px rgba(20, 20, 20, 0.06), 0 4px 12px rgba(20, 20, 20, 0.04)',
+  composerFloatShadowHover: '0 2px 6px rgba(20, 20, 20, 0.07), 0 6px 16px rgba(20, 20, 20, 0.05)',
+  composerFloatShadowFocus: '0 2px 8px rgba(20, 20, 20, 0.08), 0 8px 20px rgba(20, 20, 20, 0.06)',
 
-  popoverBorderColor: 'rgba(60, 60, 67, 0.14)',
-  popoverShadow: '0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03)',
-  glassPanelBorderColor: 'rgba(60, 60, 67, 0.12)',
-  glassPanelShadow: '0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.065)',
-  settingsPanelBorderColor: '#E5E5EA',
-  glassSurfaceBg: 'rgba(255, 255, 255, 0.72)',
-  glassSurfaceBorder: 'rgba(60, 60, 67, 0.12)',
+  popoverBorderColor: 'rgba(20, 20, 20, 0.12)',
+  popoverShadow: '0 2px 8px rgba(20, 20, 20, 0.05), 0 1px 2px rgba(20, 20, 20, 0.03)',
+  glassPanelBorderColor: 'rgba(20, 20, 20, 0.12)',
+  glassPanelShadow: '0 1px 2px rgba(20, 20, 20, 0.04), 0 4px 14px rgba(20, 20, 20, 0.065)',
+  settingsPanelBorderColor: 'rgba(20, 20, 20, 0.12)',
+  glassSurfaceBg: 'rgba(252, 252, 252, 0.72)',
+  glassSurfaceBorder: 'rgba(20, 20, 20, 0.12)',
 
-  overlaySidebarHover: '#F2F2F7',
-  overlaySidebarSelected: '#F2F2F7',
+  overlaySidebarHover: 'rgba(20, 20, 20, 0.08)',
+  overlaySidebarSelected: 'rgba(20, 20, 20, 0.08)',
 
   /** Shorthand borders built from color tokens */
-  popoverBorder: '1px solid rgba(60, 60, 67, 0.14)',
-  glassPanelBorder: '1px solid rgba(60, 60, 67, 0.12)',
-  settingsPanelBorder: '1px solid #E5E5EA',
+  popoverBorder: '1px solid rgba(20, 20, 20, 0.12)',
+  glassPanelBorder: '1px solid rgba(20, 20, 20, 0.12)',
+  settingsPanelBorder: '1px solid rgba(20, 20, 20, 0.12)',
 
-  beige: '#F2F2F7',
-  beigeMuted: '#E5E5EA',
+  beige: '#F3F3F3',
+  beigeMuted: '#EEEEEE',
 } as const
 
+/**
+ * Dark palette — aligned to Cursor Dark (`cursor-dark-color-theme.json`):
+ * sidebar `#141414` (darker), editor `#181818`, ink `#F0F0F0` + alpha.
+ * Brand accent stays Opptrix ink (`#F0F0F0`), not Cursor button blue (`#81A1C1`).
+ */
 export const opptrixTokensDark = {
-  accent: '#F5F5F7',
+  accent: '#F0F0F0',
   accentHover: '#FFFFFF',
-  accentSoft: 'rgba(255, 255, 255, 0.08)',
-  accentMuted: '#3A3A3C',
-  accentForeground: '#1C1C1E',
+  accentSoft: 'rgba(240, 240, 240, 0.08)',
+  accentMuted: 'rgba(240, 240, 240, 0.14)',
+  accentForeground: '#181818',
 
-  canvas: '#1C1C1E',
-  canvasAlt: '#2C2C2E',
-  canvasMuted: '#3A3A3C',
+  /** Main content — Cursor `editor.background` */
+  canvas: '#181818',
+  /** Left sidebar / chrome — Cursor `sideBar.background` (darker than editor) */
+  canvasAlt: '#141414',
+  canvasMuted: '#2A2A2A',
 
-  surface: '#2C2C2E',
-  surfaceMuted: 'rgba(44, 44, 46, 0.55)',
-  surfaceHover: 'rgba(58, 58, 60, 0.72)',
-  surfaceGlass: 'rgba(44, 44, 46, 0.72)',
+  surface: '#181818',
+  surfaceMuted: 'rgba(24, 24, 24, 0.72)',
+  /** Cursor `list.hoverBackground` `#F0F0F011` ≈ 6.7% */
+  surfaceHover: 'rgba(240, 240, 240, 0.067)',
+  surfaceGlass: 'rgba(24, 24, 24, 0.72)',
 
-  glass: 'rgba(44, 44, 46, 0.45)',
-  glassStrong: 'rgba(58, 58, 60, 0.62)',
-  glassNavSelected: 'rgba(72, 72, 74, 0.72)',
+  glass: 'rgba(24, 24, 24, 0.45)',
+  glassStrong: 'rgba(40, 40, 40, 0.62)',
+  /** Cursor `list.activeSelectionBackground` `#F0F0F01E` ≈ 11.8% → 0.12 */
+  glassNavSelected: 'rgba(240, 240, 240, 0.12)',
 
-  sidebarGlass: 'rgba(44, 44, 46, 0.45)',
-  sidebarSelected: 'rgba(72, 72, 74, 0.72)',
+  sidebarGlass: 'rgba(24, 24, 24, 0.45)',
+  sidebarSelected: 'rgba(240, 240, 240, 0.12)',
 
-  userBubble: '#2C2C2E',
-  gray100: '#2C2C2E',
-  gray200: '#3A3A3C',
-  gray300: '#48484A',
+  userBubble: '#2A2A2A',
+  gray100: '#2A2A2A',
+  gray200: '#3A3A3A',
+  gray300: '#4A4A4A',
 
-  separator: 'rgba(255, 255, 255, 0.15)',
-  separatorStrong: 'rgba(255, 255, 255, 0.25)',
-  border: 'rgba(255, 255, 255, 0.10)',
-  borderStrong: 'rgba(255, 255, 255, 0.20)',
+  /** Cursor `#F0F0F013` ≈ 7.5% */
+  separator: 'rgba(240, 240, 240, 0.075)',
+  separatorStrong: 'rgba(240, 240, 240, 0.12)',
+  border: 'rgba(240, 240, 240, 0.075)',
+  borderStrong: 'rgba(240, 240, 240, 0.15)',
 
-  textPrimary: '#F5F5F7',
-  textSecondary: '#AEAEB2',
-  textTertiary: '#6E6E73',
+  textPrimary: '#F0F0F0',
+  textSecondary: 'rgba(240, 240, 240, 0.74)',
+  textTertiary: 'rgba(240, 240, 240, 0.60)',
 
   success: '#30D158',
   successSoft: 'rgba(48, 209, 88, 0.14)',
@@ -203,38 +227,40 @@ export const opptrixTokensDark = {
   warningSoft: 'rgba(255, 159, 10, 0.14)',
   error: '#FF453A',
   errorSoft: 'rgba(255, 69, 58, 0.14)',
-  infoSoft: 'rgba(255, 255, 255, 0.06)',
+  infoSoft: 'rgba(240, 240, 240, 0.06)',
 
-  inputBg: '#2C2C2E',
-  inputBgHover: '#3A3A3C',
-  inputBgFocus: '#48484A',
+  /** Cursor `input.background` `#F0F0F00A` ≈ 3.9% */
+  inputBg: 'rgba(240, 240, 240, 0.039)',
+  inputBgHover: 'rgba(240, 240, 240, 0.07)',
+  inputBgFocus: 'rgba(240, 240, 240, 0.10)',
   inputBorder: 'transparent',
-  inputBorderFocus: '#F5F5F7',
+  /** Cursor `focusBorder` `#F0F0F026` ≈ 15% */
+  inputBorderFocus: 'rgba(240, 240, 240, 0.15)',
 
-  focusGlow: '0 0 0 3px rgba(255, 255, 255, 0.12)',
-  focusBorder: 'rgba(255, 255, 255, 0.18)',
+  focusGlow: '0 0 0 3px rgba(240, 240, 240, 0.12)',
+  focusBorder: 'rgba(240, 240, 240, 0.15)',
 
   composerFloatShadow: '0 1px 4px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.22)',
   composerFloatShadowHover: '0 2px 6px rgba(0, 0, 0, 0.32), 0 6px 16px rgba(0, 0, 0, 0.26)',
   composerFloatShadowFocus: '0 2px 8px rgba(0, 0, 0, 0.36), 0 8px 20px rgba(0, 0, 0, 0.30)',
 
-  popoverBorderColor: 'rgba(255, 255, 255, 0.14)',
+  popoverBorderColor: 'rgba(240, 240, 240, 0.12)',
   popoverShadow: '0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24)',
-  glassPanelBorderColor: 'rgba(255, 255, 255, 0.12)',
+  glassPanelBorderColor: 'rgba(240, 240, 240, 0.12)',
   glassPanelShadow: '0 1px 2px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.32)',
-  settingsPanelBorderColor: '#3A3A3C',
-  glassSurfaceBg: 'rgba(44, 44, 46, 0.72)',
-  glassSurfaceBorder: 'rgba(255, 255, 255, 0.12)',
+  settingsPanelBorderColor: 'rgba(240, 240, 240, 0.12)',
+  glassSurfaceBg: 'rgba(24, 24, 24, 0.72)',
+  glassSurfaceBorder: 'rgba(240, 240, 240, 0.12)',
 
-  overlaySidebarHover: '#3A3A3C',
-  overlaySidebarSelected: '#48484A',
+  overlaySidebarHover: 'rgba(240, 240, 240, 0.067)',
+  overlaySidebarSelected: 'rgba(240, 240, 240, 0.12)',
 
-  popoverBorder: '1px solid rgba(255, 255, 255, 0.14)',
-  glassPanelBorder: '1px solid rgba(255, 255, 255, 0.12)',
-  settingsPanelBorder: '1px solid #3A3A3C',
+  popoverBorder: '1px solid rgba(240, 240, 240, 0.12)',
+  glassPanelBorder: '1px solid rgba(240, 240, 240, 0.12)',
+  settingsPanelBorder: '1px solid rgba(240, 240, 240, 0.12)',
 
-  beige: '#2C2C2E',
-  beigeMuted: '#3A3A3C',
+  beige: '#2A2A2A',
+  beigeMuted: '#3A3A3A',
 } as const
 
 /** Default export for backward compatibility — use opptrixCssVars in makeStyles for theme-aware colors */
@@ -281,6 +307,8 @@ export const opptrixCssVars = {
 
   separator: 'var(--opptrix-separator)',
   separatorStrong: 'var(--opptrix-separator-strong)',
+  /** 侧栏/顶栏二级标题等发丝分割，弱于 separatorStrong */
+  separatorHairline: 'var(--opptrix-separator-hairline)',
   border: 'var(--opptrix-border)',
   borderStrong: 'var(--opptrix-border-strong)',
 

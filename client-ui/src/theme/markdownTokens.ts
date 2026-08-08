@@ -14,43 +14,43 @@ export const markdownTokens = {
   listItemGap: '0.15em',
 
   /** Text */
-  text: '#1D1D1F',
-  textMuted: '#6E6E73',
-  textSubtle: '#AEAEB2',
+  text: '#141414',
+  textMuted: 'rgba(20, 20, 20, 0.74)',
+  textSubtle: 'rgba(20, 20, 20, 0.60)',
 
   /** Links */
-  link: '#1D1D1F',
+  link: '#141414',
   linkHover: '#000000',
-  linkUnderline: 'rgba(60, 60, 67, 0.28)',
+  linkUnderline: 'rgba(20, 20, 20, 0.28)',
 
   /** Inline / block code */
-  codeBg: 'rgba(29, 29, 31, 0.06)',
-  codeFg: '#1D1D1F',
-  preBg: 'rgba(60, 60, 67, 0.045)',
+  codeBg: 'rgba(20, 20, 20, 0.06)',
+  codeFg: '#141414',
+  preBg: 'rgba(20, 20, 20, 0.045)',
   prePadding: '10px 12px',
 
   /** Blockquote */
-  blockquoteFg: '#6E6E73',
-  blockquoteBorder: 'rgba(60, 60, 67, 0.14)',
-  blockquoteBg: 'rgba(60, 60, 67, 0.03)',
-  blockquoteBorderNested: 'rgba(60, 60, 67, 0.1)',
+  blockquoteFg: 'rgba(20, 20, 20, 0.74)',
+  blockquoteBorder: 'rgba(20, 20, 20, 0.14)',
+  blockquoteBg: 'rgba(20, 20, 20, 0.03)',
+  blockquoteBorderNested: 'rgba(20, 20, 20, 0.1)',
 
   /** Divider */
-  hr: 'rgba(60, 60, 67, 0.1)',
+  hr: 'rgba(20, 20, 20, 0.1)',
 
   /** Table — borderless, compact cells */
   tableHeaderWeight: 600,
-  tableHeaderFg: '#1D1D1F',
-  tableCellFg: '#1D1D1F',
+  tableHeaderFg: '#141414',
+  tableCellFg: '#141414',
   tableCellPaddingY: '3px',
   tableCellPaddingX: '0px',
-  tableRowDivider: 'rgba(60, 60, 67, 0.1)',
+  tableRowDivider: 'rgba(20, 20, 20, 0.1)',
   tableCopyIconSize: '18px',
-  tableCopyFg: '#6E6E73',
-  tableCopyFgHover: '#1D1D1F',
+  tableCopyFg: 'rgba(20, 20, 20, 0.74)',
+  tableCopyFgHover: '#141414',
 
   /** Mermaid / diagram */
-  mermaidBg: 'rgba(60, 60, 67, 0.03)',
+  mermaidBg: 'rgba(20, 20, 20, 0.03)',
   mermaidPadding: '10px',
 
   /** Error states */
@@ -58,23 +58,23 @@ export const markdownTokens = {
   errorBorder: 'rgba(255, 59, 48, 0.22)',
 
   /** Semantic tag tones (strong / emphasis / highlight / strike) */
-  strongFg: '#1D1D1F',
-  emFg: '#6E6E73',
+  strongFg: '#141414',
+  emFg: 'rgba(20, 20, 20, 0.74)',
   markBg: 'rgba(255, 149, 0, 0.14)',
-  markFg: '#1D1D1F',
-  delFg: '#AEAEB2',
-  underline: 'rgba(60, 60, 67, 0.36)',
+  markFg: '#141414',
+  delFg: 'rgba(20, 20, 20, 0.60)',
+  underline: 'rgba(20, 20, 20, 0.36)',
   toneAccent: '#007AFF',
-  preBorder: 'rgba(60, 60, 67, 0.08)',
-  preLangFg: '#AEAEB2',
-  kbdBg: 'rgba(29, 29, 31, 0.06)',
-  kbdBorder: 'rgba(60, 60, 67, 0.12)',
+  preBorder: 'rgba(20, 20, 20, 0.08)',
+  preLangFg: 'rgba(20, 20, 20, 0.60)',
+  kbdBg: 'rgba(20, 20, 20, 0.06)',
+  kbdBorder: 'rgba(20, 20, 20, 0.12)',
 
   /** Optional badge-like tags in prose */
-  tagNeutralBg: 'rgba(29, 29, 31, 0.06)',
-  tagNeutralFg: '#6E6E73',
-  tagInfoBg: 'rgba(29, 29, 31, 0.06)',
-  tagInfoFg: '#1D1D1F',
+  tagNeutralBg: 'rgba(20, 20, 20, 0.06)',
+  tagNeutralFg: 'rgba(20, 20, 20, 0.74)',
+  tagInfoBg: 'rgba(20, 20, 20, 0.06)',
+  tagInfoFg: '#141414',
   tagSuccessBg: 'rgba(52, 199, 89, 0.1)',
   tagSuccessFg: '#248A3D',
   tagWarningBg: 'rgba(255, 149, 0, 0.12)',

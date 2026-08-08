@@ -5,9 +5,6 @@ import {
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import {
-  CheckmarkCircleRegular,
-} from '@fluentui/react-icons'
 import { getConfig, news, type PublicProvider } from '../../api/client'
 import type {
   MultimodalStatusResponse,
@@ -18,14 +15,15 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
 import {
   SettingsGroup,
+  SettingsListPanel,
+  SettingsListRow,
   SettingsRow,
   SettingsStaticBlock,
-  SettingsTextField,
 } from './SettingsPrimitives'
+import SettingsRemoteModelSelector from './SettingsRemoteModelSelector'
 import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
-import { ghostInteractive } from '../../theme/mixins'
 
 const SETTINGS_SAVE_MS = 500
 
@@ -90,15 +88,6 @@ const useStyles = makeStyles({
     marginTop: 0,
   },
   sectionBlock: { marginTop: '20px' },
-  sectionLabel: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    flexShrink: 0,
-  },
-  sectionLabelSpaced: { padding: '0 2px 8px' },
   saveHint: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
@@ -106,42 +95,6 @@ const useStyles = makeStyles({
     minHeight: '16px',
   },
   saveHintActive: { color: opptrixCssVars.textSecondary },
-  listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  listScroll: {
-    maxHeight: '220px',
-    overflowY: 'auto',
-    overscrollBehavior: 'contain',
-  },
-  listRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '10px',
-    padding: '8px 14px',
-    minHeight: '38px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  listRowMain: { flex: 1, minWidth: 0 },
-  listRowTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
-  },
-  listRowMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.4,
-    marginTop: '2px',
-  },
   statusBadge: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -154,26 +107,17 @@ const useStyles = makeStyles({
   statusReady: { color: opptrixCssVars.success },
   statusWarn: { color: opptrixCssVars.warning },
   intervalSelect: { minWidth: '160px' },
-  remoteModelSelect: { minWidth: '220px' },
+  remoteModelControl: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    minWidth: '140px',
+    maxWidth: '240px',
+  },
   panelFooter: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     padding: '8px 2px 0',
-  },
-  panelFooterDir: {...ghostInteractive,
-    display: 'block',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.accent,
-    wordBreak: 'break-all',
-    marginTop: '4px',
-    padding: 0,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    textAlign: 'left',
-    textDecoration: 'underline',
   },
 })
 
@@ -265,7 +209,6 @@ export default function MultimodalSettingsSection() {
   }, [settings.enrichment, settings.translation, loading, refreshStatus, toast], SETTINGS_SAVE_MS)
 
   const selectedProvider = providers.find(p => p.id === settings.enrichment.remote_provider_id) ?? null
-  const providerModels = selectedProvider?.models ?? []
   const runtime = mmStatus?.runtime
 
   const speechExtractionEnabled = settings.enrichment.enabled
@@ -509,84 +452,37 @@ export default function MultimodalSettingsSection() {
             {providers.length === 0 ? (
               <SettingsStaticBlock>
                 <Text block style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
-                  图片仅支持远程多模态大模型。请先在「模型」页添加 OpenAI 兼容接口，再选择支持图片的模型（如 GPT-4o、Qwen-VL、GLM-4V）。
+                  图片理解需要支持看图的远程模型。请先在「模型」页添加后，再选择如 GPT-4o、Qwen-VL、GLM-4V 等。
                 </Text>
               </SettingsStaticBlock>
             ) : (
-              <>
-                <SettingsRow
-                  title="提供商"
-                  desc="用于概括文章配图内容"
-                  control={(
-                    <OpptrixSelect
-                      className={s.remoteModelSelect}
-                      size="small"
-                      selectedOptions={[settings.enrichment.remote_provider_id ?? '']}
-                      onOptionSelect={(_, d) => {
-                        const providerId = d.optionValue || null
-                        const provider = providers.find(p => p.id === providerId)
+              <SettingsRow
+                title="视觉模型"
+                desc={selectedProvider
+                  ? `须支持看图 · 当前提供商：${selectedProvider.name}`
+                  : '须支持看图；按提供商分组，一次选定即可'}
+                control={(
+                  <div className={s.remoteModelControl}>
+                    <SettingsRemoteModelSelector
+                      providers={providers}
+                      providerId={settings.enrichment.remote_provider_id}
+                      model={settings.enrichment.remote_model}
+                      onChange={({ providerId, model }) => {
                         setSettings(prev => ({
                           ...prev,
                           enrichment: {
                             ...prev.enrichment,
                             remote_provider_id: providerId,
-                            remote_model: provider?.models[0] ?? null,
+                            remote_model: model,
                             service_mode: 'remote',
                           },
                         }))
                       }}
-                    >
-                      <OpptrixOption value="">未选择</OpptrixOption>
-                      {providers.map(p => (
-                        <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
-                      ))}
-                    </OpptrixSelect>
-                  )}
-                />
-                <SettingsRow
-                  title="视觉模型"
-                  desc="须支持 image_url 输入"
-                  stack
-                  control={providerModels.length > 0 ? (
-                    <OpptrixSelect
-                      className={s.remoteModelSelect}
-                      size="small"
-                      selectedOptions={[settings.enrichment.remote_model ?? '']}
-                      onOptionSelect={(_, d) => {
-                        setSettings(prev => ({
-                          ...prev,
-                          enrichment: {
-                            ...prev.enrichment,
-                            remote_model: d.optionValue || null,
-                            service_mode: 'remote',
-                          },
-                        }))
-                      }}
-                    >
-                      <OpptrixOption value="">未选择</OpptrixOption>
-                      {providerModels.map(model => (
-                        <OpptrixOption key={model} value={model}>{model}</OpptrixOption>
-                      ))}
-                    </OpptrixSelect>
-                  ) : (
-                    <SettingsTextField
-                      value={settings.enrichment.remote_model ?? ''}
-                      onChange={value => {
-                        setSettings(prev => ({
-                          ...prev,
-                          enrichment: {
-                            ...prev.enrichment,
-                            remote_model: value.trim() || null,
-                            service_mode: 'remote',
-                          },
-                        }))
-                      }}
-                      placeholder="输入视觉模型名称"
                     />
-                  )}
-                  last
-                />
-              </>
+                  </div>
+                )}
+                last
+              />
             )}
           </SettingsGroup>
         </div>
@@ -597,66 +493,55 @@ export default function MultimodalSettingsSection() {
       <div className={s.tabPanel}>
         {speechExtractionEnabled ? (
         <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
-          <div className={s.listPanel}>
-            <div className={s.listRow}>
-              <div className={s.listRowMain}>
-                <Text className={s.listRowTitle} block>媒体下载</Text>
-                <Text className={s.listRowMeta} block>
-                  处理时从文章链接下载音视频到本机缓存（~/.opptrix/media-cache）
-                </Text>
-              </div>
-              <span className={mergeClasses(s.statusBadge, s.statusReady)}>已启用</span>
-            </div>
-            <div className={s.listRow}>
-              <div className={s.listRowMain}>
-                <Text className={s.listRowTitle} block>媒体解码</Text>
-                <Text className={s.listRowMeta} block>
-                  {runtime?.ffmpeg?.ready ? '已就绪，可处理音视频' : '暂时不可用，请重启应用后再试'}
-                </Text>
-              </div>
-              <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg?.ready && s.statusReady)}>
-                {runtime?.ffmpeg?.ready ? '已就绪' : '不可用'}
-              </span>
-            </div>
-            <div className={s.listRow}>
-              <div className={s.listRowMain}>
-                <Text className={s.listRowTitle} block>本机语音识别</Text>
-                <Text className={s.listRowMeta} block>
-                  {!runtime?.sensevoice
-                    ? '转写能力暂时不可用，请重启应用后再试'
-                    : runtime.sensevoice.ready
-                      ? runtime.sensevoice.source === 'bundled'
-                        ? '已随应用安装，可直接转写'
-                        : '模型已就绪，可直接转写'
-                      : '开启媒体提取后后台将自动检测；也可点击下方立即准备'}
-                </Text>
-              </div>
-              {!runtime?.sensevoice ? (
-                <span className={mergeClasses(s.statusBadge, s.statusWarn)}>暂不可用</span>
-              ) : !runtime.sensevoice.ready ? (
-                <OpptrixButton
-                  variant="secondary"
-                  size="small"
-                  disabled={speechEnsuring}
-                  onClick={() => { void handleEnsureSpeech() }}
-                >
-                  {speechEnsuring ? '准备中…' : '立即准备'}
-                </OpptrixButton>
-              ) : (
-                <span className={mergeClasses(s.statusBadge, s.statusReady)}>已就绪</span>
+          <SettingsListPanel>
+            <SettingsListRow
+              title="媒体下载"
+              meta="处理时会把文章中的音视频暂存到本机，便于转写"
+              trailing={<span className={mergeClasses(s.statusBadge, s.statusReady)}>已启用</span>}
+            />
+            <SettingsListRow
+              title="媒体解码"
+              meta={runtime?.ffmpeg?.ready ? '已就绪，可处理音视频' : '暂时不可用，请重启应用后再试'}
+              trailing={(
+                <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg?.ready && s.statusReady)}>
+                  {runtime?.ffmpeg?.ready ? '已就绪' : '不可用'}
+                </span>
               )}
-            </div>
-          </div>
-          {runtime?.sensevoice?.modelsDir && runtime?.sensevoice?.source === 'user' && (
-            <Text className={s.panelFooter} block>
-              语音模型目录：{runtime.sensevoice.modelsDir}
-            </Text>
-          )}
+            />
+            <SettingsListRow
+              title="本机语音识别"
+              meta={
+                !runtime?.sensevoice
+                  ? '转写能力暂时不可用，请重启应用后再试'
+                  : runtime.sensevoice.ready
+                    ? runtime.sensevoice.source === 'bundled'
+                      ? '已随应用安装，可直接转写'
+                      : '模型已就绪，可直接转写'
+                    : '开启媒体提取后会自动准备；也可点击立即准备'
+              }
+              trailing={
+                !runtime?.sensevoice ? (
+                  <span className={mergeClasses(s.statusBadge, s.statusWarn)}>暂不可用</span>
+                ) : !runtime.sensevoice.ready ? (
+                  <OpptrixButton
+                    variant="secondary"
+                    size="small"
+                    disabled={speechEnsuring}
+                    onClick={() => { void handleEnsureSpeech() }}
+                  >
+                    {speechEnsuring ? '准备中…' : '立即准备'}
+                  </OpptrixButton>
+                ) : (
+                  <span className={mergeClasses(s.statusBadge, s.statusReady)}>已就绪</span>
+                )
+              }
+            />
+          </SettingsListPanel>
         </div>
         ) : (
         <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
           <Text className={s.panelFooter} block>
-            音视频转写需先开启「启用媒体提取」并在提取范围中勾选音频或视频。
+            音视频转写需先开启「启用媒体提取」，并在提取范围中包含音频或视频。
           </Text>
         </div>
         )}

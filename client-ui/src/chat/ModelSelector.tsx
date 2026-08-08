@@ -1,10 +1,15 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, CheckmarkRegular } from '@fluentui/react-icons'
-import type { AvailableModel } from '../types/chat'
-import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import type { AvailableModel, ReasoningEffort, SessionLlmParams } from '../types/chat'
+import {
+  DEFAULT_SESSION_MAX_TOKENS,
+  DEFAULT_SESSION_TEMPERATURE,
+  resolveSessionLlmParamsForUi,
+} from '../types/chat'
+import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { focusVisibleRing, ghostInteractive, motion } from '../theme/mixins'
-import { modelMediaHint } from './mediaCapabilities'
+import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
@@ -14,8 +19,8 @@ const useStyles = makeStyles({
   root: {
     display: 'flex',
     alignItems: 'center',
-    height: '34px',
-    minHeight: '34px',
+    height: '28px',
+    minHeight: '28px',
     flexShrink: 1,
     minWidth: 0,
     position: 'relative',
@@ -32,22 +37,23 @@ const useStyles = makeStyles({
     maxWidth: '160px',
     minWidth: '100px',
   },
-  trigger: {...ghostInteractive,
-display: 'inline-flex',
+  trigger: {
+    ...ghostInteractive,
+    display: 'inline-flex',
     alignItems: 'center',
     gap: '2px',
-    height: '34px',
+    height: '28px',
     maxWidth: '100%',
     padding: 0,
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixCssVars.textSecondary,
-    fontWeight: 500,
+    color: opptrixCssVars.textTertiary,
+    fontWeight: 400,
     cursor: 'pointer',
     transitionProperty: 'color, opacity',
     transitionDuration: motion.fast,
     ':hover': {
-      color: opptrixCssVars.textPrimary,
+      color: opptrixCssVars.textSecondary,
       backgroundColor: 'transparent',
     },
     ':disabled': {
@@ -91,7 +97,81 @@ display: 'inline-flex',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: 'var(--opptrix-font-base)',
   },
+  /** Footer 内参数区：紧凑间距，与 Cursor 设置感接近；外层 __foot 已有 padding */
+  params: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '2px 0 0',
+  },
+  paramRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+  },
+  paramLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  paramLabel: {
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    color: opptrixCssVars.textSecondary,
+  },
+  paramValue: {
+    fontSize: 'var(--opptrix-font-sm)',
+    fontVariantNumeric: 'tabular-nums',
+    color: opptrixCssVars.textTertiary,
+  },
+  slider: {
+    width: '100%',
+    accentColor: opptrixCssVars.accent,
+    height: '4px',
+    cursor: 'pointer',
+  },
+  numberInput: {
+    width: '100%',
+    boxSizing: 'border-box',
+    height: '26px',
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixCssVars.border}`,
+    backgroundColor: opptrixCssVars.canvas,
+    color: opptrixCssVars.textPrimary,
+    fontSize: 'var(--opptrix-font-base)',
+    padding: '0 8px',
+    outline: 'none',
+    ':focus-visible': {
+      border: `1px solid ${opptrixCssVars.inputBorderFocus}`,
+    },
+  },
 })
+
+/** Composer 选模+参数面板宽度（设置页仍用 COMPOSER_MENU_WIDTH.model） */
+const MODEL_PARAMS_PANEL_WIDTH = 300
+const MODEL_LIST_MAX_HEIGHT = 280
+/** 温度 / 长度 / 思考强度 footer 约占高度；列表 maxHeight 与之分离 */
+const MODEL_PARAMS_FOOTER_RESERVE = 148
+
+/**
+ * showParams 时：列表可滚、footer 固定在 ComposerTooltipMenu 外。
+ * 整体预算约 min(70vh, 420)，减去 footer 后给列表。
+ */
+function resolveModelListMaxHeight(showParams: boolean): number {
+  if (!showParams) return MODEL_LIST_MAX_HEIGHT
+  const viewportCap = typeof window === 'undefined'
+    ? 420
+    : Math.floor(window.innerHeight * 0.7)
+  const panelBudget = Math.min(420, viewportCap)
+  return Math.max(180, panelBudget - MODEL_PARAMS_FOOTER_RESERVE)
+}
+
+export type SessionLlmParamsPatch = {
+  temperature?: number
+  maxTokens?: number
+  reasoningEffort?: ReasoningEffort | null
+}
 
 interface ModelSelectorProps {
   models: AvailableModel[]
@@ -99,7 +179,13 @@ interface ModelSelectorProps {
   disabled?: boolean
   isMobile?: boolean
   compact?: boolean
+  /** 当 value 未匹配任何模型时，不回退到首项，显示此文案（设置页一步选模） */
+  unsetLabel?: string
   onChange: (ref: string) => void
+  /** 仅 Composer 传 true；设置页保持默认 false，不展示参数区 */
+  showParams?: boolean
+  llmParams?: SessionLlmParams | null
+  onLlmParamsChange?: (patch: SessionLlmParamsPatch) => void
 }
 
 function groupModelsByProvider(models: AvailableModel[]) {
@@ -119,8 +205,24 @@ function groupModelsByProvider(models: AvailableModel[]) {
   return groups
 }
 
+const EFFORT_OPTIONS: Array<{ value: ReasoningEffort | 'off'; label: string }> = [
+  { value: 'off', label: '默认' },
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+]
+
 export default function ModelSelector({
-  models, value, disabled, isMobile, compact, onChange,
+  models,
+  value,
+  disabled,
+  isMobile,
+  compact,
+  unsetLabel,
+  onChange,
+  showParams = false,
+  llmParams,
+  onLlmParamsChange,
 }: ModelSelectorProps) {
   const s = useStyles()
   const [open, setOpen] = useState(false)
@@ -128,13 +230,14 @@ export default function ModelSelector({
 
   const activeRef = useMemo(() => {
     if (value && models.some(m => m.ref === value)) return value
+    if (unsetLabel !== undefined) return undefined
     return models[0]?.ref
-  }, [models, value])
+  }, [models, value, unsetLabel])
 
-  const active = models.find(m => m.ref === activeRef)
+  const active = activeRef ? models.find(m => m.ref === activeRef) : undefined
   const groups = useMemo(() => groupModelsByProvider(models), [models])
-  const displayModel = active?.model ?? '选择模型'
-  const mediaHint = modelMediaHint(active?.media ?? null)
+  const displayModel = active?.model ?? unsetLabel ?? '选择模型'
+  const resolved = resolveSessionLlmParamsForUi(llmParams)
 
   if (!models.length) {
     return (
@@ -144,13 +247,80 @@ export default function ModelSelector({
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
-        lineHeight: '34px',
+        lineHeight: '28px',
       }}
       >
         未配置模型
       </Text>
     )
   }
+
+  const paramsFooter = showParams && onLlmParamsChange ? (
+    <div className={s.params}>
+      <div className={s.paramRow}>
+        <div className={s.paramLabelRow}>
+          <span className={s.paramLabel}>温度</span>
+          <span className={s.paramValue}>{resolved.temperature.toFixed(1)}</span>
+        </div>
+        <input
+          type="range"
+          className={s.slider}
+          min={0}
+          max={2}
+          step={0.1}
+          value={resolved.temperature}
+          disabled={disabled}
+          aria-label="温度"
+          onChange={(e) => {
+            const next = Number.parseFloat(e.target.value)
+            onLlmParamsChange({
+              temperature: Number.isFinite(next) ? next : DEFAULT_SESSION_TEMPERATURE,
+            })
+          }}
+        />
+      </div>
+      <div className={s.paramRow}>
+        <div className={s.paramLabelRow}>
+          <span className={s.paramLabel}>回复长度上限</span>
+        </div>
+        <input
+          type="number"
+          className={s.numberInput}
+          min={1}
+          max={1000000}
+          step={256}
+          value={resolved.maxTokens}
+          disabled={disabled}
+          aria-label="回复长度上限"
+          onChange={(e) => {
+            const next = Number.parseInt(e.target.value, 10)
+            if (!Number.isFinite(next) || next < 1) return
+            onLlmParamsChange({ maxTokens: next })
+          }}
+          onBlur={(e) => {
+            const next = Number.parseInt(e.target.value, 10)
+            if (!Number.isFinite(next) || next < 1) {
+              onLlmParamsChange({ maxTokens: DEFAULT_SESSION_MAX_TOKENS })
+            }
+          }}
+        />
+      </div>
+      <div className={s.paramRow}>
+        <span className={s.paramLabel}>思考强度</span>
+        <OpptrixSegmentedControl
+          variant="embedded"
+          aria-label="思考强度"
+          value={resolved.reasoningEffort}
+          options={EFFORT_OPTIONS}
+          onChange={(next) => {
+            onLlmParamsChange({
+              reasoningEffort: next === 'off' ? null : next,
+            })
+          }}
+        />
+      </div>
+    </div>
+  ) : undefined
 
   return (
     <div
@@ -168,7 +338,7 @@ export default function ModelSelector({
           'opptrix-focusable',
         )}
         disabled={disabled}
-        aria-label={`当前模型：${displayModel}${mediaHint ? `，${mediaHint}` : ''}`}
+        aria-label={`当前模型：${displayModel}`}
         aria-expanded={open}
         onClick={() => setOpen(v => !v)}
       >
@@ -180,11 +350,11 @@ export default function ModelSelector({
         open={open}
         anchorRef={triggerRef}
         align="end"
-        width={COMPOSER_MENU_WIDTH.model}
-        maxHeight={280}
-        title="选择模型"
-        ariaLabel="选择模型"
+        width={showParams ? MODEL_PARAMS_PANEL_WIDTH : COMPOSER_MENU_WIDTH.model}
+        maxHeight={resolveModelListMaxHeight(showParams)}
+        ariaLabel={showParams ? '模型与参数' : '模型列表'}
         onClose={() => setOpen(false)}
+        footer={paramsFooter}
       >
         {groups.map((group, groupIndex) => (
           <Fragment key={group.providerName}>
@@ -196,20 +366,10 @@ export default function ModelSelector({
                 active={activeRef === model.ref}
                 onClick={() => {
                   onChange(model.ref)
-                  setOpen(false)
+                  if (!showParams) setOpen(false)
                 }}
               >
                 <span className={s.modelName}>{model.model}</span>
-                {modelMediaHint(model.media ?? null) ? (
-                  <span style={{
-                    marginLeft: 6,
-                    fontSize: 'var(--opptrix-font-sm)',
-                    color: 'var(--opptrix-text-tertiary)',
-                  }}
-                  >
-                    {modelMediaHint(model.media ?? null)}
-                  </span>
-                ) : null}
                 {activeRef === model.ref ? (
                   <CheckmarkRegular fontSize={16} />
                 ) : null}

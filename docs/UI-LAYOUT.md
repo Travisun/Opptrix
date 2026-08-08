@@ -37,16 +37,17 @@
 └─────────────┴──────────────────────────────┴──────────────────┘
 ```
 
-- **默认宽度** 200px；拖拽范围约 196–360px，持久化至 `localStorage`（`opptrix-sidebar-width`）
+- **默认宽度** 250px；拖拽范围约 196–360px，持久化至 `localStorage`（`opptrix-sidebar-width`）
+- **品牌行**（`SessionSidebar`）：「新对话」菜单区之上展示粗体「Opptrix工作台」与 `useAppVersion` 的 `v…` 版本；左右内边距 `20px`，与顶部菜单行图标左缘（`margin 10 + padding 10`）对齐；窄宽 ellipsis
 - **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
-- **窗口标题栏**：macOS 沿用 `hiddenInset` 系统红绿灯；Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
+- **窗口标题栏**：macOS 为 `hiddenInset`，系统红绿灯隐藏后由二级 chrome 内紧凑自定义红绿灯（约 14px）承接；侧栏展开时顶栏工具与 Windows 一致——收起在左（红绿灯右侧）、前进/后退靠右贴侧栏分割线。Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
 - **附件预览**（右侧文件预览面板）：PDF 内嵌紧凑阅读器（翻页 / 缩放 / 适合宽度，目录默认收起可展开跳页）；**画布**（`kind=canvas`）由 `CanvasPreviewHost` 以 `@opptrix/canvas` curated 组件（流体 `Surface` + `Stack` / `Stat` / `Table` 等）渲染 Agent TSX；**脑图**（`kind=mindmap`）由 `MindmapPreviewHost` 以开源 **mind-elixir** 编辑器展示与编辑（存盘仍为扁平 `{ version, rootId, nodes }`；消息内脑图为 mind-elixir 只读缩略）；消息内画布/脑图均为缩略卡，点击打开右侧面板（桌面）或弹层（移动）；均可从消息附件芯片/卡片或文件箱打开
 - **消息目录轨**（桌面）：`bodyShell` 左侧中部比例时间轴（宽约 22px；线程/composer 左侧留白 `chatThreadPaddingLeft`≈32px，避免正文压住轨）；**仅收录助手有正文的消息**（user 不进轨）；节点默认约 5px（深灰 `textSecondary`），hover/focus 当前节点放大至约 11px（`motion.fast`；active/hot 为 `textPrimary` 黑系，不用 accent）；当前进度以轨上 `textPrimary` 填充同步滚动高亮；hover/focus 节点右侧气泡预览开头（「助手」+ 友好时间 + 约 80 字）；点击跳转对应消息；不劫持滚轮。mobile 隐藏
-- **本对话附件抽屉 / 文件箱**（桌面）：顶栏文件箱按钮切换开合（无抽屉内标题栏/关闭按钮；Escape 可关）；自右侧滑入（z-index 低于输入区）；底边留白对齐 `threadScrollPadBottom`；已引用附件不可删除。种类文案含：图片 / PDF / 文档 / 视频 / 音频 / **画布** / **脑图**（与 `mediaCapabilities` 标签一致）。mobile 隐藏
+- **本对话附件抽屉 / 文件箱**（桌面）：顶栏文件箱按钮切换开合（无抽屉内标题栏/关闭按钮；Escape 可关）；自右侧滑入（z-index 低于输入区）；底边留白对齐消息区固定底 padding（`CHAT_COMPOSER_BOTTOM_PAD`=100）；已引用附件不可删除。种类文案含：图片 / PDF / 文档 / 视频 / 音频 / **画布** / **脑图**（与 `mediaCapabilities` 标签一致）。mobile 隐藏
 
-代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/chat/ChatView.tsx`、`client-ui/src/chat/MessageOutlineRail.tsx`、`client-ui/src/chat/SessionAttachmentsDrawer.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`、`client-ui/src/chat/FilePreviewPanel.tsx`、`client-ui/src/chat/PdfPreviewViewer.tsx`、`client-ui/src/chat/CanvasPreviewHost.tsx`、`client-ui/src/chat/CanvasInlineCard.tsx`、`client-ui/src/chat/MindmapPreviewHost.tsx`、`client-ui/src/chat/MindmapInlineCard.tsx`。
+代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/chat/ChatView.tsx`、`client-ui/src/chat/MessageOutlineRail.tsx`、`client-ui/src/chat/SessionAttachmentsDrawer.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`、`client-ui/src/desktop/MacTrafficLights.tsx`、`client-ui/src/chat/FilePreviewPanel.tsx`、`client-ui/src/chat/PdfPreviewViewer.tsx`、`client-ui/src/chat/CanvasPreviewHost.tsx`、`client-ui/src/chat/CanvasInlineCard.tsx`、`client-ui/src/chat/MindmapPreviewHost.tsx`、`client-ui/src/chat/MindmapInlineCard.tsx`。
 
 ### 1.2 新闻中心
 
@@ -102,7 +103,7 @@
 1. Header：图标 + 标题 + 关闭
 2. Context 条：当前标的 / 页面
 3. 消息区 scroll
-4. 输入区固定底
+4. 输入区浮层 dock（Composer：Cursor 式——`scrollViewport` 绝对铺满 `bodyShell`，底部多层 `maskImage` 淡出与 `composerBottomPad` 联动：不透明截止在 `100% - pad`，再约 38px 内渐隐到透明，右侧 scrollbar 条带全程不透明（实测 gutter，至少 6px）；**无**全宽 dock 毛玻璃 / `composerDockScrim`；`composerDock` / `composerInner` / `composerFooter` 透明（Electron 融入 vibrancy、Web 与主区 canvas 同色），`pointerEvents: none` 仅内容区可点；输入卡 `panel` 仍为实色圆角 + 阴影；消息区 `paddingBottom` 由 ResizeObserver 测 `composerInner` 高度，下限 `CHAT_COMPOSER_BOTTOM_PAD`；卡顶极小 padding、空态输入约一行高、工具栏与 28px 按钮齐平；底栏轻量居中文案「内容由AI生成，不构成投资建议，请核实重要信息」，右侧小号上下文用量。布局两行：上行全宽 contentEditable（录音中仍可见已输入文字）；下行 toolbar 为左 `+` / 授权、中弹性空白、右 模型 / mic/send/stop（模型在麦克风或停止左侧，窄宽时模型名省略收缩且不挤掉 28px 圆钮；空态仅麦为 primary 实心圆 CTA；有可发送内容时麦在发送左侧为透明 ghost 次级、发送为主；录音为红圆且 hover 保持浅色图标/偏红底，toolbar 维持 28px 齐平；生成中为模型 + 停止）。语音聆听条（纵向柱波 + 下方次要灰文案）绝对定位叠在整个 `panel` 正中（`pointer-events: none` overlay，条自身可点结束），不夹在 toolbar 中缝、不替换 editor DOM。`+` 菜单可添加附件 / 授权文件夹 / 引用技能；`@` 与 `/` 面板互斥；Enter 发送、Shift+Enter 换行）
 
 ## 5. 响应式（V1）
 
@@ -134,7 +135,7 @@
 ```
 ┌───────────────────┬──────────────────────────────────────┐
 │ SettingsSidebar   │  contentShell (flex:1)               │
-│ 210px             │  ┌─ contentScroll ─────────────────┐ │
+│ 默认 260px（可拖） │  ┌─ contentScroll ─────────────────┐ │
 │                   │  │  ┌─ contentColumn ─────────────┐│ │
 │ 常规              │  │  │  maxWidth: 720px            ││ │
 │ 大模型            │  │  │  padding: clamp(12,3.5vw,32)││ │
@@ -154,6 +155,8 @@
 └───────────────────┴──────────────────────────────────────┘
 ```
 
+侧栏宽度默认 **260px**，panel 模式可通过 `WorkspaceSplitDivider` 拖拽调整（约 **200–360px**，并受内容区最小宽度约束），写入 `localStorage`（`opptrix-settings-sidebar-width`）。分割条与聊天左侧栏同宽、同色（默认 `tone`，非 `subtle`），panel 不另叠 `opptrix-sidebar-edge`。Overlay / 窄屏模式无分割条，仍使用同一动态宽度。内容区仅保留章节 `pageTitle` / `pageSubtitle`；不渲染 mac 次级「设置」title band。列表型章节（工作流技能、新闻订阅源、大模型提供商）默认只展示名称行；详情 / 地址在 Dialog 中编辑；「添加」入口用 `SettingsPanelHeader` 顶栏按钮。
+
 侧栏「用户交流群」为动作项（`WechatCommunityDialog`）：点击弹出扫码入群 Dialog，不切换右侧章节；二维码图为远程资源 `https://opptrix.org/images/wechat-group-qr.jpg`。
 
 ### 7.1 内容区宽度控制
@@ -169,7 +172,8 @@
 | 容器 | `SettingsGroup` | 带边框圆角的白色卡片组，多行设置项 |
 | 容器 | `SettingsCard` | 独立卡片，适合 MCP 预设卡等单张内容 |
 | 行 | `SettingsRow` | 标题 (14px 600) + 描述 (13px) + 控件 |
-| 行 | `SettingsActionRow` | 可点击整行 |
+| 行 | `SettingsActionRow` | 可点击整行（页内导航） |
+| 行 | `SettingsExternalLinkRow` | 外链整行（trailing 外开图标） |
 | 输入 | `SettingsTextField` | 行内文本输入 |
 | 输入 | `SettingsCredentialRow` | 密钥编辑行（密码+眼睛+测试+保存） |
 | 输入 | `SettingsMonospaceEditor` | 等宽 CodeMirror 编辑器（行号、折行）；沙盒白名单与 MCP JSON 配置复用 |

@@ -22,6 +22,6 @@ export function applyTheme(scheme: ColorScheme, preference: ThemePreference = 's
     meta.content = canvas
   }
 
-  // Electron: sync OS vibrancy/acrylic with app theme preference (not just resolved scheme).
+  // Electron: sync OS vibrancy/mica with app theme preference (not just resolved scheme).
   window.electronAPI?.setThemeSource?.(preference)
 }

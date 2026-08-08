@@ -1,11 +1,12 @@
-import { useRef, useEffect, useLayoutEffect, useCallback, useState, memo } from 'react'
+import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef,
-  AvailableModel, ChatAttachmentMeta, ComposerStarterChip, ExpertStarterPrompt,
+  AvailableModel, ChatAttachmentMeta, ComposerStarterChip, ExpertStarterPrompt, SessionLlmParams,
 } from '../types/chat'
+import type { SessionLlmParamsPatch } from './ModelSelector'
 import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import { getExpert, submitUserPromptResponse } from '../api/client'
 import type { ChatStreamUiRef } from './chatStreamUiBridge'
@@ -38,6 +39,43 @@ import { pickWelcomeVariant } from './chatWelcomeVariants'
 import MessageOutlineRail from './MessageOutlineRail'
 import SessionAttachmentsDrawer from './SessionAttachmentsDrawer'
 
+/** 消息区底 padding 初始/下限（ResizeObserver 测 composerInner 后覆盖） */
+const CHAT_COMPOSER_BOTTOM_PAD = 100
+/** Cursor `--agent-panel-scroll-fade-transparent-bottom-inset`：进入 composer 占位后的淡出带 */
+const COMPOSER_SCROLL_FADE_PX = 38
+
+/** Cursor 式多层 mask：内容区底部淡出；右侧 scrollbar 条带全程不透明 */
+function composerScrollMask(
+  overlayHeightPx: number,
+  scrollbarPreservePx: number,
+): {
+  maskImage: string
+  maskSize: string
+  maskPosition: string
+  maskRepeat: string
+} {
+  const pad = Math.max(0, overlayHeightPx)
+  const fadeEnd = Math.max(0, pad - COMPOSER_SCROLL_FADE_PX)
+  const preserve = Math.max(0, scrollbarPreservePx)
+  const contentFade = [
+    'linear-gradient(to bottom,',
+    '#000 0,',
+    `#000 calc(100% - ${pad}px),`,
+    `transparent calc(100% - ${fadeEnd}px),`,
+    'transparent 100%)',
+  ].join(' ')
+  return {
+    maskImage: [
+      'linear-gradient(#000, #000)',
+      contentFade,
+      'linear-gradient(#000, #000)',
+    ].join(', '),
+    maskSize: `0 100%, calc(100% - ${preserve}px) 100%, ${preserve}px 100%`,
+    maskPosition: 'left top, left top, right top',
+    maskRepeat: 'no-repeat',
+  }
+}
+
 const useStyles = makeStyles({
   root: {
     display: 'flex',
@@ -48,8 +86,14 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     position: 'relative',
   },
+  /** Electron: let `.opptrix-app-main` / chat-panel tint show through. */
+  rootElectron: {
+    backgroundColor: 'transparent',
+  },
   bodyShell: {
     position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
@@ -59,6 +103,10 @@ const useStyles = makeStyles({
     outlineOffset: '-6px',
     backgroundColor: 'color-mix(in srgb, var(--opptrix-canvas-alt) 55%, transparent)',
   },
+  /**
+   * 占满 bodyShell；消息可滚到浮层输入卡下方。
+   * 底部淡出 mask 由 inline style 按 `--opptrix-composer-overlay-height` / pad 联动。
+   */
   scrollViewport: {
     position: 'absolute',
     inset: 0,
@@ -90,7 +138,6 @@ const useStyles = makeStyles({
   contentColumn: {
     width: '100%',
     paddingTop: '8px',
-    paddingBottom: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: '5px',
@@ -109,14 +156,16 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     paddingTop: 0,
   },
+  /** 浮层 dock：透明底盘（与主区同色/透底）；消息淡出靠 scroll mask；输入卡 panel 实色 */
   composerDock: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     zIndex: 10,
     pointerEvents: 'none',
     boxSizing: 'border-box',
+    backgroundColor: 'transparent',
   },
   composerInner: {
     position: 'relative',
@@ -126,15 +175,16 @@ const useStyles = makeStyles({
     marginInline: 'auto',
     paddingLeft: opptrixTokens.chatThreadPaddingLeft,
     paddingRight: opptrixTokens.chatThreadPaddingX,
-    paddingBottom: opptrixTokens.chatComposerBottomInset,
+    /* bottomInset 由 ChatComposer.composerFooter 承担；消息淡出由 scrollViewport mask */
+    paddingBottom: 0,
     boxSizing: 'border-box',
     pointerEvents: 'auto',
+    backgroundColor: 'transparent',
   },
   composerInnerMobile: {
     maxWidth: 'none',
     paddingLeft: opptrixTokens.chatThreadPaddingXMobile,
     paddingRight: opptrixTokens.chatThreadPaddingXMobile,
-    paddingBottom: `max(${opptrixTokens.chatComposerBottomInset}, env(safe-area-inset-bottom))`,
   },
   header: {
     flexShrink: 0,
@@ -144,7 +194,7 @@ const useStyles = makeStyles({
     padding: 0,
     boxSizing: 'border-box',
     backgroundColor: opptrixCssVars.canvas,
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   headerInner: {
     maxWidth: opptrixTokens.chatThreadMaxWidth,
@@ -300,6 +350,7 @@ interface ChatViewProps {
   error: string
   availableModels?: AvailableModel[]
   sessionModel?: string
+  sessionLlmParams?: SessionLlmParams | null
   contextUsage?: ChatContextUsage | null
   isMobile?: boolean
   sidebarVisible?: boolean
@@ -320,6 +371,7 @@ interface ChatViewProps {
   ) => Promise<string>
   onClearContextRef?: () => void
   onModelChange?: (ref: string) => void
+  onLlmParamsChange?: (patch: SessionLlmParamsPatch) => void
   onOpenSidebar?: () => void
   onNewChat?: () => void
   onOpenSettings?: () => void
@@ -341,11 +393,12 @@ function ChatView({
   title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, expertId = null, expertRefreshKey = 0, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
-  contextUsage,
+  sessionLlmParams,
+  contextUsage = null,
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
+  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
@@ -436,12 +489,9 @@ function ChatView({
   const stickToBottomRef = useRef(true)
   const prevLoadingRef = useRef(false)
   const [scrollbarHalfOffset, setScrollbarHalfOffset] = useState(0)
-  /** 随 composer 实际高度（含「接下来」/快捷提问）动态抬高线程底部留白 */
-  const [threadScrollPadBottom, setThreadScrollPadBottom] = useState(() => (
-    typeof window !== 'undefined' && window.innerWidth < 768
-      ? Number.parseInt(opptrixTokens.chatThreadScrollPadBottomMobile, 10) || 196
-      : Number.parseInt(opptrixTokens.chatThreadScrollPadBottom, 10) || 212
-  ))
+  /** 右侧 mask 保留条带宽度（有滚动条时用实测 gutter，至少 6px） */
+  const [scrollbarMaskPreserve, setScrollbarMaskPreserve] = useState(0)
+  const [composerBottomPad, setComposerBottomPad] = useState(CHAT_COMPOSER_BOTTOM_PAD)
   const [pinnedToolbar, setPinnedToolbar] = useState<{
     selection: MessageSelection
     anchor: MessageSelectionAnchor
@@ -583,6 +633,7 @@ function ChatView({
     ? (expertSummary ?? '')
     : welcome.subtitle
   const electronChrome = isElectron() && !isMobile
+  const scrollMask = composerScrollMask(composerBottomPad, scrollbarMaskPreserve)
   const showDesktopChromeExtras = !isMobile
   const attachmentsToggle = showDesktopChromeExtras && onAttachmentsDrawerOpenChange ? (
     <ChromeToolButton
@@ -603,33 +654,9 @@ function ChatView({
     const hasScrollbar = el.scrollHeight > el.clientHeight + 1
     const gutter = Math.max(0, el.offsetWidth - el.clientWidth)
     setScrollbarHalfOffset(hasScrollbar && gutter > 0 ? gutter / 2 : 0)
+    // overlay 滚动条 gutter 可能为 0；仍保留至少 6px（.opptrix-chat-scroll width）
+    setScrollbarMaskPreserve(hasScrollbar ? Math.max(gutter, 6) : 0)
   }, [])
-
-  const syncThreadScrollPad = useCallback(() => {
-    const el = composerInnerRef.current
-    if (!el) return
-    const next = Math.ceil(el.getBoundingClientRect().height)
-    if (next > 0) setThreadScrollPadBottom(next)
-  }, [])
-
-  useLayoutEffect(() => {
-    syncThreadScrollPad()
-    const el = composerInnerRef.current
-    if (!el) return
-    const observer = new ResizeObserver(() => syncThreadScrollPad())
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [
-    syncThreadScrollPad,
-    promptQueue.length,
-    pendingUserPrompt,
-    starters.length,
-    isExpertSession,
-    isEmpty,
-    error,
-    loading,
-    contextRef,
-  ])
 
   useEffect(() => {
     syncScrollbarHalfOffset()
@@ -639,6 +666,22 @@ function ChatView({
     observer.observe(el)
     return () => observer.disconnect()
   }, [syncScrollbarHalfOffset])
+
+  const syncComposerBottomPad = useCallback(() => {
+    const el = composerInnerRef.current
+    if (!el) return
+    const next = Math.max(CHAT_COMPOSER_BOTTOM_PAD, el.offsetHeight)
+    setComposerBottomPad(prev => (prev === next ? prev : next))
+  }, [])
+
+  useEffect(() => {
+    syncComposerBottomPad()
+    const el = composerInnerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => syncComposerBottomPad())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [syncComposerBottomPad])
 
   useEffect(() => {
     if (!isEmpty) return
@@ -655,11 +698,6 @@ function ChatView({
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior })
   }, [])
-
-  useEffect(() => {
-    if (!stickToBottomRef.current) return
-    scrollToBottom('auto')
-  }, [threadScrollPadBottom, scrollToBottom])
 
   const scrollToMessageStart = useCallback((messageIndex: number, behavior: ScrollBehavior = 'auto') => {
     const container = chatBoxRef.current
@@ -769,7 +807,7 @@ function ChatView({
   )
 
   return (
-    <div className={s.root}>
+    <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
       {isMobile && onOpenSidebar && onNewChat && onOpenSettings && (
         <MobileTopBar
           title={title}
@@ -777,7 +815,9 @@ function ChatView({
           backendOk={backendOk}
           availableModels={availableModels}
           sessionModel={sessionModel}
+          sessionLlmParams={sessionLlmParams}
           onModelChange={onModelChange}
+          onLlmParamsChange={onLlmParamsChange}
           onOpenDrawer={onOpenSidebar}
           onNewChat={onNewChat}
           onOpenSettings={onOpenSettings}
@@ -862,7 +902,7 @@ function ChatView({
           <SessionAttachmentsDrawer
             open={attachmentsDrawerOpen}
             sessionId={sessionId}
-            composerPadBottom={threadScrollPadBottom}
+            composerPadBottom={composerBottomPad}
             onClose={() => onAttachmentsDrawerOpenChange(false)}
             onOpen={(sid, attachment) => onOpenFilePreview?.(sid, attachment)}
           />
@@ -871,6 +911,17 @@ function ChatView({
         <div
           ref={chatBoxRef}
           className={mergeClasses(s.scrollViewport, 'opptrix-scroll', 'opptrix-chat-scroll')}
+          style={{
+            '--opptrix-composer-overlay-height': `${composerBottomPad}px`,
+            maskImage: scrollMask.maskImage,
+            WebkitMaskImage: scrollMask.maskImage,
+            maskSize: scrollMask.maskSize,
+            WebkitMaskSize: scrollMask.maskSize,
+            maskPosition: scrollMask.maskPosition,
+            WebkitMaskPosition: scrollMask.maskPosition,
+            maskRepeat: scrollMask.maskRepeat,
+            WebkitMaskRepeat: scrollMask.maskRepeat,
+          } as React.CSSProperties}
           onScroll={handleChatScroll}
         >
           <div className={threadColumnClass}>
@@ -881,7 +932,7 @@ function ChatView({
                 electronChrome && s.contentColumnElectron,
                 isEmpty && s.contentColumnEmpty,
               )}
-              style={{ paddingBottom: `${threadScrollPadBottom}px` }}
+              style={{ paddingBottom: composerBottomPad }}
             >
               {isEmpty && (
                 <div
@@ -979,10 +1030,12 @@ function ChatView({
               welcomeKey={welcomeEpoch}
               availableModels={availableModels}
               sessionModel={sessionModel}
+              sessionLlmParams={sessionLlmParams}
               contextUsage={contextUsage}
               onSubmit={handleSubmit}
               onStop={onStop}
               onModelChange={onModelChange}
+              onLlmParamsChange={onLlmParamsChange}
               onClearContextRef={onClearContextRef}
               ensureSession={ensureSession}
               userPrompt={pendingUserPrompt}

@@ -234,7 +234,7 @@ export function useElectronChrome(): boolean {
   return isElectron()
 }
 
-/** macOS vibrancy / Windows acrylic — sidebar can punch through to OS blur */
+/** macOS vibrancy / Windows mica — sidebar can punch through to OS blur */
 export function supportsNativeWindowVibrancy(): boolean {
   if (!isElectron()) return false
   const platform = electronPlatform()

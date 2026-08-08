@@ -66,9 +66,9 @@ let WEB_DEV_PORT = process.env.WEB_PORT ?? '5173'
 /** @type {'use' | 'reuse' | 'bump'} */
 let apiPortMode = process.env.OPPTRIX_API_PORT_MODE ?? 'use'
 const MIN_SPLASH_MS = 2200
-const SPLASH_HTML = path.join(__dirname, 'splash.html')
-const SPLASH_CANVAS = '#F5F5F7'
-const APP_ID = require('../package.json').build?.appId
+  const SPLASH_HTML = path.join(__dirname, 'splash.html')
+  const SPLASH_CANVAS = '#FCFCFC'
+  const APP_ID = require('../package.json').build?.appId
 
 app.setName(APP_NAME)
 /** @type {boolean} */
@@ -106,30 +106,46 @@ function setOpaqueWindowBackground(win) {
   win.setBackgroundColor(SPLASH_CANVAS)
 }
 
-/** macOS vibrancy / Windows acrylic — 勿开 BrowserWindow.transparent，否则缩放动画会漏出桌面空透明。 */
-function enableWindowBlurBackground(win) {
-  if (win.isDestroyed()) return
-  if (process.platform === 'darwin') {
-    try {
-      win.setVibrancy('sidebar')
-    } catch {
-      /* older Electron */
+/** Hide system traffic lights — UI draws compact stand-ins in the secondary chrome. */
+function hideNativeMacTrafficLights(win) {
+  if (process.platform !== 'darwin' || win.isDestroyed()) return
+  try {
+    if (typeof win.setWindowButtonVisibility === 'function') {
+      win.setWindowButtonVisibility(false)
     }
-    // 透明网页区域露的是 vibrancy 材质层，不是裸桌面；背景色用 0 alpha 才能看见材质
-    win.setBackgroundColor('#00000000')
-    return
-  }
-  if (process.platform === 'win32') {
-    try {
-      if (typeof win.setBackgroundMaterial === 'function') {
-        win.setBackgroundMaterial('acrylic')
-      }
-    } catch {
-      /* unsupported on older Windows */
-    }
-    win.setBackgroundColor('#00000000')
+  } catch {
+    /* older Electron */
   }
 }
+
+  /**
+   * macOS vibrancy / Windows mica — 对齐 Cursor 窗材质。
+   * 勿开 BrowserWindow.transparent，否则缩放动画会漏出桌面空透明。
+   * 窗底色按主题：mac 浅 #00FFFFFF / 深 #40000000；win 浅 #00FFFFFF / 深 #00000000。
+   */
+  function enableWindowBlurBackground(win) {
+    if (win.isDestroyed()) return
+    const dark = nativeTheme.shouldUseDarkColors
+    if (process.platform === 'darwin') {
+      try {
+        win.setVibrancy('sidebar')
+      } catch {
+        /* older Electron */
+      }
+      win.setBackgroundColor(dark ? '#40000000' : '#00FFFFFF')
+      return
+    }
+    if (process.platform === 'win32') {
+      try {
+        if (typeof win.setBackgroundMaterial === 'function') {
+          win.setBackgroundMaterial('mica')
+        }
+      } catch {
+        /* unsupported on older Windows */
+      }
+      win.setBackgroundColor(dark ? '#00000000' : '#00FFFFFF')
+    }
+  }
 
 /** @deprecated use enableWindowBlurBackground */
 function enableMacWindowTransparency(win) {
@@ -673,8 +689,8 @@ function buildMainWindowOptions() {
     options.visualEffectState = 'active'
   } else if (process.platform === 'win32') {
     options.frame = false
-    // 同 mac：用系统材料，避免整窗 transparent 导致缩放漏底；Win11 默认系统圆角
-    options.backgroundMaterial = 'acrylic'
+    // 同 mac：用系统材料，避免整窗 transparent 导致缩放漏底；Win11 默认系统圆角（对齐 Cursor mica）
+    options.backgroundMaterial = 'mica'
   } else {
     options.frame = false
   }
@@ -710,10 +726,17 @@ function attachMainWindowHandlers(win) {
 
   const notifyFullscreen = () => {
     win.webContents.send('window-fullscreen-changed', win.isFullScreen())
+    hideNativeMacTrafficLights(win)
   }
   win.on('enter-full-screen', notifyFullscreen)
   win.on('leave-full-screen', notifyFullscreen)
-  win.webContents.on('did-finish-load', notifyFullscreen)
+  win.webContents.on('did-finish-load', () => {
+    notifyFullscreen()
+    hideNativeMacTrafficLights(win)
+  })
+  win.on('show', () => {
+    hideNativeMacTrafficLights(win)
+  })
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
@@ -724,6 +747,7 @@ function attachMainWindowHandlers(win) {
   })
 
   setOpaqueWindowBackground(win)
+  hideNativeMacTrafficLights(win)
 }
 
 function createMainWindow() {
@@ -1000,14 +1024,10 @@ async function openMainWindowFromMenu() {
 function applyNativeThemeSource(source) {
   if (source !== 'system' && source !== 'light' && source !== 'dark') return
   nativeTheme.themeSource = source
-  // Re-apply vibrancy so macOS sidebar material picks up the new theme source.
+  // Re-apply vibrancy/mica + theme-matched window background (dark mac uses #40000000).
   const win = mainWindow
-  if (win && !win.isDestroyed() && process.platform === 'darwin') {
-    try {
-      win.setVibrancy('sidebar')
-    } catch {
-      /* older Electron */
-    }
+  if (win && !win.isDestroyed()) {
+    enableWindowBlurBackground(win)
   }
 }
 
@@ -1112,6 +1132,7 @@ function registerWindowIpc() {
   ipcMain.on('window-maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
+    // macOS green button ≈ zoom (maximize fill); Windows/Linux = maximize toggle
     if (win.isMaximized()) win.unmaximize()
     else win.maximize()
   })

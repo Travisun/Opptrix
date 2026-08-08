@@ -15,6 +15,7 @@ import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
 import AppUpdateNotice from '../desktop/AppUpdateNotice'
+import { useAppVersion } from '../onboarding/useAppVersion'
 import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ExpertSessionIcon from './ExpertSessionIcon'
@@ -95,6 +96,26 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'flex-end',
     padding: '8px 8px 0',
+  },
+  brandRow: {
+    flexShrink: 0,
+    minWidth: 0,
+    /* 与 sidebarTopMenuRow 图标左缘对齐：margin 10 + padding 10 = 20 */
+    padding: '4px 20px 0',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+    lineHeight: 1.35,
+  },
+  brandName: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: opptrixCssVars.textSecondary,
+  },
+  brandVersion: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: opptrixCssVars.textSecondary,
   },
   menuSection: {
     marginTop: '15px',
@@ -325,6 +346,7 @@ function SessionSidebar({
 }: SessionSidebarProps) {
   const s = useStyles()
   const { resolvedScheme } = useTheme()
+  const { label: versionLabel } = useAppVersion()
   const isDrawer = mode === 'drawer'
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
@@ -341,6 +363,10 @@ function SessionSidebar({
   const [archiveMenu, setArchiveMenu] = useState<{ sessionId: string; anchor: HTMLElement } | null>(null)
   const archiveAnchorRef = useRef<HTMLElement | null>(null)
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
+
+  const brandAriaLabel = versionLabel
+    ? `Opptrix工作台 ${versionLabel}`
+    : 'Opptrix工作台'
 
   const releaseSidebarFocus = useCallback(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -373,6 +399,16 @@ function SessionSidebar({
           <OpptrixButton className={s.iconBtn} variant="ghost" icon={<DismissRegular />} onClick={onClose} aria-label="关闭" />
         </div>
       )}
+
+      <div className={s.brandRow} aria-label={brandAriaLabel}>
+        <span className={s.brandName}>Opptrix工作台</span>
+        {versionLabel ? (
+          <>
+            {' '}
+            <span className={s.brandVersion}>{versionLabel}</span>
+          </>
+        ) : null}
+      </div>
 
       <div className={mergeClasses(s.menuSection, 'opptrix-sidebar-menu')}>
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onNew)}>

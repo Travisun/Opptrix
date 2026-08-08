@@ -40,6 +40,10 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
   },
+  /** Electron: let ancestor right-panel / app-main tint show through. */
+  rootElectron: {
+    backgroundColor: 'transparent',
+  },
   header: {
     flexShrink: 0,
     height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
@@ -53,6 +57,9 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,
+  },
+  headerElectronFill: {
+    backgroundColor: 'transparent',
   },
   headerWeb: {
     height: '40px',
@@ -418,11 +425,12 @@ export default function FilePreviewPanel({
     : 0
 
   return (
-    <div className={s.root}>
+    <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
       <div
         className={mergeClasses(
           s.header,
           !electronChrome && s.headerWeb,
+          electronChrome && s.headerElectronFill,
           electronChrome && 'opptrix-right-panel-title-bar',
           electronChrome && (electronWin ? s.headerElectronWin : s.headerElectronMac),
         )}

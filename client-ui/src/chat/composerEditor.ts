@@ -16,14 +16,14 @@ const CHIP_KEY_ATTR = 'data-chip-key'
 const CHIP_SEND_ATTR = 'data-chip-send'
 
 export interface InlineChipData {
-  /** 去重用的唯一 key（instrument key） */
+  /** 去重用的唯一 key（instrument key / skill:name） */
   key: string
-  /** 发送时展开的纯文本，如「贵州茅台(CN:SH.600519)」 */
+  /** 发送时展开的纯文本，如「贵州茅台(CN:SH.600519)」或「@skill:morning-market-brief」 */
   sendText: string
-  /** 主显示文本（股票名称） */
+  /** 主显示文本（股票名称 / 技能名） */
   name: string
-  /** 代码标签，如 CN:SH.600519 */
-  code: string
+  /** 代码标签，如 CN:SH.600519；技能 chip 可省略 */
+  code?: string
   /** 非 A 股时的市场短名，可选 */
   market?: string | null
 }
@@ -47,10 +47,12 @@ export function createChipElement(data: InlineChipData): HTMLSpanElement {
     mk.textContent = data.market
     chip.appendChild(mk)
   }
-  const code = document.createElement('span')
-  code.className = 'opptrix-composer-inline-chip__code'
-  code.textContent = data.code
-  chip.appendChild(code)
+  if (data.code) {
+    const code = document.createElement('span')
+    code.className = 'opptrix-composer-inline-chip__code'
+    code.textContent = data.code
+    chip.appendChild(code)
+  }
   return chip
 }
 
@@ -101,14 +103,38 @@ export function getSendText(root: HTMLElement): string {
   return out
 }
 
+/**
+ * 空编辑器 DOM 归一：去掉 Chromium 清空后残留的 `<br>` / `<div><br></div>`。
+ * 有 chip 或非空发送文本时不改动。返回是否执行了清空。
+ */
+export function normalizeEmptyEditor(root: HTMLElement): boolean {
+  if (root.querySelector(`.${INLINE_CHIP_CLASS}`)) return false
+  if (getSendText(root).trim().length > 0) return false
+  if (root.innerHTML === '') return false
+  root.innerHTML = ''
+  return true
+}
+
 /** 清空编辑器。 */
 export function clearEditor(root: HTMLElement): void {
-  root.textContent = ''
+  root.innerHTML = ''
 }
 
 /** 用纯文本重置编辑器内容（丢弃所有 chip，用于草稿同步 / 快捷任务）。 */
 export function setEditorText(root: HTMLElement, text: string): void {
   root.textContent = text
+}
+
+/** 让编辑器聚焦并把光标移到内容开头。 */
+export function focusEditorStart(root: HTMLElement): void {
+  root.focus()
+  const sel = window.getSelection()
+  if (!sel) return
+  const range = document.createRange()
+  range.selectNodeContents(root)
+  range.collapse(true)
+  sel.removeAllRanges()
+  sel.addRange(range)
 }
 
 /** 让编辑器聚焦并把光标移到内容末尾。 */
@@ -155,13 +181,15 @@ export function getCaretTextContext(root: HTMLElement): { text: string; offset: 
 }
 
 /**
- * 在光标处把 `@query` 触发文本替换为 chip。
+ * 在光标处把触发文本（`@query` / `/query`）替换为 chip。
+ * @param triggerChar 触发字符（`@` 标的 / `/` 技能）
  * @param savedRange 预先快照的光标 Range；点菜单项插入时实时 selection 不可靠，须传快照。
  * 返回是否成功插入。
  */
-export function insertMentionChip(
+export function insertTriggerChip(
   root: HTMLElement,
   chip: HTMLSpanElement,
+  triggerChar: '@' | '/',
   savedRange?: Range | null,
 ): boolean {
   const range = savedRange ?? selectionInRoot(root)
@@ -174,18 +202,18 @@ export function insertMentionChip(
   const text = textNode.textContent ?? ''
   const caret = range.startOffset
   const before = text.slice(0, caret)
-  const atIndex = before.lastIndexOf('@')
-  if (atIndex < 0) return false
+  const triggerIndex = before.lastIndexOf(triggerChar)
+  if (triggerIndex < 0) return false
 
-  // 删除 @query 段。
+  // 删除触发段。
   const deleteRange = document.createRange()
-  deleteRange.setStart(textNode, atIndex)
+  deleteRange.setStart(textNode, triggerIndex)
   deleteRange.setEnd(textNode, caret)
   deleteRange.deleteContents()
 
   // 在删除点插入 chip，并在其后补一个不换行空格文本节点，方便继续输入与光标定位。
   const insertRange = document.createRange()
-  insertRange.setStart(textNode, atIndex)
+  insertRange.setStart(textNode, triggerIndex)
   insertRange.collapse(true)
   const spacer = document.createTextNode('\u00A0')
   insertRange.insertNode(spacer)
@@ -200,6 +228,56 @@ export function insertMentionChip(
     sel.removeAllRanges()
     sel.addRange(after)
   }
+  return true
+}
+
+/** 在光标处把 `@query` 触发文本替换为 chip。 */
+export function insertMentionChip(
+  root: HTMLElement,
+  chip: HTMLSpanElement,
+  savedRange?: Range | null,
+): boolean {
+  return insertTriggerChip(root, chip, '@', savedRange)
+}
+
+/** 在光标处把 `/query` 触发文本替换为技能 chip。 */
+export function insertSlashChip(
+  root: HTMLElement,
+  chip: HTMLSpanElement,
+  savedRange?: Range | null,
+): boolean {
+  return insertTriggerChip(root, chip, '/', savedRange)
+}
+
+/**
+ * 在光标处插入 chip（菜单点选等非 @ 触发场景）。
+ * 无有效选区时追加到末尾。返回是否成功。
+ */
+export function insertChipAtCaret(
+  root: HTMLElement,
+  chip: HTMLSpanElement,
+  savedRange?: Range | null,
+): boolean {
+  root.focus()
+  const range = savedRange ?? selectionInRoot(root)
+  const spacer = document.createTextNode('\u00A0')
+  if (range && root.contains(range.startContainer)) {
+    range.deleteContents()
+    range.insertNode(spacer)
+    range.insertNode(chip)
+    const sel = window.getSelection()
+    if (sel) {
+      const after = document.createRange()
+      after.setStart(spacer, spacer.length)
+      after.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(after)
+    }
+    return true
+  }
+  root.appendChild(chip)
+  root.appendChild(spacer)
+  focusEditorEnd(root)
   return true
 }
 

@@ -57,6 +57,30 @@ export interface ChatContextUsage {
   estimated: boolean
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high'
+
+/** 会话级 OpenAI 兼容采样参数（旧会话可能缺失，UI/请求侧默认温度 1、回复长度上限 4096） */
+export interface SessionLlmParams {
+  temperature?: number
+  maxTokens?: number
+  reasoningEffort?: ReasoningEffort
+}
+
+export const DEFAULT_SESSION_TEMPERATURE = 1
+export const DEFAULT_SESSION_MAX_TOKENS = 4096
+
+export function resolveSessionLlmParamsForUi(params?: SessionLlmParams | null): {
+  temperature: number
+  maxTokens: number
+  reasoningEffort: ReasoningEffort | 'off'
+} {
+  return {
+    temperature: params?.temperature ?? DEFAULT_SESSION_TEMPERATURE,
+    maxTokens: params?.maxTokens ?? DEFAULT_SESSION_MAX_TOKENS,
+    reasoningEffort: params?.reasoningEffort ?? 'off',
+  }
+}
+
 export interface SessionMeta {
   id: string
   title: string
@@ -64,6 +88,7 @@ export interface SessionMeta {
   updatedAt: string
   /** providerId:modelName */
   model?: string
+  llmParams?: SessionLlmParams
   archivedAt?: string | null
   archiveFolderId?: string | null
   expertId?: string | null

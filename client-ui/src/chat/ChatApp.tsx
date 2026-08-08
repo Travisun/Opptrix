@@ -35,14 +35,14 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
+  streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession,
 } from '../api/client'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
-  SessionMeta, AvailableModel, ChatAttachmentMeta,
+  SessionMeta, AvailableModel, ChatAttachmentMeta, SessionLlmParams,
 } from '../types/chat'
 import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
@@ -54,6 +54,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync, sidebarExpandThreshold } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
+import { useSettingsSidebarWidth } from '../hooks/useSettingsSidebarWidth'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import ChromeToolButton from '../desktop/ChromeToolButton'
@@ -256,6 +257,15 @@ export default function ChatApp() {
   })
 
   const {
+    width: settingsSidebarWidth,
+    isDragging: settingsSidebarDragging,
+    beginDrag: beginSettingsSidebarDrag,
+  } = useSettingsSidebarWidth({
+    enabled: !isMobile,
+    viewportWidth,
+  })
+
+  const {
     visible: sidebarVisible,
     drawerOpen,
     setVisible: setSidebarVisible,
@@ -263,13 +273,15 @@ export default function ChatApp() {
     openDrawer,
     closeDrawer,
   } = useSidebarPreference(isMobile, sidebarWidth)
-  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, sidebarWidth)
-  const sidebarInlineVisible = sidebarVisible && !sidebarOverlayMode
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.innerWidth >= sidebarExpandThreshold(SIDEBAR_DEFAULT_WIDTH)
   })
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection | undefined>()
+  const overlayWidthForMode = view === 'settings' ? settingsSidebarWidth : sidebarWidth
+  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, overlayWidthForMode)
+  const sidebarInlineVisible = sidebarVisible && !sidebarOverlayMode
+  const settingsSidebarInlineVisible = settingsSidebarVisible && !sidebarOverlayMode
 
   const electronChrome = isElectron() && !isMobile
 
@@ -305,7 +317,7 @@ export default function ChatApp() {
     setSettingsSidebarVisible(true)
   }, [setSidebarVisible])
 
-  useSidebarResizeSync(!isMobile, sidebarWidth, collapseSidebars, expandSidebars)
+  useSidebarResizeSync(!isMobile, overlayWidthForMode, collapseSidebars, expandSidebars)
 
   const handleToggleSidebar = useCallback(() => {
     if (view === 'settings') {
@@ -332,6 +344,7 @@ export default function ChatApp() {
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
+  const [sessionLlmParams, setSessionLlmParamsState] = useState<SessionLlmParams | undefined>()
   const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null)
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
@@ -615,6 +628,7 @@ export default function ChatApp() {
     setMessages(data.messages)
     setContextRef(data.contextRef ?? null)
     setSessionModelState(data.session.model)
+    setSessionLlmParamsState(data.session.llmParams)
     setContextUsage(data.contextUsage ?? null)
     setError('')
     setChatScrollEpoch(epoch => epoch + 1)
@@ -729,6 +743,7 @@ export default function ChatApp() {
       setMessages([])
       setContextRef(null)
       setSessionModelState(undefined)
+      setSessionLlmParamsState(undefined)
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
@@ -796,6 +811,7 @@ export default function ChatApp() {
       setMessages([])
       setContextRef(null)
       setSessionModelState(undefined)
+      setSessionLlmParamsState(undefined)
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
@@ -824,6 +840,7 @@ export default function ChatApp() {
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
+          setSessionLlmParamsState(undefined)
         }
       }
     } catch (e) {
@@ -875,6 +892,7 @@ export default function ChatApp() {
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
+          setSessionLlmParamsState(undefined)
         }
       }
     } catch (e) {
@@ -896,6 +914,7 @@ export default function ChatApp() {
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
+          setSessionLlmParamsState(undefined)
         }
       }
     } catch (e) {
@@ -1114,6 +1133,7 @@ export default function ChatApp() {
         setMessages(fresh.messages)
         setContextRef(fresh.contextRef ?? null)
         setSessionModelState(fresh.session.model)
+        setSessionLlmParamsState(fresh.session.llmParams)
         setContextUsage(fresh.contextUsage ?? null)
       }
       const list = await refreshSessions()
@@ -1242,6 +1262,7 @@ export default function ChatApp() {
       setMessages(data.messages)
       setContextRef(data.contextRef ?? null)
       setSessionModelState(data.session.model)
+      setSessionLlmParamsState(data.session.llmParams)
       pushComposerDraft('')
       setError('')
       closeDrawer()
@@ -1336,6 +1357,7 @@ export default function ChatApp() {
       const data = await setSessionContext(session.id, nextRef)
       setContextRef(data.contextRef ?? nextRef)
       setSessionModelState(session.model)
+      setSessionLlmParamsState(session.llmParams)
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
@@ -1379,6 +1401,34 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '切换模型失败')
     }
   }, [activeId, refreshContextUsage])
+
+  const handleLlmParamsChange = useCallback(async (patch: {
+    temperature?: number
+    maxTokens?: number
+    reasoningEffort?: 'low' | 'medium' | 'high' | null
+  }) => {
+    setSessionLlmParamsState(prev => {
+      const next = { ...(prev ?? {}) }
+      if (patch.temperature !== undefined) next.temperature = patch.temperature
+      if (patch.maxTokens !== undefined) next.maxTokens = patch.maxTokens
+      if (patch.reasoningEffort === null) delete next.reasoningEffort
+      else if (patch.reasoningEffort !== undefined) next.reasoningEffort = patch.reasoningEffort
+      return next
+    })
+    if (!activeId) return
+    try {
+      const res = await setSessionLlmParams(activeId, patch)
+      setSessionLlmParamsState(res.session.llmParams)
+      setSessions(prev => prev.map(sess =>
+        sess.id === activeId ? { ...sess, llmParams: res.session.llmParams } : sess,
+      ))
+      setActiveSessionMeta(prev => prev && prev.id === activeId
+        ? { ...prev, llmParams: res.session.llmParams }
+        : prev)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存模型参数失败')
+    }
+  }, [activeId])
 
   const activeSession = activeSessionMeta ?? sessions.find(x => x.id === activeId) ?? null
   const isSettings = view === 'settings'
@@ -1543,10 +1593,10 @@ export default function ChatApp() {
           viewMode={chromeViewMode}
           sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
           sidebarInline={isSettings
-            ? settingsSidebarVisible && !sidebarOverlayMode
+            ? settingsSidebarInlineVisible
             : sidebarInlineVisible}
-          sidebarWidth={sidebarWidth}
-          sidebarDragging={sidebarDragging}
+          sidebarWidth={isSettings ? settingsSidebarWidth : sidebarWidth}
+          sidebarDragging={isSettings ? settingsSidebarDragging : sidebarDragging}
           showSidebarToggle={!isSettings || sidebarOverlayMode}
           sidebarHoverReveal={sidebarOverlayMode}
           onRevealSidebar={handleEdgeRevealSidebar}
@@ -1559,7 +1609,9 @@ export default function ChatApp() {
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
           chatColumnWidth={view === 'chat' && !isMobile && chatVisible && showSplitter ? chatWidth : undefined}
-          chatAreaLeft={sidebarInlineVisible ? sidebarWidth : 0}
+          chatAreaLeft={isSettings
+            ? (settingsSidebarInlineVisible ? settingsSidebarWidth : 0)
+            : (sidebarInlineVisible ? sidebarWidth : 0)}
           chatColumnVisible={view === 'chat' && !isMobile ? chatVisible : undefined}
           onToggleRightPanel={view === 'chat' && !isMobile ? handleToggleRightPanel : undefined}
           onToggleChatColumn={view === 'chat' && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
@@ -1602,6 +1654,9 @@ export default function ChatApp() {
               onBack={handleExitSettings}
               initialSection={settingsInitialSection}
               chromeToolbarReserve={electronChrome ? desktopChromeToolbarReserve(macFullscreen) : 0}
+              sidebarWidth={settingsSidebarWidth}
+              sidebarDragging={settingsSidebarDragging}
+              onBeginSidebarDrag={beginSettingsSidebarDrag}
               onSaved={async () => {
                 await refreshHealth()
               }}
@@ -1781,6 +1836,7 @@ export default function ChatApp() {
                   error={error}
                   availableModels={availableModels}
                   sessionModel={sessionModel}
+                  sessionLlmParams={sessionLlmParams}
                   contextUsage={contextUsage}
                   isMobile={isMobile}
                   llmLabel={llmLabel}
@@ -1796,6 +1852,7 @@ export default function ChatApp() {
                   onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}
                   onClearContextRef={contextRef ? handleClearContextRef : undefined}
                   onModelChange={availableModels.length ? handleModelChange : undefined}
+                  onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
                   onOpenSidebar={openDrawer}
                   onNewChat={handleNew}
                   onOpenSettings={openSettings}

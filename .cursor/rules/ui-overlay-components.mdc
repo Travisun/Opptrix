@@ -27,7 +27,7 @@ alwaysApply: false
 | **Transient 通知**（成功/失败/提示） | `useSettingsToast()`（需在 `SettingsToastProvider` 内） | mixin `glassPanel` |
 | **侧栏/列表内联确认** | 同行 `inlineEditRow` + ✓/✕（如归档文件夹） | 与列表行同高，**不用**额外 Dialog |
 | **分段切换**（Tab 胶囊） | `OpptrixSegmentedControl`（`variant="embedded"` 用于侧栏） | `opptrix-segmented-control` |
-| **分组设置块** | `OpptrixSurface`、`SettingsGroup` | 实底卡片，非毛玻璃 |
+| **分组设置块** | `OpptrixSurface`、`SettingsGroup` | ink 4% 浅底分组（对齐 Cursor settings）；非毛玻璃 |
 
 ## 二次确认 API
 

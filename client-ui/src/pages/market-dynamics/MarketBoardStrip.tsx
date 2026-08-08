@@ -12,7 +12,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'stretch',
     minWidth: 0,
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
     backgroundColor: opptrixCssVars.canvas,
     overflowX: 'auto',
   },

@@ -11,13 +11,15 @@ import { electronPlatform } from '../platform/detect'
 
 const FOCUS_FADE_PERCENT = 10
 
-function buildLineBackground(focusRatio: number | null): string {
-  const normal = opptrixCssVars.separatorStrong
+function buildLineBackground(focusRatio: number | null, subtle: boolean): string {
+  const normal = subtle
+    ? opptrixCssVars.separatorHairline
+    : opptrixCssVars.separatorStrong
   if (focusRatio == null) return normal
 
   const y = focusRatio * 100
   const fade = FOCUS_FADE_PERCENT
-  const active = opptrixCssVars.textTertiary
+  const active = subtle ? opptrixCssVars.separatorStrong : opptrixCssVars.textTertiary
   const topFade = Math.max(0, y - fade)
   const bottomFade = Math.min(100, y + fade)
 
@@ -43,6 +45,9 @@ const useStyles = makeStyles({
     width: `${WORKSPACE_SPLITTER_WIDTH}px`,
     pointerEvents: 'none',
     backgroundColor: opptrixCssVars.separatorStrong,
+  },
+  lineSubtle: {
+    backgroundColor: opptrixCssVars.separatorHairline,
   },
   hitZone: {
     position: 'absolute',
@@ -70,6 +75,8 @@ interface Props {
    * Default: mac-only when `electronChrome` is set.
    */
   extendIntoSecondaryChrome?: boolean
+  /** 左侧栏用更细弱的发丝线，避免与主区对比过重 */
+  tone?: 'default' | 'subtle'
   isDragging?: boolean
   onBeginDrag: (clientX: number) => void
   ariaLabel?: string
@@ -78,6 +85,7 @@ interface Props {
 export default function WorkspaceSplitDivider({
   electronChrome = false,
   extendIntoSecondaryChrome,
+  tone = 'default',
   isDragging = false,
   onBeginDrag,
   ariaLabel = '调整聊天区与右侧面板宽度',
@@ -86,6 +94,7 @@ export default function WorkspaceSplitDivider({
   const dividerRef = useRef<HTMLDivElement>(null)
   const [focusRatio, setFocusRatio] = useState<number | null>(null)
   const active = focusRatio != null
+  const subtle = tone === 'subtle'
   const extendIntoChrome = extendIntoSecondaryChrome
     ?? (electronChrome && electronPlatform() === 'darwin')
 
@@ -128,9 +137,9 @@ export default function WorkspaceSplitDivider({
       aria-label={ariaLabel}
     >
       <div
-        className={s.line}
+        className={mergeClasses(s.line, subtle && s.lineSubtle)}
         aria-hidden
-        style={{ background: buildLineBackground(active ? focusRatio : null) }}
+        style={{ background: buildLineBackground(active ? focusRatio : null, subtle) }}
       />
       <div className={s.hitZone} aria-hidden {...bindHitZonePointer} />
     </div>

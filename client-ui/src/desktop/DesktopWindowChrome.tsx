@@ -20,6 +20,7 @@ import {
   DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN,
   SIDEBAR_DEFAULT_WIDTH,
   DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
+  DESKTOP_TRAFFIC_LIGHT_WIDTH,
   WORKSPACE_SPLITTER_WIDTH,
 } from './constants'
 import {
@@ -44,6 +45,7 @@ import {
 } from './layout'
 import ChromeToolButton from './ChromeToolButton'
 import AppUpdateChromeHint from './AppUpdateChromeHint'
+import MacTrafficLights from './MacTrafficLights'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 
 const useStyles = makeStyles({
@@ -75,7 +77,7 @@ const useStyles = makeStyles({
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
-  /** Frame titlebar + open sidebar: collapse left, back/forward right, space between */
+  /** Open sidebar: collapse left, back/forward right (space-between across sidebar width) */
   toolbarSplitInSidebar: {
     justifyContent: 'space-between',
     gap: 0,
@@ -255,10 +257,24 @@ export default function DesktopWindowChrome({
   const chromeBand = desktopChromeBandHeight()
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen, sidebarWidth)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
-  const frameChrome = frameTitlebarHeight > 0
-  /** Primary frame titlebar + open sidebar: collapse |····| back/forward across the panel top. */
-  const toolbarSplitInSidebar = frameChrome && sidebarInline && sidebarOpen
-  /** 右侧面板展开时：trailing 落在聊天列右缘（分割线左），与 chatTitleBar padding 对齐 */
+  /** mac custom lights: leave a no-drag hole — `-webkit-app-region: drag` steals clicks even under higher z-index. */
+  const showMacTrafficLights = electronPlatform() === 'darwin' && !macFullscreen
+  const dragLeftInset = showMacTrafficLights ? DESKTOP_TRAFFIC_LIGHT_WIDTH : 0
+  /**
+   * Open inline sidebar: collapse left |····| back/forward at the sidebar divider.
+   * Windows spans full sidebar from x=0; macOS starts after traffic lights.
+   */
+  const toolbarSplitInSidebar = sidebarInline && sidebarOpen
+  const splitToolbarLeft = toolbarSplitInSidebar
+    ? (showMacTrafficLights ? toolbarLeft : 0)
+    : toolbarLeft
+  const splitToolbarWidth = toolbarSplitInSidebar
+    ? Math.max(0, sidebarWidth - splitToolbarLeft)
+    : undefined
+  const splitToolbarPadLeft = toolbarSplitInSidebar
+    ? (showMacTrafficLights ? DESKTOP_TOOL_GAP : DESKTOP_TITLE_GAP)
+    : undefined
+
   const titleBarActionsRight = rightPanelOpen && titleBarTrailing && rightPanelWidth > 0
     ? rightPanelWidth + WORKSPACE_SPLITTER_WIDTH + DESKTOP_TITLE_GAP
     : desktopTitleBarActionsRight()
@@ -348,11 +364,13 @@ export default function DesktopWindowChrome({
       >
         {interactiveTitle ? (
           <>
-            <div
-              className={s.drag}
-              style={{ left: 0, width: `${titleLeft}px` }}
-              aria-hidden
-            />
+            {titleLeft > dragLeftInset ? (
+              <div
+                className={s.drag}
+                style={{ left: `${dragLeftInset}px`, width: `${titleLeft - dragLeftInset}px` }}
+                aria-hidden
+              />
+            ) : null}
             <div
               className={s.drag}
               style={{ left: `${dragResumeLeft}px`, right: 0, ...dragRightClip }}
@@ -360,7 +378,11 @@ export default function DesktopWindowChrome({
             />
           </>
         ) : (
-          <div className={s.drag} style={{ left: 0, right: 0, ...dragRightClip }} aria-hidden />
+          <div
+            className={s.drag}
+            style={{ left: `${dragLeftInset}px`, right: 0, ...dragRightClip }}
+            aria-hidden
+          />
         )}
 
         {showPageTitle && (
@@ -389,9 +411,9 @@ export default function DesktopWindowChrome({
           style={{
             top: `${chromeTop}px`,
             height: `${chromeBand}px`,
-            left: toolbarSplitInSidebar ? 0 : `${toolbarLeft}px`,
-            width: toolbarSplitInSidebar ? `${sidebarWidth}px` : undefined,
-            paddingLeft: toolbarSplitInSidebar ? `${DESKTOP_TITLE_GAP}px` : undefined,
+            left: `${splitToolbarLeft}px`,
+            width: splitToolbarWidth != null ? `${splitToolbarWidth}px` : undefined,
+            paddingLeft: splitToolbarPadLeft != null ? `${splitToolbarPadLeft}px` : undefined,
             paddingRight: toolbarSplitInSidebar ? `${DESKTOP_TITLE_GAP}px` : undefined,
             transitionDuration: chromeTransition,
           }}
@@ -478,6 +500,9 @@ export default function DesktopWindowChrome({
             </>
           )}
         </div>
+
+        {/* After drag layers so paint order + no-drag hole both receive clicks */}
+        {showMacTrafficLights ? <MacTrafficLights /> : null}
       </header>
 
       {!isSettings && (titleBarTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (

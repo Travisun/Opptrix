@@ -27,33 +27,43 @@
 
 ## 2. Color Tokens
 
-### 2.1 品牌色（Terracotta）
+### 2.1 品牌强调色（墨色，非 Cursor 按钮蓝）
 
-| Token | Hex | 用途 |
-|-------|-----|------|
-| `accent` | `#D17A5D` | Logo、主按钮、选中指示条 |
-| `accentHover` | `#C4694F` | Hover |
-| `accentSoft` | `#F5E8E3` | 浅底标签、AI 按钮背景 |
-| `accentMuted` | `#E8C4B8` | 热力图低档 |
+| Token | Light | Dark | 用途 |
+|-------|-------|------|------|
+| `accent` | `#141414` | `#F0F0F0` | 主按钮、选中强调 |
+| `accentHover` | `#000000` | `#FFFFFF` | Hover |
+| `accentSoft` | `rgba(20,20,20,0.08)` | `rgba(240,240,240,0.08)` | 浅底标签、弱强调 |
+| `accentMuted` | `rgba(20,20,20,0.14)` | `rgba(240,240,240,0.14)` | 次级强调填充 |
+| `accentForeground` | `#FCFCFC` | `#181818` | 强调色上的前景 |
 
-### 2.2 中性色
+> 刻意保留 Opptrix 单色墨，**未**采用 Cursor Light/Dark 的按钮蓝（`#2778C1` / `#81A1C1`）。
 
-| Token | Hex | 用途 |
-|-------|-----|------|
-| `canvas` | `#F5F4F0` | 页面背景 |
-| `surface` | `#FFFFFF` | 卡片、侧栏内嵌块 |
-| `surfaceMuted` | `#EFEEEA` | 侧栏底、Hover 底 |
-| `border` | `#E8E6E1` | 分割线、卡片描边 |
-| `borderStrong` | `#D4D2CC` | 输入框 focus 前 |
+### 2.2 中性色（对齐 Cursor Light / Dark）
+
+> 层级与 Cursor `theme-cursor` 一致：主编辑区亮于侧栏（Light `#FCFCFC` / `#F3F3F3`；Dark `#181818` / `#141414`）。
+> 品牌强调色仍为 Opptrix 墨色，**未**采用 Cursor 按钮蓝（`#2778C1` / `#81A1C1`）。
+
+| Token | Light | Dark | 用途 |
+|-------|-------|------|------|
+| `canvas` | `#FCFCFC` | `#181818` | 主内容区（Cursor `editor.background`） |
+| `canvasAlt` | `#F3F3F3` | `#141414` | 左侧边栏 / chrome（略深于主区） |
+| `canvasMuted` | `#EEEEEE` | `#2A2A2A` | 次级填充（侧栏下一档） |
+| `surface` | `#FCFCFC` | `#181818` | 与主区同底的表面 |
+| `surfaceHover` | `rgba(20,20,20,0.08)` | `rgba(240,240,240,0.067)` | 列表 hover（Cursor `list.hoverBackground`） |
+| `border` / `separator` | `rgba(20,20,20,0.08)` | `rgba(240,240,240,0.075)` | 发丝分割（Cursor `#14141414` / `#F0F0F013`）；hairline 与 separator 同值 |
+| `textPrimary` | `#141414` | `#F0F0F0` | 正文墨色 |
+| `textSecondary` | `rgba(20,20,20,0.74)` | `rgba(240,240,240,0.74)` | 次级文案 |
+| `textTertiary` | `rgba(20,20,20,0.60)` | `rgba(240,240,240,0.60)` | 弱化文案 |
 
 ### 2.3 文本
 
-| Token | Hex | 用途 |
-|-------|-----|------|
-| `textPrimary` | `#1A1A1A` | 标题、正文 |
-| `textSecondary` | `#6B6B6B` | 副标题、说明 |
-| `textTertiary` | `#9A9A9A` | Kicker、分组标签 |
-| `textOnAccent` | `#FFFFFF` | 主按钮文字 |
+| Token | Light | Dark | 用途 |
+|-------|-------|------|------|
+| `textPrimary` | `#141414` | `#F0F0F0` | 标题、正文 |
+| `textSecondary` | `rgba(20,20,20,0.74)` | `rgba(240,240,240,0.74)` | 副标题、说明 |
+| `textTertiary` | `rgba(20,20,20,0.60)` | `rgba(240,240,240,0.60)` | 弱化标签 |
+| `accentForeground` | `#FCFCFC` | `#181818` | 主按钮文字 |
 
 ### 2.4 语义色
 
@@ -142,7 +152,9 @@
 - Tokens：`glass`、`glassBlur`、`surfaceGlass`（`theme/tokens.ts`）
 
 **原则**：浮层与二次确认 Dialog **默认毛玻璃**；实体卡片（SurfaceCard、列表行）仍用 `surface` 实底 + 轻描边，不用毛玻璃。  
-Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏透明穿透）；Linux 与窄窗浮层侧栏仍用 CSS `.opptrix-glass-sidebar` / `.opptrix-overlay-sidebar`。  
+Electron **固定左侧栏**：macOS 用窗口 `vibrancy: 'sidebar'`（浅/深窗底色对齐 Cursor `#00FFFFFF` / `#40000000`），Windows 用 `backgroundMaterial: 'mica'`。vibrancy 开启时对齐 Cursor glass：`color-mix` 侧栏约 **42% / 36%**（`canvasAlt`）；主区 **单层** tint 约 **84% / 72%**（`canvas`）落在 `.opptrix-app-main` / `.opptrix-settings-content`，子级 chrome / 面板 / 聊天根节点（`.opptrix-chat-panel`、`ChatView` root、title-bar、`.opptrix-right-panel`、新闻/市场/专家全高页根等）保持透明以免叠层；内部卡片与列表 surface 仍可实底；启动 / onboarding 仍实色。Linux 与窄窗浮层侧栏仍用 CSS `.opptrix-glass-sidebar` / `.opptrix-overlay-sidebar`。  
+二次确认 Dialog（`.opptrix-glass-dialog-surface` / `.opptrix-dialog-alert-surface`）对齐 Cursor pretty-dialog 紧凑度：圆角约 12px、标题 ~13px / weight 600、正文 ~12px 次级色、按钮行 gap 6px / min-height 28px；表面 `color-mix(canvas 92%, transparent)` + `blur(16px)`。**accent 仍为 Opptrix 墨色**，不用 Cursor 按钮蓝。  
+聊天 `ask_user` 面板（`.opptrix-composer-user-prompt-panel`）同为 glass bubble：无 uppercase 喊麦标签、option hover 用 `rgba(20,20,20,0.08)`、确认行紧凑右对齐。  
 **Agent 规则**：`.cursor/rules/ui-overlay-components.mdc`（组件选型表与禁止项）。
 
 ## 6. Layout Constants
@@ -207,14 +219,14 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 
 | variant | 视觉 | 适用场景 |
 |---------|------|----------|
-| `primary` | 强调色实心 | 主操作（创建、保存、开始聊天） |
-| `secondary` | 浅底无描边 | 次要实心操作（刷新、编辑） |
+| `primary` | 墨色实心（`#141414` / `#F0F0F0`），圆角 `radiusSm`（6px） | 主操作（创建、保存、开始聊天） |
+| `secondary` | `surfaceHover` 轻填充，hover 略加深；圆角 6px | 次要实心操作（刷新、编辑、Dialog 取消） |
 | `outline` | 白底 + 描边；hover 变浅灰、描边加深；focus-visible 焦点环 | 紧凑行内操作（列表「聊天」） |
 | `ghost` | 透明 | 弱操作（取消、删除旁） |
 | `danger` | 错误色软底 | 破坏性确认 |
 | `icon` | 透明图标按钮 | 工具栏图标 |
 
-尺寸：`small`（左右 `8px`）/ `medium` / `large`。所有变体共享 hover、active（含轻微缩放）与 focus-visible。
+尺寸：`small`（min 22px）/ `medium`（min **28px**、paddingX 12、font 13px，对齐 Cursor monaco-button）/ `large`（min 40px）。所有变体共享 hover、active（含轻微缩放）与 focus-visible。**禁止**把 accent 改成 Cursor 按钮蓝 `#2778C1`。
 
 ### 7.7.2 OpptrixInlineEdit
 
@@ -239,40 +251,52 @@ Enter 确认、Esc 取消；Electron 宿主需挂 `-webkit-app-region: no-drag`�
 
 ### 7.9 设置页组件体系
 
-设置页 (`SettingsPage.tsx`) 使用 `settings/SettingsPrimitives.tsx` 提供的基础组件：
+设置页 (`SettingsPage.tsx`) 使用 `settings/SettingsPrimitives.tsx` 提供的基础组件，**视觉对齐 Cursor 现代设置页**（`cursor-settings-*` / `.cursor-settings-cell` / `.cursor-settings-sub-section-list` / `.cursor-settings-sidebar-cell`），而非旧版 VS Code settings-editor。Accent 仍用 Opptrix 墨色，不用 Cursor 按钮蓝。
 
 | 组件 | 用途 | 说明 |
 |------|------|------|
-| `SettingsGroup` | 圆角卡片组 | 1px border + `radiusXl`，overflow hidden，多行设置项的容器 |
-| `SettingsCard` | 独立卡片 | 与 Group 同风格，带 padding，适合单张独立的卡片 |
-| `SettingsSectionHeader` | 页面标题区 | Kicker（大写标签）+ 主标题 + 副标题，Apple 风格页面头部 |
-| `SettingsRow` | 设置行 | 标题 + 描述 + 控件，flex 布局，窄屏自动竖向堆叠 |
-| `SettingsPanelHeader` | 面板标题行 | Group 内小写大写分组标签 + action 区域 |
-| `SettingsInlineInput` | 行内输入框容器 | `inputShellInteractive` 外壳，最大宽 240px |
+| `SettingsGroup` | 分组容器 | ink 4% 浅底 + 发丝边框，`border-radius: 12px`，`overflow: hidden`；行间无 gap，靠分割线分隔 |
+| `SettingsCard` | 独立卡片 | 与 Group 同表面规格，带内边距 |
+| 表面常量 | `settingsSurfaceTint` / `settingsHairlineBorder` / `settingsSurfaceRadius` | 供 section 列表卡复用，避免复制 color-mix 魔法字符串 |
+| `SettingsSectionHeader` | 分组标题区 | 标题 12px / `textSecondary`（无 uppercase）；描述 12px / `textTertiary`；容器 gap 8px |
+| `SettingsRow` | 设置行 | 对齐 `.cursor-settings-cell`：`padding 12×14`、标题/描述 13/400、描述用 `textSecondary`、控件区 trailing gap 8px |
+| `SettingsPanelHeader` | Group 内小标题 | 12px / `textSecondary`，`padding ≈ 8×14`，**禁止** uppercase / 大 letter-spacing；可带右侧 `action`（如「+ 添加」）将入口置于列表顶部 |
+| `SettingsSectionLabel` | Group 上方页级标签 | `font-md` / 400 / `textSecondary` / line-height 16px；**禁止** `font-base`+600 或 uppercase |
+| `SettingsListPanel` | 列表面板 | 与 Group 同表面规格；可选固定 `height`；容纳 `SettingsAddBar` + `SettingsListScroll` + `SettingsListRow` |
+| `SettingsAddBar` | 列表顶栏 | 左侧说明（meta）+ 右侧添加/导入等操作；与 `SettingsPanelHeader` 互补（独立 listPanel 用本组件） |
+| `SettingsListScroll` | 列表滚动区 | 置于 AddBar 与行之间，自带 hover 滚动条样式 |
+| `SettingsListRow` | 列表行 | **默认只展示名称**（+ 可选一行说明）+ trailing 控件；勿默认暴露 URL / 路径 / 技术 id |
+| `SettingsInlineInput` | 行内输入框容器 | `inputShellInteractive` 外壳，最大宽约 **160px**（对齐 Cursor `.settings-input-cell-field`） |
 | `SettingsTextField` | 文本输入 | 封装 `SettingsInlineInput` + Fluent `Input` |
-| `SettingsMonospaceEditor` | 等宽多行编辑 | CodeMirror（`@uiw/react-codemirror`）：行号、折行、括号匹配；`canvasAlt` 底 + `settingsPanelBorder` 外框；默认高 320px。用于**沙盒环境**访问白名单与 **MCP 服务器** JSON 高级编辑 |
+| `SettingsMonospaceEditor` | 等宽多行编辑 | CodeMirror（`@uiw/react-codemirror`）：行号、折行、括号匹配；默认高 320px。用于**沙盒环境**访问白名单与 **MCP 服务器** JSON 高级编辑 |
 | `SettingsCredentialRow` | 密钥编辑行 | 密码框 + 眼睛切换 + 测试/保存按钮，连续编组 |
-| `SettingsActionRow` | 可点击行 | 整行可点击的导航/操作入口 |
-| `SettingsDivider` | 分割线 | 可选 fullWidth |
+| `SettingsActionRow` | 可点击行 | 整行可点击；hover 用 `surfaceHover`；文字规格与 `SettingsRow` 一致；trailing 可用 Chevron（页内导航） |
+| `SettingsExternalLinkRow` | 外链行 | 可选 leading icon + 标题/一行说明 + trailing `OpenRegular`（外开）；单层可点、`surfaceHover`；勿用 Chevron 冒充外链 |
+| `SettingsDivider` | 分割线 | 高 1px / `separator`；左右缩进与 cell padding 对齐（约 `0 14px`）；可选 fullWidth |
 | `SettingsStaticBlock` | 静态文本块 | 只读信息展示 |
-| `SettingsProviderRow` | 模型提供商行 | 头像 + 名称 + 模型查看 |
+| `SettingsProviderRow` | 模型提供商行 | 头像 + 名称 +「N 个模型」副标题（可点打开列表）；右侧仅编辑/删除，不展示 URL |
 | `SettingsEmptyState` | 空状态 | 居中图标 + 标题 + 描述，无内容时的占位展示 |
+| `SettingsRemoteModelSelector` | 设置页远程选模 | 薄封装聊天 `ModelSelector`：按提供商分组一步选定，同时写入 `provider_id` + `model`（翻译 / 多模态视觉） |
+| 数据源列表 | `ProviderSettingsCatalog` | 紧凑行（名称 / 状态 / 启用 / 拖拽）；点击行或「配置」打开 glass Dialog 编辑密钥与连接，不再行内 accordion |
 
-**Apple 风格规范**（对齐 Apple HIG: Clarity / Simplicity / Craft）：
-- 行内边距：`11px 20px`（窄屏 `10px 16px`）
-- 分割线用 `separator`（已加粗至 0.14 alpha）
-- 圆角：Group/Card 统一 `radiusXl(18px)`
-- 侧栏导航：默认 `textSecondary` + `fontWeight: 400`，选中态加深加粗
+**Cursor 设置页规格**（本机 glass CSS 实测对齐）：
+
+- **页头（tab header）**：`pageTitle` ≈ 17px / 500 / line-height 21px / `textPrimary`；`pageSubtitle` 13px / 400 / line-height 18px / `textSecondary`；header 内间距约 4px（subtitle `marginTop: 4px`）。内容区保留章节 `pageTitle` / `pageSubtitle`；**不**再叠 mac 专用 `StandaloneElectronTitleBar`「设置」次级 band（与非 mac 一致）。
+- **Section 标签（Group 上方）**：`sectionLabel` 12px / line-height 16px / `textSecondary`；**禁止 uppercase / 大 letter-spacing**；与 Group gap 8px；多 section 列表间距约 12–16px（`contentBody` gap）
+- **Group / Card**：背景 `color-mix(in srgb, var(--opptrix-text-primary) 4%, transparent)`（对齐 Cursor `--cursor-bg-quinary`）；发丝边框同级 ink 4%；**不要**厚边框实心 `canvas` 卡片感；圆角 12px
+- **Row / Cell**：`padding: 12px 14px`；`gap: 20px`；默认 `align-items: center`，stack 时 `flex-start`
+- **侧栏导航（`SettingsSidebar`）**：对齐 `.cursor-settings-sidebar-cell` — 项 padding ≈ `5×8`、`border-radius: 6px`、字号约 12–13px、默认 `textSecondary`；选中 `sidebarSelected` / `surfaceHover` 浅底 + `textPrimary`（勿过重）；搜索框保持紧凑
+- **侧栏分割线**：panel 模式与聊天左侧栏一致 — `WorkspaceSplitDivider` 默认 `tone`（`separatorStrong`），宽度 `WORKSPACE_SPLITTER_WIDTH`；panel 不叠 `opptrix-sidebar-edge`（发丝右缘仅 drawer 等需独立边时使用），避免与分割条「双线」
 - hover：`surfaceHover` 半透明底，不用实体灰块
 - 响应式断点：`660px` 竖向堆叠
-- 过渡：`motion.fast(140ms)` + `cubic-bezier(0.4, 0, 0.2, 1)`（Apple 默认曲线）
+- 过渡：`motion.fast(140ms)` + `cubic-bezier(0.4, 0, 0.2, 1)`
 - 输入框：`size="small"` + `minHeight: 30px`，更紧凑
 - 文案：面向最终用户，禁止技术术语（细则：`ui-copy-standard.mdc`）
 
-**禁止**：`window.confirm` / `alert` / `prompt`；无类名的裸 `DialogSurface`。  
+**禁止**：`window.confirm` / `alert` / `prompt`；无类名的裸 `DialogSurface`；调用方手写厚边框大圆角 `canvas` 卡片与 `SettingsGroup` 打架。  
 细则：`.cursor/rules/ui-overlay-components.mdc`。
 
-### 7.9 TabList
+### 7.10 TabList
 
 - Fluent Tab `appearance="subtle"` 或自定义 pill
 - 选中：白底 + shadow-card + accent 下划线
@@ -311,18 +335,23 @@ Enter 确认、Esc 取消；Electron 宿主需挂 `-webkit-app-region: no-drag`�
 - Griffel `makeStyles` 使用 `opptrixCssVars.*`（值为 `var(--opptrix-*)`），禁止新增静态 hex 字面量
 - `FluentProvider` 通过 `getOpptrixFluentTheme(resolvedScheme)` 切换
 
-### 暗色 palette（Apple 风格 monochrome）
+### 暗色 palette（对齐 Cursor Dark / Light 中性层级）
+
+> 来源：本机 `/Applications/Cursor.app/.../extensions/theme-cursor/` 的 `cursor-light` / `cursor-dark`。
+> 结构：主编辑区亮于侧栏；墨色 `#141414` / `#F0F0F0` + alpha 做边框与 hover。品牌强调色仍保持 Opptrix 单色墨，**未**改用 Cursor 按钮蓝。
 
 | Token | Light | Dark |
 |-------|-------|------|
-| `canvas` | `#FFFFFF` | `#1C1C1E` |
-| `canvasAlt` | `#F5F5F7` | `#2C2C2E` |
-| `textPrimary` | `#1D1D1F` | `#F5F5F7` |
-| `accent` | `#1D1D1F` | `#F5F5F7` |
-| `accentForeground` | `#FFFFFF` | `#1C1C1E` |
-| `surfaceGlass` / `glassSurfaceBg` | 白半透明 | `rgba(44,44,46,0.72)` |
-| `separator` / `border*` | 深灰低 alpha | 浅灰低 alpha |
-| `inputBg*` | 浅灰 | 抬升灰 `#3A3A3C` 等 |
+| `canvas` | `#FCFCFC` | `#181818` |
+| `canvasAlt` | `#F3F3F3` | `#141414` |
+| `canvasMuted` | `#EEEEEE` | `#2A2A2A` |
+| `textPrimary` | `#141414` | `#F0F0F0` |
+| `accent` | `#141414` | `#F0F0F0` |
+| `accentForeground` | `#FCFCFC` | `#181818` |
+| `surfaceGlass` / `glassSurfaceBg` | `rgba(252,252,252,0.72)` | `rgba(24,24,24,0.72)` |
+| `separator` / `border*` | `rgba(20,20,20,0.08)` | `rgba(240,240,240,0.075)` |
+| `separatorHairline` | 与 `separator` 同值（无 color-mix 再淡化） | 同左 |
+| `inputBg*` | `#FCFCFC` / hover `#F3F3F3` | `rgba(240,240,240,0.039)` 等 |
 
 语义色（`success` / `warning` / `error`）保留色相，仅调整 `*Soft` 背景 alpha。Markdown 与 Mermaid 分别见 `styles/markdown/tokens.css`、`MermaidBlock.tsx`。
 

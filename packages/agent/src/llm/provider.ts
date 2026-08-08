@@ -70,6 +70,12 @@ export interface LlmChatOpts {
   sessionId?: string
   /** 传入时走 SSE 流式；文本增量与 tool_calls 发现会回调 */
   onDelta?: (delta: LlmChatDelta) => void
+  /** 本轮覆盖；未设则回退 LlmConfig / 默认 1 */
+  temperature?: number
+  /** 本轮覆盖；未设则回退 LlmConfig / 默认 4096 */
+  maxTokens?: number
+  /** 有值时写入 body.reasoning_effort */
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 export interface LlmProvider {
@@ -360,8 +366,11 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       const body: Record<string, unknown> = {
         model: this.cfg.model,
         messages: messages.map(serializeMessage),
-        temperature: this.cfg.temperature ?? 0.3,
-        max_tokens: this.cfg.maxTokens ?? 4096,
+        temperature: opts?.temperature ?? this.cfg.temperature ?? 1,
+        max_tokens: opts?.maxTokens ?? this.cfg.maxTokens ?? 4096,
+      }
+      if (opts?.reasoningEffort) {
+        body.reasoning_effort = opts.reasoningEffort
       }
       if (tools?.length) {
         body.tools = tools

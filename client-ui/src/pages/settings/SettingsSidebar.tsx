@@ -62,10 +62,9 @@ const useStyles = makeStyles({
   sidebar: {
     display: 'flex',
     flexDirection: 'column',
-    width: opptrixTokens.settingsSidebarWidth,
-    minWidth: opptrixTokens.settingsSidebarWidth,
     height: '100%',
     flexShrink: 0,
+    boxSizing: 'border-box',
     backgroundColor: 'transparent',
   },
   sidebarWeb: {
@@ -138,14 +137,15 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '6px 10px',
-    borderRadius: opptrixTokens.radiusMd,
+    padding: '5px 8px',
+    borderRadius: '6px',
     cursor: 'pointer',
     border: 'none',
     backgroundColor: 'transparent',
     color: opptrixCssVars.textSecondary,
-    fontSize: 'var(--opptrix-font-base)',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 400,
+    lineHeight: '18px',
     width: '100%',
     textAlign: 'left',
     transitionProperty: 'background-color, color',
@@ -155,6 +155,8 @@ const useStyles = makeStyles({
   navItemOverlay: {
     ...sidebarTopMenuRow,
     marginBottom: 0,
+    padding: '5px 8px',
+    borderRadius: '6px',
     transitionProperty: 'background-color',
     transitionDuration: motion.fast,
   },
@@ -166,7 +168,7 @@ const useStyles = makeStyles({
   navItemActive: {
     backgroundColor: opptrixCssVars.sidebarSelected,
     color: opptrixCssVars.textPrimary,
-    fontWeight: 500,
+    fontWeight: 400,
   },
   navIcon: {
     color: opptrixCssVars.textTertiary,
@@ -194,18 +196,18 @@ display: 'flex',
     alignItems: 'flex-start',
     gap: '1px',
     width: '100%',
-    padding: '6px 8px',
-    borderRadius: opptrixTokens.radiusMd,
+    padding: '5px 8px',
+    borderRadius: '6px',
     border: 'none',
     backgroundColor: 'transparent',
     cursor: 'pointer',
     textAlign: 'left',
   },
   searchHitTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 400,
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
+    lineHeight: '18px',
   },
   searchHitMeta: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -241,6 +243,8 @@ interface SettingsSidebarProps {
   onSearchChange: (value: string) => void
   dynamicSearchEntries?: SettingsSearchEntry[]
   isMobile?: boolean
+  /** Panel / overlay width in px — omit to use design-token default */
+  width?: number
 }
 
 export default function SettingsSidebar({
@@ -248,6 +252,7 @@ export default function SettingsSidebar({
   visible = true,
   onClose,
   active, onSelect, onBack, search, onSearchChange, dynamicSearchEntries = [], isMobile = false,
+  width,
 }: SettingsSidebarProps) {
   const s = useStyles()
   const { resolvedScheme } = useTheme()
@@ -259,6 +264,10 @@ export default function SettingsSidebar({
   const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
   const sidebarSolidDark = electronChrome && !nativeVibrancy && resolvedScheme === 'dark'
   const [communityOpen, setCommunityOpen] = useState(false)
+  const resolvedWidth = width ?? opptrixTokens.settingsSidebarWidthPx
+  const widthStyle = !isMobile
+    ? { width: resolvedWidth, minWidth: resolvedWidth }
+    : undefined
 
   const searchActive = Boolean(search.trim()) && !isMobile
 
@@ -400,10 +409,17 @@ export default function SettingsSidebar({
     return (
       <OverlaySidebarShell
         open={visible}
-        width={opptrixTokens.settingsSidebarWidth}
+        width={`${resolvedWidth}px`}
         onClose={onClose}
       >
-        <div className={mergeClasses(s.sidebar, topPadClass, 'opptrix-settings-sidebar')}>
+        <div
+          className={mergeClasses(
+            s.sidebar,
+            topPadClass,
+            'opptrix-settings-sidebar',
+          )}
+          style={widthStyle}
+        >
           {body}
         </div>
       </OverlaySidebarShell>
@@ -421,8 +437,8 @@ export default function SettingsSidebar({
         electronChrome && topPadClass,
         sidebarGlass && 'opptrix-glass-sidebar',
         'opptrix-settings-sidebar',
-        'opptrix-sidebar-edge',
       )}
+      style={widthStyle}
     >
       {body}
     </aside>

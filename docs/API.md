@@ -867,6 +867,7 @@ Content-Type: application/json
 - 每轮聊天按当前模型窗长（优先 [models.dev](https://models.dev) 模糊匹配，失败降级启发式，默认 128k）估算用量；接近上限时 micro / structured 压缩，SSE 推送 `context_compact`。
 - UI transcript（`turns`）不变；模型侧使用 `sessionMemory` + 近端消息。详见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
 - `PATCH /api/sessions/:id` 切换 `model` 时按新窗口再检查；响应可含 `contextHint`（有压缩时）。
+- 同一路由可 PATCH `llmParams`（`temperature` / `maxTokens` / `reasoningEffort`）；按会话持久化，旧会话缺省时请求体温度 1、`max_tokens` 4096、不发 `reasoning_effort`。GET session 的 `session.llmParams` 供 Composer 选模面板读写。
 
 **SSE `context_compact` 事件**
 

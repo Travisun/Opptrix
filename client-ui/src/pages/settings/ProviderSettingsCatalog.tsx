@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
   Switch,
   Text,
   makeStyles,
@@ -7,7 +12,6 @@ import {
 } from '@fluentui/react-components'
 import {
   ChevronDownRegular,
-  ChevronRightRegular,
   ChevronUpRegular,
 } from '@fluentui/react-icons'
 import type { InstalledProviderSummary, ProviderCatalogResponse, PublicProviderRuntime } from '../../types/provider'
@@ -26,12 +30,17 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { motion } from '../../theme/mixins'
 import { SettingsListPanelSkeleton } from './SettingsListPanelSkeleton'
+import {
+  settingsHairlineBorder,
+  settingsSurfaceRadius,
+  settingsSurfaceTint,
+} from './SettingsPrimitives'
 
 const useListStyles = makeStyles({
   listPanel: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
+    border: settingsHairlineBorder,
+    borderRadius: settingsSurfaceRadius,
+    backgroundColor: settingsSurfaceTint,
     overflow: 'hidden',
     height: '360px',
     display: 'flex',
@@ -72,8 +81,14 @@ const useListStyles = makeStyles({
       borderBottom: 'none',
     },
   },
-  listRowExpanded: {
-    paddingBottom: '8px',
+  listRowClickable: {
+    cursor: 'pointer',
+    transitionProperty: 'background-color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+    },
   },
   listRowTop: {
     display: 'flex',
@@ -87,13 +102,14 @@ const useListStyles = makeStyles({
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '1px',
   },
   listRowMainTop: {
     display: 'flex',
     alignItems: 'baseline',
     flexWrap: 'wrap',
     gap: '4px 8px',
+    minWidth: 0,
   },
   listRowTitle: {
     fontSize: 'var(--opptrix-font-base)',
@@ -115,25 +131,27 @@ const useListStyles = makeStyles({
     alignItems: 'center',
     gap: '6px',
   },
-  credentialExpand: {
-    width: '100%',
-    maxWidth: '100%',
-    boxSizing: 'border-box',
-    overflow: 'hidden',
-  },
-  urlToggle: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: 0,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
+  configBtn: {
+    minHeight: '24px',
+    height: '24px',
+    padding: '0 8px',
     fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    ':hover': {
-      color: opptrixCssVars.textSecondary,
-    },
+    fontWeight: 500,
+  },
+  configDialogSurface: {
+    maxWidth: '440px',
+    width: 'min(440px, calc(100vw - 32px))',
+  },
+  configDialogBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    padding: '4px 0 0',
+  },
+  configDialogIntro: {
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.5,
   },
   sectionBlock: {
     marginTop: '12px',
@@ -366,8 +384,8 @@ const usePriorityStyles = makeStyles({
     minWidth: '220px',
     maxWidth: '360px',
     borderRadius: opptrixTokens.radiusMd,
-    border: opptrixCssVars.settingsPanelBorder,
-    backgroundColor: opptrixCssVars.canvas,
+    border: settingsHairlineBorder,
+    backgroundColor: settingsSurfaceTint,
     boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06)',
     transform: 'scale(1.02)',
   },
@@ -419,6 +437,26 @@ export function useProviderCatalog() {
   return { catalog, loading, refresh, setCatalog }
 }
 
+function providerConfigStatus(provider: PublicProviderRuntime): 'configured' | 'partial' | 'none' | 'n/a' {
+  const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
+  if (requiredSecrets.length) {
+    const configured = requiredSecrets.filter(f => provider.secretsConfigured[f.key]).length
+    if (configured === requiredSecrets.length) return 'configured'
+    if (configured > 0) return 'partial'
+    return 'none'
+  }
+  if (provider.settingsFields.some(f => f.type === 'secret')) {
+    const anySecret = provider.settingsFields.some(
+      f => f.type === 'secret' && provider.secretsConfigured[f.key],
+    )
+    return anySecret ? 'configured' : 'none'
+  }
+  if (provider.settingsFields.some(isExpandableSettingsField)) {
+    return 'configured'
+  }
+  return 'n/a'
+}
+
 function providerOrderStatusMeta(provider: PublicProviderRuntime): string {
   const parts: string[] = []
   if (provider.subtitle?.trim()) parts.push(provider.subtitle.trim())
@@ -432,7 +470,7 @@ function providerOrderStatusMeta(provider: PublicProviderRuntime): string {
     return parts.join(' · ')
   }
   if (provider.requiresApiKey) {
-    parts.push('请填写密钥并打开开关')
+    parts.push('请完成配置并打开开关')
     return parts.join(' · ')
   }
   parts.push('请打开开关后生效')
@@ -444,22 +482,14 @@ function providerStatusMeta(provider: PublicProviderRuntime, marketLabel: string
   if (marketLabel) parts.push(marketLabel)
   if (provider.subtitle?.trim()) parts.push(provider.subtitle.trim())
 
-  const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
-  if (requiredSecrets.length) {
+  const configStatus = providerConfigStatus(provider)
+  if (configStatus === 'configured') parts.push('已配置')
+  else if (configStatus === 'partial') {
+    const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
     const configured = requiredSecrets.filter(f => provider.secretsConfigured[f.key]).length
-    parts.push(configured === requiredSecrets.length
-      ? '密钥已配置'
-      : `密钥 ${configured}/${requiredSecrets.length}`)
-  } else if (provider.settingsFields.some(f => f.type === 'secret')) {
-    const anySecret = provider.settingsFields.some(
-      f => f.type === 'secret' && provider.secretsConfigured[f.key],
-    )
-    parts.push(anySecret ? '密钥已配置' : '尚未配置密钥')
-  }
-
-  const expandableCount = provider.settingsFields.filter(isExpandableSettingsField).length
-  if (expandableCount > 0) {
-    parts.push(`${expandableCount} 项可配置`)
+    parts.push(`密钥 ${configured}/${requiredSecrets.length}`)
+  } else if (configStatus === 'none') {
+    parts.push('未配置')
   }
 
   return parts.join(' · ')
@@ -633,7 +663,7 @@ function ProviderListRow({
   const s = useListStyles()
   const priorityS = usePriorityStyles()
   const toast = useSettingsToast()
-  const [expanded, setExpanded] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [toggling, setToggling] = useState(false)
 
   const hasSettings = settingsMode === 'full' && provider.settingsFields.some(isExpandableSettingsField)
@@ -658,83 +688,129 @@ function ProviderListRow({
     }
   }
 
+  const openConfig = () => {
+    if (hasSettings) setDialogOpen(true)
+  }
+
   return (
-    <div className={mergeClasses(
-      s.listRow,
-      expanded && hasSettings && s.listRowExpanded,
-      sortable && dragging && priorityS.dragRowDisabled,
-      sortable && !provider.priorityEligible && priorityS.dragRowDisabled,
-    )}>
-      <div className={s.listRowTop}>
-        {sortable && (
-          <span
-            className={priorityS.dragHandle}
-            aria-label={`拖动 ${provider.title}`}
-            onPointerDown={onDragHandlePointerDown}
-          >
-            ≡
-          </span>
+    <>
+      <div
+        className={mergeClasses(
+          s.listRow,
+          hasSettings && s.listRowClickable,
+          sortable && dragging && priorityS.dragRowDisabled,
+          sortable && !provider.priorityEligible && priorityS.dragRowDisabled,
         )}
-        <div className={s.listRowMain}>
-          <div className={s.listRowMainTop}>
-            <Text className={s.listRowTitle} block title={provider.title}>
-              {provider.title}
-            </Text>
-            <Text className={s.listRowMeta} block>
-              {statusMeta}
-            </Text>
-            {hasSettings && (
-              <button
-                type="button"
-                className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
-                aria-expanded={expanded}
-                onClick={() => setExpanded(v => !v)}
-              >
-                {expanded
-                  ? <ChevronDownRegular fontSize={11} />
-                  : <ChevronRightRegular fontSize={11} />}
-                <span>{expanded ? '收起设置' : '配置连接'}</span>
-              </button>
-            )}
-          </div>
-          {expanded && hasSettings && (
-            <div className={s.credentialExpand}>
-              <ProviderSettingsForm provider={provider} onSaved={onSaved} />
-            </div>
-          )}
-        </div>
-        <div className={s.listRowControls}>
+        onClick={hasSettings ? openConfig : undefined}
+        onKeyDown={hasSettings ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            openConfig()
+          }
+        } : undefined}
+        role={hasSettings ? 'button' : undefined}
+        tabIndex={hasSettings ? 0 : undefined}
+        aria-label={hasSettings ? `配置 ${provider.title}` : undefined}
+      >
+        <div className={s.listRowTop}>
           {sortable && (
-            <div className={priorityS.moveControls}>
-              <OpptrixButton
-                variant="icon"
-                size="small"
-                className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
-                disabled={moveUpDisabled || saving}
-                aria-label={`上移 ${provider.title}`}
-                icon={<ChevronUpRegular fontSize={12} />}
-                onClick={onMoveUp}
-              />
-              <OpptrixButton
-                variant="icon"
-                size="small"
-                className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
-                disabled={moveDownDisabled || saving}
-                aria-label={`下移 ${provider.title}`}
-                icon={<ChevronDownRegular fontSize={12} />}
-                onClick={onMoveDown}
-              />
-            </div>
+            <span
+              className={priorityS.dragHandle}
+              aria-label={`拖动 ${provider.title}`}
+              onPointerDown={onDragHandlePointerDown}
+              onClick={e => e.stopPropagation()}
+            >
+              ≡
+            </span>
           )}
-          <Switch
-            checked={provider.enabled}
-            disabled={toggling}
-            onChange={(_, d) => { void handleToggleEnabled(!!d.checked) }}
-            aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.title}`}
-          />
+          <div className={s.listRowMain}>
+            <div className={s.listRowMainTop}>
+              <Text className={s.listRowTitle} block title={provider.title}>
+                {provider.title}
+              </Text>
+              <Text className={s.listRowMeta} block>
+                {statusMeta}
+              </Text>
+            </div>
+          </div>
+          <div
+            className={s.listRowControls}
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => e.stopPropagation()}
+          >
+            {hasSettings && (
+              <OpptrixButton
+                variant="ghost"
+                size="small"
+                className={s.configBtn}
+                onClick={openConfig}
+              >
+                配置
+              </OpptrixButton>
+            )}
+            {sortable && (
+              <div className={priorityS.moveControls}>
+                <OpptrixButton
+                  variant="icon"
+                  size="small"
+                  className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
+                  disabled={moveUpDisabled || saving}
+                  aria-label={`上移 ${provider.title}`}
+                  icon={<ChevronUpRegular fontSize={12} />}
+                  onClick={onMoveUp}
+                />
+                <OpptrixButton
+                  variant="icon"
+                  size="small"
+                  className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
+                  disabled={moveDownDisabled || saving}
+                  aria-label={`下移 ${provider.title}`}
+                  icon={<ChevronDownRegular fontSize={12} />}
+                  onClick={onMoveDown}
+                />
+              </div>
+            )}
+            <Switch
+              checked={provider.enabled}
+              disabled={toggling}
+              onChange={(_, d) => { void handleToggleEnabled(!!d.checked) }}
+              aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.title}`}
+            />
+          </div>
         </div>
       </div>
-    </div>
+
+      {hasSettings && (
+        <Dialog
+          open={dialogOpen}
+          modalType="modal"
+          onOpenChange={(_, data) => {
+            if (!data.open) setDialogOpen(false)
+          }}
+        >
+          <DialogSurface
+            className={mergeClasses('opptrix-glass-dialog-surface', s.configDialogSurface)}
+          >
+            <DialogBody>
+              <DialogTitle>{provider.title}</DialogTitle>
+              <DialogContent className={s.configDialogBody}>
+                {(provider.subtitle?.trim() || marketLabel) && (
+                  <Text className={s.configDialogIntro} block>
+                    {[marketLabel, provider.subtitle?.trim()].filter(Boolean).join(' · ')}
+                  </Text>
+                )}
+                <ProviderSettingsForm
+                  provider={provider}
+                  onSaved={() => {
+                    onSaved()
+                  }}
+                />
+              </DialogContent>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
+      )}
+    </>
   )
 }
 
@@ -783,8 +859,8 @@ export function ProviderCatalogListPanel({
                 ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
                 : '以下为内置数据源；付费源需填写密钥后可在设置中启用')
               : (enabledCount > 0
-                ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源 · 拖拽调整回退顺序`
-                : '配置连接并启用数据源；拖拽列表可调整行情回退顺序')}
+                ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源 · 点击行或「配置」编辑连接 · 拖拽调整回退顺序`
+                : '点击行或「配置」编辑连接并启用；拖拽列表可调整行情回退顺序')}
           </Text>
         </div>
         <div className={mergeClasses(s.listScroll, sortable && priorityS.dragList, 'opptrix-scroll', 'opptrix-scroll-hover')}>
