@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   translationGetModels: () => ipcRenderer.invoke('translation-get-models'),
   translationGetDownloadDir: () => ipcRenderer.invoke('translation-get-download-dir'),
   translationOpenDownloadDir: () => ipcRenderer.invoke('translation-open-download-dir'),
+  /** Open a directory under agent-workspace in the system file manager */
+  openLocalDirectory: (dirPath) => ipcRenderer.invoke('open-local-directory', dirPath),
   translationStartDownload: (modelId) => ipcRenderer.invoke('translation-start-download', modelId),
   translationCancelDownload: () => ipcRenderer.invoke('translation-cancel-download'),
   translationTranslateArticle: (payload) => ipcRenderer.invoke('translation-translate-article', payload),

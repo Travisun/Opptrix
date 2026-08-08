@@ -17,10 +17,10 @@ import { fadeInUp } from '../theme/mixins'
 import { copyTextToClipboard } from '../platform/clipboard'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 
-/** 与 ChatComposer 约 8 行限高对齐 */
+/** 用户气泡编辑区约 5 行可见高度（超出滚动） */
 const USER_BUBBLE_LINE_HEIGHT = 1.65
 const USER_BUBBLE_FONT_PX = 16
-const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 8)
+const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 5)
 
 const useStyles = makeStyles({
   entry: {
@@ -85,6 +85,7 @@ const useStyles = makeStyles({
     lineHeight: 'inherit',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
+    minHeight: `${USER_BUBBLE_MAX_HEIGHT}px`,
     maxHeight: `${USER_BUBBLE_MAX_HEIGHT}px`,
     overflowY: 'auto',
     boxSizing: 'border-box',
@@ -413,7 +414,7 @@ function ChatMessageItem({
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={handleEditKeyDown}
                 onClick={e => e.stopPropagation()}
-                rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+                rows={5}
                 aria-label="编辑消息"
               />
               <div className={s.editActions} onClick={e => e.stopPropagation()}>

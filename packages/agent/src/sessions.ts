@@ -84,6 +84,8 @@ export interface CreateSessionOptions {
   expertIcon?: ExpertIcon | null
   /** 会话级技能专长快照（已消毒） */
   rolePersona?: string | null
+  /** providerId:modelName；省略时可由 AgentEngine 填入当前 defaultModel */
+  model?: string
 }
 
 export interface DisplayMessage {
@@ -333,6 +335,7 @@ export class SessionStore {
       : opts ?? {}
     const title = normalized.title?.trim() || '新对话'
     const now = new Date().toISOString()
+    const model = normalized.model?.trim() || undefined
     const record: SessionRecord = {
       id: randomUUID(),
       title,
@@ -344,6 +347,7 @@ export class SessionStore {
       expertId: normalized.expertId ?? null,
       expertIcon: normalized.expertIcon ?? null,
       rolePersona: normalized.rolePersona ?? null,
+      ...(model ? { model } : {}),
     }
     writeRecord(record)
     return record

@@ -210,6 +210,7 @@ opptrix://chat?session={encodeURIComponent(sessionId)}
 | `notification-open-settings` | `notificationOpenSettings()` | 打开系统「通知」设置页（macOS / Windows） |
 | `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick`；权限为 denied 时返回 `false` |
 | `window-is-focused` | `windowIsFocused()` | 主窗口是否 focused（注意力判断） |
+| `open-local-directory` | `openLocalDirectory(dirPath)` | 用系统文件管理器打开目录；路径须在 `resolveUserDataRoot()/agent-workspace` 之下，不存在则递归创建后再打开 |
 
 协议事件仍为 `opptrix-protocol`（`onProtocolOpen`），与通知点击深链共用。
 

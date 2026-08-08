@@ -606,6 +606,7 @@ export class AgentEngine {
   }
 
   async createSession(opts?: CreateSessionOptions) {
+    const model = opts?.model?.trim() || this.settings.defaultModel?.trim() || undefined
     if (opts?.expertId) {
       const expert = await getExpertCatalogService().getDefinition(opts.expertId)
       if (!expert) {
@@ -616,11 +617,13 @@ export class AgentEngine {
         expertId: expert.id,
         expertIcon: expert.icon,
         rolePersona: resolveInitialRolePersona(expert.persona),
+        model,
       })
     }
     return this.sessions.create({
       title: opts?.title?.trim() || '新对话',
       rolePersona: resolveInitialRolePersona(null),
+      model,
     })
   }
 

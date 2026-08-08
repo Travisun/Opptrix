@@ -22,6 +22,7 @@ import {
   DeleteRegular,
   DismissRegular,
   EditRegular,
+  FolderOpenRegular,
   FolderRegular,
   TextDescriptionRegular,
 } from '@fluentui/react-icons'
@@ -56,6 +57,8 @@ export interface ChatSessionTitleToolsProps {
   onArchive: (folderId: string) => void | Promise<void>
   onDelete: () => void
   onExport: () => void | Promise<void>
+  /** 用系统文件管理器打开本会话工作区目录（非桌面端可降级为复制路径） */
+  onOpenSessionDir: () => void | Promise<void>
   /** 打开本会话技能专长编辑抽屉 */
   onEditRolePersona?: () => void
   /** 会话创建时间 ISO */
@@ -77,6 +80,7 @@ export default function ChatSessionTitleTools({
   onArchive,
   onDelete,
   onExport,
+  onOpenSessionDir,
   onEditRolePersona,
   createdAt,
   sessionUsageTotal,
@@ -304,6 +308,11 @@ export default function ChatSessionTitleTools({
     await onExport()
   }
 
+  const handleOpenSessionDirClick = async () => {
+    closeMenus()
+    await onOpenSessionDir()
+  }
+
   const handleEditRolePersonaClick = () => {
     closeMenus()
     onEditRolePersona?.()
@@ -404,6 +413,10 @@ export default function ChatSessionTitleTools({
       <ComposerTooltipMenuItem onClick={() => { void handleExportClick() }}>
         <ArrowExportRegular fontSize={16} />
         <span>导出会话</span>
+      </ComposerTooltipMenuItem>
+      <ComposerTooltipMenuItem onClick={() => { void handleOpenSessionDirClick() }}>
+        <FolderOpenRegular fontSize={16} />
+        <span>会话目录</span>
       </ComposerTooltipMenuItem>
       {(createdAt || (sessionUsageTotal != null && sessionUsageTotal > 0)) && (
         <div className="opptrix-session-tools-menu__meta">

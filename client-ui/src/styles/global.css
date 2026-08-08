@@ -1506,11 +1506,11 @@ select:focus-visible {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   box-sizing: border-box;
-  padding: 12px 14px;
-  margin-bottom: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--opptrix-canvas) 96%, transparent);
   backdrop-filter: blur(16px) saturate(160%);
@@ -1524,21 +1524,21 @@ select:focus-visible {
 .opptrix-composer-user-prompt-panel__head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .opptrix-composer-user-prompt-panel__title {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: normal;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: none;
-  color: var(--opptrix-text-secondary, #6B6B6B);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
 }
 
 .opptrix-composer-user-prompt-panel__prompt {
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 400;
   line-height: 1.45;
   color: var(--opptrix-text-primary, var(--opptrix-text, #1A1A1A));
 }
@@ -1546,8 +1546,8 @@ select:focus-visible {
 .opptrix-composer-user-prompt-panel__options {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 248px;
+  gap: 3px;
+  max-height: 240px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1558,7 +1558,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   margin-top: -2px;
 }
 
@@ -1567,18 +1567,18 @@ select:focus-visible {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  min-height: 32px;
-  padding: 8px 10px;
+  min-height: 28px;
+  padding: 6px 8px;
   border: none;
   border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.4;
   color: var(--opptrix-text, #1A1A1A);
-  transition: background-color 140ms ease, box-shadow 140ms ease;
+  transition: background-color 140ms ease, box-shadow 140ms ease, font-weight 140ms ease;
 }
 
 .opptrix-composer-user-prompt-panel__option:hover:not(:disabled) {
@@ -1591,6 +1591,7 @@ select:focus-visible {
 }
 
 .opptrix-composer-user-prompt-panel__option--selected {
+  font-weight: 500;
   background: rgba(20, 20, 20, 0.1);
   box-shadow: inset 0 0 0 1px rgba(20, 20, 20, 0.12);
 }
@@ -1607,10 +1608,10 @@ select:focus-visible {
 .opptrix-composer-user-prompt-panel__custom {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   margin-top: 0;
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
@@ -1625,7 +1626,8 @@ select:focus-visible {
 
 .opptrix-composer-user-prompt-panel__custom-hint {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 400;
   color: var(--opptrix-text-tertiary, #9A9A9A);
   user-select: none;
 }
@@ -1639,16 +1641,16 @@ select:focus-visible {
 
 /* 密钥保险箱录入 — 略松排版，按钮仍紧凑 */
 .opptrix-composer-user-prompt-panel--secret {
-  gap: 12px;
-  padding: 12px 14px 14px;
+  gap: 10px;
+  padding: 10px 12px 12px;
 }
 
 .opptrix-composer-user-prompt-panel__hint {
-  margin: 2px 0 0;
-  font-size: 12px;
+  margin: 1px 0 0;
+  font-size: 11px;
   font-weight: 400;
-  line-height: 1.45;
-  color: var(--opptrix-text-secondary, #6B6B6B);
+  line-height: 1.4;
+  color: var(--opptrix-text-tertiary, #9A9A9A);
 }
 
 .opptrix-composer-user-prompt-panel__secret-field {
@@ -1670,8 +1672,8 @@ select:focus-visible {
   justify-content: flex-end;
   gap: 6px;
   width: 100%;
-  margin-top: 2px;
-  padding-top: 10px;
+  margin-top: 0;
+  padding-top: 8px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
@@ -1694,7 +1696,7 @@ select:focus-visible {
 
 .opptrix-composer-user-prompt-panel--confirm .opptrix-composer-user-prompt-panel__actions {
   border-top: none;
-  padding-top: 10px;
+  padding-top: 8px;
   margin-top: 0;
 }
 
