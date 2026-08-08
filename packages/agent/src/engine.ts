@@ -83,12 +83,13 @@ import {
 import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
 import {
   isLibraryExtractReady,
+  isTranscriptExtractReady,
   readAttachmentMeta,
   validateAttachmentAgainstCapabilities,
-  waitForPdfExtractReady,
+  waitForAttachmentExtractReady,
 } from './chat-attachments.js'
 import type { ChatAttachmentMeta } from './media-types.js'
-import { isLibraryIngestKind } from './media-types.js'
+import { isLibraryIngestKind, isTranscriptExtractKind } from './media-types.js'
 import { buildUserContentParts, chatMessageContentToText } from './content-parts.js'
 
 export interface SessionContextUsage {
@@ -851,14 +852,39 @@ export class AgentEngine {
 
     const activeModel = modelRef?.trim() || record.model
 
-    // 研报库附件：发送前短等整理；ready 后文本模型可过校验
+    // 研报库 / 音视频附件：发送前短等整理或转写；ready 后以文本过校验
     const resolvedAttachments: ChatAttachmentMeta[] = []
     for (const meta of attachmentMetas) {
-      if (!isLibraryIngestKind(meta.kind)) {
+      const needsExtractWait =
+        isLibraryIngestKind(meta.kind) || isTranscriptExtractKind(meta.kind)
+      if (!needsExtractWait) {
         resolvedAttachments.push(meta)
         continue
       }
-      const waited = await waitForPdfExtractReady(sessionId, meta.id)
+      if (isTranscriptExtractKind(meta.kind)) {
+        progress?.onProgress?.({
+          type: 'thinking',
+          round: 0,
+          label: meta.extract?.message?.trim() || '正在转写音视频…',
+        })
+      }
+      const waited = await waitForAttachmentExtractReady(
+        sessionId,
+        meta.id,
+        undefined,
+        isTranscriptExtractKind(meta.kind)
+          ? {
+              onPending: (pendingMeta) => {
+                const label = pendingMeta.extract?.message?.trim() || '正在转写音视频…'
+                progress?.onProgress?.({
+                  type: 'thinking',
+                  round: 0,
+                  label,
+                })
+              },
+            }
+          : undefined,
+      )
       if (!waited.ok) {
         return {
           reply: waited.message,
@@ -880,8 +906,11 @@ export class AgentEngine {
       let count = 0
       let total = 0
       for (const meta of resolvedAttachments) {
-        // 已整理的研报库附件不占原生多模态能力；图片仍可附带看图
-        if (isLibraryExtractReady(meta) && meta.kind !== 'image') {
+        // 已整理的研报库 / 已转写音视频不占原生多模态能力；图片仍可附带看图
+        if (
+          (isLibraryExtractReady(meta) && meta.kind !== 'image')
+          || isTranscriptExtractReady(meta)
+        ) {
           count += 1
           total += meta.size
           continue

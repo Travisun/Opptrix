@@ -87,7 +87,7 @@ export function modelAllowsAttachments(_media: ModelMediaCapabilities | null): b
   return true
 }
 
-export function buildAcceptForMedia(media: ModelMediaCapabilities | null): string {
+export function buildAcceptForMedia(_media: ModelMediaCapabilities | null): string {
   const parts: string[] = [
     'application/pdf',
     '.txt',
@@ -98,18 +98,19 @@ export function buildAcceptForMedia(media: ModelMediaCapabilities | null): strin
     '.pptx',
     '.ppt',
     'image/*',
+    // 音视频后台转写，不依赖模型原生多模态
+    'audio/*',
+    'video/*',
   ]
-  if (media?.input.includes('video')) parts.push('video/*')
-  if (media?.input.includes('audio')) parts.push('audio/*')
   return [...new Set(parts)].join(',')
 }
 
 export function modelMediaHint(media: ModelMediaCapabilities | null): string | null {
-  if (!media) return '支持研报、文档与图片'
+  if (!media) return '支持研报、文档、图片与音视频'
   const kinds = media.input.filter(k => k !== 'text')
-  const labels = new Set<string>(['研报', '文档', '图片'])
+  const labels = new Set<string>(['研报', '文档', '图片', '音频', '视频'])
   for (const k of kinds) {
-    if (k === 'pdf' || k === 'document' || k === 'image') continue
+    if (k === 'pdf' || k === 'document' || k === 'image' || k === 'audio' || k === 'video') continue
     labels.add(KIND_LABEL[k as Exclude<MediaKind, 'text'>] ?? k)
   }
   return `支持${[...labels].join('、')}`
@@ -119,9 +120,14 @@ export function isLibraryIngestKind(kind: MediaKind): boolean {
   return kind === 'pdf' || kind === 'document' || kind === 'image'
 }
 
+/** 音视频后台转写路径（与研报库入库一样不要求模型原生支持） */
+export function isTranscriptExtractKind(kind: MediaKind): boolean {
+  return kind === 'audio' || kind === 'video'
+}
+
 export function isKindSupported(media: ModelMediaCapabilities | null, kind: MediaKind): boolean {
   if (kind === 'text') return true
-  if (isLibraryIngestKind(kind)) return true
+  if (isLibraryIngestKind(kind) || isTranscriptExtractKind(kind)) return true
   if (!media) return false
   return media.input.includes(kind)
 }
@@ -132,7 +138,22 @@ export function formatBytesShort(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+/** 单文件达此大小时，上传前需用户确认（处理可能更久） */
+export const LARGE_FILE_WARN_BYTES = 500 * 1024 * 1024
+
+/** 本地整理/转写路径的附件数量上限（与后端放宽后对齐） */
+const LOCAL_EXTRACT_MAX_COUNT = 50
+
 const DEFAULT_DOC_MAX = 20 * 1024 * 1024
+const DEFAULT_AUDIO_MAX = 25 * 1024 * 1024
+const DEFAULT_VIDEO_MAX = 50 * 1024 * 1024
+
+function defaultMaxBytesForKind(kind: MediaKind): number | undefined {
+  if (isLibraryIngestKind(kind)) return DEFAULT_DOC_MAX
+  if (kind === 'audio') return DEFAULT_AUDIO_MAX
+  if (kind === 'video') return DEFAULT_VIDEO_MAX
+  return undefined
+}
 
 export function mimeToKind(mime: string, filename?: string): MediaKind | null {
   const m = resolveFileMime({ type: mime, name: filename ?? '' }).toLowerCase().split(';')[0]?.trim() ?? ''
@@ -178,18 +199,21 @@ export function validateFileForModel(
   if (!isKindSupported(media, kind)) {
     return '当前模型不支持此类文件，可换模型或去掉附件'
   }
-  const maxBytes = media?.limits.maxBytesByKind[kind]
-    ?? (isLibraryIngestKind(kind) ? DEFAULT_DOC_MAX : undefined)
-  if (maxBytes && file.size > maxBytes) {
-    return `文件过大（上限 ${formatBytesShort(maxBytes)}）`
+  const localExtract = isLibraryIngestKind(kind) || isTranscriptExtractKind(kind)
+  // 本地入库/转写路径：不按模型限额拦截单文件与总大小（超大文件由上传前确认提示）
+  if (!localExtract) {
+    const maxBytes = media?.limits.maxBytesByKind[kind] ?? defaultMaxBytesForKind(kind)
+    if (maxBytes && file.size > maxBytes) {
+      return `文件过大（上限 ${formatBytesShort(maxBytes)}）`
+    }
+    const maxTotal = media?.limits.maxTotalBytes ?? 0
+    if (media && maxTotal > 0 && pinnedTotal + file.size > maxTotal) {
+      return `附件总大小超出限制（上限 ${formatBytesShort(maxTotal)}）`
+    }
   }
-  const maxCount = Math.max(media?.limits.maxCount ?? 0, isLibraryIngestKind(kind) ? 5 : 0)
-  if (media && pinnedCount >= maxCount) {
+  const maxCount = Math.max(media?.limits.maxCount ?? 0, localExtract ? LOCAL_EXTRACT_MAX_COUNT : 0)
+  if (maxCount > 0 && pinnedCount >= maxCount) {
     return `附件数量已达上限（${maxCount} 个）`
-  }
-  const maxTotal = Math.max(media?.limits.maxTotalBytes ?? 0, isLibraryIngestKind(kind) ? 80 * 1024 * 1024 : 0)
-  if (media && pinnedTotal + file.size > maxTotal) {
-    return `附件总大小超出限制（上限 ${formatBytesShort(maxTotal)}）`
   }
   return null
 }

@@ -1649,6 +1649,8 @@ export async function uploadSessionAttachment(
   pinnedCount = 0,
   pinnedTotalBytes = 0,
 ): Promise<ChatAttachmentMeta> {
+  // 强制 octet-stream：部分环境会用 File.type（如 video/mp4）覆盖请求头，导致服务端未命中高限 parser
+  const body = file.slice(0, file.size, 'application/octet-stream')
   const resp = await fetchWithTimeout(`${API_BASE}/sessions/${sessionId}/attachments`, {
     method: 'POST',
     headers: {
@@ -1658,11 +1660,22 @@ export async function uploadSessionAttachment(
       'X-Pinned-Count': String(pinnedCount),
       'X-Pinned-Total-Bytes': String(pinnedTotalBytes),
     },
-    body: file,
+    body,
   }, 120_000)
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({})) as { error?: string }
-    throw new Error(err.error || `上传失败 (${resp.status})`)
+    const err = await resp.json().catch(() => ({})) as {
+      error?: string
+      message?: string
+      code?: string
+    }
+    const raw = (err.error || err.message || '').trim()
+    const tooLarge = resp.status === 413
+      || /payload\s*too\s*large/i.test(raw)
+      || err.code === 'FST_ERR_CTP_BODY_TOO_LARGE'
+    if (tooLarge) {
+      throw new Error('暂时无法添加该文件，请稍后重试')
+    }
+    throw new Error(raw || `上传失败 (${resp.status})`)
   }
   const data = await resp.json() as { attachment: ChatAttachmentMeta }
   return data.attachment

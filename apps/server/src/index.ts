@@ -40,10 +40,14 @@ import { registerDocLibrarySettingsRoutes } from './doc-library-settings-routes.
 import { ingestNewsArticleToDocLibrary } from './news-doc-ingest.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
-import { registerSessionAttachmentRoutes } from './session-attachment-routes.js'
+import {
+  ATTACHMENT_UPLOAD_BODY_LIMIT,
+  registerSessionAttachmentRoutes,
+} from './session-attachment-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
 import { registerAgentSkillRoutes } from './agent-skill-routes.js'
 import { registerSpeechRoutes } from './speech-routes.js'
+import { ensureMediaTranscriptBridge } from './media-transcript-bridge.js'
 import {
   startNewsFeedScheduler,
   getNewsSettings,
@@ -112,7 +116,7 @@ setEnrichmentPersistHook(doc => {
   if (article) syncNewsSearchIndex(article, doc)
 })
 
-const app = Fastify({ logger: true, bodyLimit: 64 * 1024 * 1024 })
+const app = Fastify({ logger: true, bodyLimit: ATTACHMENT_UPLOAD_BODY_LIMIT })
 
 const scheduleService = getScheduleService()
 const workspaceService = getWorkspaceService()
@@ -1602,6 +1606,7 @@ async function bootstrap() {
   await registerAgentSkillRoutes(app)
   registerSearchRoutes(app, hub, agent)
   registerSessionAttachmentRoutes(app, agent)
+  ensureMediaTranscriptBridge()
   await registerSpeechRoutes(app)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())

@@ -26,6 +26,40 @@ function sanitizeFilename(name: string): string {
   return base.replace(/[^\w.\-()\u4e00-\u9fff]/g, '_').slice(0, 180) || 'file'
 }
 
+/** 解析单段 `Range: bytes=`；非法/不可满足返回 `unsatisfied`，无 Range 返回 null */
+function parseBytesRange(
+  rangeHeader: string | undefined,
+  size: number,
+): { start: number; end: number } | 'unsatisfied' | null {
+  if (!rangeHeader) return null
+  const trimmed = rangeHeader.trim()
+  // 仅支持单段 bytes；多段 / 非 bytes 视为不可满足（媒体 seek 只需单段）
+  const m = /^bytes=(\d*)-(\d*)$/i.exec(trimmed)
+  if (!m) return 'unsatisfied'
+  const startRaw = m[1] ?? ''
+  const endRaw = m[2] ?? ''
+  if (startRaw === '' && endRaw === '') return 'unsatisfied'
+  if (size <= 0) return 'unsatisfied'
+
+  let start: number
+  let end: number
+  if (startRaw === '') {
+    // suffix: bytes=-N → 最后 N 字节
+    const suffix = Number(endRaw)
+    if (!Number.isFinite(suffix) || suffix <= 0) return 'unsatisfied'
+    start = Math.max(0, size - suffix)
+    end = size - 1
+  } else {
+    start = Number(startRaw)
+    if (!Number.isFinite(start) || start < 0) return 'unsatisfied'
+    end = endRaw === '' ? size - 1 : Number(endRaw)
+    if (!Number.isFinite(end) || end < start) return 'unsatisfied'
+    if (end >= size) end = size - 1
+  }
+  if (start >= size) return 'unsatisfied'
+  return { start, end }
+}
+
 async function resolveSessionMediaCaps(agent: AgentEngine, sessionId: string) {
   const session = agent.getSession(sessionId)
   if (!session) return null
@@ -39,10 +73,30 @@ async function resolveSessionMediaCaps(agent: AgentEngine, sessionId: string) {
   return resolveModelMediaCapabilitiesAsync(modelId, providerId)
 }
 
+/** 附件上传 body 上限：与 Fastify 实例 bodyLimit 对齐；业务层本地路径不设硬字节门禁 */
+export const ATTACHMENT_UPLOAD_BODY_LIMIT = 4 * 1024 * 1024 * 1024
+
+const attachmentBinaryBodyOpts = {
+  parseAs: 'buffer' as const,
+  bodyLimit: ATTACHMENT_UPLOAD_BODY_LIMIT,
+}
+
 export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: AgentEngine) {
+  // Blob/File 上传时浏览器可能把 Content-Type 设为真实 MIME（如 video/mp4），
+  // 若不注册高限 parser，会回落到实例默认解析并触发 413。
   app.addContentTypeParser(
     'application/octet-stream',
-    { parseAs: 'buffer' },
+    attachmentBinaryBodyOpts,
+    (_req, body, done) => { done(null, body) },
+  )
+  app.addContentTypeParser(
+    'application/pdf',
+    attachmentBinaryBodyOpts,
+    (_req, body, done) => { done(null, body) },
+  )
+  app.addContentTypeParser(
+    /^(?:audio|video|image)\/[\w.+-]+(?:\s*;.*)?$/i,
+    attachmentBinaryBodyOpts,
     (_req, body, done) => { done(null, body) },
   )
   app.addContentTypeParser(
@@ -78,6 +132,7 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
 
   app.post<{ Params: { id: string } }>(
     '/api/sessions/:id/attachments',
+    { bodyLimit: ATTACHMENT_UPLOAD_BODY_LIMIT },
     async (req, reply) => {
       const session = agent.getSession(req.params.id)
       if (!session) return reply.code(404).send({ error: 'session not found' })
@@ -171,9 +226,37 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
       const filePath = resolveAttachmentFilePath(req.params.id, req.params.attachmentId)
       if (!filePath) return reply.code(404).send({ error: 'attachment not found' })
 
+      let size: number
+      try {
+        size = fs.statSync(filePath).size
+      } catch {
+        return reply.code(404).send({ error: 'attachment not found' })
+      }
+
       // canvas/mindmap 等使用 meta.mime（如 application/vnd.opptrix.*）
       reply.header('Content-Type', meta.mime || 'application/octet-stream')
       reply.header('Content-Disposition', `inline; filename="${encodeURIComponent(meta.name)}"`)
+      reply.header('Accept-Ranges', 'bytes')
+
+      const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : undefined
+      const range = parseBytesRange(rangeHeader, size)
+
+      if (range === 'unsatisfied') {
+        reply.header('Content-Range', `bytes */${size}`)
+        return reply.code(416).send()
+      }
+
+      if (range) {
+        const { start, end } = range
+        const chunkSize = end - start + 1
+        reply.header('Content-Range', `bytes ${start}-${end}/${size}`)
+        reply.header('Content-Length', String(chunkSize))
+        return reply
+          .code(206)
+          .send(fs.createReadStream(filePath, { start, end }))
+      }
+
+      reply.header('Content-Length', String(size))
       return reply.send(fs.createReadStream(filePath))
     },
   )

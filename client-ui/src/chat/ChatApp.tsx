@@ -62,7 +62,7 @@ import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ChatSessionTitleTools from './ChatSessionTitleTools'
 import SessionRolePersonaDrawer from './SessionRolePersonaDrawer'
-import { BoxRegular } from '@fluentui/react-icons'
+import { FolderListRegular } from '@fluentui/react-icons'
 import { sessionToMarkdown } from './sessionExportMarkdown'
 import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
@@ -246,6 +246,14 @@ export default function ChatApp() {
     closePreview()
   }, [closePreview])
 
+  const handleToggleSessionFilesPreview = useCallback(() => {
+    if (mode === 'preview') {
+      handleClosePreview()
+      return
+    }
+    openPreview()
+  }, [mode, handleClosePreview, openPreview])
+
   const {
     width: sidebarWidth,
     isDragging: sidebarDragging,
@@ -331,6 +339,10 @@ export default function ChatApp() {
   const [archivedGroups, setArchivedGroups] = useState<ArchiveFolderGroup[]>([])
   const [sidebarListTab, setSidebarListTab] = useState<SidebarListTab>('chat')
   const [activeId, setActiveId] = useState<string | null>(null)
+  const handleSelectPreviewAttachment = useCallback((att: ChatAttachmentMeta) => {
+    if (!activeId) return
+    setPreview({ sessionId: activeId, attachment: att })
+  }, [activeId])
   const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
   const [expertRefreshKey, setExpertRefreshKey] = useState(0)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
@@ -545,11 +557,6 @@ export default function ChatApp() {
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const [rolePersonaOpen, setRolePersonaOpen] = useState(false)
-  const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false)
-
-  useEffect(() => {
-    setAttachmentsDrawerOpen(false)
-  }, [activeId])
   const [contextHintBanner, setContextHintBanner] = useState('')
 
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
@@ -1464,16 +1471,15 @@ export default function ChatApp() {
   )
 
   /** Electron：始终挂到 DesktopWindowChrome titleBarTrailing，与拖拽层同级可点 */
-  const attachmentsChatTitleButton = electronChrome && view === 'chat' && !isStandaloneView && !isMobile ? (
+  const sessionFilesPreviewButton = electronChrome && view === 'chat' && !isStandaloneView && !isMobile ? (
     <ChromeToolButton
-      label="本对话附件"
-      active={attachmentsDrawerOpen}
+      label="文件预览"
+      active={mode === 'preview'}
       disabled={!activeId}
-      data-attachments-toggle
-      aria-controls="session-attachments-drawer"
-      onClick={() => setAttachmentsDrawerOpen(open => !open)}
+      data-session-files-toggle
+      onClick={handleToggleSessionFilesPreview}
     >
-      <BoxRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+      <FolderListRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
     </ChromeToolButton>
   ) : null
   const sidebarSessions = useMemo(() => {
@@ -1589,7 +1595,7 @@ export default function ChatApp() {
         <DesktopWindowChrome
           title={chromeTitle}
           titleSlot={sessionTitleTools}
-          titleBarTrailing={attachmentsChatTitleButton ?? undefined}
+          titleBarTrailing={sessionFilesPreviewButton ?? undefined}
           viewMode={chromeViewMode}
           sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
           sidebarInline={isSettings
@@ -1865,8 +1871,8 @@ export default function ChatApp() {
                   onStreamError={handleStreamError}
                   resolveStreamSnapshot={resolveStreamSnapshot}
                   onClearPendingUserPrompt={clearPendingUserPrompt}
-                  attachmentsDrawerOpen={!isMobile && attachmentsDrawerOpen}
-                  onAttachmentsDrawerOpenChange={!isMobile ? setAttachmentsDrawerOpen : undefined}
+                  sessionFilesPreviewOpen={!isMobile && mode === 'preview'}
+                  onToggleSessionFilesPreview={!isMobile ? handleToggleSessionFilesPreview : undefined}
                 />
               </div>
             </div>
@@ -1895,7 +1901,10 @@ export default function ChatApp() {
               onToggleRightPanel={handleToggleRightPanel}
               onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
               onDiscussInChat={handleStockDiscuss}
+              previewMode={mode === 'preview'}
               preview={preview}
+              previewSessionId={activeId}
+              onSelectAttachment={handleSelectPreviewAttachment}
               onClosePreview={handleClosePreview}
             />
           )}

@@ -146,16 +146,30 @@ export {
   parseNonNegativeIntHeader,
   resolveUploadMime,
   schedulePdfExtract,
+  scheduleMediaTranscriptExtract,
   runPdfExtract,
+  waitForAttachmentExtractReady,
   waitForPdfExtractReady,
+  applyAttachmentExtractMeta,
+  writeLegacyExtractArtifacts,
   listSessionAttachmentMetas,
   readExtractChunks,
   readExtractMarkdown,
   isPdfTextExtractReady,
   isLibraryExtractReady,
+  isTranscriptExtractReady,
   registerDocumentIngestHook,
   registerPdfIngestHook,
+  registerMediaTranscriptHook,
   ARTIFACT_SOURCE_MAX_CHARS,
+} from './chat-attachments.js'
+export type {
+  DocumentIngestHook,
+  MediaTranscriptHook,
+  WaitAttachmentExtractResult,
+  WaitAttachmentExtractOptions,
+  WaitPdfExtractResult,
+  LegacyExtractPayload,
 } from './chat-attachments.js'
 export {
   type MediaKind,
@@ -174,6 +188,7 @@ export {
   formatBytesShort,
   mediaKindLabel,
   isLibraryIngestKind,
+  isTranscriptExtractKind,
   CANVAS_MIME,
   CANVAS_EXT,
   CANVAS_DATA_FILE,
@@ -181,7 +196,7 @@ export {
   MINDMAP_EXT,
   MINDMAP_DATA_FILE,
 } from './media-types.js'
-export { resolveAttachmentLimits } from './attachment-limits.js'
+export { resolveAttachmentLimits, LARGE_FILE_WARN_BYTES } from './attachment-limits.js'
 export {
   extractPdfToMarkdown,
   formatDocumentCatalogLine,

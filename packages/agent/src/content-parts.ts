@@ -2,13 +2,13 @@ import type { ChatAttachmentMeta } from './media-types.js'
 import { mimeToMediaKind } from './media-types.js'
 import {
   isLibraryExtractReady,
+  isTranscriptExtractReady,
   readAttachmentBuffer,
+  readExtractMarkdown,
   saveAttachment,
 } from './chat-attachments.js'
 import { formatDocumentCatalogLine } from './pdf-extract.js'
 import type { ContentPart, ChatMessage } from './llm/provider.js'
-
-const DATA_URL_INLINE_MAX = 8 * 1024 * 1024
 
 export interface ParsedAssistantContent {
   text: string
@@ -33,7 +33,7 @@ function guessNameFromMime(mime: string): string {
 export function attachmentToContentParts(
   sessionId: string,
   meta: ChatAttachmentMeta,
-  apiBaseUrl: string,
+  _apiBaseUrl: string,
 ): ContentPart[] {
   if ((meta.kind === 'pdf' || meta.kind === 'document') && isLibraryExtractReady(meta)) {
     return [{ type: 'text', text: formatDocumentCatalogLine(meta) }]
@@ -83,9 +83,36 @@ export function attachmentToContentParts(
     }]
   }
 
-  const buf = readAttachmentBuffer(sessionId, meta.id)
-  if (!buf) {
-    return [{ type: 'text', text: `[附件 ${meta.name} 不可用]` }]
+  if (meta.kind === 'video' || meta.kind === 'audio') {
+    if (isTranscriptExtractReady(meta)) {
+      const md = readExtractMarkdown(sessionId, meta.id)?.trim()
+      if (md) {
+        return [{
+          type: 'text',
+          text: `【音视频文稿】${meta.name}\n\n${md}`,
+        }]
+      }
+      return [{
+        type: 'text',
+        text: `【音视频文稿】${meta.name}：暂无可用文字，请重新转写或换文件`,
+      }]
+    }
+    if (meta.extract?.status === 'pending') {
+      return [{
+        type: 'text',
+        text: `【转写中】${meta.name}：正在转写成文字，请稍后再问`,
+      }]
+    }
+    if (meta.extract?.status === 'failed') {
+      return [{
+        type: 'text',
+        text: `【转写失败】${meta.name}：${meta.extract.error || '未能完成转写，请换文件后重试'}`,
+      }]
+    }
+    return [{
+      type: 'text',
+      text: `【转写失败】${meta.name}：暂时无法转写成文字，请稍后重试`,
+    }]
   }
 
   if (meta.kind === 'pdf' || meta.kind === 'document') {
@@ -95,18 +122,8 @@ export function attachmentToContentParts(
     }]
   }
 
-  if (meta.kind === 'video' || meta.kind === 'audio') {
-    if (buf.length <= DATA_URL_INLINE_MAX) {
-      const b64 = buf.toString('base64')
-      if (meta.kind === 'audio') {
-        const fmt = meta.mime.split('/')[1]?.split(';')[0] ?? 'wav'
-        return [{ type: 'input_audio', input_audio: { data: b64, format: fmt } }]
-      }
-      const url = `data:${meta.mime};base64,${b64}`
-      return [{ type: 'image_url', image_url: { url } }]
-    }
-    const url = `${apiBaseUrl.replace(/\/$/, '')}/sessions/${sessionId}/attachments/${meta.id}`
-    return [{ type: 'file', file: { filename: meta.name, file_data: url } }]
+  if (!readAttachmentBuffer(sessionId, meta.id)) {
+    return [{ type: 'text', text: `[附件 ${meta.name} 不可用]` }]
   }
 
   return [{ type: 'text', text: `[不支持的附件类型: ${meta.name}]` }]

@@ -6,6 +6,7 @@ import {
   DESKTOP_TITLEBAR_HEIGHT,
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
 } from '../desktop/constants'
+import type { ChatAttachmentMeta } from '../types/chat'
 import RightMarketPanel from '../market/RightMarketPanel'
 import FilePreviewPanel, { type FilePreviewTarget } from './FilePreviewPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
@@ -66,7 +67,12 @@ interface Props {
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
   onDiscussInChat?: (payload: StockDiscussPayload) => void
+  /** 右侧处于文件预览模式（可无已选附件，显示空状态） */
+  previewMode?: boolean
   preview?: FilePreviewTarget | null
+  /** 空预览时用当前会话 id（preview.sessionId 可能为空） */
+  previewSessionId?: string | null
+  onSelectAttachment?: (attachment: ChatAttachmentMeta) => void
   onClosePreview?: () => void
 }
 
@@ -83,10 +89,15 @@ function RightPanel({
   onToggleRightPanel,
   onToggleChatColumn,
   onDiscussInChat,
+  previewMode = false,
   preview = null,
+  previewSessionId = null,
+  onSelectAttachment,
   onClosePreview,
 }: Props) {
   const s = useStyles()
+  const showPreview = previewMode || preview != null
+  const previewSid = preview?.sessionId || previewSessionId || undefined
 
   const shellWidth = !visible
     ? 0
@@ -109,15 +120,16 @@ function RightPanel({
         style={fullWidth
           ? { width: '100%' }
           : { width: `${width}px`, minWidth: `${width}px` }}
-        aria-label="行情与自选"
+        aria-label={showPreview ? '文件预览' : '行情与自选'}
         aria-hidden={!visible}
       >
-        {preview ? (
+        {showPreview ? (
           <FilePreviewPanel
-            sessionId={preview.sessionId}
-            attachment={preview.attachment}
+            sessionId={previewSid}
+            attachment={preview?.attachment ?? null}
             panelVisible={visible}
             onClose={onClosePreview ?? (() => {})}
+            onSelectAttachment={onSelectAttachment}
             electronChrome={electronChrome}
             chatColumnVisible={chatColumnVisible}
             chromeToolbarReserve={chromeToolbarReserve}

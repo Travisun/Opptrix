@@ -24,6 +24,7 @@ import {
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
+import FilenameEllipsis from './FilenameEllipsis'
 
 GlobalWorkerOptions.workerSrc = pdfWorker
 
@@ -38,7 +39,14 @@ const DEFAULT_PAGE_ASPECT = 1.414
 
 interface Props {
   url: string
+  /** 次级工具条左侧文件名 */
+  title?: string
   panelVisible?: boolean
+  /** 目录面板是否打开（由 FilePreviewPanel 控制） */
+  outlineOpen?: boolean
+  onToggleOutline?: () => void
+  /** PDF 预览恒为 true；控制是否显示目录按钮 */
+  showOutlineToggle?: boolean
 }
 
 /** pdf.js outline dest：命名目标、显式数组，或页面 Ref */
@@ -167,6 +175,15 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.surfaceHover,
     color: opptrixCssVars.textPrimary,
   },
+  toolbarTitle: {
+    flex: '0 1 auto',
+    minWidth: 0,
+    maxWidth: '36%',
+    color: opptrixCssVars.textPrimary,
+    fontSize: 'var(--opptrix-font-sm)',
+    userSelect: 'none',
+    paddingRight: '4px',
+  },
   pageLabel: {
     flexShrink: 0,
     minWidth: '52px',
@@ -192,7 +209,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     width: `${OUTLINE_WIDTH}px`,
     boxSizing: 'border-box',
-    borderRight: `1px solid ${opptrixCssVars.separator}`,
+    borderLeft: `1px solid ${opptrixCssVars.separator}`,
     overflow: 'auto',
     padding: '6px 0',
     backgroundColor: opptrixCssVars.canvasAlt,
@@ -422,16 +439,23 @@ function PdfPageSlot({
   )
 }
 
-export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
+export default function PdfPreviewViewer({
+  url,
+  title,
+  panelVisible = true,
+  outlineOpen = false,
+  onToggleOutline,
+  showOutlineToggle = true,
+}: Props) {
   const s = useStyles()
   const [phase, setPhase] = useState<LoadPhase>('idle')
   const [pageCount, setPageCount] = useState(0)
   const [page, setPage] = useState(1)
   const [zoom, setZoom] = useState(1)
-  const [outlineOpen, setOutlineOpen] = useState(false)
   const [outline, setOutline] = useState<OutlineNode[]>([])
   const [containerWidth, setContainerWidth] = useState(0)
   const [activePages, setActivePages] = useState<Set<number>>(() => new Set([1]))
+  const outlineToggleLabel = outlineOpen ? '收起目录' : '打开目录'
 
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null)
@@ -543,7 +567,6 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
       setPageCount(0)
       setPage(1)
       setOutline([])
-      setOutlineOpen(false)
       setZoom(1)
       setActivePages(new Set([1]))
       visiblePagesRef.current = new Set()
@@ -555,7 +578,6 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
     setPhase('loading')
     setPage(1)
     setZoom(1)
-    setOutlineOpen(false)
     setOutline([])
     setActivePages(new Set([1]))
     visiblePagesRef.current = new Set()
@@ -710,9 +732,33 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
     return <div className={s.root} aria-hidden />
   }
 
+  const titleEl = title ? (
+    <FilenameEllipsis name={title} className={s.toolbarTitle} />
+  ) : null
+
+  const outlineBtn = showOutlineToggle && onToggleOutline ? (
+    <button
+      type="button"
+      className={mergeClasses(s.toolBtn, outlineOpen && s.toolBtnActive)}
+      onClick={onToggleOutline}
+      aria-label={outlineToggleLabel}
+      title={outlineToggleLabel}
+      aria-pressed={outlineOpen}
+    >
+      <TextBulletListTreeRegular fontSize={16} />
+    </button>
+  ) : null
+
   if (phase === 'loading' || phase === 'idle') {
     return (
       <div className={s.root}>
+        {(titleEl || outlineBtn) ? (
+          <div className={s.toolbar} role="toolbar" aria-label="文档预览">
+            {titleEl}
+            <span className={s.spacer} />
+            {outlineBtn}
+          </div>
+        ) : null}
         <div className={s.status}>
           <Spinner size="small" label={LOADING_LABEL} />
         </div>
@@ -723,6 +769,13 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
   if (phase === 'failed') {
     return (
       <div className={s.root}>
+        {(titleEl || outlineBtn) ? (
+          <div className={s.toolbar} role="toolbar" aria-label="文档预览">
+            {titleEl}
+            <span className={s.spacer} />
+            {outlineBtn}
+          </div>
+        ) : null}
         <div className={s.status}>{FAIL_MESSAGE}</div>
       </div>
     )
@@ -730,13 +783,11 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
 
   const pdf = pdfRef.current
   const hasOutline = outline.length > 0
-  const outlineToggleLabel = hasOutline
-    ? (outlineOpen ? '收起目录' : '打开目录')
-    : (outlineOpen ? '收起页码目录' : '打开页码目录')
 
   return (
     <div className={s.root}>
       <div className={s.toolbar} role="toolbar" aria-label="文档预览">
+        {titleEl}
         <button
           type="button"
           className={s.toolBtn}
@@ -792,18 +843,31 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
         >
           <ZoomInRegular fontSize={16} />
         </button>
-        <button
-          type="button"
-          className={mergeClasses(s.toolBtn, outlineOpen && s.toolBtnActive)}
-          onClick={() => setOutlineOpen((v) => !v)}
-          aria-label={outlineToggleLabel}
-          title={outlineToggleLabel}
-          aria-pressed={outlineOpen}
-        >
-          <TextBulletListTreeRegular fontSize={16} />
-        </button>
+        {outlineBtn}
       </div>
       <div className={s.main}>
+        <div className={s.pageArea} ref={pageAreaRef}>
+          <div className={s.pagesColumn}>
+            {pdf
+              ? Array.from({ length: pageCount }, (_, i) => {
+                const pageNumber = i + 1
+                return (
+                  <PdfPageSlot
+                    key={pageNumber}
+                    pdf={pdf}
+                    pageNumber={pageNumber}
+                    zoom={zoom}
+                    containerWidth={containerWidth}
+                    active={activePages.has(pageNumber)}
+                    className={s.pageSlot}
+                    canvasClassName={s.canvas}
+                    onRegister={registerPageEl}
+                  />
+                )
+              })
+              : null}
+          </div>
+        </div>
         {outlineOpen ? (
           <nav className={s.outline} aria-label={hasOutline ? '文档目录' : '页码目录'}>
             {hasOutline ? (
@@ -831,28 +895,6 @@ export default function PdfPreviewViewer({ url, panelVisible = true }: Props) {
             )}
           </nav>
         ) : null}
-        <div className={s.pageArea} ref={pageAreaRef}>
-          <div className={s.pagesColumn}>
-            {pdf
-              ? Array.from({ length: pageCount }, (_, i) => {
-                const pageNumber = i + 1
-                return (
-                  <PdfPageSlot
-                    key={pageNumber}
-                    pdf={pdf}
-                    pageNumber={pageNumber}
-                    zoom={zoom}
-                    containerWidth={containerWidth}
-                    active={activePages.has(pageNumber)}
-                    className={s.pageSlot}
-                    canvasClassName={s.canvas}
-                    onRegister={registerPageEl}
-                  />
-                )
-              })
-              : null}
-          </div>
-        </div>
       </div>
     </div>
   )

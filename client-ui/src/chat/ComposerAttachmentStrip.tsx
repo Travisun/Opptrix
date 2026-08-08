@@ -107,7 +107,13 @@ export function middleEllipsisFilename(name: string, maxChars = NAME_MAX_CHARS):
 
 function isAttachmentProcessing(item: ChatAttachmentMeta): boolean {
   if (item.optimistic || item.id.startsWith('local-')) return true
-  if (item.kind === 'pdf' || item.kind === 'document' || item.kind === 'image') {
+  if (
+    item.kind === 'pdf'
+    || item.kind === 'document'
+    || item.kind === 'image'
+    || item.kind === 'audio'
+    || item.kind === 'video'
+  ) {
     return (item.extract?.status ?? 'pending') === 'pending'
   }
   return false

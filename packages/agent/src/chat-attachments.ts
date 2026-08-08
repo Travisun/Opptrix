@@ -17,6 +17,7 @@ import {
   CANVAS_MIME,
   formatBytesShort,
   isLibraryIngestKind,
+  isTranscriptExtractKind,
   mediaKindLabel,
   mimeToMediaKind,
   MINDMAP_DATA_FILE,
@@ -29,8 +30,14 @@ import { extractPdfToMarkdown, type PdfExtractChunk } from './pdf-extract.js'
 const META_FILENAME = 'meta.json'
 const EXTRACT_MD = 'extract.md'
 const EXTRACT_CHUNKS = 'extract-chunks.json'
-const DEFAULT_PDF_MAX_BYTES = 20 * 1024 * 1024
-const EXTRACT_WAIT_MS = 90_000
+/** 本地路径（研报入库 / 转写）宽松数量上限；不限制单文件/合计字节 */
+const LOCAL_PATH_MAX_COUNT = 50
+/** 研报库整理发送门闩上限 */
+const LIBRARY_EXTRACT_WAIT_MS = 90_000
+/** 音视频转写发送门闩上限（较长） */
+const MEDIA_EXTRACT_WAIT_MS = 8 * 60_000
+/** @deprecated 使用 LIBRARY_EXTRACT_WAIT_MS */
+const EXTRACT_WAIT_MS = LIBRARY_EXTRACT_WAIT_MS
 const EXTRACT_POLL_MS = 400
 const MIN_USEFUL_CHARS = 24
 export const ARTIFACT_SOURCE_MAX_CHARS = 200_000
@@ -223,6 +230,20 @@ export function registerPdfIngestHook(hook: DocumentIngestHook): void {
   registerDocumentIngestHook(hook)
 }
 
+/** 音视频转写 hook（由 server media-transcript-bridge 注册；避免 agent 依赖 local-inference） */
+export type MediaTranscriptHook = (
+  sessionId: string,
+  attachmentId: string,
+  meta: ChatAttachmentMeta,
+  data: Buffer,
+) => void
+
+let mediaTranscriptHook: MediaTranscriptHook | null = null
+
+export function registerMediaTranscriptHook(hook: MediaTranscriptHook): void {
+  mediaTranscriptHook = hook
+}
+
 /** 双写 legacy extract.md + extract-chunks.json */
 export function writeLegacyExtractArtifacts(
   sessionId: string,
@@ -258,8 +279,9 @@ export function resolveAttachmentFilePath(sessionId: string, attachmentId: strin
 }
 
 /**
- * PDF / 文档 / 图片走本地研报库整理，不要求模型原生支持；
- * 其他媒体仍按 caps.input 校验。
+ * PDF / 文档 / 图片走本地研报库整理；音视频走后台转写。
+ * 二者均不要求模型原生多模态；其他媒体仍按 caps.input 校验。
+ * 本地路径不卡单文件/合计字节上限（仅保留数量上限）；≥ LARGE_FILE_WARN_BYTES 由 UI 确认。
  */
 export function validateAttachmentAgainstCapabilities(
   kind: MediaKind,
@@ -273,7 +295,9 @@ export function validateAttachmentAgainstCapabilities(
   }
 
   const libraryPath = isLibraryIngestKind(kind)
-  if (!libraryPath) {
+  const transcriptPath = isTranscriptExtractKind(kind)
+  const localExtractPath = libraryPath || transcriptPath
+  if (!localExtractPath) {
     if (!caps.attachment && !caps.input.includes(kind)) {
       return {
         ok: false,
@@ -286,26 +310,32 @@ export function validateAttachmentAgainstCapabilities(
         error: `当前模型不支持${mediaKindLabel(kind)}，可换模型或去掉附件`,
       }
     }
+
+    const maxBytes = caps.limits.maxBytesByKind[kind]
+    if (maxBytes && size > maxBytes) {
+      return {
+        ok: false,
+        error: `${mediaKindLabel(kind)}过大（上限 ${formatBytesShort(maxBytes)}）`,
+      }
+    }
+    const maxCount = caps.limits.maxCount || 0
+    if (maxCount > 0 && existingCount >= maxCount) {
+      return { ok: false, error: `附件数量已达上限（${maxCount} 个）` }
+    }
+    const maxTotal = caps.limits.maxTotalBytes || 0
+    if (maxTotal > 0 && existingTotalBytes + size > maxTotal) {
+      return {
+        ok: false,
+        error: `附件总大小超出限制（上限 ${formatBytesShort(maxTotal)}）`,
+      }
+    }
+    return { ok: true }
   }
 
-  const maxBytes = caps.limits.maxBytesByKind[kind]
-    ?? (libraryPath ? DEFAULT_PDF_MAX_BYTES : undefined)
-  if (maxBytes && size > maxBytes) {
-    return {
-      ok: false,
-      error: `${mediaKindLabel(kind)}过大（上限 ${formatBytesShort(maxBytes)}）`,
-    }
-  }
-  const maxCount = Math.max(caps.limits.maxCount || 0, libraryPath ? 5 : 0)
+  // 本地路径：跳过 per-file / total 字节门禁；保留宽松数量上限
+  const maxCount = Math.max(caps.limits.maxCount || 0, LOCAL_PATH_MAX_COUNT)
   if (existingCount >= maxCount) {
     return { ok: false, error: `附件数量已达上限（${maxCount} 个）` }
-  }
-  const maxTotal = Math.max(caps.limits.maxTotalBytes || 0, libraryPath ? 80 * 1024 * 1024 : 0)
-  if (existingTotalBytes + size > maxTotal) {
-    return {
-      ok: false,
-      error: `附件总大小超出限制（上限 ${formatBytesShort(maxTotal)}）`,
-    }
   }
   return { ok: true }
 }
@@ -320,6 +350,7 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
   fs.mkdirSync(dir, { recursive: true })
 
   const libraryIngest = isLibraryIngestKind(kind)
+  const transcriptExtract = isTranscriptExtractKind(kind)
   const meta: ChatAttachmentMeta = {
     id: attachmentId,
     kind,
@@ -332,7 +363,17 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
     ...(input.duration ? { duration: input.duration } : {}),
     ...(input.canvas ? { canvas: input.canvas } : {}),
     ...(input.mindmap ? { mindmap: input.mindmap } : {}),
-    ...(libraryIngest ? { extract: { status: 'pending' as const } } : {}),
+    ...(libraryIngest
+      ? { extract: { status: 'pending' as const } }
+      : transcriptExtract
+        ? {
+            extract: {
+              status: 'pending' as const,
+              phase: 'converting' as const,
+              message: '正在准备转写…',
+            },
+          }
+        : {}),
   }
 
   const filePath = dataPath(input.sessionId, attachmentId, input.name, kind)
@@ -350,6 +391,8 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
         error: '暂时无法整理该文件，请稍后重试',
       })
     }
+  } else if (transcriptExtract) {
+    scheduleMediaTranscriptExtract(input.sessionId, attachmentId)
   }
   return meta
 }
@@ -429,6 +472,38 @@ export function schedulePdfExtract(sessionId: string, attachmentId: string): voi
       status: 'failed',
       error: '未能整理该研报，请换可复制文本的电子版后再试',
     })
+  })
+}
+
+/** 异步音视频转写：不阻塞上传响应；实际工作由 mediaTranscriptHook 完成 */
+export function scheduleMediaTranscriptExtract(sessionId: string, attachmentId: string): void {
+  const meta = readAttachmentMeta(sessionId, attachmentId)
+  if (!meta || !isTranscriptExtractKind(meta.kind)) return
+  const buf = readAttachmentBuffer(sessionId, attachmentId)
+  if (!buf) {
+    patchExtract(sessionId, attachmentId, {
+      status: 'failed',
+      phase: 'failed',
+      error: '文件不可用，请重新添加',
+    })
+    return
+  }
+  if (mediaTranscriptHook) {
+    try {
+      mediaTranscriptHook(sessionId, attachmentId, meta, buf)
+    } catch {
+      patchExtract(sessionId, attachmentId, {
+        status: 'failed',
+        phase: 'failed',
+        error: '暂时无法转写该文件，请稍后重试',
+      })
+    }
+    return
+  }
+  patchExtract(sessionId, attachmentId, {
+    status: 'failed',
+    phase: 'failed',
+    error: '暂时无法转写该文件，请稍后重试',
   })
 }
 
@@ -530,30 +605,70 @@ export function listSessionAttachmentMetas(sessionId: string): ChatAttachmentMet
   return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 }
 
-export type WaitPdfExtractResult =
+export type WaitAttachmentExtractResult =
   | { ok: true; meta: ChatAttachmentMeta }
   | { ok: false; reason: 'pending' | 'failed' | 'missing'; message: string; meta?: ChatAttachmentMeta }
 
-/** 发送前短等研报库整理完成（有上限；PDF / 文档 / 图片 OCR） */
-export async function waitForPdfExtractReady(
+/** @deprecated 使用 WaitAttachmentExtractResult */
+export type WaitPdfExtractResult = WaitAttachmentExtractResult
+
+export type WaitAttachmentExtractOptions = {
+  /** pending 轮询时回调（可用于刷新 thinking 文案） */
+  onPending?: (meta: ChatAttachmentMeta) => void
+}
+
+function needsExtractGate(kind: MediaKind): boolean {
+  return isLibraryIngestKind(kind) || isTranscriptExtractKind(kind)
+}
+
+function defaultExtractWaitMs(kind: MediaKind): number {
+  return isTranscriptExtractKind(kind) ? MEDIA_EXTRACT_WAIT_MS : LIBRARY_EXTRACT_WAIT_MS
+}
+
+function extractPendingTimeoutMessage(kind: MediaKind): string {
+  return isTranscriptExtractKind(kind)
+    ? '转写尚未完成，请稍后再试或重新发送'
+    : '整理尚未完成，请稍后再试或重新发送'
+}
+
+function extractFailedMessage(meta: ChatAttachmentMeta): string {
+  if (isTranscriptExtractKind(meta.kind)) {
+    return meta.extract?.error || '未能完成转写，请换文件后重试'
+  }
+  return meta.extract?.error || '未能整理该文件，请换可读文件后重试'
+}
+
+/** 发送前短等附件整理/转写完成（研报库 + 音视频；有上限） */
+export async function waitForAttachmentExtractReady(
   sessionId: string,
   attachmentId: string,
-  timeoutMs = EXTRACT_WAIT_MS,
-): Promise<WaitPdfExtractResult> {
-  const deadline = Date.now() + timeoutMs
+  timeoutMs?: number,
+  opts?: WaitAttachmentExtractOptions,
+): Promise<WaitAttachmentExtractResult> {
+  let lastMessage: string | undefined
+  const first = readAttachmentMeta(sessionId, attachmentId)
+  if (!first) return { ok: false, reason: 'missing', message: '附件不存在' }
+  if (!needsExtractGate(first.kind)) return { ok: true, meta: first }
+
+  const deadline = Date.now() + (timeoutMs ?? defaultExtractWaitMs(first.kind))
   while (Date.now() <= deadline) {
     const meta = readAttachmentMeta(sessionId, attachmentId)
     if (!meta) return { ok: false, reason: 'missing', message: '附件不存在' }
-    if (!isLibraryIngestKind(meta.kind)) return { ok: true, meta }
+    if (!needsExtractGate(meta.kind)) return { ok: true, meta }
     const status = meta.extract?.status
     if (status === 'ready') return { ok: true, meta }
     if (status === 'failed') {
       return {
         ok: false,
         reason: 'failed',
-        message: meta.extract?.error || '未能整理该文件，请换可读文件后重试',
+        message: extractFailedMessage(meta),
         meta,
       }
+    }
+    const tickMsg = meta.extract?.message
+    if (opts?.onPending && tickMsg !== lastMessage) {
+      lastMessage = tickMsg
+      opts.onPending(meta)
     }
     await new Promise(r => setTimeout(r, EXTRACT_POLL_MS))
   }
@@ -561,9 +676,19 @@ export async function waitForPdfExtractReady(
   return {
     ok: false,
     reason: 'pending',
-    message: '整理尚未完成，请稍后再试或重新发送',
+    message: extractPendingTimeoutMessage(meta?.kind ?? first.kind),
     meta,
   }
+}
+
+/** @deprecated 使用 waitForAttachmentExtractReady */
+export async function waitForPdfExtractReady(
+  sessionId: string,
+  attachmentId: string,
+  timeoutMs?: number,
+  opts?: WaitAttachmentExtractOptions,
+): Promise<WaitPdfExtractResult> {
+  return waitForAttachmentExtractReady(sessionId, attachmentId, timeoutMs, opts)
 }
 
 export function readAttachmentBuffer(sessionId: string, attachmentId: string): Buffer | null {
@@ -609,4 +734,9 @@ export function isPdfTextExtractReady(meta: ChatAttachmentMeta): boolean {
 /** 研报库入库整理是否已就绪（PDF / 文档 / 图片 OCR） */
 export function isLibraryExtractReady(meta: ChatAttachmentMeta): boolean {
   return isLibraryIngestKind(meta.kind) && meta.extract?.status === 'ready'
+}
+
+/** 音视频转写是否已就绪 */
+export function isTranscriptExtractReady(meta: ChatAttachmentMeta): boolean {
+  return isTranscriptExtractKind(meta.kind) && meta.extract?.status === 'ready'
 }
