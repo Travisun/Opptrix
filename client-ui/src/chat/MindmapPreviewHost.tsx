@@ -36,6 +36,7 @@ import {
   elixirDataToMindmapDoc,
   mindmapDocToElixir,
 } from './mindmapElixirBridge'
+import FilenameEllipsis from './FilenameEllipsis'
 import {
   exportMindmapBoardPdf,
   exportMindmapBoardPng,
@@ -77,6 +78,15 @@ const useStyles = makeStyles({
     padding: '0 8px',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvas,
+  },
+  toolbarTitle: {
+    flex: '0 1 auto',
+    minWidth: 0,
+    maxWidth: '46%',
+    color: opptrixCssVars.textPrimary,
+    fontSize: 'var(--opptrix-font-sm)',
+    userSelect: 'none',
+    paddingRight: '4px',
   },
   toolBtn: {
     ...ghostInteractive,
@@ -455,19 +465,43 @@ export default function MindmapPreviewHost({
     }
   }
 
+  const titleEl = (
+    <FilenameEllipsis name={name} className={s.toolbarTitle} />
+  )
+
   if (state.phase === 'loading') {
     return (
-      <div className={s.center}>
-        <Spinner size="small" label="正在加载脑图…" />
+      <div className={s.root}>
+        <div
+          className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}
+          role="toolbar"
+          aria-label="脑图预览"
+        >
+          {titleEl}
+          <span className={s.spacer} />
+        </div>
+        <div className={s.center}>
+          <Spinner size="small" label="正在加载脑图…" />
+        </div>
       </div>
     )
   }
 
   if (state.phase === 'error') {
     return (
-      <div className={s.center}>
-        <span className={s.errTitle}>脑图暂时无法显示</span>
-        <span className={s.errDetail}>{state.message}</span>
+      <div className={s.root}>
+        <div
+          className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}
+          role="toolbar"
+          aria-label="脑图预览"
+        >
+          {titleEl}
+          <span className={s.spacer} />
+        </div>
+        <div className={s.center}>
+          <span className={s.errTitle}>脑图暂时无法显示</span>
+          <span className={s.errDetail}>{state.message}</span>
+        </div>
       </div>
     )
   }
@@ -489,6 +523,8 @@ export default function MindmapPreviewHost({
         role="toolbar"
         aria-label="脑图预览"
       >
+        {titleEl}
+        <span className={s.spacer} />
         {saveError ? (
           <span className={s.statusError}>{saveError}</span>
         ) : exportError ? (
@@ -496,7 +532,6 @@ export default function MindmapPreviewHost({
         ) : statusText ? (
           <span className={s.statusHint}>{statusText}</span>
         ) : null}
-        <span className={s.spacer} />
         <button
           type="button"
           className={s.toolBtn}

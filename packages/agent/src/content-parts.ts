@@ -1,4 +1,4 @@
-import type { ChatAttachmentMeta } from './media-types.js'
+import type { ChatAttachmentMeta, ModelMediaCapabilities } from './media-types.js'
 import { mimeToMediaKind } from './media-types.js'
 import {
   isLibraryExtractReady,
@@ -9,6 +9,96 @@ import {
 } from './chat-attachments.js'
 import { formatDocumentCatalogLine } from './pdf-extract.js'
 import type { ContentPart, ChatMessage } from './llm/provider.js'
+
+/** 模型是否接受原生 image_url 多模态 part */
+export function modelAcceptsImageInput(
+  caps?: Pick<ModelMediaCapabilities, 'input'> | null,
+): boolean {
+  return Boolean(caps?.input.includes('image'))
+}
+
+function modelAcceptsFileInput(
+  caps?: Pick<ModelMediaCapabilities, 'input'> | null,
+): boolean {
+  if (!caps) return false
+  return caps.input.includes('pdf') || caps.input.includes('document')
+}
+
+function modelAcceptsAudioInput(
+  caps?: Pick<ModelMediaCapabilities, 'input'> | null,
+): boolean {
+  return Boolean(caps?.input.includes('audio'))
+}
+
+/**
+ * 出站前按模型 modalities 剥离不支持的 content parts，避免 text-only schema 炸。
+ * image_url / file / input_audio：不支持则丢弃；若整条只剩空，降级为短文本提示。
+ */
+export function sanitizeContentPartsForModelMedia(
+  parts: ContentPart[],
+  caps: Pick<ModelMediaCapabilities, 'input'>,
+): ContentPart[] {
+  const allowImage = modelAcceptsImageInput(caps)
+  const allowFile = modelAcceptsFileInput(caps)
+  const allowAudio = modelAcceptsAudioInput(caps)
+  const out: ContentPart[] = []
+  let strippedLabel: string | null = null
+
+  for (const part of parts) {
+    if (part.type === 'text') {
+      out.push(part)
+      continue
+    }
+    if (part.type === 'image_url') {
+      if (allowImage) out.push(part)
+      else if (!strippedLabel) strippedLabel = '图片'
+      continue
+    }
+    if (part.type === 'file') {
+      if (allowFile) out.push(part)
+      else if (!strippedLabel) {
+        strippedLabel = part.file.filename?.trim() || '文件'
+      }
+      continue
+    }
+    if (part.type === 'input_audio') {
+      if (allowAudio) out.push(part)
+      else if (!strippedLabel) strippedLabel = '音频'
+    }
+  }
+
+  const hasText = out.some(p => p.type === 'text' && p.text.trim())
+  if (strippedLabel && !hasText) {
+    const isKindOnly = strippedLabel === '图片' || strippedLabel === '音频' || strippedLabel === '文件'
+    out.push({
+      type: 'text',
+      text: isKindOnly
+        ? `【${strippedLabel}】已本地整理，请用文档工具查阅`
+        : `【文件】${strippedLabel}，已本地整理，请用文档工具查阅`,
+    })
+  }
+
+  return out.length ? out : [{ type: 'text', text: '' }]
+}
+
+/** 净化消息列表中的多模态 parts（历史重放安全） */
+export function sanitizeMessagesForModelMedia(
+  messages: ChatMessage[],
+  caps: Pick<ModelMediaCapabilities, 'input'>,
+): ChatMessage[] {
+  let changed = false
+  const next = messages.map(m => {
+    const content = m.content
+    if (!Array.isArray(content)) return m
+    const sanitized = sanitizeContentPartsForModelMedia(content, caps)
+    const same = sanitized.length === content.length
+      && sanitized.every((p, i) => p === content[i])
+    if (same) return m
+    changed = true
+    return { ...m, content: sanitized }
+  })
+  return changed ? next : messages
+}
 
 export interface ParsedAssistantContent {
   text: string
@@ -34,6 +124,7 @@ export function attachmentToContentParts(
   sessionId: string,
   meta: ChatAttachmentMeta,
   _apiBaseUrl: string,
+  mediaCaps?: Pick<ModelMediaCapabilities, 'input'> | null,
 ): ContentPart[] {
   if ((meta.kind === 'pdf' || meta.kind === 'document') && isLibraryExtractReady(meta)) {
     return [{ type: 'text', text: formatDocumentCatalogLine(meta) }]
@@ -54,14 +145,17 @@ export function attachmentToContentParts(
   }
 
   if (meta.kind === 'image') {
-    // 图片一律以本地 OCR 文本为主（catalog + document tools）；多模态看图仅作补充
+    // 图片一律以本地 OCR 文本为主（catalog + document tools）；
+    // 仅当模型 input 含 image 时才附带 image_url 作多模态补充
     if (isLibraryExtractReady(meta)) {
       const parts: ContentPart[] = [{ type: 'text', text: formatDocumentCatalogLine(meta) }]
-      const readyBuf = readAttachmentBuffer(sessionId, meta.id)
-      if (readyBuf) {
-        const b64 = readyBuf.toString('base64')
-        const url = `data:${meta.mime};base64,${b64}`
-        parts.push({ type: 'image_url', image_url: { url, detail: 'auto' } })
+      if (modelAcceptsImageInput(mediaCaps)) {
+        const readyBuf = readAttachmentBuffer(sessionId, meta.id)
+        if (readyBuf) {
+          const b64 = readyBuf.toString('base64')
+          const url = `data:${meta.mime};base64,${b64}`
+          parts.push({ type: 'image_url', image_url: { url, detail: 'auto' } })
+        }
       }
       return parts
     }
@@ -134,8 +228,9 @@ export function attachmentToContentPart(
   sessionId: string,
   meta: ChatAttachmentMeta,
   apiBaseUrl: string,
+  mediaCaps?: Pick<ModelMediaCapabilities, 'input'> | null,
 ): ContentPart {
-  const parts = attachmentToContentParts(sessionId, meta, apiBaseUrl)
+  const parts = attachmentToContentParts(sessionId, meta, apiBaseUrl, mediaCaps)
   return parts[0] ?? { type: 'text', text: '' }
 }
 
@@ -144,11 +239,12 @@ export function buildUserContentParts(
   sessionId: string,
   attachments: ChatAttachmentMeta[],
   apiBaseUrl: string,
+  mediaCaps?: Pick<ModelMediaCapabilities, 'input'> | null,
 ): ContentPart[] {
   const parts: ContentPart[] = []
   if (text.trim()) parts.push({ type: 'text', text: text.trim() })
   for (const meta of attachments) {
-    parts.push(...attachmentToContentParts(sessionId, meta, apiBaseUrl))
+    parts.push(...attachmentToContentParts(sessionId, meta, apiBaseUrl, mediaCaps))
   }
   return parts.length ? parts : [{ type: 'text', text: '' }]
 }

@@ -9,8 +9,12 @@ import {
 import {
   attachmentToContentPart,
   buildUserContentParts,
+  sanitizeMessagesForModelMedia,
 } from '../packages/agent/dist/content-parts.js'
 import { packIdForTool } from '../packages/shared/dist/tool-packs.js'
+
+const TEXT_ONLY_CAPS = { input: ['text'] }
+const VISION_CAPS = { input: ['text', 'image'] }
 
 describe('pdf table heuristics', () => {
   it('converts aligned rows to markdown table', () => {
@@ -88,8 +92,58 @@ describe('content parts for image OCR', () => {
       size: 100,
       createdAt: '2026-01-01T00:00:00.000Z',
       extract: { status: 'ready', pageCount: 1, charCount: 80 },
-    }], 'http://127.0.0.1:8787')
+    }], 'http://127.0.0.1:8787', TEXT_ONLY_CAPS)
     assert.ok(parts.some(p => p.type === 'text' && /研报已整理/.test(p.text)))
+    assert.ok(!parts.some(p => p.type === 'image_url'), 'text-only model must not emit image_url')
+  })
+
+  it('text-only caps never emit image_url even when vision would', () => {
+    const parts = buildUserContentParts('看图', 'sess', [{
+      id: 'img1',
+      kind: 'image',
+      mime: 'image/png',
+      name: 'scan.png',
+      size: 100,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      extract: { status: 'ready', pageCount: 1, charCount: 80 },
+    }], 'http://127.0.0.1:8787', TEXT_ONLY_CAPS)
+    assert.ok(!parts.some(p => p.type === 'image_url'))
+  })
+
+  it('vision caps may attach image_url when buffer exists', async () => {
+    const { saveAttachment, readAttachmentBuffer } = await import(
+      '../packages/agent/dist/chat-attachments.js'
+    )
+    const { mkdtempSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const prev = process.env.OPPTRIX_DATA_DIR
+    const dir = mkdtempSync(join(tmpdir(), 'opptrix-img-parts-'))
+    process.env.OPPTRIX_DATA_DIR = dir
+    try {
+      const sessionId = 'sess-vision'
+      const meta = saveAttachment({
+        sessionId,
+        name: 'scan.png',
+        mime: 'image/png',
+        data: Buffer.from('fake-png-bytes'),
+      })
+      meta.extract = { status: 'ready', pageCount: 1, charCount: 80 }
+      assert.ok(readAttachmentBuffer(sessionId, meta.id))
+      const parts = buildUserContentParts(
+        '看图',
+        sessionId,
+        [meta],
+        'http://127.0.0.1:8787',
+        VISION_CAPS,
+      )
+      assert.ok(parts.some(p => p.type === 'text' && /研报已整理/.test(p.text)))
+      assert.ok(parts.some(p => p.type === 'image_url'), 'vision model should keep image_url')
+    } finally {
+      if (prev === undefined) delete process.env.OPPTRIX_DATA_DIR
+      else process.env.OPPTRIX_DATA_DIR = prev
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('failed OCR emits clear error without relying on vision alone', () => {
@@ -101,13 +155,55 @@ describe('content parts for image OCR', () => {
       size: 100,
       createdAt: '2026-01-01T00:00:00.000Z',
       extract: { status: 'failed', error: '文字识别尚未就绪' },
-    }], 'http://127.0.0.1:8787')
+    }], 'http://127.0.0.1:8787', TEXT_ONLY_CAPS)
     assert.equal(parts.length, 2)
     assert.equal(parts[1].type, 'text')
     if (parts[1].type === 'text') {
       assert.match(parts[1].text, /识别失败|文字识别/)
     }
     assert.ok(!parts.some(p => p.type === 'image_url'))
+  })
+})
+
+describe('sanitizeMessagesForModelMedia', () => {
+  it('strips historical image_url for text-only models', () => {
+    const messages = [{
+      role: 'user',
+      content: [
+        { type: 'text', text: '【研报已整理】scan.png · id=img1' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc', detail: 'auto' } },
+      ],
+    }]
+    const out = sanitizeMessagesForModelMedia(messages, TEXT_ONLY_CAPS)
+    assert.equal(out[0].content.length, 1)
+    assert.equal(out[0].content[0].type, 'text')
+    assert.ok(!JSON.stringify(out).includes('image_url'))
+  })
+
+  it('keeps image_url for vision models', () => {
+    const messages = [{
+      role: 'user',
+      content: [
+        { type: 'text', text: '看图' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
+      ],
+    }]
+    const out = sanitizeMessagesForModelMedia(messages, VISION_CAPS)
+    assert.ok(out[0].content.some(p => p.type === 'image_url'))
+  })
+
+  it('degrades lone image_url to short text when unsupported', () => {
+    const messages = [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
+      ],
+    }]
+    const out = sanitizeMessagesForModelMedia(messages, TEXT_ONLY_CAPS)
+    assert.equal(out[0].content.length, 1)
+    assert.equal(out[0].content[0].type, 'text')
+    assert.match(out[0].content[0].text, /图片/)
+    assert.match(out[0].content[0].text, /文档工具/)
   })
 })
 

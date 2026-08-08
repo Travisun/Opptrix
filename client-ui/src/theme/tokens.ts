@@ -115,7 +115,8 @@ export const opptrixTokensLight = {
   sidebarGlass: 'rgba(255, 255, 255, 0.14)',
   sidebarSelected: 'rgba(20, 20, 20, 0.08)',
 
-  userBubble: '#F3F3F3',
+  /** Align with canvas / Composer input card */
+  userBubble: '#FCFCFC',
   gray100: '#F3F3F3',
   gray200: '#EEEEEE',
   gray300: 'rgba(20, 20, 20, 0.20)',
@@ -206,7 +207,8 @@ export const opptrixTokensDark = {
   sidebarGlass: 'rgba(24, 24, 24, 0.45)',
   sidebarSelected: 'rgba(240, 240, 240, 0.12)',
 
-  userBubble: '#2A2A2A',
+  /** Align with canvas / Composer input card */
+  userBubble: '#181818',
   gray100: '#2A2A2A',
   gray200: '#3A3A3A',
   gray300: '#4A4A4A',

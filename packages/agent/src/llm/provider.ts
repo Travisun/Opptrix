@@ -1,7 +1,11 @@
 import type { OpenAiTool } from '../tools.js'
 import { formatOutboundFetchError, outboundFetch } from './outbound-fetch.js'
 import { parseOpenAiUsage, type TokenUsage } from './token-usage.js'
-import { parseAssistantResponseContent } from '../content-parts.js'
+import {
+  parseAssistantResponseContent,
+  sanitizeMessagesForModelMedia,
+} from '../content-parts.js'
+import { resolveModelMediaCapabilitiesAsync } from './models-dev-context.js'
 
 export interface LlmConfig {
   provider: string
@@ -362,10 +366,16 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       }
     }
     const url = joinOpenAiCompatibleUrl(this.cfg.baseUrl, 'chat/completions')
+    // 出站净化：text-only 模型剥离历史中的 image_url / file / audio，避免 schema 反序列化失败
+    const mediaCaps = await resolveModelMediaCapabilitiesAsync(
+      this.cfg.model,
+      this.cfg.provider,
+    )
+    const outboundMessages = sanitizeMessagesForModelMedia(messages, mediaCaps)
     const buildBody = (stream: boolean): Record<string, unknown> => {
       const body: Record<string, unknown> = {
         model: this.cfg.model,
-        messages: messages.map(serializeMessage),
+        messages: outboundMessages.map(serializeMessage),
         temperature: opts?.temperature ?? this.cfg.temperature ?? 1,
         max_tokens: opts?.maxTokens ?? this.cfg.maxTokens ?? 4096,
       }

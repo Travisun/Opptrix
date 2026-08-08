@@ -23,7 +23,6 @@ type LoadState =
   | { phase: 'ready'; doc: MindmapDoc }
 
 const FIT_PADDING = 0.92
-const RESIZE_FIT_DEBOUNCE_MS = 150
 
 const useStyles = makeStyles({
   card: {
@@ -32,21 +31,34 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
     width: '100%',
-    maxWidth: '420px',
-    minHeight: '120px',
-    maxHeight: '240px',
+    minHeight: '200px',
+    maxHeight: '360px',
     boxSizing: 'border-box',
+    margin: 0,
     padding: '10px 12px',
     borderRadius: opptrixTokens.radiusMd,
     border: `1px solid ${opptrixCssVars.border}`,
     backgroundColor: opptrixCssVars.canvasAlt,
     textAlign: 'left',
     color: opptrixCssVars.textPrimary,
+    font: 'inherit',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
     transitionProperty: 'border-color, background-color',
     transitionDuration: '0.15s',
     transitionTimingFunction: 'ease',
     ':hover': {
       backgroundColor: opptrixCssVars.canvas,
+    },
+    // 覆盖 ghostInteractive 的 :active opacity，避免缩放预览整卡闪抖
+    ':active': {
+      opacity: 1,
+      backgroundColor: opptrixCssVars.canvasMuted,
+    },
+    ':focus': { outline: 'none' },
+    ':focus-visible': {
+      outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: opptrixTokens.focusRingOffset,
     },
   },
   header: {
@@ -100,7 +112,7 @@ const useStyles = makeStyles({
   mapHost: {
     width: '100%',
     height: '100%',
-    minHeight: '100px',
+    minHeight: '160px',
     // Hide leftover mind-elixir chrome if any plugin injects it.
     '& .mind-elixir-toolbar': {
       display: 'none',
@@ -125,7 +137,6 @@ export default function MindmapInlineCard({
   const mapElRef = useRef<HTMLDivElement>(null)
   const mindRef = useRef<MindElixirInstance | null>(null)
   const seedDocRef = useRef<MindmapDoc | null>(null)
-  const resizeFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
 
   useEffect(() => {
@@ -180,6 +191,7 @@ export default function MindmapInlineCard({
     }
     mindRef.current = mind
 
+    // 内联缩略图：仅首次 ready 时 fit 一次；勿随右栏开合 ResizeObserver 反复 refit
     let cancelled = false
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -188,24 +200,8 @@ export default function MindmapInlineCard({
       })
     })
 
-    const onResize = () => {
-      if (resizeFitTimer.current) clearTimeout(resizeFitTimer.current)
-      resizeFitTimer.current = setTimeout(() => {
-        resizeFitTimer.current = null
-        if (cancelled || mindRef.current !== mind) return
-        fitMindScale(mind)
-      }, RESIZE_FIT_DEBOUNCE_MS)
-    }
-    const ro = new ResizeObserver(onResize)
-    ro.observe(el)
-
     return () => {
       cancelled = true
-      if (resizeFitTimer.current) {
-        clearTimeout(resizeFitTimer.current)
-        resizeFitTimer.current = null
-      }
-      ro.disconnect()
       mind.destroy()
       mindRef.current = null
     }
@@ -225,8 +221,10 @@ export default function MindmapInlineCard({
     <button
       type="button"
       className={mergeClasses(s.card)}
-      style={{ cursor: 'pointer' }}
-      onClick={onOpen}
+      onClick={(e) => {
+        e.stopPropagation()
+        onOpen()
+      }}
       title={`打开 ${attachment.name}`}
       aria-label={`打开脑图 ${attachment.name}`}
     >

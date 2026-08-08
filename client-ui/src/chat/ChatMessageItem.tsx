@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   BranchForkRegular,
@@ -10,11 +10,17 @@ import ChatProcessTrace from './ChatProcessTrace'
 import MessageTokenLabel from './MessageTokenLabel'
 import { MessageAttachmentStrip } from './ComposerAttachmentStrip'
 import MediaPreviewBox from './MediaPreviewBox'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { ChatAttachmentMeta, ChatDisplayMessage } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { copyTextToClipboard } from '../platform/clipboard'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
+
+/** 与 ChatComposer 约 8 行限高对齐 */
+const USER_BUBBLE_LINE_HEIGHT = 1.65
+const USER_BUBBLE_FONT_PX = 16
+const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 8)
 
 const useStyles = makeStyles({
   entry: {
@@ -22,14 +28,9 @@ const useStyles = makeStyles({
     ...fadeInUp,
   },
   entryUser: {
-    alignSelf: 'flex-end',
-    maxWidth: '78%',
+    alignSelf: 'stretch',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-end',
-  },
-  entryUserMobile: {
-    maxWidth: '90%',
   },
   entryAssistant: {
     alignSelf: 'stretch',
@@ -45,14 +46,54 @@ const useStyles = makeStyles({
   },
   userBubble: {
     maxWidth: '100%',
-    padding: '11px 15px',
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.userBubble,
+    padding: '8px 12px',
+    borderRadius: opptrixTokens.radiusXl,
+    border: `1px solid ${opptrixCssVars.separatorHairline}`,
+    backgroundColor: opptrixCssVars.canvas,
     color: opptrixCssVars.textPrimary,
-    whiteSpace: 'pre-wrap',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    boxSizing: 'border-box',
+  },
+  userBubbleEditable: {
+    cursor: 'text',
+  },
+  userBubbleEditing: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: 'none',
+    overflow: 'visible',
+    whiteSpace: 'normal',
+    textOverflow: 'clip',
   },
   userBubbleMobile: {
     maxWidth: '100%',
+  },
+  editTextarea: {
+    display: 'block',
+    width: '100%',
+    margin: 0,
+    padding: 0,
+    border: 'none',
+    outline: 'none',
+    resize: 'none',
+    backgroundColor: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    lineHeight: 'inherit',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    maxHeight: `${USER_BUBBLE_MAX_HEIGHT}px`,
+    overflowY: 'auto',
+    boxSizing: 'border-box',
+  },
+  editActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    flexShrink: 0,
   },
   assistantBubble: {
     maxWidth: '100%',
@@ -87,6 +128,11 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     gap: '4px',
     marginTop: '4px',
+  },
+  /** 用户附件条：气泡外、footer 之上 */
+  attachmentBelow: {
+    marginTop: '6px',
+    maxWidth: '100%',
   },
   time: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -145,16 +191,60 @@ interface Props {
   index: number
   sessionId?: string | null
   isMobile?: boolean
+  /** 流式生成中不可进入编辑 */
+  editDisabled?: boolean
   onFork?: () => void
+  onEditResend?: (index: number, text: string) => void
   onOpenPreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
 }
 
-function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, onOpenPreview }: Props) {
+function hasTextSelection(): boolean {
+  const sel = window.getSelection()
+  return Boolean(sel && !sel.isCollapsed && sel.toString().trim())
+}
+
+/** 默认态单行展示：换行与连续空白压成空格 */
+function toOneLinePreview(text: string): string {
+  return text.replace(/\s+/g, ' ')
+}
+
+function ChatMessageItem({
+  message,
+  index,
+  sessionId,
+  isMobile = false,
+  editDisabled = false,
+  onFork,
+  onEditResend,
+  onOpenPreview,
+}: Props) {
   const s = useStyles()
   const [copied, setCopied] = useState(false)
+  /** 仅无右栏预览（如移动端）时走消息内弹层 */
   const [previewAttachment, setPreviewAttachment] = useState<ChatAttachmentMeta | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(message.content)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isUser = message.role === 'user'
   const timeLabel = formatFriendlyTime(message.at)
+  const canEdit = isUser && Boolean(onEditResend) && !editDisabled
+
+  useEffect(() => {
+    if (!editing) setDraft(message.content)
+  }, [editing, message.content])
+
+  useEffect(() => {
+    if (editDisabled && editing) setEditing(false)
+  }, [editDisabled, editing])
+
+  useEffect(() => {
+    if (!editing) return
+    const el = textareaRef.current
+    if (!el) return
+    el.focus()
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  }, [editing])
 
   const handleCopy = useCallback(async () => {
     if (!message.content) return
@@ -163,6 +253,49 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }, [message.content])
+
+  const beginEdit = useCallback(() => {
+    if (!canEdit || editing) return
+    if (hasTextSelection()) return
+    setDraft(message.content)
+    setEditing(true)
+  }, [canEdit, editing, message.content])
+
+  const cancelEdit = useCallback(() => {
+    setDraft(message.content)
+    setEditing(false)
+  }, [message.content])
+
+  const submitEdit = useCallback(() => {
+    if (!onEditResend) return
+    const next = draft.trim()
+    if (!next && !(message.attachments?.length)) return
+    onEditResend(index, draft)
+    setEditing(false)
+  }, [draft, index, message.attachments?.length, onEditResend])
+
+  const handleBubbleClick = useCallback((e: React.MouseEvent) => {
+    if (!canEdit || editing) return
+    const target = e.target
+    if (target instanceof Element && target.closest('[data-attachment-strip], button, a')) return
+    // 等 mouseup 后选区稳定，再决定是否进入编辑
+    window.setTimeout(() => {
+      if (hasTextSelection()) return
+      beginEdit()
+    }, 0)
+  }, [beginEdit, canEdit, editing])
+
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelEdit()
+      return
+    }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      submitEdit()
+    }
+  }, [cancelEdit, submitEdit])
 
   const copyLabel = copied ? '已复制消息 Markdown' : '复制消息 Markdown'
   const forkLabel = '基于此回复分叉新对话'
@@ -222,14 +355,30 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
     </div>
   )
 
+  const handleOpenAttachment = useCallback((item: ChatAttachmentMeta) => {
+    if (onOpenPreview && sessionId) {
+      onOpenPreview(sessionId, item)
+      return
+    }
+    setPreviewAttachment(item)
+  }, [onOpenPreview, sessionId])
+
+  const attachmentStrip = message.attachments && message.attachments.length > 0 ? (
+    <div data-attachment-strip>
+      <MessageAttachmentStrip
+        items={message.attachments}
+        sessionId={sessionId}
+        onOpen={handleOpenAttachment}
+      />
+    </div>
+  ) : null
+
   return (
     <div
       className={mergeClasses(
         s.entry,
         s.entryInteractive,
-        isUser
-          ? mergeClasses(s.entryUser, isMobile && s.entryUserMobile)
-          : s.entryAssistant,
+        isUser ? s.entryUser : s.entryAssistant,
       )}
       data-message-index={index}
       data-message-role={message.role}
@@ -241,28 +390,55 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
           s.bubble,
           isMobile && s.bubbleMobile,
           isUser
-            ? mergeClasses(s.userBubble, isMobile && s.userBubbleMobile)
+            ? mergeClasses(
+              s.userBubble,
+              isMobile && s.userBubbleMobile,
+              canEdit && !editing && s.userBubbleEditable,
+              editing && s.userBubbleEditing,
+            )
             : s.assistantBubble,
         )}
+        onClick={isUser ? handleBubbleClick : undefined}
+        role={canEdit && !editing ? 'button' : undefined}
+        aria-label={canEdit && !editing ? '点击编辑这条消息' : undefined}
       >
-        {message.attachments && message.attachments.length > 0 && (
-          <MessageAttachmentStrip
-            items={message.attachments}
-            sessionId={sessionId}
-            onOpen={(item) => {
-              if (isMobile || !onOpenPreview) {
-                setPreviewAttachment(item)
-                return
-              }
-              if (sessionId) onOpenPreview(sessionId, item)
-            }}
-          />
+        {!isUser && attachmentStrip}
+        {isUser ? (
+          editing ? (
+            <>
+              <textarea
+                ref={textareaRef}
+                className={mergeClasses(s.editTextarea, 'opptrix-scroll-hidden')}
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                onClick={e => e.stopPropagation()}
+                rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+                aria-label="编辑消息"
+              />
+              <div className={s.editActions} onClick={e => e.stopPropagation()}>
+                <OpptrixButton variant="ghost" size="small" onClick={cancelEdit}>
+                  取消
+                </OpptrixButton>
+                <OpptrixButton
+                  variant="primary"
+                  size="small"
+                  onClick={submitEdit}
+                  disabled={!draft.trim() && !(message.attachments?.length)}
+                >
+                  发送
+                </OpptrixButton>
+              </div>
+            </>
+          ) : (
+            toOneLinePreview(message.content)
+            || (message.attachments?.length ? '（附件）' : '')
+          )
+        ) : (
+          <MarkdownMessage content={message.content} sessionId={sessionId} />
         )}
-        {isUser
-          ? message.content
-          : <MarkdownMessage content={message.content} sessionId={sessionId} />}
         {message.toolSteps && message.toolSteps.length > 0 && (
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 8 }}>
             <ChatProcessTrace steps={message.toolSteps} />
           </div>
         )}
@@ -275,8 +451,13 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
         )}
         {!isUser && metaFooter}
       </div>
-      {isUser && metaFooter}
-      {sessionId && (
+      {isUser && attachmentStrip ? (
+        <div className={s.attachmentBelow}>
+          {attachmentStrip}
+        </div>
+      ) : null}
+      {isUser && !editing && metaFooter}
+      {sessionId && !onOpenPreview && (
         <MediaPreviewBox
           open={Boolean(previewAttachment)}
           sessionId={sessionId}

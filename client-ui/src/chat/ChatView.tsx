@@ -139,7 +139,7 @@ const useStyles = makeStyles({
     paddingTop: '8px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px',
+    gap: '10px',
     boxSizing: 'border-box',
   },
   contentColumnElectron: {
@@ -147,7 +147,7 @@ const useStyles = makeStyles({
   },
   contentColumnMobile: {
     paddingTop: '8px',
-    gap: '5px',
+    gap: '10px',
   },
   contentColumnEmpty: {
     flex: 1,
@@ -361,6 +361,7 @@ interface ChatViewProps {
   onPromptQueueRemove?: (id: string) => void
   onPromptQueueRunNow?: (id: string) => void
   onForkMessage?: (messageIndex: number) => void
+  onEditResend?: (messageIndex: number, text: string) => void
   ensureSession?: () => Promise<string>
   onQuoteSelection?: (selection: MessageSelection) => void
   onEphemeralAsk?: (
@@ -397,7 +398,7 @@ function ChatView({
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
+  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
@@ -966,7 +967,9 @@ function ChatView({
                   index={i}
                   sessionId={sessionId}
                   isMobile={isMobile}
+                  editDisabled={loading}
                   onFork={onForkMessage ? () => onForkMessage(i) : undefined}
+                  onEditResend={onEditResend}
                   onOpenPreview={onOpenFilePreview}
                 />
               ))}

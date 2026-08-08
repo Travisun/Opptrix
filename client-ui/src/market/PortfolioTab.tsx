@@ -236,11 +236,6 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
 
   return (
     <div className={s.root}>
-      <div style={{ flexShrink: 0, padding: `6px ${CONTENT_PAD} 0` }}>
-        <Text className={s.metricLabel} style={{ lineHeight: 1.45 }}>
-          汇总 A 股、港股、美股的持仓市值与盈亏；在关注列表或详情页录入买卖后自动更新。
-        </Text>
-      </div>
       {!empty && data ? (
         <div className={s.summary}>
           <div className={s.metric}>

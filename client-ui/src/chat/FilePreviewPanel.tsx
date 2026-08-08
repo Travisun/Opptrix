@@ -20,10 +20,17 @@ import MediaPreviewPlayer from './MediaPreviewPlayer'
 import MindmapPreviewHost from './MindmapPreviewHost'
 import PdfPreviewViewer from './PdfPreviewViewer'
 import FilenameEllipsis from './FilenameEllipsis'
-import { DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_PANEL_TITLE } from '../desktop/constants'
+import ChromeToolButton from '../desktop/ChromeToolButton'
+import {
+  DESKTOP_CHROME_TOP_OFFSET,
+  DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
+  DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
+  DESKTOP_TITLEBAR_HEIGHT,
+  DESKTOP_TOOL_GAP,
+  DESKTOP_Z_PANEL_TITLE,
+} from '../desktop/constants'
 import { electronPlatform } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
-import { ghostInteractive } from '../theme/mixins'
 
 const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace'
 
@@ -48,7 +55,7 @@ const useStyles = makeStyles({
     gap: '0',
     paddingLeft: '0',
     paddingRight: '8px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
     backgroundColor: opptrixCssVars.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,
@@ -59,6 +66,13 @@ const useStyles = makeStyles({
   headerWeb: {
     height: '40px',
     zIndex: 1,
+  },
+  /**
+   * Match DesktopWindowChrome / RightMarketPanel: top inset + center within
+   * remaining chromeBand so tools / title share the left chrome midline.
+   */
+  headerElectron: {
+    paddingTop: `${DESKTOP_CHROME_TOP_OFFSET}px`,
   },
   headerElectronWin: {
     paddingRight: '12px',
@@ -77,6 +91,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    height: '28px',
     paddingLeft: '8px',
     overflow: 'hidden',
   },
@@ -84,7 +99,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
-    gap: '2px',
+    gap: `${DESKTOP_TOOL_GAP}px`,
+    height: '28px',
   },
   /** 非 PDF 预览内部工具条（与 PdfPreviewViewer toolbar 对齐） */
   previewTools: {
@@ -98,30 +114,6 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvas,
   },
-  previewToolBtn: {
-    ...ghostInteractive,
-    width: '28px',
-    height: '28px',
-    minWidth: '28px',
-    minHeight: '28px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-    color: opptrixCssVars.textSecondary,
-    cursor: 'pointer',
-    ':disabled': {
-      opacity: 0.35,
-      cursor: 'default',
-      ':hover': {
-        backgroundColor: 'transparent',
-      },
-    },
-  },
-  previewToolBtnActive: {
-    backgroundColor: opptrixCssVars.surfaceHover,
-    color: opptrixCssVars.textPrimary,
-  },
   name: {
     flex: '0 1 auto',
     minWidth: 0,
@@ -130,6 +122,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     color: opptrixCssVars.textPrimary,
     fontSize: 'var(--opptrix-font-base)',
+    lineHeight: 1,
   },
   /** 次级工具条左侧文件名 */
   toolsTitle: {
@@ -144,21 +137,6 @@ const useStyles = makeStyles({
     flex: '1 1 auto',
     minWidth: '8px',
     alignSelf: 'stretch',
-  },
-  close: {
-    ...ghostInteractive,
-    flexShrink: 0,
-    width: '28px',
-    height: '28px',
-    minWidth: '28px',
-    minHeight: '28px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-    color: opptrixCssVars.textSecondary,
-    WebkitAppRegion: 'no-drag',
-    pointerEvents: 'auto',
   },
   body: {
     flex: 1,
@@ -610,8 +588,13 @@ export default function FilePreviewPanel({
   const toggleOutline = () => setOutlineOpen((open) => !open)
   /** Left sidebar list only applies once a file is open for preview. */
   const showSidebarList = fileListOpen && Boolean(sessionId) && hasAttachment
-  /** 非 PDF / 图片且已打开附件时，在 previewPane 顶部显示文件名工具条 */
-  const showNonPdfTools = hasAttachment && !isPdf && !isImage && !showCenterPicker
+  /** 非 PDF / 图片 / 画布 / 脑图且已打开附件时，在 previewPane 顶部显示文件名工具条（宿主自带文件名的类型除外） */
+  const showNonPdfTools = hasAttachment
+    && !isPdf
+    && !isImage
+    && !isCanvas
+    && !isMindmap
+    && !showCenterPicker
 
   return (
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
@@ -619,6 +602,7 @@ export default function FilePreviewPanel({
         className={mergeClasses(
           s.header,
           !electronChrome && s.headerWeb,
+          electronChrome && s.headerElectron,
           electronChrome && s.headerElectronFill,
           electronChrome && 'opptrix-right-panel-title-bar',
           electronChrome && (electronWin ? s.headerElectronWin : s.headerElectronMac),
@@ -633,20 +617,15 @@ export default function FilePreviewPanel({
         )}
         <div className={mergeClasses(s.titleCluster, 'opptrix-panel-title-no-drag')}>
           {attachment ? (
-            <button
-              type="button"
-              className={mergeClasses(
-                s.previewToolBtn,
-                showSidebarList && s.previewToolBtnActive,
-              )}
+            <ChromeToolButton
+              label={fileListToggleLabel}
+              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+              active={showSidebarList}
               onClick={toggleFileList}
               disabled={!sessionId || !hasAttachment}
-              aria-label={fileListToggleLabel}
-              title={fileListToggleLabel}
-              aria-pressed={showSidebarList}
             >
-              <TextBulletListSquareRegular fontSize={16} />
-            </button>
+              <TextBulletListSquareRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            </ChromeToolButton>
           ) : (
             <span className={s.name}>文件预览</span>
           )}
@@ -659,15 +638,13 @@ export default function FilePreviewPanel({
           aria-hidden
         />
         <div className={mergeClasses(s.headerTrail, 'opptrix-panel-title-no-drag')}>
-          <button
-            type="button"
-            className={s.close}
+          <ChromeToolButton
+            label="关闭预览"
+            iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
             onClick={onClose}
-            aria-label="关闭预览"
-            title="关闭预览"
           >
-            <DismissRegular fontSize={18} />
-          </button>
+            <DismissRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+          </ChromeToolButton>
         </div>
       </div>
       <div className={s.main}>

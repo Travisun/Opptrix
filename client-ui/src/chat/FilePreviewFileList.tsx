@@ -190,20 +190,28 @@ export default function FilePreviewFileList({
   const [error, setError] = useState(false)
   const onItemCountChangeRef = useRef(onItemCountChange)
   onItemCountChangeRef.current = onItemCountChange
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
 
   const refresh = useCallback(async (sid: string) => {
     setLoading(true)
     setError(false)
+    setItems([])
+    onItemCountChangeRef.current?.(0)
     try {
       const next = await listSessionAttachments(sid)
+      if (sessionIdRef.current !== sid) return
       setItems(next)
       onItemCountChangeRef.current?.(next.length)
     } catch {
+      if (sessionIdRef.current !== sid) return
       setItems([])
       setError(true)
       onItemCountChangeRef.current?.(0)
     } finally {
-      setLoading(false)
+      if (sessionIdRef.current === sid) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -215,6 +223,10 @@ export default function FilePreviewFileList({
       onItemCountChangeRef.current?.(0)
       return
     }
+    setItems([])
+    setError(false)
+    setLoading(true)
+    onItemCountChangeRef.current?.(0)
     void refresh(sessionId)
   }, [panelVisible, sessionId, refresh])
 

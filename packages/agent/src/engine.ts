@@ -741,6 +741,14 @@ export class AgentEngine {
     return this.sessions.fork(source, messageIndex)
   }
 
+  /** 截断会话至指定 user display turn 之前（编辑重发前调用） */
+  truncateSession(sessionId: string, messageIndex: number) {
+    this.userPromptBridge.cancelSession(sessionId)
+    const updated = this.sessions.truncateFromDisplayIndex(sessionId, messageIndex)
+    this.invalidateContextUsage(sessionId)
+    return updated
+  }
+
   getSessionContextRef(sessionId: string): SessionContextRef | null {
     const record = this.sessions.get(sessionId)
     return record?.contextRef ?? null
@@ -896,19 +904,21 @@ export class AgentEngine {
       resolvedAttachments.push(waited.meta)
     }
 
+    let mediaCaps: Awaited<ReturnType<typeof resolveModelMediaCapabilitiesAsync>> | undefined
     if (resolvedAttachments.length) {
       const resolvedModel = this.registry.resolve(activeModel)
       const modelId = resolvedModel?.model
         ?? activeModel?.replace(/^[^:]+:/, '')
         ?? 'default'
       const providerId = providerIdFromModelRef(activeModel)
-      const caps = await resolveModelMediaCapabilitiesAsync(modelId, providerId)
+      mediaCaps = await resolveModelMediaCapabilitiesAsync(modelId, providerId)
       let count = 0
       let total = 0
       for (const meta of resolvedAttachments) {
-        // 已整理的研报库 / 已转写音视频不占原生多模态能力；图片仍可附带看图
+        // 已整理的研报库 / 已转写音视频不占原生多模态能力；
+        // 图片 OCR ready 亦不强制 vision（image_url 由 mediaCaps 门控）
         if (
-          (isLibraryExtractReady(meta) && meta.kind !== 'image')
+          isLibraryExtractReady(meta)
           || isTranscriptExtractReady(meta)
         ) {
           count += 1
@@ -918,7 +928,7 @@ export class AgentEngine {
         const validation = validateAttachmentAgainstCapabilities(
           meta.kind,
           meta.size,
-          caps,
+          mediaCaps,
           count,
           total,
         )
@@ -941,7 +951,13 @@ export class AgentEngine {
     }
 
     const userContent = resolvedAttachments.length
-      ? buildUserContentParts(text, sessionId, resolvedAttachments, this.apiBaseUrl)
+      ? buildUserContentParts(
+        text,
+        sessionId,
+        resolvedAttachments,
+        this.apiBaseUrl,
+        mediaCaps,
+      )
       : text
 
     record.messages.push({ role: 'user', content: userContent })

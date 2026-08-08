@@ -102,7 +102,7 @@
 
 1. Header：图标 + 标题 + 关闭
 2. Context 条：当前标的 / 页面
-3. 消息区 scroll
+3. 消息区 scroll（用户消息为全宽气泡；助手为无底 Markdown；消息间距约 10px）
 4. 输入区浮层 dock（Composer：Cursor 式——`scrollViewport` 绝对铺满 `bodyShell`，底部多层 `maskImage` 淡出与 `composerBottomPad` 联动：不透明截止在 `100% - pad`，再约 38px 内渐隐到透明，右侧 scrollbar 条带全程不透明（实测 gutter，至少 6px）；**无**全宽 dock 毛玻璃 / `composerDockScrim`；`composerDock` / `composerInner` / `composerFooter` 透明（Electron 融入 vibrancy、Web 与主区 canvas 同色），`pointerEvents: none` 仅内容区可点；输入卡 `panel` 仍为实色圆角 + 阴影；消息区 `paddingBottom` 由 ResizeObserver 测 `composerInner` 高度，下限 `CHAT_COMPOSER_BOTTOM_PAD`；卡顶极小 padding、空态输入约一行高、工具栏与 28px 按钮齐平；底栏轻量居中文案「内容由AI生成，不构成投资建议，请核实重要信息」，右侧小号上下文用量。布局两行：上行全宽 contentEditable（录音中仍可见已输入文字）；下行 toolbar 为左 `+` / 授权、中弹性空白、右 模型 / mic/send/stop（模型在麦克风或停止左侧，窄宽时模型名省略收缩且不挤掉 28px 圆钮；空态仅麦为 primary 实心圆 CTA；有可发送内容时麦在发送左侧为透明 ghost 次级、发送为主；录音为红圆且 hover 保持浅色图标/偏红底，toolbar 维持 28px 齐平；生成中为模型 + 停止）。语音聆听条（纵向柱波 + 下方次要灰文案）绝对定位叠在整个 `panel` 正中（`pointer-events: none` overlay，条自身可点结束），不夹在 toolbar 中缝、不替换 editor DOM。`+` 菜单可添加附件 / 授权文件夹 / 引用技能；`@` 与 `/` 面板互斥；Enter 发送、Shift+Enter 换行）
 
 ## 5. 响应式（V1）

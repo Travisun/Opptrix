@@ -10,7 +10,10 @@
 .opptrix-md > :first-child { margin-top: 0; }
 .opptrix-md > :last-child { margin-bottom: 0; }
 
-.opptrix-md p,
+.opptrix-md p {
+  margin: 6px 0 2px;
+}
+
 .opptrix-md ul,
 .opptrix-md ol,
 .opptrix-md blockquote,
@@ -34,8 +37,8 @@
   color: var(--opptrix-md-text);
 }
 
-.opptrix-md h1 { font-size: 1.28em; }
-.opptrix-md h2 { font-size: 1.14em; }
+.opptrix-md h1 { font-size: 1.21em; }
+.opptrix-md h2 { font-size: 1.21em; }
 .opptrix-md h3 { font-size: 1.04em; }
 .opptrix-md h4 { font-size: 1em; font-weight: 600; }
 .opptrix-md h5,

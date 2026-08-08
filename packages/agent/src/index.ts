@@ -214,6 +214,9 @@ export {
   attachmentToContentParts,
   chatMessageContentToText,
   parseAssistantResponseContent,
+  modelAcceptsImageInput,
+  sanitizeContentPartsForModelMedia,
+  sanitizeMessagesForModelMedia,
 } from './content-parts.js'
 export type { ContentPart, TextContentPart, ImageUrlContentPart, FileContentPart, InputAudioContentPart } from './llm/provider.js'
 export {
