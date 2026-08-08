@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, memo } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular, GlobeRegular, PeopleTeamRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, GlobeRegular, PeopleTeamRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -20,6 +20,7 @@ import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ExpertSessionIcon from './ExpertSessionIcon'
 import HoverMarqueeText from './HoverMarqueeText'
+import opptrixWordmarkSidebarSvg from '../assets/opptrix-wordmark-sidebar.svg?raw'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 export type SidebarListTab = 'chat' | 'experts' | 'archive'
@@ -98,24 +99,35 @@ const useStyles = makeStyles({
     padding: '8px 8px 0',
   },
   brandRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
     flexShrink: 0,
     minWidth: 0,
     /* 与 sidebarTopMenuRow 图标左缘对齐：margin 10 + padding 10 = 20 */
     padding: '4px 20px 0',
     overflow: 'hidden',
-    whiteSpace: 'nowrap',
-    textOverflow: 'ellipsis',
     lineHeight: 1.35,
   },
-  brandName: {
-    fontSize: '13px',
-    fontWeight: 700,
+  brandMark: {
+    display: 'inline-flex',
+    flexShrink: 0,
+    height: '16px',
+    width: 'auto',
     color: opptrixCssVars.textSecondary,
+    lineHeight: 0,
+    '& svg': {
+      display: 'block',
+      height: '16px',
+      width: 'auto',
+    },
   },
   brandVersion: {
     fontSize: '11px',
     fontWeight: 500,
     color: opptrixCssVars.textSecondary,
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   },
   menuSection: {
     marginTop: '15px',
@@ -311,7 +323,7 @@ interface SessionSidebarProps {
   onNew: () => void
   onDelete: (id: string) => void
   onArchive: (id: string, folderId: string) => void
-  onOpenSearch: () => void
+  onOpenSearch?: () => void
   onOpenSettings: () => void
   onOpenNewsCenter: () => void
   onOpenMarketDynamics: () => void
@@ -334,7 +346,7 @@ function formatDate(iso: string) {
 function SessionSidebar({
   mode, width, isDragging = false, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat', busySessionIds = [],
-  onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onOpenExpertMarket, onClose,
+  onSelect, onNew, onDelete, onArchive, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onOpenExpertMarket, onClose,
   listTab: listTabProp,
   onListTabChange,
   archivedGroups = [],
@@ -401,12 +413,13 @@ function SessionSidebar({
       )}
 
       <div className={s.brandRow} aria-label={brandAriaLabel}>
-        <span className={s.brandName}>Opptrix工作台</span>
+        <span
+          className={s.brandMark}
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: opptrixWordmarkSidebarSvg }}
+        />
         {versionLabel ? (
-          <>
-            {' '}
-            <span className={s.brandVersion}>{versionLabel}</span>
-          </>
+          <span className={s.brandVersion}>{versionLabel}</span>
         ) : null}
       </div>
 
@@ -427,11 +440,6 @@ function SessionSidebar({
       >
         <PeopleTeamRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>专家</span>
-      </button>
-
-      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onOpenSearch)}>
-        <SearchRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
-        <span>搜索</span>
       </button>
 
       <button

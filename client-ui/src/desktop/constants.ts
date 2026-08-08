@@ -38,8 +38,8 @@ export const DESKTOP_SIDEBAR_TOOL_ICON_SIZE = 18
 export const DESKTOP_SIDEBAR_TOOL_ICON_PADDING = 1
 export const DESKTOP_TITLE_GAP = 12
 
-/** Toolbar tools: sidebar, new chat, back, forward */
-export const DESKTOP_TOOLBAR_TOOL_COUNT = 4
+/** Toolbar tools: sidebar, search, back, forward, new chat */
+export const DESKTOP_TOOLBAR_TOOL_COUNT = 5
 
 /** Settings nav column default (px) — Codex-style; also default for drag persistence */
 export const DESKTOP_SETTINGS_SIDEBAR_WIDTH = 260

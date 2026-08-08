@@ -3,6 +3,7 @@ import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useSt
 import {
   ArrowLeftRegular,
   ArrowRightRegular,
+  SearchRegular,
 } from '@fluentui/react-icons'
 import { makeStyles, mergeClasses, Text } from '@fluentui/react-components'
 import { isElectron } from '../platform/detect'
@@ -157,6 +158,7 @@ interface DesktopWindowChromeProps {
   onToggleSidebar?: () => void
   onRevealSidebar?: () => void
   onNewChat?: () => void
+  onOpenSearch?: () => void
   onGoBack?: () => void
   onGoForward?: () => void
   rightPanelOpen?: boolean
@@ -223,6 +225,7 @@ export default function DesktopWindowChrome({
   onToggleSidebar,
   onRevealSidebar,
   onNewChat,
+  onOpenSearch,
   onGoBack,
   onGoForward,
   rightPanelOpen = false,
@@ -442,6 +445,11 @@ export default function DesktopWindowChrome({
               </div>
               <div className={s.toolbarSpacer} aria-hidden />
               <div className={s.toolbarCluster}>
+                {!isSettings && onOpenSearch && (
+                  <ChromeToolButton label="搜索" onClick={onOpenSearch}>
+                    <SearchRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+                  </ChromeToolButton>
+                )}
                 {onGoBack && (
                   <ChromeToolButton
                     label={isSettings ? '返回应用' : '后退'}
@@ -470,6 +478,11 @@ export default function DesktopWindowChrome({
                   {sidebarOpen
                     ? <PanelLeftContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
                     : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                </ChromeToolButton>
+              )}
+              {!isSettings && onOpenSearch && (
+                <ChromeToolButton label="搜索" onClick={onOpenSearch}>
+                  <SearchRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
                 </ChromeToolButton>
               )}
               {onGoBack && (
