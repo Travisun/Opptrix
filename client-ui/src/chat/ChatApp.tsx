@@ -33,7 +33,7 @@ import RightPanel from './RightPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
 import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
-  listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, clearSessionContext,
+  listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, truncateSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
@@ -343,6 +343,16 @@ export default function ChatApp() {
     if (!activeId) return
     setPreview({ sessionId: activeId, attachment: att })
   }, [activeId])
+
+  /** 切换对话时丢弃旧会话的预览附件，保留 preview 模式以便显示新会话列表/空态 */
+  useEffect(() => {
+    setPreview((prev) => {
+      if (!prev) return null
+      if (!activeId || prev.sessionId !== activeId) return null
+      return prev
+    })
+  }, [activeId])
+
   const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
   const [expertRefreshKey, setExpertRefreshKey] = useState(0)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
@@ -1279,6 +1289,58 @@ export default function ChatApp() {
     }
   }, [activeId, closeDrawer, navigate, pushComposerDraft, refreshSessions, view])
 
+  const handleEditResend = useCallback(async (messageIndex: number, text: string) => {
+    const sid = activeIdRef.current
+    if (!sid) return
+
+    if (streamingSessionIdsRef.current.has(sid)) {
+      setError('正在生成回复，请稍后再编辑')
+      return
+    }
+
+    const target = messages[messageIndex]
+    if (!target || target.role !== 'user') return
+
+    const nextText = text.trim()
+    const attachmentIds = (target.attachments ?? []).map(a => a.id)
+    const hasAttachments = attachmentIds.length > 0
+    if (!nextText && !hasAttachments) return
+
+    const hasFollowing = messageIndex < messages.length - 1
+    const textUnchanged = nextText === target.content.trim()
+    if (textUnchanged && !hasFollowing) return
+
+    if (hasFollowing) {
+      const ok = await confirm({
+        title: '重新发送这条消息？',
+        message: '重新发送后，这条之后的回复都会被清除，且无法恢复。确定继续？',
+        confirmLabel: '重新发送',
+        cancelLabel: '取消',
+        confirmTone: 'danger',
+      })
+      if (!ok) return
+    }
+
+    try {
+      setError('')
+      const data = await truncateSession(sid, messageIndex)
+      if (activeIdRef.current === sid) {
+        setMessages(data.messages)
+        setContextRef(data.contextRef ?? null)
+        setActiveSessionMeta(data.session)
+        setSessionModelState(data.session.model)
+        setSessionLlmParamsState(data.session.llmParams)
+      }
+      void submitImplRef.current(
+        nextText || undefined,
+        hasAttachments ? attachmentIds : undefined,
+        hasAttachments ? target.attachments : undefined,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重新发送失败，请稍后重试')
+    }
+  }, [confirm, messages])
+
   const handleClearContextRef = useCallback(async () => {
     if (!activeId) return
     try {
@@ -1855,6 +1917,7 @@ export default function ChatApp() {
                   onPromptQueueRemove={handlePromptQueueRemove}
                   onPromptQueueRunNow={handlePromptQueueRunNow}
                   onForkMessage={handleForkFromMessage}
+                  onEditResend={handleEditResend}
                   onQuoteSelection={activeId ? handleQuoteSelection : undefined}
                   onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}
                   onClearContextRef={contextRef ? handleClearContextRef : undefined}

@@ -25,6 +25,7 @@ import { useTheme } from '../theme/ThemeContext'
 import { opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { compileCanvasSource } from './compileCanvasSource'
+import FilenameEllipsis from './FilenameEllipsis'
 import { exportElementPdf, exportElementPng } from './previewExport'
 
 const MIN_SCALE = 0.5
@@ -80,6 +81,15 @@ const useStyles = makeStyles({
     padding: '0 8px',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvas,
+  },
+  toolbarTitle: {
+    flex: '0 1 auto',
+    minWidth: 0,
+    maxWidth: '46%',
+    color: opptrixCssVars.textPrimary,
+    fontSize: 'var(--opptrix-font-sm)',
+    userSelect: 'none',
+    paddingRight: '4px',
   },
   toolBtn: {
     ...ghostInteractive,
@@ -247,21 +257,45 @@ export default function CanvasPreviewHost({
     setScale((prev) => clampScale(prev + delta))
   }
 
+  const titleEl = (
+    <FilenameEllipsis name={name} className={s.toolbarTitle} />
+  )
+
   if (state.phase === 'loading') {
     return (
-      <div className={s.center}>
-        <Spinner size="small" label="正在加载画布…" />
+      <div className={s.root}>
+        <div
+          className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}
+          role="toolbar"
+          aria-label="画布预览"
+        >
+          {titleEl}
+          <span className={s.spacer} />
+        </div>
+        <div className={s.center}>
+          <Spinner size="small" label="正在加载画布…" />
+        </div>
       </div>
     )
   }
 
   if (state.phase === 'error' || runtimeError) {
     return (
-      <div className={s.center}>
-        <span className={s.errTitle}>画布暂时无法显示</span>
-        <span className={s.errDetail}>
-          {runtimeError ?? (state.phase === 'error' ? state.message : '')}
-        </span>
+      <div className={s.root}>
+        <div
+          className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}
+          role="toolbar"
+          aria-label="画布预览"
+        >
+          {titleEl}
+          <span className={s.spacer} />
+        </div>
+        <div className={s.center}>
+          <span className={s.errTitle}>画布暂时无法显示</span>
+          <span className={s.errDetail}>
+            {runtimeError ?? (state.phase === 'error' ? state.message : '')}
+          </span>
+        </div>
       </div>
     )
   }
@@ -275,6 +309,7 @@ export default function CanvasPreviewHost({
         role="toolbar"
         aria-label="画布预览"
       >
+        {titleEl}
         <span className={s.spacer} />
         <button
           type="button"

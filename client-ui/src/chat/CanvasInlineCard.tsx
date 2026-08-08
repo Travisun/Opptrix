@@ -27,7 +27,7 @@ type LoadState =
   | { phase: 'error' }
   | { phase: 'ready'; Component: ComponentType }
 
-const PREVIEW_SCALE = 0.4
+const PREVIEW_SCALE = 0.55
 
 class PreviewErrorBoundary extends Component<
   { children: ReactNode; onError: () => void },
@@ -56,21 +56,34 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
     width: '100%',
-    maxWidth: '420px',
-    minHeight: '120px',
-    maxHeight: '240px',
+    minHeight: '200px',
+    maxHeight: '360px',
     boxSizing: 'border-box',
+    margin: 0,
     padding: '10px 12px',
     borderRadius: opptrixTokens.radiusMd,
     border: `1px solid ${opptrixCssVars.border}`,
     backgroundColor: opptrixCssVars.canvasAlt,
     textAlign: 'left',
     color: opptrixCssVars.textPrimary,
+    font: 'inherit',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
     transitionProperty: 'border-color, background-color',
     transitionDuration: '0.15s',
     transitionTimingFunction: 'ease',
     ':hover': {
       backgroundColor: opptrixCssVars.canvas,
+    },
+    // 覆盖 ghostInteractive 的 :active opacity，避免缩放预览整卡闪抖
+    ':active': {
+      opacity: 1,
+      backgroundColor: opptrixCssVars.canvasMuted,
+    },
+    ':focus': { outline: 'none' },
+    ':focus-visible': {
+      outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: opptrixTokens.focusRingOffset,
     },
   },
   header: {
@@ -168,8 +181,10 @@ export default function CanvasInlineCard({
     <button
       type="button"
       className={mergeClasses(s.card)}
-      style={{ cursor: 'pointer' }}
-      onClick={onOpen}
+      onClick={(e) => {
+        e.stopPropagation()
+        onOpen()
+      }}
       title={`打开 ${attachment.name}`}
       aria-label={`打开画布 ${attachment.name}`}
     >

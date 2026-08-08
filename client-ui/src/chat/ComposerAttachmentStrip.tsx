@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef, type MouseEvent } from 'react'
 import { makeStyles, mergeClasses, Spinner } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { ChatAttachmentMeta } from '../types/chat'
@@ -20,6 +20,25 @@ const useStyles = makeStyles({
   stripBlock: {
     width: '100%',
   },
+  /** 消息附件：芯片条与产物卡纵向分离 */
+  messageAttachRoot: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    width: '100%',
+  },
+  /** 消息内大量附件：约 3 行芯片高度，超出可滚（不含 canvas/mindmap） */
+  stripMessageScroll: {
+    maxHeight: '112px',
+    overflowY: 'auto',
+  },
+  artifactStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    width: '100%',
+    marginBottom: '5px',
+  },
   chip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -33,6 +52,29 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvasAlt,
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
+  },
+  /** 可点击附件芯片：hover/active 用背景与边框，避免整卡 opacity */
+  chipInteractive: {
+    cursor: 'pointer',
+    margin: 0,
+    font: 'inherit',
+    fontFamily: 'inherit',
+    transitionProperty: 'background-color, border-color',
+    transitionDuration: '0.15s',
+    transitionTimingFunction: 'ease',
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+    },
+    ':active': {
+      backgroundColor: opptrixCssVars.canvasMuted,
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+    },
+    ':focus': { outline: 'none' },
+    ':focus-visible': {
+      outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: opptrixTokens.focusRingOffset,
+    },
   },
   thumb: {
     width: '26px',
@@ -206,15 +248,18 @@ export default function ComposerAttachmentStrip({
 
   return (
     <div className={mergeClasses(s.strip, className)}>
-      {items.map(item => (
+      {items.map(item => {
+        const previewable = Boolean(
+          onPreview && !item.optimistic && !item.id.startsWith('local-'),
+        )
+        return (
         <div
           key={item.id}
-          className={s.chip}
-          {...(onPreview && !item.optimistic && !item.id.startsWith('local-') ? {
+          className={mergeClasses(s.chip, previewable && s.chipInteractive)}
+          {...(previewable && onPreview ? {
             role: 'button',
             tabIndex: 0,
             title: attachmentTitle(item),
-            style: { cursor: 'pointer' },
             onClick: () => onPreview(item),
             onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -250,7 +295,8 @@ export default function ComposerAttachmentStrip({
             </button>
           ) : null}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -265,49 +311,87 @@ export function MessageAttachmentStrip({
   onOpen: (item: ChatAttachmentMeta) => void
 }) {
   const s = useStyles()
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
+
+  const resolveUrl = useCallback((id: string) => {
+    if (!sessionId) return ''
+    return `/api/sessions/${sessionId}/attachments/${id}`
+  }, [sessionId])
+
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    for (const item of items) {
+      if (item.kind !== 'image') continue
+      if (item.optimistic || item.id.startsWith('local-')) continue
+      if (isAttachmentProcessing(item)) continue
+      const url = resolveUrl(item.id)
+      if (!url) continue
+      next[item.id] = url
+    }
+    setThumbUrls(next)
+  }, [items, resolveUrl])
+
   if (!items.length) return null
+
+  const isArtifact = (item: ChatAttachmentMeta) =>
+    (item.kind === 'canvas' || item.kind === 'mindmap') && Boolean(sessionId)
+  const chips = items.filter(item => !isArtifact(item))
+  const artifacts = items.filter(isArtifact)
+
+  const handleOpen = (item: ChatAttachmentMeta) => (e: MouseEvent) => {
+    e.stopPropagation()
+    onOpen(item)
+  }
+
   return (
-    <div className={mergeClasses(s.strip, s.stripBlock)}>
-      {items.map(item => {
-        if (item.kind === 'mindmap' && sessionId) {
-          return (
-            <MindmapInlineCard
+    <div className={mergeClasses(s.messageAttachRoot, s.stripBlock)}>
+      {chips.length > 0 ? (
+        <div className={mergeClasses(s.strip, s.stripMessageScroll, 'opptrix-scroll-hidden')}>
+          {chips.map(item => (
+            <button
               key={item.id}
-              sessionId={sessionId}
-              attachment={item}
-              onOpen={() => onOpen(item)}
-            />
-          )
-        }
-        if (item.kind === 'canvas' && sessionId) {
-          return (
-            <CanvasInlineCard
-              key={item.id}
-              sessionId={sessionId}
-              attachment={item}
-              onOpen={() => onOpen(item)}
-            />
-          )
-        }
-        return (
-          <button
-            key={item.id}
-            type="button"
-            className={s.chip}
-            onClick={() => onOpen(item)}
-            title={attachmentTitle(item)}
-            aria-label={`查看 ${item.name}`}
-          >
-            <AttachmentIcon
-              item={item}
-              iconBoxClass={s.iconBox}
-              spinnerSlotClass={s.spinnerSlot}
-              thumbClass={s.thumb}
-            />
-            <span className={s.name}>{middleEllipsisFilename(item.name)}</span>
-          </button>
-        )
-      })}
+              type="button"
+              className={mergeClasses(s.chip, s.chipInteractive)}
+              onClick={handleOpen(item)}
+              title={attachmentTitle(item)}
+              aria-label={`查看 ${item.name}`}
+            >
+              <AttachmentIcon
+                item={item}
+                thumbUrl={thumbUrls[item.id]}
+                iconBoxClass={s.iconBox}
+                spinnerSlotClass={s.spinnerSlot}
+                thumbClass={s.thumb}
+              />
+              <span className={s.name}>{middleEllipsisFilename(item.name)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {artifacts.length > 0 && sessionId ? (
+        <div className={s.artifactStack}>
+          {artifacts.map(item => {
+            if (item.kind === 'mindmap') {
+              return (
+                <MindmapInlineCard
+                  key={item.id}
+                  sessionId={sessionId}
+                  attachment={item}
+                  onOpen={() => onOpen(item)}
+                />
+              )
+            }
+            return (
+              <CanvasInlineCard
+                key={item.id}
+                sessionId={sessionId}
+                attachment={item}
+                onOpen={() => onOpen(item)}
+              />
+            )
+          })}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -45,7 +45,7 @@ body {
   --opptrix-glass-nav-selected: rgba(20, 20, 20, 0.08);
   --opptrix-sidebar-glass: rgba(255, 255, 255, 0.14);
   --opptrix-sidebar-selected: rgba(20, 20, 20, 0.08);
-  --opptrix-user-bubble: #F3F3F3;
+  --opptrix-user-bubble: #FCFCFC;
   --opptrix-gray-100: #F3F3F3;
   --opptrix-gray-200: #EEEEEE;
   --opptrix-gray-300: rgba(20, 20, 20, 0.20);
@@ -125,7 +125,7 @@ body {
   --opptrix-glass-nav-selected: rgba(240, 240, 240, 0.12);
   --opptrix-sidebar-glass: rgba(24, 24, 24, 0.45);
   --opptrix-sidebar-selected: rgba(240, 240, 240, 0.12);
-  --opptrix-user-bubble: #2A2A2A;
+  --opptrix-user-bubble: #181818;
   --opptrix-gray-100: #2A2A2A;
   --opptrix-gray-200: #3A3A3A;
   --opptrix-gray-300: #4A4A4A;

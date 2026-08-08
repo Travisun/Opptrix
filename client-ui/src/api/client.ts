@@ -1546,6 +1546,18 @@ export async function forkSession(sessionId: string, messageIndex: number) {
   })
 }
 
+export async function truncateSession(sessionId: string, messageIndex: number) {
+  return jsonFetch<{
+    session: SessionMeta
+    messages: ChatDisplayMessage[]
+    contextRef: SessionContextRef | null
+  }>(`/sessions/${sessionId}/truncate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message_index: messageIndex }),
+  })
+}
+
 export async function clearSessionContext(sessionId: string) {
   return jsonFetch<{
     session: SessionMeta

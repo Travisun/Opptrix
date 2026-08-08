@@ -30,38 +30,38 @@ const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
-    padding: '4px 0 8px',
+    gap: '4px',
+    padding: '2px 0 4px',
     ...fadeInUp,
   },
   thinkingRow: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
   },
   thinkingHead: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     padding: '2px 0',
     minHeight: '22px',
   },
   stepList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
   },
   scrollWrapper: {
-    maxHeight: '240px',
+    maxHeight: '180px',
     overflowY: 'auto',
-    borderRadius: opptrixTokens.radiusMd,
   },
   summaryBar: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '4px',
     width: '100%',
-    padding: '4px 2px',
+    minHeight: '22px',
+    padding: '2px 0',
     background: 'none',
     border: 'none',
     cursor: 'pointer',
@@ -75,9 +75,19 @@ const useStyles = makeStyles({
     },
   },
   summaryLabel: {
-    fontSize: 'var(--opptrix-font-md)',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
     color: 'inherit',
     userSelect: 'none',
+  },
+  summaryChevron: {
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '14px',
+    height: '14px',
+    color: 'inherit',
   },
   collapse: {
     display: 'grid',
@@ -97,21 +107,25 @@ const useStyles = makeStyles({
     minHeight: 0,
   },
   stepRow: {
-    borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixCssVars.canvasAlt,
+    backgroundColor: 'transparent',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
     overflow: 'hidden',
+    ':last-child': {
+      borderBottom: 'none',
+    },
   },
   stepHeadRow: {
     display: 'flex',
-    alignItems: 'stretch',
+    alignItems: 'center',
   },
   stepHead: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '4px',
     flex: 1,
     minWidth: 0,
-    padding: '7px 10px',
+    minHeight: '22px',
+    padding: '4px 0',
     border: 'none',
     backgroundColor: 'transparent',
     cursor: 'pointer',
@@ -126,7 +140,8 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
+    width: '24px',
+    height: '22px',
     padding: 0,
     border: 'none',
     background: 'none',
@@ -135,7 +150,7 @@ const useStyles = makeStyles({
     transitionProperty: 'color',
     transitionDuration: motion.fast,
     ':hover': {
-      color: opptrixCssVars.textPrimary,
+      color: opptrixCssVars.textSecondary,
     },
   },
   leadIcon: {
@@ -144,9 +159,9 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     color: opptrixCssVars.textTertiary,
-    fontSize: 'var(--opptrix-font-xl)',
-    width: '16px',
-    height: '16px',
+    fontSize: 'var(--opptrix-font-sm)',
+    width: '14px',
+    height: '14px',
   },
   stepIcon: {
     flexShrink: 0,
@@ -154,27 +169,27 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     color: opptrixCssVars.textTertiary,
-    fontSize: 'var(--opptrix-font-lg)',
-    width: '16px',
-    height: '16px',
+    fontSize: 'var(--opptrix-font-sm)',
+    width: '14px',
+    height: '14px',
   },
   runningDots: {
-    width: '12px',
-    height: '12px',
+    width: '10px',
+    height: '10px',
     marginRight: 0,
   },
   stepLabel: {
     flex: 1,
     minWidth: 0,
-    fontSize: 'var(--opptrix-font-base)',
-    lineHeight: 1.45,
-    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
+    color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stepLabelRunning: {
-    color: opptrixCssVars.textPrimary,
+    color: opptrixCssVars.textSecondary,
     // 避免 background-clip:text：长状态（含 token / 步数）会被裁成透明看不见
     opacity: 1,
     animationDuration: '1.6s',
@@ -189,24 +204,24 @@ const useStyles = makeStyles({
     color: opptrixCssVars.error,
   },
   stepBody: {
-    padding: '0 10px 8px 30px',
+    padding: '0 0 6px 18px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '4px',
   },
   detailBlock: {
     fontSize: 'var(--opptrix-font-sm)',
-    lineHeight: 1.5,
+    lineHeight: 1.45,
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    maxHeight: '240px',
+    maxHeight: '180px',
     overflow: 'auto',
   },
   thinkingSnippet: {
-    fontSize: 'var(--opptrix-font-md)',
-    lineHeight: 1.55,
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
@@ -349,8 +364,8 @@ function StepLead({ running, expandable, expanded }: {
   return (
     <span className={s.stepIcon} aria-hidden>
       {expandable
-        ? (expanded ? <ChevronDownRegular /> : <ChevronRightRegular />)
-        : <ChevronRightRegular style={{ opacity: 0.35 }} />}
+        ? (expanded ? <ChevronDownRegular fontSize={14} /> : <ChevronRightRegular fontSize={14} />)
+        : <ChevronRightRegular fontSize={14} style={{ opacity: 0.35 }} />}
     </span>
   )
 }
@@ -527,7 +542,7 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
             title="查看步骤详情"
             aria-label={`查看「${step.label}」的详情`}
           >
-            <DocumentSearchRegular fontSize={16} />
+            <DocumentSearchRegular fontSize={14} />
           </button>
         )}
       </div>
@@ -579,7 +594,7 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
         <span className={s.stepIcon} aria-hidden>
           {active
             ? <ThinkingDots className={s.runningDots} label="" />
-            : (expanded ? <ChevronDownRegular /> : <ChevronRightRegular />)}
+            : (expanded ? <ChevronDownRegular fontSize={14} /> : <ChevronRightRegular fontSize={14} />)}
         </span>
         <LightbulbFilamentRegular className={s.leadIcon} aria-hidden />
         <Text
@@ -681,7 +696,7 @@ export default function ChatProcessTrace({
 
       {showHistorySnippet && (
         <details>
-          <summary style={{ fontSize: 'var(--opptrix-font-md)', color: opptrixCssVars.textTertiary, cursor: 'pointer' }}>
+          <summary style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary, cursor: 'pointer' }}>
             查看分析思路
           </summary>
           <Text className={s.thinkingSnippet} block>
@@ -710,8 +725,10 @@ export default function ChatProcessTrace({
               onClick={() => setHistoryExpanded(v => !v)}
               aria-expanded={historyExpanded}
             >
-              <span className={s.stepIcon} aria-hidden>
-                {historyExpanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
+              <span className={s.summaryChevron} aria-hidden>
+                {historyExpanded
+                  ? <ChevronDownRegular fontSize={14} />
+                  : <ChevronRightRegular fontSize={14} />}
               </span>
               <Text className={s.summaryLabel} block>
                 {`执行过程（${steps.length} 步）`}

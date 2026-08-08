@@ -1216,6 +1216,25 @@ app.post<{ Params: { id: string }; Body: { message_index: number } }>(
   },
 )
 
+app.post<{ Params: { id: string }; Body: { message_index: number } }>(
+  '/api/sessions/:id/truncate',
+  async (req, reply) => {
+    const messageIndex = req.body?.message_index
+    if (typeof messageIndex !== 'number' || !Number.isInteger(messageIndex) || messageIndex < 0) {
+      return reply.code(400).send({ error: 'message_index required' })
+    }
+    const updated = agent.truncateSession(req.params.id, messageIndex)
+    if (!updated) {
+      return reply.code(404).send({ error: 'session or message not found' })
+    }
+    return {
+      session: agent.sessionMeta(updated),
+      messages: agent.getDisplayMessages(updated.id),
+      contextRef: updated.contextRef ?? null,
+    }
+  },
+)
+
 app.patch<{ Params: { id: string }; Body: { contextRef: SessionContextRef | null } }>(
   '/api/sessions/:id/context',
   async (req, reply) => {

@@ -480,6 +480,41 @@ export class SessionStore {
     return record
   }
 
+  /**
+   * 从指定 display turn 起截断会话（含该条及之后）。
+   * `displayIndex` 必须指向 user 气泡；与 UI transcript 索引一致。
+   * messages 按与 turns 对齐的 user / 最终 assistant（无 tool_calls）计数切开。
+   */
+  truncateFromDisplayIndex(id: string, displayIndex: number): SessionRecord | null {
+    const record = this.get(id)
+    if (!record) return null
+
+    const display = this.toDisplayMessages(record)
+    if (displayIndex < 0 || displayIndex >= display.length) return null
+    if (display[displayIndex]!.role !== 'user') return null
+
+    let displayCount = 0
+    let messageCut = -1
+    for (let i = 0; i < record.messages.length; i++) {
+      const m = record.messages[i]!
+      const isDisplayMsg = m.role === 'user'
+        || (m.role === 'assistant' && !(m.tool_calls?.length))
+      if (!isDisplayMsg) continue
+      if (displayCount === displayIndex) {
+        messageCut = i
+        break
+      }
+      displayCount += 1
+    }
+    if (messageCut < 0) return null
+
+    record.turns = (record.turns?.length ? record.turns : display).slice(0, displayIndex)
+    record.messages = record.messages.slice(0, messageCut)
+    record.sessionMemory = null
+    this.save(record)
+    return record
+  }
+
   clearContextRef(id: string): SessionRecord | null {
     const record = this.get(id)
     if (!record) return null

@@ -850,6 +850,8 @@ Content-Type: application/json
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
+| POST | `/api/sessions/:id/fork` | 从助手气泡分叉新会话；body `{ message_index }`（display turn 索引，须为 assistant）→ `{ session, messages, contextRef }`；无效索引/角色 → 404 |
+| POST | `/api/sessions/:id/truncate` | 编辑重发前截断：从指定 **user** display turn 起删除该条及之后（同步 `turns` / `messages`，清空 `sessionMemory`）；body `{ message_index: number }`（整数 ≥0）→ `{ session, messages, contextRef }`；非 user 锚点或无效 → 404；校验失败 → 400 |
 | GET | `/api/speech/status` | 本机语音识别就绪状态：`{ ready, engine, modelName, modelsDir, language?, promptEnabled? }` |
 | POST | `/api/speech/transcribe` | 语音转写；raw body（`application/octet-stream`）+ `X-Speech-Mime`；响应 `{ text, engine, model, language?, empty? }` |
 

@@ -97,7 +97,14 @@ function RightPanel({
 }: Props) {
   const s = useStyles()
   const showPreview = previewMode || preview != null
-  const previewSid = preview?.sessionId || previewSessionId || undefined
+  /** 仅当 preview 属于当前会话时才展示附件；否则用当前 session 的文件列表/空态 */
+  const previewBelongsToActive = Boolean(
+    preview?.sessionId
+    && previewSessionId
+    && preview.sessionId === previewSessionId,
+  )
+  const previewSid = previewSessionId || undefined
+  const previewAttachment = previewBelongsToActive ? (preview?.attachment ?? null) : null
 
   const shellWidth = !visible
     ? 0
@@ -126,7 +133,7 @@ function RightPanel({
         {showPreview ? (
           <FilePreviewPanel
             sessionId={previewSid}
-            attachment={preview?.attachment ?? null}
+            attachment={previewAttachment}
             panelVisible={visible}
             onClose={onClosePreview ?? (() => {})}
             onSelectAttachment={onSelectAttachment}
