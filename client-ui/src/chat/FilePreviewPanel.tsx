@@ -1,36 +1,31 @@
 import { useEffect, useState } from 'react'
 import { Spinner, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { DismissRegular } from '@fluentui/react-icons'
-import type { ChatAttachmentMeta, MediaKind } from '../types/chat'
+import {
+  DismissRegular,
+  DocumentTextRegular,
+  TextBulletListSquareRegular,
+} from '@fluentui/react-icons'
+import type { ChatAttachmentMeta } from '../types/chat'
 import {
   fetchAttachmentPreviewText,
   fetchAttachmentRawText,
   fetchSessionAttachmentMeta,
   sessionAttachmentUrl,
 } from '../api/client'
-import { attachmentKindIcon } from './attachmentKindIcon'
 import CanvasPreviewHost from './CanvasPreviewHost'
+import FilePreviewFileList from './FilePreviewFileList'
 import MarkdownMessage from './MarkdownMessage'
+import ImagePreviewViewer from './ImagePreviewViewer'
+import MediaPreviewPlayer from './MediaPreviewPlayer'
 import MindmapPreviewHost from './MindmapPreviewHost'
 import PdfPreviewViewer from './PdfPreviewViewer'
-import { formatBytesShort } from './mediaCapabilities'
+import FilenameEllipsis from './FilenameEllipsis'
 import { DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_PANEL_TITLE } from '../desktop/constants'
 import { electronPlatform } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace'
-
-const KIND_LABEL: Record<MediaKind, string> = {
-  text: '文本',
-  image: '图片',
-  pdf: 'PDF',
-  document: '文档',
-  video: '视频',
-  audio: '音频',
-  canvas: '画布',
-  mindmap: '脑图',
-}
 
 const useStyles = makeStyles({
   root: {
@@ -82,13 +77,50 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    paddingLeft: '14px',
+    paddingLeft: '8px',
     overflow: 'hidden',
   },
-  headerIcon: {
+  headerTrail: {
     flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  /** 非 PDF 预览内部工具条（与 PdfPreviewViewer toolbar 对齐） */
+  previewTools: {
+    flexShrink: 0,
+    height: '34px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    padding: '0 8px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+  },
+  previewToolBtn: {
+    ...ghostInteractive,
+    width: '28px',
+    height: '28px',
+    minWidth: '28px',
+    minHeight: '28px',
     display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
     color: opptrixCssVars.textSecondary,
+    cursor: 'pointer',
+    ':disabled': {
+      opacity: 0.35,
+      cursor: 'default',
+      ':hover': {
+        backgroundColor: 'transparent',
+      },
+    },
+  },
+  previewToolBtnActive: {
+    backgroundColor: opptrixCssVars.surfaceHover,
+    color: opptrixCssVars.textPrimary,
   },
   name: {
     flex: '0 1 auto',
@@ -99,11 +131,14 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textPrimary,
     fontSize: 'var(--opptrix-font-base)',
   },
-  metaLabel: {
-    flexShrink: 0,
-    color: opptrixCssVars.textTertiary,
+  /** 次级工具条左侧文件名 */
+  toolsTitle: {
+    flex: '0 1 auto',
+    minWidth: 0,
+    maxWidth: '80%',
+    color: opptrixCssVars.textPrimary,
     fontSize: 'var(--opptrix-font-sm)',
-    whiteSpace: 'nowrap',
+    userSelect: 'none',
   },
   dragFill: {
     flex: '1 1 auto',
@@ -137,6 +172,11 @@ const useStyles = makeStyles({
     padding: 0,
     overflow: 'hidden',
   },
+  /** Center file picker fills the pane; list scrolls inside. */
+  bodyPicker: {
+    padding: 0,
+    overflow: 'hidden',
+  },
   artifactHost: {
     flex: 1,
     minHeight: 0,
@@ -153,18 +193,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     padding: 0,
     boxSizing: 'border-box',
-  },
-  imageWrap: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  image: {
-    maxWidth: '100%',
-    maxHeight: '100%',
-    objectFit: 'contain',
   },
   loading: {
     flex: 1,
@@ -208,6 +236,74 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     wordBreak: 'break-word',
   },
+  emptyState: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    textAlign: 'center',
+    padding: '24px 20px',
+  },
+  emptyIcon: {
+    display: 'inline-flex',
+    color: opptrixCssVars.textTertiary,
+    marginBottom: '4px',
+  },
+  emptyTitle: {
+    color: opptrixCssVars.textPrimary,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 600,
+    lineHeight: 1.45,
+  },
+  emptyHint: {
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-md)',
+    lineHeight: 1.55,
+    maxWidth: '28ch',
+  },
+  main: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  previewPane: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  /** 音视频：播放器 + 转写文稿纵向分区 */
+  mediaBody: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  mediaLayout: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  mediaTranscript: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'auto',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  mediaTranscriptLabel: {
+    flexShrink: 0,
+    marginBottom: '8px',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-sm)',
+    userSelect: 'none',
+  },
 })
 
 export interface FilePreviewTarget {
@@ -216,21 +312,17 @@ export interface FilePreviewTarget {
 }
 
 interface Props {
-  sessionId: string
-  attachment: ChatAttachmentMeta
+  sessionId?: string
+  attachment?: ChatAttachmentMeta | null
   panelVisible: boolean
   onClose: () => void
+  onSelectAttachment?: (attachment: ChatAttachmentMeta) => void
   electronChrome?: boolean
   chatColumnVisible?: boolean
   /** Skip left global toolbar band when sidebar overlay + panel spans full width. */
   chromeToolbarReserve?: number
   /** Right panel occupies full workspace width (chat column hidden). */
   panelFullWidth?: boolean
-}
-
-function headerLabel(attachment: ChatAttachmentMeta): string {
-  const kind = KIND_LABEL[attachment.kind] ?? '文件'
-  return `${kind} · ${formatBytesShort(attachment.size)}`
 }
 
 function isMarkdown(name: string): boolean {
@@ -399,22 +491,111 @@ function DocumentPreview({
   )
 }
 
-export default function FilePreviewPanel({
+function MediaTranscript({
   sessionId,
   attachment,
   panelVisible,
+}: {
+  sessionId: string
+  attachment: ChatAttachmentMeta
+  panelVisible: boolean
+}) {
+  const s = useStyles()
+  const { phase, text } = useDocumentText(sessionId, attachment, panelVisible)
+
+  if (phase === 'failed') {
+    return (
+      <UnsupportedState
+        title="未能识别语音内容"
+        hint="可换一段更清晰的录音后再试，或直接发送文件继续对话"
+      />
+    )
+  }
+  if (phase === 'pending') {
+    return (
+      <div className={s.loading}>
+        <Spinner size="small" label="正在转写语音…" />
+      </div>
+    )
+  }
+  if (!text.trim()) {
+    return (
+      <UnsupportedState
+        title="暂无转写文稿"
+        hint="可直接播放上方内容，或发送文件继续对话"
+      />
+    )
+  }
+  return (
+    <>
+      <span className={s.mediaTranscriptLabel}>转写文稿</span>
+      <pre className={s.pre}>{text}</pre>
+    </>
+  )
+}
+
+function MediaPreview({
+  sessionId,
+  attachment,
+  url,
+  panelVisible,
+}: {
+  sessionId: string
+  attachment: ChatAttachmentMeta
+  url: string
+  panelVisible: boolean
+}) {
+  const s = useStyles()
+  const kind = attachment.kind === 'video' ? 'video' : 'audio'
+
+  return (
+    <div className={s.mediaLayout}>
+      <MediaPreviewPlayer
+        url={url}
+        kind={kind}
+        title={attachment.name}
+        panelVisible={panelVisible}
+      />
+      <div className={s.mediaTranscript}>
+        <MediaTranscript
+          sessionId={sessionId}
+          attachment={attachment}
+          panelVisible={panelVisible}
+        />
+      </div>
+    </div>
+  )
+}
+
+export default function FilePreviewPanel({
+  sessionId = '',
+  attachment = null,
+  panelVisible,
   onClose,
+  onSelectAttachment,
   electronChrome = false,
   chatColumnVisible = true,
   chromeToolbarReserve = 0,
   panelFullWidth = false,
 }: Props) {
   const s = useStyles()
-  const url = sessionAttachmentUrl(sessionId, attachment.id)
-  const isPdf = attachment.kind === 'pdf'
-  const isCanvas = attachment.kind === 'canvas'
-  const isMindmap = attachment.kind === 'mindmap'
-  const bodyFlush = isPdf || isCanvas || isMindmap
+  const [fileListOpen, setFileListOpen] = useState(false)
+  const [outlineOpen, setOutlineOpen] = useState(false)
+  useEffect(() => {
+    setOutlineOpen(false)
+  }, [sessionId, attachment?.id])
+  useEffect(() => {
+    if (!attachment) setFileListOpen(false)
+  }, [attachment])
+  const hasAttachment = Boolean(attachment)
+  const showCenterPicker = !hasAttachment && Boolean(sessionId)
+  const url = attachment && sessionId ? sessionAttachmentUrl(sessionId, attachment.id) : ''
+  const isPdf = attachment?.kind === 'pdf'
+  const isImage = attachment?.kind === 'image'
+  const isCanvas = attachment?.kind === 'canvas'
+  const isMindmap = attachment?.kind === 'mindmap'
+  const isMedia = attachment?.kind === 'audio' || attachment?.kind === 'video'
+  const bodyFlush = Boolean(attachment && (isPdf || isImage || isCanvas || isMindmap))
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
   /** Full-width panel: reserve global toolbar band as a dedicated drag zone. */
   const titleBarDragLeadWidth = electronChrome
@@ -423,6 +604,14 @@ export default function FilePreviewPanel({
     && chromeToolbarReserve > 0
     ? chromeToolbarReserve
     : 0
+
+  const fileListToggleLabel = fileListOpen ? '收起文件列表' : '文件列表'
+  const toggleFileList = () => setFileListOpen((open) => !open)
+  const toggleOutline = () => setOutlineOpen((open) => !open)
+  /** Left sidebar list only applies once a file is open for preview. */
+  const showSidebarList = fileListOpen && Boolean(sessionId) && hasAttachment
+  /** 非 PDF / 图片且已打开附件时，在 previewPane 顶部显示文件名工具条 */
+  const showNonPdfTools = hasAttachment && !isPdf && !isImage && !showCenterPicker
 
   return (
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
@@ -443,11 +632,24 @@ export default function FilePreviewPanel({
           />
         )}
         <div className={mergeClasses(s.titleCluster, 'opptrix-panel-title-no-drag')}>
-          <span className={s.headerIcon}>{attachmentKindIcon(attachment.kind, attachment.name)}</span>
-          <span className={s.name} title={attachment.name}>
-            {attachment.name}
-          </span>
-          <span className={s.metaLabel}>{headerLabel(attachment)}</span>
+          {attachment ? (
+            <button
+              type="button"
+              className={mergeClasses(
+                s.previewToolBtn,
+                showSidebarList && s.previewToolBtnActive,
+              )}
+              onClick={toggleFileList}
+              disabled={!sessionId || !hasAttachment}
+              aria-label={fileListToggleLabel}
+              title={fileListToggleLabel}
+              aria-pressed={showSidebarList}
+            >
+              <TextBulletListSquareRegular fontSize={16} />
+            </button>
+          ) : (
+            <span className={s.name}>文件预览</span>
+          )}
         </div>
         <div
           className={mergeClasses(
@@ -456,52 +658,110 @@ export default function FilePreviewPanel({
           )}
           aria-hidden
         />
-        <button
-          type="button"
-          className={mergeClasses(s.close, 'opptrix-panel-title-no-drag')}
-          onClick={onClose}
-          aria-label="关闭预览"
-          title="关闭预览"
-        >
-          <DismissRegular fontSize={18} />
-        </button>
+        <div className={mergeClasses(s.headerTrail, 'opptrix-panel-title-no-drag')}>
+          <button
+            type="button"
+            className={s.close}
+            onClick={onClose}
+            aria-label="关闭预览"
+            title="关闭预览"
+          >
+            <DismissRegular fontSize={18} />
+          </button>
+        </div>
       </div>
-      <div className={mergeClasses(s.body, bodyFlush && s.bodyFlush)}>
-        {attachment.kind === 'image' ? (
-          <div className={s.imageWrap}>
-            <img src={url} alt={attachment.name} className={s.image} />
-          </div>
-        ) : isPdf ? (
-          <PdfPreviewViewer url={url} panelVisible={panelVisible} />
-        ) : isCanvas ? (
-          <div className={s.artifactHostFlush}>
-            <CanvasPreviewHost
-              sessionId={sessionId}
-              attachmentId={attachment.id}
-              name={attachment.name}
-              panelVisible={panelVisible}
-            />
-          </div>
-        ) : isMindmap ? (
-          <div className={s.artifactHostFlush}>
-            <MindmapPreviewHost
-              sessionId={sessionId}
-              attachmentId={attachment.id}
-              name={attachment.name}
-              panelVisible={panelVisible}
-            />
-          </div>
-        ) : attachment.kind === 'document' ? (
-          <DocumentPreview
+      <div className={s.main}>
+        {showSidebarList ? (
+          <FilePreviewFileList
+            variant="sidebar"
             sessionId={sessionId}
-            attachment={attachment}
             panelVisible={panelVisible}
+            selectedId={attachment?.id ?? null}
+            onSelectAttachment={onSelectAttachment}
           />
-        ) : attachment.kind === 'video' || attachment.kind === 'audio' ? (
-          <UnsupportedState hint="您可以直接发送该文件继续对话" />
-        ) : (
-          <UnsupportedState />
-        )}
+        ) : null}
+        <div className={s.previewPane}>
+          {showNonPdfTools && attachment ? (
+            <div className={s.previewTools} role="toolbar" aria-label="预览工具">
+              <FilenameEllipsis name={attachment.name} className={s.toolsTitle} />
+            </div>
+          ) : null}
+          <div
+            className={mergeClasses(
+              s.body,
+              bodyFlush && s.bodyFlush,
+              isMedia && s.mediaBody,
+              showCenterPicker && s.bodyPicker,
+            )}
+          >
+            {showCenterPicker ? (
+              <FilePreviewFileList
+                variant="picker"
+                sessionId={sessionId}
+                panelVisible={panelVisible}
+                selectedId={null}
+                onSelectAttachment={onSelectAttachment}
+              />
+            ) : !hasAttachment || !attachment ? (
+              <div className={s.emptyState} role="status">
+                <span className={s.emptyIcon} aria-hidden>
+                  <DocumentTextRegular fontSize={36} />
+                </span>
+                <span className={s.emptyTitle}>还没有打开预览</span>
+                <span className={s.emptyHint}>在对话里点击报告或附件，即可在这里查看</span>
+              </div>
+            ) : isImage ? (
+              <ImagePreviewViewer
+                url={url}
+                alt={attachment.name}
+                title={attachment.name}
+                panelVisible={panelVisible}
+              />
+            ) : isPdf ? (
+              <PdfPreviewViewer
+                url={url}
+                title={attachment.name}
+                panelVisible={panelVisible}
+                outlineOpen={outlineOpen}
+                onToggleOutline={toggleOutline}
+                showOutlineToggle
+              />
+            ) : isCanvas ? (
+              <div className={s.artifactHostFlush}>
+                <CanvasPreviewHost
+                  sessionId={sessionId}
+                  attachmentId={attachment.id}
+                  name={attachment.name}
+                  panelVisible={panelVisible}
+                />
+              </div>
+            ) : isMindmap ? (
+              <div className={s.artifactHostFlush}>
+                <MindmapPreviewHost
+                  sessionId={sessionId}
+                  attachmentId={attachment.id}
+                  name={attachment.name}
+                  panelVisible={panelVisible}
+                />
+              </div>
+            ) : attachment.kind === 'document' ? (
+              <DocumentPreview
+                sessionId={sessionId}
+                attachment={attachment}
+                panelVisible={panelVisible}
+              />
+            ) : isMedia ? (
+              <MediaPreview
+                sessionId={sessionId}
+                attachment={attachment}
+                url={url}
+                panelVisible={panelVisible}
+              />
+            ) : (
+              <UnsupportedState />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

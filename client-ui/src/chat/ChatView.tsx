@@ -29,7 +29,7 @@ import {
   ArrowMaximizeRegular,
   ArrowMinimizeRegular,
 } from './chatIcons'
-import { BoxRegular } from '@fluentui/react-icons'
+import { FolderListRegular } from '@fluentui/react-icons'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -37,7 +37,6 @@ import {
 } from '../desktop/constants'
 import { pickWelcomeVariant } from './chatWelcomeVariants'
 import MessageOutlineRail from './MessageOutlineRail'
-import SessionAttachmentsDrawer from './SessionAttachmentsDrawer'
 
 /** 消息区底 padding 初始/下限（ResizeObserver 测 composerInner 后覆盖） */
 const CHAT_COMPOSER_BOTTOM_PAD = 100
@@ -384,9 +383,9 @@ interface ChatViewProps {
   onStreamError?: (message: string) => void
   resolveStreamSnapshot?: (sessionId: string | null) => SessionStreamSnapshot | null
   onClearPendingUserPrompt?: (sessionId: string | null) => void
-  /** 本对话附件抽屉（状态由 ChatApp 持有；Electron 始终在 chrome titleBarTrailing；Web 在 headerActions） */
-  attachmentsDrawerOpen?: boolean
-  onAttachmentsDrawerOpenChange?: (open: boolean) => void
+  /** 本对话文件预览（状态由 ChatApp 持有；Electron 在 chrome titleBarTrailing；Web 在 headerActions） */
+  sessionFilesPreviewOpen?: boolean
+  onToggleSessionFilesPreview?: () => void
 }
 
 function ChatView({
@@ -409,8 +408,8 @@ function ChatView({
   onStreamError,
   resolveStreamSnapshot,
   onClearPendingUserPrompt,
-  attachmentsDrawerOpen = false,
-  onAttachmentsDrawerOpenChange,
+  sessionFilesPreviewOpen = false,
+  onToggleSessionFilesPreview,
 }: ChatViewProps) {
   const s = useStyles()
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
@@ -635,16 +634,15 @@ function ChatView({
   const electronChrome = isElectron() && !isMobile
   const scrollMask = composerScrollMask(composerBottomPad, scrollbarMaskPreserve)
   const showDesktopChromeExtras = !isMobile
-  const attachmentsToggle = showDesktopChromeExtras && onAttachmentsDrawerOpenChange ? (
+  const sessionFilesToggle = showDesktopChromeExtras && onToggleSessionFilesPreview ? (
     <ChromeToolButton
-      label="本对话附件"
-      active={attachmentsDrawerOpen}
+      label="文件预览"
+      active={sessionFilesPreviewOpen}
       disabled={!sessionId}
-      data-attachments-toggle
-      aria-controls="session-attachments-drawer"
-      onClick={() => onAttachmentsDrawerOpenChange(!attachmentsDrawerOpen)}
+      data-session-files-toggle
+      onClick={onToggleSessionFilesPreview}
     >
-      <BoxRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+      <FolderListRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
     </ChromeToolButton>
   ) : null
 
@@ -830,9 +828,9 @@ function ChatView({
             <div className={s.headerTitleSlot}>
               {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
             </div>
-            {(attachmentsToggle || headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
+            {(sessionFilesToggle || headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
               <div className={s.headerActions}>
-                {attachmentsToggle}
+                {sessionFilesToggle}
                 {headerTrailing}
                 {!rightPanelOpen && onToggleChatColumn && (
                   <ChromeToolButton
@@ -895,16 +893,6 @@ function ChatView({
             messages={messages}
             scrollContainerRef={chatBoxRef}
             onJump={index => scrollToMessageStart(index, 'smooth')}
-          />
-        ) : null}
-
-        {showDesktopChromeExtras && onAttachmentsDrawerOpenChange ? (
-          <SessionAttachmentsDrawer
-            open={attachmentsDrawerOpen}
-            sessionId={sessionId}
-            composerPadBottom={composerBottomPad}
-            onClose={() => onAttachmentsDrawerOpenChange(false)}
-            onOpen={(sid, attachment) => onOpenFilePreview?.(sid, attachment)}
           />
         ) : null}
 

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatAttachmentMeta, ModelMediaCapabilities } from '../types/chat'
 import { uploadSessionAttachment, deleteSessionAttachment, fetchSessionAttachmentMeta } from '../api/client'
+import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import {
   validateFileForModel,
   partitionPinsForModel,
   resolveFileMime,
   mimeToKind,
   isLibraryIngestKind,
+  isTranscriptExtractKind,
+  LARGE_FILE_WARN_BYTES,
 } from './mediaCapabilities'
 
 function isLocalAttachmentId(id: string): boolean {
@@ -21,6 +24,7 @@ export function useComposerAttachments(
   sessionId: string | null | undefined,
   ensureSession?: () => Promise<string>,
 ) {
+  const { confirm } = useOpptrixDialogAlert()
   const [pinned, setPinned] = useState<ChatAttachmentMeta[]>([])
   const [uploading, setUploading] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -40,11 +44,11 @@ export function useComposerAttachments(
     if (sessionId) effectiveSessionIdRef.current = sessionId
   }, [sessionId])
 
-  // 轮询研报库整理状态（PDF / 文档 / 图片 OCR）；跳过尚未入库的乐观项
+  // 轮询整理/转写状态（PDF·文档·图片 OCR + 音视频转写）；跳过尚未入库的乐观项
   useEffect(() => {
     const pending = pinned.filter(p =>
       isServerAttachment(p)
-      && (p.kind === 'pdf' || p.kind === 'document' || p.kind === 'image')
+      && (isLibraryIngestKind(p.kind) || isTranscriptExtractKind(p.kind))
       && (p.extract?.status ?? 'pending') === 'pending',
     )
     if (!pending.length) return
@@ -99,6 +103,19 @@ export function useComposerAttachments(
     const list = Array.from(files)
     if (!list.length) return
 
+    const largeCount = list.filter(f => f.size >= LARGE_FILE_WARN_BYTES).length
+    if (largeCount > 0) {
+      const ok = await confirm({
+        title: '文件较大',
+        message: largeCount === 1
+          ? '所选文件较大，处理可能需要更长时间。确定继续添加吗？'
+          : `有 ${largeCount} 个文件较大（约 500MB 及以上），处理可能需要更长时间。确定继续添加吗？`,
+        confirmLabel: '继续添加',
+        cancelLabel: '取消',
+      })
+      if (!ok) return
+    }
+
     const sid = await resolveSessionId()
     if (!sid) {
       clearToastLater('暂时无法添加附件，请稍后再试')
@@ -130,7 +147,9 @@ export function useComposerAttachments(
         size: file.size,
         createdAt: new Date().toISOString(),
         optimistic: true,
-        ...(isLibraryIngestKind(kind) ? { extract: { status: 'pending' as const } } : {}),
+        ...((isLibraryIngestKind(kind) || isTranscriptExtractKind(kind))
+          ? { extract: { status: 'pending' as const } }
+          : {}),
       }
       next = [...next, optimistic]
       total += file.size
@@ -167,7 +186,7 @@ export function useComposerAttachments(
     } finally {
       setUploading(false)
     }
-  }, [pinned, clearToastLater, resolveSessionId])
+  }, [pinned, clearToastLater, resolveSessionId, confirm])
 
   const removePinned = useCallback(async (id: string) => {
     setPinned(prev => prev.filter(p => p.id !== id))

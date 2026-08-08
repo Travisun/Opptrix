@@ -4,30 +4,78 @@ import {
   lookupModelsDevMediaEntry,
   resetModelsDevCacheForTests,
 } from '../packages/agent/dist/llm/models-dev-context.js'
-import { resolveAttachmentLimits } from '../packages/agent/dist/attachment-limits.js'
+import {
+  LARGE_FILE_WARN_BYTES,
+  resolveAttachmentLimits,
+} from '../packages/agent/dist/attachment-limits.js'
 import { parseAssistantResponseContent } from '../packages/agent/dist/content-parts.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 
 describe('resolveAttachmentLimits', () => {
-  it('applies OpenAI tier for gpt-4o', () => {
-    const limits = resolveAttachmentLimits('gpt-4o', ['text', 'image', 'pdf'])
-    assert.equal(limits.maxBytesByKind.image, 20 * 1024 * 1024)
-    assert.equal(limits.maxBytesByKind.pdf, 32 * 1024 * 1024)
-    assert.ok(limits.maxCount >= 5)
+  it('exports 500MB large-file warn threshold', () => {
+    assert.equal(LARGE_FILE_WARN_BYTES, 500 * 1024 * 1024)
   })
 
-  it('applies conservative defaults for unknown models', () => {
+  it('does not hard-cap local-path kinds (image/pdf/audio/video)', () => {
+    const limits = resolveAttachmentLimits('gpt-4o', ['text', 'image', 'pdf', 'audio', 'video'])
+    assert.equal(limits.maxBytesByKind.image, undefined)
+    assert.equal(limits.maxBytesByKind.pdf, undefined)
+    assert.equal(limits.maxBytesByKind.audio, undefined)
+    assert.equal(limits.maxBytesByKind.video, undefined)
+    assert.ok(limits.maxCount >= 50)
+  })
+
+  it('keeps local-path uncapped for unknown models', () => {
     const limits = resolveAttachmentLimits('unknown-model-xyz', ['text', 'image'])
-    assert.equal(limits.maxBytesByKind.image, 10 * 1024 * 1024)
-    // PDF 始终保留本地整理限额
-    assert.equal(limits.maxBytesByKind.pdf, 20 * 1024 * 1024)
+    assert.equal(limits.maxBytesByKind.image, undefined)
+    assert.equal(limits.maxBytesByKind.pdf, undefined)
+    assert.ok(limits.maxCount >= 50)
   })
 
-  it('applies Claude tier stricter image cap', () => {
+  it('keeps local-path uncapped for Claude tier', () => {
     const limits = resolveAttachmentLimits('claude-sonnet-4-6', ['text', 'image', 'pdf'])
-    assert.equal(limits.maxBytesByKind.image, 5 * 1024 * 1024)
+    assert.equal(limits.maxBytesByKind.image, undefined)
+    assert.equal(limits.maxBytesByKind.pdf, undefined)
+  })
+})
+
+describe('validateAttachmentAgainstCapabilities local path size', () => {
+  it('allows library/transcript files beyond former 25/50MB caps', async () => {
+    const { validateAttachmentAgainstCapabilities } = await import(
+      '../packages/agent/dist/chat-attachments.js'
+    )
+    const caps = {
+      attachment: false,
+      input: ['text'],
+      output: ['text'],
+      limits: {
+        maxBytesByKind: { audio: 25 * 1024 * 1024, video: 50 * 1024 * 1024, pdf: 20 * 1024 * 1024 },
+        maxCount: 5,
+        maxTotalBytes: 80 * 1024 * 1024,
+      },
+    }
+    const overOldAudio = 26 * 1024 * 1024
+    const overOldVideo = 51 * 1024 * 1024
+    const overOldPdf = 30 * 1024 * 1024
+    const overOldTotal = 100 * 1024 * 1024
+    assert.equal(
+      validateAttachmentAgainstCapabilities('audio', overOldAudio, caps, 0, 0).ok,
+      true,
+    )
+    assert.equal(
+      validateAttachmentAgainstCapabilities('video', overOldVideo, caps, 0, 0).ok,
+      true,
+    )
+    assert.equal(
+      validateAttachmentAgainstCapabilities('pdf', overOldPdf, caps, 0, 0).ok,
+      true,
+    )
+    assert.equal(
+      validateAttachmentAgainstCapabilities('image', overOldTotal, caps, 0, overOldTotal).ok,
+      true,
+    )
   })
 })
 
@@ -141,7 +189,7 @@ describe('partitionPinsForModel', () => {
     assert.deepEqual(removedIds, [])
   })
 
-  it('keeps library-ingest pins and removes non-ingest kinds for text-only model', async () => {
+  it('keeps library-ingest and transcript pins for text-only model', async () => {
     const { partitionPinsForModel } = await import('../client-ui/src/chat/mediaCapabilities.ts')
     const media = {
       attachment: false,
@@ -152,11 +200,12 @@ describe('partitionPinsForModel', () => {
     const pinned = [
       { id: 'a1', kind: 'image', name: 'x.png', mime: 'image/png', size: 100, createdAt: '2026-01-01T00:00:00.000Z' },
       { id: 'a2', kind: 'video', name: 'clip.mp4', mime: 'video/mp4', size: 200, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'a3', kind: 'audio', name: 'clip.wav', mime: 'audio/wav', size: 150, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'a4', kind: 'canvas', name: 'board.canvas.tsx', mime: 'application/vnd.opptrix.canvas+tsx', size: 50, createdAt: '2026-01-01T00:00:00.000Z' },
     ]
     const { kept, removedIds } = partitionPinsForModel(pinned, media)
-    assert.equal(kept.length, 1)
-    assert.equal(kept[0].id, 'a1')
-    assert.deepEqual(removedIds, ['a2'])
+    assert.deepEqual(kept.map(k => k.id).sort(), ['a1', 'a2', 'a3'])
+    assert.deepEqual(removedIds, ['a4'])
   })
 })
 

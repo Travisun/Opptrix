@@ -76,7 +76,7 @@ export interface ChatAttachmentMeta {
   width?: number
   height?: number
   duration?: number
-  /** 异步文本整理（PDF / 文档 / 图片 OCR） */
+  /** 异步文本整理（PDF / 文档 / 图片 OCR / 音视频转写） */
   extract?: AttachmentExtractMeta
   /** 画布制品元数据（kind=canvas） */
   canvas?: CanvasAttachmentMeta
@@ -195,6 +195,11 @@ export function mimeToMediaKind(mime: string, filename?: string): MediaKind | nu
 /** 本地研报库入库路径（不依赖模型多模态） */
 export function isLibraryIngestKind(kind: MediaKind): boolean {
   return kind === 'pdf' || kind === 'document' || kind === 'image'
+}
+
+/** 音视频后台转写路径（不并入研报库入库） */
+export function isTranscriptExtractKind(kind: MediaKind): boolean {
+  return kind === 'audio' || kind === 'video'
 }
 
 export function formatBytesShort(bytes: number): string {
