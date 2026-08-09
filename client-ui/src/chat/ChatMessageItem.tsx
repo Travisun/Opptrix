@@ -17,10 +17,10 @@ import { fadeInUp } from '../theme/mixins'
 import { copyTextToClipboard } from '../platform/clipboard'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 
-/** 用户气泡编辑区约 5 行可见高度（超出滚动） */
+/** 用户气泡编辑区约 3 行可见高度（超出滚动） */
 const USER_BUBBLE_LINE_HEIGHT = 1.65
 const USER_BUBBLE_FONT_PX = 16
-const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 5)
+const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 3)
 
 const useStyles = makeStyles({
   entry: {
@@ -414,7 +414,7 @@ function ChatMessageItem({
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={handleEditKeyDown}
                 onClick={e => e.stopPropagation()}
-                rows={5}
+                rows={3}
                 aria-label="编辑消息"
               />
               <div className={s.editActions} onClick={e => e.stopPropagation()}>
