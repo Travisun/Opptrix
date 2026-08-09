@@ -366,7 +366,7 @@ export default function ModelSelector({
                 active={activeRef === model.ref}
                 onClick={() => {
                   onChange(model.ref)
-                  if (!showParams) setOpen(false)
+                  setOpen(false)
                 }}
               >
                 <span className={s.modelName}>{model.model}</span>
