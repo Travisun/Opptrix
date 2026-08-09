@@ -13,7 +13,7 @@ import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   resolveProviderPresets, type StoredProvider,
 } from './config.js'
-import { getMarketDataService } from '@opptrix/market-data-store'
+import { closeMarketDuckRuntime, getMarketDataService } from '@opptrix/market-data-store'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import { cancelSessionChat, clearSessionChat, registerSessionChat } from './session-chat-runs.js'
@@ -1709,7 +1709,25 @@ async function shutdown(signal: string) {
     await browserSessionManager.closeAll()
     scheduleService.stop()
     await app.close()
-    getMarketDataService().store.close()
+    // 原生模块（lancedb / onnx / duckdb）须在 process.exit 前显式关闭，否则 macOS 上
+    // __cxa_finalize 可能 SIGABRT，表现为「Opptrix 意外退出」。
+    try {
+      const docLib = await import('@opptrix/doc-library')
+      await docLib.closeDocLibraryService()
+      await docLib.closeEmbeddingService()
+    } catch (err) {
+      app.log.warn({ err }, 'doc-library / embedding shutdown failed')
+    }
+    try {
+      await closeMarketDuckRuntime()
+    } catch (err) {
+      app.log.warn({ err }, 'market duck runtime shutdown failed')
+    }
+    try {
+      getMarketDataService().store.close()
+    } catch (err) {
+      app.log.warn({ err }, 'market store close failed')
+    }
   } catch (err) {
     app.log.error({ err }, 'shutdown error')
   } finally {

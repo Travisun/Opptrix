@@ -269,6 +269,7 @@ export { getMarketDataStore, MarketDataStore } from './store.js'
 export {
   getMarketDuckGateway,
   resetMarketDuckGateways,
+  closeMarketDuckRuntime,
   invalidateHasMarketDuckDataCache,
   type MarketDuckGateway,
   type MarketDuckStats,

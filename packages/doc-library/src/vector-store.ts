@@ -27,12 +27,15 @@ export interface VectorStore {
     vector: number[],
     opts: { documentIds?: string[]; limit?: number },
   ): Promise<VectorSearchHit[]>
+  /** 释放原生连接（LanceDB）；无原生资源时可 no-op */
+  close?(): Promise<void>
 }
 
 type LanceConnection = {
   openTable: (name: string) => Promise<LanceTable>
   createTable: (name: string, data: Record<string, unknown>[], opts?: { mode?: string }) => Promise<LanceTable>
   tableNames: () => Promise<string[]>
+  close?: () => void
 }
 
 type LanceTable = {
@@ -167,6 +170,19 @@ export class LanceVectorStore implements VectorStore {
       return []
     }
   }
+
+  /** 关闭 Lance 连接，避免 process.exit 时原生析构 SIGABRT */
+  async close(): Promise<void> {
+    const conn = this.conn
+    this.table = null
+    this.conn = null
+    this.initFailed = false
+    try {
+      conn?.close?.()
+    } catch {
+      /* ignore teardown races */
+    }
+  }
 }
 
 function mapHits(rows: Record<string, unknown>[]): VectorSearchHit[] {
@@ -217,6 +233,10 @@ export class MemoryVectorStore implements VectorStore {
     }
     return scored.sort((a, b) => b.score - a.score).slice(0, limit)
   }
+
+  async close(): Promise<void> {
+    this.rows.clear()
+  }
 }
 
 function cosine(a: number[], b: number[]): number {
@@ -240,6 +260,18 @@ let sharedStore: VectorStore | null = null
 export function getVectorStore(): VectorStore {
   if (!sharedStore) sharedStore = new LanceVectorStore()
   return sharedStore
+}
+
+/** 关闭共享向量库（若已打开）；未打开则 no-op */
+export async function closeVectorStore(): Promise<void> {
+  const store = sharedStore
+  sharedStore = null
+  if (!store) return
+  try {
+    await store.close?.()
+  } catch {
+    /* ignore teardown races */
+  }
 }
 
 export function setVectorStoreForTests(store: VectorStore | null): void {

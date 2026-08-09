@@ -194,6 +194,18 @@ export class EmbeddingService {
       return null
     }
   }
+
+  /** 释放后端（onnx / transformers）；失败不抛 */
+  async dispose(): Promise<void> {
+    const backend = this.backend
+    this.backend = null
+    if (!backend?.dispose) return
+    try {
+      await backend.dispose()
+    } catch {
+      /* ignore teardown races */
+    }
+  }
 }
 
 let sharedEmbedding: EmbeddingService | null = null
@@ -201,6 +213,14 @@ let sharedEmbedding: EmbeddingService | null = null
 export function getEmbeddingService(): EmbeddingService {
   if (!sharedEmbedding) sharedEmbedding = new EmbeddingService()
   return sharedEmbedding
+}
+
+/** 关闭共享 embedding 单例（若已打开）；未打开则 no-op */
+export async function closeEmbeddingService(): Promise<void> {
+  const svc = sharedEmbedding
+  sharedEmbedding = null
+  if (!svc) return
+  await svc.dispose()
 }
 
 export function setEmbeddingServiceForTests(svc: EmbeddingService | null): void {

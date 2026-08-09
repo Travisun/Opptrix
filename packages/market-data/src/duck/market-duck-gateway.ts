@@ -22,6 +22,7 @@ import {
   resetDuckCliPools,
 } from './duck-cli-pool.js'
 import { getDuckNeoReader, resetDuckNeoReaders } from './duck-neo-reader.js'
+import { resetKlineDuckStore } from '../kline/duck-store.js'
 
 export type AnalyticsSyncScope = 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all'
 
@@ -587,4 +588,28 @@ export function resetMarketDuckGateways(): void {
   void resetDuckNeoReaders()
   // Fire-and-forget: runtime callers are sync. Tests should await resetDuckCliPools().
   void resetDuckCliPools()
+}
+
+/**
+ * Sidecar / process 退出前显式关闭 Duck 原生句柄与 worker。
+ * 顺序：gateway 缓存 → neo reader（@duckdb/node-api）→ duck-cli pool → 遗留 KlineDuckStore。
+ */
+export async function closeMarketDuckRuntime(): Promise<void> {
+  gateways.clear()
+  duckDataCache = null
+  try {
+    await resetDuckNeoReaders()
+  } catch {
+    /* ignore */
+  }
+  try {
+    await resetDuckCliPools()
+  } catch {
+    /* ignore */
+  }
+  try {
+    await resetKlineDuckStore()
+  } catch {
+    /* ignore */
+  }
 }

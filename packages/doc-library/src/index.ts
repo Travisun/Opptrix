@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { DocLibraryService } from './service.js'
 import { openDocLibraryDb, docLibraryDbPath } from './paths.js'
+import { closeVectorStore } from './vector-store.js'
 
 export {
   DOC_LIBRARY_SCHEMA_VERSION,
@@ -52,6 +53,7 @@ export {
   MockEmbeddingBackend,
   TransformersE5Backend,
   getEmbeddingService,
+  closeEmbeddingService,
   setEmbeddingServiceForTests,
 } from './embedding.js'
 export type { EmbeddingBackend } from './embedding.js'
@@ -59,6 +61,7 @@ export {
   LanceVectorStore,
   MemoryVectorStore,
   getVectorStore,
+  closeVectorStore,
   setVectorStoreForTests,
 } from './vector-store.js'
 export type { VectorStore, VectorChunkRow, VectorSearchHit } from './vector-store.js'
@@ -215,13 +218,25 @@ export function getDocLibraryService(dbPath?: string): DocLibraryService {
   return serviceInst
 }
 
-/** 测试 teardown */
-export function closeDocLibraryService(): void {
-  serviceDb?.close()
+/**
+ * 关闭文档库单例：先 Lance 向量库，再 SQLite。
+ * 生产 sidecar 退出与测试 teardown 共用；失败不抛。
+ */
+export async function closeDocLibraryService(): Promise<void> {
+  try {
+    await closeVectorStore()
+  } catch {
+    /* ignore */
+  }
+  try {
+    serviceDb?.close()
+  } catch {
+    /* ignore */
+  }
   serviceDb = null
   serviceInst = null
 }
 
 export function resetDocLibraryServiceForTests(): void {
-  closeDocLibraryService()
+  void closeDocLibraryService()
 }

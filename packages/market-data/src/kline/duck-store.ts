@@ -198,9 +198,14 @@ export function getKlineDuckStore(dbPath = klineDuckDbPath()): KlineDuckStore {
   return sharedKlineStore
 }
 
-export function resetKlineDuckStore(): void {
-  if (sharedKlineStore) {
-    void sharedKlineStore.close()
-    sharedKlineStore = null
+/** 关闭共享 KlineDuckStore（若已打开）；await 后再 exit，避免 duckdb 原生析构 SIGABRT */
+export async function resetKlineDuckStore(): Promise<void> {
+  const store = sharedKlineStore
+  sharedKlineStore = null
+  if (!store) return
+  try {
+    await store.close()
+  } catch {
+    /* ignore teardown races */
   }
 }

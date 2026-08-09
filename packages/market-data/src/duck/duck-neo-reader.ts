@@ -471,6 +471,15 @@ export function getDuckNeoReader(duckDbPath: string): DuckNeoReader {
 }
 
 export async function resetDuckNeoReaders(): Promise<void> {
+  const handles = [...readers.values()]
   readers.clear()
   bootstraps.clear()
+  for (const handle of handles) {
+    try {
+      handle.readQueue.clear()
+      handle.instance.closeSync()
+    } catch {
+      /* ignore teardown races */
+    }
+  }
 }

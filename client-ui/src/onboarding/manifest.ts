@@ -620,6 +620,25 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.3.1': {
+    welcomeTitle: '退出更稳，继续投研',
+    welcomeSubtitle: '这一版让完全退出应用更稳定，收尾更干净，方便随时重新打开继续投研。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更稳定',
+        title: '退出应用更稳妥',
+        desc: '完全退出时更少意外中断，关掉后可以安心再打开继续用。',
+        note: '该退就退，少折腾。',
+      },
+      {
+        kicker: '更省心',
+        title: '关掉后再开，照常继续',
+        desc: '退出后收尾更干净，重新打开即可回到你的会话与关注列表。',
+        note: '进度还在，思路不断。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
