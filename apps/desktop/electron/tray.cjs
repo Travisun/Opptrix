@@ -23,12 +23,17 @@ function trayIconDirCandidates() {
 
 /**
  * macOS: trayTemplate.png (+ @2x/@3x) — filename Template enables system tinting + DPI.
- * Windows / Linux: tray-color.png (+ @2x/@3x) — brand-color glyph.
- * @returns {string | null} absolute path to 1x asset (Electron loads @2x siblings)
+ * Windows: tray.ico (16/20/24/32 multi-size).
+ * Linux: tray-color.png (+ @1.25x/@1.5x/@2x) — brand-color glyph.
+ * @returns {string | null} absolute path to tray asset (Electron loads PNG DPI siblings)
  */
 function resolveDedicatedTrayIconPath() {
-  const fileName = process.platform === 'darwin' ? 'trayTemplate.png' : 'tray-color.png'
   for (const dir of trayIconDirCandidates()) {
+    if (process.platform === 'win32') {
+      const ico = path.join(dir, 'tray.ico')
+      if (fs.existsSync(ico)) return ico
+    }
+    const fileName = process.platform === 'darwin' ? 'trayTemplate.png' : 'tray-color.png'
     const candidate = path.join(dir, fileName)
     if (fs.existsSync(candidate)) return candidate
   }

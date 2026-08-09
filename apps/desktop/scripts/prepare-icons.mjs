@@ -99,22 +99,53 @@ function stageLinuxIcons() {
   }
 }
 
-/** Menu-bar / notification-area tray glyphs (mac Template + Win/Linux color). */
-function stageTrayIcons() {
+const TRAY_MAC_REQUIRED = ['trayTemplate.png', 'trayTemplate@2x.png', 'trayTemplate@3x.png']
+const TRAY_COLOR_ENTRIES = [
+  { name: 'tray-color.png', size: 16 },
+  { name: 'tray-color@1.25x.png', size: 20 },
+  { name: 'tray-color@1.5x.png', size: 24 },
+  { name: 'tray-color@2x.png', size: 32 },
+]
+
+function readPngDimensions(file) {
+  const buf = fs.readFileSync(file)
+  if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) {
+    throw new Error(`Not a PNG: ${file}`)
+  }
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+}
+
+/** Menu-bar / notification-area tray glyphs (mac Template + Win/Linux color + Win ICO). */
+async function stageTrayIcons() {
   const src = path.join(SOURCE_DIR, 'tray')
   const dest = path.join(OUT_DIR, 'tray')
   if (!fs.existsSync(src)) {
     console.warn(`Missing tray icons dir: ${src} (tray will fall back to app logo)`)
     return
   }
-  const required = ['trayTemplate.png', 'trayTemplate@2x.png', 'tray-color.png', 'tray-color@2x.png']
-  for (const name of required) {
+  for (const name of TRAY_MAC_REQUIRED) {
     const file = path.join(src, name)
     if (!fs.existsSync(file)) {
       throw new Error(`Missing tray icon: ${file}`)
     }
   }
+  const trayColorPaths = []
+  for (const { name, size } of TRAY_COLOR_ENTRIES) {
+    const file = path.join(src, name)
+    if (!fs.existsSync(file)) {
+      throw new Error(`Missing tray icon: ${file}`)
+    }
+    const { width, height } = readPngDimensions(file)
+    if (width !== size || height !== size) {
+      throw new Error(`Tray icon ${name} must be ${size}x${size}, got ${width}x${height}`)
+    }
+    trayColorPaths.push(file)
+  }
   fs.cpSync(src, dest, { recursive: true })
+  const { default: pngToIco } = await import('png-to-ico')
+  const ico = await pngToIco(trayColorPaths)
+  fs.writeFileSync(path.join(dest, 'tray.ico'), ico)
+  fs.writeFileSync(path.join(src, 'tray.ico'), ico)
 }
 
 async function createWindowsIco() {
@@ -194,11 +225,11 @@ copyFile(
   path.join(REPO_ROOT, 'client-ui', 'public', 'app-icon.png'),
 )
 stageLinuxIcons()
-stageTrayIcons()
+await stageTrayIcons()
 await createWindowsIco()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
 console.log('  staged: icon.icon (mac App / Icon Composer)')
 console.log('  staged: icon.icns (DMG + Dock fallback)')
-console.log('  staged: tray/ (mac Template + Win/Linux color)')
+console.log('  staged: tray/ (mac Template + Win tray.ico + Linux color PNG)')
 console.log('  synced: client-ui/public/app-icon.png ← logo@64.png')
 

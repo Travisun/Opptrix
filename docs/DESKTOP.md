@@ -89,14 +89,52 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 6. Linux 用户退出 / 短命 tick 结束时与 Windows 一样有短超时 `app.exit` 兜底，避免 AppImage 幽灵进程占住下一版安装  
 
 
-托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）：
+托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）。
 
-| 平台 | 资源 | 尺寸 |
-|------|------|------|
-| **macOS** | `trayTemplate.png` / `@2x` / `@3x` | 22 / 44 / 66（Template，系统着色） |
-| **Windows / Linux** | `tray-color.png` / `@2x` / `@3x` | 16 / 32 / 48（品牌色剪影） |
+#### 仓库内当前 PNG（运行时直接加载）
 
-运行时优先加载上述专用图（路径字符串保留 Retina）；缺失时回退为应用 Logo 缩放。
+| 平台 | 资源文件名 | 像素 |
+|------|------------|------|
+| **macOS** | `trayTemplate.png` / `trayTemplate@2x.png` / `trayTemplate@3x.png` | 22 / 44 / 66（文件名含 `Template` → 系统着色） |
+| **Windows** | `tray.ico`（含 16 / 20 / 24 / 32 四个 entry） | 由 `tray-color*.png` 合成 |
+| **Linux** | `tray-color.png` / `tray-color@1.25x.png` / `tray-color@1.5x.png` / `tray-color@2x.png` | 16 / 20 / 24 / 32 |
+
+运行时优先加载上述专用图；缺失时回退为应用 Logo 缩放。Win/Linux 彩色 PNG 源文件命名须用 Electron DPI 后缀（`@1.25x` / `@1.5x` / `@2x`），不要用 Sketch 的 `@20w` 等导出名进仓库。
+
+#### Windows 清晰度：请按 DPI 导出专用尺寸（推荐）
+
+Windows 托盘逻辑边长约 **16 CSS px**，系统缩放常见为 100% / 125% / 150% / 200%，对应需要 **独立像素稿**（不要只靠从大图缩到 16px）：
+
+| 缩放 | 像素边长 | 用途 |
+|------|----------|------|
+| 100% | **16×16** | 默认托盘 |
+| 125% | **20×20** | HiDPI |
+| 150% | **24×24** | HiDPI |
+| 200% | **32×32** | HiDPI（≈ `@2x`） |
+
+Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small 尺寸）。本仓库 Win 托盘运行时加载 `tray.ico`（`prepare-icons.mjs` 从四张 `tray-color*.png` 合成）；Linux 仍用 PNG 路径字符串（Electron 自动匹配 `@1.25x` / `@1.5x` / `@2x`  sibling）。
+
+**设计要点（比「满足分片尺寸」更重要）**
+
+1. **按 16px 像素稿画剪影**：1px 安全边；笔画尽量 ≥2px；少细线/复杂内孔。
+2. **透明底 + 实色形体**（外形与 mac `trayTemplate` 一致更好）；避免「彩色底上再叠浅色字标」——16px 上几乎不可读。
+3. Cursor 一类清晰托盘：mac 侧是 **透明抠出的剪影**（非铺满色块）；Win 侧靠多尺寸 ICO，而不是指望 PNG `@2x` 文件名。
+
+#### Sketch 能否直接导出 `.ico` / `.icns`？
+
+**不能。** Sketch / `sketchtool` 原生只导出 PNG、JPG、SVG、PDF 等；**不支持直接导出 `.ico` 或 `.icns`**。
+
+推荐流程：
+
+1. **Sketch**：为每个尺寸建独立 Artboard / Exportable（Win/Linux 彩色：16 / 20 / 24 / 32；mac Template：22 + `@2x`/`@3x`），导出 **PNG**；入库前将 Win/Linux 彩色稿重命名为 `tray-color.png` / `@1.25x` / `@1.5x` / `@2x`。
+2. **合成 `.ico`（Windows 托盘 / 应用图标）**  
+   - 插件：Icon Slate、Iconboard 等可把多尺寸 PNG 打成 `.ico`；或  
+   - 本仓库：`prepare-icons.mjs` 用 `png-to-ico` 生成 `build/icons/icon.ico`（应用图标，来自 `icons/logo@*.png`）与 `icons/tray/tray.ico` + `build/icons/tray/tray.ico`（托盘，来自四张 `tray-color*.png`）。
+3. **合成 `.icns`（macOS 应用图标，不是托盘）**  
+   - 托盘用 `trayTemplate*.png` 即可，**不需要** `.icns`；  
+   - Dock / DMG 应用图标：PNG → `iconutil`（`prepare-icons.mjs` 在 macOS 上会生成 `build/icons/icon.icns`），或 Icon Slate 等插件。
+
+> 「hdi」一般指 **`.icns`**（Apple icon 容器）。托盘请继续交 PNG Template；`.icns` 只用于 App / DMG 图标。
 
 开发模式（未打包）默认 **无** 关窗驻托盘行为；关窗会走 `window-all-closed` → `app.quit()`。
 
