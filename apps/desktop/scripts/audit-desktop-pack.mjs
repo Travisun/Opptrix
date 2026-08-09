@@ -301,6 +301,19 @@ console.log('audit-desktop-pack: start')
     } else {
       ok('repo icons/tray has required tray sources')
     }
+    const stagedTrayMissing = trayRequired.some((name) => !exists(path.join('build/icons/tray', name)))
+    if (traySrcPresent && stagedTrayMissing) {
+      console.log('  … running prepare-icons.mjs (staged tray assets missing)')
+      const prepare = spawnSync(process.execPath, [path.join(__dirname, 'prepare-icons.mjs')], {
+        cwd: DESKTOP_ROOT,
+        stdio: 'inherit',
+      })
+      if (prepare.status !== 0) {
+        fail('prepare-icons.mjs failed while staging tray assets')
+      } else {
+        ok('prepare-icons completed')
+      }
+    }
     for (const name of trayRequired) {
       const rel = path.join('build/icons/tray', name)
       if (!exists(rel)) {

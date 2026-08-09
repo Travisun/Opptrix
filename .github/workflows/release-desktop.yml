@@ -112,6 +112,10 @@ jobs:
       - name: Stage RAG engines MANIFEST (Node OCR)
         run: node apps/desktop/scripts/stage-rag-engines.mjs
 
+      # Stages build/icons including tray/* (audit requires full tray set; not produced by RAG stage scripts).
+      - name: Stage desktop icons / tray
+        run: node apps/desktop/scripts/prepare-icons.mjs
+
       - name: Audit desktop packaging preflight
         shell: bash
         env:
