@@ -150,6 +150,7 @@
       ]
     },
     "dmg": {
+      "sign": true,
       "title": "安装 Opptrix ${version}",
       "icon": "build/icons/icon.icns",
       "iconSize": 96,

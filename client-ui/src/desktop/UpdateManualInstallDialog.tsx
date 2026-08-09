@@ -209,8 +209,8 @@ export default function UpdateManualInstallDialog({ open, onClose }: UpdateManua
               </Text>
             </div>
           </DialogContent>
-          <DialogActions className={s.actions}>
-            <OpptrixButton variant="secondary" onClick={onClose}>
+          <DialogActions className={mergeClasses('opptrix-manual-install-actions', s.actions)}>
+            <OpptrixButton variant="ghost" onClick={onClose}>
               知道了
             </OpptrixButton>
             <OpptrixButton variant="primary" onClick={handleOpenSite}>

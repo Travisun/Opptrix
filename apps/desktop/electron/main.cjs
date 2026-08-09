@@ -8,6 +8,7 @@ const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu, listApplicationMenuTopItems, popupApplicationMenuAt } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
+const { clearMacAppQuarantine } = require('./clear-mac-quarantine.cjs')
 const { initUpdater, registerUpdaterIpc, resumePendingUpdateOnStartup, isUpdateReady, installPendingUpdate } = require('./updater.cjs')
 const {
   deliverProtocolUrl,
@@ -1394,6 +1395,8 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(async () => {
+    // 尽早清 quarantine，减轻自动更新/下载后 Gatekeeper「已损坏」误报
+    clearMacAppQuarantine()
     configureNotificationIdentity(APP_ID)
     installMediaPermissionHandlers(session.defaultSession)
     applyAppIcon(app)

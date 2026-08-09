@@ -443,7 +443,8 @@ npm run build:desktop -- --publish always
 ### macOS
 
 - **分架构发布**（`x64` + `arm64`），Intel 与 Apple Silicon 各一份；**不用 Universal 单包**（见 §3 说明）。
-- 同时产出 `dmg`（分发）与 `zip`（更新）。
+- 同时产出 `dmg`（分发）与 `zip`（更新）；**自动更新只走 zip**（`latest-mac.yml` 指向各架构 zip）。
+- `build.dmg.sign` 已启用（`true`），在具备签名证书时会对 DMG 容器本身签名。
 - **未配置签名 secrets 时 CI 仍可构建**（产出未签名包，`CSC_IDENTITY_AUTO_DISCOVERY=false`）；正式发布建议配置签名与公证。
 
 #### 在 CI 中配置 Apple 签名（推荐）
@@ -481,7 +482,7 @@ open /Applications/Opptrix.app
 
 或在 Finder 中对该 App **右键 → 打开** 一次。
 
-**正式签名包**仍出现此提示：检查是否下错架构（Intel 需 x64，M 系列需 arm64），或 Release 是否含公证通过的构建。
+**正式签名 / 已公证包**仍出现此提示：先核对架构（Intel→x64，M 系列→arm64）；也可能是下载带来的 quarantine——可手动 `xattr -cr /Applications/Opptrix.app`。打包版启动时也会尝试清除本机 `.app` 上的 quarantine（失败不阻塞启动）。
 
 ### Windows
 

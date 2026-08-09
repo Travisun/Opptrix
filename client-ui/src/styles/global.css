@@ -1356,6 +1356,28 @@ select:focus-visible {
   width: 100%;
 }
 
+/* UpdateManualInstallDialog — 与 dialog-alert 同款紧凑行按钮，避免 Fluent 全宽拉伸 */
+.opptrix-manual-install-actions.fui-DialogActions {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  padding: 10px 0 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+.opptrix-manual-install-actions .fui-Button {
+  min-width: 64px;
+  min-height: 28px;
+  margin: 0 !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+}
+
 [data-theme="dark"] .opptrix-glass-dialog-surface .fui-DialogTitle__action .fui-Button:hover,
 [data-theme="dark"] .opptrix-glass-dialog-surface .fui-DialogTitle__action button:hover {
   background-color: rgba(255, 255, 255, 0.08) !important;
