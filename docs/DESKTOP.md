@@ -280,9 +280,9 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 | 平台 | 注意 |
 |------|------|
-| **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`（`package.json` `build.appId`），否则通知可能不归到本应用 |
-| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启 |
-| **Linux** | 依赖桌面环境对 Electron `Notification` 的支持（`Notification.isSupported()`）；部分环境可能静默失败 |
+| **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`（`package.json` `build.appId`），否则通知可能不归到本应用；toast 图标经 `Notification.icon` 指向 `prepare-icons` 产出的 `icon.ico` / logo PNG |
+| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启；`Notification.icon` 无效，依赖 bundle `Resources/icon.icns`（afterPack 覆盖完整 icns） |
+| **Linux** | 依赖桌面环境对 Electron `Notification` 的支持（`Notification.isSupported()`）；部分环境可能静默失败。toast 图标经 `Notification.icon` 指向 `build/icons/linux/*.png` 或 logo PNG；桌面入口图标仍用 `build.linux.icon` |
 
 单元测试：`tests/chat-notifications.test.mjs`（注意力、离开标记、builder、sanitize、macOS 权限映射）。
 

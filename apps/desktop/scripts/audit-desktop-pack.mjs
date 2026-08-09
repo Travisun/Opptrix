@@ -421,6 +421,15 @@ console.log('audit-desktop-pack: start')
       fail(`build/icons/icon.icns looks like a stub (${icnsSize} bytes; expect >= 100000)`)
     } else ok(`build/icons/icon.icns size ok (${icnsSize} bytes)`)
   }
+
+  const notifSrc = read('electron/notifications.cjs')
+  const iconSrc = read('electron/icon.cjs')
+  if (!notifSrc.includes('resolveAppIconPath') || !notifSrc.includes('icon:')) {
+    fail('notifications.cjs must pass resolveAppIconPath() as Notification.icon (Win/Linux toast)')
+  } else ok('notifications.cjs wires Notification.icon from resolveAppIconPath')
+  if (!iconSrc.includes('icon.ico') || !iconSrc.includes('linux')) {
+    fail('icon.cjs must prefer platform icons (win icon.ico / linux PNG)')
+  } else ok('icon.cjs prefers platform-native toast/app icons')
 }
 
 // ── 3. Update trust (embedded CA + custom verifier) ────────────────────────

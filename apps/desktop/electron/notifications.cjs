@@ -1,4 +1,5 @@
 const { Notification, app, systemPreferences, shell } = require('electron')
+const { resolveAppIconPath } = require('./icon.cjs')
 
 /** @type {'default' | 'granted' | 'denied'} */
 let cachedPermission = 'default'
@@ -177,11 +178,14 @@ function showLocalNotification(options) {
 
   let delivered = false
   try {
+    // Windows / Linux toast content image; macOS Notification.icon is ignored by the OS.
+    const iconPath = resolveAppIconPath()
     const notification = new Notification({
       title,
       body: String(options?.body ?? '').trim() || undefined,
       silent: Boolean(options?.silent),
       tag: options?.tag ? String(options.tag) : undefined,
+      ...(iconPath ? { icon: iconPath } : {}),
     })
 
     if (typeof options?.onClick === 'function') {

@@ -622,7 +622,7 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
   },
   '1.3.1': {
     welcomeTitle: '退出更稳，继续投研',
-    welcomeSubtitle: '这一版让完全退出更稳定，通知与系统提示中的应用图标也与当前品牌一致。',
+    welcomeSubtitle: '这一版让完全退出更稳定，各平台通知与系统提示中的应用图标也与当前品牌一致。',
     updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
     features: [
       {
