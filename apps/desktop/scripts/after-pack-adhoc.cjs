@@ -1,6 +1,8 @@
 /**
  * electron-builder afterPack hook.
  *
+ * 0) On macOS, replace the Icon Composer stub `Resources/icon.icns` with the full
+ *    `build/icons/icon.icns` (notification center / CFBundleIconFile readers).
  * 1) Always restore sidecar `deps/` → `node_modules/` inside the packed app.
  *    Staging renames to `deps/` so createFilter does not drop the tree (exact
  *    relative path `node_modules` is skipped). Packaged Node ESM cannot resolve
@@ -30,6 +32,34 @@ function runtimeStageRoots(context) {
     return [path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources', 'runtime-stage')]
   }
   return [path.join(context.appOutDir, 'resources', 'runtime-stage')]
+}
+
+/**
+ * Icon Composer (`build.mac.icon` = `.icon`) ships Assets.car + a stub icns.
+ * Notification Center still reads CFBundleIconFile → Resources/icon.icns.
+ * Overwrite that stub with the full icns from prepare-icons before codesign.
+ */
+function restoreMacBundleIcns(context) {
+  if (context.electronPlatformName !== 'darwin') return
+
+  const productFilename = context.packager.appInfo.productFilename
+  const appPath = path.join(context.appOutDir, `${productFilename}.app`)
+  const src = path.join(__dirname, '..', 'build', 'icons', 'icon.icns')
+  const dest = path.join(appPath, 'Contents', 'Resources', 'icon.icns')
+
+  if (!fs.existsSync(src)) {
+    throw new Error(`afterPack: missing full mac icon at ${src}`)
+  }
+  if (!fs.existsSync(appPath)) {
+    throw new Error(`afterPack: missing app bundle at ${appPath}`)
+  }
+  const destDir = path.dirname(dest)
+  if (!fs.existsSync(destDir)) {
+    throw new Error(`afterPack: missing Resources dir at ${destDir}`)
+  }
+
+  fs.copyFileSync(src, dest)
+  console.log(`afterPack: restored full mac icon.icns → ${dest}`)
 }
 
 /** Rename staged deps → node_modules so ESM bare imports resolve in production. */
@@ -96,6 +126,7 @@ function adhocSignMac(context) {
 }
 
 exports.default = async function afterPack(context) {
+  restoreMacBundleIcns(context)
   restoreSidecarNodeModules(context)
   adhocSignMac(context)
 }

@@ -407,6 +407,20 @@ console.log('audit-desktop-pack: start')
   if (!afterPackSrc.includes('restoreSidecarNodeModules') || !afterPackSrc.includes('renameSync')) {
     fail('afterPack must rename staged deps → node_modules for ESM resolution')
   } else ok('afterPack restores deps → node_modules')
+
+  if (
+    !afterPackSrc.includes('restoreMacBundleIcns')
+    || !afterPackSrc.includes('build/icons/icon.icns')
+  ) {
+    fail('afterPack must restore full build/icons/icon.icns over mac bundle stub')
+  } else ok('afterPack restores full mac icon.icns for notification center')
+
+  if (exists('build/icons/icon.icns')) {
+    const icnsSize = fs.statSync(path.join(DESKTOP_ROOT, 'build/icons/icon.icns')).size
+    if (icnsSize < 100_000) {
+      fail(`build/icons/icon.icns looks like a stub (${icnsSize} bytes; expect >= 100000)`)
+    } else ok(`build/icons/icon.icns size ok (${icnsSize} bytes)`)
+  }
 }
 
 // ── 3. Update trust (embedded CA + custom verifier) ────────────────────────

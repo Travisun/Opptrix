@@ -132,7 +132,8 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
    - 本仓库：`prepare-icons.mjs` 用 `png-to-ico` 生成 `build/icons/icon.ico`（应用图标，来自 `icons/logo@*.png`）与 `icons/tray/tray.ico` + `build/icons/tray/tray.ico`（托盘，来自四张 `tray-color*.png`）。
 3. **合成 `.icns`（macOS 应用图标，不是托盘）**  
    - 托盘用 `trayTemplate*.png` 即可，**不需要** `.icns`；  
-   - Dock / DMG 应用图标：PNG → `iconutil`（`prepare-icons.mjs` 在 macOS 上会生成 `build/icons/icon.icns`），或 Icon Slate 等插件。
+   - Dock / DMG 应用图标：PNG → `iconutil`（`prepare-icons.mjs` 在 macOS 上会生成 `build/icons/icon.icns`），或 Icon Slate 等插件。  
+   - mac App 使用 Icon Composer（`build.mac.icon` → `icon.icon`）；afterPack 再用完整 `build/icons/icon.icns` 覆盖 bundle 内 `Resources/icon.icns`，供通知中心等读取。
 
 > 「hdi」一般指 **`.icns`**（Apple icon 容器）。托盘请继续交 PNG Template；`.icns` 只用于 App / DMG 图标。
 
