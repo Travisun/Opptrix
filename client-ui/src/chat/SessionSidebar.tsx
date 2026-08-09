@@ -20,7 +20,6 @@ import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ExpertSessionIcon from './ExpertSessionIcon'
 import HoverMarqueeText from './HoverMarqueeText'
-import opptrixWordmarkSidebarSvg from '../assets/opptrix-wordmark-sidebar.svg?raw'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 export type SidebarListTab = 'chat' | 'experts' | 'archive'
@@ -100,32 +99,30 @@ const useStyles = makeStyles({
   },
   brandRow: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: '6px',
     flexShrink: 0,
     minWidth: 0,
     /* 与 sidebarTopMenuRow 图标左缘对齐：margin 10 + padding 10 = 20 */
     padding: '4px 20px 0',
     overflow: 'hidden',
-    lineHeight: 1.35,
+    lineHeight: 1,
   },
-  brandMark: {
-    display: 'inline-flex',
+  brandName: {
     flexShrink: 0,
-    height: '16px',
-    width: 'auto',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 0,
-    '& svg': {
-      display: 'block',
-      height: '16px',
-      width: 'auto',
-    },
+    /* Slightly above menu (13px); bold; secondary gray (not pure black) */
+    fontSize: '14px',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    lineHeight: 1,
+    color: opptrixCssVars.textTertiary,
+    whiteSpace: 'nowrap',
   },
   brandVersion: {
     fontSize: '11px',
     fontWeight: 500,
-    color: opptrixCssVars.textSecondary,
+    lineHeight: 1,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
@@ -383,8 +380,8 @@ function SessionSidebar({
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
 
   const brandAriaLabel = versionLabel
-    ? `Opptrix工作台 ${versionLabel}`
-    : 'Opptrix工作台'
+    ? `OpptrixBench ${versionLabel}`
+    : 'OpptrixBench'
 
   const releaseSidebarFocus = useCallback(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -420,13 +417,9 @@ function SessionSidebar({
 
       {showSidebarBrand ? (
         <div className={s.brandRow} aria-label={brandAriaLabel}>
-          <span
-            className={s.brandMark}
-            aria-hidden="true"
-            dangerouslySetInnerHTML={{ __html: opptrixWordmarkSidebarSvg }}
-          />
+          <span className={s.brandName} aria-hidden="true">OpptrixBench</span>
           {versionLabel ? (
-            <span className={s.brandVersion}>{versionLabel}</span>
+            <span className={s.brandVersion} aria-hidden="true">{versionLabel}</span>
           ) : null}
         </div>
       ) : null}
