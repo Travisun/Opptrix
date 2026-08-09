@@ -21,11 +21,13 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { UPDATER_ENTRY, UPDATER_VENDOR_DIR, UPDATER_ENTRY_MARKER } from './lib/updater-vendor-paths.mjs'
+import { resolveRuntimeTarget } from './lib/runtime-target.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
 const REPO_ROOT = path.resolve(DESKTOP_ROOT, '../..')
 const require = createRequire(path.join(DESKTOP_ROOT, 'package.json'))
+const runtimeTarget = resolveRuntimeTarget()
 
 const errors = []
 const warnings = []
@@ -69,6 +71,10 @@ console.log('audit-desktop-pack: start')
   if (files.some((e) => String(e).includes('build/updater-deps/node_modules'))) {
     fail('updater must not be staged under a directory named node_modules')
   } else ok('updater path avoids node_modules directory name')
+
+  if (!files.includes('build/icons/**/*')) {
+    fail('build.files missing build/icons/**/* (app + tray icons from prepare-icons)')
+  } else ok('build.files includes build/icons')
 
   if (!files.some((e) => String(e).includes('electron/**'))) {
     fail('build.files must include electron/** (certs + update-signature)')
@@ -182,11 +188,13 @@ console.log('audit-desktop-pack: start')
     ok('extraResources maps engines stage dir')
   }
 
-  const platformKey = `${process.platform}-${process.arch}`
+  // Respect OPPTRIX_RUNTIME_ARCH (mac-x64 cross-build must not look for darwin-arm64 MANIFEST)
+  const platformKey = `${runtimeTarget.platform}-${runtimeTarget.arch}`
   const enginesManifestRel = path.join('resources/engines', platformKey, 'MANIFEST.json')
   if (!exists(enginesManifestRel)) {
     fail(
-      `Hybrid RAG: missing ${enginesManifestRel} — run node scripts/stage-rag-engines.mjs (writes MANIFEST; no Python wheels)`,
+      `Hybrid RAG: missing ${enginesManifestRel} — run node scripts/stage-rag-engines.mjs `
+        + `(writes MANIFEST for ${platformKey}; set OPPTRIX_RUNTIME_ARCH for cross-builds)`,
     )
   } else {
     ok(`present ${enginesManifestRel}`)
@@ -249,14 +257,63 @@ console.log('audit-desktop-pack: start')
     const documentsNodeOcr = stageEnginesSrc.includes('Node OCR') || stageEnginesSrc.includes('Node ONNX')
     const downloadsPythonWheels = /pip\s+download/.test(stageEnginesSrc)
       || stageEnginesSrc.includes('downloadWheel')
+    const respectsRuntimeArch = stageEnginesSrc.includes('resolveRuntimeTarget')
+      || stageEnginesSrc.includes('OPPTRIX_RUNTIME_ARCH')
     if (!documentsNodeOcr) {
       fail('stage-rag-engines.mjs must document Node OCR path (MANIFEST-only staging)')
     } else if (downloadsPythonWheels) {
       fail('stage-rag-engines.mjs must not download Python pdfplumber/rapidocr wheels')
     } else if (!stageEnginesSrc.includes('pruneLegacyWorkers') && !stageEnginesSrc.includes('pdfplumber-worker')) {
       fail('stage-rag-engines.mjs must prune legacy Python worker dirs')
+    } else if (!respectsRuntimeArch) {
+      fail('stage-rag-engines.mjs must honor OPPTRIX_RUNTIME_ARCH (via resolveRuntimeTarget)')
     } else {
-      ok('stage-rag-engines.mjs writes MANIFEST only (Node OCR; no pip wheels)')
+      ok('stage-rag-engines.mjs writes MANIFEST only (Node OCR; OPPTRIX_RUNTIME_ARCH-aware)')
+    }
+  }
+
+  // Tray assets staged by prepare-icons into build/icons/tray (packaged via build/icons/**/*)
+  {
+    const trayRequired = [
+      'trayTemplate.png',
+      'trayTemplate@2x.png',
+      'trayTemplate@3x.png',
+      'tray.ico',
+      'tray-color.png',
+      'tray-color@1.25x.png',
+      'tray-color@1.5x.png',
+      'tray-color@2x.png',
+    ]
+    const traySrcDir = path.join(REPO_ROOT, 'icons/tray')
+    const traySrcPresent = fs.existsSync(traySrcDir)
+      && trayRequired.every((name) => {
+        if (name === 'tray.ico') {
+          // prepare-icons generates tray.ico from color PNGs; source may or may not commit it
+          return fs.existsSync(path.join(traySrcDir, 'tray-color.png'))
+        }
+        return fs.existsSync(path.join(traySrcDir, name))
+      })
+    if (!traySrcPresent) {
+      fail(
+        'repo icons/tray missing required tray sources '
+          + '(mac trayTemplate*.png + linux tray-color*.png) — restore icons/tray before packaging',
+      )
+    } else {
+      ok('repo icons/tray has required tray sources')
+    }
+    for (const name of trayRequired) {
+      const rel = path.join('build/icons/tray', name)
+      if (!exists(rel)) {
+        fail(`missing staged tray asset ${rel} — run node scripts/prepare-icons.mjs`)
+      } else {
+        ok(`present ${rel}`)
+      }
+    }
+    const prepareIconsSrc = read('scripts/prepare-icons.mjs')
+    if (!prepareIconsSrc.includes('stageTrayIcons') || !prepareIconsSrc.includes('trayTemplate.png')) {
+      fail('prepare-icons.mjs must stage tray Template / color / ico assets')
+    } else {
+      ok('prepare-icons.mjs stages tray assets')
     }
   }
 
@@ -380,6 +437,13 @@ console.log('audit-desktop-pack: start')
   if (!verifySrc.includes('ensureStageNodeModulesLink') && !verifySrc.includes("symlinkSync")) {
     fail('verify-runtime must link STAGE/node_modules → deps (avoid monorepo ABI pollution)')
   } else ok('verify-runtime links node_modules → deps for resolution')
+  const ragNativeNeedles = ['sharp', 'onnxruntime-node', '@lancedb/lancedb']
+  if (!ragNativeNeedles.every((n) => verifySrc.includes(n)) || !verifySrc.includes('assertRagNativeImports')) {
+    fail(
+      'verify-runtime must smoke-import RAG natives '
+        + '(sharp / onnxruntime-node / @lancedb/lancedb) under ELECTRON_RUN_AS_NODE',
+    )
+  } else ok('verify-runtime covers RAG native imports')
 }
 
 // ── 4. Updater vendor staging resolve (fs-extra class of bugs) ─────────────

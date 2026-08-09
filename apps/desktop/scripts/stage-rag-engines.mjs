@@ -11,12 +11,20 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { normalizeArch, resolveRuntimeTarget } from './lib/runtime-target.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
 
-const PLATFORM = process.env.OPPTRIX_RAG_ENGINES_PLATFORM?.trim() || process.platform
-const ARCH = process.env.OPPTRIX_RAG_ENGINES_ARCH?.trim() || process.arch
+/** Align with stage-runtime: OPPTRIX_RUNTIME_* wins unless RAG-specific override is set. */
+const runtimeTarget = resolveRuntimeTarget()
+const PLATFORM =
+  process.env.OPPTRIX_RAG_ENGINES_PLATFORM?.trim()
+  || runtimeTarget.platform
+const ARCH = normalizeArch(
+  process.env.OPPTRIX_RAG_ENGINES_ARCH?.trim()
+  || runtimeTarget.arch,
+)
 const PLATFORM_KEY = `${PLATFORM}-${ARCH}`
 
 /** Legacy Python sidecar dirs / names to remove from the platform stage root. */

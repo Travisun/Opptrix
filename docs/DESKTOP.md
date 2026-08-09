@@ -67,7 +67,7 @@ Stages a self-contained Node runtime under `apps/desktop/runtime-stage/`, bundle
 - Windows: NSIS 安装包（`.exe`）
 - Linux: `.AppImage` / `.deb`
 
-**发布与自动更新**（版本号、产物命名、GitHub Releases 上传、三端兼容）见 **[DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)**。
+**发布与自动更新**（版本号、产物命名、GitHub Releases 上传、三端兼容）见 **[DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)**。发版前相对上一标签的兼容性 / 打包深化检查见 **[DESKTOP-UPGRADE-PREP.md](./DESKTOP-UPGRADE-PREP.md)**。
 
 The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 

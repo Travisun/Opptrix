@@ -94,6 +94,8 @@ CI 会校验：`desktop-v*` 标签去掉前缀后，必须与 `package.json` 的
 
 > **Agent**：必须按 `.cursor/rules/desktop-release.mdc` Phase A–D **逐项执行并验证**后再打标签；下列与规则 Checklist 对齐。
 
+**升级准备（兼容性深化）**：相对上一 `desktop-v*` 的打包编排、原生依赖、数据库/用户数据、更新链与门禁，见独立清单 **[DESKTOP-UPGRADE-PREP.md](./DESKTOP-UPGRADE-PREP.md)**（本文件 Phase A–D 仍是打标签与发布的权威流程；**未 bump `version` 不得打新 `desktop-v*`**）。
+
 - [ ] 已在 `main`（或约定发布分支）合并待发布代码
 - [ ] **打包预检（硬性）**：`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop` 退出码 0（与 `ci.yml` / `release-desktop.yml` 同脚本；捕获 updater/`fs-extra`、sidecar `deps/`、证书与自定义验签、workflow 门禁等）
 - [ ] 已执行 `npm run build:packages` 与 `npm run build -w opptrix-client` 无错误（CI 会重新构建，本地可先冒烟）

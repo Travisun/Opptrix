@@ -14,6 +14,8 @@ GitHub Release 页面正文由 **`docs/releases/{version}.md`** 与安装说明�
 
 完整说明（真源、标签、引导与日志对齐）见 [`docs/DESKTOP-RELEASE.md`](../DESKTOP-RELEASE.md) §2。
 
+发版前兼容性与打包深化清单见 [`DESKTOP-UPGRADE-PREP.md`](../DESKTOP-UPGRADE-PREP.md)；真正打标签仍走 [`DESKTOP-RELEASE.md`](../DESKTOP-RELEASE.md)。
+
 ## 发版前必做
 
 1. 复制 [`TEMPLATE.md`](./TEMPLATE.md) 为 `{version}.md`（例如 `0.6.1.md`）
