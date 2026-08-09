@@ -10,7 +10,7 @@ import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, s
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
 import ThinkingDots from '../components/ThinkingDots'
-import { isElectron, supportsNativeWindowVibrancy } from '../platform/detect'
+import { isElectron, electronPlatform, supportsNativeWindowVibrancy } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
@@ -135,6 +135,10 @@ const useStyles = makeStyles({
     position: 'relative',
     zIndex: 1,
     isolation: 'isolate',
+  },
+  /* Non-mac Electron: brand lives in WindowFrameTitleBar — tighten top gap */
+  menuSectionCompact: {
+    marginTop: '6px',
   },
   menuRow: {
     ...sidebarTopMenuRow,
@@ -362,6 +366,8 @@ function SessionSidebar({
   const isDrawer = mode === 'drawer'
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
+  /* Brand row stays on mac / Web / drawer; non-mac Electron uses WindowFrameTitleBar */
+  const showSidebarBrand = isDrawer || !(isElectron() && electronPlatform() !== 'darwin')
   const nativeVibrancy = supportsNativeWindowVibrancy()
   // 原生毛玻璃时深浅色都透明穿透；无原生时仅浅色用 CSS glass，深色实底
   const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
@@ -412,18 +418,24 @@ function SessionSidebar({
         </div>
       )}
 
-      <div className={s.brandRow} aria-label={brandAriaLabel}>
-        <span
-          className={s.brandMark}
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: opptrixWordmarkSidebarSvg }}
-        />
-        {versionLabel ? (
-          <span className={s.brandVersion}>{versionLabel}</span>
-        ) : null}
-      </div>
+      {showSidebarBrand ? (
+        <div className={s.brandRow} aria-label={brandAriaLabel}>
+          <span
+            className={s.brandMark}
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: opptrixWordmarkSidebarSvg }}
+          />
+          {versionLabel ? (
+            <span className={s.brandVersion}>{versionLabel}</span>
+          ) : null}
+        </div>
+      ) : null}
 
-      <div className={mergeClasses(s.menuSection, 'opptrix-sidebar-menu')}>
+      <div className={mergeClasses(
+        s.menuSection,
+        !showSidebarBrand && s.menuSectionCompact,
+        'opptrix-sidebar-menu',
+      )}>
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onNew)}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>

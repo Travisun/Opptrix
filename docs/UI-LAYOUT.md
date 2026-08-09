@@ -38,11 +38,11 @@
 ```
 
 - **默认宽度** 250px；拖拽范围约 196–360px，持久化至 `localStorage`（`opptrix-sidebar-width`）
-- **品牌行**（`SessionSidebar`）：「新对话」菜单区之上展示粗体「Opptrix工作台」与 `useAppVersion` 的 `v…` 版本；左右内边距 `20px`，与顶部菜单行图标左缘（`margin 10 + padding 10`）对齐；窄宽 ellipsis
+- **品牌行**：macOS / Web / 移动抽屉侧栏在「新对话」菜单区之上展示「Opptrix工作台」wordmark 与 `useAppVersion` 的 `v…` 版本；左右内边距 `20px`，与顶部菜单行图标左缘（`margin 10 + padding 10`）对齐。Windows / Linux Electron 侧栏**不**再展示该行（品牌移至 frame titlebar），菜单区上边距收紧为约 `6px`
 - **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
-- **窗口标题栏**：macOS 为 `hiddenInset`，系统红绿灯隐藏后由二级 chrome 内紧凑自定义红绿灯（约 14px）承接；侧栏展开时顶栏工具与 Windows 一致——收起在左（红绿灯右侧）、前进/后退靠右贴侧栏分割线。Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
+- **窗口标题栏**：macOS 为 `hiddenInset`，系统红绿灯隐藏后由二级 chrome 内紧凑自定义红绿灯（约 14px）承接；侧栏展开时顶栏工具与 Windows 一致——收起在左（红绿灯右侧）、前进/后退靠右贴侧栏分割线。Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 纯文字「Opptrix工作台」（无 wordmark SVG、无版本号）+ 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
 - **附件预览**（右侧文件预览面板）：PDF 内嵌紧凑阅读器（翻页 / 缩放 / 适合宽度，目录默认收起可展开跳页）；**音视频**（`kind=audio|video`）由 `MediaPreviewPlayer` 自定义控件播放，下方轮询展示转写文稿（整理中 / 就绪 / 失败）；**画布**（`kind=canvas`）由 `CanvasPreviewHost` 以 `@opptrix/canvas` curated 组件（流体 `Surface` + `Stack` / `Stat` / `Table` 等）渲染 Agent TSX；**脑图**（`kind=mindmap`）由 `MindmapPreviewHost` 以开源 **mind-elixir** 编辑器展示与编辑（存盘仍为扁平 `{ version, rootId, nodes }`；消息内脑图为 mind-elixir 只读缩略）；消息内画布/脑图均为缩略卡，点击打开右侧面板（桌面）或弹层（移动）；均可从消息附件芯片/卡片或文件箱打开
 - **消息目录轨**（桌面）：`bodyShell` 左侧中部比例时间轴（宽约 22px；线程/composer 左侧留白 `chatThreadPaddingLeft`≈32px，避免正文压住轨）；**仅收录助手有正文的消息**（user 不进轨）；节点默认约 5px（深灰 `textSecondary`），hover/focus 当前节点放大至约 11px（`motion.fast`；active/hot 为 `textPrimary` 黑系，不用 accent）；当前进度以轨上 `textPrimary` 填充同步滚动高亮；hover/focus 节点右侧气泡预览开头（「助手」+ 友好时间 + 约 80 字）；点击跳转对应消息；不劫持滚轮。mobile 隐藏
 - **本对话附件抽屉 / 文件箱**（桌面）：顶栏文件箱按钮切换开合（无抽屉内标题栏/关闭按钮；Escape 可关）；自右侧滑入（z-index 低于输入区）；底边留白对齐消息区固定底 padding（`CHAT_COMPOSER_BOTTOM_PAD`=100）；已引用附件不可删除。种类文案含：图片 / PDF / 文档 / 视频 / 音频 / **画布** / **脑图**（与 `mediaCapabilities` 标签一致）。mobile 隐藏

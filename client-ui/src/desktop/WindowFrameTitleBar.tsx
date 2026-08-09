@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { isElectron, electronPlatform } from '../platform/detect'
+import { opptrixCssVars } from '../theme/tokens'
 import {
   DESKTOP_FRAME_TITLEBAR_HEIGHT,
   DESKTOP_Z_CHROME_TOOLS,
@@ -27,20 +28,37 @@ const useStyles = makeStyles({
     WebkitAppRegion: 'drag',
     pointerEvents: 'auto',
   },
-  brand: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    paddingLeft: '10px',
-    paddingRight: '4px',
-    WebkitAppRegion: 'drag',
-  },
   brandIcon: {
+    flexShrink: 0,
     width: '16px',
     height: '16px',
     display: 'block',
     objectFit: 'contain',
+    marginLeft: '10px',
+    marginRight: '6px',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    WebkitAppRegion: 'drag',
+  },
+  /* Brand labels + app menu share one typographic baseline. */
+  baselineRow: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'baseline',
+    /* Brand text → menu (~12px); menu keeps no-drag on its root. */
+    gap: '12px',
+    WebkitAppRegion: 'drag',
+  },
+  brandText: {
+    display: 'inline-flex',
+    alignItems: 'baseline',
+    gap: '3px',
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 500,
+    lineHeight: 1,
+    color: opptrixCssVars.textSecondary,
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
     pointerEvents: 'none',
     userSelect: 'none',
   },
@@ -59,7 +77,8 @@ const useStyles = makeStyles({
 
 /**
  * Non-mac Electron: top window-frame titlebar.
- * Left: app icon + simulated application menu; right: Win11-style caption buttons.
+ * Left: app icon + 「Opptrix工作台」 + simulated application menu;
+ * right: Win11-style caption buttons.
  * Background uses the same glass strategy as the left sidebar (`opptrix-glass-sidebar`).
  */
 export default function WindowFrameTitleBar() {
@@ -74,10 +93,22 @@ export default function WindowFrameTitleBar() {
       className={mergeClasses(s.root, 'opptrix-window-frame-titlebar', 'opptrix-glass-sidebar')}
       aria-label="窗口标题栏"
     >
-      <div className={s.brand} aria-hidden>
-        <img className={s.brandIcon} src={brandMarkUrl} alt="" width={16} height={16} draggable={false} />
+      <img
+        className={s.brandIcon}
+        src={brandMarkUrl}
+        alt=""
+        width={16}
+        height={16}
+        draggable={false}
+        aria-hidden
+      />
+      <div className={s.baselineRow} aria-label="Opptrix工作台">
+        <span className={s.brandText} aria-hidden="true">
+          <span>Opptrix</span>
+          <span>工作台</span>
+        </span>
+        <FrameAppMenu />
       </div>
-      <FrameAppMenu />
       <div className={s.dragFill} aria-hidden />
       <div className={s.controls}>
         <WindowControls />

@@ -7,10 +7,9 @@ import { ghostInteractive } from '../theme/mixins'
 const useStyles = makeStyles({
   root: {
     flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    paddingLeft: '2px',
+    display: 'inline-flex',
+    /* Content-sized so parent baselineRow can align brand + menu text. */
+    alignItems: 'baseline',
     gap: '0',
     WebkitAppRegion: 'no-drag',
   },
@@ -19,9 +18,10 @@ const useStyles = makeStyles({
     appearance: 'none',
     border: 'none',
     margin: 0,
-    height: '100%',
+    /* Vertical padding keeps ~28px hit area without stretch/height:100%. */
+    height: 'auto',
     maxHeight: '28px',
-    padding: '0 10px',
+    padding: '8px 10px',
     borderRadius: '4px',
     backgroundColor: 'transparent',
     color: opptrixCssVars.textPrimary,

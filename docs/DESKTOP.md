@@ -426,9 +426,9 @@ Stacking order (low → high), defined in `client-ui/src/desktop/constants.ts` a
 | Panel title bands | `1200` | `DESKTOP_Z_PANEL_TITLE` — news / market / right-panel title rows |
 | Toolbar | `1300` | `DESKTOP_Z_CHROME_TOOLS` — global fixed content chrome |
 | Clickable session title | `1310` | `DESKTOP_Z_TITLE_INTERACTIVE` — title text above drag layer |
-| Window-frame titlebar | `2100` | Non-mac `WindowFrameTitleBar` — min/max/close; above onboarding |
+| Window-frame titlebar | `2100` | Non-mac `WindowFrameTitleBar` — brand + menu + min/max/close; above onboarding |
 
-On **macOS**, native traffic lights are hidden (`setWindowButtonVisibility(false)`); compact HTML stand-ins (`MacTrafficLights`, ~14px) sit in the content chrome band (`hiddenInset`), and workspace splitters may extend into that band. On **Windows / Linux**, `WindowFrameTitleBar` adds a dedicated glass strip above content chrome: app icon + `FrameAppMenu` on the left, Win11-style caption buttons (46×titlebar, close = red/white hover) on the right. Splitters stay below the frame titlebar and do not pierce it.
+On **macOS**, native traffic lights are hidden (`setWindowButtonVisibility(false)`); compact HTML stand-ins (`MacTrafficLights`, ~14px) sit in the content chrome band (`hiddenInset`), and workspace splitters may extend into that band. Sidebar keeps its own brand row (wordmark + version). On **Windows / Linux**, `WindowFrameTitleBar` adds a dedicated glass strip above content chrome: app icon + plain text «Opptrix工作台» (no wordmark SVG, no version) + `FrameAppMenu` on the left (brand block is drag; menu is no-drag), Win11-style caption buttons (46×titlebar, close = red/white hover) on the right. The session sidebar omits its brand row and tightens the top menu spacing. Splitters stay below the frame titlebar and do not pierce it.
 
 Standalone pages (news / market / experts / settings) reuse `StandaloneElectronTitleBar` with left inset from `desktopChromeToolbarReserve` when the session sidebar is fully collapsed (same as chat `desktopTitleLeft(false)`), and right inset from `desktopTitleBarActionsRight()`. Settings sidebar matches the session sidebar’s top-through glass; `StandaloneElectronTitleBar` only covers the settings content column (panel mode uses the compact title inset; overlay mode keeps `chromeToolbarReserve`).
 
