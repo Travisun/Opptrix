@@ -164,6 +164,11 @@ function buildChunks(pages: PdfExtractPage[]): PdfExtractChunk[] {
   return chunks
 }
 
+/** Node 24 + pdf-parse 1.1.4: Buffer 会触发 bad XRef；纯 Uint8Array 正常。 */
+function toPdfParseInput(data: Buffer | Uint8Array): Uint8Array {
+  return new Uint8Array(data)
+}
+
 function toPdfExtractPages(pageTexts: string[]): PdfExtractPage[] {
   return pageTexts.map((pageText, idx) => {
     const normalized = pageText.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
@@ -183,7 +188,7 @@ export async function extractPdfToMarkdown(data: Buffer | Uint8Array): Promise<P
     'pdf-parse/lib/pdf-parse.js' as string
   ) as {
     default: (
-      buf: Buffer,
+      buf: Uint8Array,
       options?: {
         pagerender?: (pageData: {
           getTextContent: (opts: {
@@ -198,7 +203,7 @@ export async function extractPdfToMarkdown(data: Buffer | Uint8Array): Promise<P
 
   // 优先用 pagerender 按真实页收集正文（默认实现把各页用 \n\n 拼成整文，splitPages 常拆不出多页）
   const collectedPageTexts: string[] = []
-  const result = await pdfParse(Buffer.from(data), {
+  const result = await pdfParse(toPdfParseInput(data), {
     pagerender: async pageData => {
       const pageText = await renderPdfPageText(pageData)
       collectedPageTexts.push(pageText)
