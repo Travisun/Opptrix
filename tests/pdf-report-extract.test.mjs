@@ -120,7 +120,7 @@ describe('extractPdfToMarkdown with minimal PDF', () => {
     const pdf = buildMinimalTextPdf(['PageAlphaUnique', 'PageBetaUnique'])
     const parseMod = await import('pdf-parse/lib/pdf-parse.js')
     const pdfParse = parseMod.default
-    const parsed = await pdfParse(pdf)
+    const parsed = await pdfParse(new Uint8Array(pdf))
     assert.equal(parsed.numpages, 2, 'fixture must be a 2-page PDF for pdf-parse')
 
     const result = await extractPdfToMarkdown(pdf)

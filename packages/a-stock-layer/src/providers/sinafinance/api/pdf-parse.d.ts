@@ -4,5 +4,5 @@ declare module 'pdf-parse/lib/pdf-parse.js' {
     numpages?: number
   }
 
-  export default function pdfParse(data: Buffer): Promise<PdfParseResult>
+  export default function pdfParse(data: Uint8Array): Promise<PdfParseResult>
 }
