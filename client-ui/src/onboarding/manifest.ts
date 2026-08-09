@@ -584,6 +584,42 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.3.0': {
+    welcomeTitle: '资料更易找，对话更会想',
+    welcomeSubtitle:
+      '这一版让研报与会话文档可在本机语义检索，对话里预览附件与脑图，助手还可按你的工作流技能推进分析。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '替你找观点',
+        title: '研报与文档，本机语义检索',
+        desc:
+          '用日常说法在本地资料库里找相关段落与观点，不必靠文件名硬翻。',
+        note: '资料越多，越省翻找时间。',
+      },
+      {
+        kicker: '对话更顺',
+        title: '附件、图表与脑图，当场看清',
+        desc:
+          '对话里可预览附件，图表与脑图直接展开；改完提示即可重发继续追问。',
+        note: '思路不断线，少开外部软件。',
+      },
+      {
+        kicker: '替你推进',
+        title: '工作流技能，按习惯自动走',
+        desc:
+          '为助手配置常用投研步骤，复杂分析按你的习惯推进，少重复交代。',
+        note: '把精力留给判断。',
+      },
+      {
+        kicker: '更安心',
+        title: '新版本先确认，再下载',
+        desc:
+          '发现更新后默认先征求你的同意再下载，何时升级由你决定。',
+        note: '更新节奏，你做主。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
