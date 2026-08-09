@@ -380,8 +380,8 @@ function SessionSidebar({
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
 
   const brandAriaLabel = versionLabel
-    ? `OpptrixBench ${versionLabel}`
-    : 'OpptrixBench'
+    ? `Opptrix 工作台 ${versionLabel}`
+    : 'Opptrix 工作台'
 
   const releaseSidebarFocus = useCallback(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -417,7 +417,7 @@ function SessionSidebar({
 
       {showSidebarBrand ? (
         <div className={s.brandRow} aria-label={brandAriaLabel}>
-          <span className={s.brandName} aria-hidden="true">OpptrixBench</span>
+          <span className={s.brandName} aria-hidden="true">Opptrix 工作台</span>
           {versionLabel ? (
             <span className={s.brandVersion} aria-hidden="true">{versionLabel}</span>
           ) : null}

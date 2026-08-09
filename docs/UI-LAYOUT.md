@@ -38,7 +38,7 @@
 ```
 
 - **默认宽度** 250px；拖拽范围约 196–360px，持久化至 `localStorage`（`opptrix-sidebar-width`）
-- **品牌行**：macOS / Web / 移动抽屉侧栏在「新对话」菜单区之上展示纯文字「OpptrixBench」与 `useAppVersion` 的 `v…` 版本（baseline 对齐，无 wordmark SVG）；左右内边距 `20px`，与顶部菜单行图标左缘（`margin 10 + padding 10`）对齐。Windows / Linux Electron 侧栏**不**再展示该行（品牌移至 frame titlebar），菜单区上边距收紧为约 `6px`
+- **品牌行**：macOS / Web / 移动抽屉侧栏在「新对话」菜单区之上展示纯文字「Opptrix 工作台」与 `useAppVersion` 的 `v…` 版本（baseline 对齐，无 wordmark SVG）；左右内边距 `20px`，与顶部菜单行图标左缘（`margin 10 + padding 10`）对齐。Windows / Linux Electron 侧栏**不**再展示该行（品牌移至 frame titlebar），菜单区上边距收紧为约 `6px`
 - **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
