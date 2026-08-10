@@ -622,7 +622,8 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
   },
   '1.3.1': {
     welcomeTitle: '退出更稳，继续投研',
-    welcomeSubtitle: '这一版让完全退出更稳定，各平台通知与系统提示中的应用图标也与当前品牌一致。',
+    welcomeSubtitle:
+      '这一版让完全退出更稳定，各平台通知与系统提示中的应用图标也与当前品牌一致。',
     updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
     features: [
       {
@@ -636,6 +637,12 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
         title: '关掉后再开，照常继续',
         desc: '退出后收尾更干净，重新打开即可回到你的会话与关注列表。',
         note: '进度还在，思路不断。',
+      },
+      {
+        kicker: '更统一',
+        title: '通知图标与品牌一致',
+        desc: '各平台系统通知与提示中的应用图标已与当前品牌对齐。',
+        note: '一眼就能认出 Opptrix。',
       },
     ],
   },
