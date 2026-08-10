@@ -3,8 +3,14 @@ const path = require('path')
 const fs = require('fs/promises')
 const fsSync = require('node:fs')
 const { pathToFileURL } = require('node:url')
-const { spawn } = require('node:child_process')
 const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
+const {
+  buildSidecarEnv,
+  spawnSidecarProcess,
+  waitForHealth: waitForSidecarHealth,
+  stopChild,
+  serverEntryPath,
+} = require('./os-schedule/sidecar-launch.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu, listApplicationMenuTopItems, popupApplicationMenuAt } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
@@ -205,83 +211,46 @@ function repoRoot() {
   return path.join(process.resourcesPath, 'runtime-stage')
 }
 
-function serverEntry(root) {
-  return path.join(root, 'apps/server/dist/index.js')
-}
-
-function uiDist(root) {
-  return path.join(root, 'client-ui/dist')
-}
-
 function nodeCommand() {
   return process.env.NODE_BINARY ?? process.execPath
 }
 
+/**
+ * Sidecar env — shared with headless OS tick (`sidecar-launch.cjs`) so UI reuse
+ * and cold-start use the same STOCK_RESEARCH_* / NODE_PATH layout.
+ */
 function sidecarEnv(root) {
-  const env = {
-    ...process.env,
-    SERVE_UI: '1',
-    OPPTRIX_DESKTOP: '1',
-    OPPTRIX_APP_VERSION: VERSION,
-    STOCK_RESEARCH_HOST: API_HOST,
-    STOCK_RESEARCH_PORT: API_PORT,
-    UI_DIST_PATH: uiDist(root),
-  }
-
-  if (app.isReady()) {
-    env.OPPTRIX_HTTP_USER_AGENT = session.defaultSession.getUserAgent()
-  }
-
-  if (!isDev) {
-    env.ELECTRON_RUN_AS_NODE = '1'
-    env.OPPTRIX_RUNTIME_STAGE = root
-    // Sidecar 无 Electron resourcesPath 时仍能定位安装包内置 RAG 模型（与多模态同 llms）
-    env.OPPTRIX_E5_BUNDLED_DIR = path.join(process.resourcesPath, 'llms', 'multilingual-e5-small')
-    env.OPPTRIX_RAPIDOCR_BUNDLED_DIR = path.join(
-      process.resourcesPath,
-      'llms',
-      'rapidocr-ppocrv4-mobile',
-    )
-    env.OPPTRIX_RAG_ENGINES_BUNDLED_DIR = path.join(process.resourcesPath, 'engines')
-    const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
-    const fs = require('node:fs')
-    // afterPack restores deps → node_modules so ESM bare imports resolve.
-    // Prefer node_modules; keep deps fallback for older partially-migrated installs.
-    const nmDir = path.join(root, 'node_modules')
-    const depsDir = path.join(root, RUNTIME_DEPS_DIR)
-    const moduleRoot = fs.existsSync(nmDir) ? nmDir : depsDir
-    if (fs.existsSync(moduleRoot)) {
-      env.NODE_PATH = moduleRoot
+  let httpUserAgent
+  try {
+    if (app.isReady()) {
+      httpUserAgent = session.defaultSession.getUserAgent()
     }
-    const browsersPath = path.join(root, 'playwright-browsers')
-    if (fs.existsSync(browsersPath)) {
-      env.PLAYWRIGHT_BROWSERS_PATH = browsersPath
-    }
-  } else {
-    // 开发态 sidecar cwd 可能非 monorepo 根；与生产对称注入 bundled 路径
-    env.OPPTRIX_E5_BUNDLED_DIR = path.join(root, 'apps/desktop/resources/llms', 'multilingual-e5-small')
-    env.OPPTRIX_RAPIDOCR_BUNDLED_DIR = path.join(
-      root,
-      'apps/desktop/resources/llms',
-      'rapidocr-ppocrv4-mobile',
-    )
+  } catch {
+    /* ignore */
   }
-
-  return env
+  return buildSidecarEnv({
+    root,
+    host: API_HOST,
+    port: API_PORT,
+    resourcesPath: isDev ? null : process.resourcesPath,
+    version: VERSION,
+    isDev,
+    httpUserAgent,
+  })
 }
 
 function spawnSidecar() {
   const root = repoRoot()
-  const entry = serverEntry(root)
+  const entry = serverEntryPath(root)
   if (!require('node:fs').existsSync(entry)) {
     throw new Error(`Server entry not found: ${entry}\nRun: npm run build:packages`)
   }
 
-  serverProcess = spawn(nodeCommand(), [entry], {
+  serverProcess = spawnSidecarProcess({
+    execPath: nodeCommand(),
+    entry,
     cwd: root,
     env: sidecarEnv(root),
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: false,
   })
 
   serverProcess.stdout?.on('data', (chunk) => {
@@ -298,20 +267,7 @@ function spawnSidecar() {
 }
 
 async function waitForHealth(timeoutMs = 30_000) {
-  const url = `http://${API_HOST}:${API_PORT}/api/health`
-  const started = Date.now()
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const resp = await fetch(url)
-      if (resp.ok) return
-    } catch {
-      /* retry */
-    }
-    // 前 3s 快轮询（80ms），让更新 relaunch / 冷启动尽快探到 sidecar 就绪；
-    // 之后退回 250ms，避免长时间等待时空转过密。
-    await wait(Date.now() - started < 3000 ? 80 : 250)
-  }
-  throw new Error(`API sidecar not ready: ${url}`)
+  await waitForSidecarHealth(API_HOST, API_PORT, timeoutMs)
 }
 
 async function waitForAppUi(timeoutMs = 60_000) {
@@ -330,22 +286,9 @@ async function waitForAppUi(timeoutMs = 60_000) {
 }
 
 function stopSidecar() {
-  if (!serverProcess || serverProcess.killed) return
   const proc = serverProcess
   serverProcess = null
-  try {
-    proc.kill('SIGTERM')
-  } catch {
-    /* ignore */
-  }
-  setTimeout(() => {
-    if (proc.exitCode != null || proc.killed) return
-    try {
-      proc.kill('SIGKILL')
-    } catch {
-      /* ignore */
-    }
-  }, 3000)
+  stopChild(proc)
 }
 
 /**
@@ -926,7 +869,7 @@ async function bootstrapBackgroundApp() {
   await ensureSidecarReady()
   configureScheduleBridge({ host: API_HOST, port: API_PORT })
 
-  // schedule-tick 冷启动已在 continueDesktopBootstrap 走短命 worker，不会进入本路径
+  // 新 OS 任务走 HTTP-first + headless-tick；本路径仅登录项 / 前台 / --background 常驻
   await reconcileOsSchedule().catch((err) => {
     console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
   })
@@ -934,7 +877,8 @@ async function bootstrapBackgroundApp() {
 }
 
 /**
- * OS 级 `--schedule-tick` 冷启动：短命 worker，不建托盘、不常驻 reconcile poll。
+ * 兼容旧 LaunchAgent / 手动 `--schedule-tick`：短命 worker，不建托盘、不常驻 reconcile poll。
+ * 新注册的 OS tick 不再指向此路径（见 headless-tick.cjs）。
  */
 async function exitAfterEphemeralScheduleTick() {
   app.isQuitting = true
@@ -955,7 +899,8 @@ async function exitAfterEphemeralScheduleTick() {
 }
 
 /**
- * 主实例冷启动跑 OS tick：ensureSidecar → tick → 可选一次 reconcile → 干净退出。
+ * 兼容旧 plist / 手动调试的 GUI 短命 tick worker：ensureSidecar → tick → 可选 reconcile → 退出。
+ * OS runner fallback 使用 headless-tick（ELECTRON_RUN_AS_NODE），不经过本函数。
  */
 async function runEphemeralScheduleTickWorker() {
   if (process.platform === 'darwin') {
@@ -1373,6 +1318,18 @@ function setupDesktopChrome() {
       void openMainWindowFromMenu()
     },
   })
+}
+
+// Defensive: hide Dock before single-instance lock so a losing
+// --background / --schedule-tick instance does not flash the Dock icon before quit.
+if (process.platform === 'darwin' && (launchArgs.background || launchArgs.scheduleTick)) {
+  try {
+    if (app.dock && typeof app.dock.hide === 'function') {
+      app.dock.hide()
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 const gotTheLock = app.requestSingleInstanceLock()

@@ -532,7 +532,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 定时执行智能体提示词或受控脚本。持久化于用户 SQLite（`packages/user-store` 的 `schedule` 命名空间）；调度引擎为 `@opptrix/schedule` 的 `ScheduleService`。Sidecar 启动时注册 `registerScheduleRoutes` 并调用 `scheduleService.start()`（进程内每 **20s** 扫描到期任务，`trigger: 'timer'`）。
 
-桌面端另有一套 **OS 级通用 tick**（用户级、无需 root），经 `POST /api/schedule/tick` 触发（`trigger: 'os'`）；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。
+桌面端另有一套 **OS 级通用 tick**（用户级、无需 root），经 `POST /api/schedule/tick` 触发（`trigger: 'os'`）。冷启动路径为 **HTTP-first → `ELECTRON_RUN_AS_NODE` headless sidecar**（不拉起 Opptrix GUI）；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

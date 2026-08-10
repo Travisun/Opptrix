@@ -4,6 +4,7 @@ const os = require('node:os')
 const { spawnSync } = require('node:child_process')
 const { app } = require('electron')
 const { DEFAULT_TICK_INTERVAL_SEC } = require('./types.cjs')
+const { resolveOsTickInvocation } = require('./tick-runner.cjs')
 
 const SERVICE_NAME = 'opptrix-schedule-tick'
 
@@ -20,11 +21,28 @@ function timerPath() {
 }
 
 function resolveExecStart() {
-  if (app.isPackaged) {
-    return `${process.execPath} --background --schedule-tick`
+  /** @type {{
+   *   userDataDir: string
+   *   isPackaged: boolean
+   *   execPath: string
+   *   headlessTickPath: string
+   *   platform: 'linux'
+   *   runtimeStage?: string
+   *   resourcesPath?: string
+   * }} */
+  const opts = {
+    userDataDir: app.getPath('userData'),
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+    headlessTickPath: path.join(__dirname, 'headless-tick.cjs'),
+    platform: 'linux',
   }
-  const mainPath = path.join(__dirname, '..', 'main.cjs')
-  return `${process.execPath} ${mainPath} --background --schedule-tick`
+  if (app.isPackaged && typeof process.resourcesPath === 'string') {
+    opts.resourcesPath = process.resourcesPath
+    opts.runtimeStage = path.join(process.resourcesPath, 'runtime-stage')
+  }
+  const invocation = resolveOsTickInvocation(opts)
+  return invocation.execStart
 }
 
 function buildServiceUnit() {
