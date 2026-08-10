@@ -1,8 +1,9 @@
 /**
  * electron-builder afterPack hook.
  *
- * 0) On macOS, replace the Icon Composer stub `Resources/icon.icns` with the full
- *    `build/icons/icon.icns` (notification center / CFBundleIconFile readers).
+ * 0) On macOS: restore full `build/icons/icon.icns` over bundle stub, then strip
+ *    `CFBundleIconName` so Notification Center falls back to `CFBundleIconFile`
+ *    (Icon Composer Assets.car otherwise wins over the restored icns).
  * 1) Always restore sidecar `deps/` → `node_modules/` inside the packed app.
  *    Staging renames to `deps/` so createFilter does not drop the tree (exact
  *    relative path `node_modules` is skipped). Packaged Node ESM cannot resolve
@@ -35,16 +36,18 @@ function runtimeStageRoots(context) {
 }
 
 /**
- * Icon Composer (`build.mac.icon` = `.icon`) ships Assets.car + a stub icns.
- * Notification Center still reads CFBundleIconFile → Resources/icon.icns.
- * Overwrite that stub with the full icns from prepare-icons before codesign.
+ * Icon Composer (`build.mac.icon` = `.icon`) ships Assets.car + stub icns and sets
+ * both CFBundleIconFile and CFBundleIconName. macOS Notification Center prefers
+ * the Asset Catalog (CFBundleIconName → Assets.car) over icon.icns — so restoring
+ * icns alone leaves NC on the Composer/stub art. Strip IconName after restore so
+ * readers fall back to CFBundleIconFile → Resources/icon.icns (prepare-icons).
  */
 function restoreMacBundleIcns(context) {
   if (context.electronPlatformName !== 'darwin') return
 
   const productFilename = context.packager.appInfo.productFilename
   const appPath = path.join(context.appOutDir, `${productFilename}.app`)
-  const src = path.join(__dirname, '..', 'build', 'icons', 'icon.icns')
+  const src = path.join(__dirname, '..', 'build/icons/icon.icns')
   const dest = path.join(appPath, 'Contents', 'Resources', 'icon.icns')
 
   if (!fs.existsSync(src)) {
@@ -60,6 +63,34 @@ function restoreMacBundleIcns(context) {
 
   fs.copyFileSync(src, dest)
   console.log(`afterPack: restored full mac icon.icns → ${dest}`)
+  stripMacBundleIconName(appPath)
+}
+
+/** Remove CFBundleIconName so NC uses restored icon.icns (keeps Assets.car on disk). */
+function stripMacBundleIconName(appPath) {
+  const plist = path.join(appPath, 'Contents', 'Info.plist')
+  if (!fs.existsSync(plist)) {
+    throw new Error(`afterPack: missing Info.plist at ${plist}`)
+  }
+
+  let hasIconName = false
+  try {
+    execFileSync('plutil', ['-extract', 'CFBundleIconName', 'raw', '-o', '-', plist], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    hasIconName = true
+  } catch {
+    // Key absent — nothing to strip.
+  }
+
+  if (!hasIconName) {
+    console.log('afterPack: CFBundleIconName already absent')
+    return
+  }
+
+  execFileSync('plutil', ['-remove', 'CFBundleIconName', plist], { stdio: 'inherit' })
+  console.log(`afterPack: stripped CFBundleIconName from ${plist}`)
 }
 
 /** Rename staged deps → node_modules so ESM bare imports resolve in production. */
@@ -130,3 +161,6 @@ exports.default = async function afterPack(context) {
   restoreSidecarNodeModules(context)
   adhocSignMac(context)
 }
+
+// Exported for lightweight plist-strip smoke tests (not used by electron-builder).
+exports.stripMacBundleIconName = stripMacBundleIconName

@@ -133,7 +133,7 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
 3. **合成 `.icns`（macOS 应用图标，不是托盘）**  
    - 托盘用 `trayTemplate*.png` 即可，**不需要** `.icns`；  
    - Dock / DMG 应用图标：PNG → `iconutil`（`prepare-icons.mjs` 在 macOS 上会生成 `build/icons/icon.icns`），或 Icon Slate 等插件。  
-   - mac App 使用 Icon Composer（`build.mac.icon` → `icon.icon`）；afterPack 再用完整 `build/icons/icon.icns` 覆盖 bundle 内 `Resources/icon.icns`，供通知中心等读取。
+   - mac App 使用 Icon Composer（`build.mac.icon` → `icon.icon`）；afterPack 用完整 `build/icons/icon.icns` 覆盖 bundle 内 `Resources/icon.icns`，并去掉 Info.plist 的 `CFBundleIconName`（否则通知中心优先读 Assets.car，仍显示 Composer 旧图）。
 
 > 「hdi」一般指 **`.icns`**（Apple icon 容器）。托盘请继续交 PNG Template；`.icns` 只用于 App / DMG 图标。
 
@@ -285,7 +285,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 | 平台 | 注意 |
 |------|------|
 | **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`（`package.json` `build.appId`），否则通知可能不归到本应用；toast 图标经 `Notification.icon` 指向 `prepare-icons` 产出的 `icon.ico` / logo PNG |
-| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启；`Notification.icon` 无效，依赖 bundle `Resources/icon.icns`（afterPack 覆盖完整 icns） |
+| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启；`Notification.icon` 无效，依赖 bundle `Resources/icon.icns`（afterPack 覆盖完整 icns，并移除 `CFBundleIconName` 以免走 Assets.car） |
 | **Linux** | 依赖桌面环境对 Electron `Notification` 的支持（`Notification.isSupported()`）；部分环境可能静默失败。toast 图标经 `Notification.icon` 指向 `build/icons/linux/*.png` 或 logo PNG；桌面入口图标仍用 `build.linux.icon` |
 
 单元测试：`tests/chat-notifications.test.mjs`（注意力、离开标记、builder、sanitize、macOS 权限映射）。
