@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { r2KeyPrefixFromFeedUrl, resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
 import { UPDATE_YML_PUBLIC } from './lib/release-metadata-policy.mjs'
 import {
+  assertObjectPresent,
   contentTypeForFileName,
   createR2Client,
   deleteObjectKeys,
@@ -105,6 +106,7 @@ async function main() {
       file.filePath,
       contentTypeForFileName(file.name),
     )
+    await assertObjectPresent(client, r2Env.bucket, key, file.size)
     console.log(`[r2] uploaded ${key} (${formatBytes(file.size)})`)
   }
 
@@ -114,6 +116,13 @@ async function main() {
     console.log(`[r2] removing ${obsolete.length} obsolete object(s) under ${prefix}/`)
     await deleteObjectKeys(client, r2Env.bucket, obsolete)
   }
+
+  // Prune must not remove the release we just published (key mismatch / listing bugs).
+  for (const file of files) {
+    const key = `${prefix}/${file.name}`
+    await assertObjectPresent(client, r2Env.bucket, key, file.size)
+  }
+  console.log(`[r2] verified ${files.length} object(s) still present after prune`)
 
   console.log('[r2] sync complete — clients should read update metadata from:')
   console.log(`  macOS:   ${feedUrl}latest-mac.yml`)

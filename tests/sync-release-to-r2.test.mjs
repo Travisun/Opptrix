@@ -34,3 +34,12 @@ test('compareUploadOrder puts latest yml after binaries and cms', () => {
     'latest.yml',
   ])
 })
+
+import { contentTypeForFileName } from '../apps/desktop/scripts/lib/r2-client.mjs'
+
+test('contentTypeForFileName uses octet-stream for Linux installers and CMS', () => {
+  assert.equal(contentTypeForFileName('Opptrix-1.3.1-Linux.AppImage'), 'application/octet-stream')
+  assert.equal(contentTypeForFileName('Opptrix-1.3.1-Linux.deb'), 'application/octet-stream')
+  assert.equal(contentTypeForFileName('Opptrix-1.3.1-Linux.AppImage.opptrix-cms'), 'application/octet-stream')
+  assert.equal(contentTypeForFileName('latest-linux.yml'), 'text/yaml; charset=utf-8')
+})

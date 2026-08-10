@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import {
   DeleteObjectsCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -136,16 +137,49 @@ export async function putObjectFile(client, bucket, key, filePath, contentType) 
   }))
 }
 
+/** Confirm an object exists (and optionally matches size) after Put/Delete. */
+export async function headObject(client, bucket, key) {
+  const resp = await client.send(new HeadObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  }))
+  return {
+    contentLength: Number(resp.ContentLength ?? 0),
+    contentType: resp.ContentType ?? '',
+  }
+}
+
+export async function assertObjectPresent(client, bucket, key, expectedSize) {
+  try {
+    const head = await headObject(client, bucket, key)
+    if (typeof expectedSize === 'number' && expectedSize >= 0 && head.contentLength !== expectedSize) {
+      throw new Error(
+        `R2 object size mismatch for ${key}: got ${head.contentLength}, expected ${expectedSize}`,
+      )
+    }
+    return head
+  } catch (err) {
+    const status = err?.$metadata?.httpStatusCode
+    const name = err?.name ?? ''
+    if (status === 404 || name === 'NotFound' || name === 'NoSuchKey') {
+      throw new Error(`R2 object missing after upload: ${key}`)
+    }
+    throw err
+  }
+}
+
 export function contentTypeForFileName(name) {
   const lower = name.toLowerCase()
   if (lower.endsWith('.json')) return 'application/json; charset=utf-8'
   if (lower.endsWith('.yml')) return 'text/yaml; charset=utf-8'
+  // Use octet-stream for installers / CMS: some CDN/WAF paths 404 on
+  // application/x-executable, debian package, or pkcs7 MIME types.
   if (lower.endsWith('.blockmap')) return 'application/octet-stream'
-  if (lower.endsWith('.opptrix-cms')) return 'application/pkcs7-mime'
+  if (lower.endsWith('.opptrix-cms')) return 'application/octet-stream'
   if (lower.endsWith('.exe')) return 'application/vnd.microsoft.portable-executable'
   if (lower.endsWith('.dmg')) return 'application/x-apple-diskimage'
   if (lower.endsWith('.zip')) return 'application/zip'
-  if (lower.endsWith('.appimage')) return 'application/x-executable'
-  if (lower.endsWith('.deb')) return 'application/vnd.debian.binary-package'
+  if (lower.endsWith('.appimage')) return 'application/octet-stream'
+  if (lower.endsWith('.deb')) return 'application/octet-stream'
   return 'application/octet-stream'
 }
