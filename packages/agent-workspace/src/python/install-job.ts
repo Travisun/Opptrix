@@ -245,3 +245,73 @@ export function startPythonInstallJob(): PythonInstallJobSnapshot {
 
   return getPythonInstallJobStatus()
 }
+
+const DEFAULT_INSTALL_WAIT_TIMEOUT_MS = 20 * 60 * 1000
+
+function isTerminalInstallState(state: PythonInstallJobState): boolean {
+  return state === 'completed' || state === 'failed'
+}
+
+/**
+ * 阻塞等待当前（或刚启动的）托管 Python 安装任务结束。
+ * 已 completed/failed 时立即返回快照；idle 且无进行中任务时原样返回。
+ */
+export async function waitForPythonInstallJob(options?: {
+  signal?: AbortSignal
+  timeoutMs?: number
+}): Promise<PythonInstallJobSnapshot> {
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_INSTALL_WAIT_TIMEOUT_MS
+  const signal = options?.signal
+  const startedAt = Date.now()
+
+  const throwIfAborted = (): void => {
+    if (signal?.aborted) {
+      throw new Error('Python 安装等待已取消')
+    }
+  }
+
+  throwIfAborted()
+
+  let snap = getPythonInstallJobStatus()
+  if (isTerminalInstallState(snap.state)) return snap
+  if (snap.state === 'idle' && !activePromise) return snap
+
+  while (true) {
+    throwIfAborted()
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Python 安装超时，请稍后重试')
+    }
+
+    snap = getPythonInstallJobStatus()
+    if (isTerminalInstallState(snap.state)) return snap
+    if (snap.state === 'idle' && !activePromise) return snap
+
+    if (activePromise) {
+      const remaining = Math.max(1, timeoutMs - (Date.now() - startedAt))
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let onAbort: (() => void) | undefined
+      try {
+        await Promise.race([
+          activePromise,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              reject(new Error('Python 安装超时，请稍后重试'))
+            }, remaining)
+            if (signal) {
+              onAbort = () => {
+                reject(new Error('Python 安装等待已取消'))
+              }
+              signal.addEventListener('abort', onAbort, { once: true })
+            }
+          }),
+        ])
+      } finally {
+        if (timer != null) clearTimeout(timer)
+        if (signal && onAbort) signal.removeEventListener('abort', onAbort)
+      }
+      return getPythonInstallJobStatus()
+    }
+
+    await new Promise<void>(resolve => setTimeout(resolve, 100))
+  }
+}

@@ -734,7 +734,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。',
     compliance:
-      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
+      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；未就绪时解析 python/pip 会自动 ensure+wait 托管安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
   },
   shell_install: {
     packId: 'workspace',
@@ -752,8 +752,10 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   ensure_python: {
     packId: 'workspace',
-    usageGuide: '运行 Python 脚本或 pip 安装前，确认环境就绪；未就绪时会启动托管安装或引导去设置页查看进度。',
-    compliance: 'ready=false 时返回 recommend_install 与 install 进度；勿假装已安装。',
+    usageGuide:
+      '运行 Python 脚本或 pip 安装前调用；未就绪时会阻塞等待托管安装完成，成功后优先使用 Opptrix 托管解释器。',
+    compliance:
+      '会等到安装结束再返回；成功时 ready=true 且 prefer 托管；失败时 ready=false，勿假装已安装。shell_run python 未就绪时也会自动走同一安装等待流程。',
   },
   list_local_data_apis: {
     packId: 'workspace',
