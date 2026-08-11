@@ -317,7 +317,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | OCR 模型 Stage | `apps/desktop/scripts/stage-rapidocr.mjs` → `resources/llms/rapidocr-ppocrv4-mobile/`（PP-OCRv4 mobile ONNX） |
 | engines Stage | `apps/desktop/scripts/stage-rag-engines.mjs` → `resources/engines/<platform>-<arch>/MANIFEST.json`（仅写 MANIFEST / 兼容 prebuild+audit；**不再**下载 pdfplumber / rapidocr Python wheels）。CI / release 步骤名：`Stage RAG engines MANIFEST (Node OCR)` |
 | 打包 | `extraResources`：`resources/llms` → `llms`；`resources/engines` → `engines`（兼容旧探测） |
-| 运行时 | Node ONNX OCR；`OPPTRIX_RAG_ENGINES_BUNDLED_DIR` 仍可由 `main.cjs` 注入 |
+| 运行时 | Node ONNX OCR；`OPPTRIX_RAG_ENGINES_BUNDLED_DIR` 由 `sidecar-launch.cjs`（`buildSidecarEnv`）注入 |
 | 首启 | 后台 `ensureBundledRagRuntime()`：启用 embedding；OCR 模型齐全则深度整理可用 |
 
 禁止默认路径纳入 PyMuPDF（AGPL）。研报入库支持 `.pdf` / `.txt` / `.md` / `.docx` / `.pptx` / 图片；`.pptx` 按幻灯片分 chunk。
