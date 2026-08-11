@@ -58,6 +58,64 @@ describe('live thinkingSnippet accumulates full text', () => {
     assert.equal(snap.liveTrace?.thinkingSnippet, longer)
     assert.ok((snap.liveTrace?.thinkingSnippet?.length ?? 0) > 400)
   })
+
+  it('tool_start does not clear thinkingSnippet', () => {
+    let snap = createEmptyStreamSnapshot()
+    snap = applyChatProgressEvent(snap, {
+      type: 'thinking',
+      round: 1,
+      label: '模型正在思考…',
+      snippet: '工具轮推理中…',
+    })
+    snap = applyChatProgressEvent(snap, {
+      type: 'tool_start',
+      step: {
+        id: 'c1',
+        tool: 'search',
+        label: '搜索',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+      },
+    })
+    assert.equal(snap.liveTrace?.thinkingSnippet, '工具轮推理中…')
+    assert.equal(snap.liveTrace?.steps?.length, 1)
+  })
+})
+
+/**
+ * 模拟 engine onDelta 契约：hasToolCalls 只停 token progress，不挡同包 reasoning。
+ */
+describe('onDelta hasToolCalls preserves co-packaged reasoning', () => {
+  it('accumulates reasoning when hasToolCalls is set on same delta', () => {
+    let reasoningAccumulated = ''
+    let stopTokenProgress = false
+    /** @type {string[]} */
+    const snippets = []
+    const turnReasoningTimeline = ''
+
+    const onDelta = (delta) => {
+      if (delta.hasToolCalls) {
+        stopTokenProgress = true
+      }
+      if (delta.reasoningText) {
+        reasoningAccumulated += delta.reasoningText
+        snippets.push(appendReasoningTimeline(turnReasoningTimeline, reasoningAccumulated))
+      }
+      if (stopTokenProgress || !delta.text) return
+    }
+
+    onDelta({ hasToolCalls: true, reasoningText: '先查行情' })
+    onDelta({ reasoningText: '再决定工具' })
+    // 流末 flush
+    if (reasoningAccumulated) {
+      snippets.push(appendReasoningTimeline(turnReasoningTimeline, reasoningAccumulated))
+    }
+
+    assert.equal(stopTokenProgress, true)
+    assert.equal(reasoningAccumulated, '先查行情再决定工具')
+    assert.equal(snippets[0], '先查行情')
+    assert.equal(snippets.at(-1), '先查行情再决定工具')
+  })
 })
 
 function withTempStore(fn) {

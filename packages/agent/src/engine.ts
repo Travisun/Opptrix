@@ -1215,10 +1215,10 @@ export class AgentEngine {
           maxTokens: record.llmParams?.maxTokens,
           reasoningEffort: record.llmParams?.reasoningEffort,
           onDelta: (delta) => {
+            // hasToolCalls：只停 token 进度，勿 return，以免同包/后续 reasoning 被丢掉
             if (delta.hasToolCalls) {
               stopTokenProgress = true
               pendingTokens = null
-              return
             }
             if (delta.reasoningText) {
               const prevLen = reasoningAccumulated.length
@@ -1246,6 +1246,15 @@ export class AgentEngine {
             emitTokenProgress(n)
           },
         })
+        // 流结束：flush 本轮已累积 reasoning（含未达 120 字阈值的尾段）
+        if (reasoningAccumulated) {
+          emit({
+            type: 'thinking',
+            round: round + 1,
+            label: '模型正在思考…',
+            snippet: appendReasoningTimeline(turnReasoningTimeline, reasoningAccumulated),
+          })
+        }
         // 流结束：flush pending，并保证有一次最终 estimatedTokens
         if (!stopTokenProgress && accumulated) {
           const n = estimateTextTokens(accumulated)
@@ -1325,8 +1334,15 @@ export class AgentEngine {
 
       if (turn.finishReason === 'tool_calls' && turn.message.tool_calls?.length) {
         const roundReasoning = turn.reasoningContent?.trim() ?? ''
-        if (roundReasoning) {
-          turnReasoningTimeline = appendReasoningTimeline(turnReasoningTimeline, roundReasoning)
+        // 工具步骤勿复制长 reasoning；仅保留极短 content 备注（≤80）
+        const contentBrief = turnContentText.trim()
+        const stepThinking = contentBrief.length > 0 && contentBrief.length <= 80
+          ? contentBrief
+          : undefined
+        // reasoning 为空时用短 content 回退，避免 live 思考过程全空
+        const timelineChunk = roundReasoning || stepThinking || ''
+        if (timelineChunk) {
+          turnReasoningTimeline = appendReasoningTimeline(turnReasoningTimeline, timelineChunk)
           emit({
             type: 'thinking',
             round: round + 1,
@@ -1348,11 +1364,6 @@ export class AgentEngine {
 
         let refreshTools = false
         const activeSet = new Set(activeNames)
-        // 工具步骤勿复制长 reasoning；仅保留极短 content 备注（≤80）
-        const contentBrief = turnContentText.trim()
-        const stepThinking = contentBrief.length > 0 && contentBrief.length <= 80
-          ? contentBrief
-          : undefined
 
         for (const tc of turn.message.tool_calls) {
           throwIfAborted(signal)
@@ -1490,6 +1501,15 @@ export class AgentEngine {
         turnReasoningTimeline = appendReasoningTimeline(turnReasoningTimeline, finalRoundReasoning)
       }
       const turnTimeline = turnReasoningTimeline.trim() || undefined
+      // 与工具轮对称：stop 前再推一次完整时间线，保证 live 末态与历史一致
+      if (turnTimeline) {
+        emit({
+          type: 'thinking',
+          round: round + 1,
+          label: '模型正在思考…',
+          snippet: turnTimeline,
+        })
+      }
       // messages：仅终轮 reasoning（wire 不变）；turns：整轮时间线供历史气泡
       pushAssistant(
         reply,
