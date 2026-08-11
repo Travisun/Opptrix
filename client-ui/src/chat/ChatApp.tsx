@@ -219,13 +219,17 @@ export default function ChatApp() {
     canToggleChatColumn,
     beginDrag,
     collapseRightPanel,
-    closePreview,
     toggleRightPanel: handleToggleRightPanel,
     toggleChatColumn: handleToggleChatColumn,
     mode,
     openPreview,
     openMarket,
   } = useWorkspaceSplit({ enabled: splitEnabled })
+
+  const modeRef = useRef(mode)
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
 
   const workspaceMinWidth = splitEnabled && rightPanelVisible
     ? WORKSPACE_CHAT_RIGHT_MIN_WIDTH
@@ -234,8 +238,10 @@ export default function ChatApp() {
   const [preview, setPreview] = useState<{ sessionId: string; attachment: ChatAttachmentMeta } | null>(null)
 
   useEffect(() => {
-    if (mode === 'market') setPreview(null)
-  }, [mode])
+    if (mode === 'market' && !rightPanelVisible) {
+      setPreview(null)
+    }
+  }, [mode, rightPanelVisible])
 
   const handleOpenFilePreview = useCallback((sessionId: string, attachment: ChatAttachmentMeta) => {
     setPreview({ sessionId, attachment })
@@ -243,9 +249,14 @@ export default function ChatApp() {
   }, [openPreview])
 
   const handleClosePreview = useCallback(() => {
-    setPreview(null)
-    closePreview()
-  }, [closePreview])
+    openMarket()
+  }, [openMarket])
+
+  const handlePeerSlideTransitionEnd = useCallback(() => {
+    if (modeRef.current === 'market') {
+      setPreview(null)
+    }
+  }, [])
 
   const handleToggleSessionFilesPreview = useCallback(() => {
     if (mode === 'preview') {
@@ -1716,6 +1727,7 @@ export default function ChatApp() {
           onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
+          rightPanelDragging={view === 'chat' && !isMobile ? isDragging : undefined}
           chatColumnWidth={view === 'chat' && !isMobile && chatVisible && showSplitter ? chatWidth : undefined}
           chatAreaLeft={isSettings
             ? (settingsSidebarInlineVisible ? settingsSidebarWidth : 0)
@@ -2008,6 +2020,7 @@ export default function ChatApp() {
               previewSessionId={activeId}
               onSelectAttachment={handleSelectPreviewAttachment}
               onClosePreview={handleClosePreview}
+              onSlideTransitionEnd={handlePeerSlideTransitionEnd}
             />
           )}
         </div>

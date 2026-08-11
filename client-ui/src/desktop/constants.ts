@@ -73,6 +73,11 @@ export const DESKTOP_SIDEBAR_LAYOUT_MS = 480
 /** Even ease-in-out — avoids the snappy flash of strong ease-out curves */
 export const DESKTOP_SIDEBAR_LAYOUT_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
+/** Peer slide between right market ↔ file preview panels */
+export const RIGHT_PANEL_PEER_SLIDE_MS = 640
+/** Decelerating ease — immediate response then soft settle (drawer-like) */
+export const RIGHT_PANEL_PEER_SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+
 /** @deprecated alias */
 export const DESKTOP_SIDEBAR_COLLAPSE_WIDTH = DESKTOP_SIDEBAR_OVERLAY_THRESHOLD
 
