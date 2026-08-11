@@ -5,8 +5,8 @@
 
 export const DEFAULT_CONTEXT_TOKENS = 128_000
 export const OUTPUT_RESERVE_TOKENS = 8_192
-/** soft：触发 microcompact；hard：触发 structured compact */
-export const SOFT_USAGE_RATIO = 0.75
+/** soft：触发 microcompact；hard：触发 structured compact（对齐 0.85） */
+export const SOFT_USAGE_RATIO = 0.85
 export const HARD_USAGE_RATIO = 0.85
 
 interface ModelContextRule {

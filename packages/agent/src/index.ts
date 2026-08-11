@@ -251,6 +251,14 @@ export {
   type CompactLevel,
   type CompactResult,
 } from './context/compact.js'
+export {
+  type ContextProjection,
+  coveredPrefixHash,
+  projectionValid,
+  modelVisibleFromProjection,
+  installMicroProjection,
+  installMemoryProjection,
+} from './context/projection.js'
 export { estimateTextTokens, estimateMessageTokens } from './context/token-estimate.js'
 export {
   createProvider,

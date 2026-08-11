@@ -157,6 +157,10 @@ export interface SessionRecord extends SessionMeta {
    * 结构化会话工作记忆（压缩产物）。列表 meta 不返回；UI transcript 仍用 turns。
    */
   sessionMemory?: import('./context/session-memory.js').SessionMemory | null
+  /**
+   * Model-visible 上下文投影 sidecar（soft/micro/structured）。列表 meta 不返回全文。
+   */
+  contextProjection?: import('./context/projection.js').ContextProjection | null
 }
 
 function previewText(content: string, max = 72): string {
@@ -212,6 +216,7 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     expertIcon: raw.expertIcon ?? null,
     rolePersona: raw.rolePersona ?? null,
     sessionMemory: raw.sessionMemory ?? null,
+    contextProjection: raw.contextProjection ?? null,
     llmParams,
   }
   return migrateTurns(record)
@@ -516,6 +521,7 @@ export class SessionStore {
     record.turns = (record.turns?.length ? record.turns : display).slice(0, displayIndex)
     record.messages = record.messages.slice(0, messageCut)
     record.sessionMemory = null
+    record.contextProjection = null
     this.save(record)
     return record
   }

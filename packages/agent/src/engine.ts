@@ -134,7 +134,7 @@ export interface ChatResult {
 // No hard limit on rounds — let the LLM naturally converge to a text response.
 // Safety: if 50 rounds reached without convergence, force stop.
 const MAX_SAFETY_ROUNDS = 50
-const TRUNCATE = 12_000
+const TRUNCATE = 32_768
 
 function providerIdFromModelRef(modelRef?: string): string | undefined {
   if (!modelRef) return undefined
@@ -499,6 +499,7 @@ export class AgentEngine {
       messages: record.messages,
       contextPrefix: contextMessages,
       keepRecent: KEEP_RECENT_DEFAULT,
+      contextProjection: record.contextProjection,
     })
     let toolsTokens = activeNames.length * 120
     try {
@@ -594,6 +595,7 @@ export class AgentEngine {
       state: {
         messages: record.messages,
         sessionMemory: record.sessionMemory,
+        contextProjection: record.contextProjection,
       },
       contextPrefix: opts.contextPrefix,
       llm: opts.llm,
@@ -602,16 +604,11 @@ export class AgentEngine {
     })
 
     if (result.results.some(r => r.changed)) {
-      // micro 仅投影，不落盘；structured / overflow_retry 才写 canonical
-      const persistCanonical = result.results.some(
-        r => r.changed && (r.level === 'structured' || r.level === 'overflow_retry'),
-      )
-      if (persistCanonical) {
-        record.messages = result.state.messages
-        record.sessionMemory = result.state.sessionMemory ?? null
-        this.sessions.save(record)
-        this.invalidateContextUsage(record.id)
-      }
+      // soft/micro 永不改写 canonical messages；structured 只落盘 memory + projection
+      record.sessionMemory = result.state.sessionMemory ?? null
+      record.contextProjection = result.state.contextProjection ?? null
+      this.sessions.save(record)
+      this.invalidateContextUsage(record.id)
       for (const r of result.results) {
         if (!r.changed) continue
         opts.emit?.({
