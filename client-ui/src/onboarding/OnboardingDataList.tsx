@@ -1,10 +1,10 @@
 import { Text } from '@fluentui/react-components'
 import type { ProviderCatalogResponse } from '../types/provider'
 import {
-  ProviderCatalogListPanel,
   ProviderCatalogLoading,
   useProviderCatalog,
 } from '../pages/settings/ProviderSettingsCatalog'
+import { DataProvidersCardsPanel } from '../pages/settings/DataProvidersCardsPanel'
 import { opptrixCssVars } from '../theme/tokens'
 import { TONGHUASHUN_PROVIDER_ID } from './OnboardingFuyaoPanel'
 
@@ -38,11 +38,10 @@ export function OnboardingDataList() {
   }
 
   return (
-    <ProviderCatalogListPanel
+    <DataProvidersCardsPanel
       catalog={catalogWithoutTonghuashun(catalog)}
       onSaved={() => { void refresh() }}
-      showInstalled={false}
-      panelHeight="min(40vh, 320px)"
+      showAdvancedOrder={false}
     />
   )
 }

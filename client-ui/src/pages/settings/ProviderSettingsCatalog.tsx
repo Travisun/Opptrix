@@ -437,7 +437,7 @@ export function useProviderCatalog() {
   return { catalog, loading, refresh, setCatalog }
 }
 
-function providerConfigStatus(provider: PublicProviderRuntime): 'configured' | 'partial' | 'none' | 'n/a' {
+export function providerConfigStatus(provider: PublicProviderRuntime): 'configured' | 'partial' | 'none' | 'n/a' {
   const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
   if (requiredSecrets.length) {
     const configured = requiredSecrets.filter(f => provider.secretsConfigured[f.key]).length
@@ -470,10 +470,10 @@ function providerOrderStatusMeta(provider: PublicProviderRuntime): string {
     return parts.join(' · ')
   }
   if (provider.requiresApiKey) {
-    parts.push('请完成配置并打开开关')
+    parts.push('请完成配置并启用')
     return parts.join(' · ')
   }
-  parts.push('请打开开关后生效')
+  parts.push('请启用后生效')
   return parts.join(' · ')
 }
 
@@ -588,10 +588,8 @@ function InstalledProvidersSection({ onChanged }: { onChanged: () => void }) {
     <div className={s.sectionBlock}>
       <div className={s.listPanel} style={{ height: 'auto', maxHeight: items.length ? '220px' : 'none' }}>
         <div className={s.listHeader}>
-          <Text className={s.listHeaderMeta} block>
-            {providersDir
-              ? `扩展数据源：将插件文件夹放入 ${providersDir}，保存后会自动扫描（约 1 秒内）`
-              : '扩展数据源：将插件文件夹放入用户数据目录下的 providers 文件夹'}
+          <Text className={s.listHeaderMeta} block title={providersDir || undefined}>
+            可将扩展文件夹放入本机扩展目录，保存后约 1 秒内自动出现
           </Text>
           <OpptrixButton variant="ghost" disabled={scanning} onClick={() => { void handleRescan() }}>
             {scanning ? '扫描中…' : '重新扫描'}
@@ -639,6 +637,8 @@ function ProviderListRow({
   onSaved,
   settingsMode = 'full',
   sortable = false,
+  /** 排序行默认不显示启用开关，避免高级区变成开关墙；密列表保持默认 true */
+  showEnabledToggle,
   saving = false,
   onDragHandlePointerDown,
   onMoveUp,
@@ -652,6 +652,7 @@ function ProviderListRow({
   onSaved: () => void
   settingsMode?: 'full' | 'toggle-only'
   sortable?: boolean
+  showEnabledToggle?: boolean
   saving?: boolean
   onDragHandlePointerDown?: (e: ReactPointerEvent<HTMLSpanElement>) => void
   onMoveUp?: () => void
@@ -667,6 +668,7 @@ function ProviderListRow({
   const [toggling, setToggling] = useState(false)
 
   const hasSettings = settingsMode === 'full' && provider.settingsFields.some(isExpandableSettingsField)
+  const enabledToggleVisible = showEnabledToggle ?? !sortable
   const statusMeta = sortable
     ? providerOrderStatusMeta(provider)
     : providerStatusMeta(provider, marketLabel)
@@ -770,12 +772,14 @@ function ProviderListRow({
                 />
               </div>
             )}
-            <Switch
-              checked={provider.enabled}
-              disabled={toggling}
-              onChange={(_, d) => { void handleToggleEnabled(!!d.checked) }}
-              aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.title}`}
-            />
+            {enabledToggleVisible && (
+              <Switch
+                checked={provider.enabled}
+                disabled={toggling}
+                onChange={(_, d) => { void handleToggleEnabled(!!d.checked) }}
+                aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.title}`}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -897,7 +901,7 @@ function reorderList<T>(items: T[], from: number, to: number): T[] {
   return next
 }
 
-function ProviderOrderList({
+export function ProviderOrderList({
   providers,
   onSaved,
   onOrderSaved,
@@ -1036,7 +1040,9 @@ function ProviderOrderList({
               provider={provider}
               marketLabel=""
               onSaved={onSaved}
+              settingsMode="toggle-only"
               sortable
+              showEnabledToggle={false}
               saving={saving}
               dragging={draggingIndex === index}
               onDragHandlePointerDown={(e) => { onHandlePointerDown(index, e) }}
