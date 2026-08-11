@@ -14,6 +14,13 @@ import {
 
 import type { ChatAttachmentMeta } from './media-types.js'
 import type { ExpertIcon } from '@opptrix/shared'
+import {
+  joinReasoningSegments,
+  normalizeReasoningSegments,
+  type ReasoningSegment,
+} from './reasoning-timeline.js'
+
+export type { ReasoningSegment }
 
 export type { ChatToolStep, ChatAttachmentMeta }
 
@@ -104,8 +111,10 @@ export interface DisplayMessage {
   usage?: TokenUsage
   usageEstimated?: boolean
   attachments?: ChatAttachmentMeta[]
-  /** 终轮非空思考链（历史气泡可折叠展示） */
+  /** 整轮思考时间线（工具轮+终轮 reasoning 拼接；旧会话可能仅终轮） */
   reasoningContent?: string
+  /** 结构化思考分段（优先）；缺省时由 reasoningContent 按 SEP 降级 */
+  reasoningSegments?: ReasoningSegment[]
 }
 
 export interface SessionForkContextRef {
@@ -154,8 +163,10 @@ export interface SessionRecord extends SessionMeta {
     usage?: TokenUsage
     usageEstimated?: boolean
     attachments?: ChatAttachmentMeta[]
-    /** 终轮非空思考链；工具轮不写 */
+    /** 整轮思考时间线（工具轮+终轮拼接；旧会话可能仅终轮） */
     reasoningContent?: string
+    /** 结构化思考分段；与 reasoningContent 双写（派生字符串兼容旧读） */
+    reasoningSegments?: ReasoningSegment[]
   }[]
   contextRef?: SessionContextRef | null
   /**
@@ -512,17 +523,24 @@ export class SessionStore {
 
   toDisplayMessages(record: SessionRecord): DisplayMessage[] {
     if (record.turns?.length) {
-      return record.turns.map(t => ({
-        role: t.role,
-        content: t.content,
-        toolsUsed: t.toolsUsed,
-        toolSteps: t.toolSteps,
-        at: t.at,
-        usage: t.usage,
-        usageEstimated: t.usageEstimated,
-        attachments: t.attachments,
-        reasoningContent: t.reasoningContent,
-      }))
+      return record.turns.map(t => {
+        const segments = normalizeReasoningSegments(t.reasoningSegments)
+        const reasoningContent = t.reasoningContent?.trim()
+          || (segments ? joinReasoningSegments(segments) : undefined)
+          || undefined
+        return {
+          role: t.role,
+          content: t.content,
+          toolsUsed: t.toolsUsed,
+          toolSteps: t.toolSteps,
+          at: t.at,
+          usage: t.usage,
+          usageEstimated: t.usageEstimated,
+          attachments: t.attachments,
+          reasoningContent,
+          ...(segments ? { reasoningSegments: segments } : {}),
+        }
+      })
     }
     const out: DisplayMessage[] = []
     for (const m of record.messages) {

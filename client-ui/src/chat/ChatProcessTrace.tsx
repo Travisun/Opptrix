@@ -25,6 +25,11 @@ import { fadeInUp, motion } from '../theme/mixins'
 import { copyTextToClipboard } from '../platform/clipboard'
 import ThinkingDots from '../components/ThinkingDots'
 import { formatLiveThinkingStatus } from './sessionStreamRuntime'
+import {
+  formatReasoningSegmentLabel,
+  resolveReasoningSegments,
+  type ReasoningSegment,
+} from './reasoningTimeline'
 
 const useStyles = makeStyles({
   root: {
@@ -227,6 +232,73 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
+  },
+  timeline: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0',
+    padding: '0 0 2px 0',
+  },
+  timelineItem: {
+    display: 'flex',
+    alignItems: 'stretch',
+    gap: '8px',
+    minWidth: 0,
+  },
+  timelineRail: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: '14px',
+    flexShrink: 0,
+    paddingTop: '6px',
+  },
+  timelineDot: {
+    width: '7px',
+    height: '7px',
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: opptrixCssVars.textTertiary,
+    opacity: 0.55,
+    flexShrink: 0,
+  },
+  timelineDotActive: {
+    backgroundColor: opptrixCssVars.textSecondary,
+    opacity: 1,
+  },
+  timelineLine: {
+    flex: 1,
+    width: '1px',
+    minHeight: '8px',
+    marginTop: '4px',
+    backgroundColor: opptrixCssVars.separatorHairline,
+  },
+  timelineBody: {
+    flex: 1,
+    minWidth: 0,
+    padding: '2px 0 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  timelineHead: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    minWidth: 0,
+  },
+  timelineLabel: {
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
+    color: opptrixCssVars.textTertiary,
+    fontWeight: 600,
+  },
+  timelineTime: {
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
+    color: opptrixCssVars.textTertiary,
+    opacity: 0.85,
+    fontVariantNumeric: 'tabular-nums',
+    flexShrink: 0,
   },
   dialogSurface: {
     maxWidth: '560px',
@@ -574,45 +646,81 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
   )
 }
 
-interface ThinkingSnippetRowProps {
-  snippet: string
+interface ReasoningTimelineProps {
+  segments: ReasoningSegment[]
+  /** live：展开并跟随末段滚动 */
   active: boolean
 }
 
-/** 思考过程 — 进行中显示动画，完成后可展开查看 */
-function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
+/** 思考竖轴 — 复用 step 视觉；多段显示「第 N 段思路」，单段省略段标题 */
+function ReasoningTimeline({ segments, active }: ReasoningTimelineProps) {
   const s = useStyles()
-  const [expanded, setExpanded] = useState(false)
+  const bodyScrollRef = useRef<HTMLDivElement>(null)
+  const showLabels = segments.length > 1
+  const lastLen = segments[segments.length - 1]?.content.length ?? 0
+
+  useEffect(() => {
+    if (!active) return
+    const el = bodyScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [active, segments.length, lastLen])
 
   return (
     <div className={s.stepRow}>
-      <button
-        type="button"
-        className={s.stepHead}
-        onClick={() => !active && setExpanded(v => !v)}
-        aria-expanded={expanded}
-        disabled={active}
-      >
-        <span className={s.stepIcon} aria-hidden>
-          {active
-            ? <ThinkingDots className={s.runningDots} label="" />
-            : (expanded ? <ChevronDownRegular fontSize={14} /> : <ChevronRightRegular fontSize={14} />)}
-        </span>
-        <LightbulbFilamentRegular className={s.leadIcon} aria-hidden />
-        <Text
-          className={mergeClasses(s.stepLabel, active && s.stepLabelRunning)}
-          block
-        >
-          {active ? '正在梳理思路…' : '思考过程'}
-        </Text>
-      </button>
-      {!active && expanded && (
-        <div className={s.stepBody}>
-          <Text className={s.thinkingSnippet} block>
-            {snippet}
+      {active && (
+        <div className={s.stepHead} aria-disabled>
+          <span className={s.stepIcon} aria-hidden>
+            <ThinkingDots className={s.runningDots} label="" />
+          </span>
+          <LightbulbFilamentRegular className={s.leadIcon} aria-hidden />
+          <Text className={mergeClasses(s.stepLabel, s.stepLabelRunning)} block>
+            正在梳理思路…
           </Text>
         </div>
       )}
+      <div
+        ref={bodyScrollRef}
+        className={mergeClasses(s.detailBlock, 'opptrix-scroll')}
+      >
+        <div className={s.timeline}>
+          {segments.map((seg, index) => {
+            const isLast = index === segments.length - 1
+            const time = formatStepTime(seg.at)
+            const label = showLabels
+              ? (seg.label?.trim() || formatReasoningSegmentLabel(index + 1))
+              : undefined
+            return (
+              <div key={`seg-${index}-${seg.round ?? ''}`} className={s.timelineItem}>
+                <div className={s.timelineRail} aria-hidden>
+                  <span
+                    className={mergeClasses(
+                      s.timelineDot,
+                      active && isLast && s.timelineDotActive,
+                    )}
+                  />
+                  {!isLast && <span className={s.timelineLine} />}
+                </div>
+                <div className={s.timelineBody}>
+                  {(label || time) && (
+                    <div className={s.timelineHead}>
+                      {label && (
+                        <Text className={s.timelineLabel} block>{label}</Text>
+                      )}
+                      {time && (
+                        <Text className={s.timelineTime} block>{time}</Text>
+                      )}
+                    </div>
+                  )}
+                  <Text className={s.thinkingSnippet} block>
+                    {seg.content}
+                  </Text>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -624,6 +732,8 @@ interface Props {
   phaseLabel?: string
   estimatedTokens?: number
   thinkingSnippet?: string
+  /** 结构化思考分段；缺省时由 thinkingSnippet 降级 */
+  thinkingSegments?: ReasoningSegment[]
   live?: boolean
 }
 
@@ -633,6 +743,7 @@ export default function ChatProcessTrace({
   phaseLabel,
   estimatedTokens,
   thinkingSnippet,
+  thinkingSegments,
   live = false,
 }: Props) {
   const s = useStyles()
@@ -640,6 +751,7 @@ export default function ChatProcessTrace({
   // History mode: steps / thinking collapse into a summary bar, expandable on click.
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [historySnippetExpanded, setHistorySnippetExpanded] = useState(false)
+  const segments = resolveReasoningSegments(thinkingSegments, thinkingSnippet)
   const runningStep = live ? steps.find(st => st.status === 'running') : null
   const modelThinking = live && !runningStep
   const statusLabel = live
@@ -647,14 +759,16 @@ export default function ChatProcessTrace({
     : thinkingLabel
   const phaseHint = phaseLabel ?? thinkingLabel ?? ''
   const snippetActive = modelThinking && /思路|思考|梳理/.test(phaseHint)
-  const hideStatusForSnippet = snippetActive && Boolean(thinkingSnippet)
-  const showStatusHead = Boolean(statusLabel && (live || thinkingSnippet)) && !hideStatusForSnippet
-  const showLiveSnippet = live && Boolean(thinkingSnippet)
-  const showHistorySnippet = Boolean(thinkingSnippet?.trim() && !live)
+  const hasThinking = segments.length > 0
+  const hideStatusForSnippet = snippetActive && hasThinking
+  const showStatusHead = Boolean(statusLabel && (live || hasThinking)) && !hideStatusForSnippet
+  const showLiveSnippet = live && hasThinking
+  const showHistorySnippet = hasThinking && !live
+  const lastSegLen = segments[segments.length - 1]?.content.length ?? 0
 
-  // 实时执行时跟随最新步骤滚动到底部（步骤新增或内容/状态更新时）。
+  // 实时执行时跟随最新步骤 / 思考全文滚动到底部
   const liveProgressKey = live
-    ? `${steps.length}:${steps.map(st => st.status).join(',')}:${estimatedTokens ?? ''}:${phaseLabel ?? ''}`
+    ? `${steps.length}:${steps.map(st => st.status).join(',')}:${estimatedTokens ?? ''}:${phaseLabel ?? ''}:${segments.length}:${lastSegLen}`
     : ''
   useEffect(() => {
     if (!live) return
@@ -666,6 +780,10 @@ export default function ChatProcessTrace({
   if (!showStatusHead && !showLiveSnippet && !showHistorySnippet && steps.length === 0) {
     return null
   }
+
+  const historySummary = historySnippetExpanded
+    ? '思考过程'
+    : `查看思考过程（${segments.length} 段）`
 
   return (
     <div className={s.root} data-chat-process-trace={live ? 'live' : 'history'}>
@@ -692,11 +810,11 @@ export default function ChatProcessTrace({
         </div>
       )}
 
-      {showLiveSnippet && thinkingSnippet && (
-        <ThinkingSnippetRow snippet={thinkingSnippet} active={snippetActive} />
+      {showLiveSnippet && (
+        <ReasoningTimeline segments={segments} active />
       )}
 
-      {showHistorySnippet && thinkingSnippet && (
+      {showHistorySnippet && (
         <>
           <button
             type="button"
@@ -710,15 +828,13 @@ export default function ChatProcessTrace({
                 : <ChevronRightRegular fontSize={14} />}
             </span>
             <Text className={s.summaryLabel} block>
-              {historySnippetExpanded ? '思考过程' : '查看思考过程'}
+              {historySummary}
             </Text>
           </button>
           <div className={mergeClasses(s.collapse, historySnippetExpanded && s.collapseOpen)}>
             <div className={s.collapseInner}>
               <div className={s.stepBody}>
-                <Text className={mergeClasses(s.thinkingSnippet, 'opptrix-scroll')} block>
-                  {thinkingSnippet}
-                </Text>
+                <ReasoningTimeline segments={segments} active={false} />
               </div>
             </div>
           </div>

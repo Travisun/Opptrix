@@ -437,11 +437,14 @@ function ChatMessageItem({
           )
         ) : (
           <>
-            {(message.reasoningContent?.trim() || (message.toolSteps && message.toolSteps.length > 0)) && (
+            {(message.reasoningContent?.trim()
+              || (message.reasoningSegments && message.reasoningSegments.length > 0)
+              || (message.toolSteps && message.toolSteps.length > 0)) && (
               <div style={{ marginBottom: message.content ? 8 : 0 }}>
                 <ChatProcessTrace
                   steps={message.toolSteps ?? []}
                   thinkingSnippet={message.reasoningContent?.trim() || undefined}
+                  thinkingSegments={message.reasoningSegments}
                 />
               </div>
             )}

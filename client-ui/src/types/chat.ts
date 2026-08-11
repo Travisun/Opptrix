@@ -1,4 +1,7 @@
 import type { ChatToolStep } from './chatProgress'
+import type { ReasoningSegment } from '../chat/reasoningTimeline'
+
+export type { ReasoningSegment }
 
 export interface ExpertIcon {
   kind: 'emoji' | 'icon'
@@ -219,8 +222,10 @@ export interface ChatDisplayMessage {
   usage?: TokenUsage
   usageEstimated?: boolean
   attachments?: ChatAttachmentMeta[]
-  /** 终轮非空思考过程（历史气泡可折叠展示） */
+  /** 整轮思考派生字符串（兼容旧读）；展示优先 reasoningSegments */
   reasoningContent?: string
+  /** 结构化思考分段（竖轴时间线） */
+  reasoningSegments?: ReasoningSegment[]
 }
 
 export interface SessionForkContextRef {

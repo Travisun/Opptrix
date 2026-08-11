@@ -7,6 +7,7 @@
 
 import { parseNamespacedMcpTool } from '@opptrix/shared'
 import type { TokenUsage } from './llm/token-usage.js'
+import type { ReasoningSegment } from './reasoning-timeline.js'
 
 /**
  * 工具调用步骤状态 — 标识单次工具调用的当前阶段。
@@ -96,7 +97,10 @@ export type ChatProgressEvent =
     type: 'thinking'
     round: number
     label: string
+    /** 派生全文（join SEP）；兼容旧客户端 */
     snippet?: string
+    /** 结构化分段；UI 竖轴优先用此字段 */
+    segments?: ReasoningSegment[]
     /** 本轮加载的工具包 id */
     active_packs?: string[]
     /** 本轮暴露给 LLM 的工具数量 */

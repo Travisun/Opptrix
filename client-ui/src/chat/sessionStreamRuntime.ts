@@ -1,5 +1,11 @@
 import type { ChatLiveTrace, ChatProgressEvent, ChatToolStep, ChatUserPromptPayload } from '../types/chatProgress'
 import { formatTokenCount } from './formatTokenCount.ts'
+import {
+  joinReasoningSegments,
+  normalizeReasoningSegments,
+  resolveReasoningSegments,
+  type ReasoningSegment,
+} from './reasoningTimeline.ts'
 
 export type SessionStreamSnapshot = {
   liveTrace: ChatLiveTrace | null
@@ -52,6 +58,7 @@ function rebuildLiveTrace(
     estimatedTokens?: number | undefined
     clearEstimatedTokens?: boolean
     thinkingSnippet?: string | undefined
+    thinkingSegments?: ReasoningSegment[] | undefined
   },
 ): ChatLiveTrace {
   const steps = patch.steps ?? prev?.steps ?? []
@@ -59,14 +66,20 @@ function rebuildLiveTrace(
   const estimatedTokens = patch.clearEstimatedTokens
     ? undefined
     : ('estimatedTokens' in patch ? patch.estimatedTokens : prev?.estimatedTokens)
+  const thinkingSegments = 'thinkingSegments' in patch
+    ? patch.thinkingSegments
+    : prev?.thinkingSegments
   const thinkingSnippet = 'thinkingSnippet' in patch
     ? patch.thinkingSnippet
-    : prev?.thinkingSnippet
+    : (thinkingSegments?.length
+      ? joinReasoningSegments(thinkingSegments)
+      : prev?.thinkingSnippet)
   return {
     steps,
     phaseLabel: phaseLabel || undefined,
     estimatedTokens,
     thinkingSnippet,
+    thinkingSegments,
     thinkingLabel: formatLiveThinkingStatus(
       phaseLabel || undefined,
       estimatedTokens,
@@ -103,15 +116,30 @@ export function applyChatProgressEvent(
   event: ChatProgressEvent,
 ): SessionStreamSnapshot {
   switch (event.type) {
-    case 'thinking':
+    case 'thinking': {
+      const incoming = normalizeReasoningSegments(event.segments)
+      let thinkingSegments: ReasoningSegment[] | undefined
+      if (incoming?.length) {
+        thinkingSegments = incoming
+      } else if (event.snippet != null && event.snippet !== '') {
+        // 旧服务端仅推 snippet：按 SEP 降级分段
+        thinkingSegments = resolveReasoningSegments(undefined, event.snippet)
+      } else {
+        thinkingSegments = snapshot.liveTrace?.thinkingSegments
+      }
+      const segmentsOrUndef = thinkingSegments?.length ? thinkingSegments : undefined
       return {
         ...snapshot,
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
           phaseLabel: stripPhaseEllipsis(event.label),
           clearEstimatedTokens: true,
-          thinkingSnippet: event.snippet ?? snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: segmentsOrUndef,
+          thinkingSnippet: event.snippet
+            ?? (segmentsOrUndef ? joinReasoningSegments(segmentsOrUndef) : undefined)
+            ?? snapshot.liveTrace?.thinkingSnippet,
         }),
       }
+    }
     case 'context_compact':
       return {
         ...snapshot,
@@ -119,6 +147,7 @@ export function applyChatProgressEvent(
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
           phaseLabel: '正在整理对话要点',
           thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
         }),
       }
     case 'user_prompt':
@@ -128,6 +157,7 @@ export function applyChatProgressEvent(
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
           phaseLabel: '等待你的确认',
           thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
         }),
       }
     case 'tool_start':

@@ -183,6 +183,18 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
     assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考…')
   })
 
+  it('stores full thinking snippet rather than truncating to last 400', () => {
+    const full = 'X'.repeat(900)
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'thinking',
+      round: 1,
+      label: '模型正在思考…',
+      snippet: full,
+    })
+    assert.equal(next.liveTrace?.thinkingSnippet, full)
+    assert.equal(next.liveTrace?.thinkingSnippet?.length, 900)
+  })
+
   it('shows total step count with tokens after tool_done and reply', () => {
     let snap = createEmptyStreamSnapshot()
     snap = applyChatProgressEvent(snap, {
