@@ -73,7 +73,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 ## 计划任务与后台常驻
 
-桌面端计划任务采用 **双轨调度**：Sidecar 内 `ScheduleService.start()` 每 **20s** 进程内扫描（`trigger: 'timer'`）；另注册 **OS 级通用 tick**（默认间隔 **60s**，用户级、**不要求 root**），在关窗或仅后台常驻时仍能唤醒 sidecar 执行 `POST /api/schedule/tick`（`trigger: 'os'`）。两路均经乐观 claim 幂等，避免重复跑同一到期任务。
+桌面端计划任务采用 **双轨调度**：Sidecar 内 `ScheduleService.start()` 每 **20s** 进程内扫描（`trigger: 'timer'`）；另注册 **OS 级通用 tick**（默认间隔 **60s**，用户级、**不要求 root**）。OS tick 优先经 userData 内 **HTTP-first runner** 对已运行 sidecar 发 `POST /api/schedule/tick`（`trigger: 'os'`）；仅当 sidecar 未起时才 fallback **`ELECTRON_RUN_AS_NODE` headless-tick**（无界面拉起 sidecar → tick → 停掉本次 sidecar），**不再** GUI 冷启动 `--background --schedule-tick`。两路均经乐观 claim 幂等，避免重复跑同一到期任务。
 
 ### 关窗 = 托盘常驻（生产包）
 
@@ -133,7 +133,7 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
 3. **合成 `.icns`（macOS 应用图标，不是托盘）**  
    - 托盘用 `trayTemplate*.png` 即可，**不需要** `.icns`；  
    - Dock / DMG 应用图标：PNG → `iconutil`（`prepare-icons.mjs` 在 macOS 上会生成 `build/icons/icon.icns`），或 Icon Slate 等插件。  
-   - mac App 使用 Icon Composer（`build.mac.icon` → `icon.icon`）；afterPack 再用完整 `build/icons/icon.icns` 覆盖 bundle 内 `Resources/icon.icns`，供通知中心等读取。
+   - mac App 使用 Icon Composer（`build.mac.icon` → `icon.icon`）；afterPack 用完整 `build/icons/icon.icns` 覆盖 bundle 内 `Resources/icon.icns`，并去掉 Info.plist 的 `CFBundleIconName`（否则通知中心优先读 Assets.car，仍显示 Composer 旧图）。
 
 > 「hdi」一般指 **`.icns`**（Apple icon 容器）。托盘请继续交 PNG Template；`.icns` 只用于 App / DMG 图标。
 
@@ -144,26 +144,30 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
 | 参数 | 含义 |
 |------|------|
 | `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar 并 reconcile OS 调度 |
-| `--schedule-tick` | 本次启动为 OS tick 唤醒：短命 worker（`runEphemeralScheduleTickWorker`）在 sidecar ready 后 `POST /api/schedule/tick`，然后退出（常与 `--background` 合用；不建托盘、不常驻） |
+| `--schedule-tick` | **兼容**旧 LaunchAgent / 手动调试：短命 Electron worker（`runEphemeralScheduleTickWorker`）在 sidecar ready 后 `POST /api/schedule/tick`，然后退出（常与 `--background` 合用；不建托盘、不常驻）。**新注册的 OS 任务不再指向此路径** |
 
-OS 适配器写入的系统任务均带 `--background --schedule-tick`：
+OS 适配器注册的系统任务执行 **HTTP-first tick runner**（写在 Electron `userData`，如 `os-schedule-tick-runner.sh` / `.cmd`），**不再**把 Opptrix GUI 本体当作 StartInterval / schtasks / systemd 的主程序：
+
+1. 读取 `userData/os-schedule-endpoint.json`（`host` 强制 `127.0.0.1`、`port`，以及冷启动用的 `execPath` + `headlessTick`；可选 `runtimeStage` / `resourcesPath`；由 `configureScheduleBridge` / ensure runner 写入，**无密钥**）
+2. 短超时 `POST http://127.0.0.1:$PORT/api/schedule/tick`（`{"trigger":"os"}`）→ **成功则 exit 0**（应用已运行时不拉起新进程，避免 Dock / 任务栏闪烁；UI 侧 `resolveApiPort(allowReuse:true)` 可 reuse 同一 endpoint 上的健康 sidecar）
+3. 失败（sidecar 未起）再 fallback：`ELECTRON_RUN_AS_NODE=1 "$execPath" "$headlessTick"`（`os-schedule/headless-tick.cjs`：再试 POST → 必要时 spawn sidecar → health → POST tick → **停掉本次 sidecar** → exit）。**禁止** fallback 到 `Opptrix --background --schedule-tick`
 
 | 平台 | 机制 | 标识 |
 |------|------|------|
-| **macOS** | 用户 LaunchAgent `~/Library/LaunchAgents/org.opptrix.schedule-tick.plist`，`StartInterval` ≥ 30s | `launchctl` gui 域 |
-| **Windows** | 用户计划任务 `schtasks`，按分钟重复 | 任务名 `OpptrixScheduleTick` |
-| **Linux** | 用户 systemd timer `~/.config/systemd/user/opptrix-schedule-tick.timer` | `systemctl --user` |
+| **macOS** | 用户 LaunchAgent `~/Library/LaunchAgents/org.opptrix.schedule-tick.plist`，`ProgramArguments` = `/bin/bash` + tick runner，`StartInterval` ≥ 30s | `launchctl` gui 域 |
+| **Windows** | 用户计划任务 `schtasks`，`/TR` 指向 tick runner `.cmd`，按分钟重复 | 任务名 `OpptrixScheduleTick` |
+| **Linux** | 用户 systemd timer；`.service` 的 `ExecStart` = `/bin/bash` + tick runner | `systemctl --user` |
 
-实现：`apps/desktop/electron/os-schedule/{darwin,win32,linux}.cjs`；入口 `os-schedule/index.cjs`。Windows NSIS 安装器（`nsis/installer.nsh`）会在安装前移除 `OpptrixScheduleTick` 并结束运行中的 Opptrix，避免旧版定时拉起阻塞覆盖安装。
+实现：`apps/desktop/electron/os-schedule/{tick-runner,headless-tick,sidecar-launch}.cjs` + `{darwin,win32,linux}.cjs`；入口 `os-schedule/index.cjs`。Windows NSIS 安装器（`nsis/installer.nsh`）会在安装前移除 `OpptrixScheduleTick` 并结束运行中的 Opptrix，避免旧版定时拉起阻塞覆盖安装。
 
-单实例锁：若已有实例运行，带 `--schedule-tick` 的第二次启动只触发 `handleScheduleTickFromOs()`（经已有 sidecar），不重复开主窗（除非未带 `--background`）。
+单实例锁：若已有实例运行，带 `--schedule-tick` 的第二次启动（仅兼容旧 plist / 手动调试）只触发 `handleScheduleTickFromOs()`（经已有 sidecar），不重复开主窗（除非未带 `--background`）。macOS 在 `requestSingleInstanceLock` 之前对 `--background` / `--schedule-tick` 尽早 `app.dock.hide()`，进一步降低秒退时的 Dock 闪烁。
 
 ### `schedule-bridge.cjs` 与 reconcile
 
-主进程通过 bridge 调用 sidecar REST（`configureScheduleBridge({ host, port })`）：
+主进程通过 bridge 调用 sidecar REST（`configureScheduleBridge({ host, port })` 同时写入 `os-schedule-endpoint.json`）：
 
 1. `GET /api/schedule/os/reconcile` — 是否应注册 OS tick（`register_tick` = `master_enabled`）、`autostart`、`interval_sec`
-2. `getOsScheduleAdapter().ensureTickRegistration` / `removeTickRegistration` — 写系统级任务
+2. `getOsScheduleAdapter().ensureTickRegistration` / `removeTickRegistration` — 生成/刷新 tick runner 并写系统级任务
 3. `app.setLoginItemSettings({ openAtLogin, args: ['--background'] })` — macOS/Windows 登录项（`autostart`）
 4. `PATCH /api/schedule/settings` — 回写 `os_tick_status` / `os_tick_error`
 
@@ -250,6 +254,7 @@ opptrix://chat?session={encodeURIComponent(sessionId)}
 | `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick`；权限为 denied 时返回 `false` |
 | `window-is-focused` | `windowIsFocused()` | 主窗口是否 focused（注意力判断） |
 | `open-local-directory` | `openLocalDirectory(dirPath)` | 用系统文件管理器打开目录；路径须在 `resolveUserDataRoot()/agent-workspace` 之下，不存在则递归创建后再打开 |
+| `chat-debug-open-log-dir` | `chatDebugOpenLogDir()` | 打开（必要时先创建）`~/.opptrix/logs/chat-debug`；设置 → 关于「对话调试日志」写入按会话拆分的 JSONL |
 
 协议事件仍为 `opptrix-protocol`（`onProtocolOpen`），与通知点击深链共用。
 
@@ -281,7 +286,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 | 平台 | 注意 |
 |------|------|
 | **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`（`package.json` `build.appId`），否则通知可能不归到本应用；toast 图标经 `Notification.icon` 指向 `prepare-icons` 产出的 `icon.ico` / logo PNG |
-| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启；`Notification.icon` 无效，依赖 bundle `Resources/icon.icns`（afterPack 覆盖完整 icns） |
+| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启；`Notification.icon` 无效，依赖 bundle `Resources/icon.icns`（afterPack 覆盖完整 icns，并移除 `CFBundleIconName` 以免走 Assets.car） |
 | **Linux** | 依赖桌面环境对 Electron `Notification` 的支持（`Notification.isSupported()`）；部分环境可能静默失败。toast 图标经 `Notification.icon` 指向 `build/icons/linux/*.png` 或 logo PNG；桌面入口图标仍用 `build.linux.icon` |
 
 单元测试：`tests/chat-notifications.test.mjs`（注意力、离开标记、builder、sanitize、macOS 权限映射）。

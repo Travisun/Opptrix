@@ -2,19 +2,33 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { app } = require('electron')
 const { DEFAULT_TICK_INTERVAL_SEC } = require('./types.cjs')
+const { resolveOsTickInvocation } = require('./tick-runner.cjs')
 
 const TASK_NAME = 'OpptrixScheduleTick'
 
-function quoteCmd(value) {
-  return `"${String(value).replace(/"/g, '\\"')}"`
-}
-
 function resolveCommandLine() {
-  if (app.isPackaged) {
-    return `${quoteCmd(process.execPath)} --background --schedule-tick`
+  /** @type {{
+   *   userDataDir: string
+   *   isPackaged: boolean
+   *   execPath: string
+   *   headlessTickPath: string
+   *   platform: 'win32'
+   *   runtimeStage?: string
+   *   resourcesPath?: string
+   * }} */
+  const opts = {
+    userDataDir: app.getPath('userData'),
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+    headlessTickPath: path.join(__dirname, 'headless-tick.cjs'),
+    platform: 'win32',
   }
-  const mainPath = path.join(__dirname, '..', 'main.cjs')
-  return `${quoteCmd(process.execPath)} ${quoteCmd(mainPath)} --background --schedule-tick`
+  if (app.isPackaged && typeof process.resourcesPath === 'string') {
+    opts.resourcesPath = process.resourcesPath
+    opts.runtimeStage = path.join(process.resourcesPath, 'runtime-stage')
+  }
+  const invocation = resolveOsTickInvocation(opts)
+  return invocation.taskRun
 }
 
 function schtasks(args) {
@@ -83,7 +97,7 @@ const win32Adapter = {
         ok: false,
         status: 'error',
         error: err instanceof Error ? err.message : String(err),
-    }
+      }
     }
   },
 

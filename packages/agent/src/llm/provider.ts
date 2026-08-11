@@ -6,6 +6,12 @@ import {
   sanitizeMessagesForModelMedia,
 } from '../content-parts.js'
 import { resolveModelMediaCapabilitiesAsync } from './models-dev-context.js'
+import {
+  createSseChunkSampler,
+  logChatDebugAbort,
+  logChatDebugHttpError,
+  truncateForChatDebug,
+} from '../chat-debug-log.js'
 
 export interface LlmConfig {
   provider: string
@@ -235,6 +241,7 @@ async function consumeChatCompletionSse(
   let usage: TokenUsage | undefined
   let sawToolCalls = false
   const toolCallsByIndex = new Map<number, ToolCall>()
+  const sseSampler = createSseChunkSampler(opts?.sessionId)
 
   const mergeToolCallDelta = (delta: {
     index?: number
@@ -272,6 +279,8 @@ async function consumeChatCompletionSse(
         const payload = line.slice(5).trim()
         if (!payload) continue
         if (payload === '[DONE]') continue
+
+        sseSampler.onDataPayload(payload, content.length)
 
         let parsed: {
           usage?: unknown
@@ -428,6 +437,21 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       return turnFromAssistantMessage(raw, usage, opts?.sessionId)
     }
 
+    const noteHttpError = (status: number, bodyText: string) => {
+      if (opts?.sessionId) {
+        logChatDebugHttpError(opts.sessionId, {
+          status,
+          bodyTruncated: truncateForChatDebug(bodyText),
+        })
+      }
+    }
+
+    const noteAbort = () => {
+      if (opts?.sessionId) {
+        logChatDebugAbort(opts.sessionId, { reason: 'cancelled' })
+      }
+    }
+
     try {
       if (opts?.onDelta) {
         let streamConsumeStarted = false
@@ -439,16 +463,21 @@ export class OpenAiCompatibleProvider implements LlmProvider {
             if (streamResp.status === 400 || streamResp.status === 422) {
               const fallback = await post(false)
               if (!fallback.ok) {
-                return httpErrorTurn(fallback.status, (await fallback.text()).slice(0, 300))
+                const fbText = (await fallback.text()).slice(0, 300)
+                noteHttpError(fallback.status, fbText)
+                return httpErrorTurn(fallback.status, fbText)
               }
               return await parseJsonTurn(fallback)
             }
+            noteHttpError(streamResp.status, text)
             return httpErrorTurn(streamResp.status, text)
           }
           if (!streamResp.body) {
             const fallback = await post(false)
             if (!fallback.ok) {
-              return httpErrorTurn(fallback.status, (await fallback.text()).slice(0, 300))
+              const fbText = (await fallback.text()).slice(0, 300)
+              noteHttpError(fallback.status, fbText)
+              return httpErrorTurn(fallback.status, fbText)
             }
             return await parseJsonTurn(fallback)
           }
@@ -456,6 +485,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           return await consumeChatCompletionSse(streamResp, opts)
         } catch (streamErr) {
           if (signal?.aborted) {
+            noteAbort()
             const msg = '已取消'
             return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: 'cancelled' }
           }
@@ -463,7 +493,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           if (!streamConsumeStarted) {
             const fallback = await post(false)
             if (!fallback.ok) {
-              return httpErrorTurn(fallback.status, (await fallback.text()).slice(0, 300))
+              const fbText = (await fallback.text()).slice(0, 300)
+              noteHttpError(fallback.status, fbText)
+              return httpErrorTurn(fallback.status, fbText)
             }
             return await parseJsonTurn(fallback)
           }
@@ -473,11 +505,14 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
       const resp = await post(false)
       if (!resp.ok) {
-        return httpErrorTurn(resp.status, (await resp.text()).slice(0, 300))
+        const text = (await resp.text()).slice(0, 300)
+        noteHttpError(resp.status, text)
+        return httpErrorTurn(resp.status, text)
       }
       return await parseJsonTurn(resp)
     } catch (e) {
       if (signal?.aborted) {
+        noteAbort()
         const msg = '已取消'
         return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: 'cancelled' }
       }

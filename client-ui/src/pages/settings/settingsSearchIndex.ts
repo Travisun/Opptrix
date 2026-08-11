@@ -38,6 +38,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
   { section: 'about', title: '检查更新', keywords: ['更新', 'upgrade'] },
+  { section: 'about', title: '对话调试日志', desc: '将对话过程写入本机日志，便于排查无回复或中断', keywords: ['调试', '日志', '无回复', '中断'] },
   { section: 'about', title: '官方网站', desc: 'Opptrix 官网', keywords: ['官网', 'opptrix.org', '网站'] },
   { section: 'about', title: '用户协议', keywords: ['条款', 'legal', 'agreement'] },
   { section: 'about', title: '隐私政策', keywords: ['privacy', '隐私'] },

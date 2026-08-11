@@ -415,6 +415,13 @@ console.log('audit-desktop-pack: start')
     fail('afterPack must restore full build/icons/icon.icns over mac bundle stub')
   } else ok('afterPack restores full mac icon.icns for notification center')
 
+  if (
+    !afterPackSrc.includes('CFBundleIconName')
+    || !afterPackSrc.includes('stripMacBundleIconName')
+  ) {
+    fail('afterPack must strip CFBundleIconName so NC falls back to restored icon.icns')
+  } else ok('afterPack strips CFBundleIconName (Asset Catalog) for notification center')
+
   if (exists('build/icons/icon.icns')) {
     const icnsSize = fs.statSync(path.join(DESKTOP_ROOT, 'build/icons/icon.icns')).size
     if (icnsSize < 100_000) {

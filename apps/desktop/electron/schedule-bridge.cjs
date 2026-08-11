@@ -1,6 +1,11 @@
+const path = require('node:path')
 const { app } = require('electron')
 const { getOsScheduleAdapter } = require('./os-schedule/index.cjs')
 const { DEFAULT_TICK_INTERVAL_SEC } = require('./os-schedule/types.cjs')
+const {
+  writeOsScheduleEndpoint,
+  defaultHeadlessTickPath,
+} = require('./os-schedule/tick-runner.cjs')
 
 /** @type {string} */
 let apiHost = '127.0.0.1'
@@ -8,11 +13,43 @@ let apiHost = '127.0.0.1'
 let apiPort = '8711'
 
 /**
+ * Persist loopback host/port + headless cold-start paths for the OS tick runner (no secrets).
+ * Same endpoint JSON is reused by UI `resolveApiPort(allowReuse:true)` via host/port.
+ */
+function persistOsScheduleEndpoint() {
+  try {
+    if (typeof app?.getPath !== 'function') return
+    /** @type {{
+     *   host: string
+     *   port: string | number
+     *   execPath: string
+     *   headlessTick: string
+     *   runtimeStage?: string
+     *   resourcesPath?: string
+     * }} */
+    const opts = {
+      host: apiHost,
+      port: apiPort,
+      execPath: process.execPath,
+      headlessTick: defaultHeadlessTickPath(),
+    }
+    if (app.isPackaged && typeof process.resourcesPath === 'string') {
+      opts.resourcesPath = process.resourcesPath
+      opts.runtimeStage = path.join(process.resourcesPath, 'runtime-stage')
+    }
+    writeOsScheduleEndpoint(app.getPath('userData'), opts)
+  } catch {
+    /* non-electron / tests */
+  }
+}
+
+/**
  * @param {{ host?: string; port?: string | number }} opts
  */
 function configureScheduleBridge(opts = {}) {
   if (opts.host) apiHost = opts.host
   if (opts.port != null) apiPort = String(opts.port)
+  persistOsScheduleEndpoint()
 }
 
 function apiBase() {
