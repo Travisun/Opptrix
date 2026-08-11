@@ -34,20 +34,60 @@ function loadImageNaturalSize(
   })
 }
 
+/** Capture element at full scroll size so horizontally overflowed content is included. */
+async function captureElementPngDataUrl(el: HTMLElement): Promise<string> {
+  const width = Math.max(el.scrollWidth, el.offsetWidth, 1)
+  const height = Math.max(el.scrollHeight, el.offsetHeight, 1)
+  return toPng(el, {
+    cacheBust: true,
+    pixelRatio: Math.min(2, window.devicePixelRatio || 1),
+    backgroundColor: '#ffffff',
+    width,
+    height,
+  })
+}
+
+/** Draw a PNG data URL onto the current PDF page with contain (aspect preserved + margin). */
+function drawPngContainOnCurrentPage(
+  pdf: jsPDF,
+  dataUrl: string,
+  widthPx: number,
+  heightPx: number,
+): void {
+  const pageW = pdf.internal.pageSize.getWidth()
+  const pageH = pdf.internal.pageSize.getHeight()
+  const margin = 8
+  const maxW = pageW - margin * 2
+  const maxH = pageH - margin * 2
+  const imgAspect = widthPx / heightPx
+  const boxAspect = maxW / maxH
+
+  let drawW: number
+  let drawH: number
+  if (imgAspect > boxAspect) {
+    drawW = maxW
+    drawH = maxW / imgAspect
+  } else {
+    drawH = maxH
+    drawW = maxH * imgAspect
+  }
+
+  const x = (pageW - drawW) / 2
+  const y = (pageH - drawH) / 2
+  pdf.addImage(dataUrl, 'PNG', x, y, drawW, drawH, undefined, 'FAST')
+}
+
 export async function exportElementPng(
   el: HTMLElement,
   filename: string,
 ): Promise<void> {
-  const dataUrl = await toPng(el, {
-    cacheBust: true,
-    pixelRatio: Math.min(2, window.devicePixelRatio || 1),
-    backgroundColor: '#ffffff',
-  })
+  const dataUrl = await captureElementPngDataUrl(el)
   triggerDownload(dataUrl, `${baseName(filename)}.png`)
 }
 
 /**
- * PDF MVP: one page per `[data-opptrix-page]`, else a single page from the root element.
+ * PDF: one page per `[data-opptrix-page]`, else a single page from the root element.
+ * Each page uses contain layout (aspect preserved + margin) — same as mindmap export.
  */
 export async function exportElementPdf(
   el: HTMLElement,
@@ -55,24 +95,27 @@ export async function exportElementPdf(
 ): Promise<void> {
   const pages = Array.from(el.querySelectorAll<HTMLElement>('[data-opptrix-page]'))
   const targets = pages.length > 0 ? pages : [el]
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
-  const pageW = pdf.internal.pageSize.getWidth()
-  const pageH = pdf.internal.pageSize.getHeight()
-  const margin = 8
+  let pdf: jsPDF | null = null
 
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i]
-    const dataUrl = await toPng(target, {
-      cacheBust: true,
-      pixelRatio: Math.min(2, window.devicePixelRatio || 1),
-      backgroundColor: '#ffffff',
-    })
-    if (i > 0) pdf.addPage()
-    const imgW = pageW - margin * 2
-    const imgH = pageH - margin * 2
-    pdf.addImage(dataUrl, 'PNG', margin, margin, imgW, imgH, undefined, 'FAST')
+    const dataUrl = await captureElementPngDataUrl(target)
+    const { width, height } = await loadImageNaturalSize(dataUrl)
+    if (width <= 0 || height <= 0) {
+      throw new Error('Invalid export image size')
+    }
+    const orientation = width >= height ? 'landscape' : 'portrait'
+    if (!pdf) {
+      pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation })
+    } else {
+      pdf.addPage('a4', orientation)
+    }
+    drawPngContainOnCurrentPage(pdf, dataUrl, width, height)
   }
 
+  if (!pdf) {
+    throw new Error('No export targets')
+  }
   pdf.save(`${baseName(filename)}.pdf`)
 }
 
@@ -117,27 +160,7 @@ export async function exportPngDataUrlToPdf(
 
   const orientation = width >= height ? 'landscape' : 'portrait'
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation })
-  const pageW = pdf.internal.pageSize.getWidth()
-  const pageH = pdf.internal.pageSize.getHeight()
-  const margin = 8
-  const maxW = pageW - margin * 2
-  const maxH = pageH - margin * 2
-  const imgAspect = width / height
-  const boxAspect = maxW / maxH
-
-  let drawW: number
-  let drawH: number
-  if (imgAspect > boxAspect) {
-    drawW = maxW
-    drawH = maxW / imgAspect
-  } else {
-    drawH = maxH
-    drawW = maxH * imgAspect
-  }
-
-  const x = (pageW - drawW) / 2
-  const y = (pageH - drawH) / 2
-  pdf.addImage(dataUrl, 'PNG', x, y, drawW, drawH, undefined, 'FAST')
+  drawPngContainOnCurrentPage(pdf, dataUrl, width, height)
   pdf.save(`${baseName(filename)}.pdf`)
 }
 

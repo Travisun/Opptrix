@@ -1,8 +1,16 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { cx } from '../cx.js'
 import {
   buildChartOption,
-  computePlotMinWidth,
+  computePlotIntrinsicWidth,
+  computePlotLayoutWidth,
   echarts,
   resolveLegendItems,
   resolveSeriesColors,
@@ -51,6 +59,7 @@ export type ChartProps = {
 /**
  * Theme-aware charts via ECharts (bar / line / pie / heatmap).
  * Agents import only `{ Chart }` from `@opptrix/canvas` — not echarts.
+ * Plot width adapts to data density up to the parent/container width (never forced to 100% when sparse).
  */
 export function Chart({
   className,
@@ -68,11 +77,36 @@ export function Chart({
 }: ChartProps) {
   const { tokens } = useCanvasTheme()
   const colors = resolveSeriesColors(data, tokens)
+  const rootRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null)
-  const plotMinWidth = computePlotMinWidth(type, data)
+  /** null = not measured yet; use intrinsic until parent width is known */
+  const [availableWidth, setAvailableWidth] = useState<number | null>(null)
+  const plotWidth =
+    availableWidth == null
+      ? computePlotIntrinsicWidth(type, data)
+      : computePlotLayoutWidth(type, data, availableWidth)
+  const needsScroll = availableWidth != null && plotWidth > availableWidth
   const titleForLegend = typeof title === 'string' ? title : undefined
   const legendItems = resolveLegendItems(type, data, colors, tokens, titleForLegend)
+
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const measure = () => {
+      const parent = el.parentElement
+      const w = parent != null ? parent.clientWidth : el.clientWidth
+      setAvailableWidth(Math.max(1, w))
+    }
+    measure()
+
+    const ro = new ResizeObserver(measure)
+    if (el.parentElement) ro.observe(el.parentElement)
+    else ro.observe(el)
+
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     const el = hostRef.current
@@ -122,7 +156,7 @@ export function Chart({
     showTooltip,
     showLegend,
     height,
-    plotMinWidth,
+    plotWidth,
   ])
 
   const aria =
@@ -134,15 +168,28 @@ export function Chart({
           ? '饼图'
           : '热力图'
 
+  const rootStyle: CSSProperties = {
+    ...style,
+    width: plotWidth,
+    maxWidth: '100%',
+    ['--oxc-chart-plot-width' as string]: `${plotWidth}px`,
+  }
+
   return (
-    <div className={cx('oxc-chart', `oxc-chart--${type}`, className)} style={style}>
+    <div
+      ref={rootRef}
+      className={cx('oxc-chart', `oxc-chart--${type}`, className)}
+      style={rootStyle}
+    >
       {title != null ? <div className="oxc-chart__title">{title}</div> : null}
       <div className="oxc-chart__body">
-        <div className="oxc-chart__scroll">
+        <div
+          className={cx('oxc-chart__scroll', needsScroll && 'oxc-chart__scroll--overflow')}
+        >
           <div
             ref={hostRef}
             className="oxc-chart__plot"
-            style={{ height, minWidth: plotMinWidth }}
+            style={{ height, width: plotWidth, maxWidth: '100%' }}
             role="img"
             aria-label={aria}
           />

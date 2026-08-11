@@ -731,38 +731,28 @@
 }
 
 /* —— Chart —— */
-/* Chrome (title/caption) vs plot body: narrow max-width + scroll stay on body only. */
+/* Plot width from JS (`--oxc-chart-plot-width`): compact when sparse, up to container when dense. */
 
 .oxc-chart {
-  width: 100%;
-  max-width: min(100%, 480px);
+  max-width: 100%;
   margin-inline: auto;
   overflow: visible;
 }
 
 .oxc-chart__body {
   width: 100%;
-  max-width: 320px;
+  max-width: 100%;
   margin-inline: auto;
-}
-
-.oxc-chart--bar .oxc-chart__body,
-.oxc-chart--line .oxc-chart__body {
-  max-width: 320px;
-}
-
-.oxc-chart--pie .oxc-chart__body {
-  max-width: 230px;
-}
-
-.oxc-chart--heatmap .oxc-chart__body {
-  max-width: 380px;
 }
 
 .oxc-chart__scroll {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
   overflow-y: hidden;
+}
+
+.oxc-chart__scroll--overflow {
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 

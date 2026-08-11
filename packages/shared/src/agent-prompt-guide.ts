@@ -232,7 +232,7 @@ export function buildArtifactsPlaybook(): string {
     '- 【不得省略文字】每个主要章节至少一段介绍/解读 Text；图表前后要有引导句或结论句；Stat/Table/Chart 旁须有说明（caption/旁注/Callout 二选一）；禁止「只有数字块、没有叙述」',
     '- 【标题层级】H1 全文唯一报告标题；H2 章；H3 节；禁止用 Card title 充当章节标题；禁止跳级',
     '- 【图表优先】有可对比、变化、范围/区间、构成占比的定量数据时，优先用 Chart 可视化，不要只堆 Table/Stat；Table 作明细补充，Stat 作关键 KPI 摘要；图前后仍须有引导/结论 Text（与「不得省略文字」一致）',
-    '- 【图表尺寸】Chart 不要拉满 Surface 全宽；独立行 Chart 由组件默认居中（margin-inline: auto）；依赖默认 max-width（bar/line ~320、pie ~220–240、heatmap ~360–400）；勿写 style={{ width: \'100%\' }} 覆盖宽度破坏居中，勿写超大 height；默认 height 约 140–180；饼图尤忌撑满。Chart 已含专业坐标轴/网格/数值标注，勿再手写假坐标或假轴。最短示例：Chart 不设 width，依赖默认尺寸与居中',
+    '- 【图表尺寸】Chart 随内容宽自适应：稀疏数据保持紧凑默认（bar/line ~320、pie ~230、heatmap ~380），类目密时可增至父容器/画布内容宽度上限；独立行 Chart 默认居中（margin-inline: auto）。勿写 style={{ width: \'100%\' }} 强制拉满 Surface，勿写超大 height；默认 height 约 140–180；饼图尤忌撑满。Chart 已含专业坐标轴/网格/数值标注，勿再手写假坐标或假轴。最短示例：Chart 不设 width，依赖自适应与居中',
     '- 【图注须与图居中对齐】图注优先 Chart caption="…" 或 caption={…}（渲染在 plot/legend 下方，与图同宽居中）；勿把图注做成全宽左对齐旁白 Text。表注：全宽表可左对齐或 Text align="center"；图注硬性居中',
     '- 【图种选用】Chart 支持 type="bar" | "line" | "pie" | "heatmap"：趋势/变化/时间序列 → line；对比/分布/直方类离散比较 → bar（可称柱状/直方，实现用 bar）；构成/占比 → pie；强弱矩阵 / 多维截面强度 → heatmap，data 用 { label, row, col, value }（可选 color 覆盖单格）；次选可用 Table + rowTone / 单元格语义色背景（Table 无独立 cellBg API）；禁止乱编花哨硬编码色',
     '- 【多序列】多条折线/分组柱必须用长表 data[].series（系列名）；同一 label 跨系列对齐类目，缺测点可省略（断线）。禁止给单折线每点不同 color 冒充「多指标」——无 series 时 line 为单系列统一主色、图例仅 1 项',

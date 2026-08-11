@@ -9,6 +9,7 @@ import {
   useState,
   type ComponentType,
   type ErrorInfo,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type WheelEvent,
 } from 'react'
@@ -148,14 +149,25 @@ const useStyles = makeStyles({
   stage: {
     flex: 1,
     minHeight: 0,
-    overflow: 'auto',
+    overflow: 'hidden',
     /* light = pure white via --opptrix-canvas; dark follows app theme */
     backgroundColor: opptrixCssVars.canvas,
+    cursor: 'grab',
+    touchAction: 'none',
+    userSelect: 'none',
+  },
+  stagePanning: {
+    cursor: 'grabbing',
   },
   stageInner: {
     width: '100%',
     boxSizing: 'border-box',
-    transformOrigin: 'top left',
+    /* Origin 0 0 keeps translate+scale consistent with pointer pan deltas */
+    transformOrigin: '0 0',
+  },
+  previewRoot: {
+    width: '100%',
+    boxSizing: 'border-box',
   },
   center: {
     flex: 1,
@@ -188,13 +200,27 @@ export default function CanvasPreviewHost({
   const s = useStyles()
   const { resolvedScheme } = useTheme()
   const previewRef = useRef<HTMLDivElement>(null)
+  const panDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    originX: number
+    originY: number
+  } | null>(null)
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [scale, setScale] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [panning, setPanning] = useState(false)
 
   const clampScale = (v: number) =>
     Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(v * 100) / 100))
+
+  const resetView = () => {
+    setScale(1)
+    setPan({ x: 0, y: 0 })
+  }
 
   useEffect(() => {
     if (!panelVisible) return
@@ -202,6 +228,9 @@ export default function CanvasPreviewHost({
     setState({ phase: 'loading' })
     setRuntimeError(null)
     setScale(1)
+    setPan({ x: 0, y: 0 })
+    panDragRef.current = null
+    setPanning(false)
 
     void (async () => {
       const result = await fetchAttachmentRawText(sessionId, attachmentId)
@@ -255,6 +284,38 @@ export default function CanvasPreviewHost({
     e.preventDefault()
     const delta = e.deltaY > 0 ? -SCALE_STEP : SCALE_STEP
     setScale((prev) => clampScale(prev + delta))
+  }
+
+  const onStagePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    panDragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: pan.x,
+      originY: pan.y,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setPanning(true)
+  }
+
+  const onStagePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = panDragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    setPan({
+      x: drag.originX + (e.clientX - drag.startX),
+      y: drag.originY + (e.clientY - drag.startY),
+    })
+  }
+
+  const endStagePan = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = panDragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    panDragRef.current = null
+    setPanning(false)
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
   }
 
   const titleEl = (
@@ -321,7 +382,15 @@ export default function CanvasPreviewHost({
         >
           <ZoomOutRegular fontSize={16} />
         </button>
-        <span className={s.scaleLabel}>{Math.round(scale * 100)}%</span>
+        <button
+          type="button"
+          className={mergeClasses(s.toolBtnText, s.scaleLabel)}
+          onClick={resetView}
+          aria-label="重置为 100%"
+          title="重置为 100%"
+        >
+          {Math.round(scale * 100)}%
+        </button>
         <button
           type="button"
           className={s.toolBtn}
@@ -355,21 +424,35 @@ export default function CanvasPreviewHost({
           PDF
         </button>
       </div>
-      <div className={s.stage} onWheel={onWheel}>
+      <div
+        className={mergeClasses(s.stage, panning && s.stagePanning)}
+        onWheel={onWheel}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={endStagePan}
+        onPointerCancel={endStagePan}
+        aria-label="按住拖动平移画布"
+      >
         <div
           className={s.stageInner}
-          ref={previewRef}
-          style={{ transform: `scale(${scale})` }}
-          data-opptrix-canvas-preview=""
-          data-theme={resolvedScheme === 'dark' ? 'dark' : 'light'}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+          }}
         >
-          <PreviewErrorBoundary
-            onError={(message) => {
-              setRuntimeError(message)
-            }}
+          <div
+            className={s.previewRoot}
+            ref={previewRef}
+            data-opptrix-canvas-preview=""
+            data-theme={resolvedScheme === 'dark' ? 'dark' : 'light'}
           >
-            <Comp />
-          </PreviewErrorBoundary>
+            <PreviewErrorBoundary
+              onError={(message) => {
+                setRuntimeError(message)
+              }}
+            >
+              <Comp />
+            </PreviewErrorBoundary>
+          </div>
         </div>
       </div>
     </div>
