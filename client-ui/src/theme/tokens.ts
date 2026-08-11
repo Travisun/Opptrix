@@ -24,10 +24,18 @@ const layoutTokens = {
   panelWidth: '380px',
 
   chatThreadMaxWidth: '820px',
-  /** Desktop right inset; left uses chatThreadPaddingLeft for the outline rail. */
-  chatThreadPaddingX: '15px',
-  /** Desktop left inset — clears the ~22px message outline rail + breathing room. */
-  chatThreadPaddingLeft: '32px',
+  /** Desktop thread/composer horizontal inset (symmetric left & right). */
+  chatThreadPaddingX: '25px',
+  /**
+   * @deprecated Use `chatThreadPaddingX`. Outline rail is an overlay; no extra left padding.
+   */
+  chatThreadPaddingLeft: '25px',
+  /** Desktop message-outline left-edge hover hit strip (overlay; no layout gutter). */
+  chatOutlineHitWidth: '16px',
+  /** Visual width of the outline dot column. */
+  chatOutlineRailWidth: '28px',
+  /** @deprecated Use `chatOutlineHitWidth` / `chatOutlineRailWidth`. */
+  chatOutlineGutterWidth: '16px',
   chatThreadPaddingXMobile: '15px',
   chatComposerPadding: '12px',
   /** Composer 输入卡圆角（偏 pill，对齐 Cursor 单行输入卡；勿改全局 radiusXl） */
