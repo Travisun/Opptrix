@@ -59,7 +59,7 @@ export interface ChatContextUsage {
 
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
-/** 会话级 OpenAI 兼容采样参数（旧会话可能缺失，UI/请求侧默认温度 1、回复长度上限 4096） */
+/** 会话级 OpenAI 兼容采样参数（旧会话可能缺失，UI/请求侧默认温度 1、回复长度上限 32k） */
 export interface SessionLlmParams {
   temperature?: number
   maxTokens?: number
@@ -67,7 +67,16 @@ export interface SessionLlmParams {
 }
 
 export const DEFAULT_SESSION_TEMPERATURE = 1
-export const DEFAULT_SESSION_MAX_TOKENS = 4096
+/** 与 agent output-budget ORDINARY_OUTPUT_TOKENS（普模默认 32k）对齐 */
+export const DEFAULT_SESSION_MAX_TOKENS = 32_768
+export const OUTPUT_TOKENS_64K = 65_536
+export const OUTPUT_TOKENS_128K = 131_072
+/** 回复长度上限可选档位：32k / 64k / 128k */
+export const MAX_OUTPUT_TOKENS_PRESETS = [
+  DEFAULT_SESSION_MAX_TOKENS,
+  OUTPUT_TOKENS_64K,
+  OUTPUT_TOKENS_128K,
+] as const
 
 export function resolveSessionLlmParamsForUi(params?: SessionLlmParams | null): {
   temperature: number

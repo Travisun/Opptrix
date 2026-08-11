@@ -13,7 +13,10 @@ import {
   REASONING_OUTPUT_TOKENS,
   HIGH_REASONING_OUTPUT_TOKENS,
   ORDINARY_OUTPUT_TOKENS,
+  OUTPUT_TOKENS_64K,
+  OUTPUT_TOKENS_128K,
   LEGACY_DEFAULT_MAX_TOKENS,
+  LEGACY_ORDINARY_OUTPUT_TOKENS,
 } from '../packages/agent/dist/index.js'
 
 function listen(server) {
@@ -33,15 +36,17 @@ describe('output budget ladder', () => {
     assert.equal(looksLikeReasoningModel('gpt-4o'), false)
   })
 
-  it('auto ladder 16k / 32k / 64k', () => {
+  it('auto ladder 32k / 32k / 64k', () => {
     assert.equal(autoOutputBudget(false), ORDINARY_OUTPUT_TOKENS)
     assert.equal(autoOutputBudget(true, 'low'), REASONING_OUTPUT_TOKENS)
     assert.equal(autoOutputBudget(true, 'medium'), REASONING_OUTPUT_TOKENS)
     assert.equal(autoOutputBudget(true, 'high'), HIGH_REASONING_OUTPUT_TOKENS)
-    assert.equal(ORDINARY_OUTPUT_TOKENS, 16_384)
+    assert.equal(ORDINARY_OUTPUT_TOKENS, 32_768)
+    assert.equal(REASONING_OUTPUT_TOKENS, 32_768)
+    assert.equal(HIGH_REASONING_OUTPUT_TOKENS, OUTPUT_TOKENS_64K)
   })
 
-  it('raises default 4096 for ordinary and reasoning; respects higher / lower explicit', () => {
+  it('raises legacy 4096 / 16k for ordinary and reasoning; respects 64k / 128k / lower explicit', () => {
     assert.equal(
       resolveRequestMaxTokens({ model: 'gpt-4o' }),
       ORDINARY_OUTPUT_TOKENS,
@@ -55,10 +60,31 @@ describe('output budget ladder', () => {
     )
     assert.equal(
       resolveRequestMaxTokens({
+        explicitMaxTokens: LEGACY_ORDINARY_OUTPUT_TOKENS,
+        model: 'gpt-4o',
+      }),
+      ORDINARY_OUTPUT_TOKENS,
+    )
+    assert.equal(
+      resolveRequestMaxTokens({
         explicitMaxTokens: 512,
         model: 'gpt-4o',
       }),
       512,
+    )
+    assert.equal(
+      resolveRequestMaxTokens({
+        explicitMaxTokens: OUTPUT_TOKENS_64K,
+        model: 'gpt-4o',
+      }),
+      OUTPUT_TOKENS_64K,
+    )
+    assert.equal(
+      resolveRequestMaxTokens({
+        explicitMaxTokens: OUTPUT_TOKENS_128K,
+        model: 'gpt-4o',
+      }),
+      OUTPUT_TOKENS_128K,
     )
     assert.equal(
       resolveRequestMaxTokens({ model: 'deepseek-reasoner' }),
@@ -78,6 +104,14 @@ describe('output budget ladder', () => {
         model: 'deepseek-reasoner',
       }),
       80_000,
+    )
+    assert.equal(
+      resolveRequestMaxTokens({
+        explicitMaxTokens: OUTPUT_TOKENS_128K,
+        reasoningEffort: 'high',
+        model: 'deepseek-reasoner',
+      }),
+      OUTPUT_TOKENS_128K,
     )
     assert.equal(
       resolveRequestMaxTokens({

@@ -1,12 +1,26 @@
 /**
- * 推理模型输出额度 ladder — 默认 4096 会被思考过程吃光。
- * 机制对齐 Reasonix AutoOutputBudget（16k/32k/64k），不照搬其包结构。
+ * 输出额度 ladder — 历史默认 4096 / 旧普模 16k 会被长回复或思考吃光。
+ * 机制对齐 Reasonix AutoOutputBudget；普模默认 32k，用户可显式选 64k / 128k。
  */
 
 export const LEGACY_DEFAULT_MAX_TOKENS = 4096
-export const ORDINARY_OUTPUT_TOKENS = 16_384
+/** 旧普模默认（16k）；未真正定制时抬到普模 32k */
+export const LEGACY_ORDINARY_OUTPUT_TOKENS = 16_384
+
+/** 普模默认 32k（与推理 low|medium 同档） */
+export const ORDINARY_OUTPUT_TOKENS = 32_768
 export const REASONING_OUTPUT_TOKENS = 32_768
 export const HIGH_REASONING_OUTPUT_TOKENS = 65_536
+
+export const OUTPUT_TOKENS_64K = 65_536
+export const OUTPUT_TOKENS_128K = 131_072
+
+/** UI / 会话可选档位：32k | 64k | 128k */
+export const MAX_OUTPUT_TOKENS_PRESETS = [
+  ORDINARY_OUTPUT_TOKENS,
+  OUTPUT_TOKENS_64K,
+  OUTPUT_TOKENS_128K,
+] as const
 
 export type ReasoningEffortLevel = 'low' | 'medium' | 'high'
 
@@ -23,7 +37,7 @@ export function looksLikeReasoningModel(model?: string | null): boolean {
 
 /**
  * 按是否启用思考与 effort 给出自动输出额度。
- * - 非推理：16k（ORDINARY_OUTPUT_TOKENS；历史 4096 易截断长回复）
+ * - 非推理：32k（ORDINARY_OUTPUT_TOKENS；普模默认）
  * - 推理 / low|medium：32k（亦可按模型启发式启用）
  * - high：64k
  */
@@ -36,12 +50,17 @@ export function autoOutputBudget(
   return REASONING_OUTPUT_TOKENS
 }
 
+function isLegacyUnsetMaxTokens(n: number, ladder: number): boolean {
+  if (ladder <= n) return false
+  return n === LEGACY_DEFAULT_MAX_TOKENS || n === LEGACY_ORDINARY_OUTPUT_TOKENS
+}
+
 /**
  * 解析本轮请求 max_tokens。
- * - 未设置 → 自动 ladder（普模 16k / 推理 32k / high 64k）
- * - 显式更高 → 尊重用户
- * - 显式更低且非「历史默认 4096」→ 尊重用户偏低设置
- * - 显式等于 4096 且 ladder 更高 → 视为未真正定制，抬升
+ * - 未设置 → 自动 ladder（普模 32k / 推理 32k / high 64k）
+ * - 显式更高（含 64k / 128k）→ 尊重用户
+ * - 显式更低且非历史默认 → 尊重用户偏低设置
+ * - 显式等于 4096 或旧 16k 且 ladder 更高 → 视为未真正定制，抬升
  */
 export function resolveRequestMaxTokens(opts: {
   explicitMaxTokens?: number | null
@@ -58,8 +77,6 @@ export function resolveRequestMaxTokens(opts: {
   }
   const n = Math.min(1_000_000, Math.floor(explicit))
   if (n >= ladder) return n
-  if (n === LEGACY_DEFAULT_MAX_TOKENS && ladder > LEGACY_DEFAULT_MAX_TOKENS) {
-    return ladder
-  }
+  if (isLegacyUnsetMaxTokens(n, ladder)) return ladder
   return n
 }

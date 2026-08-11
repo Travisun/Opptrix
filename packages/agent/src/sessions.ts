@@ -24,7 +24,8 @@ export interface SessionLlmParams {
 }
 
 export const DEFAULT_SESSION_TEMPERATURE = 1
-export const DEFAULT_SESSION_MAX_TOKENS = 4096
+/** 与 output-budget ORDINARY_OUTPUT_TOKENS（普模默认 32k）对齐 */
+export const DEFAULT_SESSION_MAX_TOKENS = 32_768
 
 export function normalizeSessionLlmParams(raw: unknown): SessionLlmParams | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
