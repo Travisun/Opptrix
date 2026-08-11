@@ -8,6 +8,8 @@ import {
   resolveLegendItems,
   computeEffectiveShowValues,
   computePlotMinWidth,
+  computePlotLayoutWidth,
+  computePlotIntrinsicWidth,
   hasNamedSeriesField,
   buildChartOption,
 } from '../packages/canvas-kit/src/components/chart-echarts.ts'
@@ -97,10 +99,36 @@ describe('density helpers', () => {
     assert.equal(computeEffectiveShowValues('line', true, data.slice(0, 12)), true)
   })
 
-  it('plot minWidth scales with categories', () => {
+  it('plot minWidth scales with categories (legacy intrinsic px)', () => {
     const data = Array.from({ length: 10 }, (_, i) => ({ label: `L${i}`, value: i }))
-    assert.equal(computePlotMinWidth('line', data), 'max(100%, 360px)')
+    assert.equal(computePlotMinWidth('line', data), '360px')
     assert.equal(computePlotMinWidth('pie', data), undefined)
+  })
+
+  it('layout width stays compact when sparse', () => {
+    const data = Array.from({ length: 3 }, (_, i) => ({ label: `L${i}`, value: i }))
+    assert.equal(computePlotIntrinsicWidth('bar', data), 320)
+    assert.equal(computePlotLayoutWidth('bar', data, 800), 320)
+    assert.equal(computePlotLayoutWidth('pie', data, 800), 230)
+    assert.equal(computePlotLayoutWidth('heatmap', data, 800), 380)
+  })
+
+  it('layout width grows with density up to available', () => {
+    const data = Array.from({ length: 20 }, (_, i) => ({ label: `L${i}`, value: i }))
+    assert.equal(computePlotIntrinsicWidth('line', data), 720)
+    assert.equal(computePlotLayoutWidth('line', data, 800), 720)
+    assert.equal(computePlotLayoutWidth('line', data, 500), 500)
+  })
+
+  it('heatmap layout width scales with columns', () => {
+    const data = Array.from({ length: 12 }, (_, i) => ({
+      label: `c${i}`,
+      value: i,
+      row: 'r0',
+      col: `c${i}`,
+    }))
+    assert.equal(computePlotIntrinsicWidth('heatmap', data), Math.max(380, 12 * 36))
+    assert.equal(computePlotLayoutWidth('heatmap', data, 400), 400)
   })
 })
 

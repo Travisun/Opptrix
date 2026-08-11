@@ -76,4 +76,5 @@ export default function Report() {
 
 - **长表 `data[].series`**：任一数据点带 `series` 时，`bar` / `line` 按系列分组（类目 = `label` 首次出现顺序；缺测点断线）；图例为系列名，色取该系列首点 `color` 或 `chart1…chart5` 轮转。
 - **无 `series`**：`bar` / `pie` 仍按点上色与图例；`line` 为**单系列**统一主色，图例仅 1 项（`title` 或「趋势」），勿用每点不同 `color` 冒充多指标。
-- **密度**：类目多时轴标签 `hideOverlap` + 自动旋转；点数/单元格过密时自动关闭数值标注（仍可用 `showTooltip`）；`bar`/`line` 外层可横滚（`minWidth ≈ n×36px`）。
+- **密度**：类目多时轴标签 `hideOverlap` + 自动旋转；点数/单元格过密时自动关闭数值标注（仍可用 `showTooltip`）。
+- **自适应宽度**：画布内图表按数据密度增长（bar/line ≈ `n×36px`，不低于紧凑默认 320/230/380），**上限**为父容器宽度；稀疏数据保持紧凑，**勿**手写 `width: 100%` 把图拉满 Surface。

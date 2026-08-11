@@ -17,6 +17,14 @@ const HEATMAP_VALUE_LIMIT = 16
 const CATEGORY_ROTATE_THRESHOLD = 8
 const PX_PER_CATEGORY = 36
 
+/** Compact default plot widths (match former CSS max-width). */
+const COMPACT_PLOT_WIDTH: Record<ChartType, number> = {
+  bar: 320,
+  line: 320,
+  pie: 230,
+  heatmap: 380,
+}
+
 export function resolveSeriesColors(
   data: ChartDatum[],
   tokens: CanvasSemanticTokens,
@@ -177,12 +185,56 @@ export function computeEffectiveShowValues(
   return data.length <= DENSE_VALUE_LIMIT
 }
 
-/** bar/line 横滚最小宽度；pie/heatmap 返回 undefined。 */
+function heatmapColumnCount(data: ChartDatum[]): number {
+  const cols = new Set<string>()
+  for (const d of data) {
+    if (d.col != null && d.col !== '') cols.add(d.col)
+  }
+  return cols.size
+}
+
+/**
+ * Intrinsic plot width from data density (before clamping to container).
+ * Sparse charts stay near compact defaults; dense bar/line/heatmap grow with categories/columns.
+ */
+export function computePlotIntrinsicWidth(type: ChartType, data: ChartDatum[]): number {
+  const compact = COMPACT_PLOT_WIDTH[type]
+  if (type === 'pie') return compact
+  if (type === 'heatmap') {
+    const cols = heatmapColumnCount(data)
+    if (cols <= 0) return compact
+    return Math.max(compact, cols * PX_PER_CATEGORY)
+  }
+  const n = cartesianCategoryCount(data)
+  if (n <= 0) return compact
+  return Math.max(compact, n * PX_PER_CATEGORY)
+}
+
+/**
+ * Adaptive plot width: min(available, max(compact, intrinsic)).
+ * Sparse data → compact (does not stretch to 100% Surface).
+ * Dense data → grows up to availableWidthPx (prefer fitting over horizontal scroll).
+ */
+export function computePlotLayoutWidth(
+  type: ChartType,
+  data: ChartDatum[],
+  availableWidthPx: number,
+): number {
+  const available = Math.max(1, Math.floor(availableWidthPx))
+  const compact = COMPACT_PLOT_WIDTH[type]
+  const intrinsic = computePlotIntrinsicWidth(type, data)
+  return Math.min(available, Math.max(compact, intrinsic))
+}
+
+/**
+ * @deprecated Prefer `computePlotLayoutWidth`. Kept for callers/tests that only need intrinsic px.
+ * bar/line: intrinsic pixel string; pie/heatmap: undefined (legacy scroll path).
+ */
 export function computePlotMinWidth(type: ChartType, data: ChartDatum[]): string | undefined {
   if (type !== 'bar' && type !== 'line') return undefined
   const n = cartesianCategoryCount(data)
   if (n <= 0) return undefined
-  return `max(100%, ${n * PX_PER_CATEGORY}px)`
+  return `${Math.max(COMPACT_PLOT_WIDTH[type], n * PX_PER_CATEGORY)}px`
 }
 
 function uniqueSorted(values: string[]): string[] {
