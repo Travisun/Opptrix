@@ -66,17 +66,17 @@ describe('rag engines bundled paths', () => {
     assert.doesNotMatch(src, /downloadWheel/)
   })
 
-  it('prebuild and main inject engines', () => {
+  it('prebuild and sidecar-launch inject engines', () => {
     const prebuild = fs.readFileSync(
       path.join(ROOT, 'apps/desktop/scripts/prebuild.mjs'),
       'utf8',
     )
     assert.match(prebuild, /stage-rag-engines\.mjs/)
-    const main = fs.readFileSync(
-      path.join(ROOT, 'apps/desktop/electron/main.cjs'),
+    const sidecarLaunch = fs.readFileSync(
+      path.join(ROOT, 'apps/desktop/electron/os-schedule/sidecar-launch.cjs'),
       'utf8',
     )
-    assert.match(main, /OPPTRIX_RAG_ENGINES_BUNDLED_DIR/)
+    assert.match(sidecarLaunch, /OPPTRIX_RAG_ENGINES_BUNDLED_DIR/)
   })
 
   it('ensureBundledRagRuntime enables embedding; layout stays retired', async () => {
