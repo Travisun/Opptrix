@@ -79,6 +79,11 @@ export interface ChatMessage {
   tool_calls?: ToolCall[]
   tool_call_id?: string
   name?: string
+  /**
+   * DeepSeek 等思考链；仅当本字段 !== undefined 时序列化为 `reasoning_content`
+   *（含空串，供 tool 轮「丢思考也要带 key」）。
+   */
+  reasoningContent?: string
 }
 
 export interface LlmTurn {
@@ -171,6 +176,10 @@ function serializeMessage(m: ChatMessage): Record<string, unknown> {
     ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
     ...(m.name ? { name: m.name } : {}),
+    // undefined 不写；空串仍写出（tool 轮续写 DeepSeek thinking）
+    ...(m.reasoningContent !== undefined
+      ? { reasoning_content: m.reasoningContent }
+      : {}),
   }
 }
 

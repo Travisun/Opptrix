@@ -23,23 +23,22 @@ export function looksLikeReasoningModel(model?: string | null): boolean {
 
 /**
  * 按是否启用思考与 effort 给出自动输出额度。
- * - 非推理：保持历史默认 4096（避免普模无故抬升）
+ * - 非推理：16k（ORDINARY_OUTPUT_TOKENS；历史 4096 易截断长回复）
  * - 推理 / low|medium：32k（亦可按模型启发式启用）
  * - high：64k
- * ORDINARY_OUTPUT_TOKENS(16k) 预留给显式「普模抬升」场景
  */
 export function autoOutputBudget(
   reasoningEnabled: boolean,
   effort?: ReasoningEffortLevel | null,
 ): number {
-  if (!reasoningEnabled) return LEGACY_DEFAULT_MAX_TOKENS
+  if (!reasoningEnabled) return ORDINARY_OUTPUT_TOKENS
   if (effort === 'high') return HIGH_REASONING_OUTPUT_TOKENS
   return REASONING_OUTPUT_TOKENS
 }
 
 /**
  * 解析本轮请求 max_tokens。
- * - 未设置 → 自动 ladder
+ * - 未设置 → 自动 ladder（普模 16k / 推理 32k / high 64k）
  * - 显式更高 → 尊重用户
  * - 显式更低且非「历史默认 4096」→ 尊重用户偏低设置
  * - 显式等于 4096 且 ladder 更高 → 视为未真正定制，抬升

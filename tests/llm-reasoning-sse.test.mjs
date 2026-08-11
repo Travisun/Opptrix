@@ -33,15 +33,33 @@ describe('output budget ladder', () => {
     assert.equal(looksLikeReasoningModel('gpt-4o'), false)
   })
 
-  it('auto ladder 4096 / 32k / 64k', () => {
-    assert.equal(autoOutputBudget(false), LEGACY_DEFAULT_MAX_TOKENS)
+  it('auto ladder 16k / 32k / 64k', () => {
+    assert.equal(autoOutputBudget(false), ORDINARY_OUTPUT_TOKENS)
     assert.equal(autoOutputBudget(true, 'low'), REASONING_OUTPUT_TOKENS)
     assert.equal(autoOutputBudget(true, 'medium'), REASONING_OUTPUT_TOKENS)
     assert.equal(autoOutputBudget(true, 'high'), HIGH_REASONING_OUTPUT_TOKENS)
     assert.equal(ORDINARY_OUTPUT_TOKENS, 16_384)
   })
 
-  it('raises default 4096 for reasoning models; respects higher explicit', () => {
+  it('raises default 4096 for ordinary and reasoning; respects higher / lower explicit', () => {
+    assert.equal(
+      resolveRequestMaxTokens({ model: 'gpt-4o' }),
+      ORDINARY_OUTPUT_TOKENS,
+    )
+    assert.equal(
+      resolveRequestMaxTokens({
+        explicitMaxTokens: LEGACY_DEFAULT_MAX_TOKENS,
+        model: 'gpt-4o-mini',
+      }),
+      ORDINARY_OUTPUT_TOKENS,
+    )
+    assert.equal(
+      resolveRequestMaxTokens({
+        explicitMaxTokens: 512,
+        model: 'gpt-4o',
+      }),
+      512,
+    )
     assert.equal(
       resolveRequestMaxTokens({ model: 'deepseek-reasoner' }),
       REASONING_OUTPUT_TOKENS,
@@ -152,6 +170,103 @@ describe('reasoning_content SSE', () => {
       assert.equal(turn.reasoningContent, '内部推理')
       assert.equal(turn.message.content, '最终答案')
       assert.equal(turn.finishReason, 'stop')
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
+  })
+
+  it('tool_calls round-trips reasoning_content (incl. empty string) on next request', async () => {
+    /** @type {Record<string, unknown>[]} */
+    const bodies = []
+    let hit = 0
+    const server = createServer(async (req, res) => {
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      bodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      hit += 1
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      if (hit === 1) {
+        res.end(JSON.stringify({
+          choices: [{
+            finish_reason: 'tool_calls',
+            message: {
+              role: 'assistant',
+              content: null,
+              reasoning_content: '先查行情再答',
+              tool_calls: [{
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'get_quote', arguments: '{"code":"600519"}' },
+              }],
+            },
+          }],
+        }))
+        return
+      }
+      res.end(JSON.stringify({
+        choices: [{
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'ok' },
+        }],
+      }))
+    })
+    const port = await listen(server)
+    try {
+      const llm = createProvider({
+        provider: 'deepseek',
+        apiKey: 'test-key',
+        model: 'deepseek-reasoner',
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+      })
+      const turn1 = await llm.chat([{ role: 'user', content: '茅台怎样' }])
+      assert.equal(turn1.finishReason, 'tool_calls')
+      assert.equal(turn1.reasoningContent, '先查行情再答')
+
+      // 对齐 Engine：工具轮 push 一律带 reasoningContent（含空串）
+      const assistantWithReasoning = {
+        role: 'assistant',
+        content: null,
+        tool_calls: turn1.message.tool_calls,
+        reasoningContent: turn1.reasoningContent ?? '',
+      }
+      await llm.chat([
+        { role: 'user', content: '茅台怎样' },
+        assistantWithReasoning,
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          name: 'get_quote',
+          content: '{"price":1800}',
+        },
+      ])
+      assert.equal(bodies.length, 2)
+      const wire = /** @type {any} */ (bodies[1]).messages.find(
+        (m) => m.role === 'assistant' && m.tool_calls,
+      )
+      assert.ok(wire)
+      assert.equal(wire.reasoning_content, '先查行情再答')
+
+      // 空思考也要带 key
+      await llm.chat([
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: turn1.message.tool_calls,
+          reasoningContent: '',
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          name: 'get_quote',
+          content: '{}',
+        },
+      ])
+      const emptyWire = /** @type {any} */ (bodies[2]).messages.find(
+        (m) => m.role === 'assistant' && m.tool_calls,
+      )
+      assert.ok(emptyWire)
+      assert.equal(emptyWire.reasoning_content, '')
+      assert.ok('reasoning_content' in emptyWire)
     } finally {
       await new Promise((r) => server.close(r))
     }

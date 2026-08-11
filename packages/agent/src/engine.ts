@@ -1072,8 +1072,18 @@ export class AgentEngine {
       usage?: TokenUsage,
       usageEstimated?: boolean,
       attachments?: ChatAttachmentMeta[],
+      reasoningContent?: string,
     ) => {
-      this.pushAssistant(record!, reply, used, steps, usage, usageEstimated, attachments)
+      this.pushAssistant(
+        record!,
+        reply,
+        used,
+        steps,
+        usage,
+        usageEstimated,
+        attachments,
+        reasoningContent,
+      )
     }
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
@@ -1299,6 +1309,8 @@ export class AgentEngine {
           role: 'assistant',
           content: turnContentText || null,
           tool_calls: turn.message.tool_calls,
+          // 工具轮一律带上（含空串），下一请求 wire 回传 reasoning_content
+          reasoningContent: turn.reasoningContent ?? '',
         })
         this.sessions.save(record)
 
@@ -1436,6 +1448,9 @@ export class AgentEngine {
         content: reply,
         ...(lastRoundEstimatedTokens != null ? { estimatedTokens: lastRoundEstimatedTokens } : {}),
       })
+      const finalReasoning = turn.reasoningContent?.trim()
+        ? turn.reasoningContent
+        : undefined
       pushAssistant(
         reply,
         toolsUsed,
@@ -1443,6 +1458,7 @@ export class AgentEngine {
         chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
         chatUsage.estimated,
         mergeAssistantAttachments(outputAttachments),
+        finalReasoning,
       )
       void emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
@@ -1485,11 +1501,17 @@ export class AgentEngine {
     usage?: TokenUsage,
     usageEstimated?: boolean,
     attachments?: ChatAttachmentMeta[],
+    reasoningContent?: string,
   ) {
     if (this.sessions.shouldMaterializeContext(record)) {
       this.sessions.materializeContextRef(record)
     }
-    record.messages.push({ role: 'assistant', content: reply })
+    record.messages.push({
+      role: 'assistant',
+      content: reply,
+      // 终轮仅非空思考写入，避免污染普模请求体
+      ...(reasoningContent ? { reasoningContent } : {}),
+    })
     if (!record.turns) record.turns = []
     record.turns.push({
       role: 'assistant',

@@ -86,7 +86,7 @@ server · (desktop 仅壳层 + 打包)
 - **AgentEngine**：OpenAI 兼容 Function Calling + 进程内 MCP Broker。
 - **ToolRegistry**：投研 MCP 工具（市场、ETF、组合、跨市场搜索与评估等），见 `packages/agent/src/tools.ts`；工作区 / `http_fetch` / `shell_run`（`@anthropic-ai/sandbox-runtime` OS 隔离 + 会话 grants / 联网安装 sticky）见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 与 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)。
 - **多会话**：会话与消息持久化经 server → user-store。
-- **会话前缀缓存**：稳定 system（角色/纪律/packs）与本轮动态尾注分离——【会话时钟】与「本轮工具选型卡」经 turn-tail 追加到发给模型的 messages 末尾，避免每轮改写 system 导致 DeepSeek 等前缀缓存失效；推理模型按 effort/模型名自动抬升输出额度（16k/32k/64k），并累积 `reasoning_content`。
+- **会话前缀缓存**：稳定 system（角色/纪律/packs）与本轮动态尾注分离——【会话时钟】与「本轮工具选型卡」经 turn-tail 追加到发给模型的 messages 末尾，避免每轮改写 system 导致 DeepSeek 等前缀缓存失效；输出额度 ladder 为普模 16k / 推理 32k / high 64k；工具轮将 `reasoning_content` 写入会话并在下一请求回传（空串也保留字段），终轮仅非空思考写入。
 
 ## Hub 与 Search
 
