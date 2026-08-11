@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Input, Spinner, Text, makeStyles } from '@fluentui/react-components'
+import { Spinner, Text, makeStyles } from '@fluentui/react-components'
 import { CheckmarkCircleRegular } from '@fluentui/react-icons'
-import { getProviderCatalog, saveProviderConfig, testProviderConfig } from '../api/client'
+import { getProviderCatalog } from '../api/client'
 import type { PublicProviderRuntime } from '../types/provider'
-import OpptrixField from '../components/opptrix/OpptrixField'
+import { ProviderSettingsForm } from '../pages/settings/ProviderSettingsForm'
 import { openExternalUrl } from '../platform/openUrl'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ONBOARDING_COPY } from './manifest'
@@ -69,11 +69,6 @@ const useStyles = makeStyles({
     alignSelf: 'flex-start',
     fontSize: 'var(--opptrix-font-md)',
   },
-  error: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.error,
-    lineHeight: 1.45,
-  },
   loading: {
     display: 'flex',
     alignItems: 'center',
@@ -83,15 +78,34 @@ const useStyles = makeStyles({
   },
 })
 
+/** True when all required secret fields from settingsFields are configured. */
 export function isTonghuashunConfigured(provider: PublicProviderRuntime | null | undefined): boolean {
   if (!provider) return false
-  return provider.secretsConfigured.apiKey === true
+  const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
+  if (requiredSecrets.length > 0) {
+    return requiredSecrets.every(f => provider.secretsConfigured[f.key] === true)
+  }
+  const secrets = provider.settingsFields.filter(f => f.type === 'secret')
+  if (secrets.length > 0) {
+    return secrets.every(f => provider.secretsConfigured[f.key] === true)
+  }
+  return provider.canEnable
+}
+
+function firstSecretPreview(provider: PublicProviderRuntime | null | undefined): string | undefined {
+  if (!provider?.secretPreviews) return undefined
+  const secretField = provider.settingsFields.find(f => f.type === 'secret')
+  if (!secretField) return undefined
+  const preview = provider.secretPreviews[secretField.key]
+  return preview?.trim() ? preview : undefined
 }
 
 function findTonghuashunProvider(
-  groups: { providers: PublicProviderRuntime[] }[],
+  catalog: { groups: { providers: PublicProviderRuntime[] }[]; providers?: PublicProviderRuntime[] },
 ): PublicProviderRuntime | null {
-  for (const group of groups) {
+  const fromFlat = catalog.providers?.find(p => p.providerId === TONGHUASHUN_PROVIDER_ID)
+  if (fromFlat) return fromFlat
+  for (const group of catalog.groups) {
     const hit = group.providers.find(p => p.providerId === TONGHUASHUN_PROVIDER_ID)
     if (hit) return hit
   }
@@ -105,6 +119,7 @@ export function OnboardingFuyaoReadyPanel({
 }) {
   const s = useStyles()
   const shell = useOnboardingShellStyles()
+  const preview = firstSecretPreview(provider)
 
   return (
     <>
@@ -120,9 +135,9 @@ export function OnboardingFuyaoReadyPanel({
             ? ONBOARDING_COPY.fuyao.readyEnabled
             : ONBOARDING_COPY.fuyao.readyDisabled}
         </Text>
-        {provider?.secretPreviews?.apiKey && (
+        {preview && (
           <Text className={s.hint} block>
-            当前密钥：{provider.secretPreviews.apiKey}
+            当前密钥：{preview}
           </Text>
         )}
       </div>
@@ -142,51 +157,46 @@ export function OnboardingFuyaoPanel({
   const s = useStyles()
   const shell = useOnboardingShellStyles()
   const [loading, setLoading] = useState(true)
-  const [apiKey, setApiKey] = useState('')
-  const [advancing, setAdvancing] = useState(false)
-  const [error, setError] = useState('')
+  const [provider, setProvider] = useState<PublicProviderRuntime | null>(null)
 
   const advanceImplRef = useRef<() => Promise<void>>(async () => {})
 
-  const runAdvance = useCallback(async () => {
-    const key = apiKey.trim()
-    if (!key) {
-      setError(ONBOARDING_COPY.fuyao.emptyKeyError)
-      return
-    }
-    setAdvancing(true)
-    setError('')
+  const refresh = useCallback(async () => {
     try {
-      const test = await testProviderConfig(TONGHUASHUN_PROVIDER_ID, { apiKey: key })
-      if (!test.data?.ok) {
-        setError(test.data?.message ?? ONBOARDING_COPY.fuyao.testFailedError)
-        return
-      }
-      await saveProviderConfig(TONGHUASHUN_PROVIDER_ID, {
-        enabled: true,
-        extra: { apiKey: key },
-      })
-      onConfigured()
-      onComplete()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '连接失败，请稍后重试')
+      const data = await getProviderCatalog()
+      const hit = findTonghuashunProvider(data)
+      setProvider(hit)
+      return hit
+    } catch {
+      setProvider(null)
+      return null
     } finally {
-      setAdvancing(false)
+      setLoading(false)
     }
-  }, [apiKey, onComplete, onConfigured])
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const configured = isTonghuashunConfigured(provider)
+
+  const runAdvance = useCallback(async () => {
+    if (!isTonghuashunConfigured(provider)) return
+    onConfigured()
+    onComplete()
+  }, [provider, onComplete, onConfigured])
 
   advanceImplRef.current = runAdvance
 
-  const canAdvance = apiKey.trim().length > 0 && !advancing
-
   const reportNav = useCallback(() => {
     onNavChange({
-      canAdvance,
-      advancing,
-      advanceLabel: advancing ? '验证中…' : '继续',
+      canAdvance: configured,
+      advancing: false,
+      advanceLabel: '继续',
       advance: () => advanceImplRef.current(),
     })
-  }, [advancing, canAdvance, onNavChange])
+  }, [configured, onNavChange])
 
   useEffect(() => {
     reportNav()
@@ -194,23 +204,11 @@ export function OnboardingFuyaoPanel({
 
   useEffect(() => () => { onNavChange(null) }, [onNavChange])
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    void getProviderCatalog()
-      .then(data => {
-        if (cancelled) return
-        const provider = findTonghuashunProvider(data.groups)
-        if (provider?.values.apiKey && typeof provider.values.apiKey === 'string') {
-          setApiKey(String(provider.values.apiKey))
-        }
-      })
-      .catch(() => { /* keep empty */ })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+  const handleSaved = useCallback(() => {
+    void refresh().then((next) => {
+      if (isTonghuashunConfigured(next)) onConfigured()
+    })
+  }, [refresh, onConfigured])
 
   if (loading) {
     return (
@@ -218,6 +216,17 @@ export function OnboardingFuyaoPanel({
         <Spinner size="tiny" />
         <Text>正在读取数据源配置…</Text>
       </div>
+    )
+  }
+
+  if (!provider) {
+    return (
+      <>
+        <Text className={shell.sectionTitle} block>{ONBOARDING_COPY.fuyao.title}</Text>
+        <Text className={shell.sectionLead} block>
+          暂时无法加载历史行情配置，请稍后在设置中继续完成。
+        </Text>
+      </>
     )
   }
 
@@ -238,25 +247,7 @@ export function OnboardingFuyaoPanel({
         >
           {ONBOARDING_COPY.fuyao.apiPortalLinkLabel}
         </OnboardingTextLink>
-        <OpptrixField
-          label={ONBOARDING_COPY.fuyao.apiFieldLabel}
-          hint={ONBOARDING_COPY.fuyao.apiFieldHint}
-        >
-          <Input
-            appearance="filled-darker"
-            size="medium"
-            type="password"
-            value={apiKey}
-            placeholder={ONBOARDING_COPY.fuyao.apiPlaceholder}
-            onChange={(_, d) => {
-              setApiKey(d.value ?? '')
-              if (error) setError('')
-            }}
-          />
-        </OpptrixField>
-        {error && (
-          <Text className={s.error} block role="alert">{error}</Text>
-        )}
+        <ProviderSettingsForm provider={provider} onSaved={handleSaved} />
       </div>
     </>
   )
