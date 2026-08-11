@@ -329,11 +329,13 @@ export default function OnboardingWizard({
       )
     } else {
       body = (
-        <OnboardingFuyaoPanel
-          onConfigured={() => { void refreshFuyaoStatus() }}
-          onComplete={goNext}
-          onNavChange={setFuyaoNav}
-        />
+        <SettingsToastProvider>
+          <OnboardingFuyaoPanel
+            onConfigured={() => { void refreshFuyaoStatus() }}
+            onComplete={goNext}
+            onNavChange={setFuyaoNav}
+          />
+        </SettingsToastProvider>
       )
       footerSecondary = (
         <OpptrixButton variant="ghost" onClick={skipFuyao}>
