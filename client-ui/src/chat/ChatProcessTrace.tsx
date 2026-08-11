@@ -579,10 +579,20 @@ interface ThinkingSnippetRowProps {
   active: boolean
 }
 
-/** 思考过程 — 进行中显示动画，完成后可展开查看 */
+/** 思考过程 — live 进行中展示全文并滚动；历史默认折叠 */
 function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
   const s = useStyles()
   const [expanded, setExpanded] = useState(false)
+  const bodyScrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!active) return
+    const el = bodyScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [active, snippet.length])
+
+  const showBody = active || expanded
 
   return (
     <div className={s.stepRow}>
@@ -590,7 +600,7 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
         type="button"
         className={s.stepHead}
         onClick={() => !active && setExpanded(v => !v)}
-        aria-expanded={expanded}
+        aria-expanded={active ? true : expanded}
         disabled={active}
       >
         <span className={s.stepIcon} aria-hidden>
@@ -606,11 +616,16 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
           {active ? '正在梳理思路…' : '思考过程'}
         </Text>
       </button>
-      {!active && expanded && (
+      {showBody && (
         <div className={s.stepBody}>
-          <Text className={s.thinkingSnippet} block>
-            {snippet}
-          </Text>
+          <div
+            ref={bodyScrollRef}
+            className={mergeClasses(s.detailBlock, 'opptrix-scroll')}
+          >
+            <Text className={s.thinkingSnippet} block>
+              {snippet}
+            </Text>
+          </div>
         </div>
       )}
     </div>
@@ -652,9 +667,9 @@ export default function ChatProcessTrace({
   const showLiveSnippet = live && Boolean(thinkingSnippet)
   const showHistorySnippet = Boolean(thinkingSnippet?.trim() && !live)
 
-  // 实时执行时跟随最新步骤滚动到底部（步骤新增或内容/状态更新时）。
+  // 实时执行时跟随最新步骤 / 思考全文滚动到底部
   const liveProgressKey = live
-    ? `${steps.length}:${steps.map(st => st.status).join(',')}:${estimatedTokens ?? ''}:${phaseLabel ?? ''}`
+    ? `${steps.length}:${steps.map(st => st.status).join(',')}:${estimatedTokens ?? ''}:${phaseLabel ?? ''}:${thinkingSnippet?.length ?? 0}`
     : ''
   useEffect(() => {
     if (!live) return
@@ -693,7 +708,7 @@ export default function ChatProcessTrace({
       )}
 
       {showLiveSnippet && thinkingSnippet && (
-        <ThinkingSnippetRow snippet={thinkingSnippet} active={snippetActive} />
+        <ThinkingSnippetRow snippet={thinkingSnippet} active />
       )}
 
       {showHistorySnippet && thinkingSnippet && (

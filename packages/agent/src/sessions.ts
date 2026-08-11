@@ -104,7 +104,7 @@ export interface DisplayMessage {
   usage?: TokenUsage
   usageEstimated?: boolean
   attachments?: ChatAttachmentMeta[]
-  /** 终轮非空思考链（历史气泡可折叠展示） */
+  /** 整轮思考时间线（工具轮+终轮 reasoning 拼接；旧会话可能仅终轮） */
   reasoningContent?: string
 }
 
@@ -154,7 +154,7 @@ export interface SessionRecord extends SessionMeta {
     usage?: TokenUsage
     usageEstimated?: boolean
     attachments?: ChatAttachmentMeta[]
-    /** 终轮非空思考链；工具轮不写 */
+    /** 整轮思考时间线（工具轮+终轮拼接；旧会话可能仅终轮） */
     reasoningContent?: string
   }[]
   contextRef?: SessionContextRef | null

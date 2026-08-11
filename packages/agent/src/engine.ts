@@ -60,6 +60,7 @@ import {
   formatArgsDetail,
   formatToolLabel,
 } from './chat-progress.js'
+import { appendReasoningTimeline } from './reasoning-timeline.js'
 import {
   UserPromptBridge,
   createUserPromptId,
@@ -1045,6 +1046,8 @@ export class AgentEngine {
     const toolSteps: ChatToolStep[] = []
     const createdAttachments: ChatAttachmentMeta[] = []
     let chatUsage = createEmptyChatUsage()
+    /** 本轮用户提问的思考时间线（工具轮 + 终轮 reasoning 按序拼接） */
+    let turnReasoningTimeline = ''
 
     const mergeAssistantAttachments = (
       outputAttachments?: ChatAttachmentMeta[],
@@ -1088,6 +1091,7 @@ export class AgentEngine {
       usageEstimated?: boolean,
       attachments?: ChatAttachmentMeta[],
       reasoningContent?: string,
+      turnReasoningContent?: string,
     ) => {
       this.pushAssistant(
         record!,
@@ -1098,6 +1102,7 @@ export class AgentEngine {
         usageEstimated,
         attachments,
         reasoningContent,
+        turnReasoningContent,
       )
     }
 
@@ -1218,14 +1223,14 @@ export class AgentEngine {
             if (delta.reasoningText) {
               const prevLen = reasoningAccumulated.length
               reasoningAccumulated += delta.reasoningText
-              // 首段或每新增约 120 字推一次 thinking
+              // 首段或每新增约 120 字推一次；snippet 为整轮累积全文（含先前轮次）
               if (prevLen === 0 || reasoningAccumulated.length - prevLen >= 120
                 || Math.floor(reasoningAccumulated.length / 120) > Math.floor(prevLen / 120)) {
                 emit({
                   type: 'thinking',
                   round: round + 1,
                   label: '模型正在思考…',
-                  snippet: reasoningAccumulated.slice(-400),
+                  snippet: appendReasoningTimeline(turnReasoningTimeline, reasoningAccumulated),
                 })
               }
             }
@@ -1319,13 +1324,14 @@ export class AgentEngine {
       }
 
       if (turn.finishReason === 'tool_calls' && turn.message.tool_calls?.length) {
-        const thinkingSnippet = turnContentText.trim()
-        if (thinkingSnippet) {
+        const roundReasoning = turn.reasoningContent?.trim() ?? ''
+        if (roundReasoning) {
+          turnReasoningTimeline = appendReasoningTimeline(turnReasoningTimeline, roundReasoning)
           emit({
             type: 'thinking',
             round: round + 1,
-            label: '模型分析思路',
-            snippet: thinkingSnippet,
+            label: '模型正在思考…',
+            snippet: turnReasoningTimeline,
             active_packs: this.lastRoundPackIds,
             tools_exposed_count: activeNames.length,
           })
@@ -1342,6 +1348,11 @@ export class AgentEngine {
 
         let refreshTools = false
         const activeSet = new Set(activeNames)
+        // 工具步骤勿复制长 reasoning；仅保留极短 content 备注（≤80）
+        const contentBrief = turnContentText.trim()
+        const stepThinking = contentBrief.length > 0 && contentBrief.length <= 80
+          ? contentBrief
+          : undefined
 
         for (const tc of turn.message.tool_calls) {
           throwIfAborted(signal)
@@ -1359,7 +1370,7 @@ export class AgentEngine {
             status: 'running',
             argsPreview: formatArgsPreview(args),
             argsDetail: formatArgsDetail(args),
-            thinking: thinkingSnippet || undefined,
+            thinking: stepThinking,
             startedAt: new Date().toISOString(),
           }
           toolSteps.push(runningStep)
@@ -1474,9 +1485,12 @@ export class AgentEngine {
         content: reply,
         ...(lastRoundEstimatedTokens != null ? { estimatedTokens: lastRoundEstimatedTokens } : {}),
       })
-      const finalReasoning = turn.reasoningContent?.trim()
-        ? turn.reasoningContent
-        : undefined
+      const finalRoundReasoning = turn.reasoningContent?.trim() ?? ''
+      if (finalRoundReasoning) {
+        turnReasoningTimeline = appendReasoningTimeline(turnReasoningTimeline, finalRoundReasoning)
+      }
+      const turnTimeline = turnReasoningTimeline.trim() || undefined
+      // messages：仅终轮 reasoning（wire 不变）；turns：整轮时间线供历史气泡
       pushAssistant(
         reply,
         toolsUsed,
@@ -1484,7 +1498,8 @@ export class AgentEngine {
         chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
         chatUsage.estimated,
         mergeAssistantAttachments(outputAttachments),
-        finalReasoning,
+        finalRoundReasoning || undefined,
+        turnTimeline,
       )
       void emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
@@ -1528,6 +1543,8 @@ export class AgentEngine {
     usageEstimated?: boolean,
     attachments?: ChatAttachmentMeta[],
     reasoningContent?: string,
+    /** 写入 turns 的思考时间线；缺省同 reasoningContent（兼容仅终轮） */
+    turnReasoningContent?: string,
   ) {
     if (this.sessions.shouldMaterializeContext(record)) {
       this.sessions.materializeContextRef(record)
@@ -1535,10 +1552,11 @@ export class AgentEngine {
     record.messages.push({
       role: 'assistant',
       content: reply,
-      // 终轮仅非空思考写入，避免污染普模请求体
+      // 终轮仅非空思考写入 messages，避免污染普模 / 改变 wire
       ...(reasoningContent ? { reasoningContent } : {}),
     })
     if (!record.turns) record.turns = []
+    const turnReasoning = turnReasoningContent ?? reasoningContent
     record.turns.push({
       role: 'assistant',
       content: reply,
@@ -1548,8 +1566,8 @@ export class AgentEngine {
       usage,
       usageEstimated,
       attachments: attachments?.length ? attachments : undefined,
-      // 终轮非空思考写入 turn，供历史气泡折叠展示
-      ...(reasoningContent ? { reasoningContent } : {}),
+      // 整轮思考时间线（非空）写入 turn，供历史气泡折叠展示
+      ...(turnReasoning ? { reasoningContent: turnReasoning } : {}),
     })
     if (usage) {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)

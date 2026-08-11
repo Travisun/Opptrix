@@ -1,5 +1,9 @@
 export { AgentEngine, ChatCancelledError, type AgentSettings, type ChatResult, type SessionContextUsage } from './engine.js'
 export {
+  appendReasoningTimeline,
+  REASONING_TIMELINE_SEP,
+} from './reasoning-timeline.js'
+export {
   type ChatProgressEvent,
   type ChatProgressOptions,
   type ChatToolStep,

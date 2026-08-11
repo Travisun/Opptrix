@@ -109,6 +109,7 @@ export function applyChatProgressEvent(
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
           phaseLabel: stripPhaseEllipsis(event.label),
           clearEstimatedTokens: true,
+          // 引擎推送整轮累积全文；直接替换（非仅保留末尾片段）
           thinkingSnippet: event.snippet ?? snapshot.liveTrace?.thinkingSnippet,
         }),
       }
