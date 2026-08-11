@@ -6,7 +6,7 @@ import {
 } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { ChatAttachmentMeta, ChatDisplayMessage, MediaKind } from '../types/chat'
-import { opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 import MarkdownMessage from './MarkdownMessage'
@@ -27,6 +27,9 @@ const REPORT_KINDS = new Set<MediaKind>(['pdf', 'document', 'canvas', 'mindmap']
 
 /** Center-to-center pitch of outline dots (compact index cluster). */
 export const DOT_PITCH_PX = 18
+
+/** Idle rail opacity — always visible, semi-transparent until hover / focus / scrub. */
+const RAIL_IDLE_OPACITY = 0.35
 
 /** Viewport cap for the compact cluster (matches CSS maxHeight). */
 export function maxRailHeightPx(vh = typeof window !== 'undefined' ? window.innerHeight : 800): number {
@@ -129,13 +132,14 @@ export function buildOutlineEntries(messages: ChatDisplayMessage[]): OutlineEntr
 }
 
 const useStyles = makeStyles({
-  rail: {
+  /** Left-edge hit strip — overlay within ChatView mainStack; no layout gutter. */
+  hitStrip: {
     position: 'absolute',
     left: 0,
     top: '50%',
     transform: 'translateY(-50%)',
-    zIndex: 4,
-    width: '28px',
+    zIndex: 3,
+    width: opptrixTokens.chatOutlineHitWidth,
     height: 'auto',
     maxHeight: 'min(56vh, 420px)',
     boxSizing: 'border-box',
@@ -143,6 +147,23 @@ const useStyles = makeStyles({
     pointerEvents: 'auto',
     cursor: 'ns-resize',
     touchAction: 'none',
+  },
+  /** Dot column + tooltip — always visible; idle semi-transparent, engaged opaque. */
+  railVisual: {
+    position: 'relative',
+    width: opptrixTokens.chatOutlineRailWidth,
+    height: '100%',
+    opacity: RAIL_IDLE_OPACITY,
+    pointerEvents: 'auto',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '1ms',
+    },
+  },
+  railVisualEngaged: {
+    opacity: 1,
   },
   /** Clips the compact column when taller than the viewport. */
   clip: {
@@ -195,13 +216,13 @@ const useStyles = makeStyles({
       transitionDuration: '1ms',
     },
   },
-  dotRailHover: {
-    backgroundColor: opptrixCssVars.textSecondary,
-  },
   dotActive: {
     backgroundColor: opptrixCssVars.textSecondary,
   },
-  dotActiveRailHover: {
+  dotEngaged: {
+    backgroundColor: opptrixCssVars.textPrimary,
+  },
+  dotActiveEngaged: {
     backgroundColor: opptrixCssVars.textPrimary,
   },
   preview: {
@@ -484,8 +505,9 @@ export default function MessageOutlineRail({
 
   if (entries.length === 0) return null
 
-  const fisheyeBase = railHovered ? 1.15 : 1
-  const fisheyeAmp = railHovered ? 0.95 : 0
+  const isEngaged = railHovered || scrubTranslateY != null
+  const fisheyeBase = isEngaged ? 1.15 : 1
+  const fisheyeAmp = isEngaged ? 0.95 : 0
   const focusForScale = focusOrdinal
   const tipEntry = tooltipOrdinal != null ? entries[tooltipOrdinal] : null
   const tipTopPx = tipEntry != null && tooltipOrdinal != null
@@ -496,10 +518,11 @@ export default function MessageOutlineRail({
   return (
     <div
       ref={railRef}
-      className={s.rail}
+      className={s.hitStrip}
       style={{ height: viewportHeight }}
       role="navigation"
       aria-label="消息目录"
+      tabIndex={0}
       onMouseEnter={engageRail}
       onMouseLeave={() => {
         if (scrubbingRef.current) return
@@ -509,6 +532,7 @@ export default function MessageOutlineRail({
         setTooltipOrdinal(null)
       }}
       onFocus={engageRail}
+      onFocusCapture={engageRail}
       onBlur={e => disengageRailIfLeaving(e.relatedTarget)}
       onPointerDown={onRailPointerDown}
       onPointerMove={onRailPointerMove}
@@ -516,6 +540,9 @@ export default function MessageOutlineRail({
       onPointerCancel={endScrub}
       onWheel={onRailWheel}
     >
+      <div
+        className={mergeClasses(s.railVisual, isEngaged && s.railVisualEngaged)}
+      >
       <div className={s.clip}>
         <div
           className={s.column}
@@ -530,8 +557,8 @@ export default function MessageOutlineRail({
               sigma: 1.35,
             })
             const showTipFocus = tooltipOrdinal === ordinal || focusForScale === ordinal
-            const dotColorClass = railHovered
-              ? (isActive || showTipFocus ? s.dotActiveRailHover : s.dotRailHover)
+            const dotColorClass = isEngaged
+              ? (isActive || showTipFocus ? s.dotActiveEngaged : s.dotEngaged)
               : (isActive ? s.dotActive : undefined)
 
             return (
@@ -539,6 +566,7 @@ export default function MessageOutlineRail({
                 key={entry.index}
                 type="button"
                 className={s.item}
+                tabIndex={0}
                 aria-label={
                   entry.hasReport
                     ? '跳到助手的消息（含报告）'
@@ -595,6 +623,7 @@ export default function MessageOutlineRail({
           />
         </span>
       ) : null}
+      </div>
     </div>
   )
 }

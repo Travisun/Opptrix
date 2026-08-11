@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, memo } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
@@ -36,7 +36,7 @@ import {
   DESKTOP_TOOL_ICON_SIZE,
 } from '../desktop/constants'
 import { pickWelcomeVariant } from './chatWelcomeVariants'
-import MessageOutlineRail from './MessageOutlineRail'
+import MessageOutlineRail, { buildOutlineEntries } from './MessageOutlineRail'
 
 /** 消息区底 padding 初始/下限（ResizeObserver 测 composerInner 后覆盖） */
 const CHAT_COMPOSER_BOTTOM_PAD = 100
@@ -97,6 +97,16 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflow: 'hidden',
   },
+  /** Thread scroll + composer dock; symmetric paddingX inside thread/composer columns. */
+  mainStack: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+  },
   bodyShellDragging: {
     outline: `1.5px dashed ${opptrixCssVars.borderStrong}`,
     outlineOffset: '-6px',
@@ -119,7 +129,7 @@ const useStyles = makeStyles({
     width: '100%',
     maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    paddingLeft: opptrixTokens.chatThreadPaddingLeft,
+    paddingLeft: opptrixTokens.chatThreadPaddingX,
     paddingRight: opptrixTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
   },
@@ -172,7 +182,7 @@ const useStyles = makeStyles({
     width: '100%',
     maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    paddingLeft: opptrixTokens.chatThreadPaddingLeft,
+    paddingLeft: opptrixTokens.chatThreadPaddingX,
     paddingRight: opptrixTokens.chatThreadPaddingX,
     /* bottomInset 由 ChatComposer.composerFooter 承担；消息淡出由 scrollViewport mask */
     paddingBottom: 0,
@@ -188,12 +198,19 @@ const useStyles = makeStyles({
   header: {
     flexShrink: 0,
     display: 'flex',
-    alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'stretch',
     height: '40px',
     padding: 0,
     boxSizing: 'border-box',
     backgroundColor: opptrixCssVars.canvas,
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+  },
+  headerMain: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
   },
   headerInner: {
     maxWidth: opptrixTokens.chatThreadMaxWidth,
@@ -201,7 +218,7 @@ const useStyles = makeStyles({
     height: '100%',
     margin: '0 auto',
     minWidth: 0,
-    paddingLeft: opptrixTokens.chatThreadPaddingLeft,
+    paddingLeft: opptrixTokens.chatThreadPaddingX,
     paddingRight: opptrixTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
     display: 'flex',
@@ -240,7 +257,9 @@ const useStyles = makeStyles({
     gap: '10px',
     padding: '20px 24px',
     textAlign: 'center',
-    maxWidth: '440px',
+    width: '100%',
+    maxWidth: 'min(80vw, 100%)',
+    boxSizing: 'border-box',
   },
   welcomeBannerMobile: {
     padding: '16px 16px',
@@ -294,7 +313,7 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-lg)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.6,
-    maxWidth: '36ch',
+    maxWidth: '100%',
     animationDelay: '0.75s',
   },
   loadingRow: {
@@ -635,6 +654,11 @@ function ChatView({
   const electronChrome = isElectron() && !isMobile
   const scrollMask = composerScrollMask(composerBottomPad, scrollbarMaskPreserve)
   const showDesktopChromeExtras = !isMobile
+  const outlineEntries = useMemo(
+    () => (showDesktopChromeExtras ? buildOutlineEntries(messages) : []),
+    [messages, showDesktopChromeExtras],
+  )
+  const showOutlineRail = showDesktopChromeExtras && outlineEntries.length > 0
   const sessionFilesToggle = showDesktopChromeExtras && onToggleSessionFilesPreview ? (
     <ChromeToolButton
       label="文件预览"
@@ -825,36 +849,38 @@ function ChatView({
 
       {!isMobile && !electronChrome && (
         <div className={s.header}>
-          <div className={s.headerInner}>
-            <div className={s.headerTitleSlot}>
-              {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
-            </div>
-            {(sessionFilesToggle || headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
-              <div className={s.headerActions}>
-                {sessionFilesToggle}
-                {headerTrailing}
-                {!rightPanelOpen && onToggleChatColumn && (
-                  <ChromeToolButton
-                    label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
-                    iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                    onClick={onToggleChatColumn}
-                  >
-                    {chatColumnVisible
-                      ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                      : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
-                  </ChromeToolButton>
-                )}
-                {!rightPanelOpen && onToggleRightPanel && (
-                  <ChromeToolButton
-                    label="展开右侧面板"
-                    iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                    onClick={onToggleRightPanel}
-                  >
-                    <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                  </ChromeToolButton>
-                )}
+          <div className={s.headerMain}>
+            <div className={s.headerInner}>
+              <div className={s.headerTitleSlot}>
+                {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
               </div>
-            )}
+              {(sessionFilesToggle || headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
+                <div className={s.headerActions}>
+                  {sessionFilesToggle}
+                  {headerTrailing}
+                  {!rightPanelOpen && onToggleChatColumn && (
+                    <ChromeToolButton
+                      label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
+                      iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                      onClick={onToggleChatColumn}
+                    >
+                      {chatColumnVisible
+                        ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                        : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                    </ChromeToolButton>
+                  )}
+                  {!rightPanelOpen && onToggleRightPanel && (
+                    <ChromeToolButton
+                      label="展开右侧面板"
+                      iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                      onClick={onToggleRightPanel}
+                    >
+                      <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                    </ChromeToolButton>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -889,14 +915,14 @@ function ChatView({
           />
         )}
 
-        {showDesktopChromeExtras ? (
+        <div className={s.mainStack}>
+        {showOutlineRail ? (
           <MessageOutlineRail
             messages={messages}
             scrollContainerRef={chatBoxRef}
             onJump={index => scrollToMessageStart(index, 'smooth')}
           />
         ) : null}
-
         <div
           ref={chatBoxRef}
           className={mergeClasses(s.scrollViewport, 'opptrix-scroll', 'opptrix-chat-scroll')}
@@ -1039,6 +1065,7 @@ function ChatView({
               onOpenPreview={onOpenFilePreview}
             />
           </div>
+        </div>
         </div>
       </div>
     </div>
