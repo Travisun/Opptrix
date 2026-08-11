@@ -14,6 +14,7 @@ import {
   mergeAllowedNetworkDomains,
 } from './network-policy.js'
 import { nodeRuntimeAllowReadPaths } from '../node/resolve-node.js'
+import { resolvePythonRuntime } from '../python/resolve-python.js'
 import { resolveBundledSandboxBinConfig } from './resolve-sandbox-bins.js'
 import { finalizeFilesystemPathsForPlatform } from './windows-acl-path-policy.js'
 
@@ -39,16 +40,55 @@ function uniquePaths(paths: readonly string[]): string[] {
   return out
 }
 
+/**
+ * Windows 系统只读路径（可注入 env 便于单测；一律用 path.win32）。
+ * 勿整棵 APPDATA / LOCALAPPDATA；勿 stamp WINDIR / Program Files*。
+ */
+export function win32SystemReadAllowPaths(env: NodeJS.ProcessEnv = process.env): string[] {
+  const local = env.LOCALAPPDATA?.trim()
+  const candidates = [
+    env.TEMP?.trim() ?? '',
+    env.TMP?.trim() ?? '',
+    local ? path.win32.join(local, 'Programs', 'Python') : '',
+  ].filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of candidates) {
+    const norm = path.win32.resolve(p)
+    const key = norm.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(norm)
+  }
+  return out
+}
+
+/** active Python 所在目录（及 Scripts/bin 旁父级）— 覆盖 conda 等非 Store 路径 */
+export function pythonActiveAllowReadPaths(activePath: string | null | undefined): string[] {
+  if (!activePath?.trim()) return []
+  const dir = path.dirname(path.resolve(activePath.trim()))
+  const out = [dir]
+  const base = path.basename(dir).toLowerCase()
+  if (base === 'scripts' || base === 'bin') {
+    out.push(path.dirname(dir))
+  }
+  return out
+}
+
+async function resolvePythonActiveAllowReadPaths(): Promise<string[]> {
+  try {
+    const runtime = await resolvePythonRuntime()
+    return pythonActiveAllowReadPaths(runtime.active_path)
+  } catch {
+    return []
+  }
+}
+
 /** 解释器/系统只读路径 — 供 sandbox 内 python/node 启动 */
 function systemReadAllowPaths(): string[] {
   const platform = os.platform()
   if (platform === 'win32') {
-    // 勿 stamp WINDIR / Program Files*：srt-win acl grant 对系统目录会 0x5 整批回滚。
-    // 仅用户可写配置区；PF 下运行时依赖默认 Users RX，不进 grant。
-    return uniquePaths([
-      process.env.APPDATA ?? '',
-      process.env.LOCALAPPDATA ?? '',
-    ].filter(Boolean))
+    return win32SystemReadAllowPaths()
   }
   if (platform === 'darwin') {
     return uniquePaths([
@@ -130,12 +170,16 @@ export async function buildSandboxConfigFromGrants(
     ...buildGlobalDenyPaths(),
   ])
 
-  const nodeReadPaths = await nodeRuntimeAllowReadPaths()
+  const [nodeReadPaths, pythonActivePaths] = await Promise.all([
+    nodeRuntimeAllowReadPaths(),
+    resolvePythonActiveAllowReadPaths(),
+  ])
 
   const allowRead = finalizeFilesystemPathsForPlatform(uniquePaths([
     ...grantRealpaths,
     ...systemReadAllowPaths(),
     resolvePythonRuntimeRoot(),
+    ...pythonActivePaths,
     ...nodeReadPaths,
   ]))
 
@@ -193,7 +237,10 @@ export async function buildSandboxConfigFromGrantPaths(
   const rwPaths = grants.filter(g => g.mode === 'rw').map(g => path.resolve(g.abs_path))
   const roPaths = grants.filter(g => g.mode === 'ro').map(g => path.resolve(g.abs_path))
   const grantPaths = grants.map(g => path.resolve(g.abs_path))
-  const nodeReadPaths = await nodeRuntimeAllowReadPaths()
+  const [nodeReadPaths, pythonActivePaths] = await Promise.all([
+    nodeRuntimeAllowReadPaths(),
+    resolvePythonActiveAllowReadPaths(),
+  ])
 
   const sessionHosts = [
     ...(sessionEgress?.hosts ?? []),
@@ -218,6 +265,7 @@ export async function buildSandboxConfigFromGrantPaths(
         ...grantPaths,
         ...systemReadAllowPaths(),
         resolvePythonRuntimeRoot(),
+        ...pythonActivePaths,
         ...nodeReadPaths,
       ])),
       allowWrite: finalizeFilesystemPathsForPlatform(uniquePaths([

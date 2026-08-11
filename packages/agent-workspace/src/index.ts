@@ -163,6 +163,8 @@ export {
   summarizeShellArgv,
   buildSandboxConfigFromGrants,
   buildSandboxConfigFromGrantPaths,
+  win32SystemReadAllowPaths,
+  pythonActiveAllowReadPaths,
   isWindowsAclStampForbidden,
   needsWindowsAclGrant,
   filterWindowsAclGrantPaths,

@@ -7,7 +7,12 @@ export type {
   ShellRunResult,
   ShellSecretRef,
 } from './types.js'
-export { buildSandboxConfigFromGrants, buildSandboxConfigFromGrantPaths } from './config-from-grants.js'
+export {
+  buildSandboxConfigFromGrants,
+  buildSandboxConfigFromGrantPaths,
+  win32SystemReadAllowPaths,
+  pythonActiveAllowReadPaths,
+} from './config-from-grants.js'
 export type { BuildSandboxConfigOptions } from './config-from-grants.js'
 export {
   isWindowsAclStampForbidden,

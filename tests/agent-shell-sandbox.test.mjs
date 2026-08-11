@@ -18,6 +18,8 @@ import {
   getShellPlatformStatus,
   isWindowsAclStampForbidden,
   needsWindowsAclGrant,
+  win32SystemReadAllowPaths,
+  pythonActiveAllowReadPaths,
   NetworkInstallStickyStore,
   SessionNetworkEgressStore,
   parseNetworkEgressChoice,
@@ -144,6 +146,46 @@ test('finalizeFilesystemPathsForPlatform strips win32 blacklist; non-win keeps p
   assert.deepEqual(macOut, ['/usr/bin', '/System/Library'])
 })
 
+test('win32SystemReadAllowPaths is TEMP/TMP + Programs\\Python only (not whole APPDATA trees)', () => {
+  const env = {
+    TEMP: 'C:\\Users\\alice\\AppData\\Local\\Temp',
+    TMP: 'C:\\Users\\alice\\AppData\\Local\\Temp',
+    LOCALAPPDATA: 'C:\\Users\\alice\\AppData\\Local',
+    APPDATA: 'C:\\Users\\alice\\AppData\\Roaming',
+  }
+  const paths = win32SystemReadAllowPaths(env).map(p => path.win32.resolve(p).toLowerCase())
+  const temp = path.win32.resolve(env.TEMP).toLowerCase()
+  const programsPython = path.win32.resolve(
+    path.win32.join(env.LOCALAPPDATA, 'Programs', 'Python'),
+  ).toLowerCase()
+  const localApp = path.win32.resolve(env.LOCALAPPDATA).toLowerCase()
+  const roaming = path.win32.resolve(env.APPDATA).toLowerCase()
+
+  assert.ok(paths.includes(temp), 'TEMP must be in systemRead')
+  assert.ok(paths.includes(programsPython), 'Programs\\Python must be in systemRead')
+  assert.ok(!paths.includes(localApp), 'must not grant whole LOCALAPPDATA')
+  assert.ok(!paths.includes(roaming), 'must not grant whole APPDATA')
+})
+
+test('pythonActiveAllowReadPaths includes dirname; Scripts/bin also include parent', () => {
+  assert.deepEqual(pythonActiveAllowReadPaths(null), [])
+  assert.deepEqual(pythonActiveAllowReadPaths(''), [])
+
+  const ordinary = path.join('/opt', 'miniconda3', 'python')
+  const ordinaryDir = path.dirname(path.resolve(ordinary))
+  assert.deepEqual(pythonActiveAllowReadPaths(ordinary), [ordinaryDir])
+
+  const scriptsExe = path.join('/opt', 'miniconda3', 'Scripts', 'python.exe')
+  const scriptsDir = path.dirname(path.resolve(scriptsExe))
+  const scriptsParent = path.dirname(scriptsDir)
+  assert.deepEqual(pythonActiveAllowReadPaths(scriptsExe), [scriptsDir, scriptsParent])
+
+  const binPy = path.join('/opt', 'miniconda3', 'bin', 'python')
+  const binDir = path.dirname(path.resolve(binPy))
+  const binParent = path.dirname(binDir)
+  assert.deepEqual(pythonActiveAllowReadPaths(binPy), [binDir, binParent])
+})
+
 test('buildSandboxConfigFromGrantPaths win32 allow lists exclude system ACL stamp targets', async () => {
   await withTmpDataDir(async (tmp) => {
     const rw = path.join(tmp, 'rw-grant')
@@ -154,6 +196,7 @@ test('buildSandboxConfigFromGrantPaths win32 allow lists exclude system ACL stam
       const windir = process.env.WINDIR ?? 'C:\\Windows'
       const pf = process.env.ProgramFiles ?? 'C:\\Program Files'
       const localApp = process.env.LOCALAPPDATA
+      const appData = process.env.APPDATA
       const temp = process.env.TEMP ?? process.env.TMP
 
       const allowReadNorm = cfg.filesystem.allowRead.map(p => path.resolve(p).toLowerCase())
@@ -161,16 +204,35 @@ test('buildSandboxConfigFromGrantPaths win32 allow lists exclude system ACL stam
       assert.ok(!allowReadNorm.includes(path.resolve(pf).toLowerCase()))
       assert.ok(!allowReadNorm.some(p => /^[a-z]:\\?$/.test(p)))
       if (localApp) {
-        // LOCALAPPDATA 可进 allowRead；整棵不得进 allowWrite
-        assert.ok(allowReadNorm.includes(path.resolve(localApp).toLowerCase()))
+        assert.ok(!allowReadNorm.includes(path.resolve(localApp).toLowerCase()),
+          'must not grant whole LOCALAPPDATA tree')
+        const programsPython = path.resolve(path.join(localApp, 'Programs', 'Python')).toLowerCase()
+        assert.ok(allowReadNorm.includes(programsPython), 'Programs\\Python should be allowRead')
         assert.ok(!cfg.filesystem.allowWrite.some(
           p => path.resolve(p).toLowerCase() === path.resolve(localApp).toLowerCase(),
         ))
       }
+      if (appData) {
+        assert.ok(!allowReadNorm.includes(path.resolve(appData).toLowerCase()),
+          'must not grant whole APPDATA tree')
+      }
       if (temp) {
+        assert.ok(allowReadNorm.includes(path.resolve(temp).toLowerCase()), 'TEMP in allowRead')
         assert.ok(cfg.filesystem.allowWrite.some(
           p => path.resolve(p).toLowerCase() === path.resolve(temp).toLowerCase(),
         ))
+      }
+      // resolvePythonRuntimeRoot + node paths 仍经 finalize 进入 allowRead
+      const { resolvePythonRuntimeRoot } = await import('../packages/shared/dist/index.js')
+      const pyRoot = path.resolve(resolvePythonRuntimeRoot()).toLowerCase()
+      assert.ok(allowReadNorm.includes(pyRoot), 'python runtime root in allowRead')
+      const { nodeRuntimeAllowReadPaths } = await import('../packages/agent-workspace/dist/node/resolve-node.js')
+      const nodePaths = await nodeRuntimeAllowReadPaths()
+      for (const p of nodePaths) {
+        assert.ok(
+          allowReadNorm.includes(path.resolve(p).toLowerCase()),
+          `missing node allowRead path: ${p}`,
+        )
       }
       assert.ok(cfg.filesystem.allowWrite.some(p => path.resolve(p) === path.resolve(rw)))
       assert.ok(cfg.filesystem.denyRead.some(p => path.resolve(p) === path.resolve(os.homedir())))
@@ -273,13 +335,19 @@ test('buildSandboxConfigFromGrants includes node runtime allowRead paths', async
   })
 })
 
-test('buildSandboxConfigFromGrantPaths includes node runtime allowRead paths', async () => {
+test('buildSandboxConfigFromGrantPaths includes python runtime root and node allowRead paths', async () => {
   await withTmpDataDir(async (tmp) => {
     const rw = path.join(tmp, 'rw-grant')
     await fs.mkdir(rw, { recursive: true })
+    const { resolvePythonRuntimeRoot } = await import('../packages/shared/dist/index.js')
     const { nodeRuntimeAllowReadPaths } = await import('../packages/agent-workspace/dist/node/resolve-node.js')
     const nodePaths = await nodeRuntimeAllowReadPaths()
     const cfg = await buildSandboxConfigFromGrantPaths([{ abs_path: rw, mode: 'rw' }], false)
+    const pyRoot = path.resolve(resolvePythonRuntimeRoot())
+    assert.ok(
+      cfg.filesystem.allowRead.some(r => path.resolve(r) === pyRoot),
+      `missing python runtime root allowRead: ${pyRoot}`,
+    )
     for (const p of nodePaths) {
       assert.ok(
         cfg.filesystem.allowRead.some(r => path.resolve(r) === path.resolve(p)),
