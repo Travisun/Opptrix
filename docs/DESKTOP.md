@@ -398,6 +398,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 **边界说明（可行性）**：
 
 - Windows 的机器级隔离用户与网络策略需要**一次**提升授权；Opptrix 会在首次 `shell_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行 `npx … windows-install`。
+- Windows 沙箱 `allowRead` **不会**对 `WINDIR` / Program Files / 盘符根做 ACL stamp（依赖系统默认读取权限）；请勿以「管理员运行 Opptrix」作为常规解决办法。
 - **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；访问外网或联网安装另有单独确认（`ping` 与运行命令合并为一次）。
 - Linux deb 通过 `Depends: bubblewrap, socat, ripgrep` 在系统包管理器层拉齐依赖。
 - AppImage 构建时会优先从可信源下载便携二进制到 `runtime-stage/sandbox-bins/{arch}/`（失败时回退构建机 `which`），sidecar 通过 `OPPTRIX_RUNTIME_STAGE` 注入 `bwrapPath` / `socatPath` / `ripgrep.command`。**deb 仍是最稳的安装路径**。

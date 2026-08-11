@@ -223,6 +223,214 @@ describe('python install job', () => {
     assert.equal(job.state, 'failed')
     assert.match(job.message, /校验失败|重试/)
   })
+
+  it('waitForPythonInstallJob resolves when pipeline completes', async () => {
+    const {
+      startPythonInstallJob,
+      waitForPythonInstallJob,
+      setPythonInstallPipelineDepsForTests,
+    } = await importInstallJob()
+
+    let resolveDownload
+    const downloadGate = new Promise(resolve => { resolveDownload = resolve })
+
+    setPythonInstallPipelineDepsForTests({
+      resolveArtifact: () => ({
+        platformKey: 'win-amd64',
+        version: '3.12.8',
+        kind: 'embed',
+        filename: 'python-3.12.8-embed-amd64.zip',
+        urls: ['https://example.com/python.zip'],
+      }),
+      downloadArtifact: async (_artifact, _dest, opts) => {
+        opts?.onProgress?.({ url: 'mock', bytesDownloaded: 50, bytesTotal: 100 })
+        await downloadGate
+        return {
+          destPath: _dest,
+          bytesDownloaded: 100,
+          sha256: 'abc',
+          sourceUrl: 'mock',
+        }
+      },
+      installArtifact: async () => ({
+        manifest: {
+          version: '3.12.8',
+          platformKey: 'win-amd64',
+          kind: 'embed',
+          installedAt: new Date().toISOString(),
+          installDir: '/tmp/opptrix-python',
+          runtimeRoot: '/tmp/opptrix-python',
+          pythonPath: '/tmp/opptrix-python/python.exe',
+          pythonVersion: 'Python 3.12.8',
+        },
+        installDir: '/tmp/opptrix-python',
+        runtimeRoot: '/tmp/opptrix-python',
+        pythonPath: '/tmp/opptrix-python/python.exe',
+      }),
+      bootstrapPip: async () => {},
+    })
+
+    startPythonInstallJob()
+    const waitPromise = waitForPythonInstallJob({ timeoutMs: 5000 })
+    resolveDownload()
+    const done = await waitPromise
+    assert.equal(done.state, 'completed')
+    assert.equal(done.percent, 100)
+  })
+})
+
+describe('ensurePythonReady prefer_opptrix', () => {
+  it('waits for install, sets prefer_opptrix, and reports ready with opptrix', async () => {
+    const {
+      ensurePythonReady,
+      resetEnsurePythonDepsForTests,
+      setEnsurePythonDepsForTests,
+    } = await import(
+      path.join(repoRoot, 'packages/agent-workspace/dist/python/ensure-python.js')
+    )
+
+    let prefer = false
+    let statusCalls = 0
+    const completedJob = {
+      state: 'completed',
+      message: 'done',
+      accepted: true,
+      phase: 'done',
+      percent: 100,
+      bytes_downloaded: 1,
+      bytes_total: 1,
+      steps: [],
+      error: null,
+    }
+
+    setEnsurePythonDepsForTests({
+      getStatus: async () => {
+        statusCalls += 1
+        if (statusCalls === 1) {
+          return {
+            system_path: null,
+            system_version: null,
+            opptrix_path: null,
+            opptrix_version: null,
+            active_source: 'none',
+            active_path: null,
+            active_version: null,
+            ready: false,
+            recommend_install: true,
+            message: 'not ready',
+          }
+        }
+        return {
+          system_path: null,
+          system_version: null,
+          opptrix_path: '/opptrix/python',
+          opptrix_version: 'Python 3.12.8',
+          active_source: 'opptrix',
+          active_path: '/opptrix/python',
+          active_version: 'Python 3.12.8',
+          ready: true,
+          recommend_install: false,
+          message: 'opptrix ready',
+        }
+      },
+      startJob: () => ({
+        state: 'queued',
+        message: 'queued',
+        accepted: true,
+        phase: 'prepare',
+        percent: 1,
+        bytes_downloaded: 0,
+        bytes_total: null,
+        steps: [],
+        error: null,
+      }),
+      waitJob: async () => completedJob,
+      getJobStatus: () => completedJob,
+      getSettings: () => ({
+        prefer_opptrix_python: prefer,
+        pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+      }),
+      saveSettings: (input) => {
+        prefer = input.prefer_opptrix_python === true
+        return {
+          ok: true,
+          settings: {
+            prefer_opptrix_python: prefer,
+            pip_index_urls: input.pip_index_urls ?? ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+          },
+        }
+      },
+    })
+
+    try {
+      const ensured = await ensurePythonReady({ timeoutMs: 1000 })
+      assert.equal(ensured.ok, true)
+      assert.equal(ensured.ready, true)
+      assert.equal(ensured.active_source, 'opptrix')
+      assert.equal(prefer, true)
+      assert.ok(statusCalls >= 2)
+    } finally {
+      resetEnsurePythonDepsForTests()
+    }
+  })
+
+  it('does not report ready when install fails', async () => {
+    const {
+      ensurePythonReady,
+      resetEnsurePythonDepsForTests,
+      setEnsurePythonDepsForTests,
+    } = await import(
+      path.join(repoRoot, 'packages/agent-workspace/dist/python/ensure-python.js')
+    )
+
+    let prefer = false
+    const failedJob = {
+      state: 'failed',
+      message: '安装失败',
+      accepted: true,
+      phase: 'idle',
+      percent: 0,
+      bytes_downloaded: 0,
+      bytes_total: null,
+      steps: [],
+      error: 'boom',
+    }
+
+    setEnsurePythonDepsForTests({
+      getStatus: async () => ({
+        system_path: null,
+        system_version: null,
+        opptrix_path: null,
+        opptrix_version: null,
+        active_source: 'none',
+        active_path: null,
+        active_version: null,
+        ready: false,
+        recommend_install: true,
+        message: 'not ready',
+      }),
+      startJob: () => failedJob,
+      waitJob: async () => failedJob,
+      getJobStatus: () => failedJob,
+      getSettings: () => ({
+        prefer_opptrix_python: prefer,
+        pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+      }),
+      saveSettings: (input) => {
+        prefer = input.prefer_opptrix_python === true
+        return { ok: true, settings: { prefer_opptrix_python: prefer, pip_index_urls: [] } }
+      },
+    })
+
+    try {
+      const ensured = await ensurePythonReady({ timeoutMs: 1000 })
+      assert.equal(ensured.ok, false)
+      assert.equal(ensured.ready, false)
+      assert.equal(prefer, false)
+    } finally {
+      resetEnsurePythonDepsForTests()
+    }
+  })
 })
 
 describe('python installer cleanup', () => {

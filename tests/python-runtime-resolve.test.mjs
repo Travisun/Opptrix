@@ -41,6 +41,49 @@ async function detectSystemPython() {
   return null
 }
 
+describe('windows python candidate scan / version pick', () => {
+  it('builds exe paths for any Python3xx under LocalAppData and Program Files', async () => {
+    const {
+      buildWindowsPythonExeCandidates,
+      isWindowsPythonInstallDirName,
+    } = await importResolvePython()
+
+    assert.equal(isWindowsPythonInstallDirName('Python310'), true)
+    assert.equal(isWindowsPythonInstallDirName('Python314'), true)
+    assert.equal(isWindowsPythonInstallDirName('Python3'), true)
+    assert.equal(isWindowsPythonInstallDirName('NotPython'), false)
+
+    const candidates = buildWindowsPythonExeCandidates({
+      localAppData: 'C:\\Users\\u\\AppData\\Local',
+      programFiles: 'C:\\Program Files',
+      programFilesX86: 'C:\\Program Files (x86)',
+      localAppDataPythonDirs: ['Python310', 'Python314', 'Other'],
+      programFilesPythonDirs: ['Python39', 'Microsoft'],
+      programFilesX86PythonDirs: ['Python38'],
+    })
+
+    const norm = candidates.map(p => p.replace(/\//g, '\\').toLowerCase())
+    assert.ok(norm.some(p => p.includes('\\python310\\python.exe')))
+    assert.ok(norm.some(p => p.includes('\\python314\\python.exe')))
+    assert.ok(norm.some(p => p.includes('\\python39\\python.exe')))
+    assert.ok(norm.some(p => p.includes('\\python38\\python.exe')))
+    assert.equal(norm.some(p => p.includes('\\other\\')), false)
+    assert.equal(norm.some(p => p.includes('\\microsoft\\')), false)
+  })
+
+  it('pickHighestPythonProbe selects the highest version', async () => {
+    const { pickHighestPythonProbe, parsePythonVersionParts } = await importResolvePython()
+    assert.deepEqual(parsePythonVersionParts('Python 3.12.8'), [3, 12, 8])
+    const best = pickHighestPythonProbe([
+      { path: 'a', version: 'Python 3.10.0' },
+      { path: 'b', version: 'Python 3.14.1' },
+      { path: 'c', version: 'Python 3.11.9' },
+    ])
+    assert.equal(best?.path, 'b')
+    assert.equal(best?.version, 'Python 3.14.1')
+  })
+})
+
 describe('looksLikePythonBin / looksLikePipBin', () => {
   it('matches python3.x and pip3.x', async () => {
     const { looksLikePythonBin, looksLikePipBin } = await importResolveShellArgv()

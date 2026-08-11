@@ -96,8 +96,13 @@ export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './shell/r
 export type { ResolveShellArgvResult } from './shell/resolve-shell-argv.js'
 export {
   resolvePythonRuntime,
+  parsePythonVersionParts,
+  pickHighestPythonProbe,
+  isWindowsPythonInstallDirName,
+  buildWindowsPythonExeCandidates,
   type PythonActiveSource,
   type PythonRuntimeStatus,
+  type PythonProbe,
   PYTHON_BINARIES,
   PIP_BINARIES,
 } from './python/resolve-python.js'
@@ -121,6 +126,7 @@ export {
 export {
   getPythonInstallJobStatus,
   startPythonInstallJob,
+  waitForPythonInstallJob,
   resetPythonInstallJobForTests,
   setPythonInstallPipelineDepsForTests,
   type PythonInstallJobSnapshot,
@@ -128,6 +134,13 @@ export {
   type PythonInstallPhase,
   type PythonInstallPipelineDeps,
 } from './python/install-job.js'
+export {
+  ensurePythonReady,
+  resetEnsurePythonDepsForTests,
+  setEnsurePythonDepsForTests,
+  type EnsurePythonResult,
+  type EnsurePythonDeps,
+} from './python/ensure-python.js'
 export {
   WorkspaceService,
   getWorkspaceService,
@@ -163,6 +176,13 @@ export {
   summarizeShellArgv,
   buildSandboxConfigFromGrants,
   buildSandboxConfigFromGrantPaths,
+  win32SystemReadAllowPaths,
+  pythonActiveAllowReadPaths,
+  isWindowsAclStampForbidden,
+  needsWindowsAclGrant,
+  filterWindowsAclGrantPaths,
+  finalizeFilesystemPathsForPlatform,
+  windowsAclForbiddenRoots,
   assertAllowedShellArgv,
   assertPackageInstallPolicy,
   commandNeedsNetwork,

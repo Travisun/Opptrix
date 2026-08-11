@@ -698,7 +698,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'ensure_python',
       category: '工作区',
-      description: '确认 Python 是否可用；不可用时可在设置页安装 Opptrix 托管版本，或返回安装进度',
+      description:
+        '确认 Python 是否可用；不可用时自动安装 Opptrix 托管版本并等待完成，成功后优先使用托管解释器',
       parameters: S({}),
       handler: async () => {
         try {

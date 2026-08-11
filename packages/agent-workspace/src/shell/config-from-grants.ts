@@ -14,7 +14,9 @@ import {
   mergeAllowedNetworkDomains,
 } from './network-policy.js'
 import { nodeRuntimeAllowReadPaths } from '../node/resolve-node.js'
+import { resolvePythonRuntime } from '../python/resolve-python.js'
 import { resolveBundledSandboxBinConfig } from './resolve-sandbox-bins.js'
+import { finalizeFilesystemPathsForPlatform } from './windows-acl-path-policy.js'
 
 async function realpathSafe(p: string): Promise<string> {
   try {
@@ -38,20 +40,55 @@ function uniquePaths(paths: readonly string[]): string[] {
   return out
 }
 
+/**
+ * Windows 系统只读路径（可注入 env 便于单测；一律用 path.win32）。
+ * 勿整棵 APPDATA / LOCALAPPDATA；勿 stamp WINDIR / Program Files*。
+ */
+export function win32SystemReadAllowPaths(env: NodeJS.ProcessEnv = process.env): string[] {
+  const local = env.LOCALAPPDATA?.trim()
+  const candidates = [
+    env.TEMP?.trim() ?? '',
+    env.TMP?.trim() ?? '',
+    local ? path.win32.join(local, 'Programs', 'Python') : '',
+  ].filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of candidates) {
+    const norm = path.win32.resolve(p)
+    const key = norm.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(norm)
+  }
+  return out
+}
+
+/** active Python 所在目录（及 Scripts/bin 旁父级）— 覆盖 conda 等非 Store 路径 */
+export function pythonActiveAllowReadPaths(activePath: string | null | undefined): string[] {
+  if (!activePath?.trim()) return []
+  const dir = path.dirname(path.resolve(activePath.trim()))
+  const out = [dir]
+  const base = path.basename(dir).toLowerCase()
+  if (base === 'scripts' || base === 'bin') {
+    out.push(path.dirname(dir))
+  }
+  return out
+}
+
+async function resolvePythonActiveAllowReadPaths(): Promise<string[]> {
+  try {
+    const runtime = await resolvePythonRuntime()
+    return pythonActiveAllowReadPaths(runtime.active_path)
+  } catch {
+    return []
+  }
+}
+
 /** 解释器/系统只读路径 — 供 sandbox 内 python/node 启动 */
 function systemReadAllowPaths(): string[] {
   const platform = os.platform()
   if (platform === 'win32') {
-    const windir = process.env.WINDIR ?? 'C:\\Windows'
-    const pf = process.env.ProgramFiles ?? 'C:\\Program Files'
-    return uniquePaths([
-      windir,
-      path.join(windir, 'System32'),
-      pf,
-      process.env['ProgramFiles(x86)'] ?? path.join(pf, ' (x86)'),
-      process.env.APPDATA ?? '',
-      process.env.LOCALAPPDATA ?? '',
-    ].filter(Boolean))
+    return win32SystemReadAllowPaths()
   }
   if (platform === 'darwin') {
     return uniquePaths([
@@ -85,10 +122,10 @@ function systemReadAllowPaths(): string[] {
 function systemWriteAllowPaths(): string[] {
   const platform = os.platform()
   if (platform === 'win32') {
+    // 仅 TEMP/TMP；勿整棵 LOCALAPPDATA（过宽且易与 deny/策略冲突）
     return uniquePaths([
       process.env.TEMP ?? '',
       process.env.TMP ?? '',
-      process.env.LOCALAPPDATA ?? '',
     ].filter(Boolean))
   }
   return uniquePaths(['/tmp', '/var/tmp', '/private/tmp'])
@@ -133,20 +170,24 @@ export async function buildSandboxConfigFromGrants(
     ...buildGlobalDenyPaths(),
   ])
 
-  const nodeReadPaths = await nodeRuntimeAllowReadPaths()
+  const [nodeReadPaths, pythonActivePaths] = await Promise.all([
+    nodeRuntimeAllowReadPaths(),
+    resolvePythonActiveAllowReadPaths(),
+  ])
 
-  const allowRead = uniquePaths([
+  const allowRead = finalizeFilesystemPathsForPlatform(uniquePaths([
     ...grantRealpaths,
     ...systemReadAllowPaths(),
     resolvePythonRuntimeRoot(),
+    ...pythonActivePaths,
     ...nodeReadPaths,
-  ])
+  ]))
 
-  const allowWrite = uniquePaths([
+  const allowWrite = finalizeFilesystemPathsForPlatform(uniquePaths([
     ...rwPaths,
     ...systemWriteAllowPaths(),
     ...getDefaultWritePaths(),
-  ])
+  ]))
 
   const denyWrite = uniquePaths([
     ...buildGlobalDenyPaths(),
@@ -196,7 +237,10 @@ export async function buildSandboxConfigFromGrantPaths(
   const rwPaths = grants.filter(g => g.mode === 'rw').map(g => path.resolve(g.abs_path))
   const roPaths = grants.filter(g => g.mode === 'ro').map(g => path.resolve(g.abs_path))
   const grantPaths = grants.map(g => path.resolve(g.abs_path))
-  const nodeReadPaths = await nodeRuntimeAllowReadPaths()
+  const [nodeReadPaths, pythonActivePaths] = await Promise.all([
+    nodeRuntimeAllowReadPaths(),
+    resolvePythonActiveAllowReadPaths(),
+  ])
 
   const sessionHosts = [
     ...(sessionEgress?.hosts ?? []),
@@ -217,13 +261,18 @@ export async function buildSandboxConfigFromGrantPaths(
     },
     filesystem: {
       denyRead: uniquePaths([userData, homedir, path.join(homedir, '.ssh'), ...buildGlobalDenyPaths()]),
-      allowRead: uniquePaths([
+      allowRead: finalizeFilesystemPathsForPlatform(uniquePaths([
         ...grantPaths,
         ...systemReadAllowPaths(),
         resolvePythonRuntimeRoot(),
+        ...pythonActivePaths,
         ...nodeReadPaths,
-      ]),
-      allowWrite: uniquePaths([...rwPaths, ...systemWriteAllowPaths(), ...getDefaultWritePaths()]),
+      ])),
+      allowWrite: finalizeFilesystemPathsForPlatform(uniquePaths([
+        ...rwPaths,
+        ...systemWriteAllowPaths(),
+        ...getDefaultWritePaths(),
+      ])),
       denyWrite: uniquePaths([...buildGlobalDenyPaths(), ...roPaths]),
     },
     git: { safeDirectories: grantPaths },

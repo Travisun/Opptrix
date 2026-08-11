@@ -5,6 +5,7 @@ import {
   resolveNodeRuntime,
   resolveNpmCliJs,
 } from '../node/resolve-node.js'
+import { ensurePythonReady } from '../python/ensure-python.js'
 import { resolvePythonRuntime } from '../python/resolve-python.js'
 import { basenameOfArgv0 } from './package-policy.js'
 
@@ -59,9 +60,16 @@ async function resolvePythonShellArgv(
   argv: readonly string[],
   bin: string,
 ): Promise<ResolveShellArgvResult> {
-  const runtime = await resolvePythonRuntime()
+  let runtime = await resolvePythonRuntime()
   if (!runtime.ready || !runtime.active_path) {
-    throw new WorkspaceError(runtime.message || 'Python 环境尚未就绪')
+    const ensured = await ensurePythonReady()
+    if (!ensured.ready) {
+      throw new WorkspaceError(ensured.message || 'Python 环境尚未就绪')
+    }
+    runtime = await resolvePythonRuntime()
+    if (!runtime.ready || !runtime.active_path) {
+      throw new WorkspaceError(runtime.message || 'Python 环境尚未就绪')
+    }
   }
 
   const out = [...argv]
