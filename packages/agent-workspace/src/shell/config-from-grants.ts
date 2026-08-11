@@ -15,6 +15,7 @@ import {
 } from './network-policy.js'
 import { nodeRuntimeAllowReadPaths } from '../node/resolve-node.js'
 import { resolveBundledSandboxBinConfig } from './resolve-sandbox-bins.js'
+import { finalizeFilesystemPathsForPlatform } from './windows-acl-path-policy.js'
 
 async function realpathSafe(p: string): Promise<string> {
   try {
@@ -42,13 +43,9 @@ function uniquePaths(paths: readonly string[]): string[] {
 function systemReadAllowPaths(): string[] {
   const platform = os.platform()
   if (platform === 'win32') {
-    const windir = process.env.WINDIR ?? 'C:\\Windows'
-    const pf = process.env.ProgramFiles ?? 'C:\\Program Files'
+    // 勿 stamp WINDIR / Program Files*：srt-win acl grant 对系统目录会 0x5 整批回滚。
+    // 仅用户可写配置区；PF 下运行时依赖默认 Users RX，不进 grant。
     return uniquePaths([
-      windir,
-      path.join(windir, 'System32'),
-      pf,
-      process.env['ProgramFiles(x86)'] ?? path.join(pf, ' (x86)'),
       process.env.APPDATA ?? '',
       process.env.LOCALAPPDATA ?? '',
     ].filter(Boolean))
@@ -85,10 +82,10 @@ function systemReadAllowPaths(): string[] {
 function systemWriteAllowPaths(): string[] {
   const platform = os.platform()
   if (platform === 'win32') {
+    // 仅 TEMP/TMP；勿整棵 LOCALAPPDATA（过宽且易与 deny/策略冲突）
     return uniquePaths([
       process.env.TEMP ?? '',
       process.env.TMP ?? '',
-      process.env.LOCALAPPDATA ?? '',
     ].filter(Boolean))
   }
   return uniquePaths(['/tmp', '/var/tmp', '/private/tmp'])
@@ -135,18 +132,18 @@ export async function buildSandboxConfigFromGrants(
 
   const nodeReadPaths = await nodeRuntimeAllowReadPaths()
 
-  const allowRead = uniquePaths([
+  const allowRead = finalizeFilesystemPathsForPlatform(uniquePaths([
     ...grantRealpaths,
     ...systemReadAllowPaths(),
     resolvePythonRuntimeRoot(),
     ...nodeReadPaths,
-  ])
+  ]))
 
-  const allowWrite = uniquePaths([
+  const allowWrite = finalizeFilesystemPathsForPlatform(uniquePaths([
     ...rwPaths,
     ...systemWriteAllowPaths(),
     ...getDefaultWritePaths(),
-  ])
+  ]))
 
   const denyWrite = uniquePaths([
     ...buildGlobalDenyPaths(),
@@ -217,13 +214,17 @@ export async function buildSandboxConfigFromGrantPaths(
     },
     filesystem: {
       denyRead: uniquePaths([userData, homedir, path.join(homedir, '.ssh'), ...buildGlobalDenyPaths()]),
-      allowRead: uniquePaths([
+      allowRead: finalizeFilesystemPathsForPlatform(uniquePaths([
         ...grantPaths,
         ...systemReadAllowPaths(),
         resolvePythonRuntimeRoot(),
         ...nodeReadPaths,
-      ]),
-      allowWrite: uniquePaths([...rwPaths, ...systemWriteAllowPaths(), ...getDefaultWritePaths()]),
+      ])),
+      allowWrite: finalizeFilesystemPathsForPlatform(uniquePaths([
+        ...rwPaths,
+        ...systemWriteAllowPaths(),
+        ...getDefaultWritePaths(),
+      ])),
       denyWrite: uniquePaths([...buildGlobalDenyPaths(), ...roPaths]),
     },
     git: { safeDirectories: grantPaths },

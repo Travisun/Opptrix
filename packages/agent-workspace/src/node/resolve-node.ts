@@ -5,6 +5,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { isDesktopRuntime } from '@opptrix/shared'
 import { WorkspaceError } from '../errors.js'
+import { needsWindowsAclGrant } from '../shell/windows-acl-path-policy.js'
 
 const execFileAsync = promisify(execFile)
 const require = createRequire(import.meta.url)
@@ -293,7 +294,12 @@ export async function nodeRuntimeAllowReadPaths(): Promise<string[]> {
     out.push(path.dirname(runtime.npm_path))
   }
 
-  return [...new Set(out.map(p => path.resolve(p)).filter(Boolean))]
+  const resolved = [...new Set(out.map(p => path.resolve(p)).filter(Boolean))]
+  // win32：Program Files 下 node/Opptrix 依赖默认 Users RX，勿 stamp ACL
+  if (process.platform === 'win32') {
+    return resolved.filter(p => needsWindowsAclGrant(p))
+  }
+  return resolved
 }
 
 export function usesElectronAsNodeArgv(argv: readonly string[]): boolean {

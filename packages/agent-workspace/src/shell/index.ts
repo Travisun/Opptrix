@@ -10,6 +10,13 @@ export type {
 export { buildSandboxConfigFromGrants, buildSandboxConfigFromGrantPaths } from './config-from-grants.js'
 export type { BuildSandboxConfigOptions } from './config-from-grants.js'
 export {
+  isWindowsAclStampForbidden,
+  needsWindowsAclGrant,
+  filterWindowsAclGrantPaths,
+  finalizeFilesystemPathsForPlatform,
+  windowsAclForbiddenRoots,
+} from './windows-acl-path-policy.js'
+export {
   assertAllowedShellArgv,
   assertPackageInstallPolicy,
   argvToCommandString,

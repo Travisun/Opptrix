@@ -13,7 +13,11 @@ import {
   buildSandboxConfigFromGrants,
   commandNeedsNetwork,
   commandMayNeedEgressConfirmation,
+  finalizeFilesystemPathsForPlatform,
+  filterWindowsAclGrantPaths,
   getShellPlatformStatus,
+  isWindowsAclStampForbidden,
+  needsWindowsAclGrant,
   NetworkInstallStickyStore,
   SessionNetworkEgressStore,
   parseNetworkEgressChoice,
@@ -65,6 +69,9 @@ test('buildSandboxConfigFromGrantPaths maps rw/ro and network sticky', async () 
     assert.ok(denied.filesystem.denyWrite.some(p => path.resolve(p) === path.resolve(ro)))
     assert.deepEqual(denied.network.allowedDomains, [])
     assert.ok(denied.filesystem.allowRead.some(p => path.resolve(p) === path.resolve(ro)))
+    // 会话 grant + denyRead(homedir) 仍在
+    assert.ok(denied.filesystem.denyRead.some(p => path.resolve(p) === path.resolve(os.homedir())))
+    assert.ok(denied.filesystem.allowRead.some(p => path.resolve(p) === path.resolve(rw)))
 
     const allowed = await buildSandboxConfigFromGrantPaths(
       [{ abs_path: rw, mode: 'rw' }],
@@ -72,6 +79,110 @@ test('buildSandboxConfigFromGrantPaths maps rw/ro and network sticky', async () 
     )
     assert.ok(allowed.network.allowedDomains.includes('pypi.org'))
     assert.ok(allowed.network.allowedDomains.includes('registry.npmjs.org'))
+  })
+})
+
+test('windows ACL path policy blacklists system roots and Program Files', () => {
+  const env = {
+    WINDIR: 'C:\\Windows',
+    SystemRoot: 'C:\\Windows',
+    ProgramFiles: 'C:\\Program Files',
+    'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+    ProgramW6432: 'C:\\Program Files',
+    LOCALAPPDATA: 'C:\\Users\\alice\\AppData\\Local',
+    APPDATA: 'C:\\Users\\alice\\AppData\\Roaming',
+    TEMP: 'C:\\Users\\alice\\AppData\\Local\\Temp',
+    TMP: 'C:\\Users\\alice\\AppData\\Local\\Temp',
+  }
+
+  assert.equal(isWindowsAclStampForbidden('C:\\Windows', env), true)
+  assert.equal(isWindowsAclStampForbidden('C:\\Windows\\System32', env), true)
+  assert.equal(isWindowsAclStampForbidden('C:\\Program Files', env), true)
+  assert.equal(isWindowsAclStampForbidden('C:\\Program Files\\nodejs', env), true)
+  assert.equal(isWindowsAclStampForbidden('C:\\Program Files (x86)\\Opptrix', env), true)
+  assert.equal(isWindowsAclStampForbidden('C:\\', env), true)
+  assert.equal(isWindowsAclStampForbidden('D:', env), true)
+
+  assert.equal(needsWindowsAclGrant('C:\\Users\\alice\\AppData\\Local\\Opptrix\\runtime-stage', env), true)
+  assert.equal(needsWindowsAclGrant(env.LOCALAPPDATA, env), true)
+  assert.equal(needsWindowsAclGrant(env.TEMP, env), true)
+  assert.equal(needsWindowsAclGrant('C:\\Program Files\\nodejs', env), false)
+
+  const filtered = filterWindowsAclGrantPaths([
+    'C:\\Windows',
+    'C:\\Program Files\\nodejs',
+    'C:\\',
+    'C:\\Users\\alice\\AppData\\Local\\Opptrix',
+    'C:\\Users\\alice\\workspace',
+  ], env)
+  assert.deepEqual(filtered, [
+    'C:\\Users\\alice\\AppData\\Local\\Opptrix',
+    'C:\\Users\\alice\\workspace',
+  ])
+})
+
+test('finalizeFilesystemPathsForPlatform strips win32 blacklist; non-win keeps paths', () => {
+  const env = {
+    WINDIR: 'C:\\Windows',
+    ProgramFiles: 'C:\\Program Files',
+    LOCALAPPDATA: 'C:\\Users\\alice\\AppData\\Local',
+    TEMP: 'C:\\Users\\alice\\AppData\\Local\\Temp',
+  }
+  const input = [
+    'C:\\Windows',
+    'C:\\Program Files\\nodejs',
+    'C:\\',
+    'C:\\Users\\alice\\AppData\\Local\\Opptrix',
+    'C:\\Users\\alice\\AppData\\Local\\Temp',
+  ]
+  const winOut = finalizeFilesystemPathsForPlatform(input, 'win32', env)
+  assert.ok(!winOut.some(p => /\\windows$/i.test(p) || /program files/i.test(p) || /^[a-z]:\\?$/i.test(p)))
+  assert.ok(winOut.includes('C:\\Users\\alice\\AppData\\Local\\Opptrix'))
+  assert.ok(winOut.includes('C:\\Users\\alice\\AppData\\Local\\Temp'))
+
+  const macOut = finalizeFilesystemPathsForPlatform(['/usr/bin', '/System/Library'], 'darwin', env)
+  assert.deepEqual(macOut, ['/usr/bin', '/System/Library'])
+})
+
+test('buildSandboxConfigFromGrantPaths win32 allow lists exclude system ACL stamp targets', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const rw = path.join(tmp, 'rw-grant')
+    await fs.mkdir(rw, { recursive: true })
+    const cfg = await buildSandboxConfigFromGrantPaths([{ abs_path: rw, mode: 'rw' }], false)
+
+    if (process.platform === 'win32') {
+      const windir = process.env.WINDIR ?? 'C:\\Windows'
+      const pf = process.env.ProgramFiles ?? 'C:\\Program Files'
+      const localApp = process.env.LOCALAPPDATA
+      const temp = process.env.TEMP ?? process.env.TMP
+
+      const allowReadNorm = cfg.filesystem.allowRead.map(p => path.resolve(p).toLowerCase())
+      assert.ok(!allowReadNorm.includes(path.resolve(windir).toLowerCase()))
+      assert.ok(!allowReadNorm.includes(path.resolve(pf).toLowerCase()))
+      assert.ok(!allowReadNorm.some(p => /^[a-z]:\\?$/.test(p)))
+      if (localApp) {
+        // LOCALAPPDATA 可进 allowRead；整棵不得进 allowWrite
+        assert.ok(allowReadNorm.includes(path.resolve(localApp).toLowerCase()))
+        assert.ok(!cfg.filesystem.allowWrite.some(
+          p => path.resolve(p).toLowerCase() === path.resolve(localApp).toLowerCase(),
+        ))
+      }
+      if (temp) {
+        assert.ok(cfg.filesystem.allowWrite.some(
+          p => path.resolve(p).toLowerCase() === path.resolve(temp).toLowerCase(),
+        ))
+      }
+      assert.ok(cfg.filesystem.allowWrite.some(p => path.resolve(p) === path.resolve(rw)))
+      assert.ok(cfg.filesystem.denyRead.some(p => path.resolve(p) === path.resolve(os.homedir())))
+    } else {
+      // 非 Win：策略出口不破坏既有路径（darwin/linux 系统只读仍在）
+      assert.ok(cfg.filesystem.allowRead.some(p => path.resolve(p) === path.resolve(rw)))
+      assert.ok(cfg.filesystem.denyRead.some(p => path.resolve(p) === path.resolve(os.homedir())))
+      assert.ok(cfg.filesystem.allowWrite.some(p => path.resolve(p) === path.resolve(rw)))
+      if (process.platform === 'darwin' || process.platform === 'linux') {
+        assert.ok(cfg.filesystem.allowRead.some(p => path.resolve(p) === path.resolve('/usr/bin')))
+      }
+    }
   })
 })
 
