@@ -96,7 +96,13 @@ import {
   createEmptyChatUsage,
   resolveTurnUsage,
 } from './llm/usage-estimate.js'
-import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
+import {
+  mergeTokenUsage,
+  emptyTokenUsage,
+  promptCacheKeyForSession,
+  resolveCacheWarmth,
+  type TokenUsage,
+} from './llm/token-usage.js'
 import {
   isLibraryExtractReady,
   isTranscriptExtractReady,
@@ -1156,7 +1162,13 @@ export class AgentEngine {
         ?? 'default'
       const providerId = providerIdFromModelRef(activeModel)
 
-      logChatDebugRoundStart(sessionId, { round: round + 1, model: activeModel || modelId })
+      const promptCacheKey = promptCacheKeyForSession(sessionId)
+      logChatDebugRoundStart(sessionId, {
+        round: round + 1,
+        model: activeModel || modelId,
+        promptCacheKey,
+        cacheWarmth: 'unknown',
+      })
 
       let overflowRetried = false
       let lastRoundEstimatedTokens: number | undefined
@@ -1275,11 +1287,16 @@ export class AgentEngine {
         finishReason: turn.finishReason,
         contentLen: turnContentText.length,
         toolCallNames: turn.message.tool_calls?.map(tc => tc.function.name).filter(Boolean),
+        promptCacheKey,
+        cacheWarmth: resolveCacheWarmth(turn.usage),
         usage: turn.usage
           ? {
               promptTokens: turn.usage.promptTokens,
               completionTokens: turn.usage.completionTokens,
               totalTokens: turn.usage.totalTokens,
+              ...(turn.usage.cachedPromptTokens !== undefined
+                ? { cachedPromptTokens: turn.usage.cachedPromptTokens }
+                : {}),
             }
           : undefined,
       })

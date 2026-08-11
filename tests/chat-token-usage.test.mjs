@@ -95,14 +95,57 @@ describe('parseOpenAiUsage', () => {
     })
   })
 
+  it('parses cached_tokens from prompt_tokens_details', () => {
+    const usage = parseOpenAiUsage({
+      prompt_tokens: 200,
+      completion_tokens: 10,
+      total_tokens: 210,
+      prompt_tokens_details: { cached_tokens: 180 },
+    })
+    assert.equal(usage?.cachedPromptTokens, 180)
+  })
+
+  it('parses top-level cached_tokens', () => {
+    const usage = parseOpenAiUsage({
+      prompt_tokens: 50,
+      completion_tokens: 5,
+      total_tokens: 55,
+      cached_tokens: 0,
+    })
+    assert.equal(usage?.cachedPromptTokens, 0)
+  })
+
+  it('omits cachedPromptTokens when absent', () => {
+    const usage = parseOpenAiUsage({
+      prompt_tokens: 10,
+      completion_tokens: 1,
+      total_tokens: 11,
+    })
+    assert.equal(usage?.cachedPromptTokens, undefined)
+  })
+
   it('merges usage totals', () => {
-    const a = { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
-    const b = { promptTokens: 20, completionTokens: 8, totalTokens: 28 }
+    const a = { promptTokens: 10, completionTokens: 5, totalTokens: 15, cachedPromptTokens: 8 }
+    const b = { promptTokens: 20, completionTokens: 8, totalTokens: 28, cachedPromptTokens: 2 }
     assert.deepEqual(mergeTokenUsage(a, b), {
       promptTokens: 30,
       completionTokens: 13,
       totalTokens: 43,
+      cachedPromptTokens: 10,
     })
+  })
+})
+
+describe('resolveCacheWarmth / promptCacheKeyForSession', () => {
+  it('derives warm|cold|unknown', async () => {
+    const { resolveCacheWarmth, promptCacheKeyForSession } = await import(
+      '../packages/agent/dist/llm/token-usage.js'
+    )
+    assert.equal(resolveCacheWarmth(undefined), 'unknown')
+    assert.equal(resolveCacheWarmth({}), 'unknown')
+    assert.equal(resolveCacheWarmth({ cachedPromptTokens: 0 }), 'cold')
+    assert.equal(resolveCacheWarmth({ cachedPromptTokens: 12 }), 'warm')
+    assert.equal(promptCacheKeyForSession('abc'), 'opptrix-session:abc')
   })
 })
 

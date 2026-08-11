@@ -76,14 +76,23 @@ function appendJsonl(sessionId: string, event: Record<string, unknown>): void {
   }
 }
 
+export type ChatDebugCacheWarmth = 'warm' | 'cold' | 'unknown'
+
 export function logChatDebugRoundStart(
   sessionId: string,
-  payload: { round: number; model: string },
+  payload: {
+    round: number
+    model: string
+    promptCacheKey?: string
+    cacheWarmth?: ChatDebugCacheWarmth
+  },
 ): void {
   appendJsonl(sessionId, {
     event: 'round_start',
     round: payload.round,
     model: payload.model,
+    ...(payload.promptCacheKey ? { promptCacheKey: payload.promptCacheKey } : {}),
+    cacheWarmth: payload.cacheWarmth ?? 'unknown',
   })
 }
 
@@ -105,7 +114,14 @@ export function logChatDebugRoundEnd(
     finishReason: string
     contentLen: number
     toolCallNames?: string[]
-    usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
+    usage?: {
+      promptTokens?: number
+      completionTokens?: number
+      totalTokens?: number
+      cachedPromptTokens?: number
+    }
+    promptCacheKey?: string
+    cacheWarmth?: ChatDebugCacheWarmth
   },
 ): void {
   appendJsonl(sessionId, {
@@ -114,6 +130,8 @@ export function logChatDebugRoundEnd(
     contentLen: payload.contentLen,
     ...(payload.toolCallNames?.length ? { toolCallNames: payload.toolCallNames } : {}),
     ...(payload.usage ? { usage: payload.usage } : {}),
+    ...(payload.promptCacheKey ? { promptCacheKey: payload.promptCacheKey } : {}),
+    cacheWarmth: payload.cacheWarmth ?? 'unknown',
   })
 }
 

@@ -1,6 +1,10 @@
 import type { OpenAiTool } from '../tools.js'
 import { formatOutboundFetchError, outboundFetch } from './outbound-fetch.js'
-import { parseOpenAiUsage, type TokenUsage } from './token-usage.js'
+import {
+  parseOpenAiUsage,
+  promptCacheKeyForSession,
+  type TokenUsage,
+} from './token-usage.js'
 import {
   parseAssistantResponseContent,
   sanitizeMessagesForModelMedia,
@@ -529,6 +533,11 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       }
       if (opts?.reasoningEffort) {
         body.reasoning_effort = opts.reasoningEffort
+      }
+      // 观测用：稳定 session 级 prompt cache key；不因 warm/cold 改写 messages
+      const sessionId = opts?.sessionId?.trim()
+      if (sessionId) {
+        body.prompt_cache_key = promptCacheKeyForSession(sessionId)
       }
       if (tools?.length) {
         body.tools = tools
