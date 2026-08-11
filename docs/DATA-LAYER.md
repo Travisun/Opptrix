@@ -995,7 +995,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 | Provider | manifest 默认 | 用户可调 | 说明 |
 |----------|---------------|----------|------|
-| tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0；**有 Key 时 CN ETF**（列表/概况/净值/持仓/行情）优先走 Fuyao `/api/fund/*` |
+| tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0；**有 Key 时 CN ETF**（列表/概况/净值/持仓/行情）优先走 Fuyao `/api/fund/*`；**CN 个股 realtime** 并行 enrich `valuations/snapshot`（pe/pb）；**etfProfile** 并行 enrich `fund/holders/detail` |
 | tushare | 110 | ✅ | 需 Token；bulk/基本面 |
 | tickflow | 100 | ✅ | 需 Key；多市场行情 |
 | zzshare / baostock 等免费 | 105–110 | ✅ | 免费层（effective 低于需 Key 层） |

@@ -48,8 +48,10 @@ const useStyles = makeStyles({
     minHeight: 0,
   },
   rootExpanded: {
-    flexShrink: 0,
+    flex: 1,
+    minHeight: 0,
     width: '100%',
+    height: '100%',
   },
   toolbar: {
     display: 'flex',
@@ -109,7 +111,10 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   chartAreaExpanded: {
+    flex: 1,
+    minHeight: 0,
     width: '100%',
+    overflow: 'hidden',
   },
   legendItem: {
     display: 'inline-flex',
@@ -132,7 +137,8 @@ const useStyles = makeStyles({
   chartFrameExpanded: {
     display: 'flex',
     flexDirection: 'column',
-    minHeight: '360px',
+    flex: 1,
+    minHeight: 0,
   },
   chartOverlay: {
     position: 'absolute',
@@ -150,7 +156,14 @@ const useStyles = makeStyles({
     '& > :first-child': { borderTop: 'none' },
   },
   chartStackExpanded: {
-    flexShrink: 0,
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  paneRowExpanded: {
+    flex: 1,
+    minHeight: 0,
   },
   paneRow: {
     display: 'flex',
@@ -181,7 +194,7 @@ const useStyles = makeStyles({
     '& [class*="attribution"]': { display: 'none !important', opacity: '0 !important' },
   },
   paneMain: { height: '148px' },
-  paneMainExpanded: { minHeight: '300px', height: '300px' },
+  paneMainExpanded: { flex: 1, minHeight: '120px' },
   paneVol: { height: '38px' },
   paneVolExpanded: { height: '46px', flexShrink: 0 },
   paneMacd: { height: '36px' },
@@ -720,7 +733,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
           )}
 
           <div className={mergeClasses(s.chartStack, expanded && s.chartStackExpanded)}>
-            <div className={s.paneRow}>
+            <div className={mergeClasses(s.paneRow, expanded && s.paneRowExpanded)}>
               <span className={s.paneLabel}>{intraday ? '分' : 'K'}</span>
               <div className={s.paneKSplit}>
                 <div className={mergeClasses(s.panePlot, expanded ? s.paneMainExpanded : s.paneMain)} ref={mainRef} />

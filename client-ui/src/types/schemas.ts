@@ -376,6 +376,34 @@ export interface MarketDragonTigerItem {
   change_pct?: number | null
 }
 
+export interface MarketLimitUpItem {
+  code: string
+  name: string
+  change_pct: number | null
+  reason?: string
+  continue_day_text?: string
+  board_label?: string
+}
+
+export interface MarketHotItem {
+  code: string
+  name: string
+  rank?: number | null
+  heat?: number | null
+  rank_change?: number | null
+}
+
+export interface MarketLimitLadderBoard {
+  key: string
+  label: string
+  items: Array<{ code: string; name: string; board_num?: number }>
+}
+
+export interface MarketLimitLadder {
+  date: string | null
+  boards: MarketLimitLadderBoard[]
+}
+
 export interface MarketDynamicsData {
   refreshed_at: string
   sections: MarketDynamicsSection[]
@@ -383,6 +411,10 @@ export interface MarketDynamicsData {
   cn_losers?: MarketStockMover[]
   cn_dragon_tiger?: MarketDragonTigerItem[]
   cn_dragon_tiger_date?: string | null
+  cn_limit_up?: MarketLimitUpItem[]
+  cn_skyrocket?: MarketHotItem[]
+  cn_limit_ladder?: MarketLimitLadder | null
+  cn_emotion_source?: 'tonghuashun' | null
 }
 
 export interface StockSearchItem {

@@ -23,6 +23,11 @@ const useStyles = makeStyles({
     gridTemplateRows: '1fr 1fr',
     overflow: 'hidden',
   },
+  rootEmbedded: {
+    flex: '0 0 auto',
+    height: '300px',
+    minHeight: '280px',
+  },
   col: {
     minWidth: 0,
     minHeight: 0,
@@ -182,13 +187,15 @@ function PanelCol({ title, s, headAction, children }: PanelColProps) {
 type Props = {
   gainers: MarketStockMover[]
   losers: MarketStockMover[]
+  /** 嵌入纵向滚动盘面时使用固定高度网格，避免与外层滚动冲突 */
+  embedded?: boolean
 }
 
-export default function MarketBoardFocus({ gainers, losers }: Props) {
+export default function MarketBoardFocus({ gainers, losers, embedded = false }: Props) {
   const s = useStyles()
 
   return (
-    <div className={s.root}>
+    <div className={mergeClasses(s.root, embedded && s.rootEmbedded)}>
       <PanelCol title="涨幅" s={s}>
         <MoverRows items={gainers} s={s} />
       </PanelCol>

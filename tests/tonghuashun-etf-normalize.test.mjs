@@ -2,15 +2,105 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  applyValuationToStockRealtime,
+  buildValuationProfileMetrics,
+  mapValuationSnapshotItem,
+} from '../packages/a-stock-layer/dist/providers/tonghuashun/normalize/index.js'
+import {
   computeEtfPremiumRate,
   mapFundHoldingsToEtfRows,
   mapFundHistoricalBarsToKlines,
+  mapFundHoldersToProfileFields,
   mapFundMarketSnapshotToStockRealtime,
   mapFundNavRows,
   mapFundProfileToEtfProfileRow,
   mapFundReturnsToPerformance,
   mapFundTickerToListItem,
+  pickFundHolderRow,
 } from '../packages/a-stock-layer/dist/providers/tonghuashun/normalize/fund.js'
+
+test('mapValuationSnapshotItem maps pe_ttm→pe and pb_mrq→pb', () => {
+  const mapped = mapValuationSnapshotItem({
+    thscode: '600519.SH',
+    pe_ttm: 21.3567,
+    pe_mrq: 20.8841,
+    pb_mrq: 7.1532,
+    ps_ttm: 10.3284,
+    pcf_ttm: 19.7716,
+  })
+  assert.ok(mapped)
+  assert.equal(mapped.pe, 21.3567)
+  assert.equal(mapped.pb, 7.1532)
+  assert.equal(mapped.extras.pe_mrq, 20.8841)
+  assert.equal(mapped.extras.ps_ttm, 10.3284)
+  assert.equal(mapped.extras.pcf_ttm, 19.7716)
+})
+
+test('applyValuationToStockRealtime merges pe/pb without breaking other fields', () => {
+  const rt = applyValuationToStockRealtime({
+    code: '600519',
+    name: '贵州茅台',
+    price: 1800,
+    changePct: 1.2,
+    pe: null,
+    pb: null,
+    turnoverRate: null,
+    volume: 100,
+    amount: 200,
+  }, mapValuationSnapshotItem({ pe_ttm: 21.3, pb_mrq: 7.1 }))
+  assert.equal(rt.pe, 21.3)
+  assert.equal(rt.pb, 7.1)
+  assert.equal(rt.price, 1800)
+})
+
+test('buildValuationProfileMetrics uses Chinese labels', () => {
+  const metrics = buildValuationProfileMetrics({ pe_ttm: 21.3, pb_mrq: 7.1, ps_ttm: 10.2 })
+  assert.ok(metrics.some(m => m.label === '市盈率（TTM）' && m.value.includes('21')))
+  assert.ok(metrics.some(m => m.label === '市净率（MRQ）'))
+  assert.ok(metrics.some(m => m.label === '市销率（TTM）'))
+})
+
+test('pickFundHolderRow prefers separate scope with latest report', () => {
+  const row = pickFundHolderRow([
+    { merge_scope: 'merged', report_date_ms: 1609344000000, holder_amount: 100 },
+    { merge_scope: 'separate', report_date_ms: 1767110400000, holder_amount: 3951034 },
+  ])
+  assert.equal(row?.holder_amount, 3951034)
+})
+
+test('mapFundHoldersToProfileFields maps holder_amount and ins_position', () => {
+  const fields = mapFundHoldersToProfileFields([
+    {
+      merge_scope: 'separate',
+      report_date_ms: 1767110400000,
+      holder_amount: 3951034,
+      avg_holder_share: 10159.83,
+      ins_position: 0.97,
+      psnl_rate: 99.03,
+    },
+  ])
+  assert.ok(fields)
+  assert.equal(fields.holderAmount, 3951034)
+  assert.equal(fields.avgHolderShare, 10159.83)
+  assert.equal(fields.instHolderRatio, 0.97)
+  assert.equal(fields.indivHolderRatio, 99.03)
+  assert.ok(fields.holderReportDate)
+})
+
+test('mapFundProfileToEtfProfileRow merges holder fields', () => {
+  const row = mapFundProfileToEtfProfileRow('510300', {
+    fund_name: '沪深300ETF',
+    estab_date: 1386028800000,
+  }, {
+    holders: {
+      holderAmount: 1000,
+      instHolderRatio: 12.5,
+      indivHolderRatio: 87.5,
+    },
+  })
+  assert.equal(row.holderAmount, 1000)
+  assert.equal(row.instHolderRatio, 12.5)
+})
 
 test('computeEtfPremiumRate matches sinafinance percent convention', () => {
   const premium = computeEtfPremiumRate(4.753, 4.71)
@@ -102,18 +192,24 @@ test('mapFundHistoricalBarsToKlines computes changePct from prior close', () => 
   assert.ok(Math.abs((klines[1].changePct ?? 0) - (-0.273) ) < 0.01)
 })
 
-test('mapFundReturnsToPerformance maps Fuyao return_* fields', () => {
+test('mapFundReturnsToPerformance maps Fuyao return_* fields including w13/w26/year3', () => {
   const perf = mapFundReturnsToPerformance({
     return_month: -3.33,
+    return_tmonth: 5.5,
+    return_hyear: 8.2,
     return_year: 19.66,
     return_nowyear: 2.49,
     return_now: 121.58,
+    return_tyear: 45.6,
   })
   assert.ok(perf)
   assert.equal(perf.w4, -3.33)
+  assert.equal(perf.w13, 5.5)
+  assert.equal(perf.w26, 8.2)
   assert.equal(perf.w52, 19.66)
   assert.equal(perf.year, 2.49)
   assert.equal(perf.total, 121.58)
+  assert.equal(perf.year3, 45.6)
 })
 
 test('mapFundTickerToListItem filters non-ETF codes', () => {

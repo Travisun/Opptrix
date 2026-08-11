@@ -331,13 +331,48 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   iconBtn: {...ghostInteractive,
-
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '26px',
+    height: '26px',
+    padding: 0,
     border: 'none',
-    background: 'transparent',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
     color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
-    padding: '2px',
     lineHeight: 0,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
+  },
+  footerAction: {...ghostInteractive,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '26px',
+    padding: '0 8px',
+    border: 'none',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textTertiary,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 500,
+    lineHeight: 1.25,
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
+    ':disabled': {
+      cursor: 'default',
+      opacity: 0.6,
+    },
   },
 })
 
@@ -780,7 +815,15 @@ export default function WatchlistTab({
               ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
               : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
         </span>
-        <button type="button" className={s.iconBtn} onClick={() => void refreshQuotes()}>刷新</button>
+        <button
+          type="button"
+          className={s.footerAction}
+          aria-label="刷新行情"
+          disabled={loadingQuotes}
+          onClick={() => void refreshQuotes()}
+        >
+          刷新
+        </button>
       </div>
 
       <WatchlistGroupsDialog

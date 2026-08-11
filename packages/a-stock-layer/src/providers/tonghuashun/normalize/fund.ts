@@ -32,6 +32,39 @@ export function computeEtfPremiumRate(
   return ((price - nav) / nav) * 100
 }
 
+export function pickFundHolderRow(items: Record<string, unknown>[]): Record<string, unknown> | null {
+  if (!items.length) return null
+  const latest = (scope: string) => items
+    .filter(i => String(i.merge_scope ?? '') === scope)
+    .sort((a, b) => Number(b.report_date_ms) - Number(a.report_date_ms))[0]
+  return latest('separate') ?? latest('merged') ?? items[0] ?? null
+}
+
+export function mapFundHoldersToProfileFields(
+  items: Record<string, unknown>[],
+): {
+  holderAmount?: number | null
+  avgHolderShare?: number | null
+  instHolderRatio?: number | null
+  indivHolderRatio?: number | null
+  holderReportDate?: string
+} | undefined {
+  const row = pickFundHolderRow(items)
+  if (!row) return undefined
+  const fields = {
+    holderAmount: safeFloat(row.holder_amount),
+    avgHolderShare: safeFloat(row.avg_holder_share),
+    instHolderRatio: safeFloat(row.ins_position),
+    indivHolderRatio: safeFloat(row.psnl_rate),
+    holderReportDate: msToYmd(row.report_date_ms) || undefined,
+  }
+  const hasValue = fields.holderAmount != null
+    || fields.avgHolderShare != null
+    || fields.instHolderRatio != null
+    || fields.indivHolderRatio != null
+  return hasValue ? fields : undefined
+}
+
 export function mapFundReturnsToPerformance(
   row: Record<string, unknown> | null | undefined,
 ): Record<string, number | null> | undefined {
@@ -57,6 +90,7 @@ export function mapFundProfileToEtfProfileRow(
     premiumRate?: number | null
     returns?: Record<string, unknown> | null
     name?: string
+    holders?: ReturnType<typeof mapFundHoldersToProfileFields>
   },
 ): StandardEtfProfileRow {
   const c = normalizeCode(code)
@@ -73,6 +107,7 @@ export function mapFundProfileToEtfProfileRow(
     nav: opts?.nav ?? null,
     premiumRate: opts?.premiumRate ?? null,
     performance,
+    ...opts?.holders,
     source: 'tonghuashun',
   }
 }

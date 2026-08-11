@@ -24,6 +24,10 @@ import {
   mapTickerItem,
   mapTickerToProfile,
   resampleKlines,
+  applyValuationToStockRealtime,
+  buildValuationProfileMetrics,
+  indexValuationItems,
+  mapValuationSnapshotItem,
 } from '../../normalize/index.js'
 import {
   mapFundHistoricalBarsToKlines,
@@ -99,13 +103,18 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     }
     return this.withClient(async client => {
       const thscode = toThsCode(code)
-      const [snap, name] = await Promise.all([
+      const [snap, name, valSnap] = await Promise.all([
         client.pricesSnapshot(thscode),
         this.resolveName(client, code),
+        client.valuationsSnapshot(thscode).catch(() => ({ item: [] })),
       ])
       const item = snap.item?.[0]
       if (!item) return null
-      return [mapSnapshotToStockRealtime(item, name)]
+      const valItem = (valSnap.item ?? []).find(
+        it => fromThsCode(String(it.thscode ?? '')) === normalizeCode(code),
+      ) ?? valSnap.item?.[0]
+      const row = mapSnapshotToStockRealtime(item, name)
+      return [applyValuationToStockRealtime(row, mapValuationSnapshotItem(valItem))]
     })
   }
 
@@ -118,11 +127,17 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
 
       if (stockCodes.length) {
         const thscodes = stockCodes.map(toThsCode)
-        const snap = await client.pricesSnapshot(thscodes)
+        const [snap, valSnap] = await Promise.all([
+          client.pricesSnapshot(thscodes),
+          client.valuationsSnapshot(thscodes).catch(() => ({ item: [] })),
+        ])
+        const valByThscode = indexValuationItems(valSnap.item ?? [])
         for (const item of snap.item ?? []) {
           const c = fromThsCode(String(item.thscode ?? ''))
           const name = await this.resolveName(client, c)
-          out.push(mapSnapshotToStockRealtime(item, name))
+          const thscode = String(item.thscode ?? toThsCode(c))
+          const row = mapSnapshotToStockRealtime(item, name)
+          out.push(applyValuationToStockRealtime(row, valByThscode.get(thscode)))
         }
       }
 
@@ -236,12 +251,33 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
   }
 
   async profile(code: string): Promise<StockProfile[] | null> {
+    if (isCnEtfCode(code)) {
+      return this.withClient(async client => {
+        const data = await client.tickersSearch(normalizeCode(code), 5, 'fund-etf')
+        const hit = (data.item ?? []).find(it => fromThsCode(String(it.thscode ?? '')) === normalizeCode(code))
+          ?? data.item?.[0]
+        if (!hit) return null
+        const profile = mapTickerToProfile(hit)
+        if (profile.name) this.nameCache.set(profile.code, profile.name)
+        return [profile]
+      })
+    }
     return this.withClient(async client => {
-      const data = await client.tickersSearch(normalizeCode(code), 5)
-      const hit = (data.item ?? []).find(it => fromThsCode(String(it.thscode ?? '')) === normalizeCode(code))
-        ?? data.item?.[0]
+      const bare = normalizeCode(code)
+      const thscode = toThsCode(bare)
+      const [searchData, valSnap] = await Promise.all([
+        client.tickersSearch(bare, 5),
+        client.valuationsSnapshot(thscode).catch(() => ({ item: [] })),
+      ])
+      const hit = (searchData.item ?? []).find(it => fromThsCode(String(it.thscode ?? '')) === bare)
+        ?? searchData.item?.[0]
       if (!hit) return null
       const profile = mapTickerToProfile(hit)
+      const valItem = (valSnap.item ?? []).find(
+        it => fromThsCode(String(it.thscode ?? '')) === bare,
+      ) ?? valSnap.item?.[0]
+      const metrics = buildValuationProfileMetrics(valItem)
+      if (metrics.length) profile.profileMetrics = metrics
       if (profile.name) this.nameCache.set(profile.code, profile.name)
       return [profile]
     })

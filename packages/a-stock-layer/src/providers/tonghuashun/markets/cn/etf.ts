@@ -9,6 +9,7 @@ import {
   FUYAO_EXCHANGE_FUND_TYPE,
   latestUnitNavFromNavItems,
   mapFundHoldingsToEtfRows,
+  mapFundHoldersToProfileFields,
   mapFundNavRows,
   mapFundProfileToEtfProfileRow,
   mapFundTickerToListItem,
@@ -68,11 +69,12 @@ export function mixTonghuashunEtf(Driver: { prototype: TonghuashunMarketHandler 
     const bare = normalizeCode(etfCode)
     const thscode = resolveExchangeThscode(bare)
     return withFuyaoClient(async client => {
-      const [profileData, navData, snapData, returnsData] = await Promise.all([
+      const [profileData, navData, snapData, returnsData, holdersData] = await Promise.all([
         client.fundProfileDetail(FUYAO_EXCHANGE_FUND_TYPE, thscode),
         client.fundPerformanceNav(FUYAO_EXCHANGE_FUND_TYPE, thscode, { nav_type: 'unit' }),
         client.fundMarketSnapshot(thscode),
         client.fundPerformanceReturns(FUYAO_EXCHANGE_FUND_TYPE, thscode),
+        client.fundHoldersDetail(FUYAO_EXCHANGE_FUND_TYPE, thscode).catch(() => ({ item: [] })),
       ])
       const profile = profileData.item?.[0]
       if (!profile) return null
@@ -84,6 +86,7 @@ export function mixTonghuashunEtf(Driver: { prototype: TonghuashunMarketHandler 
         nav: unitNav,
         premiumRate,
         returns: returnsData.item?.[0] ?? null,
+        holders: mapFundHoldersToProfileFields(holdersData.item ?? []),
       })
       return [row]
     })

@@ -126,6 +126,18 @@ export class FuyaoClient {
     )
   }
 
+  /**
+   * A 股估值快照（PE/PB 等）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/valuations/snapshot
+   */
+  valuationsSnapshot(thscodes: string | string[]) {
+    const joined = Array.isArray(thscodes) ? thscodes.join(',') : thscodes
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/valuations/snapshot',
+      { thscodes: joined },
+    )
+  }
+
   async pricesHistorical(
     thscode: string,
     startMs: number,
@@ -400,6 +412,21 @@ export class FuyaoClient {
     return this.get<{ item?: Record<string, unknown>[] }>(
       '/api/fund/performance/returns',
       { fund_type: fundType, thscode },
+    )
+  }
+
+  /**
+   * 基金持有人结构
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/holders/detail
+   */
+  fundHoldersDetail(
+    fundType: string,
+    thscode: string,
+    mergeScope: 'all' | 'merged' | 'separate' = 'all',
+  ) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/holders/detail',
+      { fund_type: fundType, thscode, merge_scope: mergeScope },
     )
   }
 

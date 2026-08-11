@@ -96,6 +96,7 @@
 | `trade_calendar` | `year?` | A 股交易日历 |
 | `macro_series` | `scope?` / `kind` / `page?` / `page_size?` | 宏观序列（中国 MACRO_INDICATOR；国外/行业/油价/翻页→eastmoney cjsj） |
 | `index_constituents` | `index_code` / `code` | 指数/同花顺板块成分 |
+| `market_dynamics` | — | 市场全景（指数/全球/涨跌榜/龙虎榜）；启用同花顺时可选 `cn_limit_up` / `cn_skyrocket` / `cn_limit_ladder` |
 | `dragon_tiger` | `date?` | 龙虎榜 |
 | `limit_updown` | `date?` | 涨跌停池 |
 | `market_sentiment` | `code?` | 市场情绪/个股热度 |
@@ -259,6 +260,7 @@ POST /api/research
 | `trade_calendar` | `year?` | A 股交易日历 |
 | `macro_series` | `scope?` + `kind` + 可选 `page` / `page_size` / `limit` | 宏观事实序列（`MACRO_INDICATOR` + eastmoney cjsj：国外/行业/油价/翻页） |
 | `index_constituents` | `index_code` | 指数成分（标准 INDEX_CONST + 同花顺回退） |
+| `market_dynamics` | — | 市场全景；同花顺启用时附加涨停池/飙升榜/连板天梯（`cn_limit_*` / `cn_skyrocket`） |
 | `dragon_tiger` | `date?` | 龙虎榜 |
 | `limit_updown` | `date?` | 涨跌停池 |
 | `market_sentiment` | `code?` | 情绪/热度 |

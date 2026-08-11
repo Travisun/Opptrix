@@ -249,6 +249,9 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
                 losers={data?.cn_losers ?? []}
                 dragonTiger={data?.cn_dragon_tiger ?? []}
                 dragonTigerDate={data?.cn_dragon_tiger_date}
+                limitUp={data?.cn_limit_up ?? []}
+                skyrocket={data?.cn_skyrocket ?? []}
+                limitLadder={data?.cn_limit_ladder}
                 marketLoading={loading}
                 articles={insights.articles}
                 insightsLoading={insights.loading}

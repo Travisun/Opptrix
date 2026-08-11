@@ -433,6 +433,11 @@ export interface EtfProfileData {
     year3?: number | null
   }
   rankTotal?: number | null
+  holderAmount?: number | null
+  avgHolderShare?: number | null
+  instHolderRatio?: number | null
+  indivHolderRatio?: number | null
+  holderReportDate?: string
   source?: string
 }
 

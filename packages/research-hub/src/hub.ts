@@ -114,6 +114,11 @@ import {
   normalizeShareholderPayload,
 } from './stock-detail-normalize.js'
 import {
+  mapCnLimitUpItems,
+  mapCnSkyrocketItems,
+  parseCnLimitLadder,
+} from './market-emotion-map.js'
+import {
   buildCrossMarketDetailPayload,
   mergeCrossMarketQuote,
   normalizeCrossMarketArticles,
@@ -271,7 +276,7 @@ export class ResearchHub {
         }
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
         case 'portfolio_analysis': return this.portfolioAnalysis(params, t0)
-        case 'market_dynamics': return this.marketDynamics(t0)
+        case 'market_dynamics': return await this.marketDynamics(t0)
         case 'search_stocks':
           return await this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
         case 'stock_quotes': {
@@ -806,7 +811,49 @@ export class ResearchHub {
   }
 
   private async marketDynamics(t0: number) {
-    const [homeR, majorR, asiaR, europeR, americaR, gainersR, losersR, dragonR] = await Promise.all([
+    const fetchEmotionLimitUp = async () => {
+      try {
+        const r = await this.de.limitUpdown()
+        if (!r.success || !Array.isArray(r.data)) return []
+        return mapCnLimitUpItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
+    const fetchEmotionSkyrocket = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsSkyrocketList', ['day'])
+        if (!r.success) return []
+        return mapCnSkyrocketItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
+    const fetchEmotionLadder = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsLimitUpLadder', [])
+        if (!r.success) return null
+        return parseCnLimitLadder(r.data)
+      } catch {
+        return null
+      }
+    }
+
+    const [
+      homeR,
+      majorR,
+      asiaR,
+      europeR,
+      americaR,
+      gainersR,
+      losersR,
+      dragonR,
+      cnLimitUp,
+      cnSkyrocket,
+      cnLimitLadder,
+    ] = await Promise.all([
       this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['mstats_home', false]),
       this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['major', false]),
       this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AS', 1, 40, 2, 'desc']),
@@ -815,6 +862,9 @@ export class ResearchHub {
       this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'desc']),
       this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'asc']),
       this.de.dragonTiger(),
+      fetchEmotionLimitUp(),
+      fetchEmotionSkyrocket(),
+      fetchEmotionLadder(),
     ])
 
     const mapCnItems = (resp: { success: boolean; data?: unknown }) => {
@@ -908,6 +958,10 @@ export class ResearchHub {
       },
     ].filter(section => section.items.length > 0)
 
+    const hasEmotionData = cnLimitUp.length > 0
+      || cnSkyrocket.length > 0
+      || (cnLimitLadder?.boards.length ?? 0) > 0
+
     return ok({
       refreshed_at: new Date().toISOString(),
       sections,
@@ -915,6 +969,10 @@ export class ResearchHub {
       cn_losers: mapMoverItems(losersR),
       cn_dragon_tiger: cnDragonTiger,
       cn_dragon_tiger_date: cnDragonTiger[0]?.date ?? null,
+      cn_limit_up: cnLimitUp.length ? cnLimitUp : undefined,
+      cn_skyrocket: cnSkyrocket.length ? cnSkyrocket : undefined,
+      cn_limit_ladder: cnLimitLadder,
+      cn_emotion_source: hasEmotionData ? 'tonghuashun' as const : null,
     }, '市场动态', t0)
   }
 

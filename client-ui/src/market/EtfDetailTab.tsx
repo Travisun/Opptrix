@@ -280,8 +280,12 @@ function performanceRows(profile: EtfProfileData | null): Array<{ label: string;
   const pairs: Array<{ key: keyof NonNullable<EtfProfileData['performance']>; label: string }> = [
     { key: 'w1', label: '近 1 周' },
     { key: 'w4', label: '近 1 月' },
+    { key: 'w13', label: '近 3 月' },
+    { key: 'w26', label: '近半年' },
     { key: 'w52', label: '近 1 年' },
     { key: 'year', label: '今年以来' },
+    { key: 'year3', label: '近 3 年' },
+    { key: 'total', label: '成立以来' },
   ]
   const out: Array<{ label: string; value: string }> = []
   for (const { key, label } of pairs) {
@@ -426,6 +430,12 @@ export default function EtfDetailTab({ stock }: Props) {
   const latestNav = snapshot?.nav ?? navRows[0] ?? null
   const profileTopHoldings = useMemo(() => normalizeProfileTopHoldings(profile), [profile])
   const perfRows = useMemo(() => performanceRows(profile), [profile])
+  const hasHolderStats = profile != null && (
+    profile.holderAmount != null
+    || profile.avgHolderShare != null
+    || profile.instHolderRatio != null
+    || profile.indivHolderRatio != null
+  )
   const holdingsFromProfile = useMemo(() => {
     if (!profileTopHoldings.length) return [] as EtfHoldingRow[]
     return profileTopHoldings.map(row => ({
@@ -601,6 +611,42 @@ export default function EtfDetailTab({ stock }: Props) {
                         <span className={s.metricValue}>{row.value}</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {hasHolderStats && (
+                <div className={s.subSection}>
+                  <Text className={s.sectionTitle}>持有人结构</Text>
+                  <div className={s.metricGrid}>
+                    {profile?.holderAmount != null && (
+                      <div className={s.metric}>
+                        <span className={s.metricLabel}>持有人户数</span>
+                        <span className={s.metricValue}>
+                          {formatCompactNumber(profile.holderAmount)}
+                        </span>
+                      </div>
+                    )}
+                    {profile?.avgHolderShare != null && (
+                      <div className={s.metric}>
+                        <span className={s.metricLabel}>户均份额</span>
+                        <span className={s.metricValue}>
+                          {formatCompactNumber(profile.avgHolderShare)}
+                        </span>
+                      </div>
+                    )}
+                    {profile?.instHolderRatio != null && (
+                      <div className={s.metric}>
+                        <span className={s.metricLabel}>机构占比</span>
+                        <span className={s.metricValue}>{formatPct(profile.instHolderRatio)}</span>
+                      </div>
+                    )}
+                    {profile?.indivHolderRatio != null && (
+                      <div className={s.metric}>
+                        <span className={s.metricLabel}>个人占比</span>
+                        <span className={s.metricValue}>{formatPct(profile.indivHolderRatio)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
