@@ -2,6 +2,7 @@ import type {
   Dividend, DragonTiger, FinancialSummary, IndexKline, IndexRealtime,
   LimitUpDown, SentimentData, StockKline, StockListItem, StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
+import { isCnEtfCode } from '../../../../core/instrument.js'
 import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { FuyaoClient } from '../../api/client.js'
@@ -24,6 +25,10 @@ import {
   mapTickerToProfile,
   resampleKlines,
 } from '../../normalize/index.js'
+import {
+  mapFundHistoricalBarsToKlines,
+  mapFundMarketSnapshotToStockRealtime,
+} from '../../normalize/fund.js'
 
 function todayYmd(): string {
   const d = new Date()
@@ -70,7 +75,8 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     const c = normalizeCode(code)
     const cached = this.nameCache.get(c)
     if (cached) return cached
-    const data = await client.tickersSearch(c, 3)
+    const assetType = isCnEtfCode(c) ? 'fund-etf' : 'a-share'
+    const data = await client.tickersSearch(c, 3, assetType)
     const hit = (data.item ?? []).find(it => fromThsCode(String(it.thscode ?? '')) === c)
       ?? data.item?.[0]
     const name = String(hit?.name ?? c)
@@ -79,6 +85,18 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
   }
 
   async realtime(code: string): Promise<StockRealtime[] | null> {
+    if (isCnEtfCode(code)) {
+      return this.withClient(async client => {
+        const thscode = toThsCode(code)
+        const [snap, name] = await Promise.all([
+          client.fundMarketSnapshot(thscode),
+          this.resolveName(client, code),
+        ])
+        const item = snap.item?.[0]
+        if (!item) return null
+        return [mapFundMarketSnapshotToStockRealtime(item, name)]
+      })
+    }
     return this.withClient(async client => {
       const thscode = toThsCode(code)
       const [snap, name] = await Promise.all([
@@ -93,17 +111,39 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
 
   async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
     if (!codes.length) return null
+    const etfCodes = codes.filter(c => isCnEtfCode(c))
+    const stockCodes = codes.filter(c => !isCnEtfCode(c))
     return this.withClient(async client => {
-      const thscodes = codes.map(toThsCode)
-      const snap = await client.pricesSnapshot(thscodes)
-      const items = snap.item ?? []
-      if (!items.length) return null
       const out: StockRealtime[] = []
-      for (const item of items) {
-        const code = fromThsCode(String(item.thscode ?? ''))
-        const name = await this.resolveName(client, code)
-        out.push(mapSnapshotToStockRealtime(item, name))
+
+      if (stockCodes.length) {
+        const thscodes = stockCodes.map(toThsCode)
+        const snap = await client.pricesSnapshot(thscodes)
+        for (const item of snap.item ?? []) {
+          const c = fromThsCode(String(item.thscode ?? ''))
+          const name = await this.resolveName(client, c)
+          out.push(mapSnapshotToStockRealtime(item, name))
+        }
       }
+
+      if (etfCodes.length) {
+        const etfRows = await Promise.all(
+          etfCodes.map(async c => {
+            const thscode = toThsCode(c)
+            const [snap, name] = await Promise.all([
+              client.fundMarketSnapshot(thscode),
+              this.resolveName(client, c),
+            ])
+            const item = snap.item?.[0]
+            if (!item) return null
+            return mapFundMarketSnapshotToStockRealtime(item, name)
+          }),
+        )
+        for (const row of etfRows) {
+          if (row) out.push(row)
+        }
+      }
+
       return out.length ? out : null
     })
   }
@@ -118,6 +158,23 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     const p = period.toLowerCase()
     if (p !== 'daily' && p !== 'weekly' && p !== 'monthly' && p !== 'day' && p !== 'week' && p !== 'month') {
       return null
+    }
+    if (isCnEtfCode(code)) {
+      return this.withClient(async client => {
+        const thscode = toThsCode(code)
+        const endMs = end ? ymdToMs(end, true) : Date.now()
+        const startMs = start
+          ? ymdToMs(start)
+          : ymdToMs(ymdDaysAgo(count ? Math.min(count * 2, 3650) : 800))
+        const bars = await client.fundMarketHistorical(thscode, startMs, endMs, '1d')
+        let mapped = mapFundHistoricalBarsToKlines(code, bars)
+        if (p.startsWith('week')) mapped = resampleKlines(mapped, 'weekly')
+        if (p.startsWith('month')) mapped = resampleKlines(mapped, 'monthly')
+        if (start) mapped = mapped.filter(b => b.date >= start.slice(0, 10))
+        if (end) mapped = mapped.filter(b => b.date <= end.slice(0, 10))
+        if (count && mapped.length > count) mapped = mapped.slice(-count)
+        return mapped.length ? mapped : null
+      })
     }
     return this.withClient(async client => {
       const thscode = toThsCode(code)

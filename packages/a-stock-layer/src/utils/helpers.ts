@@ -22,6 +22,9 @@ export function resolveStockMarketCode(code: string): StockMarket {
   const c = normalizeCode(code)
   if (isBseCode(c)) return 'BJ'
   if (c.startsWith('399')) return 'SZ'
+  // 上证 ETF（51/52/56/58）；深证 ETF 159xxx / 16xxxx 走默认 SZ
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return 'SH'
   if (c.startsWith('6')) return 'SH'
   if (c.startsWith('9') && !isBseCode(c)) return 'SH'
   if (c.startsWith('3') || c.startsWith('2')) return 'SZ'
@@ -49,6 +52,8 @@ export function resolveMarket(code: string): 'BJ' | 'SH' | 'SZ' {
   if (isShIndexCode(c)) {
     return 'SH'
   }
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return 'SH'
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return 'SH'
   return 'SZ'
 }
@@ -61,6 +66,8 @@ export function resolveSecId(code: string): string {
   if (c.startsWith('399')) return `0.${c}`
   if (isBse920Code(c)) return `3.${c}`
   if (isBseCode(c)) return `0.${c}`
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return `1.${c}`
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `1.${c}`
   return `0.${c}`
 }
@@ -106,6 +113,8 @@ function buildSecFromBare(c: string): string {
   if (isBseCode(c)) return `bj${c}`
   if (c.startsWith('399') || (c.startsWith('0') && !c.startsWith('000'))) return `sz${c}`
   if (isShIndexCode(c)) return `sh${c}`
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return `sh${c}`
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `sh${c}`
   return `sz${c}`
 }
@@ -127,7 +136,13 @@ export function cnSecSymbol(code: string, exchange?: string | null): string {
 export function secXueqiuSymbol(code: string): string {
   const c = normalizeCode(code)
   if (isBseCode(c)) return `BJ${c}`
-  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c)) || isShIndexCode(c)) {
+  const head2 = c.slice(0, 2)
+  if (
+    c.startsWith('6')
+    || (c.startsWith('9') && !isBseCode(c))
+    || isShIndexCode(c)
+    || head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58'
+  ) {
     return `SH${c}`
   }
   return `SZ${c}`

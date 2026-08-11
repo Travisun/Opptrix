@@ -481,7 +481,7 @@ export interface EtfScorecardData {
   dimensions: EtfScorecardDimension[]
   highlights: string[]
   risks: string[]
-  source: 'local'
+  source: 'local' | 'online'
   data_as_of: string | null
 }
 

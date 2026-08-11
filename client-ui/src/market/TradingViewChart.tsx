@@ -290,14 +290,22 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
   const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
     && hasApplicationCapability(instrumentRef, 'chart_daily')
   const cnEquityChart = instrumentRef.market === 'CN'
-    && (instrumentRef.assetClass === 'EQUITY' || instrumentRef.assetClass === 'INDEX')
+    && (instrumentRef.assetClass === 'EQUITY'
+      || instrumentRef.assetClass === 'INDEX'
+      || instrumentRef.assetClass === 'ETF')
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
   const canChart = cnEquityChart || crossMarketChart
+  const cnIntraday = cnEquityChart
+    && hasApplicationCapability(instrumentRef, 'chart_intraday')
   const crossMarketIntraday = crossMarketChart
     && hasApplicationCapability(instrumentRef, 'chart_intraday')
   const periodOptions = useMemo(() => {
-    if (cnEquityChart) return PERIODS
+    if (cnEquityChart) {
+      if (cnIntraday) return PERIODS
+      // CN ETF 等仅有日 K：不展示分时/分钟周期，避免整图报「不支持」
+      return PERIODS.filter(item => item.id === 'daily' || item.id === 'weekly' || item.id === 'monthly')
+    }
     if (crossMarketChart) {
       const options: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = []
       if (hasApplicationCapability(instrumentRef, 'chart_intraday')) {
@@ -307,7 +315,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
       return options
     }
     return PERIODS.filter(item => item.id === 'daily' || item.id === 'weekly' || item.id === 'monthly')
-  }, [cnEquityChart, crossMarketChart, instrumentRef])
+  }, [cnEquityChart, cnIntraday, crossMarketChart, instrumentRef])
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
   const [period, setPeriod] = useState<ChartPeriod>('daily')
@@ -503,13 +511,13 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
   }, [period, active, data?.isTradingDay, loadChart])
 
   useEffect(() => {
-    if (!cnEquityChart && !crossMarketIntraday) {
+    if (!cnIntraday && !crossMarketIntraday) {
       setIntradayAvailable(false)
       if (isIntradayPeriod(period) || isMinuteOhlcPeriod(period)) setPeriod('daily')
       return undefined
     }
     const controller = new AbortController()
-    const probe = cnEquityChart
+    const probe = cnIntraday
       ? research.stockChart(instrumentRef, 'intraday', undefined, controller.signal)
       : research.instrumentChart(instrumentRef, 'intraday', 1, controller.signal)
     probe
@@ -519,7 +527,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
       })
       .catch(() => {})
     return () => { controller.abort() }
-  }, [code, instrumentRef, cnEquityChart, crossMarketIntraday, period])
+  }, [code, instrumentRef, cnIntraday, crossMarketIntraday, period])
 
   useEffect(() => {
     if (!data || !mainRef.current || !volumeRef.current || !macdRef.current) return undefined

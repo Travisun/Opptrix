@@ -87,6 +87,7 @@ import {
   isUnifiedSnapshot,
   unifiedChartToStockChart,
   unifiedSnapshotToCrossMarket,
+  unifiedSnapshotToEtfSnapshot,
   unifiedSnapshotToStockDetail,
   unifiedQuoteToMarketQuote,
   type UnifiedInstrumentChartDto,
@@ -429,8 +430,28 @@ export const research = {
       code ? { code } : {},
     ),
 
-  etfSnapshot: (code: string, signal?: AbortSignal) =>
-    apiCall<import('../types/market').EtfSnapshotData>('etf_snapshot', { code }, { signal }, 20000),
+  etfSnapshot: async (code: string, signal?: AbortSignal): Promise<
+    import('../types/schemas').ApiResponse<import('../types/market').EtfSnapshotData>
+  > => {
+    const fallback: import('../types/market').EtfSnapshotData = {
+      code,
+      profile: null,
+      nav: null,
+      quote: null,
+    }
+    const resp = await apiCall<
+      import('../types/market').EtfSnapshotData | UnifiedInstrumentSnapshotDto
+    >('etf_snapshot', { code }, { signal }, 20000)
+    if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
+      return toApiResponse('etf_snapshot', resp, fallback, unifiedSnapshotToEtfSnapshot(resp.data))
+    }
+    return toApiResponse(
+      'etf_snapshot',
+      resp,
+      fallback,
+      resp.data && !isUnifiedSnapshot(resp.data) ? resp.data : undefined,
+    )
+  },
 
   etfNav: (code: string, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').EtfNavPoint[]; source?: string }>(

@@ -9,6 +9,9 @@ import type {
   CrossMarketKlineBar,
   CrossMarketQuote,
   CryptoSnapshotData,
+  EtfNavPoint,
+  EtfProfileData,
+  EtfSnapshotData,
   IntradayChartBar,
   MarketQuote,
   OhlcChartBar,
@@ -196,6 +199,44 @@ export function unifiedSnapshotToStockDetail(data: UnifiedInstrumentSnapshotDto)
     dividends: data.extras?.dividends as StockDetailData['dividends'],
     moneyFlow: data.extras?.money_flow as StockDetailData['moneyFlow'],
     shareholders: data.extras?.shareholders as StockDetailData['shareholders'],
+  }
+}
+
+function asEtfNavPoint(raw: unknown): EtfNavPoint | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const date = String(row.date ?? row.navDate ?? '').slice(0, 10)
+  return {
+    code: row.code != null ? String(row.code) : undefined,
+    date: date || new Date().toISOString().slice(0, 10),
+    nav: typeof row.nav === 'number' ? row.nav : null,
+    accNav: typeof row.accNav === 'number' ? row.accNav : null,
+    changePct: typeof row.changePct === 'number' ? row.changePct : null,
+    premiumRate: typeof row.premiumRate === 'number' ? row.premiumRate : null,
+  }
+}
+
+/** UnifiedInstrumentSnapshot → EtfSnapshotData（ETF 详情 Tab） */
+export function unifiedSnapshotToEtfSnapshot(data: UnifiedInstrumentSnapshotDto): EtfSnapshotData {
+  const quote = data.quote ? quoteDtoToMarketQuote(data.quote) : null
+  const profile = (data.profile as EtfProfileData | null) ?? null
+  const nav = asEtfNavPoint(data.extras?.nav)
+  const name = data.name?.trim() || profile?.name
+  return {
+    code: data.code,
+    profile: profile
+      ? {
+        ...profile,
+        name: profile.name || name,
+        changePct: profile.changePct ?? quote?.changePct ?? null,
+        nav: profile.nav ?? nav?.nav ?? null,
+        premiumRate: profile.premiumRate ?? nav?.premiumRate ?? null,
+      }
+      : name
+        ? { code: data.code, name, changePct: quote?.changePct ?? null }
+        : null,
+    nav,
+    quote,
   }
 }
 

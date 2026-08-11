@@ -16,6 +16,7 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
+import { resolveWatchlistInstrument } from './instrument'
 import TradingViewChart from './TradingViewChart'
 import EtfDecisionCard from './EtfDecisionCard'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -230,6 +231,12 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     padding: '8px 2px',
   },
+  subSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    marginTop: '12px',
+  },
 })
 
 interface Props {
@@ -240,6 +247,49 @@ function toneClass(s: ReturnType<typeof useStyles>, tone: ReturnType<typeof pctT
   if (tone === 'up') return s.pctUp
   if (tone === 'down') return s.pctDown
   return s.pctFlat
+}
+
+function formatHoldingRatio(raw: unknown): string {
+  if (raw == null || raw === '') return '—'
+  if (typeof raw === 'number' && Number.isFinite(raw)) return `${raw.toFixed(2)}%`
+  const s = String(raw).trim()
+  if (!s) return '—'
+  if (s.endsWith('%')) return s
+  const n = Number(s)
+  return Number.isFinite(n) ? `${n.toFixed(2)}%` : s
+}
+
+function normalizeProfileTopHoldings(
+  profile: EtfProfileData | null,
+): Array<{ code: string; name: string; ratio: string }> {
+  const raw = profile?.topHoldings
+  if (!Array.isArray(raw) || !raw.length) return []
+  return raw.slice(0, 10).map(item => {
+    const row = item as Record<string, unknown>
+    return {
+      code: String(row.code ?? row.symbol ?? row.holdingSymbol ?? '').replace(/^(sh|sz|bj)/i, ''),
+      name: String(row.name ?? row.holdingName ?? '').trim(),
+      ratio: formatHoldingRatio(row.ratio ?? row.weight ?? row.NAVRTO),
+    }
+  }).filter(r => r.code || r.name)
+}
+
+function performanceRows(profile: EtfProfileData | null): Array<{ label: string; value: string }> {
+  const p = profile?.performance
+  if (!p) return []
+  const pairs: Array<{ key: keyof NonNullable<EtfProfileData['performance']>; label: string }> = [
+    { key: 'w1', label: '近 1 周' },
+    { key: 'w4', label: '近 1 月' },
+    { key: 'w52', label: '近 1 年' },
+    { key: 'year', label: '今年以来' },
+  ]
+  const out: Array<{ label: string; value: string }> = []
+  for (const { key, label } of pairs) {
+    const v = p[key]
+    if (v == null || Number.isNaN(v)) continue
+    out.push({ label, value: formatPct(v) })
+  }
+  return out
 }
 
 export default function EtfDetailTab({ stock }: Props) {
@@ -332,7 +382,12 @@ export default function EtfDetailTab({ stock }: Props) {
     research.etfNav(stockCode)
       .then(resp => {
         if (cancelled) return
-        setNavRows(resp.data?.items ?? [])
+        const raw = resp.data as
+          | { items?: EtfNavPoint[] }
+          | EtfNavPoint[]
+          | null
+          | undefined
+        setNavRows(Array.isArray(raw) ? raw : (raw?.items ?? []))
       })
       .catch(() => {
         if (!cancelled) setNavRows([])
@@ -350,7 +405,12 @@ export default function EtfDetailTab({ stock }: Props) {
     research.etfHoldings(stockCode)
       .then(resp => {
         if (cancelled) return
-        setHoldings(resp.data?.items ?? [])
+        const raw = resp.data as
+          | { items?: EtfHoldingRow[] }
+          | EtfHoldingRow[]
+          | null
+          | undefined
+        setHoldings(Array.isArray(raw) ? raw : (raw?.items ?? []))
       })
       .catch(() => {
         if (!cancelled) setHoldings([])
@@ -364,6 +424,22 @@ export default function EtfDetailTab({ stock }: Props) {
   const profile: EtfProfileData | null = snapshot?.profile ?? null
   const quote = snapshot?.quote
   const latestNav = snapshot?.nav ?? navRows[0] ?? null
+  const profileTopHoldings = useMemo(() => normalizeProfileTopHoldings(profile), [profile])
+  const perfRows = useMemo(() => performanceRows(profile), [profile])
+  const holdingsFromProfile = useMemo(() => {
+    if (!profileTopHoldings.length) return [] as EtfHoldingRow[]
+    return profileTopHoldings.map(row => ({
+      reportDate: profile?.reportDate || '',
+      holdingSymbol: row.code,
+      holdingName: row.name || row.code,
+      weight: (() => {
+        const n = Number(String(row.ratio).replace(/%/g, ''))
+        return Number.isFinite(n) ? n : null
+      })(),
+      marketValue: null,
+    }))
+  }, [profileTopHoldings, profile?.reportDate])
+  const displayHoldings = holdings.length > 0 ? holdings : holdingsFromProfile
 
   const displayName = useMemo(
     () => resolveDisplayStockName(stockCode ?? '', profile?.name, stock?.name),
@@ -436,7 +512,11 @@ export default function EtfDetailTab({ stock }: Props) {
 
       {tab === 'chart' ? (
         <div className={s.chartWrap}>
-          <TradingViewChart code={stock.code} active={tab === 'chart'} />
+          <TradingViewChart
+            code={stock.code}
+            instrument={resolveWatchlistInstrument(stock)}
+            active={tab === 'chart'}
+          />
         </div>
       ) : (
         <div className={s.body}>
@@ -452,6 +532,20 @@ export default function EtfDetailTab({ stock }: Props) {
                   <span className={s.metricLabel}>管理人</span>
                   <span className={s.metricValue}>{profile?.manager || '—'}</span>
                 </div>
+                {profile?.company && (
+                  <div className={s.metric}>
+                    <span className={s.metricLabel}>基金公司</span>
+                    <span className={s.metricValue}>{profile.company}</span>
+                  </div>
+                )}
+                {(profile?.trackingIndex || profile?.benchmark) && (
+                  <div className={s.metric}>
+                    <span className={s.metricLabel}>跟踪指数</span>
+                    <span className={s.metricValue} title={profile?.trackingIndex || profile?.benchmark}>
+                      {profile?.trackingIndex || profile?.benchmark || '—'}
+                    </span>
+                  </div>
+                )}
                 <div className={s.metric}>
                   <span className={s.metricLabel}>管理费</span>
                   <span className={s.metricValue}>
@@ -461,18 +555,77 @@ export default function EtfDetailTab({ stock }: Props) {
                 <div className={s.metric}>
                   <span className={s.metricLabel}>规模</span>
                   <span className={s.metricValue}>
-                    {formatCompactNumber(profile?.scale ?? profile?.totalShares ?? null)}
+                    {profile?.totalAUM
+                      || formatCompactNumber(profile?.scale ?? profile?.totalShares ?? null)}
                   </span>
                 </div>
+                {(latestNav?.nav != null || profile?.nav != null) && (
+                  <div className={s.metric}>
+                    <span className={s.metricLabel}>单位净值</span>
+                    <span className={s.metricValue}>{formatPrice(latestNav?.nav ?? profile?.nav)}</span>
+                  </div>
+                )}
+                {(latestNav?.premiumRate != null || profile?.premiumRate != null) && (
+                  <div className={s.metric}>
+                    <span className={s.metricLabel}>折溢价</span>
+                    <span className={s.metricValue}>
+                      {formatPct(latestNav?.premiumRate ?? profile?.premiumRate ?? null)}
+                    </span>
+                  </div>
+                )}
                 <div className={s.metric}>
                   <span className={s.metricLabel}>上市日期</span>
-                  <span className={s.metricValue}>{profile?.listingDate || '—'}</span>
+                  <span className={s.metricValue}>{profile?.listingDate || profile?.establishDate || '—'}</span>
                 </div>
                 <div className={s.metric}>
                   <span className={s.metricLabel}>成交额</span>
-                  <span className={s.metricValue}>{formatCompactNumber(quote?.amount ?? null)}</span>
+                  <span className={s.metricValue}>
+                    {formatCompactNumber(quote?.amount ?? profile?.amount ?? null)}
+                  </span>
                 </div>
+                {profile?.custodian && (
+                  <div className={s.metric}>
+                    <span className={s.metricLabel}>托管人</span>
+                    <span className={s.metricValue}>{profile.custodian}</span>
+                  </div>
+                )}
               </div>
+
+              {perfRows.length > 0 && (
+                <div className={s.subSection}>
+                  <Text className={s.sectionTitle}>近期收益</Text>
+                  <div className={s.metricGrid}>
+                    {perfRows.map(row => (
+                      <div key={row.label} className={s.metric}>
+                        <span className={s.metricLabel}>{row.label}</span>
+                        <span className={s.metricValue}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {profileTopHoldings.length > 0 && (
+                <div className={s.subSection}>
+                  <Text className={s.sectionTitle}>前十大持仓</Text>
+                  <div className={s.tableHeadWide}>
+                    <span className={s.tableHeadCell}>成分</span>
+                    <span className={s.tableHeadCell}>代码</span>
+                    <span className={s.tableHeadCell}>占比</span>
+                    <span className={s.tableHeadCell} />
+                  </div>
+                  {profileTopHoldings.map((row, index) => (
+                    <div key={listRowKey(index, row.code, row.name)} className={s.tableRowWide}>
+                      <span className={s.tableCellName} title={row.name || row.code}>
+                        {row.name || row.code || '—'}
+                      </span>
+                      <span className={s.tableCell}>{row.code || '—'}</span>
+                      <span className={s.tableCell}>{row.ratio}</span>
+                      <span className={s.tableCell} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -513,17 +666,22 @@ export default function EtfDetailTab({ stock }: Props) {
           {tab === 'holdings' && (
             holdingsLoading ? (
               <div className={s.center}><Spinner size="small" label="正在拉取持仓…" /></div>
-            ) : holdings.length === 0 ? (
-              <Text className={s.emptyHint}>暂无持仓披露，部分 ETF 需等季报更新</Text>
+            ) : displayHoldings.length === 0 ? (
+              <Text className={s.emptyHint}>
+                暂无持仓披露。部分 ETF 需等季报更新；也可稍后再试或查看概览中的前十大持仓
+              </Text>
             ) : (
               <div>
+                {holdings.length === 0 && profileTopHoldings.length > 0 && (
+                  <Text className={s.emptyHint}>以下来自基金概况中的前十大持仓</Text>
+                )}
                 <div className={s.tableHeadWide}>
                   <span className={s.tableHeadCell}>成分</span>
                   <span className={s.tableHeadCell}>代码</span>
                   <span className={s.tableHeadCell}>占比</span>
                   <span className={s.tableHeadCell}>市值</span>
                 </div>
-                {holdings.slice(0, 30).map((row, index) => (
+                {displayHoldings.slice(0, 30).map((row, index) => (
                   <div key={listRowKey(index, row.reportDate, row.holdingSymbol)} className={s.tableRowWide}>
                     <span className={s.tableCellName} title={row.holdingName}>
                       {row.holdingName || row.holdingSymbol}

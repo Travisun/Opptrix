@@ -1,6 +1,7 @@
 import { isCnEtfCode } from '../../../../core/instrument.js'
 import type { StockListItem } from '../../../../core/schema.js'
 import { normalizeCode, safeFloat } from '../../../../utils/helpers.js'
+import { etfHoldingsViaIndexProxy } from '../../../common/etf-holdings-proxy.js'
 import {
   mapSinaEtfListItems,
   mapSinaFundNavRows,
@@ -10,11 +11,47 @@ import {
   fetchSinaEtfListAll,
   fetchSinaFundProfile,
   fetchSinaFundQuote,
+  fetchSinaFundTopHoldService,
 } from '../../api/fund-service.js'
 import { fetchSinaFundNavPage } from '../../api/fund.js'
-import { fetchSinaFundHoldings } from '../../api/corp-service.js'
 import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import type { SinafinanceCnHandler } from './handler.js'
+
+function mapSinaTopHoldToEtfHoldings(
+  bare: string,
+  raw: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const heavy = raw.heavy_stock ?? raw.heavyStock ?? raw.data
+  const list = Array.isArray(heavy)
+    ? heavy
+    : Array.isArray((heavy as { list?: unknown } | null)?.list)
+      ? ((heavy as { list: unknown[] }).list)
+      : Array.isArray(raw)
+        ? raw
+        : []
+  const rows: Record<string, unknown>[] = []
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const symbolRaw = String(row.SYMBOL ?? row.symbol ?? row.code ?? row.stockCode ?? '')
+    const symbol = normalizeCode(symbolRaw.replace(/^(sh|sz|bj)/i, ''))
+    const name = String(row.SKNAME ?? row.name ?? row.stockName ?? '').trim()
+    if (!symbol && !name) continue
+    rows.push({
+      reportDate: String(row.ENDDATE ?? row.reportDate ?? row.asOfDate ?? '').slice(0, 10)
+        || new Date().toISOString().slice(0, 10),
+      holdingSymbol: symbol || null,
+      holdingName: name || null,
+      weight: safeFloat(row.NAVRTO ?? row.navPct ?? row.ratio ?? row.weight),
+      shares: safeFloat(row.shares),
+      marketValue: safeFloat(row.HOLDMKTCAP ?? row.marketValue),
+      assetType: 'stock',
+      source: 'sinafinance_top_hold',
+      etfCode: bare,
+    })
+  }
+  return rows.filter(r => r.holdingSymbol || r.holdingName)
+}
 
 type Handler = SinafinanceCnHandler & Record<string, unknown>
 
@@ -84,17 +121,16 @@ export function mixSinafinanceEtf(Driver: { prototype: SinafinanceCnHandler }) {
   p.etfHoldings = async function etfHoldings(etfCode: string): Promise<Record<string, unknown>[] | null> {
     if (!isCnEtfCode(etfCode)) return null
     const bare = normalizeCode(etfCode)
-    const blocks = await fetchSinaFundHoldings(bare)
-    if (!blocks?.length) return null
-    const rows = blocks.map((row: Record<string, unknown>) => ({
-      reportDate: String(row.asOfDate ?? '').slice(0, 10),
-      holdingSymbol: normalizeCode(String(row.fundCode ?? '')),
-      holdingName: String(row.fundName ?? '').trim() || null,
-      weight: safeFloat(row.navPct ?? row.floatPct),
-      shares: safeFloat(row.shares),
-      marketValue: safeFloat(row.marketValue),
-      source: 'sinafinance',
-    }))
-    return rows.filter((r: Record<string, unknown>) => r.holdingSymbol).length ? rows : null
+    // 重仓股 API（FdFundService.getTopHold）；旧 HTML「基金持股」是反向持有人，不可用
+    try {
+      const raw = await fetchSinaFundTopHoldService(bare)
+      if (raw && typeof raw === 'object') {
+        const rows = mapSinaTopHoldToEtfHoldings(bare, raw as Record<string, unknown>)
+        if (rows.length) return rows
+      }
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
+    }
+    return etfHoldingsViaIndexProxy(bare)
   }
 }

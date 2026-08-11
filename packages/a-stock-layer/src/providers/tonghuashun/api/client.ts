@@ -14,8 +14,11 @@ export class FuyaoApiError extends Error {
 
 type QueryValue = string | number | boolean | null | undefined
 
+type FuyaoTickerAssetType = 'a-share' | 'a-share-index' | 'fund-etf' | 'fund-lof'
+
 const RETRY_CODES = new Set([4001, 5001, 5002, 5003])
 const TEN_YEARS_MS = Math.floor(10 * 365.25 * 86400 * 1000)
+const FIVE_YEARS_MS = Math.floor(5 * 365.25 * 86400 * 1000)
 
 function cleanParams(params: Record<string, QueryValue>): Record<string, string> {
   const out: Record<string, string> = {}
@@ -83,21 +86,25 @@ export class FuyaoClient {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
   }
 
-  tickersSearch(q: string, limit = 5) {
+  tickersSearch(q: string, limit = 5, assetType: FuyaoTickerAssetType | string = 'a-share') {
     return this.get<{ item?: Record<string, unknown>[] }>(
       '/api/meta/tickers/search',
-      { q, limit, asset_type: 'a-share' },
+      { q, limit, asset_type: assetType },
     )
   }
 
-  tickersList(limit = 1000, offset = 0, assetType: 'a-share' | 'a-share-index' = 'a-share') {
+  tickersList(
+    limit = 1000,
+    offset = 0,
+    assetType: FuyaoTickerAssetType | string = 'a-share',
+  ) {
     return this.get<{ item?: Record<string, unknown>[]; total?: number }>(
       '/api/meta/tickers/list',
       { exchange: 'SH,SZ,BJ', asset_type: assetType, limit, offset },
     )
   }
 
-  async tickersListAll(assetType: 'a-share' | 'a-share-index' = 'a-share'): Promise<Record<string, unknown>[]> {
+  async tickersListAll(assetType: FuyaoTickerAssetType | string = 'a-share'): Promise<Record<string, unknown>[]> {
     const pageSize = 1000
     const all: Record<string, unknown>[] = []
     let offset = 0
@@ -341,6 +348,105 @@ export class FuyaoClient {
       '/api/a-share/special-data/anomaly-analysis-stock',
       { thscodes: joined },
     )
+  }
+
+  /**
+   * 基金基本资料
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/profile/detail
+   */
+  fundProfileDetail(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/profile/detail',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /**
+   * 基金重仓股
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/holdings
+   */
+  fundPortfolioHoldings(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/holdings',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /**
+   * 基金净值序列
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/nav
+   */
+  fundPerformanceNav(
+    fundType: string,
+    thscode: string,
+    opts?: { range?: string; nav_type?: string },
+  ) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/performance/nav',
+      {
+        fund_type: fundType,
+        thscode,
+        range: opts?.range,
+        nav_type: opts?.nav_type,
+      },
+    )
+  }
+
+  /**
+   * 基金区间收益
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/returns
+   */
+  fundPerformanceReturns(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/performance/returns',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /**
+   * 场内 ETF 行情快照（仅 ETF）
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/market/snapshot
+   */
+  fundMarketSnapshot(thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/market/snapshot',
+      { thscode },
+    )
+  }
+
+  /**
+   * 场内 ETF 历史日线（仅 ETF；单次窗口最长 5 自然年）
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/market/historical
+   */
+  async fundMarketHistorical(
+    thscode: string,
+    startMs: number,
+    endMs: number,
+    interval = '1d',
+  ): Promise<Record<string, unknown>[]> {
+    const slices: Array<[number, number]> = []
+    let cur = startMs
+    while (cur < endMs) {
+      const end = Math.min(cur + FIVE_YEARS_MS, endMs)
+      slices.push([cur, end])
+      cur = end + 1
+    }
+    const seen = new Set<number>()
+    const bars: Record<string, unknown>[] = []
+    for (const [start, end] of slices) {
+      const data = await this.get<{ item?: Record<string, unknown>[] }>(
+        '/api/fund/market/historical',
+        { thscode, interval, start, end },
+      )
+      for (const bar of data.item ?? []) {
+        const d = Number(bar.date_ms)
+        if (seen.has(d)) continue
+        seen.add(d)
+        bars.push(bar)
+      }
+    }
+    bars.sort((a, b) => Number(a.date_ms) - Number(b.date_ms))
+    return bars
   }
 }
 
