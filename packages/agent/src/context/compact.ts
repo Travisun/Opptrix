@@ -40,7 +40,8 @@ export interface SessionCompactState {
   sessionMemory?: SessionMemory | null
 }
 
-const MICRO_TOOL_MAX = 480
+/** tool 可见摘要上限（P2：放宽，避免 480 字永久撕毁） */
+const MICRO_TOOL_MAX = 2_400
 export const KEEP_RECENT_DEFAULT = 16
 const KEEP_RECENT_AGGRESSIVE = 8
 
@@ -159,10 +160,10 @@ export async function structuredCompact(
   const compactUsage = resolveTurnUsage(turn, compactPrompt)
 
   if (turn.finishReason === 'error' || !chatMessageContentToText(turn.message.content).trim()) {
-    const micro = microcompactMessages(repaired, keepRecent)
+    // 压缩失败时不永久撕毁 tool 正文；由 ensureContextBudget 对 modelView 做 micro 投影
     return {
-      state: { messages: micro.messages, sessionMemory: state.sessionMemory },
-      changed: micro.changed,
+      state: { messages: repaired, sessionMemory: state.sessionMemory },
+      changed: false,
     }
   }
 
@@ -171,11 +172,10 @@ export async function structuredCompact(
     state.sessionMemory,
     cut,
   )
-  // 持久化仍保留全量 messages（UI 用 turns）；ModelView 靠 memory + 近端窗
-  const micro = microcompactMessages(repaired, keepRecent)
+  // 持久化保留全量 messages（不因 micro 永久撕毁 tool 正文）；ModelView 靠 memory + 近端窗
   return {
     state: {
-      messages: micro.messages,
+      messages: repaired,
       sessionMemory: memory,
     },
     changed: true,
@@ -266,12 +266,17 @@ export async function ensureContextBudget(opts: {
     return { state, results, modelView: view }
   }
 
-  // soft / aggressive → micro
+  // soft / aggressive → micro（仅投影到 modelView，不永久改写 canonical messages）
   {
     const micro = microcompactMessages(state.messages, keepRecent)
     if (micro.changed) {
-      state = { ...state, messages: micro.messages }
-      view = buildView()
+      view = assembleModelView({
+        systemPrompt: opts.systemPrompt,
+        sessionMemory: state.sessionMemory,
+        messages: micro.messages,
+        contextPrefix: opts.contextPrefix,
+        keepRecent,
+      })
       used = Math.max(0, estimateModelViewTokens(view) - estimateTextTokens(opts.systemPrompt))
       results.push({
         level: opts.aggressive ? 'overflow_retry' : 'micro',
@@ -288,13 +293,12 @@ export async function ensureContextBudget(opts: {
   }
 
   if (!opts.llm) {
-    // 无 LLM：进一步缩短近端
+    // 无 LLM：进一步缩短近端投影，仍不撕毁持久化正文
     const micro2 = microcompactMessages(state.messages, KEEP_RECENT_AGGRESSIVE)
-    state = { ...state, messages: micro2.messages }
     view = assembleModelView({
       systemPrompt: opts.systemPrompt,
       sessionMemory: state.sessionMemory,
-      messages: state.messages,
+      messages: micro2.messages,
       contextPrefix: opts.contextPrefix,
       keepRecent: KEEP_RECENT_AGGRESSIVE,
     })

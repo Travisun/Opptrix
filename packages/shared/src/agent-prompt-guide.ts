@@ -341,7 +341,7 @@ export function buildResearchEpistemicPlaybook(): string {
     '1) 分层：工具返回 = 事实层；你的文字 = 推断层。禁止把推断写成「已证实」。',
     '2) 禁编造：未调用工具或工具报错/空数据时，明确写「数据不可用/未拉取」，禁止用训练记忆补行情、评分、新闻正文或精确数字。',
     '3) 引用来源：关键数字（价、涨跌幅、评分、净值、持仓权重等）尽量带单位，并暗示依据（如「据 snapshot」「据 evaluate」）；冲突时并列说明，勿 silently 取更好看的一侧。',
-    '4) 时效：本轮 system 含【会话时钟】时必须以其为「截至」基准（含时区），勿臆造日期；仅当用户明确追问「现在几点」或需二次核对时间时才调用 get_current_time。资讯用文章发布日相对会话时钟判断新旧；Crypto 注明高时效波动。',
+    '4) 时效：本轮尾注含【会话时钟】时必须以其为「截至」基准（含时区），勿臆造日期；仅当用户明确追问「现在几点」或需二次核对时间时才调用 get_current_time。资讯用文章发布日相对会话时钟判断新旧；Crypto 注明高时效波动。',
     '5) 证据类型标签（书写时区分）：价量事实 / 模型评分或技术指标 / 机构观点 / 新闻叙事 / 宏观背景。宏观是背景不是个股因果证明。',
     '6) 不确定性：深度结论用条件句或概率口吻（「在…前提下更支持…」）；给出至少一条否证/风险条件。',
     '7) 合规：不给出具体买卖点、仓位或「必涨/必跌」判断；可做情景对照（上/下/震荡）与数据解读。',
@@ -426,7 +426,7 @@ export function buildResearchCompletenessLoop(tier: ResearchTier = 'L2'): string
 }
 
 /**
- * 会话时钟块 — 由 Engine 每轮注入权威本地时间，避免 LLM 猜日期或多余调 tool。
+ * 会话时钟块 — 由 Engine 每轮注入权威本地时间（进 turn-tail，勿进稳定 system）。
  */
 export function buildSessionClockPlaybook(clock: {
   iso: string
@@ -450,13 +450,17 @@ export function buildSessionClockPlaybook(clock: {
 export interface AgentSystemRulesOptions {
   /** 本轮已加载 pack；省略则注入全部 playbook（兼容旧行为） */
   activePacks?: readonly string[]
-  /** 本轮选型卡正文（由 agent buildRoundRoutePlaybook 生成） */
+  /**
+   * @deprecated 选型卡已迁至 turn-tail；传入也不再写入稳定 system
+   */
   routePlaybook?: string
   /** 本轮已暴露工具名（用于提示「仅限列表」） */
   activeToolNames?: readonly string[]
   /** 本轮投研答复档位 */
   researchTier?: ResearchTier
-  /** 本轮权威时钟正文（buildSessionClockPlaybook） */
+  /**
+   * @deprecated 会话时钟已迁至 turn-tail；传入也不再写入稳定 system
+   */
   sessionClock?: string
 }
 
@@ -487,9 +491,7 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     '3) 引用须带文档名与页码；禁止臆造未读内容；勿一次灌全文',
   )
 
-  if (opts?.sessionClock) {
-    sections.push(opts.sessionClock)
-  }
+  // 会话时钟 / 选型卡 → turn-tail（见 buildTurnTailPrompt），勿写入稳定 system
 
   sections.push(
     buildResearchEpistemicPlaybook(),
@@ -503,10 +505,6 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   // 完备性闭环仅作用于 L2/L3 报告类输出；L1 事实快答保持轻量。
   if (tier !== 'L1') {
     sections.push(buildResearchCompletenessLoop(tier))
-  }
-
-  if (opts?.routePlaybook) {
-    sections.push(opts.routePlaybook)
   }
 
   sections.push(buildToolPackCatalogPrompt())

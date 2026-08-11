@@ -70,6 +70,7 @@ test('estimateTextTokens charges CJK tighter than latin chars/4', () => {
 })
 
 test('microcompactMessages shortens old tool bodies and keeps recent intact', () => {
+  const fat = 'x'.repeat(5000)
   const messages = []
   for (let i = 0; i < 10; i++) {
     messages.push({
@@ -85,7 +86,7 @@ test('microcompactMessages shortens old tool bodies and keeps recent intact', ()
       role: 'tool',
       tool_call_id: `c${i}`,
       name: 'get_quote',
-      content: JSON.stringify({ price: 1, payload: 'x'.repeat(2000) }),
+      content: JSON.stringify({ price: 1, payload: fat }),
     })
   }
   const { messages: out, changed } = microcompactMessages(messages, 4)
@@ -93,10 +94,10 @@ test('microcompactMessages shortens old tool bodies and keeps recent intact', ()
   assert.equal(out.length, messages.length)
   const oldTool = out[1]
   assert.equal(oldTool.role, 'tool')
-  assert.ok(String(oldTool.content).length < 2000)
+  assert.ok(String(oldTool.content).length < 5000)
   assert.match(String(oldTool.content), /_compacted|compacted/)
   const recentTool = out[out.length - 1]
-  assert.equal(String(recentTool.content).length > 1500, true)
+  assert.equal(String(recentTool.content).length > 4000, true)
 })
 
 test('assembleModelView injects session memory and keeps system first', () => {
@@ -169,16 +170,19 @@ test('buildBudgetForModel resolves context window asynchronously', async () => {
 
 test('ensureContextBudget soft path triggers micro on small window', async () => {
   const messages = buildFatToolHistory(40, 4000)
-  const { results, state } = await ensureContextBudget({
+  const { results, state, modelView } = await ensureContextBudget({
     modelId: 'gpt-3.5-turbo',
     systemPrompt: 'LAYER0',
     state: { messages, sessionMemory: null },
     llm: null,
   })
   assert.ok(results.some((r) => r.level === 'micro' && r.changed))
+  // micro 仅投影：canonical 保留完整 tool 正文（不再 480/2400 永久撕毁）
   const oldTool = state.messages.find((m) => m.role === 'tool')
   assert.ok(oldTool)
-  assert.ok(String(oldTool.content).length < 4000)
+  assert.ok(String(oldTool.content).length >= 4000)
+  assert.ok(modelView.length > 0)
+  assert.equal(modelView[0].role, 'system')
   // tool_calls 成组：assistant(tool_calls) 后仍有对应 tool
   for (let i = 0; i < state.messages.length; i++) {
     const m = state.messages[i]

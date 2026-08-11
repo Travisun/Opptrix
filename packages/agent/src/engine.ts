@@ -1,7 +1,10 @@
 import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import { getCurrentTime } from './app-context.js'
-import { type ChatMessage } from './llm/provider.js'
+import {
+  type ChatMessage,
+  EMPTY_REPLY_REASONING_HINT,
+} from './llm/provider.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
@@ -31,7 +34,12 @@ import {
   orderToolsByPreference,
   type ToolRoutePlan,
 } from './mcp/tool-route-plan.js'
-import { buildSessionClockPlaybook, parseNamespacedMcpTool } from '@opptrix/shared'
+import {
+  appendTurnTailMessages,
+  buildSessionClockPlaybook,
+  buildTurnTailPrompt,
+  parseNamespacedMcpTool,
+} from '@opptrix/shared'
 import {
   logChatDebugAbort,
   logChatDebugEmptyReply,
@@ -222,6 +230,7 @@ export class AgentEngine {
     return lines.join('\n')
   }
 
+  /** 稳定 system（无每轮时钟/选型卡，利于前缀缓存） */
   private buildRoundSystemPrompt(sessionId: string, activeNames: readonly string[]) {
     const record = this.ensureSessionRolePersona(sessionId)
     const expert = record?.expertId
@@ -231,7 +240,6 @@ export class AgentEngine {
       message: this.lastChatSeedMessage,
       contextRef: record?.contextRef ?? null,
     })
-    const clock = getCurrentTime()
     const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
     return this.tools.systemPrompt({
       expert,
@@ -240,11 +248,22 @@ export class AgentEngine {
       activePacks: this.lastRoundPackIds,
       activeToolNames: activeNames,
       researchTier: expert?.defaultResearchTier ?? plan.researchTier,
-      routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
-      sessionClock: buildSessionClockPlaybook(clock),
       dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
       agentSkillCatalog: buildSkillCatalogPrompt(),
       activatedAgentSkills: buildActivatedSkillsPrompt(activatedSkills),
+    })
+  }
+
+  /** 本轮动态尾注：会话时钟 + 选型卡（append 到 modelView，不进稳定 system） */
+  private buildRoundTurnTail(sessionId: string, activeNames: readonly string[]) {
+    const record = this.sessions.get(sessionId)
+    const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
+      message: this.lastChatSeedMessage,
+      contextRef: record?.contextRef ?? null,
+    })
+    return buildTurnTailPrompt({
+      sessionClock: buildSessionClockPlaybook(getCurrentTime()),
+      routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
     })
   }
 
@@ -583,10 +602,16 @@ export class AgentEngine {
     })
 
     if (result.results.some(r => r.changed)) {
-      record.messages = result.state.messages
-      record.sessionMemory = result.state.sessionMemory ?? null
-      this.sessions.save(record)
-      this.invalidateContextUsage(record.id)
+      // micro 仅投影，不落盘；structured / overflow_retry 才写 canonical
+      const persistCanonical = result.results.some(
+        r => r.changed && (r.level === 'structured' || r.level === 'overflow_retry'),
+      )
+      if (persistCanonical) {
+        record.messages = result.state.messages
+        record.sessionMemory = result.state.sessionMemory ?? null
+        this.sessions.save(record)
+        this.invalidateContextUsage(record.id)
+      }
       for (const r of result.results) {
         if (!r.changed) continue
         opts.emit?.({
@@ -812,19 +837,23 @@ export class AgentEngine {
         ? `用户划选了以下内容：\n"""${quote}"""\n\n请结合当前对话上下文，回答用户的问题：\n${text}`
         : text
 
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: this.tools.systemPrompt({
-          sessionClock: buildSessionClockPlaybook(getCurrentTime()),
-          researchTier: 'L2',
-        }),
-      },
-      ...contextMessages,
-      ...history,
-      ...ephemeralHistory,
-      { role: 'user', content: prompt },
-    ]
+    const messages: ChatMessage[] = appendTurnTailMessages(
+      [
+        {
+          role: 'system',
+          content: this.tools.systemPrompt({
+            researchTier: 'L2',
+          }),
+        },
+        ...contextMessages,
+        ...history,
+        ...ephemeralHistory,
+        { role: 'user', content: prompt },
+      ],
+      buildTurnTailPrompt({
+        sessionClock: buildSessionClockPlaybook(getCurrentTime()),
+      }),
+    )
 
     const turn = await llm.chat(messages, undefined, undefined, {
       temperature: record.llmParams?.temperature,
@@ -834,7 +863,12 @@ export class AgentEngine {
     if (turn.finishReason === 'error') {
       return { reply: chatMessageContentToText(turn.message.content) || turn.error || '请求失败' }
     }
-    return { reply: chatMessageContentToText(turn.message.content).trim() || '（无回复内容）' }
+    const selectionReply = chatMessageContentToText(turn.message.content).trim()
+    if (selectionReply) return { reply: selectionReply }
+    if (turn.reasoningContent || turn.finishReason === 'length') {
+      return { reply: EMPTY_REPLY_REASONING_HINT }
+    }
+    return { reply: '（无回复内容）' }
   }
 
   resolveUserPrompt(sessionId: string, promptId: string, answer: UserPromptAnswer) {
@@ -1093,8 +1127,9 @@ export class AgentEngine {
     try {
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
-      // 每轮刷新会话时钟，保证长工具链下「截至」仍准确
+      // 稳定 system（无时钟/选型卡）；动态内容经 turn-tail 追加，利于前缀缓存
       const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
+      const turnTail = this.buildRoundTurnTail(sessionId, activeNames)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const resolvedModel = this.registry.resolve(activeModel)
       const modelId = resolvedModel?.model
@@ -1124,7 +1159,9 @@ export class AgentEngine {
             estimated: budgeted.compactUsageEstimated ?? true,
           })
         }
+        const modelView = appendTurnTailMessages(budgeted.modelView, turnTail)
         let accumulated = ''
+        let reasoningAccumulated = ''
         let stopTokenProgress = false
         let lastEmitAt = 0
         let lastTokens = -1
@@ -1136,7 +1173,7 @@ export class AgentEngine {
           pendingTokens = null
           emit({ type: 'reply', estimatedTokens: n })
         }
-        const turn = await llm.chat(budgeted.modelView, openAiTools, signal, {
+        const turn = await llm.chat(modelView, openAiTools, signal, {
           sessionId,
           temperature: record.llmParams?.temperature,
           maxTokens: record.llmParams?.maxTokens,
@@ -1146,6 +1183,20 @@ export class AgentEngine {
               stopTokenProgress = true
               pendingTokens = null
               return
+            }
+            if (delta.reasoningText) {
+              const prevLen = reasoningAccumulated.length
+              reasoningAccumulated += delta.reasoningText
+              // 首段或每新增约 120 字推一次 thinking
+              if (prevLen === 0 || reasoningAccumulated.length - prevLen >= 120
+                || Math.floor(reasoningAccumulated.length / 120) > Math.floor(prevLen / 120)) {
+                emit({
+                  type: 'thinking',
+                  round: round + 1,
+                  label: '模型正在思考…',
+                  snippet: reasoningAccumulated.slice(-400),
+                })
+              }
             }
             if (stopTokenProgress || !delta.text) return
             accumulated += delta.text
@@ -1167,7 +1218,7 @@ export class AgentEngine {
         } else {
           lastRoundEstimatedTokens = undefined
         }
-        chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, budgeted.modelView))
+        chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, modelView))
         return turn
       }
 
@@ -1361,8 +1412,21 @@ export class AgentEngine {
       }
 
       const replyRaw = turnContentText.trim()
-      const isEmptyReply = !replyRaw || replyRaw === '（无回复内容）'
-      const reply = replyRaw || '（无回复内容）'
+      let reply = replyRaw
+      if (!reply || reply === '（无回复内容）') {
+        const hitBudget = turn.finishReason === 'length'
+          || (
+            turn.requestedMaxTokens != null
+            && turn.usage?.completionTokens != null
+            && turn.usage.completionTokens >= turn.requestedMaxTokens
+          )
+        reply = (turn.reasoningContent || hitBudget)
+          ? EMPTY_REPLY_REASONING_HINT
+          : '（无回复内容）'
+      }
+      const isEmptyReply = !replyRaw
+        || replyRaw === '（无回复内容）'
+        || reply === EMPTY_REPLY_REASONING_HINT
       if (isEmptyReply) {
         logChatDebugEmptyReply(sessionId, { round: round + 1 })
       }

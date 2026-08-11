@@ -257,7 +257,17 @@ export {
   isConfigured,
   fetchOpenAiModelList,
   joinOpenAiCompatibleUrl,
+  EMPTY_REPLY_REASONING_HINT,
+  LEGACY_DEFAULT_MAX_TOKENS,
+  ORDINARY_OUTPUT_TOKENS,
+  REASONING_OUTPUT_TOKENS,
+  HIGH_REASONING_OUTPUT_TOKENS,
+  autoOutputBudget,
+  looksLikeReasoningModel,
+  resolveRequestMaxTokens,
   type LlmConfig,
+  type LlmTurn,
+  type LlmChatDelta,
 } from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'
 

@@ -295,13 +295,13 @@ Opptrix/
 - **与出站关系**：LAN 仅放宽私网/localhost **连接判定**；具体域名仍可能需 `network_egress` 确认（`http_fetch` / `shell_run` ping 等读有效 LAN）。
 
   - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
-  - **会话时钟**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）注入 system【会话时钟】，作为「截至」时效基准；`get_current_time` 仅在用户明确问时刻时调用
+  - **会话时钟 / 前缀缓存**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）写入**本轮 turn-tail**（messages 末尾 ephemeral user），**不**写入稳定 system，以免破坏 DeepSeek 等前缀缓存；选型卡同理。`get_current_time` 仅在用户明确问时刻时调用。推理模型未显式提高输出额度时按 ladder 抬升请求 `max_tokens`，并累积上游 `reasoning_content`（空正文时提示思考占用输出上限）。
   - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示
   - 准确率测试：`tests/mcp-tool-route-accuracy.test.mjs`（首推精确率 / 可见性召回 / 易混消歧 / 选型卡 / 过播种抑制）
 - **系统提示词分层（`assembleSystemPrompt`）**：实现 `packages/agent/src/experts/prompt-assembler.ts`；每轮由 `AgentEngine.buildRoundSystemPrompt` → `ToolRegistry.systemPrompt` 组装，结构固定为三层（空行分隔）：
   - **Layer 0 — 系统底线（不可覆盖）**：`buildLayer0Baseline()`。禁止具体买卖建议、禁止编造数据、须先调工具取数、区分事实与推断等。专家 `persona` 或用户消息若要求违反上述底线，Agent 须拒绝并说明原因；**Layer 0 优先级高于 Layer 1 角色设定**。
   - **Layer 1 — 角色 persona**：`buildRolePersona({ sessionRolePersona, roleLabel })`。正文唯一来源是会话字段 `rolePersona`（创建时从专家 `persona` 或 `DEFAULT_RESEARCHER_PERSONA` 快照；可经 `PUT /api/sessions/:id/role-persona` 编辑）。抬头可用专家 `title`（仅展示）。目录改 `persona` **不影响**已有会话。消毒：空/超长 >4000 字/命中注入模式则创建时回退默认角色；PATCH 会话失败则 400。专家目录列表 API 不返回 `persona`。**写法与快照语义**见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
-  - **Layer 2 — 工具与投研纪律**：`ask_user` 用法、本轮工具选型卡与已加载 tools、`【会话时钟】`（Asia/Shanghai）、`buildDataSourcingPolicy`（远程 MCP 优先）、`buildAgentSystemRules`（含 `researchTier` 档位 playbook、route playbook 等）。
+  - **Layer 2 — 工具与投研纪律**：`ask_user` 用法、已加载 tools、`buildDataSourcingPolicy`（远程 MCP 优先）、`buildAgentSystemRules`（含 `researchTier` 档位 playbook 等）。本轮选型卡与【会话时钟】在 Layer2 之外经 `buildTurnTailPrompt` 追加（见上「会话前缀缓存」）。
 - **专家会话 vs 默认研究员**：
   - **默认研究员**：`POST /api/sessions` 不传 `expertId` → `expertId` / `expertIcon` 为 `null`，`rolePersona` 初始为默认投研研究员文案（可编辑）。
   - **专家会话**：传 `expertId`（须存在于目录）→ 持久化 `expertId` + `expertIcon` + `rolePersona` 快照；标题默认 `defaultSessionTitle` 或专家 `title`；首聊天轮前 `seedExpertDefaultPacks` 按专家 `defaultPacks` 激活工具包（每会话每专家仅播种一次）；`defaultResearchTier` 仍可从目录按 `expertId` 读取（未冻结）；空会话欢迎可用专家 `starterPrompts`（最多 6 条，见 [API.md §Experts](./API.md#experts专家目录)）。
