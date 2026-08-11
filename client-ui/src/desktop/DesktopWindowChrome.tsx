@@ -23,6 +23,8 @@ import {
   DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
   DESKTOP_TRAFFIC_LIGHT_WIDTH,
   WORKSPACE_SPLITTER_WIDTH,
+  RIGHT_PANEL_PEER_SLIDE_MS,
+  RIGHT_PANEL_PEER_SLIDE_EASE,
 } from './constants'
 import {
   PanelLeftContractRegular,
@@ -163,6 +165,8 @@ interface DesktopWindowChromeProps {
   onGoForward?: () => void
   rightPanelOpen?: boolean
   rightPanelWidth?: number
+  /** 拖拽右栏分隔条时为 true — 顶栏 actions / 标题带 right 跟移禁用 transition */
+  rightPanelDragging?: boolean
   chatColumnWidth?: number
   chatAreaLeft?: number
   onToggleRightPanel?: () => void
@@ -230,6 +234,7 @@ export default function DesktopWindowChrome({
   onGoForward,
   rightPanelOpen = false,
   rightPanelWidth = 0,
+  rightPanelDragging = false,
   chatColumnWidth,
   chatAreaLeft = 0,
   onToggleRightPanel,
@@ -331,6 +336,16 @@ export default function DesktopWindowChrome({
     ? 'none'
     : `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`
 
+  /** Right-panel width drives title max-width, drag clip, and preview icon — sync with peer morph curve. */
+  const rightPanelChromeTransition = sidebarDragging || rightPanelDragging
+    ? 'none'
+    : rightPanelOpen
+      ? `${RIGHT_PANEL_PEER_SLIDE_MS}ms`
+      : `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`
+  const rightPanelChromeEase = rightPanelOpen && !sidebarDragging && !rightPanelDragging
+    ? RIGHT_PANEL_PEER_SLIDE_EASE
+    : DESKTOP_SIDEBAR_LAYOUT_EASE
+
   const dragRightClip = resolveDragRightClip(
     isStandalonePanel,
     isSettings,
@@ -376,14 +391,36 @@ export default function DesktopWindowChrome({
             ) : null}
             <div
               className={s.drag}
-              style={{ left: `${dragResumeLeft}px`, right: 0, ...dragRightClip }}
+              style={{
+                left: `${dragResumeLeft}px`,
+                right: 0,
+                ...dragRightClip,
+                ...(dragRightClip.right != null
+                  ? {
+                      transitionProperty: 'right',
+                      transitionDuration: rightPanelChromeTransition,
+                      transitionTimingFunction: rightPanelChromeEase,
+                    }
+                  : {}),
+              }}
               aria-hidden
             />
           </>
         ) : (
           <div
             className={s.drag}
-            style={{ left: `${dragLeftInset}px`, right: 0, ...dragRightClip }}
+            style={{
+              left: `${dragLeftInset}px`,
+              right: 0,
+              ...dragRightClip,
+              ...(dragRightClip.right != null
+                ? {
+                    transitionProperty: 'right',
+                    transitionDuration: rightPanelChromeTransition,
+                    transitionTimingFunction: rightPanelChromeEase,
+                  }
+                : {}),
+            }}
             aria-hidden
           />
         )}
@@ -396,7 +433,8 @@ export default function DesktopWindowChrome({
             height: `${chromeBand}px`,
             left: `${titleLeft}px`,
             maxWidth: `${titleMaxWidth}px`,
-            transitionDuration: chromeTransition,
+            transitionDuration: rightPanelOpen ? rightPanelChromeTransition : chromeTransition,
+            transitionTimingFunction: rightPanelOpen ? rightPanelChromeEase : DESKTOP_SIDEBAR_LAYOUT_EASE,
           }}
           >
             {titleSlotWithLayout ? (
@@ -525,6 +563,9 @@ export default function DesktopWindowChrome({
             top: `${frameTitlebarHeight + chromeTop}px`,
             height: `${chromeBand}px`,
             right: `${titleBarActionsRight}px`,
+            transitionProperty: 'right',
+            transitionDuration: rightPanelChromeTransition,
+            transitionTimingFunction: rightPanelChromeEase,
           }}
         >
           {titleBarTrailing}
