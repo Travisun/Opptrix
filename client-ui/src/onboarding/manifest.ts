@@ -646,6 +646,38 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.3.2': {
+    welcomeTitle: '情绪盘面与思考过程，一眼看清',
+    welcomeSubtitle:
+      '这一版让你在市场动态里切换涨停、飙升、天梯等情绪视角，对话里也能按时间线回顾本轮思考。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '替你读盘',
+        title: '情绪盘面，短线更快把握',
+        desc: '市场动态可切换涨停、飙升、天梯等视角，把盘面情绪收在一处看。',
+        note: '少切软件，多留判断时间。',
+      },
+      {
+        kicker: '思路不断',
+        title: '思考过程按时间线可回顾',
+        desc: '本轮推理步骤按时间线展开，方便对照结论与中间判断。',
+        note: '追问有依据，复盘更清晰。',
+      },
+      {
+        kicker: '看图更顺',
+        title: '放大画布仍可拖移查看',
+        desc: '图表放大后仍可拖移浏览，完整导出也更省事。',
+        note: '细节与全貌都不丢。',
+      },
+      {
+        kicker: '看盘连贯',
+        title: '行情与文件预览顺畅切换',
+        desc: '右侧可在行情与文件预览间连贯切换，关预览后仍回到行情。',
+        note: '看附件、看盘面，不断线。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

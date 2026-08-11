@@ -330,10 +330,11 @@ console.log('audit-desktop-pack: start')
     }
   }
 
-  const mainSrc = read('electron/main.cjs')
-  if (!mainSrc.includes('OPPTRIX_RAG_ENGINES_BUNDLED_DIR')) {
-    fail('main.cjs must inject OPPTRIX_RAG_ENGINES_BUNDLED_DIR for sidecar')
-  } else ok('main.cjs injects OPPTRIX_RAG_ENGINES_BUNDLED_DIR')
+  // Sidecar env is built in sidecar-launch.cjs (shared by main UI + headless OS tick).
+  const sidecarLaunchSrc = read('electron/os-schedule/sidecar-launch.cjs')
+  if (!sidecarLaunchSrc.includes('OPPTRIX_RAG_ENGINES_BUNDLED_DIR')) {
+    fail('sidecar-launch.cjs must inject OPPTRIX_RAG_ENGINES_BUNDLED_DIR for sidecar')
+  } else ok('sidecar-launch.cjs injects OPPTRIX_RAG_ENGINES_BUNDLED_DIR')
 
   if (!pkg.scripts?.['build']?.includes('prebuild.mjs')) {
     warn('desktop build script should run prebuild.mjs (includes stage-sensevoice / stage-e5 / stage-rapidocr / stage-rag-engines)')
