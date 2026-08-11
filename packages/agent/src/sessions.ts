@@ -5,6 +5,12 @@ import { chatMessageContentToText } from './content-parts.js'
 import type { ChatToolStep } from './chat-progress.js'
 import type { TokenUsage } from './llm/token-usage.js'
 import { SessionArchiveFolderStore } from './archive-folders.js'
+import {
+  contextProjectionToRef,
+  hydrateContextProjection,
+  isContextProjectionRef,
+  writeContextProjectionToDisk,
+} from './context/session-projection-disk.js'
 
 import type { ChatAttachmentMeta } from './media-types.js'
 import type { ExpertIcon } from '@opptrix/shared'
@@ -24,7 +30,8 @@ export interface SessionLlmParams {
 }
 
 export const DEFAULT_SESSION_TEMPERATURE = 1
-export const DEFAULT_SESSION_MAX_TOKENS = 4096
+/** 与 output-budget ORDINARY_OUTPUT_TOKENS（普模默认 32k）对齐 */
+export const DEFAULT_SESSION_MAX_TOKENS = 32_768
 
 export function normalizeSessionLlmParams(raw: unknown): SessionLlmParams | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
@@ -97,6 +104,8 @@ export interface DisplayMessage {
   usage?: TokenUsage
   usageEstimated?: boolean
   attachments?: ChatAttachmentMeta[]
+  /** 终轮非空思考链（历史气泡可折叠展示） */
+  reasoningContent?: string
 }
 
 export interface SessionForkContextRef {
@@ -145,6 +154,8 @@ export interface SessionRecord extends SessionMeta {
     usage?: TokenUsage
     usageEstimated?: boolean
     attachments?: ChatAttachmentMeta[]
+    /** 终轮非空思考链；工具轮不写 */
+    reasoningContent?: string
   }[]
   contextRef?: SessionContextRef | null
   /**
@@ -156,6 +167,11 @@ export interface SessionRecord extends SessionMeta {
    * 结构化会话工作记忆（压缩产物）。列表 meta 不返回；UI transcript 仍用 turns。
    */
   sessionMemory?: import('./context/session-memory.js').SessionMemory | null
+  /**
+   * Model-visible 上下文投影 sidecar（soft/micro/structured）。
+   * 引擎内存为完整 ContextProjection；SQLite 仅存 ContextProjectionRef 指针；列表 meta / API 不下发全文。
+   */
+  contextProjection?: import('./context/projection.js').ContextProjection | null
 }
 
 function previewText(content: string, max = 72): string {
@@ -177,8 +193,73 @@ export function setSessionPersistHooks(hooks: {
 
 function writeRecord(record: SessionRecord) {
   record.updatedAt = new Date().toISOString()
-  getUserDataStore().setDocument(NAMESPACE, record.id, record)
+  const full = record.contextProjection ?? null
+  // 盘上全文；SQLite 仅指针（引擎内存仍保留完整投影）
+  writeContextProjectionToDisk(record.id, full)
+  const forStore: Omit<SessionRecord, 'contextProjection'> & {
+    contextProjection: ReturnType<typeof contextProjectionToRef> | null
+  } = {
+    ...record,
+    contextProjection: full ? contextProjectionToRef(full) : null,
+  }
+  getUserDataStore().setDocument(NAMESPACE, record.id, forStore)
   sessionPersistHook?.(record)
+}
+
+/** 旧全文 / 指针 → 引擎内存完整投影；必要时把 SQLite 改成指针（幂等） */
+function rewriteSqliteProjectionPointer(
+  sessionId: string,
+  full: import('./context/projection.js').ContextProjection,
+): void {
+  try {
+    const raw = getUserDataStore().getDocument<SessionRecord>(NAMESPACE, sessionId)
+    if (!raw) return
+    if (isContextProjectionRef(raw.contextProjection)) return
+    const next: Omit<SessionRecord, 'contextProjection'> & {
+      contextProjection: ReturnType<typeof contextProjectionToRef>
+    } = {
+      ...raw,
+      contextProjection: contextProjectionToRef(full),
+    }
+    getUserDataStore().setDocument(NAMESPACE, sessionId, next)
+  } catch {
+    /* 迁移失败不影响主路径 */
+  }
+}
+
+function normalizeRecord(raw: SessionRecord): SessionRecord {
+  const llmParams = normalizeSessionLlmParams(raw.llmParams)
+  const { projection, needsPointerRewrite } = hydrateContextProjection(
+    raw.id,
+    raw.contextProjection,
+  )
+  if (needsPointerRewrite && projection) {
+    rewriteSqliteProjectionPointer(raw.id, projection)
+  }
+  const record: SessionRecord = {
+    ...raw,
+    turns: raw.turns ?? [],
+    contextRef: raw.contextRef ?? null,
+    expertId: raw.expertId ?? null,
+    expertIcon: raw.expertIcon ?? null,
+    rolePersona: raw.rolePersona ?? null,
+    sessionMemory: raw.sessionMemory ?? null,
+    contextProjection: projection,
+    llmParams,
+  }
+  return backfillTurnReasoning(migrateTurns(record))
+}
+
+/** 终轮助手消息（无 tool_calls）的思考链，按 display 顺序 */
+function finalAssistantReasonings(messages: ChatMessage[]): Array<string | undefined> {
+  const out: Array<string | undefined> = []
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    if (m.tool_calls?.length) continue
+    const r = typeof m.reasoningContent === 'string' ? m.reasoningContent.trim() : ''
+    out.push(r || undefined)
+  }
+  return out
 }
 
 function migrateTurns(record: SessionRecord): SessionRecord {
@@ -187,10 +268,16 @@ function migrateTurns(record: SessionRecord): SessionRecord {
   const turns: SessionRecord['turns'] = []
   for (const m of record.messages) {
     if ((m.role === 'user' || m.role === 'assistant') && m.content != null) {
+      const reasoning = m.role === 'assistant'
+        && typeof m.reasoningContent === 'string'
+        && m.reasoningContent.trim()
+        ? m.reasoningContent
+        : undefined
       turns.push({
         role: m.role,
         content: chatMessageContentToText(m.content),
         at: record.updatedAt,
+        ...(reasoning ? { reasoningContent: reasoning } : {}),
       })
     }
   }
@@ -201,19 +288,24 @@ function migrateTurns(record: SessionRecord): SessionRecord {
   return record
 }
 
-function normalizeRecord(raw: SessionRecord): SessionRecord {
-  const llmParams = normalizeSessionLlmParams(raw.llmParams)
-  const record: SessionRecord = {
-    ...raw,
-    turns: raw.turns ?? [],
-    contextRef: raw.contextRef ?? null,
-    expertId: raw.expertId ?? null,
-    expertIcon: raw.expertIcon ?? null,
-    rolePersona: raw.rolePersona ?? null,
-    sessionMemory: raw.sessionMemory ?? null,
-    llmParams,
-  }
-  return migrateTurns(record)
+/** 旧会话 turns 缺思考时，从同轮终助手 messages 回填并持久化 */
+function backfillTurnReasoning(record: SessionRecord): SessionRecord {
+  if (!record.turns?.length) return record
+  const fromMsgs = finalAssistantReasonings(record.messages)
+  let ai = 0
+  let changed = false
+  const turns = record.turns.map(t => {
+    if (t.role !== 'assistant') return t
+    const msgReasoning = fromMsgs[ai++]
+    if (t.reasoningContent?.trim()) return t
+    if (!msgReasoning) return t
+    changed = true
+    return { ...t, reasoningContent: msgReasoning }
+  })
+  if (!changed) return record
+  record.turns = turns
+  writeRecord(record)
+  return record
 }
 
 function toMeta(raw: SessionRecord): SessionMeta {
@@ -429,15 +521,22 @@ export class SessionStore {
         usage: t.usage,
         usageEstimated: t.usageEstimated,
         attachments: t.attachments,
+        reasoningContent: t.reasoningContent,
       }))
     }
     const out: DisplayMessage[] = []
     for (const m of record.messages) {
       if ((m.role === 'user' || m.role === 'assistant') && m.content != null) {
+        const reasoning = m.role === 'assistant'
+          && typeof m.reasoningContent === 'string'
+          && m.reasoningContent.trim()
+          ? m.reasoningContent
+          : undefined
         out.push({
           role: m.role,
           content: chatMessageContentToText(m.content),
           at: record.updatedAt,
+          ...(reasoning ? { reasoningContent: reasoning } : {}),
         })
       }
     }
@@ -515,6 +614,7 @@ export class SessionStore {
     record.turns = (record.turns?.length ? record.turns : display).slice(0, displayIndex)
     record.messages = record.messages.slice(0, messageCut)
     record.sessionMemory = null
+    record.contextProjection = null
     this.save(record)
     return record
   }

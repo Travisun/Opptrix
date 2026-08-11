@@ -19,6 +19,10 @@ import {
   ensureContextBudget,
   CONTEXT_COMPACT_HINT,
   buildBudgetForModel,
+  coveredPrefixHash,
+  projectionValid,
+  installMicroProjection,
+  modelVisibleFromProjection,
 } from '../packages/agent/dist/index.js'
 
 function buildFatToolHistory(rounds, payloadChars) {
@@ -56,7 +60,8 @@ test('resolveContextBudget soft/hard ratios', () => {
   assert.ok(b.historyBudget > 0)
   assert.equal(b.softLimit, Math.floor(b.historyBudget * SOFT_USAGE_RATIO))
   assert.equal(b.hardLimit, Math.floor(b.historyBudget * HARD_USAGE_RATIO))
-  assert.ok(b.softLimit < b.hardLimit)
+  assert.ok(b.softLimit <= b.hardLimit)
+  assert.equal(SOFT_USAGE_RATIO, 0.85)
 })
 
 test('estimateTextTokens charges CJK tighter than latin chars/4', () => {
@@ -70,6 +75,7 @@ test('estimateTextTokens charges CJK tighter than latin chars/4', () => {
 })
 
 test('microcompactMessages shortens old tool bodies and keeps recent intact', () => {
+  const fat = 'x'.repeat(5000)
   const messages = []
   for (let i = 0; i < 10; i++) {
     messages.push({
@@ -85,7 +91,7 @@ test('microcompactMessages shortens old tool bodies and keeps recent intact', ()
       role: 'tool',
       tool_call_id: `c${i}`,
       name: 'get_quote',
-      content: JSON.stringify({ price: 1, payload: 'x'.repeat(2000) }),
+      content: JSON.stringify({ price: 1, payload: fat }),
     })
   }
   const { messages: out, changed } = microcompactMessages(messages, 4)
@@ -93,10 +99,10 @@ test('microcompactMessages shortens old tool bodies and keeps recent intact', ()
   assert.equal(out.length, messages.length)
   const oldTool = out[1]
   assert.equal(oldTool.role, 'tool')
-  assert.ok(String(oldTool.content).length < 2000)
+  assert.ok(String(oldTool.content).length < 5000)
   assert.match(String(oldTool.content), /_compacted|compacted/)
   const recentTool = out[out.length - 1]
-  assert.equal(String(recentTool.content).length > 1500, true)
+  assert.equal(String(recentTool.content).length > 4000, true)
 })
 
 test('assembleModelView injects session memory and keeps system first', () => {
@@ -164,21 +170,25 @@ test('buildBudgetForModel resolves context window asynchronously', async () => {
   const budget = await buildBudgetForModel('unknown-model-xyz-for-test', 'LAYER0')
   assert.ok(budget.contextTokens > 0)
   assert.ok(budget.historyBudget > 0)
-  assert.ok(budget.softLimit < budget.hardLimit)
+  assert.ok(budget.softLimit <= budget.hardLimit)
 })
 
 test('ensureContextBudget soft path triggers micro on small window', async () => {
   const messages = buildFatToolHistory(40, 4000)
-  const { results, state } = await ensureContextBudget({
+  const { results, state, modelView } = await ensureContextBudget({
     modelId: 'gpt-3.5-turbo',
     systemPrompt: 'LAYER0',
-    state: { messages, sessionMemory: null },
+    state: { messages, sessionMemory: null, contextProjection: null },
     llm: null,
   })
   assert.ok(results.some((r) => r.level === 'micro' && r.changed))
+  // micro 仅投影：canonical 保留完整 tool 正文（不再 480/2400 永久撕毁）
   const oldTool = state.messages.find((m) => m.role === 'tool')
   assert.ok(oldTool)
-  assert.ok(String(oldTool.content).length < 4000)
+  assert.ok(String(oldTool.content).length >= 4000)
+  assert.ok(state.contextProjection)
+  assert.ok(modelView.length > 0)
+  assert.equal(modelView[0].role, 'system')
   // tool_calls 成组：assistant(tool_calls) 后仍有对应 tool
   for (let i = 0; i < state.messages.length; i++) {
     const m = state.messages[i]
@@ -232,6 +242,102 @@ test('ensureContextBudget hard path writes sessionMemory via mock llm', async ()
   })
   assert.ok(results.some((r) => r.level === 'structured' && r.changed))
   assert.ok(state.sessionMemory)
+  assert.ok(state.contextProjection)
   assert.match(state.sessionMemory.goal, /600519/)
   assert.match(state.sessionMemory.constraints, /公开/)
+})
+
+test('soft/micro does not rewrite canonical tool bodies; installs contextProjection', async () => {
+  const messages = buildFatToolHistory(40, 4000)
+  const before = messages
+    .filter((m) => m.role === 'tool')
+    .map((m) => String(m.content).length)
+  const { results, state, modelView } = await ensureContextBudget({
+    modelId: 'gpt-3.5-turbo',
+    systemPrompt: 'LAYER0',
+    state: { messages, sessionMemory: null, contextProjection: null },
+    llm: null,
+  })
+  assert.ok(results.some((r) => r.level === 'micro' && r.changed))
+  assert.ok(state.contextProjection)
+  assert.ok(state.contextProjection.coveredCount > 0)
+  assert.ok(projectionValid(state.contextProjection, state.messages))
+  const after = state.messages
+    .filter((m) => m.role === 'tool')
+    .map((m) => String(m.content).length)
+  assert.deepEqual(after, before)
+  // modelView 应走投影：较早 tool 在投影里被截断
+  const viewTools = modelView.filter((m) => m.role === 'tool')
+  assert.ok(viewTools.some((m) => String(m.content).length < 4000))
+})
+
+test('assembleModelView prefers valid projection splice', () => {
+  const messages = buildFatToolHistory(8, 2000)
+  const micro = microcompactMessages(messages, 4)
+  const projection = installMicroProjection(messages, micro.messages, 4, null)
+  assert.ok(projection)
+  assert.equal(projectionValid(projection, messages), true)
+  const view = assembleModelView({
+    systemPrompt: 'LAYER0',
+    sessionMemory: null,
+    messages,
+    keepRecent: 4,
+    contextProjection: projection,
+  })
+  assert.equal(view[0].content, 'LAYER0')
+  // 投影前缀在 system 之后
+  const withoutSystem = view.slice(1)
+  assert.ok(withoutSystem.length > 0)
+  // splice = projection.messages + canonical[covered:]
+  const expectedTail = messages.slice(projection.coveredCount)
+  const fromProj = modelVisibleFromProjection({
+    systemPrompt: 'LAYER0',
+    projection,
+    canonical: messages,
+    keepRecent: 4,
+  })
+  assert.equal(view.length, fromProj.length)
+  assert.equal(
+    view.filter((m) => m.role === 'tool').length,
+    fromProj.filter((m) => m.role === 'tool').length,
+  )
+  assert.ok(expectedTail.length > 0)
+  assert.equal(coveredPrefixHash(messages, projection.coveredCount), projection.coveredPrefixHash)
+})
+
+test('assembleModelView falls back when projection missing or invalid', () => {
+  const messages = [
+    { role: 'user', content: '你好' },
+    { role: 'assistant', content: '嗨' },
+  ]
+  const legacy = assembleModelView({
+    systemPrompt: 'LAYER0',
+    sessionMemory: null,
+    messages,
+    keepRecent: 24,
+  })
+  assert.equal(legacy.length, 3)
+  assert.equal(legacy[1].role, 'user')
+
+  const invalid = {
+    schemaVersion: 1,
+    messages: [],
+    coveredCount: 1,
+    keepRecent: 16,
+    // no hash → fail-closed
+    projectionVersion: 1,
+    updatedAt: new Date().toISOString(),
+  }
+  const fallback = assembleModelView({
+    systemPrompt: 'LAYER0',
+    sessionMemory: null,
+    messages,
+    keepRecent: 24,
+    contextProjection: invalid,
+  })
+  assert.deepEqual(
+    fallback.map((m) => m.role),
+    legacy.map((m) => m.role),
+  )
+  assert.equal(projectionValid(invalid, messages), false)
 })

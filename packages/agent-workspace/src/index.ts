@@ -3,14 +3,18 @@ export {
   resolveAgentPrivilegesRoot,
   resolveSessionWorkspaceRoot,
   resolveSharedWorkspaceRoot,
+  resolveSessionStateRoot,
+  resolveSessionStateDir,
   assertSafeSessionId,
   migrateLegacyWorkspaceFiles,
   deleteSessionWorkspaceDirectory,
+  deleteSessionStateDirectory,
   DEFAULT_ROOT_ID,
   SHARED_ROOT_ID,
   SESSIONS_SUBDIR,
   SHARED_SUBDIR,
   LEGACY_SUBDIR,
+  SESSION_STATE_SUBDIR,
 } from './paths.js'
 export {
   ensureSharedWorkspaceLayout,

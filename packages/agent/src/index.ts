@@ -226,9 +226,12 @@ export {
 export {
   type TokenUsage,
   type TokenUsageDisplay,
+  type CacheWarmth,
   emptyTokenUsage,
   mergeTokenUsage,
   parseOpenAiUsage,
+  resolveCacheWarmth,
+  promptCacheKeyForSession,
 } from './llm/token-usage.js'
 
 export {
@@ -251,13 +254,49 @@ export {
   type CompactLevel,
   type CompactResult,
 } from './context/compact.js'
+export {
+  type ContextProjection,
+  coveredPrefixHash,
+  projectionValid,
+  modelVisibleFromProjection,
+  installMicroProjection,
+  installMemoryProjection,
+} from './context/projection.js'
+export {
+  parseContextProjection,
+  readContextProjectionFromDisk,
+  writeContextProjectionToDisk,
+  resolveContextProjectionPath,
+  computeContextUsagePercent,
+  hydrateContextProjection,
+  contextProjectionToRef,
+  isContextProjectionRef,
+  isFullContextProjection,
+  CONTEXT_PROJECTION_PATH_KEY,
+  type ContextProjectionRef,
+} from './context/session-projection-disk.js'
 export { estimateTextTokens, estimateMessageTokens } from './context/token-estimate.js'
 export {
   createProvider,
   isConfigured,
   fetchOpenAiModelList,
   joinOpenAiCompatibleUrl,
+  EMPTY_REPLY_REASONING_HINT,
+  LEGACY_DEFAULT_MAX_TOKENS,
+  LEGACY_ORDINARY_OUTPUT_TOKENS,
+  ORDINARY_OUTPUT_TOKENS,
+  REASONING_OUTPUT_TOKENS,
+  HIGH_REASONING_OUTPUT_TOKENS,
+  OUTPUT_TOKENS_64K,
+  OUTPUT_TOKENS_128K,
+  OUTPUT_TOKENS_384K,
+  MAX_OUTPUT_TOKENS_PRESETS,
+  autoOutputBudget,
+  looksLikeReasoningModel,
+  resolveRequestMaxTokens,
   type LlmConfig,
+  type LlmTurn,
+  type LlmChatDelta,
 } from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'
 

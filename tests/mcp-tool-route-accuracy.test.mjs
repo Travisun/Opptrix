@@ -15,6 +15,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildAgentSystemRules } from '../packages/shared/dist/agent-prompt-guide.js'
+import { buildTurnTailPrompt } from '../packages/shared/dist/turn-tail.js'
 import { buildAgentSafeProjectInfo } from '../packages/agent/dist/app-context.js'
 import {
   resolveToolRoutePlan,
@@ -232,12 +233,15 @@ test('D4 route playbook only names loaded tools', () => {
 })
 
 test('D5 conditional playbooks — unloaded packs omitted from system rules', () => {
+  const routeCard = '【本轮工具选型卡】\n- 测试卡'
   const slim = buildAgentSystemRules({
     activePacks: ['core', 'meta'],
     activeToolNames: ['search_instruments', 'list_tool_packs'],
-    routePlaybook: '【本轮工具选型卡】\n- 测试卡',
+    routePlaybook: routeCard,
   })
-  assert.match(slim, /本轮工具选型卡/)
+  // 选型卡进 turn-tail，不进稳定 system
+  assert.ok(!slim.includes('本轮工具选型卡'))
+  assert.match(buildTurnTailPrompt({ routePlaybook: routeCard }), /本轮工具选型卡/)
   assert.match(slim, /search_library/)
   assert.match(slim, /多跳/)
   assert.ok(!slim.includes('【资讯调阅'))
@@ -247,19 +251,16 @@ test('D5 conditional playbooks — unloaded packs omitted from system rules', ()
 
   const withNews = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'news'],
-    routePlaybook: '【本轮工具选型卡】\n- news',
   })
   assert.match(withNews, /【资讯调阅/)
 
   const withFund = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'fundamentals'],
-    routePlaybook: '【本轮工具选型卡】\n- fund',
   })
   assert.match(withFund, /【基本面事实表/)
 
   const withArtifacts = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'artifacts'],
-    routePlaybook: '【本轮工具选型卡】\n- artifacts',
   })
   assert.match(withArtifacts, /【画布与脑图/)
   assert.match(withArtifacts, /@opptrix\/canvas/)

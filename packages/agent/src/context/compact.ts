@@ -14,6 +14,13 @@ import {
   type SessionMemory,
 } from './session-memory.js'
 import {
+  installMemoryProjection,
+  installMicroProjection,
+  projectionValid,
+  modelVisibleFromProjection,
+  type ContextProjection,
+} from './projection.js'
+import {
   estimateMessageTokens,
   estimateSystemToolsReserve,
   estimateTextTokens,
@@ -38,9 +45,11 @@ export interface CompactResult {
 export interface SessionCompactState {
   messages: ChatMessage[]
   sessionMemory?: SessionMemory | null
+  contextProjection?: ContextProjection | null
 }
 
-const MICRO_TOOL_MAX = 480
+/** tool 可见摘要上限（P2：放宽，避免 480 字永久撕毁） */
+const MICRO_TOOL_MAX = 2_400
 export const KEEP_RECENT_DEFAULT = 16
 const KEEP_RECENT_AGGRESSIVE = 8
 
@@ -127,14 +136,28 @@ export async function structuredCompact(
   const keepRecent = opts?.keepRecent ?? KEEP_RECENT_DEFAULT
   const repaired = repairToolCallSequences(state.messages)
   if (repaired.length <= keepRecent + 2) {
-    return { state: { ...state, messages: repaired }, changed: false }
+    return {
+      state: {
+        messages: repaired,
+        sessionMemory: state.sessionMemory,
+        contextProjection: state.contextProjection,
+      },
+      changed: false,
+    }
   }
 
   const cut = repaired.length - keepRecent
   const older = repaired.slice(0, cut)
   const transcript = historyForSummarizer(older)
   if (!transcript.trim()) {
-    return { state: { ...state, messages: repaired }, changed: false }
+    return {
+      state: {
+        messages: repaired,
+        sessionMemory: state.sessionMemory,
+        contextProjection: state.contextProjection,
+      },
+      changed: false,
+    }
   }
 
   const prevMemory = formatSessionMemoryForPrompt(state.sessionMemory)
@@ -159,10 +182,14 @@ export async function structuredCompact(
   const compactUsage = resolveTurnUsage(turn, compactPrompt)
 
   if (turn.finishReason === 'error' || !chatMessageContentToText(turn.message.content).trim()) {
-    const micro = microcompactMessages(repaired, keepRecent)
+    // 压缩失败时不永久撕毁 tool 正文；由 ensureContextBudget 对 modelView 做 micro 投影
     return {
-      state: { messages: micro.messages, sessionMemory: state.sessionMemory },
-      changed: micro.changed,
+      state: {
+        messages: repaired,
+        sessionMemory: state.sessionMemory,
+        contextProjection: state.contextProjection,
+      },
+      changed: false,
     }
   }
 
@@ -171,12 +198,17 @@ export async function structuredCompact(
     state.sessionMemory,
     cut,
   )
-  // 持久化仍保留全量 messages（UI 用 turns）；ModelView 靠 memory + 近端窗
-  const micro = microcompactMessages(repaired, keepRecent)
+  // 持久化保留全量 messages；写 memory + projection（coveredCount=cut），不删 canonical tool 正文
+  const projection = installMemoryProjection(
+    repaired,
+    keepRecent,
+    state.contextProjection,
+  )
   return {
     state: {
-      messages: micro.messages,
+      messages: repaired,
       sessionMemory: memory,
+      contextProjection: projection ?? state.contextProjection ?? null,
     },
     changed: true,
     usage: compactUsage.usage,
@@ -190,8 +222,19 @@ export function assembleModelView(opts: {
   messages: ChatMessage[]
   contextPrefix?: ChatMessage[]
   keepRecent?: number
+  contextProjection?: ContextProjection | null
 }): ChatMessage[] {
   const keepRecent = opts.keepRecent ?? KEEP_RECENT_DEFAULT
+  if (opts.contextProjection && projectionValid(opts.contextProjection, opts.messages)) {
+    return modelVisibleFromProjection({
+      systemPrompt: opts.systemPrompt,
+      sessionMemory: opts.sessionMemory,
+      projection: opts.contextProjection,
+      canonical: opts.messages,
+      contextPrefix: opts.contextPrefix,
+      keepRecent,
+    })
+  }
   const out: ChatMessage[] = [{ role: 'system', content: opts.systemPrompt }]
   const memoryText = formatSessionMemoryForPrompt(opts.sessionMemory)
   if (memoryText) {
@@ -240,6 +283,7 @@ export async function ensureContextBudget(opts: {
   let state: SessionCompactState = {
     messages: repairToolCallSequences(opts.state.messages),
     sessionMemory: opts.state.sessionMemory ?? null,
+    contextProjection: opts.state.contextProjection ?? null,
   }
   const keepRecent = opts.aggressive ? KEEP_RECENT_AGGRESSIVE : KEEP_RECENT_DEFAULT
   const budget = await buildBudgetForModel(
@@ -255,22 +299,30 @@ export async function ensureContextBudget(opts: {
     messages: state.messages,
     contextPrefix: opts.contextPrefix,
     keepRecent,
+    contextProjection: state.contextProjection,
   })
 
   let view = buildView()
-  let used = estimateModelViewTokens(view) - estimateTextTokens(opts.systemPrompt)
   // history-ish: exclude primary system from usage vs historyBudget
-  used = Math.max(0, estimateModelViewTokens(view) - estimateTextTokens(opts.systemPrompt))
+  let used = Math.max(0, estimateModelViewTokens(view) - estimateTextTokens(opts.systemPrompt))
 
   if (used < budget.softLimit && !opts.aggressive) {
     return { state, results, modelView: view }
   }
 
-  // soft / aggressive → micro
+  // soft / aggressive → micro（只写投影，不改写 canonical messages）
   {
     const micro = microcompactMessages(state.messages, keepRecent)
     if (micro.changed) {
-      state = { ...state, messages: micro.messages }
+      const projection = installMicroProjection(
+        state.messages,
+        micro.messages,
+        keepRecent,
+        state.contextProjection,
+      )
+      if (projection) {
+        state = { ...state, contextProjection: projection }
+      }
       view = buildView()
       used = Math.max(0, estimateModelViewTokens(view) - estimateTextTokens(opts.systemPrompt))
       results.push({
@@ -288,18 +340,27 @@ export async function ensureContextBudget(opts: {
   }
 
   if (!opts.llm) {
-    // 无 LLM：进一步缩短近端
+    // 无 LLM：进一步缩短近端投影，仍不撕毁持久化正文
     const micro2 = microcompactMessages(state.messages, KEEP_RECENT_AGGRESSIVE)
-    state = { ...state, messages: micro2.messages }
+    const projection = installMicroProjection(
+      state.messages,
+      micro2.messages,
+      KEEP_RECENT_AGGRESSIVE,
+      state.contextProjection,
+    )
+    if (projection) {
+      state = { ...state, contextProjection: projection }
+    }
     view = assembleModelView({
       systemPrompt: opts.systemPrompt,
       sessionMemory: state.sessionMemory,
       messages: state.messages,
       contextPrefix: opts.contextPrefix,
       keepRecent: KEEP_RECENT_AGGRESSIVE,
+      contextProjection: state.contextProjection,
     })
     used = Math.max(0, estimateModelViewTokens(view) - estimateTextTokens(opts.systemPrompt))
-    if (micro2.changed) {
+    if (micro2.changed || projection) {
       results.push({
         level: 'micro',
         message: CONTEXT_COMPACT_HINT,

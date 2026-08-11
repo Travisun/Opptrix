@@ -1,6 +1,10 @@
 import type { OpenAiTool } from '../tools.js'
 import { formatOutboundFetchError, outboundFetch } from './outbound-fetch.js'
-import { parseOpenAiUsage, type TokenUsage } from './token-usage.js'
+import {
+  parseOpenAiUsage,
+  promptCacheKeyForSession,
+  type TokenUsage,
+} from './token-usage.js'
 import {
   parseAssistantResponseContent,
   sanitizeMessagesForModelMedia,
@@ -12,6 +16,29 @@ import {
   logChatDebugHttpError,
   truncateForChatDebug,
 } from '../chat-debug-log.js'
+import {
+  LEGACY_DEFAULT_MAX_TOKENS,
+  resolveRequestMaxTokens,
+} from './output-budget.js'
+
+export {
+  LEGACY_DEFAULT_MAX_TOKENS,
+  LEGACY_ORDINARY_OUTPUT_TOKENS,
+  ORDINARY_OUTPUT_TOKENS,
+  REASONING_OUTPUT_TOKENS,
+  HIGH_REASONING_OUTPUT_TOKENS,
+  OUTPUT_TOKENS_64K,
+  OUTPUT_TOKENS_128K,
+  OUTPUT_TOKENS_384K,
+  MAX_OUTPUT_TOKENS_PRESETS,
+  autoOutputBudget,
+  looksLikeReasoningModel,
+  resolveRequestMaxTokens,
+} from './output-budget.js'
+
+/** 空正文但有思考或输出打满时的用户可见说明（无技术黑话） */
+export const EMPTY_REPLY_REASONING_HINT =
+  '思考过程占用了本轮输出上限，正文未能写出。请提高本会话的最大输出，或换用更适合长思考的模型。'
 
 export interface LlmConfig {
   provider: string
@@ -61,28 +88,42 @@ export interface ChatMessage {
   tool_calls?: ToolCall[]
   tool_call_id?: string
   name?: string
+  /**
+   * DeepSeek 等思考链；仅当本字段 !== undefined 时序列化为 `reasoning_content`
+   *（含空串，供 tool 轮「丢思考也要带 key」）。
+   */
+  reasoningContent?: string
 }
 
 export interface LlmTurn {
   message: ChatMessage
-  finishReason: 'stop' | 'tool_calls' | 'error'
+  finishReason: 'stop' | 'tool_calls' | 'error' | 'length'
   error?: string
   /** 上游响应表明上下文超限 */
   contextOverflow?: boolean
   usage?: TokenUsage
+  /** DeepSeek 等推理模型的 thinking 累积（不进 message.content） */
+  reasoningContent?: string
+  /** 本轮实际请求的 max_tokens（含 ladder） */
+  requestedMaxTokens?: number
   /** 从模型原生 content parts 解析出的输出媒体 */
   outputAttachments?: import('./../media-types.js').ChatAttachmentMeta[]
 }
 
-export type LlmChatDelta = { text?: string; hasToolCalls?: boolean }
+export type LlmChatDelta = {
+  text?: string
+  /** 推理增量（可选；不破坏仅读 text 的旧回调） */
+  reasoningText?: string
+  hasToolCalls?: boolean
+}
 
 export interface LlmChatOpts {
   sessionId?: string
   /** 传入时走 SSE 流式；文本增量与 tool_calls 发现会回调 */
   onDelta?: (delta: LlmChatDelta) => void
-  /** 本轮覆盖；未设则回退 LlmConfig / 默认 1 */
+  /** 本轮覆盖；未设则回退 LlmConfig / 默认 ladder */
   temperature?: number
-  /** 本轮覆盖；未设则回退 LlmConfig / 默认 4096 */
+  /** 本轮覆盖；未设则回退 LlmConfig / 自动 ladder */
   maxTokens?: number
   /** 有值时写入 body.reasoning_effort */
   reasoningEffort?: 'low' | 'medium' | 'high'
@@ -144,6 +185,10 @@ function serializeMessage(m: ChatMessage): Record<string, unknown> {
     ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
     ...(m.name ? { name: m.name } : {}),
+    // undefined 不写；空串仍写出（tool 轮续写 DeepSeek thinking）
+    ...(m.reasoningContent !== undefined
+      ? { reasoning_content: m.reasoningContent }
+      : {}),
   }
 }
 
@@ -175,14 +220,64 @@ function extractDeltaText(content: unknown): string {
     .join('')
 }
 
+function extractReasoningContent(raw: {
+  reasoning_content?: unknown
+  reasoningContent?: unknown
+}): string {
+  const a = raw.reasoning_content
+  const b = raw.reasoningContent
+  if (typeof a === 'string' && a) return a
+  if (typeof b === 'string' && b) return b
+  return ''
+}
+
+function mapFinishReason(
+  raw: string | undefined | null,
+  hasToolCalls: boolean,
+): LlmTurn['finishReason'] {
+  if (hasToolCalls || raw === 'tool_calls') return 'tool_calls'
+  if (raw === 'length') return 'length'
+  return 'stop'
+}
+
+function emptyContentPlaceholder(
+  text: string,
+  reasoning: string,
+  usage: TokenUsage | undefined,
+  finishReason: LlmTurn['finishReason'],
+  requestedMaxTokens?: number,
+): string {
+  const trimmed = text.trim()
+  if (trimmed) return trimmed
+  const hitLength = finishReason === 'length'
+    || (
+      requestedMaxTokens != null
+      && usage?.completionTokens != null
+      && usage.completionTokens >= requestedMaxTokens
+    )
+  if (reasoning.trim() || hitLength) return EMPTY_REPLY_REASONING_HINT
+  return '（无回复内容）'
+}
+
 function turnFromAssistantMessage(
   raw: {
     content?: string | null | unknown[]
     tool_calls?: ToolCall[]
+    reasoning_content?: unknown
+    reasoningContent?: unknown
   },
   usage: TokenUsage | undefined,
   sessionId?: string,
+  meta?: {
+    finishReason?: string | null
+    requestedMaxTokens?: number
+    reasoningContent?: string
+  },
 ): LlmTurn {
+  const reasoning = (meta?.reasoningContent ?? extractReasoningContent(raw)).trim()
+  const finishReason = mapFinishReason(meta?.finishReason, Boolean(raw.tool_calls?.length))
+  const requestedMaxTokens = meta?.requestedMaxTokens
+
   if (raw.tool_calls?.length) {
     return {
       message: {
@@ -192,15 +287,26 @@ function turnFromAssistantMessage(
       },
       finishReason: 'tool_calls',
       usage,
+      reasoningContent: reasoning || undefined,
+      requestedMaxTokens,
     }
   }
 
   if (sessionId && Array.isArray(raw.content)) {
     const parsed = parseAssistantResponseContent(sessionId, raw.content)
-    return {
-      message: { role: 'assistant', content: parsed.text || '（无回复内容）' },
-      finishReason: 'stop',
+    const content = emptyContentPlaceholder(
+      parsed.text,
+      reasoning,
       usage,
+      finishReason === 'tool_calls' ? 'stop' : finishReason,
+      requestedMaxTokens,
+    )
+    return {
+      message: { role: 'assistant', content },
+      finishReason: finishReason === 'tool_calls' ? 'stop' : finishReason,
+      usage,
+      reasoningContent: reasoning || undefined,
+      requestedMaxTokens,
       outputAttachments: parsed.attachments.length ? parsed.attachments : undefined,
     }
   }
@@ -216,10 +322,20 @@ function turnFromAssistantMessage(
         .join('\n')
       : ''
 
-  return {
-    message: { role: 'assistant', content: textContent ?? '' },
-    finishReason: 'stop',
+  const content = emptyContentPlaceholder(
+    textContent ?? '',
+    reasoning,
     usage,
+    finishReason === 'tool_calls' ? 'stop' : finishReason,
+    requestedMaxTokens,
+  )
+
+  return {
+    message: { role: 'assistant', content },
+    finishReason: finishReason === 'tool_calls' ? 'stop' : finishReason,
+    usage,
+    reasoningContent: reasoning || undefined,
+    requestedMaxTokens,
   }
 }
 
@@ -237,11 +353,13 @@ async function consumeChatCompletionSse(
   const decoder = new TextDecoder()
   let buffer = ''
   let content = ''
+  let reasoningContent = ''
   let finishReason: string | undefined
   let usage: TokenUsage | undefined
   let sawToolCalls = false
   const toolCallsByIndex = new Map<number, ToolCall>()
   const sseSampler = createSseChunkSampler(opts?.sessionId)
+  const requestedMaxTokens = opts?.maxTokens
 
   const mergeToolCallDelta = (delta: {
     index?: number
@@ -288,6 +406,7 @@ async function consumeChatCompletionSse(
             finish_reason?: string | null
             delta?: {
               content?: string | null | unknown[]
+              reasoning_content?: string | null
               tool_calls?: Array<{
                 index?: number
                 id?: string
@@ -312,6 +431,14 @@ async function consumeChatCompletionSse(
 
         const delta = choice.delta
         if (!delta) continue
+
+        const reasoningText = typeof delta.reasoning_content === 'string'
+          ? delta.reasoning_content
+          : ''
+        if (reasoningText) {
+          reasoningContent += reasoningText
+          onDelta?.({ reasoningText })
+        }
 
         const text = extractDeltaText(delta.content)
         if (text) {
@@ -348,13 +475,20 @@ async function consumeChatCompletionSse(
       },
       finishReason: 'tool_calls',
       usage,
+      reasoningContent: reasoningContent || undefined,
+      requestedMaxTokens,
     }
   }
 
   return turnFromAssistantMessage(
-    { content },
+    { content, reasoning_content: reasoningContent },
     usage,
     opts?.sessionId,
+    {
+      finishReason,
+      requestedMaxTokens,
+      reasoningContent,
+    },
   )
 }
 
@@ -381,15 +515,29 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       this.cfg.provider,
     )
     const outboundMessages = sanitizeMessagesForModelMedia(messages, mediaCaps)
+    const requestedMaxTokens = resolveRequestMaxTokens({
+      explicitMaxTokens: opts?.maxTokens ?? this.cfg.maxTokens,
+      reasoningEffort: opts?.reasoningEffort,
+      model: this.cfg.model,
+    })
+    const chatOpts: LlmChatOpts = {
+      ...opts,
+      maxTokens: requestedMaxTokens,
+    }
     const buildBody = (stream: boolean): Record<string, unknown> => {
       const body: Record<string, unknown> = {
         model: this.cfg.model,
         messages: outboundMessages.map(serializeMessage),
         temperature: opts?.temperature ?? this.cfg.temperature ?? 1,
-        max_tokens: opts?.maxTokens ?? this.cfg.maxTokens ?? 4096,
+        max_tokens: requestedMaxTokens,
       }
       if (opts?.reasoningEffort) {
         body.reasoning_effort = opts.reasoningEffort
+      }
+      // 观测用：稳定 session 级 prompt cache key；不因 warm/cold 改写 messages
+      const sessionId = opts?.sessionId?.trim()
+      if (sessionId) {
+        body.prompt_cache_key = promptCacheKeyForSession(sessionId)
       }
       if (tools?.length) {
         body.tools = tools
@@ -422,19 +570,26 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           message?: {
             content?: string | null | unknown[]
             tool_calls?: ToolCall[]
+            reasoning_content?: unknown
+            reasoningContent?: unknown
           }
         }[]
       }
-      const raw = data.choices?.[0]?.message
+      const choice = data.choices?.[0]
+      const raw = choice?.message
       const usage = parseOpenAiUsage(data.usage)
       if (!raw) {
         return {
           message: { role: 'assistant', content: '⚠️ API 返回格式异常' },
           finishReason: 'error',
           error: 'bad_response',
+          requestedMaxTokens,
         }
       }
-      return turnFromAssistantMessage(raw, usage, opts?.sessionId)
+      return turnFromAssistantMessage(raw, usage, opts?.sessionId, {
+        finishReason: choice?.finish_reason,
+        requestedMaxTokens,
+      })
     }
 
     const noteHttpError = (status: number, bodyText: string) => {
@@ -482,7 +637,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
             return await parseJsonTurn(fallback)
           }
           streamConsumeStarted = true
-          return await consumeChatCompletionSse(streamResp, opts)
+          return await consumeChatCompletionSse(streamResp, chatOpts)
         } catch (streamErr) {
           if (signal?.aborted) {
             noteAbort()

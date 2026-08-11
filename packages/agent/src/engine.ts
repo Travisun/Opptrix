@@ -1,7 +1,10 @@
 import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import { getCurrentTime } from './app-context.js'
-import { type ChatMessage } from './llm/provider.js'
+import {
+  type ChatMessage,
+  EMPTY_REPLY_REASONING_HINT,
+} from './llm/provider.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
@@ -31,7 +34,12 @@ import {
   orderToolsByPreference,
   type ToolRoutePlan,
 } from './mcp/tool-route-plan.js'
-import { buildSessionClockPlaybook, parseNamespacedMcpTool } from '@opptrix/shared'
+import {
+  appendTurnTailMessages,
+  buildSessionClockPlaybook,
+  buildTurnTailPrompt,
+  parseNamespacedMcpTool,
+} from '@opptrix/shared'
 import {
   logChatDebugAbort,
   logChatDebugEmptyReply,
@@ -41,6 +49,7 @@ import {
 import {
   applySessionLanAskChoice,
   getWorkspaceService,
+  deleteSessionStateDirectory,
 } from '@opptrix/agent-workspace'
 import {
   type ChatProgressEvent,
@@ -79,6 +88,7 @@ import {
   isContextOverflowError,
   KEEP_RECENT_DEFAULT,
 } from './context/compact.js'
+import { computeContextUsagePercent } from './context/session-projection-disk.js'
 import { resolveModelContextTokensAsync, resolveModelMediaCapabilitiesAsync } from './llm/models-dev-context.js'
 import { estimateToolsTokens, estimateTextTokens } from './context/token-estimate.js'
 import {
@@ -86,7 +96,13 @@ import {
   createEmptyChatUsage,
   resolveTurnUsage,
 } from './llm/usage-estimate.js'
-import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
+import {
+  mergeTokenUsage,
+  emptyTokenUsage,
+  promptCacheKeyForSession,
+  resolveCacheWarmth,
+  type TokenUsage,
+} from './llm/token-usage.js'
 import {
   isLibraryExtractReady,
   isTranscriptExtractReady,
@@ -104,6 +120,10 @@ export interface SessionContextUsage {
   remainingTokens: number
   modelRef: string
   estimated: true
+  /** 0–100，供 Composer「上下文约 N%」 */
+  usagePercent: number
+  /** 本会话已做过上下文整理（投影存在；刷新仍在） */
+  compacted: boolean
 }
 
 export interface AgentSettings {
@@ -126,7 +146,7 @@ export interface ChatResult {
 // No hard limit on rounds — let the LLM naturally converge to a text response.
 // Safety: if 50 rounds reached without convergence, force stop.
 const MAX_SAFETY_ROUNDS = 50
-const TRUNCATE = 12_000
+const TRUNCATE = 32_768
 
 function providerIdFromModelRef(modelRef?: string): string | undefined {
   if (!modelRef) return undefined
@@ -222,6 +242,7 @@ export class AgentEngine {
     return lines.join('\n')
   }
 
+  /** 稳定 system（无每轮时钟/选型卡，利于前缀缓存） */
   private buildRoundSystemPrompt(sessionId: string, activeNames: readonly string[]) {
     const record = this.ensureSessionRolePersona(sessionId)
     const expert = record?.expertId
@@ -231,7 +252,6 @@ export class AgentEngine {
       message: this.lastChatSeedMessage,
       contextRef: record?.contextRef ?? null,
     })
-    const clock = getCurrentTime()
     const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
     return this.tools.systemPrompt({
       expert,
@@ -240,11 +260,22 @@ export class AgentEngine {
       activePacks: this.lastRoundPackIds,
       activeToolNames: activeNames,
       researchTier: expert?.defaultResearchTier ?? plan.researchTier,
-      routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
-      sessionClock: buildSessionClockPlaybook(clock),
       dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
       agentSkillCatalog: buildSkillCatalogPrompt(),
       activatedAgentSkills: buildActivatedSkillsPrompt(activatedSkills),
+    })
+  }
+
+  /** 本轮动态尾注：会话时钟 + 选型卡（append 到 modelView，不进稳定 system） */
+  private buildRoundTurnTail(sessionId: string, activeNames: readonly string[]) {
+    const record = this.sessions.get(sessionId)
+    const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
+      message: this.lastChatSeedMessage,
+      contextRef: record?.contextRef ?? null,
+    })
+    return buildTurnTailPrompt({
+      sessionClock: buildSessionClockPlaybook(getCurrentTime()),
+      routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
     })
   }
 
@@ -480,6 +511,7 @@ export class AgentEngine {
       messages: record.messages,
       contextPrefix: contextMessages,
       keepRecent: KEEP_RECENT_DEFAULT,
+      contextProjection: record.contextProjection,
     })
     let toolsTokens = activeNames.length * 120
     try {
@@ -501,6 +533,8 @@ export class AgentEngine {
       remainingTokens: Math.max(0, limitTokens - usedTokens),
       modelRef,
       estimated: true,
+      usagePercent: computeContextUsagePercent(usedTokens, limitTokens),
+      compacted: Boolean(record.contextProjection),
     }
     this.contextUsageCache.set(sessionId, usage)
     return usage
@@ -575,6 +609,7 @@ export class AgentEngine {
       state: {
         messages: record.messages,
         sessionMemory: record.sessionMemory,
+        contextProjection: record.contextProjection,
       },
       contextPrefix: opts.contextPrefix,
       llm: opts.llm,
@@ -583,8 +618,9 @@ export class AgentEngine {
     })
 
     if (result.results.some(r => r.changed)) {
-      record.messages = result.state.messages
+      // soft/micro 永不改写 canonical messages；structured 只落盘 memory + projection
       record.sessionMemory = result.state.sessionMemory ?? null
+      record.contextProjection = result.state.contextProjection ?? null
       this.sessions.save(record)
       this.invalidateContextUsage(record.id)
       for (const r of result.results) {
@@ -730,6 +766,10 @@ export class AgentEngine {
     this.toolPackSessions.clear(id)
     this.agentSkillSessions.clear(id)
     this.workspaceService.clearSession(id)
+    void deleteSessionStateDirectory(id).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[agent] 清理会话状态目录失败 (${id}): ${msg}`)
+    })
     this.sessions.delete(id)
     this.invalidateContextUsage(id)
   }
@@ -812,19 +852,23 @@ export class AgentEngine {
         ? `用户划选了以下内容：\n"""${quote}"""\n\n请结合当前对话上下文，回答用户的问题：\n${text}`
         : text
 
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: this.tools.systemPrompt({
-          sessionClock: buildSessionClockPlaybook(getCurrentTime()),
-          researchTier: 'L2',
-        }),
-      },
-      ...contextMessages,
-      ...history,
-      ...ephemeralHistory,
-      { role: 'user', content: prompt },
-    ]
+    const messages: ChatMessage[] = appendTurnTailMessages(
+      [
+        {
+          role: 'system',
+          content: this.tools.systemPrompt({
+            researchTier: 'L2',
+          }),
+        },
+        ...contextMessages,
+        ...history,
+        ...ephemeralHistory,
+        { role: 'user', content: prompt },
+      ],
+      buildTurnTailPrompt({
+        sessionClock: buildSessionClockPlaybook(getCurrentTime()),
+      }),
+    )
 
     const turn = await llm.chat(messages, undefined, undefined, {
       temperature: record.llmParams?.temperature,
@@ -834,7 +878,12 @@ export class AgentEngine {
     if (turn.finishReason === 'error') {
       return { reply: chatMessageContentToText(turn.message.content) || turn.error || '请求失败' }
     }
-    return { reply: chatMessageContentToText(turn.message.content).trim() || '（无回复内容）' }
+    const selectionReply = chatMessageContentToText(turn.message.content).trim()
+    if (selectionReply) return { reply: selectionReply }
+    if (turn.reasoningContent || turn.finishReason === 'length') {
+      return { reply: EMPTY_REPLY_REASONING_HINT }
+    }
+    return { reply: '（无回复内容）' }
   }
 
   resolveUserPrompt(sessionId: string, promptId: string, answer: UserPromptAnswer) {
@@ -1038,8 +1087,18 @@ export class AgentEngine {
       usage?: TokenUsage,
       usageEstimated?: boolean,
       attachments?: ChatAttachmentMeta[],
+      reasoningContent?: string,
     ) => {
-      this.pushAssistant(record!, reply, used, steps, usage, usageEstimated, attachments)
+      this.pushAssistant(
+        record!,
+        reply,
+        used,
+        steps,
+        usage,
+        usageEstimated,
+        attachments,
+        reasoningContent,
+      )
     }
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
@@ -1093,8 +1152,9 @@ export class AgentEngine {
     try {
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
-      // 每轮刷新会话时钟，保证长工具链下「截至」仍准确
+      // 稳定 system（无时钟/选型卡）；动态内容经 turn-tail 追加，利于前缀缓存
       const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
+      const turnTail = this.buildRoundTurnTail(sessionId, activeNames)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const resolvedModel = this.registry.resolve(activeModel)
       const modelId = resolvedModel?.model
@@ -1102,7 +1162,13 @@ export class AgentEngine {
         ?? 'default'
       const providerId = providerIdFromModelRef(activeModel)
 
-      logChatDebugRoundStart(sessionId, { round: round + 1, model: activeModel || modelId })
+      const promptCacheKey = promptCacheKeyForSession(sessionId)
+      logChatDebugRoundStart(sessionId, {
+        round: round + 1,
+        model: activeModel || modelId,
+        promptCacheKey,
+        cacheWarmth: 'unknown',
+      })
 
       let overflowRetried = false
       let lastRoundEstimatedTokens: number | undefined
@@ -1124,7 +1190,9 @@ export class AgentEngine {
             estimated: budgeted.compactUsageEstimated ?? true,
           })
         }
+        const modelView = appendTurnTailMessages(budgeted.modelView, turnTail)
         let accumulated = ''
+        let reasoningAccumulated = ''
         let stopTokenProgress = false
         let lastEmitAt = 0
         let lastTokens = -1
@@ -1136,7 +1204,7 @@ export class AgentEngine {
           pendingTokens = null
           emit({ type: 'reply', estimatedTokens: n })
         }
-        const turn = await llm.chat(budgeted.modelView, openAiTools, signal, {
+        const turn = await llm.chat(modelView, openAiTools, signal, {
           sessionId,
           temperature: record.llmParams?.temperature,
           maxTokens: record.llmParams?.maxTokens,
@@ -1146,6 +1214,20 @@ export class AgentEngine {
               stopTokenProgress = true
               pendingTokens = null
               return
+            }
+            if (delta.reasoningText) {
+              const prevLen = reasoningAccumulated.length
+              reasoningAccumulated += delta.reasoningText
+              // 首段或每新增约 120 字推一次 thinking
+              if (prevLen === 0 || reasoningAccumulated.length - prevLen >= 120
+                || Math.floor(reasoningAccumulated.length / 120) > Math.floor(prevLen / 120)) {
+                emit({
+                  type: 'thinking',
+                  round: round + 1,
+                  label: '模型正在思考…',
+                  snippet: reasoningAccumulated.slice(-400),
+                })
+              }
             }
             if (stopTokenProgress || !delta.text) return
             accumulated += delta.text
@@ -1167,7 +1249,7 @@ export class AgentEngine {
         } else {
           lastRoundEstimatedTokens = undefined
         }
-        chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, budgeted.modelView))
+        chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, modelView))
         return turn
       }
 
@@ -1205,11 +1287,16 @@ export class AgentEngine {
         finishReason: turn.finishReason,
         contentLen: turnContentText.length,
         toolCallNames: turn.message.tool_calls?.map(tc => tc.function.name).filter(Boolean),
+        promptCacheKey,
+        cacheWarmth: resolveCacheWarmth(turn.usage),
         usage: turn.usage
           ? {
               promptTokens: turn.usage.promptTokens,
               completionTokens: turn.usage.completionTokens,
               totalTokens: turn.usage.totalTokens,
+              ...(turn.usage.cachedPromptTokens !== undefined
+                ? { cachedPromptTokens: turn.usage.cachedPromptTokens }
+                : {}),
             }
           : undefined,
       })
@@ -1248,6 +1335,8 @@ export class AgentEngine {
           role: 'assistant',
           content: turnContentText || null,
           tool_calls: turn.message.tool_calls,
+          // 工具轮一律带上（含空串），下一请求 wire 回传 reasoning_content
+          reasoningContent: turn.reasoningContent ?? '',
         })
         this.sessions.save(record)
 
@@ -1361,8 +1450,21 @@ export class AgentEngine {
       }
 
       const replyRaw = turnContentText.trim()
-      const isEmptyReply = !replyRaw || replyRaw === '（无回复内容）'
-      const reply = replyRaw || '（无回复内容）'
+      let reply = replyRaw
+      if (!reply || reply === '（无回复内容）') {
+        const hitBudget = turn.finishReason === 'length'
+          || (
+            turn.requestedMaxTokens != null
+            && turn.usage?.completionTokens != null
+            && turn.usage.completionTokens >= turn.requestedMaxTokens
+          )
+        reply = (turn.reasoningContent || hitBudget)
+          ? EMPTY_REPLY_REASONING_HINT
+          : '（无回复内容）'
+      }
+      const isEmptyReply = !replyRaw
+        || replyRaw === '（无回复内容）'
+        || reply === EMPTY_REPLY_REASONING_HINT
       if (isEmptyReply) {
         logChatDebugEmptyReply(sessionId, { round: round + 1 })
       }
@@ -1372,6 +1474,9 @@ export class AgentEngine {
         content: reply,
         ...(lastRoundEstimatedTokens != null ? { estimatedTokens: lastRoundEstimatedTokens } : {}),
       })
+      const finalReasoning = turn.reasoningContent?.trim()
+        ? turn.reasoningContent
+        : undefined
       pushAssistant(
         reply,
         toolsUsed,
@@ -1379,6 +1484,7 @@ export class AgentEngine {
         chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
         chatUsage.estimated,
         mergeAssistantAttachments(outputAttachments),
+        finalReasoning,
       )
       void emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
@@ -1421,11 +1527,17 @@ export class AgentEngine {
     usage?: TokenUsage,
     usageEstimated?: boolean,
     attachments?: ChatAttachmentMeta[],
+    reasoningContent?: string,
   ) {
     if (this.sessions.shouldMaterializeContext(record)) {
       this.sessions.materializeContextRef(record)
     }
-    record.messages.push({ role: 'assistant', content: reply })
+    record.messages.push({
+      role: 'assistant',
+      content: reply,
+      // 终轮仅非空思考写入，避免污染普模请求体
+      ...(reasoningContent ? { reasoningContent } : {}),
+    })
     if (!record.turns) record.turns = []
     record.turns.push({
       role: 'assistant',
@@ -1436,6 +1548,8 @@ export class AgentEngine {
       usage,
       usageEstimated,
       attachments: attachments?.length ? attachments : undefined,
+      // 终轮非空思考写入 turn，供历史气泡折叠展示
+      ...(reasoningContent ? { reasoningContent } : {}),
     })
     if (usage) {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)

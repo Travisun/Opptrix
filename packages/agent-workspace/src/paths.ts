@@ -94,3 +94,23 @@ export async function deleteSessionWorkspaceDirectory(sessionId: string): Promis
   const dir = resolveSessionWorkspaceRoot(safe)
   await fs.rm(dir, { recursive: true, force: true })
 }
+
+/** 私有会话状态根（与 agent-workspace 平级，Deny；非 Agent 可读平面） */
+export const SESSION_STATE_SUBDIR = 'session-state'
+
+export function resolveSessionStateRoot(): string {
+  return path.join(resolveUserDataRoot(), SESSION_STATE_SUBDIR)
+}
+
+/** 单会话私有状态目录：session-state/<sessionId>/ */
+export function resolveSessionStateDir(sessionId: string): string {
+  const safe = assertSafeSessionId(sessionId)
+  return path.join(resolveSessionStateRoot(), safe)
+}
+
+/** 删除会话私有状态目录（幂等；失败由调用方 warn） */
+export async function deleteSessionStateDirectory(sessionId: string): Promise<void> {
+  const safe = assertSafeSessionId(sessionId)
+  const dir = resolveSessionStateDir(safe)
+  await fs.rm(dir, { recursive: true, force: true })
+}

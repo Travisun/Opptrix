@@ -5,9 +5,13 @@ import type { AvailableModel, ReasoningEffort, SessionLlmParams } from '../types
 import {
   DEFAULT_SESSION_MAX_TOKENS,
   DEFAULT_SESSION_TEMPERATURE,
+  MAX_OUTPUT_TOKENS_PRESETS,
+  OUTPUT_TOKENS_64K,
+  OUTPUT_TOKENS_128K,
+  OUTPUT_TOKENS_384K,
   resolveSessionLlmParamsForUi,
 } from '../types/chat'
-import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
+import { opptrixCssVars } from '../theme/tokens'
 import { focusVisibleRing, ghostInteractive, motion } from '../theme/mixins'
 import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
 import ComposerTooltipMenu, {
@@ -131,21 +135,6 @@ const useStyles = makeStyles({
     height: '4px',
     cursor: 'pointer',
   },
-  numberInput: {
-    width: '100%',
-    boxSizing: 'border-box',
-    height: '26px',
-    borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixCssVars.border}`,
-    backgroundColor: opptrixCssVars.canvas,
-    color: opptrixCssVars.textPrimary,
-    fontSize: 'var(--opptrix-font-base)',
-    padding: '0 8px',
-    outline: 'none',
-    ':focus-visible': {
-      border: `1px solid ${opptrixCssVars.inputBorderFocus}`,
-    },
-  },
 })
 
 /** Composer 选模+参数面板宽度（设置页仍用 COMPOSER_MENU_WIDTH.model） */
@@ -211,6 +200,29 @@ const EFFORT_OPTIONS: Array<{ value: ReasoningEffort | 'off'; label: string }> =
   { value: 'medium', label: '中' },
   { value: 'high', label: '高' },
 ]
+
+type OutputLengthPreset = `${(typeof MAX_OUTPUT_TOKENS_PRESETS)[number]}`
+
+const OUTPUT_LENGTH_OPTIONS: Array<{ value: OutputLengthPreset; label: string }> = [
+  { value: String(DEFAULT_SESSION_MAX_TOKENS) as OutputLengthPreset, label: '32k' },
+  { value: String(OUTPUT_TOKENS_64K) as OutputLengthPreset, label: '64k' },
+  { value: String(OUTPUT_TOKENS_128K) as OutputLengthPreset, label: '128k' },
+  { value: String(OUTPUT_TOKENS_384K) as OutputLengthPreset, label: '384k' },
+]
+
+/** 将当前上限映射到可选档位（旧默认 / 未匹配偏低值落在 32k） */
+function resolveOutputLengthPreset(maxTokens: number): OutputLengthPreset {
+  if (maxTokens >= OUTPUT_TOKENS_384K) {
+    return String(OUTPUT_TOKENS_384K) as OutputLengthPreset
+  }
+  if (maxTokens >= OUTPUT_TOKENS_128K) {
+    return String(OUTPUT_TOKENS_128K) as OutputLengthPreset
+  }
+  if (maxTokens >= OUTPUT_TOKENS_64K) {
+    return String(OUTPUT_TOKENS_64K) as OutputLengthPreset
+  }
+  return String(DEFAULT_SESSION_MAX_TOKENS) as OutputLengthPreset
+}
 
 export default function ModelSelector({
   models,
@@ -280,28 +292,17 @@ export default function ModelSelector({
         />
       </div>
       <div className={s.paramRow}>
-        <div className={s.paramLabelRow}>
-          <span className={s.paramLabel}>回复长度上限</span>
-        </div>
-        <input
-          type="number"
-          className={s.numberInput}
-          min={1}
-          max={1000000}
-          step={256}
-          value={resolved.maxTokens}
-          disabled={disabled}
+        <span className={s.paramLabel}>回复长度上限</span>
+        <OpptrixSegmentedControl
+          variant="embedded"
           aria-label="回复长度上限"
-          onChange={(e) => {
-            const next = Number.parseInt(e.target.value, 10)
-            if (!Number.isFinite(next) || next < 1) return
-            onLlmParamsChange({ maxTokens: next })
-          }}
-          onBlur={(e) => {
-            const next = Number.parseInt(e.target.value, 10)
-            if (!Number.isFinite(next) || next < 1) {
-              onLlmParamsChange({ maxTokens: DEFAULT_SESSION_MAX_TOKENS })
-            }
+          value={resolveOutputLengthPreset(resolved.maxTokens)}
+          options={OUTPUT_LENGTH_OPTIONS}
+          onChange={(next) => {
+            const parsed = Number.parseInt(next, 10)
+            onLlmParamsChange({
+              maxTokens: Number.isFinite(parsed) ? parsed : DEFAULT_SESSION_MAX_TOKENS,
+            })
           }}
         />
       </div>

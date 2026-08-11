@@ -14,6 +14,10 @@ import {
   buildUserInteractionPlaybook,
   buildArtifactsPlaybook,
 } from '../packages/shared/dist/agent-prompt-guide.js'
+import {
+  buildTurnTailPrompt,
+  appendTurnTailMessages,
+} from '../packages/shared/dist/turn-tail.js'
 import { buildToolPackCatalogPrompt } from '../packages/shared/dist/tool-packs.js'
 import {
   resolveToolRoutePlan,
@@ -45,13 +49,30 @@ test('session clock playbook embeds authoritative local time', () => {
   assert.match(block, /Asia\/Shanghai/)
   assert.match(block, /不必为此再调 get_current_time/)
 
+  // 时钟进 turn-tail，不再写入稳定 system（前缀缓存）；规则正文仍可提及「会话时钟」概念
   const rules = buildAgentSystemRules({
     sessionClock: block,
     researchTier: 'L1',
     activePacks: ['core', 'meta'],
   })
-  assert.match(rules, /会话时钟/)
-  assert.match(rules, /优先使用.*会话时钟|以其为「截至」基准/)
+  assert.ok(!rules.includes('2026/7/14 21:19:00'), 'stable system must not embed live clock')
+  assert.ok(!rules.includes('1_752_500_340_000') && !rules.includes('1752500340000'))
+  assert.match(rules, /优先使用.*会话时钟|以其为「截至」基准|尾注含【会话时钟】/)
+
+  const tail = buildTurnTailPrompt({
+    sessionClock: block,
+    routePlaybook: '【本轮工具选型卡 — 必须优先遵守】\n- test',
+  })
+  assert.match(tail, /会话时钟/)
+  assert.match(tail, /本轮工具选型卡/)
+  const withTail = appendTurnTailMessages(
+    [{ role: 'system', content: 'STABLE' }, { role: 'user', content: 'q' }],
+    tail,
+  )
+  assert.equal(withTail[0].content, 'STABLE')
+  assert.ok(!String(withTail[0].content).includes('会话时钟'))
+  assert.equal(withTail[withTail.length - 1].role, 'user')
+  assert.match(String(withTail[withTail.length - 1].content), /选型卡/)
 })
 
 test('tool pack catalog forbids sandbox plotting as chat charts', () => {
@@ -133,7 +154,8 @@ test('system rules always include epistemic + tier skeleton', () => {
   })
   assert.match(rules, /投研证据纪律/)
   assert.match(rules, /深度投研备忘录/)
-  assert.match(rules, /本轮工具选型卡/)
+  // 选型卡进 turn-tail，不进稳定 system
+  assert.ok(!rules.includes('本轮工具选型卡'))
   assert.ok(!rules.includes('【资讯调阅'))
 })
 

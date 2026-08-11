@@ -14,6 +14,7 @@ import {
 import { getUserDataStore } from '../packages/user-store/dist/index.js'
 import {
   isChatDebugLoggingEnabled,
+  logChatDebugRoundEnd,
   logChatDebugRoundStart,
   resetChatDebugLogCacheForTests,
   resolveChatDebugLogPath,
@@ -64,7 +65,12 @@ test('isChatDebugLoggingEnabled defaults false and writes only when enabled', as
     resetChatDebugLogCacheForTests()
     assert.equal(isChatDebugLoggingEnabled(), true)
 
-    logChatDebugRoundStart('sess-a', { round: 1, model: 'test:model' })
+    logChatDebugRoundStart('sess-a', {
+      round: 1,
+      model: 'test:model',
+      promptCacheKey: 'opptrix-session:sess-a',
+      cacheWarmth: 'unknown',
+    })
     const logPath = resolveChatDebugLogPath('sess-a')
     assert.equal(fs.existsSync(logPath), true)
     const line = fs.readFileSync(logPath, 'utf8').trim()
@@ -73,7 +79,25 @@ test('isChatDebugLoggingEnabled defaults false and writes only when enabled', as
     assert.equal(parsed.sessionId, 'sess-a')
     assert.equal(parsed.model, 'test:model')
     assert.equal(parsed.round, 1)
+    assert.equal(parsed.promptCacheKey, 'opptrix-session:sess-a')
+    assert.equal(parsed.cacheWarmth, 'unknown')
     assert.ok(!JSON.stringify(parsed).toLowerCase().includes('authorization'))
     assert.ok(!Object.keys(parsed).some(k => /api.?key|token|authorization/i.test(k)))
+
+    logChatDebugRoundEnd('sess-a', {
+      finishReason: 'stop',
+      contentLen: 12,
+      promptCacheKey: 'opptrix-session:sess-a',
+      cacheWarmth: 'warm',
+      usage: { promptTokens: 100, completionTokens: 10, totalTokens: 110, cachedPromptTokens: 80 },
+    })
+    const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n')
+    assert.equal(lines.length, 2)
+    const end = JSON.parse(lines[1])
+    assert.equal(end.event, 'round_end')
+    assert.equal(end.promptCacheKey, 'opptrix-session:sess-a')
+    assert.equal(end.cacheWarmth, 'warm')
+    assert.equal(end.usage.cachedPromptTokens, 80)
+    assert.ok(!JSON.stringify(end).toLowerCase().includes('bearer'))
   })
 })
