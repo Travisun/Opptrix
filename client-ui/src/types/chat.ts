@@ -55,6 +55,10 @@ export interface ChatContextUsage {
   remainingTokens: number
   modelRef: string
   estimated: boolean
+  /** 0–100；Composer「上下文约 N%」 */
+  usagePercent?: number
+  /** 已整理过上下文（刷新仍在） */
+  compacted?: boolean
 }
 
 export type ReasoningEffort = 'low' | 'medium' | 'high'

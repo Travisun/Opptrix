@@ -5,6 +5,10 @@ import { chatMessageContentToText } from './content-parts.js'
 import type { ChatToolStep } from './chat-progress.js'
 import type { TokenUsage } from './llm/token-usage.js'
 import { SessionArchiveFolderStore } from './archive-folders.js'
+import {
+  readContextProjectionFromDisk,
+  writeContextProjectionToDisk,
+} from './context/session-projection-disk.js'
 
 import type { ChatAttachmentMeta } from './media-types.js'
 import type { ExpertIcon } from '@opptrix/shared'
@@ -187,6 +191,8 @@ export function setSessionPersistHooks(hooks: {
 function writeRecord(record: SessionRecord) {
   record.updatedAt = new Date().toISOString()
   getUserDataStore().setDocument(NAMESPACE, record.id, record)
+  // disk 为主/并存；SQLite 字段保留兼容，本轮不删
+  writeContextProjectionToDisk(record.id, record.contextProjection ?? null)
   sessionPersistHook?.(record)
 }
 
@@ -250,6 +256,7 @@ function backfillTurnReasoning(record: SessionRecord): SessionRecord {
 
 function normalizeRecord(raw: SessionRecord): SessionRecord {
   const llmParams = normalizeSessionLlmParams(raw.llmParams)
+  const fromDisk = readContextProjectionFromDisk(raw.id)
   const record: SessionRecord = {
     ...raw,
     turns: raw.turns ?? [],
@@ -258,7 +265,8 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     expertIcon: raw.expertIcon ?? null,
     rolePersona: raw.rolePersona ?? null,
     sessionMemory: raw.sessionMemory ?? null,
-    contextProjection: raw.contextProjection ?? null,
+    // disk 优先；缺省回退 SQLite 字段
+    contextProjection: fromDisk ?? raw.contextProjection ?? null,
     llmParams,
   }
   return backfillTurnReasoning(migrateTurns(record))

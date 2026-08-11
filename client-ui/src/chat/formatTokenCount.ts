@@ -17,8 +17,22 @@ export function formatTurnUsageLabel(totalTokens: number, estimated?: boolean): 
   return estimated ? `本轮约 ${count}` : `本轮 ${count}`
 }
 
-export function formatContextUsageLabel(used: number, limit: number, estimated = true): string {
-  const usedLabel = formatTokenCount(used)
-  const limitLabel = formatTokenCount(limit)
-  return estimated ? `已用约 ${usedLabel} / ${limitLabel}` : `已用 ${usedLabel} / ${limitLabel}`
+/** Composer 底栏：上下文约 N%；整理后追加「已整理」 */
+export function formatContextUsageLabel(usagePercent: number, compacted?: boolean): string {
+  const pct = Math.min(100, Math.max(0, Math.round(usagePercent)))
+  const base = `上下文约 ${pct}%`
+  return compacted ? `${base} · 已整理` : base
+}
+
+/** 兼容旧字段：无 usagePercent 时由 used/limit 推算 */
+export function resolveContextUsagePercent(usage: {
+  usagePercent?: number
+  usedTokens: number
+  limitTokens: number
+}): number {
+  if (typeof usage.usagePercent === 'number' && Number.isFinite(usage.usagePercent)) {
+    return Math.min(100, Math.max(0, Math.round(usage.usagePercent)))
+  }
+  if (!(usage.limitTokens > 0)) return 0
+  return Math.min(100, Math.max(0, Math.round((usage.usedTokens / usage.limitTokens) * 100)))
 }

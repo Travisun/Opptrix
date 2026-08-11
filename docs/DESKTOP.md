@@ -375,7 +375,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
+智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
 
 **出站与 DNS（默认禁网）**：
 

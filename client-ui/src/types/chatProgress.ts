@@ -53,6 +53,8 @@ export interface ChatContextUsageSnapshot {
   remainingTokens: number
   modelRef: string
   estimated: boolean
+  usagePercent?: number
+  compacted?: boolean
 }
 
 export type ChatProgressEvent =

@@ -49,6 +49,7 @@ import {
 import {
   applySessionLanAskChoice,
   getWorkspaceService,
+  deleteSessionStateDirectory,
 } from '@opptrix/agent-workspace'
 import {
   type ChatProgressEvent,
@@ -87,6 +88,7 @@ import {
   isContextOverflowError,
   KEEP_RECENT_DEFAULT,
 } from './context/compact.js'
+import { computeContextUsagePercent } from './context/session-projection-disk.js'
 import { resolveModelContextTokensAsync, resolveModelMediaCapabilitiesAsync } from './llm/models-dev-context.js'
 import { estimateToolsTokens, estimateTextTokens } from './context/token-estimate.js'
 import {
@@ -112,6 +114,10 @@ export interface SessionContextUsage {
   remainingTokens: number
   modelRef: string
   estimated: true
+  /** 0–100，供 Composer「上下文约 N%」 */
+  usagePercent: number
+  /** 本会话已做过上下文整理（投影存在；刷新仍在） */
+  compacted: boolean
 }
 
 export interface AgentSettings {
@@ -521,6 +527,8 @@ export class AgentEngine {
       remainingTokens: Math.max(0, limitTokens - usedTokens),
       modelRef,
       estimated: true,
+      usagePercent: computeContextUsagePercent(usedTokens, limitTokens),
+      compacted: Boolean(record.contextProjection),
     }
     this.contextUsageCache.set(sessionId, usage)
     return usage
@@ -752,6 +760,10 @@ export class AgentEngine {
     this.toolPackSessions.clear(id)
     this.agentSkillSessions.clear(id)
     this.workspaceService.clearSession(id)
+    void deleteSessionStateDirectory(id).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[agent] 清理会话状态目录失败 (${id}): ${msg}`)
+    })
     this.sessions.delete(id)
     this.invalidateContextUsage(id)
   }

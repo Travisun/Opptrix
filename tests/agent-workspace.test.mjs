@@ -19,6 +19,8 @@ import {
   resolveSharedWorkspaceRoot,
   resetSharedWorkspaceLayoutCacheForTests,
   ensureSharedWorkspaceLayout,
+  deleteSessionStateDirectory,
+  resolveSessionStateDir,
 } from '../packages/agent-workspace/dist/index.js'
 
 async function withTmpDataDir(fn) {
@@ -75,6 +77,12 @@ test('global deny blocks opptrix.db and agent-privileges even under grant', asyn
     const watchlist = path.join(tmp, 'watchlist.json')
     await fs.writeFile(watchlist, '[]')
     assert.equal(isPathDenied(watchlist), true)
+    const sessionState = path.join(tmp, 'session-state', 'sess-1', 'context-projection.json')
+    await fs.mkdir(path.dirname(sessionState), { recursive: true })
+    await fs.writeFile(sessionState, '{}')
+    assert.equal(isPathDenied(path.join(tmp, 'session-state')), true)
+    assert.equal(isPathDenied(sessionState), true)
+    assert.ok(buildGlobalDenyPaths().some(p => p.endsWith('session-state') || p.includes(`${path.sep}session-state`)))
     assert.ok(buildGlobalDenyPaths().length >= 8)
   })
 })
@@ -225,6 +233,20 @@ test('clearSession removes session workspace directory', async () => {
     svc.clearSession(sessionId)
     await new Promise(r => setTimeout(r, 50))
     await assert.rejects(() => fs.access(grant.abs_path))
+  })
+})
+
+test('deleteSessionStateDirectory removes session-state dir idempotently', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const sessionId = 'state-cleanup'
+    const dir = resolveSessionStateDir(sessionId)
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(path.join(dir, 'context-projection.json'), '{"schemaVersion":1}')
+    assert.equal(dir.startsWith(path.join(tmp, 'session-state')), true)
+    assert.equal(dir.includes('agent-workspace'), false)
+    await deleteSessionStateDirectory(sessionId)
+    await assert.rejects(() => fs.access(dir))
+    await deleteSessionStateDirectory(sessionId) // idempotent
   })
 })
 

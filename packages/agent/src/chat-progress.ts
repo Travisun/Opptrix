@@ -22,6 +22,10 @@ export interface ChatContextUsageSnapshot {
   remainingTokens: number
   modelRef: string
   estimated: boolean
+  /** 0–100；不下发 projection 全文 */
+  usagePercent: number
+  /** 已整理过上下文（刷新仍在） */
+  compacted: boolean
 }
 
 export interface ChatTurnUsageSnapshot extends TokenUsage {

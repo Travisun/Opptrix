@@ -259,6 +259,13 @@ export {
   installMicroProjection,
   installMemoryProjection,
 } from './context/projection.js'
+export {
+  parseContextProjection,
+  readContextProjectionFromDisk,
+  writeContextProjectionToDisk,
+  resolveContextProjectionPath,
+  computeContextUsagePercent,
+} from './context/session-projection-disk.js'
 export { estimateTextTokens, estimateMessageTokens } from './context/token-estimate.js'
 export {
   createProvider,

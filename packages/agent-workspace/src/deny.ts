@@ -13,6 +13,7 @@ export function buildGlobalDenyPaths(): string[] {
     'opptrix.db-shm',
     'providers',
     'sessions',
+    'session-state',
     'tushare-config.json',
     'watchlist.json',
     'portfolio.json',
