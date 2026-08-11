@@ -50,8 +50,43 @@ describe('parseChartFence', () => {
 
   it('rejects empty or oversized data', () => {
     assert.equal(parseChartFence('{"data":[]}').ok, false)
-    const data = Array.from({ length: 41 }, (_, i) => ({ label: `L${i}`, value: i }))
+    const data = Array.from({ length: 61 }, (_, i) => ({ label: `L${i}`, value: i }))
     assert.equal(parseChartFence(JSON.stringify({ data })).ok, false)
+  })
+
+  it('accepts series field for multi-series line', () => {
+    const r = parseChartFence(JSON.stringify({
+      type: 'line',
+      title: '营收与净利',
+      showValues: false,
+      showTooltip: true,
+      data: [
+        { label: 'Q1', value: 10.2, series: '营收', color: '#3B82F6' },
+        { label: 'Q1', value: 3.1, series: '净利' },
+        { label: 'Q2', value: 12.4, series: '营收' },
+        { label: 'Q2', value: 3.5, series: '净利' },
+      ],
+    }))
+    assert.equal(r.ok, true)
+    if (!r.ok) return
+    assert.equal(r.spec.type, 'line')
+    assert.equal(r.spec.data[0]?.series, '营收')
+    assert.equal(r.spec.data[1]?.series, '净利')
+    assert.equal(r.spec.showValues, false)
+    assert.equal(r.spec.showTooltip, true)
+  })
+
+  it('accepts up to 60 data points', () => {
+    const data = Array.from({ length: 60 }, (_, i) => ({ label: `L${i}`, value: i }))
+    const r = parseChartFence(JSON.stringify({ data }))
+    assert.equal(r.ok, true)
+  })
+
+  it('rejects non-string series', () => {
+    const r = parseChartFence(JSON.stringify({
+      data: [{ label: 'A', value: 1, series: 1 }],
+    }))
+    assert.equal(r.ok, false)
   })
 
   it('rejects unsafe colors', () => {

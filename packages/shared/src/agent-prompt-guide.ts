@@ -235,7 +235,9 @@ export function buildArtifactsPlaybook(): string {
     '- 【图表尺寸】Chart 不要拉满 Surface 全宽；独立行 Chart 由组件默认居中（margin-inline: auto）；依赖默认 max-width（bar/line ~320、pie ~220–240、heatmap ~360–400）；勿写 style={{ width: \'100%\' }} 覆盖宽度破坏居中，勿写超大 height；默认 height 约 140–180；饼图尤忌撑满。Chart 已含专业坐标轴/网格/数值标注，勿再手写假坐标或假轴。最短示例：Chart 不设 width，依赖默认尺寸与居中',
     '- 【图注须与图居中对齐】图注优先 Chart caption="…" 或 caption={…}（渲染在 plot/legend 下方，与图同宽居中）；勿把图注做成全宽左对齐旁白 Text。表注：全宽表可左对齐或 Text align="center"；图注硬性居中',
     '- 【图种选用】Chart 支持 type="bar" | "line" | "pie" | "heatmap"：趋势/变化/时间序列 → line；对比/分布/直方类离散比较 → bar（可称柱状/直方，实现用 bar）；构成/占比 → pie；强弱矩阵 / 多维截面强度 → heatmap，data 用 { label, row, col, value }（可选 color 覆盖单格）；次选可用 Table + rowTone / 单元格语义色背景（Table 无独立 cellBg API）；禁止乱编花哨硬编码色',
-    '- 【图表配色】默认不传 color，走主题 chart1…chart5（Chart 自动解析）；heatmap 用主题连续色阶（低 fillSubtle/accentSoft → 高 chart1/accent）；涨跌方向见【语义配色】（用 tokens.danger/success 写入 data[].color）；多类别用主题色轮转；禁止彩虹乱配与高饱和硬编码；深浅模式跟随 Surface / data-theme',
+    '- 【多序列】多条折线/分组柱必须用长表 data[].series（系列名）；同一 label 跨系列对齐类目，缺测点可省略（断线）。禁止给单折线每点不同 color 冒充「多指标」——无 series 时 line 为单系列统一主色、图例仅 1 项',
+    '- 【密度】类目多时设 showValues:false、showTooltip:true（组件也会在过密时自动关数值标注）；勿依赖点上堆叠文字',
+    '- 【图表配色】默认不传 color，走主题 chart1…chart5（Chart 自动解析）；heatmap 用主题连续色阶（低 fillSubtle/accentSoft → 高 chart1/accent）；涨跌方向见【语义配色】（用 tokens.danger/success 写入 data[].color）；多类别/多系列用主题色轮转；禁止彩虹乱配与高饱和硬编码；深浅模式跟随 Surface / data-theme',
     '- 【图文/图表结合】优先 Stack 纵向叙事；关键指标可用 Row/Grid 放 Stat，但前后要有文字；Chart 与 Table 嵌入叙事流，不要单独堆一排无说明的组件',
     '- 【例外】仅当用户明确要求「面板 / 仪表盘 / dashboard / 看板 / 卡片墙」等时，才可采用更密的面板型布局；否则一律报告型',
     '- 【语义配色】',
@@ -355,7 +357,11 @@ export function buildResearchEpistemicPlaybook(): string {
     '  ```chart',
     '  {"type":"bar","title":"营收对比","data":[{"label":"Q1","value":10.2},{"label":"Q2","value":12.4}]}',
     '  ```',
-    '- type 可选 bar|line|pie|heatmap（默认 bar）；data 1–40 项；涨跌色：data[].color 用红涨绿跌语义（如 #E5484D / #30A46C 或等价 rgba），勿编造花哨色',
+    '- 多折线须带 series（长表），勿用每点不同 color 冒充多指标；类目密时 showValues:false、showTooltip:true',
+    '  ```chart',
+    '  {"type":"line","title":"营收与净利","showValues":false,"showTooltip":true,"data":[{"label":"Q1","value":10.2,"series":"营收"},{"label":"Q1","value":3.1,"series":"净利"},{"label":"Q2","value":12.4,"series":"营收"},{"label":"Q2","value":3.5,"series":"净利"}]}',
+    '  ```',
+    '- type 可选 bar|line|pie|heatmap（默认 bar）；data 1–60 项；可选 data[].series；涨跌色：data[].color 用红涨绿跌语义（如 #E5484D / #30A46C 或等价 rgba），勿编造花哨色',
     '- 完整机构调研报告（可视化报告/画布）才用 create_canvas（需 artifacts；画布内亦可 Chart）；插图 ≠ 报告；勿用 python 画报告图',
   ].join('\n')
 }

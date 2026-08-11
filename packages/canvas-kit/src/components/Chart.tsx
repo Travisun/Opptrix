@@ -2,7 +2,9 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { cx } from '../cx.js'
 import {
   buildChartOption,
+  computePlotMinWidth,
   echarts,
+  resolveLegendItems,
   resolveSeriesColors,
 } from './chart-echarts.js'
 import { useCanvasTheme } from '../useCanvasTheme.js'
@@ -11,6 +13,11 @@ export type ChartDatum = {
   label: string
   value: number
   color?: string
+  /**
+   * 可选系列名（长表多序列）。任一数据点带 series 时，bar/line 按系列分组画多条线/多组柱；
+   * 图例为系列名。无 series 时：bar/pie 按点上色；line 单系列统一主色、图例仅 1 项。
+   */
+  series?: string
   /** Heatmap row key（heatmap 单元格必填；缺则跳过该点）。 */
   row?: string
   /** Heatmap column key（heatmap 单元格必填；缺则跳过该点）。 */
@@ -63,6 +70,9 @@ export function Chart({
   const colors = resolveSeriesColors(data, tokens)
   const hostRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null)
+  const plotMinWidth = computePlotMinWidth(type, data)
+  const titleForLegend = typeof title === 'string' ? title : undefined
+  const legendItems = resolveLegendItems(type, data, colors, tokens, titleForLegend)
 
   useEffect(() => {
     const el = hostRef.current
@@ -112,6 +122,7 @@ export function Chart({
     showTooltip,
     showLegend,
     height,
+    plotMinWidth,
   ])
 
   const aria =
@@ -126,23 +137,27 @@ export function Chart({
   return (
     <div className={cx('oxc-chart', `oxc-chart--${type}`, className)} style={style}>
       {title != null ? <div className="oxc-chart__title">{title}</div> : null}
-      <div
-        ref={hostRef}
-        className="oxc-chart__plot"
-        style={{ height }}
-        role="img"
-        aria-label={aria}
-      />
-      {showLegend && type !== 'heatmap' ? (
-        <div className="oxc-chart__legend">
-          {data.map((d, i) => (
-            <span key={i} className="oxc-chart__legend-item">
-              <span className="oxc-chart__swatch" style={{ background: colors[i] }} />
-              {d.label}
-            </span>
-          ))}
+      <div className="oxc-chart__body">
+        <div className="oxc-chart__scroll">
+          <div
+            ref={hostRef}
+            className="oxc-chart__plot"
+            style={{ height, minWidth: plotMinWidth }}
+            role="img"
+            aria-label={aria}
+          />
         </div>
-      ) : null}
+        {showLegend && type !== 'heatmap' && legendItems.length > 0 ? (
+          <div className="oxc-chart__legend">
+            {legendItems.map((item, i) => (
+              <span key={`${item.name}-${i}`} className="oxc-chart__legend-item">
+                <span className="oxc-chart__swatch" style={{ background: item.color }} />
+                {item.name}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
       {caption != null ? <div className="oxc-chart__caption">{caption}</div> : null}
     </div>
   )

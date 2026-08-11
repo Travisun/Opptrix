@@ -298,10 +298,10 @@
 
 .opptrix-md-chart {
   margin: var(--opptrix-md-block-gap) auto;
-  max-width: 380px;
+  max-width: 480px;
   width: 100%;
   text-align: center;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .opptrix-md-chart--error {

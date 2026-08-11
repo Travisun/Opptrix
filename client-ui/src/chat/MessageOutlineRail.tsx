@@ -10,11 +10,20 @@ import { opptrixCssVars } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 import MarkdownMessage from './MarkdownMessage'
+import {
+  buildOutlineSummary,
+  buildPreviewMarkdown,
+} from './messageOutlinePreview'
+
+export {
+  buildOutlineSummary,
+  buildPreviewMarkdown,
+  stripChartFencesForPreview,
+  CHART_PREVIEW_PLACEHOLDER,
+} from './messageOutlinePreview'
 
 /** Attachments that count as a report / produced artifact for the outline tip. */
 const REPORT_KINDS = new Set<MediaKind>(['pdf', 'document', 'canvas', 'mindmap'])
-
-const PREVIEW_MAX_CHARS = 200
 
 /** Center-to-center pitch of outline dots (compact index cluster). */
 export const DOT_PITCH_PX = 18
@@ -66,23 +75,6 @@ export function messageHasReport(attachments: ChatAttachmentMeta[] | undefined):
   return attachments.some(a => REPORT_KINDS.has(a.kind))
 }
 
-/** Truncate assistant body for compact markdown tooltip (≈160–220 chars). */
-export function buildPreviewMarkdown(content: string, maxChars = PREVIEW_MAX_CHARS): string {
-  const text = content.trim()
-  if (text.length <= maxChars) return text
-  const slice = text.slice(0, maxChars)
-  const breakAt = Math.max(
-    slice.lastIndexOf('\n'),
-    slice.lastIndexOf('。'),
-    slice.lastIndexOf('！'),
-    slice.lastIndexOf('？'),
-    slice.lastIndexOf('. '),
-    slice.lastIndexOf(' '),
-  )
-  const cut = breakAt > maxChars * 0.55 ? slice.slice(0, breakAt) : slice
-  return `${cut.trimEnd()}…`
-}
-
 /**
  * Fisheye scale by ordinal distance from focus.
  * scale = base + amp * exp(-dist² / (2·σ²))
@@ -127,7 +119,7 @@ export function buildOutlineEntries(messages: ChatDisplayMessage[]): OutlineEntr
     out.push({
       index: i,
       role: 'assistant',
-      summary: text.length > 80 ? `${text.slice(0, 80)}…` : text,
+      summary: buildOutlineSummary(text),
       previewMarkdown,
       hasReport: messageHasReport(m.attachments),
       at: typeof m.at === 'string' ? m.at : '',
@@ -321,6 +313,10 @@ const useStyles = makeStyles({
       overflow: 'hidden',
     },
     '& img, & table': {
+      display: 'none',
+    },
+    /* Defense-in-depth: chart/mermaid must not paint in the narrow tip. */
+    '& .opptrix-md-chart, & .opptrix-md-mermaid': {
       display: 'none',
     },
   },

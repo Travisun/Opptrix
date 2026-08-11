@@ -37,6 +37,19 @@ export default function Report() {
           ]}
         />
         {/* type: bar | line | pie | heatmap；heatmap 需 row/col */}
+        {/* 多折线/分组柱：长表 data[].series；无 series 时 line 为单系列统一主色 */}
+        <Chart
+          type="line"
+          title="营收与净利"
+          showValues={false}
+          showTooltip
+          data={[
+            { label: 'Q1', value: 10.2, series: '营收' },
+            { label: 'Q1', value: 3.1, series: '净利' },
+            { label: 'Q2', value: 12.4, series: '营收' },
+            { label: 'Q2', value: 3.5, series: '净利' },
+          ]}
+        />
         <Text size="small">
           详见 <Link href="https://example.com">披露原文</Link>，代码 <Code>REV</Code>
         </Text>
@@ -58,3 +71,9 @@ export default function Report() {
 | 数据 | `Card`, `CardHeader`, `CardBody`, `Stat`, `Table`, `Callout`, `Pill`, `Button`, `Chart` |
 | 工具 | `cx` |
 | 样式 | `@opptrix/canvas/styles.css` |
+
+## Chart 多序列与密度
+
+- **长表 `data[].series`**：任一数据点带 `series` 时，`bar` / `line` 按系列分组（类目 = `label` 首次出现顺序；缺测点断线）；图例为系列名，色取该系列首点 `color` 或 `chart1…chart5` 轮转。
+- **无 `series`**：`bar` / `pie` 仍按点上色与图例；`line` 为**单系列**统一主色，图例仅 1 项（`title` 或「趋势」），勿用每点不同 `color` 冒充多指标。
+- **密度**：类目多时轴标签 `hideOverlap` + 自动旋转；点数/单元格过密时自动关闭数值标注（仍可用 `showTooltip`）；`bar`/`line` 外层可横滚（`minWidth ≈ n×36px`）。

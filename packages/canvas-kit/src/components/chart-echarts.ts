@@ -1,5 +1,5 @@
 /**
- * ECharts option builders for @opptrix/canvas Chart.
+ * ECharts option builders for Canvas Chart.
  * Agents must not import echarts — only Chart from '@opptrix/canvas'.
  */
 import * as echarts from 'echarts'
@@ -12,6 +12,11 @@ export { echarts }
 
 const CHART_KEYS = ['chart1', 'chart2', 'chart3', 'chart4', 'chart5'] as const
 
+const DENSE_VALUE_LIMIT = 12
+const HEATMAP_VALUE_LIMIT = 16
+const CATEGORY_ROTATE_THRESHOLD = 8
+const PX_PER_CATEGORY = 36
+
 export function resolveSeriesColors(
   data: ChartDatum[],
   tokens: CanvasSemanticTokens,
@@ -21,6 +26,163 @@ export function resolveSeriesColors(
     const key = CHART_KEYS[i % CHART_KEYS.length]
     return tokens[key]
   })
+}
+
+export type CartesianSeriesGroup = {
+  name: string
+  color: string
+  values: Array<number | null>
+}
+
+export type CartesianGrouped = {
+  categories: string[]
+  series: CartesianSeriesGroup[]
+  hasNamedSeries: boolean
+}
+
+/** 是否存在非空 series 字段（长表多序列）。 */
+export function hasNamedSeriesField(data: ChartDatum[]): boolean {
+  return data.some((d) => typeof d.series === 'string' && d.series.trim() !== '')
+}
+
+/**
+ * 长表 → 宽表：按 series 分组；categories = label 首次出现顺序；缺测点 null。
+ * 无 series 时返回单系列（颜色取首点或 chart1）。
+ */
+export function groupCartesianData(
+  data: ChartDatum[],
+  tokens: CanvasSemanticTokens,
+): CartesianGrouped {
+  if (!hasNamedSeriesField(data)) {
+    const color = data[0]?.color ?? tokens.chart1
+    return {
+      categories: data.map((d) => d.label),
+      series: [
+        {
+          name: '趋势',
+          color,
+          values: data.map((d) => d.value),
+        },
+      ],
+      hasNamedSeries: false,
+    }
+  }
+
+  const categories: string[] = []
+  const catIndex = new Map<string, number>()
+  for (const d of data) {
+    if (!catIndex.has(d.label)) {
+      catIndex.set(d.label, categories.length)
+      categories.push(d.label)
+    }
+  }
+
+  const seriesNames: string[] = []
+  const seriesIndex = new Map<string, number>()
+  for (const d of data) {
+    const name = (d.series ?? '').trim() || '默认'
+    if (!seriesIndex.has(name)) {
+      seriesIndex.set(name, seriesNames.length)
+      seriesNames.push(name)
+    }
+  }
+
+  const series: CartesianSeriesGroup[] = seriesNames.map((name, si) => {
+    const values: Array<number | null> = categories.map(() => null)
+    let color: string | undefined
+    for (const d of data) {
+      const sn = (d.series ?? '').trim() || '默认'
+      if (sn !== name) continue
+      const ci = catIndex.get(d.label)
+      if (ci === undefined) continue
+      values[ci] = d.value
+      if (color === undefined && d.color) color = d.color
+    }
+    if (color === undefined) {
+      color = tokens[CHART_KEYS[si % CHART_KEYS.length]]
+    }
+    return { name, color, values }
+  })
+
+  return { categories, series, hasNamedSeries: true }
+}
+
+export type ChartLegendItem = {
+  name: string
+  color: string
+}
+
+/**
+ * HTML 图例项：多序列用系列名；单折线 1 项；bar/pie 无 series 时按点。
+ */
+export function resolveLegendItems(
+  type: ChartType,
+  data: ChartDatum[],
+  colors: string[],
+  tokens: CanvasSemanticTokens,
+  title?: string,
+): ChartLegendItem[] {
+  if (type === 'heatmap') return []
+
+  if (hasNamedSeriesField(data) && (type === 'bar' || type === 'line')) {
+    const grouped = groupCartesianData(data, tokens)
+    return grouped.series.map((s) => ({ name: s.name, color: s.color }))
+  }
+
+  if (type === 'line') {
+    const color = data[0]?.color ?? colors[0] ?? tokens.chart1
+    const name = title?.trim() || '趋势'
+    return [{ name, color }]
+  }
+
+  return data.map((d, i) => ({
+    name: d.label,
+    color: colors[i] ?? tokens.chart1,
+  }))
+}
+
+function cartesianCategoryCount(data: ChartDatum[]): number {
+  if (!hasNamedSeriesField(data)) return data.length
+  const seen = new Set<string>()
+  for (const d of data) seen.add(d.label)
+  return seen.size
+}
+
+function cartesianSeriesCount(data: ChartDatum[]): number {
+  if (!hasNamedSeriesField(data)) return 1
+  const seen = new Set<string>()
+  for (const d of data) seen.add((d.series ?? '').trim() || '默认')
+  return seen.size
+}
+
+/** 过密时自动关闭数值标注（不改用户 showTooltip）。 */
+export function computeEffectiveShowValues(
+  type: ChartType,
+  showValues: boolean,
+  data: ChartDatum[],
+): boolean {
+  if (!showValues) return false
+  if (type === 'heatmap') {
+    const cells = data.filter(
+      (d) => d.row != null && d.row !== '' && d.col != null && d.col !== '',
+    ).length
+    return cells <= HEATMAP_VALUE_LIMIT
+  }
+  if (type === 'pie') {
+    return data.length <= DENSE_VALUE_LIMIT
+  }
+  if (hasNamedSeriesField(data)) {
+    return cartesianCategoryCount(data) * cartesianSeriesCount(data) <= DENSE_VALUE_LIMIT
+  }
+  return data.length <= DENSE_VALUE_LIMIT
+}
+
+/** bar/line 横滚最小宽度；pie/heatmap 返回 undefined。 */
+export function computePlotMinWidth(type: ChartType, data: ChartDatum[]): string | undefined {
+  if (type !== 'bar' && type !== 'line') return undefined
+  const n = cartesianCategoryCount(data)
+  if (n <= 0) return undefined
+  return `max(100%, ${n * PX_PER_CATEGORY}px)`
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -61,7 +223,13 @@ export type ChartOptionInput = {
   showLegend: boolean
 }
 
-function axisCommon(tokens: CanvasSemanticTokens, showAxis: boolean, showGrid: boolean) {
+function axisCommon(
+  tokens: CanvasSemanticTokens,
+  showAxis: boolean,
+  showGrid: boolean,
+  categoryCount?: number,
+) {
+  const dense = categoryCount != null && categoryCount > CATEGORY_ROTATE_THRESHOLD
   return {
     axisLine: {
       show: showAxis,
@@ -72,6 +240,9 @@ function axisCommon(tokens: CanvasSemanticTokens, showAxis: boolean, showGrid: b
       show: showAxis,
       color: tokens.textSecondary,
       fontSize: 10,
+      hideOverlap: true,
+      interval: 'auto' as const,
+      rotate: dense ? 35 : 0,
     },
     splitLine: {
       show: showGrid,
@@ -91,24 +262,113 @@ function tooltipBase(tokens: CanvasSemanticTokens, showTooltip: boolean) {
   }
 }
 
+function valueLabel(
+  show: boolean,
+  tokens: CanvasSemanticTokens,
+): {
+  show: boolean
+  position: 'top'
+  color: string
+  fontSize: number
+  formatter: (p: unknown) => string
+} {
+  return {
+    show,
+    position: 'top',
+    color: tokens.textSecondary,
+    fontSize: 10,
+    formatter: (p: unknown) => formatValue(paramValue(asRecord(p).value)),
+  }
+}
+
 function buildCartesian(
   input: ChartOptionInput,
   seriesType: 'bar' | 'line',
 ): EChartsOption {
   const { data, colors, tokens, showValues, showAxis, showGrid, showTooltip } = input
+  const effectiveShowValues = computeEffectiveShowValues(seriesType, showValues, data)
+  const named = hasNamedSeriesField(data)
+
+  if (named) {
+    const grouped = groupCartesianData(data, tokens)
+    const n = grouped.categories.length
+    const axis = axisCommon(tokens, showAxis, showGrid, n)
+    const bottomPad = showAxis ? (n > CATEGORY_ROTATE_THRESHOLD ? 44 : 28) : 12
+
+    return {
+      animationDuration: 280,
+      grid: {
+        left: showAxis ? 12 : 12,
+        right: 12,
+        top: effectiveShowValues ? 28 : 16,
+        bottom: bottomPad,
+        containLabel: true,
+      },
+      tooltip: {
+        ...tooltipBase(tokens, showTooltip),
+        trigger: showTooltip ? 'axis' : 'item',
+        axisPointer: showTooltip
+          ? { type: seriesType === 'bar' ? 'shadow' : 'line' }
+          : undefined,
+      },
+      xAxis: {
+        type: 'category',
+        data: grouped.categories,
+        ...axis,
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: 'value',
+        scale: seriesType === 'line',
+        ...axisCommon(tokens, showAxis, showGrid),
+        axisLine: { show: false },
+        axisTick: { show: false },
+      },
+      series: grouped.series.map((s) =>
+        seriesType === 'bar'
+          ? {
+              name: s.name,
+              type: 'bar' as const,
+              data: s.values,
+              itemStyle: { color: s.color, borderRadius: [2, 2, 0, 0] },
+              barMaxWidth: 28,
+              label: valueLabel(effectiveShowValues, tokens),
+              emphasis: { focus: 'series' as const },
+              connectNulls: false,
+            }
+          : {
+              name: s.name,
+              type: 'line' as const,
+              data: s.values,
+              itemStyle: { color: s.color },
+              lineStyle: { width: 2, color: s.color },
+              symbol: 'circle',
+              symbolSize: 6,
+              label: valueLabel(effectiveShowValues, tokens),
+              emphasis: { focus: 'series' as const },
+              connectNulls: false,
+            },
+      ),
+    }
+  }
+
+  // —— 无 series：bar 按点上色；line 单系列统一主色 ——
   const labels = data.map((d) => d.label)
   const values = data.map((d) => d.value)
-  const axis = axisCommon(tokens, showAxis, showGrid)
+  const n = labels.length
+  const axis = axisCommon(tokens, showAxis, showGrid, n)
   const palette = data.map((_, i) => colors[i] ?? tokens.chart1)
+  const lineColor = data[0]?.color ?? colors[0] ?? tokens.chart1
+  const bottomPad = showAxis ? (n > CATEGORY_ROTATE_THRESHOLD ? 44 : 28) : 12
 
   return {
     animationDuration: 280,
     grid: {
-      left: showAxis ? 40 : 12,
+      left: showAxis ? 12 : 12,
       right: 12,
-      top: showValues ? 28 : 16,
-      bottom: showAxis ? 28 : 12,
-      containLabel: false,
+      top: effectiveShowValues ? 28 : 16,
+      bottom: bottomPad,
+      containLabel: true,
     },
     tooltip: {
       ...tooltipBase(tokens, showTooltip),
@@ -126,7 +386,7 @@ function buildCartesian(
     yAxis: {
       type: 'value',
       scale: seriesType === 'line',
-      ...axis,
+      ...axisCommon(tokens, showAxis, showGrid),
       axisLine: { show: false },
       axisTick: { show: false },
     },
@@ -139,29 +399,17 @@ function buildCartesian(
               itemStyle: { color: palette[i], borderRadius: [2, 2, 0, 0] },
             })),
             barMaxWidth: 36,
-            label: {
-              show: showValues,
-              position: 'top' as const,
-              color: tokens.textSecondary,
-              fontSize: 10,
-              formatter: (p: unknown) => formatValue(paramValue(asRecord(p).value)),
-            },
+            label: valueLabel(effectiveShowValues, tokens),
             emphasis: { focus: 'series' as const },
           }
         : {
             type: 'line' as const,
             data: values,
-            itemStyle: { color: colors[0] ?? tokens.chart1 },
-            lineStyle: { width: 2, color: colors[0] ?? tokens.chart1 },
+            itemStyle: { color: lineColor },
+            lineStyle: { width: 2, color: lineColor },
             symbol: 'circle',
             symbolSize: 6,
-            label: {
-              show: showValues,
-              position: 'top' as const,
-              color: tokens.textSecondary,
-              fontSize: 10,
-              formatter: (p: unknown) => formatValue(paramValue(asRecord(p).value)),
-            },
+            label: valueLabel(effectiveShowValues, tokens),
             emphasis: { focus: 'series' as const },
           },
     ],
@@ -170,6 +418,7 @@ function buildCartesian(
 
 function buildPie(input: ChartOptionInput): EChartsOption {
   const { data, colors, tokens, showValues, showTooltip } = input
+  const effectiveShowValues = computeEffectiveShowValues('pie', showValues, data)
 
   return {
     animationDuration: 280,
@@ -194,7 +443,7 @@ function buildPie(input: ChartOptionInput): EChartsOption {
           itemStyle: { color: colors[i] ?? tokens.chart1 },
         })),
         label: {
-          show: showValues,
+          show: effectiveShowValues,
           color: tokens.textSecondary,
           fontSize: 10,
           formatter: (p: unknown) => {
@@ -205,7 +454,7 @@ function buildPie(input: ChartOptionInput): EChartsOption {
           },
         },
         labelLine: {
-          show: showValues,
+          show: effectiveShowValues,
           lineStyle: { color: tokens.separator },
         },
         emphasis: {
@@ -218,6 +467,7 @@ function buildPie(input: ChartOptionInput): EChartsOption {
 
 function buildHeatmap(input: ChartOptionInput): EChartsOption {
   const { data, tokens, showValues, showAxis, showGrid, showTooltip, showLegend } = input
+  const effectiveShowValues = computeEffectiveShowValues('heatmap', showValues, data)
   const cells = data.filter(
     (d) => d.row != null && d.row !== '' && d.col != null && d.col !== '',
   )
@@ -247,7 +497,7 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
     }
   }
 
-  const axis = axisCommon(tokens, showAxis, showGrid)
+  const axis = axisCommon(tokens, showAxis, showGrid, cols.length)
 
   return {
     animationDuration: 280,
@@ -263,11 +513,11 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
       },
     },
     grid: {
-      left: showAxis ? 52 : 12,
+      left: showAxis ? 12 : 12,
       right: showLegend ? 48 : 12,
       top: 16,
       bottom: showAxis ? 28 : 12,
-      containLabel: false,
+      containLabel: true,
     },
     xAxis: {
       type: 'category',
@@ -279,7 +529,7 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
     yAxis: {
       type: 'category',
       data: rows,
-      ...axis,
+      ...axisCommon(tokens, showAxis, showGrid),
       splitArea: { show: false },
       splitLine: {
         show: showGrid,
@@ -306,7 +556,7 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
         type: 'heatmap',
         data: heatData,
         label: {
-          show: showValues,
+          show: effectiveShowValues,
           color: tokens.text,
           fontSize: 9,
           formatter: (p: unknown) => formatValue(paramValue(asRecord(p).value)),

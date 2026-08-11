@@ -99,3 +99,11 @@ export {
   type ChartDatum,
   type ChartType,
 } from './components/Chart.js'
+export {
+  groupCartesianData,
+  resolveLegendItems,
+  computeEffectiveShowValues,
+  hasNamedSeriesField,
+  type CartesianGrouped,
+  type ChartLegendItem,
+} from './components/chart-echarts.js'

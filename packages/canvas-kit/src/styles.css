@@ -731,42 +731,62 @@
 }
 
 /* —— Chart —— */
+/* Chrome (title/caption) vs plot body: narrow max-width + scroll stay on body only. */
 
 .oxc-chart {
   width: 100%;
+  max-width: min(100%, 480px);
+  margin-inline: auto;
+  overflow: visible;
+}
+
+.oxc-chart__body {
+  width: 100%;
   max-width: 320px;
   margin-inline: auto;
-  overflow: hidden;
 }
 
-.oxc-chart--bar,
-.oxc-chart--line {
+.oxc-chart--bar .oxc-chart__body,
+.oxc-chart--line .oxc-chart__body {
   max-width: 320px;
 }
 
-.oxc-chart--pie {
+.oxc-chart--pie .oxc-chart__body {
   max-width: 230px;
 }
 
-.oxc-chart--heatmap {
+.oxc-chart--heatmap .oxc-chart__body {
   max-width: 380px;
+}
+
+.oxc-chart__scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .oxc-chart__title {
   margin-bottom: var(--oxc-space-8);
+  padding-inline: var(--oxc-space-8);
   text-align: center;
   font-weight: 600;
   color: var(--oxc-text);
   font-size: var(--oxc-type-body-size);
   line-height: var(--oxc-type-body-line);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .oxc-chart__caption {
   margin-top: var(--oxc-space-8);
+  padding-inline: var(--oxc-space-8);
   text-align: center;
   font-size: var(--oxc-type-small-size);
   line-height: var(--oxc-type-small-line);
   color: var(--oxc-text-secondary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .oxc-chart__plot {
