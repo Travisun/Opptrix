@@ -8,6 +8,7 @@ import {
   MAX_OUTPUT_TOKENS_PRESETS,
   OUTPUT_TOKENS_64K,
   OUTPUT_TOKENS_128K,
+  OUTPUT_TOKENS_384K,
   resolveSessionLlmParamsForUi,
 } from '../types/chat'
 import { opptrixCssVars } from '../theme/tokens'
@@ -206,10 +207,14 @@ const OUTPUT_LENGTH_OPTIONS: Array<{ value: OutputLengthPreset; label: string }>
   { value: String(DEFAULT_SESSION_MAX_TOKENS) as OutputLengthPreset, label: '32k' },
   { value: String(OUTPUT_TOKENS_64K) as OutputLengthPreset, label: '64k' },
   { value: String(OUTPUT_TOKENS_128K) as OutputLengthPreset, label: '128k' },
+  { value: String(OUTPUT_TOKENS_384K) as OutputLengthPreset, label: '384k' },
 ]
 
 /** 将当前上限映射到可选档位（旧默认 / 未匹配偏低值落在 32k） */
 function resolveOutputLengthPreset(maxTokens: number): OutputLengthPreset {
+  if (maxTokens >= OUTPUT_TOKENS_384K) {
+    return String(OUTPUT_TOKENS_384K) as OutputLengthPreset
+  }
   if (maxTokens >= OUTPUT_TOKENS_128K) {
     return String(OUTPUT_TOKENS_128K) as OutputLengthPreset
   }

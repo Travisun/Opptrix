@@ -1,6 +1,6 @@
 /**
  * 输出额度 ladder — 历史默认 4096 / 旧普模 16k 会被长回复或思考吃光。
- * 机制对齐 Reasonix AutoOutputBudget；普模默认 32k，用户可显式选 64k / 128k。
+ * 机制对齐 Reasonix AutoOutputBudget；普模默认 32k，用户可显式选 64k / 128k / 384k。
  */
 
 export const LEGACY_DEFAULT_MAX_TOKENS = 4096
@@ -14,12 +14,14 @@ export const HIGH_REASONING_OUTPUT_TOKENS = 65_536
 
 export const OUTPUT_TOKENS_64K = 65_536
 export const OUTPUT_TOKENS_128K = 131_072
+export const OUTPUT_TOKENS_384K = 393_216
 
-/** UI / 会话可选档位：32k | 64k | 128k */
+/** UI / 会话可选档位：32k | 64k | 128k | 384k */
 export const MAX_OUTPUT_TOKENS_PRESETS = [
   ORDINARY_OUTPUT_TOKENS,
   OUTPUT_TOKENS_64K,
   OUTPUT_TOKENS_128K,
+  OUTPUT_TOKENS_384K,
 ] as const
 
 export type ReasoningEffortLevel = 'low' | 'medium' | 'high'
@@ -58,7 +60,7 @@ function isLegacyUnsetMaxTokens(n: number, ladder: number): boolean {
 /**
  * 解析本轮请求 max_tokens。
  * - 未设置 → 自动 ladder（普模 32k / 推理 32k / high 64k）
- * - 显式更高（含 64k / 128k）→ 尊重用户
+ * - 显式更高（含 64k / 128k / 384k）→ 尊重用户
  * - 显式更低且非历史默认 → 尊重用户偏低设置
  * - 显式等于 4096 或旧 16k 且 ladder 更高 → 视为未真正定制，抬升
  */

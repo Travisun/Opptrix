@@ -71,11 +71,13 @@ export const DEFAULT_SESSION_TEMPERATURE = 1
 export const DEFAULT_SESSION_MAX_TOKENS = 32_768
 export const OUTPUT_TOKENS_64K = 65_536
 export const OUTPUT_TOKENS_128K = 131_072
-/** 回复长度上限可选档位：32k / 64k / 128k */
+export const OUTPUT_TOKENS_384K = 393_216
+/** 回复长度上限可选档位：32k / 64k / 128k / 384k */
 export const MAX_OUTPUT_TOKENS_PRESETS = [
   DEFAULT_SESSION_MAX_TOKENS,
   OUTPUT_TOKENS_64K,
   OUTPUT_TOKENS_128K,
+  OUTPUT_TOKENS_384K,
 ] as const
 
 export function resolveSessionLlmParamsForUi(params?: SessionLlmParams | null): {
