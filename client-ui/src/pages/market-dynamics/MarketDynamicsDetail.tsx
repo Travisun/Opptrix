@@ -7,16 +7,29 @@ import { ghostInteractive } from '../../theme/mixins'
 import type {
   FeedArticle,
   MarketDragonTigerItem,
+  MarketHotItem,
   MarketIndexQuote,
+  MarketLimitLadder,
+  MarketLimitUpItem,
   MarketStockMover,
 } from '../../types/schemas'
 import { openExternalUrl } from '../../platform/openUrl'
 import { formatRelativeTime } from '../news/newsUtils'
-import { indexChartCodeFromQuote, writeCnIndexChartCode } from './cnIndexChartStorage'
+import { indexChartCodeFromQuote } from './cnIndexChartStorage'
 import MarketBoardFocus from './MarketBoardFocus'
 import MarketDragonTigerList from './MarketDragonTigerList'
+import MarketEmotionBoard from './MarketEmotionBoard'
 
-type DetailTab = 'focus' | 'brief' | 'news'
+type DetailTab = 'board' | 'news'
+type BoardListId = 'movers' | 'limit_up' | 'skyrocket' | 'ladder' | 'dragon'
+
+const BOARD_NAV: { id: BoardListId; label: string }[] = [
+  { id: 'movers', label: '涨跌' },
+  { id: 'limit_up', label: '涨停' },
+  { id: 'skyrocket', label: '飙升' },
+  { id: 'ladder', label: '天梯' },
+  { id: 'dragon', label: '龙虎' },
+]
 
 const CONTENT_PAD = '10px'
 
@@ -38,6 +51,20 @@ const useStyles = makeStyles({
     gap: '8px',
     minWidth: 0,
     flexWrap: 'wrap',
+  },
+  chromeChart: {
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
+  },
+  chartTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   chromeMeta: {
     flex: '0 0 auto',
@@ -90,20 +117,77 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   chartWrap: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
     padding: `6px ${CONTENT_PAD} 8px`,
-    minHeight: '200px',
   },
-  briefHead: {
+  boardBody: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  boardNav: {
+    flexShrink: 0,
+    width: '76px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    padding: '6px 4px',
+    borderRight: `1px solid ${opptrixCssVars.separator}`,
+    overflowY: 'auto',
+  },
+  boardNavStacked: {
+    width: '64px',
+  },
+  boardNavItem: {
+    ...ghostInteractive,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    padding: '8px 4px',
+    borderRadius: '6px',
+    fontSize: 'var(--opptrix-font-xs)',
+    fontWeight: 600,
+    color: opptrixCssVars.textSecondary,
+    textAlign: 'center',
+    lineHeight: 1.3,
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+  },
+  boardNavItemActive: {
+    backgroundColor: opptrixCssVars.sidebarSelected,
+    color: opptrixCssVars.textPrimary,
+  },
+  boardMain: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  boardMainScroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+  },
+  sectionHead: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '6px',
-    padding: '0 8px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    height: '32px',
-    minHeight: '32px',
-    boxSizing: 'border-box',
+    padding: '6px 10px 4px',
+    minHeight: '28px',
+  },
+  sectionHeadTitle: {
+    fontSize: 'var(--opptrix-font-xs)',
+    fontWeight: 600,
+    color: opptrixCssVars.textTertiary,
+    letterSpacing: '0.03em',
   },
   sectionHeadHint: {
     fontSize: 'var(--opptrix-font-xs)',
@@ -112,11 +196,6 @@ const useStyles = makeStyles({
     letterSpacing: 'normal',
     lineHeight: 1,
     flexShrink: 0,
-  },
-  briefScroll: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto',
   },
   newsScroll: {
     flex: 1,
@@ -203,6 +282,9 @@ type Props = {
   losers: MarketStockMover[]
   dragonTiger: MarketDragonTigerItem[]
   dragonTigerDate?: string | null
+  limitUp?: MarketLimitUpItem[]
+  skyrocket?: MarketHotItem[]
+  limitLadder?: MarketLimitLadder | null
   marketLoading: boolean
   articles: FeedArticle[]
   insightsLoading: boolean
@@ -217,42 +299,100 @@ export default function MarketDynamicsDetail({
   losers,
   dragonTiger,
   dragonTigerDate,
+  limitUp = [],
+  skyrocket = [],
+  limitLadder,
   marketLoading,
   articles,
   insightsLoading,
   stacked = false,
 }: Props) {
   const s = useStyles()
-  const [detailTab, setDetailTab] = useState<DetailTab>('focus')
+  const [detailTab, setDetailTab] = useState<DetailTab>('board')
+  const [boardList, setBoardList] = useState<BoardListId>('movers')
   const showChart = Boolean(chartCode)
   const activeName = cnIndices.find(item => indexChartCodeFromQuote(item) === chartCode)?.name ?? chartCode
-  const chartMinHeight = stacked ? '180px' : '220px'
 
-  const handleChartTabSelect = (code: string) => {
-    onChartCodeChange(code)
-    writeCnIndexChartCode(code)
+  const moversLoading = marketLoading && !gainers.length && !losers.length
+  const limitUpLoading = marketLoading && !limitUp.length
+  const skyrocketLoading = marketLoading && !skyrocket.length
+  const ladderLoading = marketLoading && !limitLadder?.boards.length
+  const dragonLoading = marketLoading && !dragonTiger.length
+
+  const boardListLoading =
+    boardList === 'movers' ? moversLoading
+      : boardList === 'limit_up' ? limitUpLoading
+        : boardList === 'skyrocket' ? skyrocketLoading
+          : boardList === 'ladder' ? ladderLoading
+            : dragonLoading
+
+  const renderBoardContent = () => {
+    if (boardListLoading) {
+      const loadingLabel =
+        boardList === 'movers' ? '正在加载涨跌榜…'
+          : boardList === 'limit_up' ? '正在加载涨停…'
+            : boardList === 'skyrocket' ? '正在加载飙升榜…'
+              : boardList === 'ladder' ? '正在加载连板天梯…'
+                : '正在加载龙虎榜…'
+      return (
+        <div className={s.loading}><Spinner size="tiny" label={loadingLabel} /></div>
+      )
+    }
+
+    switch (boardList) {
+      case 'movers':
+        return <MarketBoardFocus gainers={gainers} losers={losers} />
+      case 'limit_up':
+        return (
+          <MarketEmotionBoard
+            section="limit_up"
+            limitUp={limitUp}
+            skyrocket={skyrocket}
+            ladder={limitLadder}
+          />
+        )
+      case 'skyrocket':
+        return (
+          <MarketEmotionBoard
+            section="skyrocket"
+            limitUp={limitUp}
+            skyrocket={skyrocket}
+            ladder={limitLadder}
+          />
+        )
+      case 'ladder':
+        return (
+          <MarketEmotionBoard
+            section="ladder"
+            limitUp={limitUp}
+            skyrocket={skyrocket}
+            ladder={limitLadder}
+          />
+        )
+      case 'dragon':
+        return (
+          <>
+            <div className={s.sectionHead}>
+              <span className={s.sectionHeadTitle}>龙虎榜</span>
+              {dragonTigerDate && (
+                <span className={s.sectionHeadHint}>{dragonTigerDate}</span>
+              )}
+            </div>
+            <div className={mergeClasses(s.boardMainScroll, 'opptrix-scroll-hidden')}>
+              <MarketDragonTigerList items={dragonTiger} />
+            </div>
+          </>
+        )
+      default:
+        return null
+    }
   }
 
   return (
     <div className={mergeClasses(s.root, 'opptrix-market-dynamics-detail')}>
       {showChart ? (
-        <div className={s.chrome}>
-          <Text className={s.chromeMeta}>指数走势</Text>
-          {cnIndices.length > 0 && (
-            <TabList
-              className={s.tabList}
-              size="small"
-              appearance="subtle"
-              selectedValue={chartCode ?? undefined}
-              onTabSelect={(_, d) => handleChartTabSelect(String(d.value))}
-            >
-              {cnIndices.map(item => (
-                <Tab key={item.qt_code || item.code} value={indexChartCodeFromQuote(item)}>
-                  {item.name}
-                </Tab>
-              ))}
-            </TabList>
-          )}
+        <div className={mergeClasses(s.chrome, s.chromeChart)}>
+          <Text className={s.chartTitle}>{activeName ?? '指数走势'}</Text>
           <button
             type="button"
             className={s.closeBtn}
@@ -272,8 +412,7 @@ export default function MarketDynamicsDetail({
             selectedValue={detailTab}
             onTabSelect={(_, d) => setDetailTab(String(d.value) as DetailTab)}
           >
-            <Tab value="focus">热度</Tab>
-            <Tab value="brief">龙虎榜</Tab>
+            <Tab value="board">盘面</Tab>
             <Tab value="news">资讯</Tab>
           </TabList>
         </div>
@@ -282,40 +421,39 @@ export default function MarketDynamicsDetail({
       <div className={s.body}>
         {showChart && chartCode ? (
           <div className={s.pane}>
-            <div className={s.chartWrap} style={{ minHeight: chartMinHeight }}>
+            <div className={s.chartWrap}>
               <TradingViewChart code={chartCode} expanded active />
             </div>
-            {activeName && (
-              <Text
-                block
-                style={{
-                  fontSize: 'var(--opptrix-font-xs)',
-                  color: opptrixCssVars.textTertiary,
-                  padding: '0 10px 6px',
-                }}
+          </div>
+        ) : detailTab === 'board' ? (
+          <div className={s.pane}>
+            <div className={s.boardBody}>
+              <nav
+                className={mergeClasses(
+                  s.boardNav,
+                  stacked && s.boardNavStacked,
+                  'opptrix-scroll-hidden',
+                )}
+                aria-label="盘面列表"
               >
-                {activeName} · 仅 A 股宽基指数
-              </Text>
-            )}
-          </div>
-        ) : detailTab === 'focus' ? (
-          <div className={s.pane}>
-            <MarketBoardFocus gainers={gainers} losers={losers} />
-          </div>
-        ) : detailTab === 'brief' ? (
-          <div className={s.pane}>
-            <div className={s.briefHead}>
-              <Text className={s.sectionHeadHint}>龙虎榜</Text>
-              {dragonTigerDate && (
-                <span className={s.sectionHeadHint}>{dragonTigerDate}</span>
-              )}
-            </div>
-            <div className={mergeClasses(s.briefScroll, 'opptrix-scroll-hidden')}>
-              {marketLoading && !dragonTiger.length ? (
-                <div className={s.loading}><Spinner size="tiny" label="加载龙虎榜…" /></div>
-              ) : (
-                <MarketDragonTigerList items={dragonTiger} />
-              )}
+                {BOARD_NAV.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={mergeClasses(
+                      s.boardNavItem,
+                      boardList === item.id && s.boardNavItemActive,
+                    )}
+                    aria-current={boardList === item.id ? 'page' : undefined}
+                    onClick={() => setBoardList(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+              <div className={s.boardMain}>
+                {renderBoardContent()}
+              </div>
             </div>
           </div>
         ) : (

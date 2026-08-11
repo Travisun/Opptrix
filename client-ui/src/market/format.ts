@@ -78,6 +78,9 @@ export function inferCnExchangeFromCode(code: string): 'SH' | 'SZ' | 'BJ' {
   const c = normalizeCode(code)
   if (c.startsWith('92') || c.startsWith('43') || c.startsWith('83') || c.startsWith('87')) return 'BJ'
   if (c.startsWith('399')) return 'SZ'
+  // 上证 ETF 代码段（51/52/56/58）；深证 ETF 为 159xxx / 16xxxx，走下方默认
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return 'SH'
   if (c.startsWith('6')) return 'SH'
   if (c.startsWith('9')) return 'SH'
   if (c.startsWith('3') || c.startsWith('2')) return 'SZ'

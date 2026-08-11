@@ -29,7 +29,7 @@ import { registerMarketDataServiceReset, resetMarketDataRuntime } from './runtim
 import { MarketDataLifecycle } from './sync/lifecycle.js'
 import { queryLocalLatestQuote } from './query/local-bars.js'
 import { searchUniverseStocks } from './query/search-stocks.js'
-import { buildEtfScorecardSchema, computeEtfScorecard } from './query/etf-scorecard.js'
+import { buildEtfScorecardSchema, computeEtfScorecard, computeEtfScorecardFromOnline } from './query/etf-scorecard.js'
 import { searchLocalInstruments, listLocalInstrumentsSummary } from './query/search-instruments.js'
 
 export class MarketDataService {
@@ -137,6 +137,10 @@ export class MarketDataService {
 
   etfScorecard(code: string) {
     return computeEtfScorecard(this.store, code)
+  }
+
+  etfScorecardFromOnline(input: Parameters<typeof computeEtfScorecardFromOnline>[0]) {
+    return computeEtfScorecardFromOnline(input)
   }
 
   etfScorecardSchema() {
@@ -278,7 +282,7 @@ export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './sto
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
 export type { LocalInstrumentHit } from './query/search-instruments.js'
-export { buildEtfScorecardSchema, ETF_SCORECARD_NAME } from './query/etf-scorecard.js'
+export { buildEtfScorecardSchema, computeEtfScorecardFromOnline, ETF_SCORECARD_NAME } from './query/etf-scorecard.js'
 export type { EtfScorecardResult, EtfScorecardDimension } from './query/etf-scorecard.js'
 export { searchUniverseStocks } from './query/search-stocks.js'
 export {

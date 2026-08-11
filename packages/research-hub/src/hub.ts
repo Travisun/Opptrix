@@ -114,6 +114,11 @@ import {
   normalizeShareholderPayload,
 } from './stock-detail-normalize.js'
 import {
+  mapCnLimitUpItems,
+  mapCnSkyrocketItems,
+  parseCnLimitLadder,
+} from './market-emotion-map.js'
+import {
   buildCrossMarketDetailPayload,
   mergeCrossMarketQuote,
   normalizeCrossMarketArticles,
@@ -147,6 +152,47 @@ function instrumentQueryError(r: { success: boolean }, fallback: string): string
 function instrumentQueryData<T>(r: { success: boolean }): T | undefined {
   if (!r.success || !('data' in r)) return undefined
   return r.data as T
+}
+
+function etfQueryNum(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+function etfProfileRowFromQuery(data: unknown): Record<string, unknown> | null {
+  if (!data) return null
+  if (Array.isArray(data)) return (data[0] as Record<string, unknown>) ?? null
+  if (typeof data === 'object') {
+    const obj = data as Record<string, unknown>
+    if (obj.profile && typeof obj.profile === 'object') {
+      const p = obj.profile
+      return Array.isArray(p) ? (p[0] as Record<string, unknown>) ?? null : (p as Record<string, unknown>)
+    }
+    return obj
+  }
+  return null
+}
+
+function etfQuoteRowFromQuery(data: unknown): Record<string, unknown> | null {
+  if (!data) return null
+  if (Array.isArray(data)) return (data[0] as Record<string, unknown>) ?? null
+  if (typeof data === 'object') return data as Record<string, unknown>
+  return null
+}
+
+function etfLatestNavRow(rows: Record<string, unknown>[] | undefined): Record<string, unknown> | null {
+  if (!rows?.length) return null
+  let best = rows[0]!
+  let bestDate = String(best.date ?? best.navDate ?? '').slice(0, 10)
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i]!
+    const date = String(row.date ?? row.navDate ?? '').slice(0, 10)
+    if (!date) continue
+    if (!bestDate || date > bestDate) {
+      best = row
+      bestDate = date
+    }
+  }
+  return best
 }
 
 interface WatchlistRadarItem {
@@ -202,18 +248,18 @@ export class ResearchHub {
       switch (feature) {
         case 'stock_diagnosis': {
           const ref = this.resolveInstrumentRefFromParams(params)
-          if (ref) return this.dispatchInstrumentCapability('evaluation', params, t0)
-          return this.stockDiagnosis(String(params.code), String(params.scorecard ?? '综合评估'), t0)
+          if (ref) return await this.dispatchInstrumentCapability('evaluation', params, t0)
+          return await this.stockDiagnosis(String(params.code), String(params.scorecard ?? '综合评估'), t0)
         }
         case 'institution_rating':
-          return this.dispatchInstrumentCapability('institution_rating', normalizeInstrumentHubParams(params), t0)
+          return await this.dispatchInstrumentCapability('institution_rating', normalizeInstrumentHubParams(params), t0)
         case 'institution_report':
-          return this.dispatchInstrumentCapability('institution_report', normalizeInstrumentHubParams(params), t0)
-        case 'strategy_signal': return this.instrumentStrategySignal(params, t0)
-        case 'instrument_evaluation': return this.instrumentEvaluation(params, t0)
-        case 'instrument_strategy_signal': return this.instrumentStrategySignal(params, t0)
-        case 'instrument_indicators': return this.instrumentIndicators(params, t0)
-        case 'instrument_strategy_verify': return this.instrumentStrategyVerify(params, t0)
+          return await this.dispatchInstrumentCapability('institution_report', normalizeInstrumentHubParams(params), t0)
+        case 'strategy_signal': return await this.instrumentStrategySignal(params, t0)
+        case 'instrument_evaluation': return await this.instrumentEvaluation(params, t0)
+        case 'instrument_strategy_signal': return await this.instrumentStrategySignal(params, t0)
+        case 'instrument_indicators': return await this.instrumentIndicators(params, t0)
+        case 'instrument_strategy_verify': return await this.instrumentStrategyVerify(params, t0)
         case 'trend_brief': {
           const ref = resolveInstrumentFromParams(params)
           if (ref && ref.market !== 'CN') {
@@ -225,14 +271,14 @@ export class ResearchHub {
         }
         case 'strategy_verify': {
           const ref = resolveInstrumentFromParams(params)
-          if (ref) return this.dispatchInstrumentCapability('strategy_verify', { ...params, instrument: ref }, t0)
-          return this.strategyVerify(params, t0)
+          if (ref) return await this.dispatchInstrumentCapability('strategy_verify', { ...params, instrument: ref }, t0)
+          return await this.strategyVerify(params, t0)
         }
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
         case 'portfolio_analysis': return this.portfolioAnalysis(params, t0)
-        case 'market_dynamics': return this.marketDynamics(t0)
+        case 'market_dynamics': return await this.marketDynamics(t0)
         case 'search_stocks':
-          return this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
+          return await this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
         case 'stock_quotes': {
           const refs = instrumentRefsFromList(params.codes)
           const list = refs.length
@@ -240,7 +286,7 @@ export class ResearchHub {
             : (params.codes as string[] | undefined)?.map(code =>
               resolveInstrumentFromParams({ code, market: 'CN' }),
             ).filter((r): r is InstrumentRef => r != null) ?? []
-          return this.instrumentQuotes({ instruments: list.length ? list : params.codes, ...params }, t0)
+          return await this.instrumentQuotes({ instruments: list.length ? list : params.codes, ...params }, t0)
         }
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
         case 'watchlist_list': return this.watchlistList(t0)
@@ -252,19 +298,19 @@ export class ResearchHub {
         case 'discover_profile_readiness': return this.discoverProfileReadiness(params, t0)
         case 'discover_scorecards': return this.discoverScorecards(params, t0)
         case 'market_regime': return this.marketRegime(params, t0)
-        case 'batch_stock_snapshots': return this.instrumentBatchSnapshots(params, t0)
-        case 'instrument_batch_snapshots': return this.instrumentBatchSnapshots(params, t0)
-        case 'instrument_cyq': return this.instrumentCyq(params, t0)
-        case 'instrument_institution_rating': return this.instrumentInstitutionRating(params, t0)
-        case 'instrument_institution_report': return this.instrumentInstitutionReport(params, t0)
+        case 'batch_stock_snapshots': return await this.instrumentBatchSnapshots(params, t0)
+        case 'instrument_batch_snapshots': return await this.instrumentBatchSnapshots(params, t0)
+        case 'instrument_cyq': return await this.instrumentCyq(params, t0)
+        case 'instrument_institution_rating': return await this.instrumentInstitutionRating(params, t0)
+        case 'instrument_institution_report': return await this.instrumentInstitutionReport(params, t0)
         case 'stock_kline':
-          return this.instrumentChart(normalizeInstrumentHubParams({ ...params, period: 'daily' }), t0)
+          return await this.instrumentChart(normalizeInstrumentHubParams({ ...params, period: 'daily' }), t0)
         case 'stock_cyq':
-          return this.instrumentCyq(normalizeInstrumentHubParams(params), t0)
+          return await this.instrumentCyq(normalizeInstrumentHubParams(params), t0)
         case 'stock_chart':
-          return this.instrumentChart(normalizeInstrumentHubParams(params), t0)
+          return await this.instrumentChart(normalizeInstrumentHubParams(params), t0)
         case 'stock_detail':
-          return this.instrumentSnapshot(normalizeInstrumentHubParams(params), t0)
+          return await this.instrumentSnapshot(normalizeInstrumentHubParams(params), t0)
         case 'backtest': return this.runBacktest(params, t0)
         case 'latest_evaluation': {
           const ref = resolveInstrumentFromParams(params)
@@ -304,46 +350,46 @@ export class ResearchHub {
         case 'provider_uninstall': return await this.providerUninstall(params, t0)
         case 'provider_reload': return await this.providerReload(params, t0)
         case 'provider_installed_list': return this.providerInstalledList(t0)
-        case 'etf_list': return this.etfList(params, t0)
+        case 'etf_list': return await this.etfList(params, t0)
         case 'etf_snapshot': {
           const ref = resolveInstrumentFromParams(params)
           if (!ref) return fail('instrument 或 code 必填', t0)
-          return this.dispatchInstrumentCapability('snapshot', { ...params, instrument: ref }, t0)
+          return await this.dispatchInstrumentCapability('snapshot', { ...params, instrument: ref }, t0)
         }
-        case 'etf_nav': return this.queryEtfInstrumentData(params, 'etf_nav', t0)
-        case 'etf_holdings': return this.queryEtfInstrumentData(params, 'etf_holdings', t0)
-        case 'etf_profile': return this.queryEtfInstrumentData(params, 'etf_profile', t0)
-        case 'sector_list': return this.sectorList(params, t0)
-        case 'sector_constituents': return this.sectorConstituents(params, t0)
-        case 'market_session': return this.marketSession(params, t0)
+        case 'etf_nav': return await this.queryEtfInstrumentData(params, 'etf_nav', t0)
+        case 'etf_holdings': return await this.queryEtfInstrumentData(params, 'etf_holdings', t0)
+        case 'etf_profile': return await this.queryEtfInstrumentData(params, 'etf_profile', t0)
+        case 'sector_list': return await this.sectorList(params, t0)
+        case 'sector_constituents': return await this.sectorConstituents(params, t0)
+        case 'market_session': return await this.marketSession(params, t0)
         case 'local_etf_list': return await this.localEtfList(params, t0)
         case 'local_etf_nav': return await this.localEtfNav(String(params.code ?? ''), params, t0)
         case 'local_etf_holdings': return await this.localEtfHoldings(String(params.code ?? ''), params, t0)
         case 'etf_scorecard': {
           const ref = resolveInstrumentFromParams(params)
           if (!ref) return fail('instrument 或 code 必填', t0)
-          return this.etfScorecard(ref, t0)
+          return await this.etfScorecard(ref, t0)
         }
         case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
         case 'search_local_instruments':
-          return this.instrumentSearch(params, t0)
+          return await this.instrumentSearch(params, t0)
         case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
-        case 'instrument_snapshot': return this.instrumentSnapshot(params, t0)
-        case 'instrument_quotes': return this.instrumentQuotes(params, t0)
-        case 'instrument_chart': return this.instrumentChart(params, t0)
-        case 'instrument_search': return this.instrumentSearch(params, t0)
+        case 'instrument_snapshot': return await this.instrumentSnapshot(params, t0)
+        case 'instrument_quotes': return await this.instrumentQuotes(params, t0)
+        case 'instrument_chart': return await this.instrumentChart(params, t0)
+        case 'instrument_search': return await this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
-        case 'instrument_profile': return this.queryInstrumentStandardData(params, 'profile', t0)
-        case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
-        case 'instrument_balance_sheet': return this.queryInstrumentStandardData(params, 'balance_sheet', t0)
-        case 'instrument_cash_flow': return this.queryInstrumentStandardData(params, 'cash_flow', t0)
-        case 'instrument_income_statement': return this.queryInstrumentStandardData(params, 'income_statement', t0)
-        case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
-        case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
-        case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
-        case 'instrument_institution_holdings': return this.instrumentInstitutionHoldings(params, t0)
-        case 'instrument_notices': return this.instrumentNotices(params, t0)
-        case 'instrument_financial_indicators': return this.instrumentFinancialIndicators(params, t0)
+        case 'instrument_profile': return await this.queryInstrumentStandardData(params, 'profile', t0)
+        case 'instrument_financials': return await this.queryInstrumentStandardData(params, 'financials', t0)
+        case 'instrument_balance_sheet': return await this.queryInstrumentStandardData(params, 'balance_sheet', t0)
+        case 'instrument_cash_flow': return await this.queryInstrumentStandardData(params, 'cash_flow', t0)
+        case 'instrument_income_statement': return await this.queryInstrumentStandardData(params, 'income_statement', t0)
+        case 'instrument_shareholders': return await this.queryInstrumentStandardData(params, 'shareholders', t0)
+        case 'instrument_dividend': return await this.queryInstrumentStandardData(params, 'dividend', t0)
+        case 'instrument_money_flow': return await this.queryInstrumentStandardData(params, 'money_flow', t0)
+        case 'instrument_institution_holdings': return await this.instrumentInstitutionHoldings(params, t0)
+        case 'instrument_notices': return await this.instrumentNotices(params, t0)
+        case 'instrument_financial_indicators': return await this.instrumentFinancialIndicators(params, t0)
         case 'cn_market_special': return this.cnMarketSpecial(params, t0)
         case 'trade_calendar': return this.tradeCalendar(params, t0)
         case 'macro_series': return this.macroSeries(params, t0)
@@ -360,27 +406,27 @@ export class ResearchHub {
         case 'us_realtime': {
           const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
-          return this.instrumentQuotes({ instruments: [ref] }, t0)
+          return await this.instrumentQuotes({ instruments: [ref] }, t0)
         }
         case 'us_kline': {
           const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
-          return this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
+          return await this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
         }
         case 'us_profile': {
           const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
-          return this.usProfile(ref.symbol, t0)
+          return await this.usProfile(ref.symbol, t0)
         }
         case 'us_financials': {
           const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
-          return this.usFinancials(ref.symbol, params, t0)
+          return await this.usFinancials(ref.symbol, params, t0)
         }
         case 'us_snapshot': {
           const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
-          return this.instrumentSnapshot({ instrument: ref }, t0)
+          return await this.instrumentSnapshot({ instrument: ref }, t0)
         }
         case 'us_stock_list': return await this.usStockList(params, t0)
         case 'local_us_list': return await this.localUsList(params, t0)
@@ -388,17 +434,17 @@ export class ResearchHub {
         case 'crypto_realtime': {
           const ref = resolveInstrumentFromParams({ market: 'CRYPTO', pair: params.pair ?? params.symbol })
           if (!ref) return fail('pair 必填', t0)
-          return this.instrumentQuotes({ instruments: [ref] }, t0)
+          return await this.instrumentQuotes({ instruments: [ref] }, t0)
         }
         case 'crypto_kline': {
           const ref = resolveInstrumentFromParams({ market: 'CRYPTO', pair: params.pair ?? params.symbol })
           if (!ref) return fail('pair 必填', t0)
-          return this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
+          return await this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
         }
         case 'crypto_snapshot': {
           const ref = resolveInstrumentFromParams({ market: 'CRYPTO', pair: params.pair ?? params.symbol })
           if (!ref) return fail('pair 必填', t0)
-          return this.instrumentSnapshot({ instrument: ref }, t0)
+          return await this.instrumentSnapshot({ instrument: ref }, t0)
         }
         case 'crypto_list': return await this.cryptoList(params, t0)
         case 'local_crypto_list': return await this.localCryptoList(params, t0)
@@ -422,16 +468,16 @@ export class ResearchHub {
           const pid = String(params.provider_id ?? '')
           const method = String(params.method ?? '')
           const args = Array.isArray(params.args) ? params.args : []
-          return this.de.invokeCustomMethod(pid, method, args)
-            .then(r => r.success
-              ? ok(
-                r.argTransforms?.length
-                  ? { result: r.data, arg_transforms: r.argTransforms }
-                  : r.data,
-                `${pid}.${method}`,
-                t0,
-              )
-              : fail(r.error ?? '调用失败', t0))
+          const r = await this.de.invokeCustomMethod(pid, method, args)
+          return r.success
+            ? ok(
+              r.argTransforms?.length
+                ? { result: r.data, arg_transforms: r.argTransforms }
+                : r.data,
+              `${pid}.${method}`,
+              t0,
+            )
+            : fail(r.error ?? '调用失败', t0)
         }
         default: return fail(`Unknown feature: ${feature}`, t0)
       }
@@ -601,24 +647,24 @@ export class ResearchHub {
   ): Promise<ResearchResult> {
     const normalized = normalizeInstrumentHubParams(params)
     switch (cap) {
-      case 'snapshot': return this.instrumentSnapshot(normalized, t0)
-      case 'quotes': return this.instrumentQuotes(normalized, t0)
+      case 'snapshot': return await this.instrumentSnapshot(normalized, t0)
+      case 'quotes': return await this.instrumentQuotes(normalized, t0)
       case 'chart':
       case 'chart_intraday':
-        return this.instrumentChart(
+        return await this.instrumentChart(
           cap === 'chart_intraday' ? { ...normalized, period: 'intraday' } : normalized,
           t0,
         )
       case 'capabilities': return this.instrumentCapabilities(normalized, t0)
-      case 'search': return this.instrumentSearch(normalized, t0)
-      case 'cyq': return this.instrumentCyq(normalized, t0)
-      case 'institution_rating': return this.instrumentInstitutionRating(normalized, t0)
-      case 'institution_report': return this.instrumentInstitutionReport(normalized, t0)
-      case 'evaluation': return this.instrumentEvaluation(normalized, t0)
-      case 'strategy_signal': return this.instrumentStrategySignal(normalized, t0)
-      case 'indicators': return this.instrumentIndicators(normalized, t0)
-      case 'strategy_verify': return this.instrumentStrategyVerify(normalized, t0)
-      case 'batch_snapshots': return this.instrumentBatchSnapshots(normalized, t0)
+      case 'search': return await this.instrumentSearch(normalized, t0)
+      case 'cyq': return await this.instrumentCyq(normalized, t0)
+      case 'institution_rating': return await this.instrumentInstitutionRating(normalized, t0)
+      case 'institution_report': return await this.instrumentInstitutionReport(normalized, t0)
+      case 'evaluation': return await this.instrumentEvaluation(normalized, t0)
+      case 'strategy_signal': return await this.instrumentStrategySignal(normalized, t0)
+      case 'indicators': return await this.instrumentIndicators(normalized, t0)
+      case 'strategy_verify': return await this.instrumentStrategyVerify(normalized, t0)
+      case 'batch_snapshots': return await this.instrumentBatchSnapshots(normalized, t0)
       default: return fail(`未知 capability: ${cap}`, t0)
     }
   }
@@ -765,7 +811,49 @@ export class ResearchHub {
   }
 
   private async marketDynamics(t0: number) {
-    const [homeR, majorR, asiaR, europeR, americaR, gainersR, losersR, dragonR] = await Promise.all([
+    const fetchEmotionLimitUp = async () => {
+      try {
+        const r = await this.de.limitUpdown()
+        if (!r.success || !Array.isArray(r.data)) return []
+        return mapCnLimitUpItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
+    const fetchEmotionSkyrocket = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsSkyrocketList', ['day'])
+        if (!r.success) return []
+        return mapCnSkyrocketItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
+    const fetchEmotionLadder = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsLimitUpLadder', [])
+        if (!r.success) return null
+        return parseCnLimitLadder(r.data)
+      } catch {
+        return null
+      }
+    }
+
+    const [
+      homeR,
+      majorR,
+      asiaR,
+      europeR,
+      americaR,
+      gainersR,
+      losersR,
+      dragonR,
+      cnLimitUp,
+      cnSkyrocket,
+      cnLimitLadder,
+    ] = await Promise.all([
       this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['mstats_home', false]),
       this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['major', false]),
       this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AS', 1, 40, 2, 'desc']),
@@ -774,6 +862,9 @@ export class ResearchHub {
       this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'desc']),
       this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'asc']),
       this.de.dragonTiger(),
+      fetchEmotionLimitUp(),
+      fetchEmotionSkyrocket(),
+      fetchEmotionLadder(),
     ])
 
     const mapCnItems = (resp: { success: boolean; data?: unknown }) => {
@@ -867,6 +958,10 @@ export class ResearchHub {
       },
     ].filter(section => section.items.length > 0)
 
+    const hasEmotionData = cnLimitUp.length > 0
+      || cnSkyrocket.length > 0
+      || (cnLimitLadder?.boards.length ?? 0) > 0
+
     return ok({
       refreshed_at: new Date().toISOString(),
       sections,
@@ -874,6 +969,10 @@ export class ResearchHub {
       cn_losers: mapMoverItems(losersR),
       cn_dragon_tiger: cnDragonTiger,
       cn_dragon_tiger_date: cnDragonTiger[0]?.date ?? null,
+      cn_limit_up: cnLimitUp.length ? cnLimitUp : undefined,
+      cn_skyrocket: cnSkyrocket.length ? cnSkyrocket : undefined,
+      cn_limit_ladder: cnLimitLadder,
+      cn_emotion_source: hasEmotionData ? 'tonghuashun' as const : null,
     }, '市场动态', t0)
   }
 
@@ -1792,6 +1891,7 @@ export class ResearchHub {
     const requestCount = isIndex && klinePeriod !== 'daily'
       ? Math.max(safeCount, 80)
       : safeCount
+    const exchange = stockMarket
     if (before) {
       const step = 200
       const endDay = this.dayBefore(before.slice(0, 10))
@@ -1799,6 +1899,7 @@ export class ResearchHub {
         period: klinePeriod,
         count: step,
         endDate: endDay,
+        exchange,
       })
       let older = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(olderR) ?? []).filter(b => b.date < before)
       if (!older.length) {
@@ -1806,6 +1907,7 @@ export class ResearchHub {
           period: klinePeriod,
           count: step,
           endDate: before.slice(0, 10),
+          exchange,
         })
         older = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(olderR) ?? []).filter(b => b.date < before)
       }
@@ -1813,6 +1915,7 @@ export class ResearchHub {
       const recentR = await this.queryCnKline(code, {
         period: klinePeriod,
         count: Math.max(recentCount, isIndex && klinePeriod !== 'daily' ? 80 : 0),
+        exchange,
       })
       const recentData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(recentR)
       if (recentR.success && recentData?.length) {
@@ -1829,12 +1932,14 @@ export class ResearchHub {
     let klineR = await this.queryCnKline(code, {
       period: klinePeriod,
       count: requestCount,
+      exchange,
     })
     let klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
     if ((!klineR.success || !klineData?.length) && klinePeriod !== 'daily') {
       klineR = await this.queryCnKline(code, {
         period: klinePeriod,
         count: Math.max(requestCount, 80),
+        exchange,
       })
       klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
     }
@@ -1859,7 +1964,12 @@ export class ResearchHub {
     const normalized = code.padStart(6, '0')
     const cnRef = resolveCnInstrumentRef(
       explicitMarket
-        ? { market: 'CN', assetClass: 'EQUITY', symbol: normalized, exchange: explicitMarket }
+        ? {
+          market: 'CN',
+          assetClass: inferCnAssetClass(normalized),
+          symbol: normalized,
+          exchange: explicitMarket,
+        }
         : normalized,
     )
     const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : 800
@@ -2200,8 +2310,16 @@ export class ResearchHub {
         t0,
       )
     }
-    const rows = (data as unknown[]) ?? []
-    return ok(rows, `${labels[capability]} ${rows.length} 条`, t0)
+    const rows = Array.isArray(data) ? data : []
+    return ok(
+      {
+        code: ref.symbol,
+        items: rows,
+        source: 'queryInstrumentData',
+      },
+      `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
   }
 
   /** 板块/行业目录 — 标准 sector_list（plateType 如 industries:CN / boards:CN） */
@@ -2943,9 +3061,26 @@ export class ResearchHub {
 
   private async queryCnKline(
     code: string,
-    opts: { period?: string; count?: number; startDate?: string; endDate?: string },
+    opts: {
+      period?: string
+      count?: number
+      startDate?: string
+      endDate?: string
+      exchange?: string
+    },
   ) {
-    return this.de.queryInstrumentData(this.cnInstrumentRef(code), 'kline', {
+    const normalized = normalizeCode(code)
+    const ref = resolveCnInstrumentRef(
+      opts.exchange
+        ? {
+          market: 'CN',
+          assetClass: inferCnAssetClass(normalized),
+          symbol: normalized,
+          exchange: opts.exchange,
+        }
+        : normalized,
+    )
+    return this.de.queryInstrumentData(ref, 'kline', {
       count: opts.count ?? 120,
       period: opts.period ?? 'daily',
       startDate: opts.startDate,
@@ -2982,10 +3117,83 @@ export class ResearchHub {
   }
 
   private async etfScorecard(ref: InstrumentRef, t0: number) {
-    const card = this.marketData.etfScorecard(ref.symbol)
-    if (!card) return fail('暂时无法生成 ETF 决策雷达', t0)
-    const scoreHint = card.total_score != null ? ` ${card.total_score} 分` : ''
-    return ok(card, `${card.name} ETF决策雷达${scoreHint}`, t0)
+    const local = this.marketData.etfScorecard(ref.symbol)
+    if (local) {
+      const scoreHint = local.total_score != null ? ` ${local.total_score} 分` : ''
+      return ok(local, `${local.name} ETF决策雷达${scoreHint}`, t0)
+    }
+
+    // 本地库无该 ETF：并行 profile + realtime；etf_nav 短超时非阻塞，避免 snapshot 三腿拖死
+    const ONLINE_SCORECARD_TIMEOUT_MS = 8000
+    const NAV_RACE_MS = 2500
+    try {
+      const navPromise = Promise.race([
+        this.de.queryInstrumentData(ref, 'etf_nav'),
+        new Promise<{ success: false }>(resolve => {
+          setTimeout(() => resolve({ success: false }), NAV_RACE_MS)
+        }),
+      ]).catch(() => ({ success: false as const }))
+
+      const coreResults = await Promise.race([
+        Promise.all([
+          this.de.queryInstrumentData(ref, 'etf_profile'),
+          this.de.queryInstrumentData(ref, 'realtime'),
+        ]),
+        new Promise<null>(resolve => {
+          setTimeout(() => resolve(null), ONLINE_SCORECARD_TIMEOUT_MS)
+        }),
+      ])
+
+      const navResult = await navPromise
+
+      if (!coreResults) {
+        return fail(
+          '在线评分加载较慢，请稍后再试；也可在设置中同步行情库后查看完整评分',
+          t0,
+        )
+      }
+
+      const [profileRes, realtimeRes] = coreResults
+      if (!profileRes.success && !realtimeRes.success) {
+        return fail(
+          '在线评分加载较慢，请稍后再试；也可在设置中同步行情库后查看完整评分',
+          t0,
+        )
+      }
+
+      const profile = etfProfileRowFromQuery(instrumentQueryData(profileRes))
+      const quote = etfQuoteRowFromQuery(instrumentQueryData(realtimeRes))
+      const navRowsRaw = instrumentQueryData<{ changePct?: number | null }[]>(navResult)
+      const navRows = Array.isArray(navRowsRaw) ? navRowsRaw : []
+      const nav = etfLatestNavRow(navRows as Record<string, unknown>[])
+
+      const online = this.marketData.etfScorecardFromOnline({
+        code: ref.symbol,
+        name: (profile?.name as string | undefined)
+          ?? (quote?.name as string | undefined)
+          ?? ref.symbol,
+        premiumRate: etfQueryNum(nav?.premiumRate) ?? etfQueryNum(profile?.premiumRate),
+        scale: etfQueryNum(profile?.scale),
+        totalShares: etfQueryNum(profile?.totalShares),
+        nav: etfQueryNum(nav?.nav) ?? etfQueryNum(profile?.nav),
+        expenseRatio: etfQueryNum(profile?.expenseRatio),
+        amount: etfQueryNum(quote?.amount) ?? etfQueryNum(profile?.amount),
+        navRows: navRows.map(row => ({ changePct: etfQueryNum(row.changePct) })),
+        dataAsOf: (typeof nav?.date === 'string' ? nav.date : null)
+          ?? (typeof profile?.navDate === 'string' ? profile.navDate : null),
+      })
+      if (online) {
+        const scoreHint = online.total_score != null ? ` ${online.total_score} 分` : ''
+        return ok(online, `${online.name} ETF决策雷达（在线简化）${scoreHint}`, t0)
+      }
+    } catch {
+      // fall through to actionable empty state
+    }
+
+    return fail(
+      '暂时无法生成综合评分。可在设置中同步行情库后重试，或稍后再试',
+      t0,
+    )
   }
 
   private etfScorecardSchema(t0: number) {

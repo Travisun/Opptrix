@@ -2,6 +2,7 @@ import { normalizeCode } from '../../../../utils/helpers.js'
 import { FuyaoClient } from '../../api/client.js'
 import { isTonghuashunEnabled } from '../../config.js'
 import { toIndexThsCode, toThsCode } from '../../api/symbols.js'
+import { mapValuationSnapshotItem } from '../../normalize/index.js'
 import type { TonghuashunMarketHandler } from './handler.js'
 
 type Handler = TonghuashunMarketHandler & Record<string, unknown>
@@ -122,6 +123,37 @@ export function mixTonghuashunExt(Driver: { prototype: TonghuashunMarketHandler 
       const data = await client.financialsIndicators(thscode, r)
       if (!data || Object.keys(data).length === 0) return null
       return [{ ...data, source: SOURCE }]
+    })
+  }
+
+  /**
+   * A 股估值快照（PE/PB 等）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/valuations/snapshot
+   * @pageUrl https://fuyao.aicubes.cn/
+   * @returns Record<string, unknown>[] 含 pe/pb（由 pe_ttm/pb_mrq 归一）及 source=tonghuashun
+   * @usage engine.invokeCustomMethod("tonghuashun", "thsValuationsSnapshot", ["600519"])
+   * @remarks 支持逗号分隔或数组；标准 realtime/batchRealtime 已自动 enrich pe/pb。
+   * @param codes 单只代码、逗号分隔多码或 JSON 数组（必填）
+   * @example {"provider":"tonghuashun","method":"thsValuationsSnapshot","args":["600519,000001"]}
+   */
+  p.thsValuationsSnapshot = async function thsValuationsSnapshot(codes: string | string[]) {
+    const bareList = parseCodesArg(codes)
+    if (!bareList.length) return null
+    const thscodes = bareList.map(c => resolveStockThscode(c)).filter(Boolean)
+    if (!thscodes.length) return null
+    return withFuyaoClient(async client => {
+      const data = await client.valuationsSnapshot(thscodes)
+      const rows = (data.item ?? []).map(row => {
+        const mapped = mapValuationSnapshotItem(row)
+        return {
+          ...row,
+          pe: mapped?.pe ?? null,
+          pb: mapped?.pb ?? null,
+          ...(mapped?.extras ?? {}),
+          source: SOURCE,
+        }
+      })
+      return rows.length ? rows : null
     })
   }
 

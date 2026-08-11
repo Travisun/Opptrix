@@ -7,8 +7,8 @@ import { formatScoreSummary, formatScorecardDisplayName, getScoreGradeInfo } fro
 import { scoreMetricTone, type DecisionMetricTone } from './decisionCardTone'
 import { listRowKey } from '../utils/listRowKey'
 
-const ETF_SCORE_LEGEND =
-  '基于折溢价、规模与成交、管理费、净值波动及同类对比的本地评分（0–100 分），供挑选与换仓参考，不构成买卖建议。'
+  const ETF_SCORE_LEGEND =
+  '基于折溢价、规模与成交、管理费、净值波动及同类对比的综合评分（0–100 分），供挑选与换仓参考，不构成买卖建议。'
 
 const useStyles = makeStyles({
   panel: {
@@ -207,6 +207,9 @@ export default function EtfDecisionCard({ data, loading, error, onRefresh }: Pro
           )}
           {data.data_as_of && (
             <Text className={s.meta} block>数据截至 {data.data_as_of}</Text>
+          )}
+          {data.source === 'online' && (
+            <Text className={s.meta} block>当前为在线简化评分，同步行情库后可看完整维度</Text>
           )}
         </div>
         <OpptrixButton

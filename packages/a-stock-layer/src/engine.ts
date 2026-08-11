@@ -61,7 +61,7 @@ import { PortfolioManager } from './portfolio/manager.js'
 import { WatchlistManager } from './watchlist/manager.js'
 import { watchlistItemKey } from './watchlist/instrument.js'
 import { instrumentId } from './core/instrument.js'
-import { normalizeCode } from './utils/helpers.js'
+import { normalizeCode, resolveStockMarketCode } from './utils/helpers.js'
 import { resampleStockKlinesToPeriod } from './utils/kline-resample.js'
 import {
   normalizePreOpenRealtimeQuote,
@@ -69,6 +69,25 @@ import {
 } from './utils/quote-normalize.js'
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
+
+/** ETF 净值序列可能升序/降序 — 按 date 取最新一条，避免误用成立日 nav[0] */
+function pickLatestNavRow<T extends Record<string, unknown>>(
+  rows: T[] | null | undefined,
+): T | null {
+  if (!rows?.length) return null
+  let best = rows[0]!
+  let bestDate = String(best.date ?? best.navDate ?? '').slice(0, 10)
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i]!
+    const date = String(row.date ?? row.navDate ?? '').slice(0, 10)
+    if (!date) continue
+    if (!bestDate || date > bestDate) {
+      best = row
+      bestDate = date
+    }
+  }
+  return best
+}
 
 export type { InstrumentDataCapability } from './core/instrument-query.js'
 
@@ -692,17 +711,18 @@ export class MarketDataEngine {
 
   async etfSnapshot(etfCode: string) {
     const code = normalizeCode(etfCode)
+    const exchange = resolveStockMarketCode(code)
     const [profile, nav, quote] = await Promise.all([
       this.etfProfile(code),
       this.etfNav(code),
-      this.realtime(code),
+      this.realtime(code, exchange),
     ])
     return {
       success: profile.success || nav.success || quote.success,
       data: {
         code,
         profile: profile.data?.[0] ?? null,
-        nav: nav.data?.[0] ?? null,
+        nav: pickLatestNavRow(nav.data as Record<string, unknown>[] | undefined) ?? null,
         quote: quote.data?.[0] ?? null,
       },
       source: profile.source ?? nav.source ?? quote.source,

@@ -97,6 +97,26 @@ export const TONGHUASHUN_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     },
   ),
 
+  thsValuationsSnapshot: thsDoc(
+    'thsValuationsSnapshot',
+    'A 股估值快照（PE/PB 等，pe_ttm→pe、pb_mrq→pb）',
+    '/api/a-share/valuations/snapshot',
+    [
+      {
+        name: 'codes',
+        type: 'string',
+        description: '单只代码、逗号分隔多码，或 invoke 时传 JSON 字符串数组',
+        required: true,
+      },
+    ],
+    'Record<string, unknown>[] 估值行（含 pe/pb 及 pe_mrq/ps_ttm/pcf_ttm），含 source=tonghuashun',
+    {
+      example: '{"provider":"tonghuashun","method":"thsValuationsSnapshot","args":["600519,000001"]}',
+      usage: INVOKE('thsValuationsSnapshot', '["600519"]'),
+      notes: '批量 thscodes 请求；裸代码自动转为 thscode。标准 realtime 已自动 enrich pe/pb。',
+    },
+  ),
+
   thsLimitUpLadder: thsDoc(
     'thsLimitUpLadder',
     '连板天梯（近 30 个交易日涨停梯队）',

@@ -22,7 +22,7 @@ export interface EtfScorecardResult {
   dimensions: EtfScorecardDimension[]
   highlights: string[]
   risks: string[]
-  source: 'local'
+  source: 'local' | 'online'
   data_as_of: string | null
 }
 
@@ -212,10 +212,12 @@ function loadEtfContext(store: MarketDataStore, code: string) {
   const navRows = store.getEtfNavHistory(normalized, 30)
   const latestNav = navRows[0] ?? null
 
+  // stock_quotes_daily 无 amount 列（仅 close/pe/pb/market_cap/turnover_rate/…）；
+  // 流动性维度在无成交额时退化为仅用规模评分。
   const quoteRow = store.db.prepare(`
-    SELECT close, amount, trade_date FROM stock_quotes_daily
+    SELECT trade_date FROM stock_quotes_daily
     WHERE code = ? ORDER BY trade_date DESC LIMIT 1
-  `).get(normalized) as { close: number | null; amount: number | null; trade_date: string } | undefined
+  `).get(normalized) as { trade_date: string } | undefined
 
   const premium = latestNav?.premiumRate
     ?? (profile?.premiumRate as number | null | undefined)
@@ -238,7 +240,7 @@ function loadEtfContext(store: MarketDataStore, code: string) {
     premium,
     scaleYi,
     expenseRatio,
-    amount: quoteRow?.amount ?? null,
+    amount: null,
     dataAsOf: latestNav?.date ?? quoteRow?.trade_date ?? null,
   }
 }
@@ -311,11 +313,92 @@ export function computeEtfScorecard(store: MarketDataStore, code: string): EtfSc
   }
 }
 
+export type OnlineEtfScorecardInput = {
+  code: string
+  name?: string | null
+  premiumRate?: number | null
+  scale?: number | null
+  totalShares?: number | null
+  nav?: number | null
+  expenseRatio?: number | null
+  amount?: number | null
+  navRows?: { changePct: number | null }[]
+  dataAsOf?: string | null
+}
+
+/** 无本地库时，用在线 profile/nav/quote 合成简化决策分（折溢价 / 规模 / 费率等）。 */
+export function computeEtfScorecardFromOnline(input: OnlineEtfScorecardInput): EtfScorecardResult | null {
+  const code = normalizeStockCode(input.code)
+  if (!code) return null
+
+  const nav = input.nav != null && Number.isFinite(input.nav) ? input.nav : null
+  const scaleRaw = input.scale != null && Number.isFinite(input.scale)
+    ? input.scale
+    : (input.totalShares != null && nav != null ? Number(input.totalShares) * nav : null)
+  const scaleYi = scaleRaw != null && Number.isFinite(scaleRaw) ? scaleRaw / YI_YUAN : null
+  const premium = input.premiumRate != null && Number.isFinite(input.premiumRate) ? input.premiumRate : null
+  const expenseRatio = input.expenseRatio != null && Number.isFinite(input.expenseRatio)
+    ? input.expenseRatio
+    : null
+  const amount = input.amount != null && Number.isFinite(input.amount) ? input.amount : null
+  const navRows = Array.isArray(input.navRows) ? input.navRows : []
+
+  const dimScores: Record<string, ReturnType<typeof scorePremium>> = {
+    premium: scorePremium(premium),
+    scale_liquidity: scoreScaleLiquidity(scaleYi, amount),
+    expense: scoreExpense(expenseRatio),
+    nav_stability: scoreNavStability(navRows),
+    peer_rank: {
+      score: null,
+      value: null,
+      hint: '在线模式下暂无同类对比，可在设置中同步行情库后查看完整评分',
+    },
+  }
+
+  const dimensions: EtfScorecardDimension[] = DIMENSIONS.map(d => ({
+    key: d.key,
+    label: d.label,
+    weight: d.weight,
+    score: dimScores[d.key]?.score ?? null,
+    value: dimScores[d.key]?.value ?? null,
+    hint: dimScores[d.key]?.hint ?? null,
+  }))
+
+  if (!dimensions.some(d => d.score != null)) return null
+
+  let total = 0
+  let wsum = 0
+  for (const d of dimensions) {
+    if (d.score != null) {
+      total += d.score * d.weight
+      wsum += d.weight
+    }
+  }
+  const totalScore = wsum > 0 ? Math.round((total / wsum) * 10) : null
+  const { highlights, risks } = buildHighlightsRisks(dimensions)
+  if (!highlights.length) {
+    highlights.push('当前为在线简化评分，完成行情库同步后可获得更完整维度')
+  }
+
+  return {
+    code,
+    name: String(input.name ?? '').trim() || code,
+    scorecard: ETF_SCORECARD_NAME,
+    total_score: totalScore,
+    grade: gradeFromScore(totalScore),
+    dimensions,
+    highlights: highlights.slice(0, 4),
+    risks: risks.slice(0, 4),
+    source: 'online',
+    data_as_of: input.dataAsOf ?? null,
+  }
+}
+
 export function buildEtfScorecardSchema() {
   return {
     name: ETF_SCORECARD_NAME,
-    description: '基于本地 ETF 净值、规模、费率、流动性与同类对比的决策雷达（0–100 分）',
-    prerequisite: '需先完成 etf_list / etf_nav 同步；有行情截面时流动性维度更准确',
+    description: '基于 ETF 净值、规模、费率、流动性与同类对比的决策评分（0–100 分）；本地库优先，缺省时用在线概况合成简化分',
+    prerequisite: '完整评分需本地 ETF 同步；无本地数据时仍可基于在线概况给出折溢价/规模等简化分',
     dimensions: DIMENSIONS.map(d => ({ key: d.key, label: d.label, weight: d.weight })),
     grades: {
       A: '≥80 综合较优',

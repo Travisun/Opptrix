@@ -26,6 +26,94 @@ function fiscalPeriodLabel(row: Record<string, unknown>): string {
   return String(row.period ?? fp ?? '')
 }
 
+export type ValuationExtras = {
+  pe_mrq?: number | null
+  ps_ttm?: number | null
+  pcf_ttm?: number | null
+}
+
+export type MappedValuation = {
+  pe: number | null
+  pb: number | null
+  extras: ValuationExtras
+}
+
+/** Fuyao valuations/snapshot → pe（TTM）/ pb（MRQ）及扩展指标 */
+export function mapValuationSnapshotItem(
+  item: Record<string, unknown> | null | undefined,
+): MappedValuation | null {
+  if (!item || typeof item !== 'object') return null
+  const pe = safeFloat(item.pe_ttm)
+  const pb = safeFloat(item.pb_mrq)
+  const extras: ValuationExtras = {
+    pe_mrq: safeFloat(item.pe_mrq),
+    ps_ttm: safeFloat(item.ps_ttm),
+    pcf_ttm: safeFloat(item.pcf_ttm),
+  }
+  const hasValue = pe != null || pb != null
+    || Object.values(extras).some(v => v != null)
+  if (!hasValue) return null
+  return { pe, pb, extras }
+}
+
+export function indexValuationItems(
+  items: Record<string, unknown>[],
+): Map<string, MappedValuation> {
+  const map = new Map<string, MappedValuation>()
+  for (const item of items) {
+    const thscode = String(item.thscode ?? '').trim()
+    const mapped = mapValuationSnapshotItem(item)
+    if (thscode && mapped) map.set(thscode, mapped)
+  }
+  return map
+}
+
+export function applyValuationToStockRealtime(
+  rt: StockRealtime,
+  val: MappedValuation | null | undefined,
+): StockRealtime {
+  if (!val) return rt
+  return {
+    ...rt,
+    pe: val.pe ?? rt.pe,
+    pb: val.pb ?? rt.pb,
+  }
+}
+
+function formatValuationMetric(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 100) return n.toFixed(2)
+  if (abs >= 10) return n.toFixed(3)
+  return n.toFixed(4)
+}
+
+/** 个股概况 profileMetrics 用中文标签 */
+export function buildValuationProfileMetrics(
+  item: Record<string, unknown> | null | undefined,
+): Array<{ label: string; value: string }> {
+  const mapped = mapValuationSnapshotItem(item)
+  if (!mapped) return []
+  const out: Array<{ label: string; value: string }> = []
+  if (mapped.pe != null) {
+    out.push({ label: '市盈率（TTM）', value: formatValuationMetric(mapped.pe) })
+  }
+  if (mapped.pb != null) {
+    out.push({ label: '市净率（MRQ）', value: formatValuationMetric(mapped.pb) })
+  }
+  const { pe_mrq, ps_ttm, pcf_ttm } = mapped.extras
+  if (pe_mrq != null) {
+    out.push({ label: '市盈率（MRQ）', value: formatValuationMetric(pe_mrq) })
+  }
+  if (ps_ttm != null) {
+    out.push({ label: '市销率（TTM）', value: formatValuationMetric(ps_ttm) })
+  }
+  if (pcf_ttm != null) {
+    out.push({ label: '市现率（TTM）', value: formatValuationMetric(pcf_ttm) })
+  }
+  return out
+}
+
 export function mapSnapshotToStockRealtime(
   snap: Record<string, unknown>,
   name = '',
@@ -210,13 +298,19 @@ export function mapDragonTigerStock(row: Record<string, unknown>, tradeDate: str
 }
 
 export function mapLimitUpRow(row: Record<string, unknown>): LimitUpDown {
+  const continueDayCnt = safeFloat(row.continue_day_cnt ?? row.limit_up_days ?? row.board_num)
+  const continueDayText = String(
+    row.continue_day_text ?? row.board_label ?? row.limit_up_label ?? '',
+  ).trim()
   return {
     code: fromThsCode(String(row.thscode ?? row.ticker ?? '')),
     name: String(row.name ?? ''),
     date: msToYmd(row.limit_up_time) || '',
     type: 'limit_up',
     changePct: safeFloat(row.price_change_ratio_pct),
-    reason: String(row.limit_up_reason ?? ''),
+    reason: String(row.limit_up_reason ?? row.reason ?? '').trim() || undefined,
+    continueDayText: continueDayText || undefined,
+    continueDayCnt,
   }
 }
 
@@ -265,3 +359,14 @@ export function resampleKlines(klines: StockKline[], mode: 'weekly' | 'monthly')
     }
   })
 }
+
+export {
+  computeEtfPremiumRate,
+  mapFundProfileToEtfProfileRow,
+  mapFundNavRows,
+  mapFundHoldingsToEtfRows,
+  mapFundMarketSnapshotToStockRealtime,
+  mapFundHistoricalBarsToKlines,
+  mapFundReturnsToPerformance,
+  mapFundTickerToListItem,
+} from './fund.js'

@@ -344,6 +344,10 @@ export interface LimitUpDown {
   changePct?: number | null
   /** 涨停/跌停原因（如"锂电池概念"、"业绩预增"、"并购重组"） */
   reason?: string
+  /** 连板描述（如「3连板」），同花顺等源可选 */
+  continueDayText?: string
+  /** 连板天数，同花顺等源可选 */
+  continueDayCnt?: number | null
 }
 
 /**

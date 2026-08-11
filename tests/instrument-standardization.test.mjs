@@ -298,6 +298,35 @@ test('resolveCnInstrumentRef — namespace and bare code', async () => {
   const fromBare = resolveCnInstrumentRef('510300')
   assert.equal(fromBare.assetClass, 'ETF')
   assert.equal(fromBare.symbol, '510300')
+  assert.equal(fromBare.exchange, 'SH')
+})
+
+test('inferCnExchangeFromSymbol — SH/SZ ETF code segments', async () => {
+  const { inferCnExchangeFromSymbol, resolveCnInstrumentIdentity } = await import(
+    '../packages/shared/dist/instrument-symbol.js'
+  )
+  assert.equal(inferCnExchangeFromSymbol('510300'), 'SH')
+  assert.equal(inferCnExchangeFromSymbol('159915'), 'SZ')
+  assert.equal(inferCnExchangeFromSymbol('560010'), 'SH')
+  assert.equal(inferCnExchangeFromSymbol('588000'), 'SH')
+
+  const shEtf = resolveCnInstrumentIdentity({ market: 'CN', assetClass: 'EQUITY', symbol: '510300' })
+  assert.equal(shEtf.exchange, 'SH')
+  assert.equal(shEtf.assetClass, 'ETF')
+
+  const szEtf = resolveCnInstrumentIdentity({ market: 'CN', assetClass: 'EQUITY', symbol: '159915' })
+  assert.equal(szEtf.exchange, 'SZ')
+  assert.equal(szEtf.assetClass, 'ETF')
+})
+
+test('resolveStockMarketCode — SH/SZ ETF prefixes', async () => {
+  const { resolveStockMarketCode, ensureCnSecSymbol } = await import(
+    '../packages/a-stock-layer/dist/utils/helpers.js'
+  )
+  assert.equal(resolveStockMarketCode('510300'), 'SH')
+  assert.equal(resolveStockMarketCode('159915'), 'SZ')
+  assert.equal(ensureCnSecSymbol('510300'), 'sh510300')
+  assert.equal(ensureCnSecSymbol('159915'), 'sz159915')
 })
 
 test('resolveInstrumentRef — unified entry for namespace string', async () => {

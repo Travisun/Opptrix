@@ -1,4 +1,4 @@
-import { normalizeCode, safeFloat } from '../../../utils/helpers.js'
+import { normalizeCode, resolveMarket, safeFloat } from '../../../utils/helpers.js'
 import { filterCnEtfListItems } from '../../common/standard-etf.js'
 import type { StockListItem } from '../../../core/schema.js'
 import { fetchTencentBoardRankList } from './proxy.js'
@@ -45,28 +45,32 @@ export async function fetchTencentEtfBasicItem(code: string): Promise<StockListI
     code: bare,
     name: bare,
     industry: 'ETF',
-    market: bare.startsWith('6') ? 'SH' : 'SZ',
+    market: resolveMarket(bare),
   }
 }
 
-/** 从代码推断腾讯 market 前缀（6 开头 → sh，其余 → sz） */
+/** 从代码推断腾讯 market 前缀（含上证 ETF 51/52/56/58 → sh） */
 function tencentMarketPrefix(code: string): string {
-  const bare = normalizeCode(code)
-  return bare.startsWith('6') ? 'sh' : 'sz'
+  return resolveMarket(code).toLowerCase()
 }
 
 /**
- * 解析腾讯 JSONP 响应为对象。
+ * 解析腾讯 JSONP 或纯 JSON 响应。
  *
- * @param text JSONP 原始文本，格式 `jQuery随机数({...})`
+ * @param text JSONP（`jQuery…({…})`）或裸 JSON
  * @returns 解析后的对象，失败返回 null
  */
 function parseJsonp<T>(text: string): T | null {
   try {
-    const first = text.indexOf('(')
-    const last = text.lastIndexOf(')')
+    const trimmed = text.trim()
+    if (!trimmed) return null
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      return JSON.parse(trimmed) as T
+    }
+    const first = trimmed.indexOf('(')
+    const last = trimmed.lastIndexOf(')')
     if (first < 0 || last <= first) return null
-    return JSON.parse(text.slice(first + 1, last)) as T
+    return JSON.parse(trimmed.slice(first + 1, last)) as T
   } catch (e) {
     rethrowIfFreeProviderThrottleTrigger(e)
     return null
@@ -126,7 +130,7 @@ export async function fetchTencentFundProfile(code: string): Promise<Record<stri
  * @param code 6 位 ETF 代码
  * @returns `{ selector, report_time, total_money, asset[], industry[], stock[] }`，失败返回 null
  * @usage `fetchTencentFundAsset('510300')`
- * @remarks 返回 JSONP 格式。stock[] 包含个股持仓明细（代码、名称、占比），asset[] 为大类资产配置，industry[] 为行业分布。
+ * @remarks 上游可能返回纯 JSON 或 JSONP；解析器两者均兼容。stock[] 含个股持仓明细（代码、名称、占比）。
  * @example
  * ```ts
  * const asset = await fetchTencentFundAsset('510300')

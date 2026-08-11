@@ -1,4 +1,5 @@
 import { Capability } from '../../core/capabilities.js'
+import { CN_ETF_CAPABILITIES } from '../../core/bindings.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { TONGHUASHUN_SETTINGS } from './settings.js'
@@ -38,8 +39,14 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   marketGroup: 'CN',
   defaultPriority: 120,
   maxConcurrent: 5,
-  capabilities: TONGHUASHUN_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, [], maxConcurrent),
+  capabilities: [...new Set([...TONGHUASHUN_CAPS, ...CN_ETF_CAPABILITIES])],
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
+    EQUITY_CAPS,
+    INDEX_CAPS,
+    p,
+    CN_ETF_CAPABILITIES,
+    maxConcurrent,
+  ),
   settings: TONGHUASHUN_SETTINGS,
   supportsTest: true,
 }

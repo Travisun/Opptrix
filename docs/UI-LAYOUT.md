@@ -69,7 +69,7 @@
 | 概览 | Dashboard | Stat 行 + Module 网格 |
 | 个股研究 | StockResearch | PageHeader + Tab + 内容卡片 |
 | 机会与组合 | PortfolioHub | Tab + 表格/表单卡片 |
-| 市场动态 | MarketDynamicsPage | 大盘/板块/龙虎榜 + 对话内工作流技能（早报、收盘、产业链） |
+| 市场动态 | MarketDynamicsPage | 左侧指数栏 + 右侧观察区（**盘面** / **资讯** 两 Tab）；盘面内左栏切换涨跌/涨停/飙升/天梯/龙虎，右侧仅渲染当前列表；开图时顶栏仅指数名 + 返回看板（换指数靠左侧栏） |
 | 投研写作 | StockWriter | 双栏 Editor 卡片 |
 | 设置 | Settings | 表单卡片堆叠 |
 | 新闻中心 | NewsCenter | 侧栏入口；feed / reader 双模式 |
