@@ -6,7 +6,9 @@ import type { ChatToolStep } from './chat-progress.js'
 import type { TokenUsage } from './llm/token-usage.js'
 import { SessionArchiveFolderStore } from './archive-folders.js'
 import {
-  readContextProjectionFromDisk,
+  contextProjectionToRef,
+  hydrateContextProjection,
+  isContextProjectionRef,
   writeContextProjectionToDisk,
 } from './context/session-projection-disk.js'
 
@@ -166,7 +168,8 @@ export interface SessionRecord extends SessionMeta {
    */
   sessionMemory?: import('./context/session-memory.js').SessionMemory | null
   /**
-   * Model-visible 上下文投影 sidecar（soft/micro/structured）。列表 meta 不返回全文。
+   * Model-visible 上下文投影 sidecar（soft/micro/structured）。
+   * 引擎内存为完整 ContextProjection；SQLite 仅存 ContextProjectionRef 指针；列表 meta / API 不下发全文。
    */
   contextProjection?: import('./context/projection.js').ContextProjection | null
 }
@@ -190,10 +193,61 @@ export function setSessionPersistHooks(hooks: {
 
 function writeRecord(record: SessionRecord) {
   record.updatedAt = new Date().toISOString()
-  getUserDataStore().setDocument(NAMESPACE, record.id, record)
-  // disk 为主/并存；SQLite 字段保留兼容，本轮不删
-  writeContextProjectionToDisk(record.id, record.contextProjection ?? null)
+  const full = record.contextProjection ?? null
+  // 盘上全文；SQLite 仅指针（引擎内存仍保留完整投影）
+  writeContextProjectionToDisk(record.id, full)
+  const forStore: Omit<SessionRecord, 'contextProjection'> & {
+    contextProjection: ReturnType<typeof contextProjectionToRef> | null
+  } = {
+    ...record,
+    contextProjection: full ? contextProjectionToRef(full) : null,
+  }
+  getUserDataStore().setDocument(NAMESPACE, record.id, forStore)
   sessionPersistHook?.(record)
+}
+
+/** 旧全文 / 指针 → 引擎内存完整投影；必要时把 SQLite 改成指针（幂等） */
+function rewriteSqliteProjectionPointer(
+  sessionId: string,
+  full: import('./context/projection.js').ContextProjection,
+): void {
+  try {
+    const raw = getUserDataStore().getDocument<SessionRecord>(NAMESPACE, sessionId)
+    if (!raw) return
+    if (isContextProjectionRef(raw.contextProjection)) return
+    const next: Omit<SessionRecord, 'contextProjection'> & {
+      contextProjection: ReturnType<typeof contextProjectionToRef>
+    } = {
+      ...raw,
+      contextProjection: contextProjectionToRef(full),
+    }
+    getUserDataStore().setDocument(NAMESPACE, sessionId, next)
+  } catch {
+    /* 迁移失败不影响主路径 */
+  }
+}
+
+function normalizeRecord(raw: SessionRecord): SessionRecord {
+  const llmParams = normalizeSessionLlmParams(raw.llmParams)
+  const { projection, needsPointerRewrite } = hydrateContextProjection(
+    raw.id,
+    raw.contextProjection,
+  )
+  if (needsPointerRewrite && projection) {
+    rewriteSqliteProjectionPointer(raw.id, projection)
+  }
+  const record: SessionRecord = {
+    ...raw,
+    turns: raw.turns ?? [],
+    contextRef: raw.contextRef ?? null,
+    expertId: raw.expertId ?? null,
+    expertIcon: raw.expertIcon ?? null,
+    rolePersona: raw.rolePersona ?? null,
+    sessionMemory: raw.sessionMemory ?? null,
+    contextProjection: projection,
+    llmParams,
+  }
+  return backfillTurnReasoning(migrateTurns(record))
 }
 
 /** 终轮助手消息（无 tool_calls）的思考链，按 display 顺序 */
@@ -252,24 +306,6 @@ function backfillTurnReasoning(record: SessionRecord): SessionRecord {
   record.turns = turns
   writeRecord(record)
   return record
-}
-
-function normalizeRecord(raw: SessionRecord): SessionRecord {
-  const llmParams = normalizeSessionLlmParams(raw.llmParams)
-  const fromDisk = readContextProjectionFromDisk(raw.id)
-  const record: SessionRecord = {
-    ...raw,
-    turns: raw.turns ?? [],
-    contextRef: raw.contextRef ?? null,
-    expertId: raw.expertId ?? null,
-    expertIcon: raw.expertIcon ?? null,
-    rolePersona: raw.rolePersona ?? null,
-    sessionMemory: raw.sessionMemory ?? null,
-    // disk 优先；缺省回退 SQLite 字段
-    contextProjection: fromDisk ?? raw.contextProjection ?? null,
-    llmParams,
-  }
-  return backfillTurnReasoning(migrateTurns(record))
 }
 
 function toMeta(raw: SessionRecord): SessionMeta {

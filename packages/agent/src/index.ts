@@ -226,9 +226,12 @@ export {
 export {
   type TokenUsage,
   type TokenUsageDisplay,
+  type CacheWarmth,
   emptyTokenUsage,
   mergeTokenUsage,
   parseOpenAiUsage,
+  resolveCacheWarmth,
+  promptCacheKeyForSession,
 } from './llm/token-usage.js'
 
 export {
@@ -265,6 +268,12 @@ export {
   writeContextProjectionToDisk,
   resolveContextProjectionPath,
   computeContextUsagePercent,
+  hydrateContextProjection,
+  contextProjectionToRef,
+  isContextProjectionRef,
+  isFullContextProjection,
+  CONTEXT_PROJECTION_PATH_KEY,
+  type ContextProjectionRef,
 } from './context/session-projection-disk.js'
 export { estimateTextTokens, estimateMessageTokens } from './context/token-estimate.js'
 export {
