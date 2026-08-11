@@ -1,5 +1,5 @@
 /**
- * 整轮思考时间线：多轮 reasoning 拼接；live 快照累积全文
+ * 整轮思考时间线：结构化 segments + 派生字符串 + live 竖轴数据
  */
 import { describe, it, test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -8,6 +8,12 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   appendReasoningTimeline,
+  appendReasoningSegment,
+  beginReasoningSegment,
+  formatReasoningSegmentLabel,
+  joinReasoningSegments,
+  resolveReasoningSegments,
+  updateLastReasoningSegmentContent,
   REASONING_TIMELINE_SEP,
   SessionStore,
 } from '../packages/agent/dist/index.js'
@@ -16,56 +22,116 @@ import {
   applyChatProgressEvent,
   createEmptyStreamSnapshot,
 } from '../client-ui/src/chat/sessionStreamRuntime.ts'
+import {
+  resolveReasoningSegments as resolveUiSegments,
+} from '../client-ui/src/chat/reasoningTimeline.ts'
 
-describe('appendReasoningTimeline', () => {
-  it('returns first chunk when existing empty', () => {
+describe('reasoning segments helpers', () => {
+  it('appendReasoningTimeline still joins with SEP', () => {
     assert.equal(appendReasoningTimeline('', '  round-1  '), 'round-1')
-  })
-
-  it('ignores empty chunk', () => {
     assert.equal(appendReasoningTimeline('keep', '  '), 'keep')
-  })
-
-  it('joins multi-round reasoning in order with separator', () => {
     const mid = appendReasoningTimeline('tool-round', 'final-round')
     assert.equal(mid, `tool-round${REASONING_TIMELINE_SEP}final-round`)
-    const full = appendReasoningTimeline(
-      appendReasoningTimeline('r1', 'r2'),
-      'r3',
+  })
+
+  it('append / join / label for structured segments', () => {
+    let segs = []
+    segs = appendReasoningSegment(segs, '先查工具', { at: '2026-08-11T04:00:00.000Z', round: 1 })
+    segs = appendReasoningSegment(segs, '再给出结论', { at: '2026-08-11T04:01:00.000Z', round: 2 })
+    assert.equal(segs.length, 2)
+    assert.equal(segs[0].label, formatReasoningSegmentLabel(1))
+    assert.equal(segs[1].label, '第 2 段思路')
+    assert.equal(
+      joinReasoningSegments(segs),
+      `先查工具${REASONING_TIMELINE_SEP}再给出结论`,
     )
-    assert.equal(full, `r1${REASONING_TIMELINE_SEP}r2${REASONING_TIMELINE_SEP}r3`)
+  })
+
+  it('streaming updates last segment; prior segments retained', () => {
+    let segs = appendReasoningSegment([], '段一', { round: 1 })
+    segs = beginReasoningSegment(segs, { round: 2 })
+    segs = updateLastReasoningSegmentContent(segs, '段')
+    segs = updateLastReasoningSegmentContent(segs, '段二完整')
+    assert.equal(segs.length, 2)
+    assert.equal(segs[0].content, '段一')
+    assert.equal(segs[1].content, '段二完整')
+  })
+
+  it('resolveReasoningSegments prefers structured; legacy string splits SEP', () => {
+    const structured = resolveReasoningSegments(
+      [{ content: 'A', label: '第 1 段思路' }, { content: 'B' }],
+      'ignored',
+    )
+    assert.equal(structured.length, 2)
+    assert.equal(structured[0].label, '第 1 段思路')
+
+    const legacy = resolveReasoningSegments(
+      undefined,
+      `旧一段${REASONING_TIMELINE_SEP}旧二段`,
+    )
+    assert.equal(legacy.length, 2)
+    assert.equal(legacy[0].content, '旧一段')
+    assert.equal(legacy[0].label, undefined)
+    assert.equal(legacy[1].content, '旧二段')
+
+    const uiLegacy = resolveUiSegments(null, `x${REASONING_TIMELINE_SEP}y`)
+    assert.deepEqual(uiLegacy.map(s => s.content), ['x', 'y'])
   })
 })
 
-describe('live thinkingSnippet accumulates full text', () => {
-  it('replaces with longer full snippet across thinking events', () => {
+describe('live thinkingSegments accumulate', () => {
+  it('thinking event with segments updates liveTrace', () => {
     let snap = createEmptyStreamSnapshot()
+    const segs = [
+      { content: 'AAAA'.repeat(50), label: '第 1 段思路', round: 1 },
+    ]
     snap = applyChatProgressEvent(snap, {
       type: 'thinking',
       round: 1,
       label: '模型正在思考…',
-      snippet: 'AAAA'.repeat(50),
+      snippet: segs[0].content,
+      segments: segs,
     })
+    assert.equal(snap.liveTrace?.thinkingSegments?.length, 1)
     assert.equal(snap.liveTrace?.thinkingSnippet?.length, 200)
 
-    const longer = `${'AAAA'.repeat(50)}\n\n---\n\n${'BBBB'.repeat(80)}`
+    const longer = [
+      segs[0],
+      { content: 'BBBB'.repeat(80), label: '第 2 段思路', round: 2 },
+    ]
     snap = applyChatProgressEvent(snap, {
       type: 'thinking',
       round: 2,
       label: '模型正在思考…',
-      snippet: longer,
+      snippet: joinReasoningSegments(longer),
+      segments: longer,
     })
-    assert.equal(snap.liveTrace?.thinkingSnippet, longer)
+    assert.equal(snap.liveTrace?.thinkingSegments?.length, 2)
+    assert.equal(snap.liveTrace?.thinkingSegments?.[0]?.content, segs[0].content)
     assert.ok((snap.liveTrace?.thinkingSnippet?.length ?? 0) > 400)
   })
 
-  it('tool_start does not clear thinkingSnippet', () => {
+  it('legacy snippet-only event still segments via SEP', () => {
+    let snap = createEmptyStreamSnapshot()
+    const snippet = `工具轮${REASONING_TIMELINE_SEP}终轮`
+    snap = applyChatProgressEvent(snap, {
+      type: 'thinking',
+      round: 2,
+      label: '模型正在思考…',
+      snippet,
+    })
+    assert.equal(snap.liveTrace?.thinkingSegments?.length, 2)
+    assert.equal(snap.liveTrace?.thinkingSnippet, snippet)
+  })
+
+  it('tool_start does not clear thinkingSegments', () => {
     let snap = createEmptyStreamSnapshot()
     snap = applyChatProgressEvent(snap, {
       type: 'thinking',
       round: 1,
       label: '模型正在思考…',
       snippet: '工具轮推理中…',
+      segments: [{ content: '工具轮推理中…', label: '第 1 段思路', round: 1 }],
     })
     snap = applyChatProgressEvent(snap, {
       type: 'tool_start',
@@ -78,6 +144,7 @@ describe('live thinkingSnippet accumulates full text', () => {
       },
     })
     assert.equal(snap.liveTrace?.thinkingSnippet, '工具轮推理中…')
+    assert.equal(snap.liveTrace?.thinkingSegments?.[0]?.content, '工具轮推理中…')
     assert.equal(snap.liveTrace?.steps?.length, 1)
   })
 })
@@ -89,9 +156,10 @@ describe('onDelta hasToolCalls preserves co-packaged reasoning', () => {
   it('accumulates reasoning when hasToolCalls is set on same delta', () => {
     let reasoningAccumulated = ''
     let stopTokenProgress = false
+    let streamingOpen = false
+    let segments = []
     /** @type {string[]} */
     const snippets = []
-    const turnReasoningTimeline = ''
 
     const onDelta = (delta) => {
       if (delta.hasToolCalls) {
@@ -99,22 +167,28 @@ describe('onDelta hasToolCalls preserves co-packaged reasoning', () => {
       }
       if (delta.reasoningText) {
         reasoningAccumulated += delta.reasoningText
-        snippets.push(appendReasoningTimeline(turnReasoningTimeline, reasoningAccumulated))
+        if (!streamingOpen) {
+          segments = beginReasoningSegment(segments, { round: 1 })
+          streamingOpen = true
+        }
+        segments = updateLastReasoningSegmentContent(segments, reasoningAccumulated)
+        snippets.push(joinReasoningSegments(segments))
       }
       if (stopTokenProgress || !delta.text) return
     }
 
     onDelta({ hasToolCalls: true, reasoningText: '先查行情' })
     onDelta({ reasoningText: '再决定工具' })
-    // 流末 flush
     if (reasoningAccumulated) {
-      snippets.push(appendReasoningTimeline(turnReasoningTimeline, reasoningAccumulated))
+      segments = updateLastReasoningSegmentContent(segments, reasoningAccumulated)
+      snippets.push(joinReasoningSegments(segments))
     }
 
     assert.equal(stopTokenProgress, true)
     assert.equal(reasoningAccumulated, '先查行情再决定工具')
     assert.equal(snippets[0], '先查行情')
     assert.equal(snippets.at(-1), '先查行情再决定工具')
+    assert.equal(segments.length, 1)
   })
 })
 
@@ -131,12 +205,17 @@ function withTempStore(fn) {
   })
 }
 
-test('display turn keeps multi-round timeline in reasoningContent', async () => {
+test('display turn persists segments and derived reasoningContent', async () => {
   await withTempStore(async () => {
     const store = new SessionStore()
     const record = store.create({ title: '整轮时间线' })
     const now = new Date().toISOString()
-    const timeline = appendReasoningTimeline('先查工具', '再给出结论')
+    const segments = appendReasoningSegment(
+      appendReasoningSegment([], '先查工具', { at: now, round: 1 }),
+      '再给出结论',
+      { at: now, round: 2 },
+    )
+    const timeline = joinReasoningSegments(segments)
     record.turns = [
       { role: 'user', content: '问', at: now },
       {
@@ -144,6 +223,7 @@ test('display turn keeps multi-round timeline in reasoningContent', async () => 
         content: '答',
         at: now,
         reasoningContent: timeline,
+        reasoningSegments: segments,
         toolSteps: [
           {
             id: 'c1',
@@ -151,7 +231,6 @@ test('display turn keeps multi-round timeline in reasoningContent', async () => 
             label: '搜索',
             status: 'done',
             startedAt: now,
-            // 无长 reasoning 副本
           },
         ],
       },
@@ -165,7 +244,6 @@ test('display turn keeps multi-round timeline in reasoningContent', async () => 
         reasoningContent: '先查工具',
       },
       { role: 'tool', tool_call_id: 'c1', name: 'search', content: '{}' },
-      // messages 终轮仅本轮 reasoning（wire）；turns 存整轮时间线
       { role: 'assistant', content: '答', reasoningContent: '再给出结论' },
     ]
     store.save(record)
@@ -173,12 +251,36 @@ test('display turn keeps multi-round timeline in reasoningContent', async () => 
     const loaded = store.get(record.id)
     assert.ok(loaded)
     assert.equal(loaded.turns[1].reasoningContent, timeline)
+    assert.equal(loaded.turns[1].reasoningSegments?.length, 2)
     const finalMsg = loaded.messages.filter(m => m.role === 'assistant' && !m.tool_calls).at(-1)
     assert.equal(finalMsg?.reasoningContent, '再给出结论')
     const display = store.toDisplayMessages(loaded)
     assert.equal(display[1].reasoningContent, timeline)
-    assert.match(display[1].reasoningContent ?? '', /先查工具/)
-    assert.match(display[1].reasoningContent ?? '', /再给出结论/)
+    assert.equal(display[1].reasoningSegments?.length, 2)
+    assert.equal(display[1].reasoningSegments?.[0]?.label, '第 1 段思路')
     assert.equal(display[1].toolSteps?.[0]?.thinking, undefined)
+  })
+})
+
+test('legacy string-only turn still resolves to segments in UI helper', async () => {
+  await withTempStore(async () => {
+    const store = new SessionStore()
+    const record = store.create({ title: '旧字符串' })
+    const now = new Date().toISOString()
+    const timeline = `仅字符串一段${REASONING_TIMELINE_SEP}仅字符串二段`
+    record.turns = [
+      { role: 'user', content: '问', at: now },
+      { role: 'assistant', content: '答', at: now, reasoningContent: timeline },
+    ]
+    record.messages = [
+      { role: 'user', content: '问' },
+      { role: 'assistant', content: '答', reasoningContent: '仅字符串二段' },
+    ]
+    store.save(record)
+    const display = store.toDisplayMessages(store.get(record.id))
+    assert.equal(display[1].reasoningSegments, undefined)
+    const resolved = resolveReasoningSegments(display[1].reasoningSegments, display[1].reasoningContent)
+    assert.equal(resolved.length, 2)
+    assert.equal(resolved[0].label, undefined)
   })
 })

@@ -1,4 +1,5 @@
 import type { TokenUsage } from './chat'
+import type { ReasoningSegment } from '../chat/reasoningTimeline'
 
 export type ChatToolStepStatus = 'running' | 'done' | 'error'
 
@@ -58,7 +59,13 @@ export interface ChatContextUsageSnapshot {
 }
 
 export type ChatProgressEvent =
-  | { type: 'thinking'; round: number; label: string; snippet?: string }
+  | {
+    type: 'thinking'
+    round: number
+    label: string
+    snippet?: string
+    segments?: ReasoningSegment[]
+  }
   | { type: 'tool_start'; step: ChatToolStep }
   | { type: 'tool_done'; step: ChatToolStep }
   | { type: 'user_prompt'; prompt: ChatUserPromptPayload }
@@ -90,6 +97,9 @@ export interface ChatLiveTrace {
   phaseLabel?: string
   /** 当前 LLM 轮次已消耗的估算 token */
   estimatedTokens?: number
+  /** 派生全文（兼容）；展示优先 thinkingSegments */
   thinkingSnippet?: string
+  /** 结构化思考分段（竖轴） */
+  thinkingSegments?: ReasoningSegment[]
   steps: ChatToolStep[]
 }

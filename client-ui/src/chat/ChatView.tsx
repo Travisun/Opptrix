@@ -982,6 +982,7 @@ function ChatView({
                     phaseLabel={liveTrace.phaseLabel}
                     estimatedTokens={liveTrace.estimatedTokens}
                     thinkingSnippet={liveTrace.thinkingSnippet}
+                    thinkingSegments={liveTrace.thinkingSegments}
                     live
                   />
                 </div>
