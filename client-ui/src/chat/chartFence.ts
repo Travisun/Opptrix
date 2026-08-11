@@ -9,6 +9,8 @@ export type ChartFenceDatum = {
   label: string
   value: number
   color?: string
+  /** 可选系列名；有任一 series 时 bar/line 按多序列渲染。 */
+  series?: string
   row?: string
   col?: string
 }
@@ -32,11 +34,11 @@ export type ChartFenceParseResult = ChartFenceParseOk | ChartFenceParseErr
 
 const CHART_TYPES = new Set<ChartFenceType>(['bar', 'line', 'pie', 'heatmap'])
 
-const MAX_DATA = 40
+const MAX_DATA = 60
 const MAX_LABEL = 80
 const MAX_TITLE = 200
 const HEIGHT_MIN = 80
-const HEIGHT_MAX = 320
+const HEIGHT_MAX = 360
 const HEIGHT_DEFAULT = 160
 
 /** 允许 #RGB / #RRGGBB / rgba(...)；拒绝 url() / expression / 其它注入。 */
@@ -123,6 +125,17 @@ function parseDatum(raw: unknown, index: number): ChartFenceDatum | ChartFencePa
       return { ok: false, reason: `第 ${index + 1} 项 col 过长` }
     }
     datum.col = col
+  }
+
+  if (raw.series !== undefined) {
+    if (typeof raw.series !== 'string') {
+      return { ok: false, reason: `第 ${index + 1} 项 series 须为文本` }
+    }
+    const series = raw.series.trim()
+    if (series.length > MAX_LABEL) {
+      return { ok: false, reason: `第 ${index + 1} 项 series 过长` }
+    }
+    if (series) datum.series = series
   }
 
   return datum
