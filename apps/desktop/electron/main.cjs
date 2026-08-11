@@ -1237,6 +1237,16 @@ function registerWindowIpc() {
     return dir
   })
 
+  ipcMain.handle('chat-debug-open-log-dir', async () => {
+    const dataRoot = String(process.env.OPPTRIX_DATA_DIR ?? '').trim()
+      || path.join(require('node:os').homedir(), '.opptrix')
+    const dir = path.join(dataRoot, 'logs', 'chat-debug')
+    await fs.mkdir(dir, { recursive: true })
+    const err = await shell.openPath(dir)
+    if (err) throw new Error(`无法打开目录：${err}`)
+    return dir
+  })
+
   /** 仅允许打开 resolveUserDataRoot()/agent-workspace 之下的目录 */
   ipcMain.handle('open-local-directory', async (_event, dirPath) => {
     const raw = String(dirPath ?? '').trim()

@@ -30,6 +30,7 @@ export * from './provider-priority-order.js'
 export * from './free-provider-throttle.js'
 export * from './mcp-servers.js'
 export * from './onboarding.js'
+export * from './chat-debug-settings.js'
 export {
   initOutboundNetwork,
   getOutboundNetworkStatus,

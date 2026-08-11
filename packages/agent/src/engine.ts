@@ -33,6 +33,12 @@ import {
 } from './mcp/tool-route-plan.js'
 import { buildSessionClockPlaybook, parseNamespacedMcpTool } from '@opptrix/shared'
 import {
+  logChatDebugAbort,
+  logChatDebugEmptyReply,
+  logChatDebugRoundEnd,
+  logChatDebugRoundStart,
+} from './chat-debug-log.js'
+import {
   applySessionLanAskChoice,
   getWorkspaceService,
 } from '@opptrix/agent-workspace'
@@ -1037,6 +1043,7 @@ export class AgentEngine {
     }
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
+      logChatDebugAbort(sessionId, { reason: 'cancelled' })
       this.userPromptBridge.cancelSession(sessionId)
       record!.messages = record!.messages.slice(0, messagesBeforeAssistant)
       if (record!.turns) {
@@ -1094,6 +1101,8 @@ export class AgentEngine {
         ?? activeModel?.replace(/^[^:]+:/, '')
         ?? 'default'
       const providerId = providerIdFromModelRef(activeModel)
+
+      logChatDebugRoundStart(sessionId, { round: round + 1, model: activeModel || modelId })
 
       let overflowRetried = false
       let lastRoundEstimatedTokens: number | undefined
@@ -1191,14 +1200,28 @@ export class AgentEngine {
         throwIfAborted(signal)
       }
 
+      const turnContentText = chatMessageContentToText(turn.message.content)
+      logChatDebugRoundEnd(sessionId, {
+        finishReason: turn.finishReason,
+        contentLen: turnContentText.length,
+        toolCallNames: turn.message.tool_calls?.map(tc => tc.function.name).filter(Boolean),
+        usage: turn.usage
+          ? {
+              promptTokens: turn.usage.promptTokens,
+              completionTokens: turn.usage.completionTokens,
+              totalTokens: turn.usage.totalTokens,
+            }
+          : undefined,
+      })
+
       if (turn.finishReason === 'error') {
         if (turn.error === 'cancelled' || signal?.aborted) {
           return finalizeCancelled(toolsUsed, toolSteps)
         }
-        const overflow = turn.contextOverflow || isContextOverflowError(turn.error, chatMessageContentToText(turn.message.content))
+        const overflow = turn.contextOverflow || isContextOverflowError(turn.error, turnContentText)
         const reply = overflow
           ? '对话内容过多，整理后仍无法继续。请新开对话，或换用更大上下文窗口的模型。'
-          : (chatMessageContentToText(turn.message.content) || turn.error || '请求失败')
+          : (turnContentText || turn.error || '请求失败')
         pushAssistant(reply, toolsUsed, toolSteps, chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined, chatUsage.estimated)
         emit({
           type: 'error',
@@ -1209,7 +1232,7 @@ export class AgentEngine {
       }
 
       if (turn.finishReason === 'tool_calls' && turn.message.tool_calls?.length) {
-        const thinkingSnippet = chatMessageContentToText(turn.message.content).trim()
+        const thinkingSnippet = turnContentText.trim()
         if (thinkingSnippet) {
           emit({
             type: 'thinking',
@@ -1223,7 +1246,7 @@ export class AgentEngine {
 
         record.messages.push({
           role: 'assistant',
-          content: chatMessageContentToText(turn.message.content) || null,
+          content: turnContentText || null,
           tool_calls: turn.message.tool_calls,
         })
         this.sessions.save(record)
@@ -1337,7 +1360,12 @@ export class AgentEngine {
         continue
       }
 
-      const reply = chatMessageContentToText(turn.message.content).trim() || '（无回复内容）'
+      const replyRaw = turnContentText.trim()
+      const isEmptyReply = !replyRaw || replyRaw === '（无回复内容）'
+      const reply = replyRaw || '（无回复内容）'
+      if (isEmptyReply) {
+        logChatDebugEmptyReply(sessionId, { round: round + 1 })
+      }
       const outputAttachments = turn.outputAttachments
       emit({
         type: 'reply',

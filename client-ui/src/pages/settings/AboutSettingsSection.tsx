@@ -12,7 +12,7 @@ import {
   WarningRegular,
 } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
-import { getHealth } from '../../api/client'
+import { getHealth, getUserPreference, setUserPreference } from '../../api/client'
 import { useAppUpdate } from '../../hooks/useAppUpdate'
 import { isElectron, type NotificationPermissionState } from '../../platform/detect'
 import { openExternalUrl } from '../../platform/openUrl'
@@ -36,6 +36,14 @@ import {
   SettingsGroup,
   SettingsRow,
 } from './SettingsPrimitives'
+
+/** 与 packages/shared chat-debug-settings 对齐；client-ui 不从 shared 主入口导入 */
+const CHAT_DEBUG_LOGGING_KEY = 'chat_debug_logging'
+
+function parseChatDebugEnabled(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  return (value as { enabled?: unknown }).enabled === true
+}
 
 const useStyles = makeStyles({
   root: {
@@ -170,6 +178,8 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
   const [versionLabel, setVersionLabel] = useState<string | null>(null)
   const [checkedOnce, setCheckedOnce] = useState(false)
   const [notifyPermission, setNotifyPermission] = useState<NotificationPermissionState | null>(null)
+  const [chatDebugEnabled, setChatDebugEnabled] = useState(false)
+  const [chatDebugLoading, setChatDebugLoading] = useState(true)
 
   useEffect(() => {
     if (isElectron()) {
@@ -184,6 +194,21 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
     void getHealth()
       .then(health => setVersionLabel(health.version ? `v${health.version}` : null))
       .catch(() => setVersionLabel(null))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void getUserPreference<{ enabled?: boolean }>(CHAT_DEBUG_LOGGING_KEY)
+      .then(resp => {
+        if (!cancelled) setChatDebugEnabled(parseChatDebugEnabled(resp.value))
+      })
+      .catch(() => {
+        if (!cancelled) setChatDebugEnabled(false)
+      })
+      .finally(() => {
+        if (!cancelled) setChatDebugLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
 
   const handleCheckUpdate = useCallback(() => {
@@ -203,6 +228,18 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
     void window.electronAPI?.notificationRequestPermission?.()
       .then(perm => setNotifyPermission(perm))
       .catch(() => {})
+  }, [])
+
+  const handleChatDebugChange = useCallback((_: unknown, data: { checked: boolean | 'mixed' }) => {
+    const next = Boolean(data.checked)
+    setChatDebugEnabled(next)
+    void setUserPreference(CHAT_DEBUG_LOGGING_KEY, { enabled: next }).catch(() => {
+      setChatDebugEnabled(!next)
+    })
+  }, [])
+
+  const handleOpenChatDebugDir = useCallback(() => {
+    void window.electronAPI?.chatDebugOpenLogDir?.().catch(() => {})
   }, [])
 
   const versionDesc = versionLabel ?? '读取版本中…'
@@ -359,6 +396,37 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
           </SettingsGroup>
         </div>
       )}
+
+      <div className={s.sectionBlock}>
+        <Text className={s.sectionLabel} block>对话调试日志</Text>
+        <SettingsGroup>
+          <SettingsRow
+            title="对话调试日志"
+            desc="开启后，将把对话过程写入本机日志，便于排查无回复或中断；默认关闭"
+            control={(
+              <Switch
+                checked={chatDebugEnabled}
+                disabled={chatDebugLoading}
+                onChange={handleChatDebugChange}
+                aria-label="对话调试日志"
+              />
+            )}
+            last={!isElectron()}
+          />
+          {isElectron() ? (
+            <SettingsRow
+              title="日志文件夹"
+              desc="在系统文件管理器中打开本机日志目录"
+              control={(
+                <OpptrixButton variant="secondary" onClick={handleOpenChatDebugDir}>
+                  打开日志文件夹
+                </OpptrixButton>
+              )}
+              last
+            />
+          ) : null}
+        </SettingsGroup>
+      </div>
 
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>法律与官网</Text>

@@ -254,6 +254,7 @@ opptrix://chat?session={encodeURIComponent(sessionId)}
 | `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick`；权限为 denied 时返回 `false` |
 | `window-is-focused` | `windowIsFocused()` | 主窗口是否 focused（注意力判断） |
 | `open-local-directory` | `openLocalDirectory(dirPath)` | 用系统文件管理器打开目录；路径须在 `resolveUserDataRoot()/agent-workspace` 之下，不存在则递归创建后再打开 |
+| `chat-debug-open-log-dir` | `chatDebugOpenLogDir()` | 打开（必要时先创建）`~/.opptrix/logs/chat-debug`；设置 → 关于「对话调试日志」写入按会话拆分的 JSONL |
 
 协议事件仍为 `opptrix-protocol`（`onProtocolOpen`），与通知点击深链共用。
 
