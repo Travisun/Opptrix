@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { desktopFrameTitlebarHeight } from '../desktop/layout'
 import { electronPlatform, isElectron } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
 import {
@@ -439,10 +440,13 @@ export function OnboardingShell({
   const s = useOnboardingShellStyles()
   const electronChrome = isElectron()
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
+  // Only when there is no primary WindowFrameTitleBar (darwin / Web keep current behavior).
+  const showOnboardingElectronTitleBar =
+    electronChrome && desktopFrameTitlebarHeight() === 0
   const isDisplay = layoutMode === 'display'
   const railClass = chromeRailClass(s, { isDisplay, contentWide })
 
-  const electronTitleBar = electronChrome ? (
+  const electronTitleBar = showOnboardingElectronTitleBar ? (
     <header
       className={mergeClasses(
         s.electronTitleBar,
