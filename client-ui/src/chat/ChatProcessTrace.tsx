@@ -579,7 +579,7 @@ interface ThinkingSnippetRowProps {
   active: boolean
 }
 
-/** 模型分析思路 — 进行中显示 Spinner，完成后可展开查看 */
+/** 思考过程 — 进行中显示动画，完成后可展开查看 */
 function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
   const s = useStyles()
   const [expanded, setExpanded] = useState(false)
@@ -603,8 +603,7 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
           className={mergeClasses(s.stepLabel, active && s.stepLabelRunning)}
           block
         >
-          模型分析思路
-          {active ? '…' : ''}
+          {active ? '正在梳理思路…' : '思考过程'}
         </Text>
       </button>
       {!active && expanded && (
@@ -638,19 +637,20 @@ export default function ChatProcessTrace({
 }: Props) {
   const s = useStyles()
   const scrollRef = useRef<HTMLDivElement>(null)
-  // History mode: steps collapse into a summary bar, expandable on click.
+  // History mode: steps / thinking collapse into a summary bar, expandable on click.
   const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [historySnippetExpanded, setHistorySnippetExpanded] = useState(false)
   const runningStep = live ? steps.find(st => st.status === 'running') : null
   const modelThinking = live && !runningStep
   const statusLabel = live
     ? (formatLiveThinkingStatus(phaseLabel, estimatedTokens, steps.length) ?? thinkingLabel)
     : thinkingLabel
   const phaseHint = phaseLabel ?? thinkingLabel ?? ''
-  const snippetActive = modelThinking && phaseHint.includes('思路')
+  const snippetActive = modelThinking && /思路|思考|梳理/.test(phaseHint)
   const hideStatusForSnippet = snippetActive && Boolean(thinkingSnippet)
   const showStatusHead = Boolean(statusLabel && (live || thinkingSnippet)) && !hideStatusForSnippet
   const showLiveSnippet = live && Boolean(thinkingSnippet)
-  const showHistorySnippet = Boolean(thinkingSnippet && !live)
+  const showHistorySnippet = Boolean(thinkingSnippet?.trim() && !live)
 
   // 实时执行时跟随最新步骤滚动到底部（步骤新增或内容/状态更新时）。
   const liveProgressKey = live
@@ -696,15 +696,33 @@ export default function ChatProcessTrace({
         <ThinkingSnippetRow snippet={thinkingSnippet} active={snippetActive} />
       )}
 
-      {showHistorySnippet && (
-        <details>
-          <summary style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary, cursor: 'pointer' }}>
-            查看分析思路
-          </summary>
-          <Text className={s.thinkingSnippet} block>
-            {thinkingSnippet}
-          </Text>
-        </details>
+      {showHistorySnippet && thinkingSnippet && (
+        <>
+          <button
+            type="button"
+            className={s.summaryBar}
+            onClick={() => setHistorySnippetExpanded(v => !v)}
+            aria-expanded={historySnippetExpanded}
+          >
+            <span className={s.summaryChevron} aria-hidden>
+              {historySnippetExpanded
+                ? <ChevronDownRegular fontSize={14} />
+                : <ChevronRightRegular fontSize={14} />}
+            </span>
+            <Text className={s.summaryLabel} block>
+              {historySnippetExpanded ? '思考过程' : '查看思考过程'}
+            </Text>
+          </button>
+          <div className={mergeClasses(s.collapse, historySnippetExpanded && s.collapseOpen)}>
+            <div className={s.collapseInner}>
+              <div className={s.stepBody}>
+                <Text className={mergeClasses(s.thinkingSnippet, 'opptrix-scroll')} block>
+                  {thinkingSnippet}
+                </Text>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {steps.length > 0 && (

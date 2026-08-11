@@ -1519,6 +1519,8 @@ export class AgentEngine {
       usage,
       usageEstimated,
       attachments: attachments?.length ? attachments : undefined,
+      // 终轮非空思考写入 turn，供历史气泡折叠展示
+      ...(reasoningContent ? { reasoningContent } : {}),
     })
     if (usage) {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)

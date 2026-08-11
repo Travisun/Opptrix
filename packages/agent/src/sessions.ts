@@ -98,6 +98,8 @@ export interface DisplayMessage {
   usage?: TokenUsage
   usageEstimated?: boolean
   attachments?: ChatAttachmentMeta[]
+  /** 终轮非空思考链（历史气泡可折叠展示） */
+  reasoningContent?: string
 }
 
 export interface SessionForkContextRef {
@@ -146,6 +148,8 @@ export interface SessionRecord extends SessionMeta {
     usage?: TokenUsage
     usageEstimated?: boolean
     attachments?: ChatAttachmentMeta[]
+    /** 终轮非空思考链；工具轮不写 */
+    reasoningContent?: string
   }[]
   contextRef?: SessionContextRef | null
   /**
@@ -186,21 +190,59 @@ function writeRecord(record: SessionRecord) {
   sessionPersistHook?.(record)
 }
 
+/** 终轮助手消息（无 tool_calls）的思考链，按 display 顺序 */
+function finalAssistantReasonings(messages: ChatMessage[]): Array<string | undefined> {
+  const out: Array<string | undefined> = []
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    if (m.tool_calls?.length) continue
+    const r = typeof m.reasoningContent === 'string' ? m.reasoningContent.trim() : ''
+    out.push(r || undefined)
+  }
+  return out
+}
+
 function migrateTurns(record: SessionRecord): SessionRecord {
   if (record.turns?.length) return record
 
   const turns: SessionRecord['turns'] = []
   for (const m of record.messages) {
     if ((m.role === 'user' || m.role === 'assistant') && m.content != null) {
+      const reasoning = m.role === 'assistant'
+        && typeof m.reasoningContent === 'string'
+        && m.reasoningContent.trim()
+        ? m.reasoningContent
+        : undefined
       turns.push({
         role: m.role,
         content: chatMessageContentToText(m.content),
         at: record.updatedAt,
+        ...(reasoning ? { reasoningContent: reasoning } : {}),
       })
     }
   }
   if (!turns.length) return record
 
+  record.turns = turns
+  writeRecord(record)
+  return record
+}
+
+/** 旧会话 turns 缺思考时，从同轮终助手 messages 回填并持久化 */
+function backfillTurnReasoning(record: SessionRecord): SessionRecord {
+  if (!record.turns?.length) return record
+  const fromMsgs = finalAssistantReasonings(record.messages)
+  let ai = 0
+  let changed = false
+  const turns = record.turns.map(t => {
+    if (t.role !== 'assistant') return t
+    const msgReasoning = fromMsgs[ai++]
+    if (t.reasoningContent?.trim()) return t
+    if (!msgReasoning) return t
+    changed = true
+    return { ...t, reasoningContent: msgReasoning }
+  })
+  if (!changed) return record
   record.turns = turns
   writeRecord(record)
   return record
@@ -219,7 +261,7 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     contextProjection: raw.contextProjection ?? null,
     llmParams,
   }
-  return migrateTurns(record)
+  return backfillTurnReasoning(migrateTurns(record))
 }
 
 function toMeta(raw: SessionRecord): SessionMeta {
@@ -435,15 +477,22 @@ export class SessionStore {
         usage: t.usage,
         usageEstimated: t.usageEstimated,
         attachments: t.attachments,
+        reasoningContent: t.reasoningContent,
       }))
     }
     const out: DisplayMessage[] = []
     for (const m of record.messages) {
       if ((m.role === 'user' || m.role === 'assistant') && m.content != null) {
+        const reasoning = m.role === 'assistant'
+          && typeof m.reasoningContent === 'string'
+          && m.reasoningContent.trim()
+          ? m.reasoningContent
+          : undefined
         out.push({
           role: m.role,
           content: chatMessageContentToText(m.content),
           at: record.updatedAt,
+          ...(reasoning ? { reasoningContent: reasoning } : {}),
         })
       }
     }

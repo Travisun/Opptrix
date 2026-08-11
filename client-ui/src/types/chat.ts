@@ -215,6 +215,8 @@ export interface ChatDisplayMessage {
   usage?: TokenUsage
   usageEstimated?: boolean
   attachments?: ChatAttachmentMeta[]
+  /** 终轮非空思考过程（历史气泡可折叠展示） */
+  reasoningContent?: string
 }
 
 export interface SessionForkContextRef {

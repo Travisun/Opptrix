@@ -436,12 +436,17 @@ function ChatMessageItem({
             || (message.attachments?.length ? '（附件）' : '')
           )
         ) : (
-          <MarkdownMessage content={message.content} sessionId={sessionId} />
-        )}
-        {message.toolSteps && message.toolSteps.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <ChatProcessTrace steps={message.toolSteps} />
-          </div>
+          <>
+            {(message.reasoningContent?.trim() || (message.toolSteps && message.toolSteps.length > 0)) && (
+              <div style={{ marginBottom: message.content ? 8 : 0 }}>
+                <ChatProcessTrace
+                  steps={message.toolSteps ?? []}
+                  thinkingSnippet={message.reasoningContent?.trim() || undefined}
+                />
+              </div>
+            )}
+            <MarkdownMessage content={message.content} sessionId={sessionId} />
+          </>
         )}
         {!message.toolSteps?.length && message.toolsUsed && message.toolsUsed.length > 0 && (
           <div className={s.toolTags}>
