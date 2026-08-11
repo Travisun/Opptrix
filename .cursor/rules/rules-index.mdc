@@ -16,6 +16,7 @@ alwaysApply: true
 | **需求澄清** | 重要修改前必须向用户提问确认需求 | `requirement-clarification.mdc` |
 | **UI 文案规范** | 所有用户可见文案必须为产品级高端风格，禁止技术描述 | `ui-copy-standard.mdc` |
 | **双远程同步** | push / merge 后 GitHub 与 Gitee 必须 tip 一致 | `dual-remote-sync.mdc` |
+| **功能完备性** | 新功能三维完备、兼容/安全、禁止半成品、交付前复审回炉 | `feature-completeness.mdc` |
 
 ## 场景规则（按 glob 自动挂载）
 
@@ -41,12 +42,13 @@ alwaysApply: true
 0. 需求澄清 → 向用户提问确认需求（requirement-clarification.mdc）
 1. 探索代码 → codegraph_explore → 定位符号与调用链
 2. 理解实现 → Read 具体文件
-3. 设计方案 → 选择方案、评估影响
-4. 用户确认 → 展示方案、确认影响
-5. 实现代码 → 最小 diff 改动
-6. 验证正确性 → 运行检查
-7. 文档同步 → 更新对应文档（doc-sync.mdc）
-8. 提交代码 → commit + PR
+3. 设计方案 → 技术/用户/产品三维 + 兼容安全 + 外部参照（feature-completeness.mdc）
+4. 用户确认 → 方向与取舍确认（影响不可逆时必问）
+5. 实现代码 → 完整路径，禁止半成品
+6. 验证正确性 → 门禁 + 测试
+7. 交付前复审 → 按 feature-completeness 回炉直至达标
+8. 文档同步 → 更新对应文档（doc-sync.mdc）
+9. 提交代码 → commit + PR
 ```
 
 ### 探索再改
@@ -89,6 +91,7 @@ alwaysApply: true
 - [ ] 测试通过
 - [ ] 文档已更新（如适用）
 - [ ] 架构/调用方式变更已同步文档（doc-sync.mdc）
+- [ ] 新功能已按 `feature-completeness.mdc` 复审（非半成品；三维完备；兼容/安全）
 
 ### client-ui 改动后
 
@@ -131,6 +134,7 @@ alwaysApply: true
 | **需求澄清** | `.cursor/rules/requirement-clarification.mdc` |
 | **UI 文案** | `.cursor/rules/ui-copy-standard.mdc` |
 | **双远程同步** | `.cursor/rules/dual-remote-sync.mdc` |
+| **功能完备性** | `.cursor/rules/feature-completeness.mdc` |
 | CodeGraph | `.cursor/rules/codegraph.mdc` |
 | 兼容 | `.cursor/rules/backward-compatibility.mdc` |
 | Schema | `.cursor/rules/schema-migration.mdc` |
