@@ -2526,6 +2526,10 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
   }
 }
 
+.opptrix-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 60, 67, 0.12) transparent;
+}
 .opptrix-scroll::-webkit-scrollbar {
   width: 5px;
 }
