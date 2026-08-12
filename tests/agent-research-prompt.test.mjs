@@ -98,7 +98,7 @@ test('epistemic playbook treats inline chart as default data expression', () => 
   assert.match(text, /@opptrix\/canvas/)
   assert.match(text, /默认数据表达|无需询问|无需 activate artifacts/)
   assert.match(text, /勿为插图去 ask_user|禁止误当成 create_canvas/)
-  assert.match(text, /禁止.*matplotlib|禁止旁路|禁止用 shell_run/)
+  assert.match(text, /禁止.*matplotlib|禁止旁路|禁止用 opptrix_run/)
   assert.match(text, /matplotlib|seaborn|plotly/)
   assert.ok(!text.includes('仅文字答复'))
 })
@@ -253,7 +253,7 @@ test('workspace playbook requires get_system_info and network egress policy', ()
 
   const rules = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'workspace'],
-    activeToolNames: ['shell_run', 'http_fetch', 'get_system_info'],
+    activeToolNames: ['opptrix_run', 'http_fetch', 'get_system_info'],
     researchTier: 'L1',
   })
   assert.match(rules, /get_system_info/)
@@ -270,7 +270,7 @@ test('workspace playbook requires get_system_info and network egress policy', ()
     researchTier: 'L1',
   })
   assert.match(noShell, /activate_tool_pack\(\['workspace'\]\)/)
-  assert.match(noShell, /shell_run|ensure_python|workspace_/)
+  assert.match(noShell, /opptrix_run|shell_run|ensure_python|workspace_/)
   assert.ok(!noShell.includes('说明当前无法完成'))
 })
 
@@ -305,7 +305,7 @@ test('system rules include local programming playbook and catalog index', () => 
   const rules = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'workspace'],
     researchTier: 'L2',
-    activeToolNames: ['shell_run', 'list_local_data_apis', 'prepare_fuyao_dump'],
+    activeToolNames: ['opptrix_run', 'list_local_data_apis', 'prepare_fuyao_dump'],
   })
   assert.match(rules, /本地编程协议/)
   assert.match(rules, /本地数据目录/)

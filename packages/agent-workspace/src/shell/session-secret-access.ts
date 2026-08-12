@@ -1,6 +1,6 @@
 /**
  * 会话级密钥授权 — 内存 allowlist；clearSession 清理。
- * 保险箱条目用户级持久化；本对话须显式 grant 后才可用于 shell_run.secret_refs。
+ * 保险箱条目用户级持久化；本对话须显式 grant 后才可用于 opptrix_run.secret_refs。
  */
 export class SessionSecretAccessStore {
   private readonly sessions = new Map<string, Set<string>>()

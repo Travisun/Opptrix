@@ -208,21 +208,21 @@ test('unattended helpers strip ask_user / request_secret and never hang', async 
 
   assert.equal(isUnattendedBlockedTool('ask_user'), true)
   assert.equal(isUnattendedBlockedTool('request_secret'), true)
-  assert.equal(isUnattendedBlockedTool('shell_run'), false)
+  assert.equal(isUnattendedBlockedTool('opptrix_run'), false)
 
   assert.deepEqual(
-    filterToolNamesForUnattended(['ask_user', 'shell_run', 'request_secret', 'search_instruments']),
-    ['shell_run', 'search_instruments'],
+    filterToolNamesForUnattended(['ask_user', 'opptrix_run', 'request_secret', 'search_instruments']),
+    ['opptrix_run', 'search_instruments'],
   )
 
   const tools = [
     { type: 'function', function: { name: 'ask_user', description: '', parameters: { type: 'object', properties: {} } } },
-    { type: 'function', function: { name: 'shell_run', description: '', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'opptrix_run', description: '', parameters: { type: 'object', properties: {} } } },
     { type: 'function', function: { name: 'request_secret', description: '', parameters: { type: 'object', properties: {} } } },
   ]
   assert.deepEqual(
     filterOpenAiToolsForUnattended(tools).map(t => t.function.name),
-    ['shell_run'],
+    ['opptrix_run'],
   )
 
   assert.equal(UNATTENDED_ASK_USER_RESULT.ok, false)
