@@ -1,0 +1,33 @@
+/**
+ * Bundled open-source fonts for Opptrix (cross-platform; no OS-specific stacks).
+ *
+ * - Noto Sans SC: default CJK sans (清晰黑体)
+ * - Inter: modern Latin sans (stacks with Noto for CJK)
+ * - Source Han Sans SC: alias of the same Noto files (见 source-han-alias.css)
+ * - JetBrains Mono: shared monospace
+ *
+ * Licenses: SIL Open Font License 1.1 — see public/fonts/LICENSE
+ */
+
+/* Noto Sans SC — full unicode-range shards for 400/500/700 */
+@import '@fontsource/noto-sans-sc/400.css';
+@import '@fontsource/noto-sans-sc/500.css';
+@import '@fontsource/noto-sans-sc/700.css';
+
+/* Inter Latin (+ext) for modern sans preset */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/700.css';
+
+/* JetBrains Mono — shared mono across all presets */
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+
+/* Source Han Sans SC → same Noto Sans SC files (no duplicate download when cached) */
+@import './source-han-alias.css';
+
+:root {
+  --opptrix-font-sans: 'Noto Sans SC', sans-serif;
+  --opptrix-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

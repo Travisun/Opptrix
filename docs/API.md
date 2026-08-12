@@ -304,7 +304,7 @@ POST /api/research
 
 ### 沙盒环境设置
 
-命令隔离（`shell_run` / `shell_install`）的**永久出站白名单**、局域网策略，以及 Windows **隔离强度**（`windows_isolation_mode`：`elevated` 完整隔离 / `unelevated` 基础隔离，默认 `elevated`）。持久化于用户 SQLite：`preference` / `sandbox_settings`。运行时与部署环境变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）**并集**合并；命中合并白名单的目标免弹出站确认（仍受 SSRF / LAN 策略约束）。设置页入口：**设置 → 沙盒环境**。
+命令隔离（`shell_run` / `shell_install`）的**永久出站白名单**、局域网策略，以及 Windows **隔离强度**（`windows_isolation_mode`：`elevated` 完整隔离 / `unelevated` 基础隔离，默认 `unelevated`）。持久化于用户 SQLite：`preference` / `sandbox_settings`。运行时与部署环境变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）**并集**合并；命中合并白名单的目标免弹出站确认（仍受 SSRF / LAN 策略约束）。设置页入口：**设置 → 沙盒环境**。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -319,7 +319,7 @@ POST /api/research
   "settings": {
     "allowed_domains": ["example.com", "*.example.com"],
     "allow_lan_access": false,
-    "windows_isolation_mode": "elevated"
+    "windows_isolation_mode": "unelevated"
   }
 }
 ```
@@ -338,17 +338,17 @@ POST /api/research
     "needs_linux_install": true,
     "can_auto_install": true,
     "needs_elevation": true,
-    "windows_isolation_mode": "elevated",
-    "network_isolation_level": "full"
+    "windows_isolation_mode": "unelevated",
+    "network_isolation_level": "basic"
   }
 }
 ```
 
-> 注：旧客户端缺 `windows_isolation_mode` 时服务端 normalize 为 `elevated`（默认完整隔离）。`network_isolation_level` 为用户向字段：`full` / `basic` / `none`。
+> 注：缺 `windows_isolation_mode` 或非法值时服务端 normalize 为 `unelevated`（产品默认基础隔离）；已显式保存为 `elevated` 的配置保持不变。`network_isolation_level` 为用户向字段：`full` / `basic` / `none`。
 >
 > **Windows 两种模式（与 Codex 对齐）**：
-> - `elevated`（完整隔离，默认）：走系统级沙箱运行时（架构：SRT / `srt-win` + 网络过滤器）。首次可能需一次系统授权；凭据失效（错误 **1326 / 1312**）时最多自动刷新再执行一次。
-> - `unelevated`（基础隔离）：RestrictedToken 降权启动；**不**初始化 SRT/WFP、不要求隔离凭据。网络限制更弱（出站靠确认/白名单）；若请求与 elevated 同等的完整网络隔离则硬拒绝。
+> - `unelevated`（基础隔离，默认）：RestrictedToken 降权启动；**不**初始化 SRT/WFP、不要求隔离凭据。网络限制更弱（出站靠确认/白名单）；若请求与 elevated 同等的完整网络隔离则硬拒绝。
+> - `elevated`（完整隔离）：走系统级沙箱运行时（架构：SRT / `srt-win` + 网络过滤器）。首次可能需一次系统授权；凭据失效（错误 **1326 / 1312**）时最多自动刷新再执行一次。
 
 **`status` 字段**
 
@@ -377,7 +377,7 @@ POST /api/research
 |------|------|------|
 | `allowed_domains` | string[] | 域名或 IP 列表；支持 `*.example.com` 通配 |
 | `allow_lan_access` | boolean | 默认 `false`；为 `false` 时拒绝保存 localhost / 私网条目 |
-| `windows_isolation_mode` | string | 可选；`elevated` \| `unelevated`；缺省/非法值 normalize 为 `elevated`；非 Windows 仍可持久化，运行时忽略 |
+| `windows_isolation_mode` | string | 可选；`elevated` \| `unelevated`；缺省/非法值 normalize 为 `unelevated`；非 Windows 仍可持久化，运行时忽略 |
 
 **PUT 成功**：`{ "settings": { allowed_domains, allow_lan_access, windows_isolation_mode } }`（域名去重、小写、去尾点）
 
@@ -1045,7 +1045,7 @@ Content-Type: application/json
 
 工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` / `resolve_workspace_path_uri` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；多数**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants / file 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区，Agent **勿**用 `market sync` / `dailyDump` 作主路径。
 
-**Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`shell_run` / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。Windows 读取 `windows_isolation_mode`（默认 `elevated` 完整隔离；`unelevated` 基础隔离，网络限制更弱，见上文「沙盒环境设置」）。完整隔离下凭据失效（1326/1312）最多自动刷新再执行一次。首次 `shell_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "shell_run"`，选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，隔离运行时出站回调（架构：SRT `sandboxAskCallback`）触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 完整隔离一次系统授权、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
+**Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`shell_run` / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。Windows 读取 `windows_isolation_mode`（默认 `unelevated` 基础隔离；`elevated` 完整隔离，网络围栏更强，见上文「沙盒环境设置」）。完整隔离下凭据失效（1326/1312）最多自动刷新再执行一次。首次 `shell_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "shell_run"`，选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，隔离运行时出站回调（架构：SRT `sandboxAskCallback`）触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 完整隔离一次系统授权、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
 
 ### Workspace grants（会话文件夹授权）
 

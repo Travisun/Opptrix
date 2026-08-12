@@ -44,7 +44,7 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-lg)',
     color: opptrixCssVars.accent,
     lineHeight: 1.45,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
   },
   meta: {
     marginTop: '10px',

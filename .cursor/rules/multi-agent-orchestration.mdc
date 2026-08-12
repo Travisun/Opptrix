@@ -206,6 +206,7 @@ Main Agent **必须**清理：
 | `review-audit.mdc` | 审计清单 |
 | `post-edit-verification.mdc` | Verifier 跑 check:ui / build |
 | `doc-sync.mdc` | Documenter 或 Implementer AC 含文档 |
+| `cross-platform-compat.mdc` | 路径/原生/沙盒改动时 Verifier AC 含三平台自检 |
 
 ## 反模式（禁止）
 

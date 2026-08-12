@@ -1,6 +1,7 @@
 import { ColorType } from 'lightweight-charts'
 import type { ColorScheme } from '../theme/tokens'
 import { getOpptrixTokens } from '../theme/tokens'
+import { resolveSansFontFamily } from '../theme/fontFamily'
 
 export const MARKET_UP = '#FF3B30'
 export const MARKET_DOWN = '#34C759'
@@ -11,7 +12,7 @@ export function getChartLayout(scheme: ColorScheme) {
     background: { type: ColorType.Solid, color: t.canvas },
     textColor: t.textTertiary,
     fontSize: 10,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: resolveSansFontFamily(),
     attributionLogo: false,
   }
 }

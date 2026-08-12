@@ -17,6 +17,7 @@ alwaysApply: true
 | **UI 文案规范** | 所有用户可见文案必须为产品级高端风格，禁止技术描述 | `ui-copy-standard.mdc` |
 | **双远程同步** | push / merge 后 GitHub 与 Gitee 必须 tip 一致 | `dual-remote-sync.mdc` |
 | **功能完备性** | 新功能三维完备、兼容/安全、禁止半成品、交付前复审回炉 | `feature-completeness.mdc` |
+| **多平台兼容** | macOS / Linux / Windows 均可运行或明确降级；禁止本机单一依赖定制 | `cross-platform-compat.mdc` |
 
 ## 场景规则（按 glob 自动挂载）
 
@@ -92,6 +93,7 @@ alwaysApply: true
 - [ ] 文档已更新（如适用）
 - [ ] 架构/调用方式变更已同步文档（doc-sync.mdc）
 - [ ] 新功能已按 `feature-completeness.mdc` 复审（非半成品；三维完备；兼容/安全）
+- [ ] 涉及路径/原生/沙盒/shell/打包时已按 `cross-platform-compat.mdc` 自检三平台（或明确 skip/降级）
 
 ### client-ui 改动后
 
@@ -135,6 +137,7 @@ alwaysApply: true
 | **UI 文案** | `.cursor/rules/ui-copy-standard.mdc` |
 | **双远程同步** | `.cursor/rules/dual-remote-sync.mdc` |
 | **功能完备性** | `.cursor/rules/feature-completeness.mdc` |
+| **多平台兼容** | `.cursor/rules/cross-platform-compat.mdc` |
 | CodeGraph | `.cursor/rules/codegraph.mdc` |
 | 兼容 | `.cursor/rules/backward-compatibility.mdc` |
 | Schema | `.cursor/rules/schema-migration.mdc` |

@@ -32,7 +32,7 @@ import {
 import { electronPlatform } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
 
-const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+const MONO_FONT = 'var(--opptrix-font-mono)'
 
 const useStyles = makeStyles({
   root: {

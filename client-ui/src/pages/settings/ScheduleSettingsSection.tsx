@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import {
-  CalendarClockRegular,
-  CheckmarkCircleRegular,
-  DismissCircleRegular,
-} from '@fluentui/react-icons'
+import { Spinner, Switch, Text, makeStyles } from '@fluentui/react-components'
+import { CalendarClockRegular } from '@fluentui/react-icons'
 import {
   scheduleApi,
-  type ScheduleJobSummary,
-  type ScheduleOsHealth,
   type ScheduleSettings,
   type ScheduledJob,
 } from '../../api/client'
@@ -36,24 +30,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-  },
-  statusBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textSecondary,
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-  },
-  statusReady: {
-    color: opptrixCssVars.success,
-  },
-  statusWarn: {
-    color: opptrixCssVars.warning,
-  },
-  statusError: {
-    color: opptrixCssVars.error,
   },
   emptyHint: {
     fontSize: 'var(--opptrix-font-md)',
@@ -94,58 +70,21 @@ function lastStatusLabel(status: string | null): string {
   }
 }
 
-function scheduleHealthBadge(os: ScheduleOsHealth | null, s: ReturnType<typeof useStyles>) {
-  if (!os) return null
-  switch (os.status) {
-    case 'error':
-      return (
-        <span className={mergeClasses(s.statusBadge, s.statusError)}>
-          <DismissCircleRegular fontSize={14} />
-          需关注
-        </span>
-      )
-    case 'pending':
-      return (
-        <span className={mergeClasses(s.statusBadge, s.statusWarn)}>
-          同步中
-        </span>
-      )
-    case 'synced':
-      return (
-        <span className={mergeClasses(s.statusBadge, s.statusReady)}>
-          <CheckmarkCircleRegular fontSize={14} />
-          就绪
-        </span>
-      )
-    default:
-      return (
-        <span className={s.statusBadge}>
-          托盘内执行
-        </span>
-      )
-  }
-}
-
 export default function ScheduleSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState<ScheduleSettings | null>(null)
   const [jobs, setJobs] = useState<ScheduledJob[]>([])
-  const [os, setOs] = useState<ScheduleOsHealth | null>(null)
-  const [summary, setSummary] = useState<ScheduleJobSummary | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [settingsResp, statusResp, jobsResp] = await Promise.all([
+      const [settingsResp, jobsResp] = await Promise.all([
         scheduleApi.getSettings(),
-        scheduleApi.getStatus(),
         scheduleApi.listJobs(),
       ])
       setSettings(settingsResp.settings)
-      setOs(statusResp.os)
-      setSummary(statusResp.jobs)
       setJobs(jobsResp.jobs)
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '暂时无法加载计划任务')
@@ -160,7 +99,6 @@ export default function ScheduleSettingsSection() {
     try {
       const resp = await scheduleApi.patchSettings(patch)
       setSettings(resp.settings)
-      if (resp.os) setOs(resp.os)
       const needsReconcile = (
         patch.master_enabled !== undefined
         || patch.autostart !== undefined
@@ -168,7 +106,7 @@ export default function ScheduleSettingsSection() {
       if (needsReconcile) {
         void window.electronAPI?.scheduleOsReconcile?.().catch(() => {})
       }
-      toast.showSuccess('已保存')
+      toast.showSuccess('设置已保存')
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '保存失败，请稍后重试')
     }
@@ -205,27 +143,27 @@ export default function ScheduleSettingsSection() {
   return (
     <div className={s.root}>
       <div className={s.sectionBlock}>
-        <SettingsSectionLabel>总开关</SettingsSectionLabel>
+        <SettingsSectionLabel>执行</SettingsSectionLabel>
         <SettingsGroup>
           <SettingsRow
-            title="计划任务"
-            desc="关闭后所有任务都不会自动执行。最小化到托盘时仍会按计划执行；从托盘完全退出后不会执行"
+            title="启用计划任务"
+            desc="关闭后，任务不会自动执行"
             control={(
               <Switch
                 checked={settings.master_enabled}
                 onChange={(_, data) => { void patchSettings({ master_enabled: Boolean(data.checked) }) }}
-                aria-label="计划任务总开关"
+                aria-label="启用计划任务"
               />
             )}
           />
           <SettingsRow
-            title="允许运行脚本"
-            desc="开启后，计划任务可执行受控脚本（默认仅智能体提示词）"
+            title="允许任务运行受控脚本"
+            desc="默认只跑智能体任务；开启后才可执行脚本类任务"
             control={(
               <Switch
                 checked={settings.allow_shell_scripts}
                 onChange={(_, data) => { void patchSettings({ allow_shell_scripts: Boolean(data.checked) }) }}
-                aria-label="允许运行脚本"
+                aria-label="允许任务运行受控脚本"
               />
             )}
             last
@@ -234,11 +172,11 @@ export default function ScheduleSettingsSection() {
       </div>
 
       <div className={s.sectionBlock}>
-        <SettingsSectionLabel>后台常驻</SettingsSectionLabel>
+        <SettingsSectionLabel>开机启动</SettingsSectionLabel>
         <SettingsGroup>
           <SettingsRow
             title="登录时在托盘启动"
-            desc="开机后静默进入托盘，便于计划任务在后台继续执行；完全退出应用后仍不会执行"
+            desc="开机后在托盘运行，便于按时执行任务"
             control={(
               <Switch
                 checked={settings.autostart}
@@ -250,19 +188,6 @@ export default function ScheduleSettingsSection() {
             last
           />
         </SettingsGroup>
-      </div>
-
-      <div className={s.sectionBlock}>
-        <SettingsSectionLabel>运行说明</SettingsSectionLabel>
-        <SettingsListPanel>
-          <SettingsListRow
-            title={os?.message ?? '应用运行或驻留托盘时按计划执行'}
-            meta={summary
-              ? `共 ${summary.total} 个任务，${summary.enabled} 个启用`
-              : '暂无任务摘要'}
-            trailing={scheduleHealthBadge(os, s)}
-          />
-        </SettingsListPanel>
       </div>
 
       <div className={s.sectionBlock}>

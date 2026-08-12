@@ -209,7 +209,7 @@ const useStyles = makeStyles({
   },
   modelPopoverItem: {
     fontSize: 'var(--opptrix-font-base)',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
   },
@@ -246,7 +246,7 @@ const useStyles = makeStyles({
   credentialInput: {
     flex: '1 1 0',
     minWidth: 0,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     fontSize: 'var(--opptrix-font-md)',
     paddingLeft: '10px',
   },

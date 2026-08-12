@@ -814,7 +814,7 @@ export default function ProviderWizard({
                         checked={selected.has(model)}
                         onChange={() => toggleModel(model)}
                       />
-                      <Text style={{ fontSize: 'var(--opptrix-font-base)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: 1.4 }}>
+                      <Text style={{ fontSize: 'var(--opptrix-font-base)', fontFamily: 'var(--opptrix-font-mono)', lineHeight: 1.4 }}>
                         {model}
                       </Text>
                     </label>

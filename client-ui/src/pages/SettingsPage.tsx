@@ -39,11 +39,16 @@ import {
   type FontScaleName,
 } from '../theme/fontScale'
 import {
+  applyFontFamily, readFontFamilyPreference, writeFontFamilyPreference,
+  type FontFamilyPreset,
+} from '../theme/fontFamily'
+import {
   playChatCueSound,
   readChatSoundPreference,
   writeChatSoundPreference,
 } from '../platform/chatSound'
 import FontScalePreferencePicker from './settings/FontScalePreferencePicker'
+import FontFamilyPreferencePicker from './settings/FontFamilyPreferencePicker'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
@@ -364,6 +369,12 @@ function SettingsPageView({
     applyFontScale(name)
     setFontScaleState(name)
   }, [])
+  const [fontFamily, setFontFamilyState] = useState<FontFamilyPreset>(() => readFontFamilyPreference())
+  const setFontFamily = useCallback((preset: FontFamilyPreset) => {
+    writeFontFamilyPreference(preset)
+    applyFontFamily(preset)
+    setFontFamilyState(preset)
+  }, [])
   const [chatSoundEnabled, setChatSoundEnabled] = useState(() => readChatSoundPreference())
   const setChatSound = useCallback((enabled: boolean) => {
     writeChatSoundPreference(enabled)
@@ -585,6 +596,16 @@ function SettingsPageView({
                     <ThemePreferencePicker
                       value={themePreference}
                       onChange={setThemePreference}
+                    />
+                  )}
+                />
+                <SettingsRow
+                  title="界面字体"
+                  desc="全应用统一使用所选字体，含对话与报告"
+                  control={(
+                    <FontFamilyPreferencePicker
+                      value={fontFamily}
+                      onChange={setFontFamily}
                     />
                   )}
                 />

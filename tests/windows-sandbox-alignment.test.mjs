@@ -26,22 +26,22 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-test('normalizeWindowsIsolationMode defaults unknown to elevated', () => {
-  assert.equal(normalizeWindowsIsolationMode(undefined), 'elevated')
-  assert.equal(normalizeWindowsIsolationMode(null), 'elevated')
-  assert.equal(normalizeWindowsIsolationMode('bogus'), 'elevated')
+test('normalizeWindowsIsolationMode defaults unknown to unelevated', () => {
+  assert.equal(normalizeWindowsIsolationMode(undefined), 'unelevated')
+  assert.equal(normalizeWindowsIsolationMode(null), 'unelevated')
+  assert.equal(normalizeWindowsIsolationMode('bogus'), 'unelevated')
   assert.equal(normalizeWindowsIsolationMode('unelevated'), 'unelevated')
   assert.equal(normalizeWindowsIsolationMode('elevated'), 'elevated')
 })
 
-test('normalizeSandboxSettings defaults windows_isolation_mode to elevated', () => {
+test('normalizeSandboxSettings defaults windows_isolation_mode to unelevated', () => {
   const n = normalizeSandboxSettings({
     allowed_domains: ['example.com'],
     allow_lan_access: true,
   })
-  assert.equal(n.windows_isolation_mode, 'elevated')
+  assert.equal(n.windows_isolation_mode, 'unelevated')
   assert.deepEqual(n.allowed_domains, ['example.com'])
-  assert.equal(DEFAULT_SANDBOX_SETTINGS.windows_isolation_mode, 'elevated')
+  assert.equal(DEFAULT_SANDBOX_SETTINGS.windows_isolation_mode, 'unelevated')
 })
 
 test('normalizeSandboxSettings keeps unelevated', () => {
@@ -51,6 +51,15 @@ test('normalizeSandboxSettings keeps unelevated', () => {
     windows_isolation_mode: 'unelevated',
   })
   assert.equal(n.windows_isolation_mode, 'unelevated')
+})
+
+test('normalizeSandboxSettings keeps elevated when explicitly saved', () => {
+  const n = normalizeSandboxSettings({
+    allowed_domains: [],
+    allow_lan_access: false,
+    windows_isolation_mode: 'elevated',
+  })
+  assert.equal(n.windows_isolation_mode, 'elevated')
 })
 
 test('validateSandboxSettingsInput accepts isolation modes', () => {
@@ -185,6 +194,12 @@ test('windows_isolation_mode persists via sandbox settings store', async () => {
     resetSandboxSettingsStoreForTests()
     if (prev == null) delete process.env.OPPTRIX_DATA_DIR
     else process.env.OPPTRIX_DATA_DIR = prev
-    await fs.rm(tmp, { recursive: true, force: true })
+    try {
+      await fs.rm(tmp, { recursive: true, force: true })
+    } catch (err) {
+      // 单例 store 仍占着 SQLite WAL；不影响断言结果
+      const code = err && typeof err === 'object' && 'code' in err ? err.code : ''
+      if (code !== 'EBUSY') throw err
+    }
   }
 })

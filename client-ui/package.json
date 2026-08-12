@@ -18,6 +18,7 @@
   "scripts": {
     "dev": "vite",
     "dev:clean": "node -e \"require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})\" && vite --force",
+    "prebuild": "node ../scripts/prepare-ui-fonts.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -26,6 +27,9 @@
     "@codemirror/lint": "^6.9.7",
     "@fluentui/react-components": "^9.59.0",
     "@fluentui/react-icons": "^2.0.274",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/noto-sans-sc": "^5.3.0",
     "@opptrix/canvas": "*",
     "@uiw/react-codemirror": "^4.25.11",
     "html-to-image": "^1.11.13",

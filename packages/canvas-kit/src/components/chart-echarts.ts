@@ -292,6 +292,7 @@ function axisCommon(
       show: showAxis,
       color: tokens.textSecondary,
       fontSize: 10,
+      fontFamily: tokens.fontSans,
       hideOverlap: true,
       interval: 'auto' as const,
       rotate: dense ? 35 : 0,
@@ -310,7 +311,7 @@ function tooltipBase(tokens: CanvasSemanticTokens, showTooltip: boolean) {
     backgroundColor: tokens.surfaceElevated,
     borderColor: tokens.border,
     borderWidth: 1,
-    textStyle: { color: tokens.text, fontSize: 12 },
+    textStyle: { color: tokens.text, fontSize: 12, fontFamily: tokens.fontSans },
   }
 }
 
@@ -322,6 +323,7 @@ function valueLabel(
   position: 'top'
   color: string
   fontSize: number
+  fontFamily: string
   formatter: (p: unknown) => string
 } {
   return {
@@ -329,6 +331,7 @@ function valueLabel(
     position: 'top',
     color: tokens.textSecondary,
     fontSize: 10,
+    fontFamily: tokens.fontSans,
     formatter: (p: unknown) => formatValue(paramValue(asRecord(p).value)),
   }
 }
@@ -599,7 +602,7 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
       itemWidth: 8,
       itemHeight: 64,
       text: ['高', '低'],
-      textStyle: { color: tokens.textSecondary, fontSize: 10 },
+      textStyle: { color: tokens.textSecondary, fontSize: 10, fontFamily: tokens.fontSans },
       inRange: { color: [heatLow, heatHigh] },
       outOfRange: { color: [tokens.fillMuted] },
     },
@@ -611,6 +614,7 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
           show: effectiveShowValues,
           color: tokens.text,
           fontSize: 9,
+          fontFamily: tokens.fontSans,
           formatter: (p: unknown) => formatValue(paramValue(asRecord(p).value)),
         },
         itemStyle: {
@@ -631,15 +635,24 @@ function buildHeatmap(input: ChartOptionInput): EChartsOption {
 }
 
 export function buildChartOption(input: ChartOptionInput): EChartsOption {
-  switch (input.type) {
-    case 'line':
-      return buildCartesian(input, 'line')
-    case 'pie':
-      return buildPie(input)
-    case 'heatmap':
-      return buildHeatmap(input)
-    case 'bar':
-    default:
-      return buildCartesian(input, 'bar')
+  const option = (() => {
+    switch (input.type) {
+      case 'line':
+        return buildCartesian(input, 'line')
+      case 'pie':
+        return buildPie(input)
+      case 'heatmap':
+        return buildHeatmap(input)
+      case 'bar':
+      default:
+        return buildCartesian(input, 'bar')
+    }
+  })()
+  return {
+    ...option,
+    textStyle: {
+      ...(typeof option.textStyle === 'object' && option.textStyle ? option.textStyle : {}),
+      fontFamily: input.tokens.fontSans,
+    },
   }
 }

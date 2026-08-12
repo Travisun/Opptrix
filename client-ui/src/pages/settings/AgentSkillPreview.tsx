@@ -110,11 +110,11 @@ const useStyles = makeStyles({
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     color: opptrixCssVars.textSecondary,
-    fontFamily: 'var(--opptrix-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+    fontFamily: 'var(--opptrix-font-mono)',
   },
   mdCode: {
     fontSize: '0.92em',
-    fontFamily: 'var(--opptrix-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+    fontFamily: 'var(--opptrix-font-mono)',
     color: opptrixCssVars.textSecondary,
   },
   mdBlockquote: {

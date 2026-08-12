@@ -33,7 +33,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'mcp_servers', title: 'MCP 服务', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具', 'MCP 服务器'] },
   { section: 'agent_skills', title: '工作流技能', desc: '导入与管理投研流程说明', keywords: ['技能', '工作流', '早报', '财报', '流程', 'skill'] },
   { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
-  { section: 'schedule', title: '计划任务', desc: '管理定时智能体任务与受控脚本', keywords: ['定时', '自动执行', 'cron'] },
+  { section: 'schedule', title: '计划任务', desc: '管理定时任务与开机启动', keywords: ['定时', '自动执行', '开机启动'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
   { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
@@ -49,6 +49,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // 常规
   { section: 'general', group: '外观', title: '主题', desc: '浅色深色跟随系统', keywords: ['theme', 'dark', 'light', '暗黑', '深色', '浅色', '外观'] },
+  { section: 'general', group: '外观', title: '界面字体', desc: '全应用统一使用所选字体，含对话与报告', keywords: ['font', '字体', '黑体', '无衬线', '思源', 'Inter', 'Noto', '界面字体'] },
   { section: 'general', group: '外观', title: '字体大小', desc: '调整全局文字尺寸', keywords: ['font', '字号', '文字大小', '字体', '大小'] },
   { section: 'general', group: '外观', title: '提示音', desc: '对话完成或需要你确认时播放轻提示', keywords: ['提示音', '音效', '声音', 'sound', '通知音'] },
   { section: 'general', group: '偏好', title: '评分卡', desc: '因子评估默认使用的评分模板', keywords: ['scorecard', 'G=B+M', '因子'] },
@@ -85,9 +86,9 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'sandbox', title: '允许局域网访问', desc: '授权本地网络内的目标', keywords: ['局域网', '本地', '私网'] },
 
   // 计划任务
-  { section: 'schedule', title: '计划任务总开关', desc: '关闭后所有任务都不会自动执行' },
-  { section: 'schedule', title: '允许运行脚本', desc: '计划任务可执行受控脚本' },
-  { section: 'schedule', title: '系统定时', desc: '后台常驻与系统定时同步状态', keywords: ['后台常驻', '同步'] },
+  { section: 'schedule', title: '启用计划任务', desc: '关闭后，任务不会自动执行', keywords: ['总开关', '执行'] },
+  { section: 'schedule', title: '允许任务运行受控脚本', desc: '默认只跑智能体任务；开启后才可执行脚本类任务', keywords: ['脚本'] },
+  { section: 'schedule', title: '登录时在托盘启动', desc: '开机后在托盘运行，便于按时执行任务', keywords: ['开机启动', '登录启动', '托盘'] },
 
   // Python 环境
   { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },

@@ -46,6 +46,7 @@ export function useCanvasTheme(opts: UseCanvasThemeOptions = {}): CanvasThemeVal
   const [hostScheme, setHostScheme] = useState<CanvasColorScheme>(() =>
     schemeProp ?? readHostScheme(root),
   )
+  const [fontEpoch, setFontEpoch] = useState(0)
 
   useEffect(() => {
     if (schemeProp) {
@@ -71,6 +72,12 @@ export function useCanvasTheme(opts: UseCanvasThemeOptions = {}): CanvasThemeVal
     }
   }, [schemeProp, root])
 
+  useEffect(() => {
+    const onFont = () => setFontEpoch((n) => n + 1)
+    window.addEventListener('opptrix-font-family-change', onFont)
+    return () => window.removeEventListener('opptrix-font-family-change', onFont)
+  }, [])
+
   const scheme = schemeProp ?? hostScheme
 
   return useMemo(() => {
@@ -83,5 +90,5 @@ export function useCanvasTheme(opts: UseCanvasThemeOptions = {}): CanvasThemeVal
       cssVars: vars as CSSProperties,
       ...groups,
     }
-  }, [scheme])
+  }, [scheme, fontEpoch])
 }

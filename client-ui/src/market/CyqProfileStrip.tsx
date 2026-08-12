@@ -4,6 +4,7 @@ import type { ChipDistributionPoint, ChipDistributionProfileData } from '../type
 import { MARKET_UP } from './chartTheme'
 import { priceToCanvasY } from './cyqUtils'
 import { opptrixCssVars } from '../theme/tokens'
+import { OPPTRIX_FONT_FAMILY_CHANGE_EVENT, resolveSansFontFamily } from '../theme/fontFamily'
 
 const useStyles = makeStyles({
   root: {
@@ -113,7 +114,7 @@ function drawStrip(
   ctx.stroke()
 
   ctx.fillStyle = opptrixCssVars.textTertiary
-  ctx.font = '8px -apple-system, BlinkMacSystemFont, sans-serif'
+  ctx.font = `8px ${resolveSansFontFamily()}`
   ctx.textAlign = 'left'
   ctx.fillText(profile.currentPrice.toFixed(2), 2, Math.max(9, Math.min(h - 2, yNow - 2)))
   return { w, h }
@@ -147,11 +148,20 @@ export default function CyqProfileStrip({ profile, latest, priceSpan }: Props) {
     lastSizeRef.current = null
     paint(true)
 
+    const onFont = () => {
+      lastSizeRef.current = null
+      paint(true)
+    }
+    window.addEventListener(OPPTRIX_FONT_FAMILY_CHANGE_EVENT, onFont)
+
     const ro = new ResizeObserver(() => {
       paint(false)
     })
     ro.observe(wrap)
-    return () => { ro.disconnect() }
+    return () => {
+      ro.disconnect()
+      window.removeEventListener(OPPTRIX_FONT_FAMILY_CHANGE_EVENT, onFont)
+    }
   }, [profile, latest, priceSpan])
 
   return (

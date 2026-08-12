@@ -12,7 +12,10 @@ import type { ShellPlatformStatus } from './types.js'
 import { isWindowsSandboxProvisioned } from './ensure-windows-sandbox.js'
 import { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 import { getLinuxSandboxInstallState, linuxCanAutoInstall } from './linux-sandbox-common.js'
-import { isUnelevatedSpawnSupported } from './windows-unelevated/index.js'
+import {
+  isUnelevatedSpawnSupported,
+  UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+} from './windows-unelevated/index.js'
 
 function nodePlatformToSandboxPlatform(): Platform | 'unsupported' {
   if (!SandboxManager.isSupportedPlatform()) return 'unsupported'
@@ -170,10 +173,10 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
       networkIsolationLevel = unelevatedOk ? 'basic' : 'none'
       message = unelevatedOk
         ? '基础隔离已就绪（出站由确认与白名单约束）'
-        : '基础隔离组件不可用，请改用完整隔离或稍后重试'
+        : UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE
       setupHint = unelevatedOk
         ? undefined
-        : '基础隔离组件不可用，请改用完整隔离或稍后重试'
+        : UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE
       // 分发缺失不影响 unelevated ready
       depErrors = []
     } else {

@@ -62,7 +62,7 @@ const useStyles = makeStyles({
   comboInput: {
     flex: '1 1 0',
     minWidth: 0,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     fontSize: 'var(--opptrix-font-md)',
     paddingLeft: '10px',
     paddingRight: '4px',

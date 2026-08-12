@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare UI fonts
+        run: npm run prepare:fonts
+
       # Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST (Node OCR; no Python wheels).
       - name: Stage bundled SenseVoice models
         run: node apps/desktop/scripts/stage-sensevoice.mjs

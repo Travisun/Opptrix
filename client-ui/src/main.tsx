@@ -9,8 +9,13 @@ import { WatchlistGroupsProvider } from './market/WatchlistGroupsContext'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
+import { applyFontFamily, readFontFamilyPreference } from './theme/fontFamily'
 import { applyFontScale, readFontScalePreference } from './theme/fontScale'
+import './styles/fonts.css'
 import './styles/global.css'
+
+applyFontFamily(readFontFamilyPreference())
+applyFontScale(readFontScalePreference())
 
 if (isDesktopApp()) {
   document.documentElement.classList.add('opptrix-desktop')
@@ -38,6 +43,7 @@ if (isElectron()) {
 function ThemedApp() {
   const { resolvedScheme } = useTheme()
   useEffect(() => {
+    applyFontFamily(readFontFamilyPreference())
     applyFontScale(readFontScalePreference())
   }, [])
   return (
