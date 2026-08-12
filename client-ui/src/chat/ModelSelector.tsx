@@ -98,7 +98,7 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.separator,
   },
   modelName: {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     fontSize: 'var(--opptrix-font-base)',
   },
   /** Footer 内参数区：紧凑间距，与 Cursor 设置感接近；外层 __foot 已有 padding */

@@ -108,7 +108,7 @@ function textToDomains(text: string): string[] {
 const DEFAULT_SETTINGS: SandboxSettings = {
   allowed_domains: [],
   allow_lan_access: false,
-  windows_isolation_mode: 'elevated',
+  windows_isolation_mode: 'unelevated',
 }
 
 export default function SandboxSettingsSection() {
@@ -130,9 +130,9 @@ export default function SandboxSettingsSection() {
       const next: SandboxSettings = {
         allowed_domains: resp.settings.allowed_domains,
         allow_lan_access: resp.settings.allow_lan_access,
-        windows_isolation_mode: resp.settings.windows_isolation_mode === 'unelevated'
-          ? 'unelevated'
-          : 'elevated',
+        windows_isolation_mode: resp.settings.windows_isolation_mode === 'elevated'
+          ? 'elevated'
+          : 'unelevated',
       }
       setSettings(next)
       setDomainsText(domainsToText(next.allowed_domains))
@@ -175,9 +175,9 @@ export default function SandboxSettingsSection() {
         const saved: SandboxSettings = {
           allowed_domains: resp.settings.allowed_domains,
           allow_lan_access: resp.settings.allow_lan_access,
-          windows_isolation_mode: resp.settings.windows_isolation_mode === 'unelevated'
-            ? 'unelevated'
-            : 'elevated',
+          windows_isolation_mode: resp.settings.windows_isolation_mode === 'elevated'
+            ? 'elevated'
+            : 'unelevated',
         }
         setSettings(saved)
         setDomainsText(domainsToText(saved.allowed_domains))

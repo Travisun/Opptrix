@@ -14,10 +14,12 @@
 
 ```bash
 npm install          # 根目录
-npm run build        # packages + client-ui
+npm run prepare:fonts  # 生成思源黑体别名 CSS（source-han-alias.css，gitignore）
+npm run build        # packages + prepare:fonts + client-ui
 npm run clean        # 清理各包 dist
 ```
 
+升级 `@fontsource/noto-sans-sc` 后须重跑 `npm run prepare:fonts`（CI 与 `client-ui` `prebuild` 也会自动生成）。
 ### Workspace 包名
 
 | 路径 | npm name |

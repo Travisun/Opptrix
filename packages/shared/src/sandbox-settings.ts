@@ -8,8 +8,8 @@ export interface SandboxSettings {
   allowed_domains: string[]
   allow_lan_access: boolean
   /**
-   * Windows 隔离强度。缺省 / 非法值 normalize 为 elevated（兼容旧客户端）。
-   * 非 Windows 平台仍可持久化，运行时忽略。
+   * Windows 隔离强度。缺省 / 非法值 normalize 为 unelevated（产品默认基础隔离）。
+   * 仅当显式为 elevated 时保留完整隔离。非 Windows 平台仍可持久化，运行时忽略。
    */
   windows_isolation_mode: WindowsIsolationMode
 }
@@ -17,14 +17,14 @@ export interface SandboxSettings {
 export const DEFAULT_SANDBOX_SETTINGS: SandboxSettings = {
   allowed_domains: [],
   allow_lan_access: false,
-  windows_isolation_mode: 'elevated',
+  windows_isolation_mode: 'unelevated',
 }
 
 export function normalizeWindowsIsolationMode(
   raw: unknown,
 ): WindowsIsolationMode {
-  if (raw === 'unelevated') return 'unelevated'
-  return 'elevated'
+  if (raw === 'elevated') return 'elevated'
+  return 'unelevated'
 }
 
 export function normalizeSandboxDomainLine(line: string): string {

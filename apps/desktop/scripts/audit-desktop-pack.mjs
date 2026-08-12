@@ -541,6 +541,12 @@ console.log('audit-desktop-pack: start')
   if (!ciWf.includes('audit-desktop-pack.mjs')) {
     fail('ci.yml must run audit-desktop-pack.mjs before build/test')
   } else ok('ci.yml runs audit-desktop-pack')
+  if (!ciWf.includes('prepare:fonts') && !ciWf.includes('prepare-ui-fonts')) {
+    fail('ci.yml must run prepare:fonts before UI build')
+  } else ok('ci.yml runs prepare:fonts')
+  if (!releaseWf.includes('prepare:fonts') && !releaseWf.includes('prepare-ui-fonts')) {
+    fail('release-desktop.yml must run prepare:fonts before desktop/UI build')
+  } else ok('release-desktop.yml runs prepare:fonts')
   for (const [label, wf] of [
     ['ci.yml', ciWf],
     ['release-desktop.yml', releaseWf],
@@ -566,6 +572,39 @@ console.log('audit-desktop-pack: start')
   ]) {
     if (!exists(rel)) fail(`missing ${rel}`)
     else ok(`present ${rel}`)
+  }
+}
+
+// ── 5b. UI fonts prepare wiring (source-han-alias generated, not committed) ─
+{
+  const rootPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))
+  const clientPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'client-ui/package.json'), 'utf8'))
+  const fontsCss = path.join(REPO_ROOT, 'client-ui/src/styles/fonts.css')
+  const prepareScript = path.join(REPO_ROOT, 'scripts/prepare-ui-fonts.mjs')
+
+  if (rootPkg.scripts?.['prepare:fonts'] !== 'node scripts/prepare-ui-fonts.mjs') {
+    fail('root package.json must define prepare:fonts → node scripts/prepare-ui-fonts.mjs')
+  } else ok('root prepare:fonts script')
+
+  if (!String(rootPkg.scripts?.build ?? '').includes('prepare:fonts')) {
+    fail('root build script must run prepare:fonts before client-ui build')
+  } else ok('root build runs prepare:fonts')
+
+  if (!String(clientPkg.scripts?.prebuild ?? '').includes('prepare-ui-fonts')) {
+    fail('client-ui package.json prebuild must run prepare-ui-fonts.mjs')
+  } else ok('client-ui prebuild prepares fonts')
+
+  if (!fs.existsSync(prepareScript)) {
+    fail('missing scripts/prepare-ui-fonts.mjs')
+  } else ok('present prepare-ui-fonts.mjs')
+
+  if (!fs.existsSync(fontsCss)) {
+    fail('missing client-ui/src/styles/fonts.css (must be committed)')
+  } else {
+    const css = fs.readFileSync(fontsCss, 'utf8')
+    if (!css.includes('source-han-alias.css')) {
+      fail('fonts.css must import source-han-alias.css')
+    } else ok('fonts.css imports source-han-alias')
   }
 }
 

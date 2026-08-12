@@ -126,6 +126,12 @@ export {
   probeRestrictedTokenApi,
   UNELEVATED_FULL_NETWORK_REJECT_MESSAGE,
   UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+  UNELEVATED_SPAWN_FAILED_MESSAGE,
+  UNELEVATED_INTERNAL_ERROR_MESSAGE,
+  allocStruct,
+  getWinApis,
+  tryLoadKoffi,
+  resetUnelevatedProbeCacheForTests,
 } from './windows-unelevated/index.js'
 export { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './resolve-shell-argv.js'

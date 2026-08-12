@@ -162,9 +162,18 @@ export type CanvasTokenGroups = {
   }
 }
 
-const FONT_SANS =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-const FONT_MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+const FONT_SANS_FALLBACK = '"Noto Sans SC", sans-serif'
+const FONT_MONO_FALLBACK = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+
+function readHostFont(cssVar: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim()
+    return v || fallback
+  } catch {
+    return fallback
+  }
+}
 
 function withTypeAndSpace(
   partial: Omit<
@@ -248,8 +257,8 @@ function withTypeAndSpace(
     spaceLg: '24px',
     spaceXl: '32px',
 
-    fontSans: FONT_SANS,
-    fontMono: FONT_MONO,
+    fontSans: FONT_SANS_FALLBACK,
+    fontMono: FONT_MONO_FALLBACK,
 
     typeH1Size: t.h1.fontSize,
     typeH1Line: t.h1.lineHeight,
@@ -360,7 +369,12 @@ export const canvasTokensDark: CanvasSemanticTokens = withTypeAndSpace({
 })
 
 export function getCanvasTokens(scheme: CanvasColorScheme): CanvasSemanticTokens {
-  return scheme === 'dark' ? canvasTokensDark : canvasTokensLight
+  const base = scheme === 'dark' ? canvasTokensDark : canvasTokensLight
+  return {
+    ...base,
+    fontSans: readHostFont('--opptrix-font-sans', FONT_SANS_FALLBACK),
+    fontMono: readHostFont('--opptrix-font-mono', FONT_MONO_FALLBACK),
+  }
 }
 
 export function groupCanvasTokens(tokens: CanvasSemanticTokens): CanvasTokenGroups {

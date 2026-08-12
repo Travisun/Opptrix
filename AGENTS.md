@@ -14,6 +14,7 @@
 4. **增量改动**：按用户最新指示做最小 diff；不顺手重构
 5. **禁止断代**：schema、用户数据、Hub/API 变更须兼容 + 幂等迁移
 6. **禁止半成品**：新功能须技术/用户/产品三维完备，兼容现有架构与安全；交付前复审回炉直至达标（见 R11）
+7. **多平台默认可达**：功能改动须兼顾 macOS / Linux / Windows，禁止本机单一依赖定制（见 R12）
 
 ---
 
@@ -169,6 +170,17 @@ packages 改动后：
 - 实现后按清单复审：端到端、失败态、不破坏邻接功能、测试与门禁、文档
 - Verifier / 主验收 AC 须含完备性相关项；细则：`.cursor/rules/feature-completeness.mdc`
 
+### R12. 多平台兼容（macOS / Linux / Windows）
+
+**任何功能改动须兼顾三平台可运行与稳步；不得以当前开发环境的单一依赖做功能定制而忽略其他平台。**
+
+- 适用：功能、沙盒、原生模块、路径、shell、打包、CI
+- `darwin` / `linux` / `win32` 均须有实现路径，或明确 skip / 降级策略
+- ❌ 硬编码本机路径；❌ 假设某一 OS 原生绑定全平台可用且无降级；❌ 只在本机验证就算完成
+- 平台分支（`process.platform` / 条件编译 / 专属模块）须成对维护；新增专属能力时写明其他平台行为
+- 沙盒（elevated、bwrap、Seatbelt 等）不得写成唯一实现而不给其他平台等价路径
+- 细则：`.cursor/rules/cross-platform-compat.mdc`
+
 ---
 
 ## 架构分层
@@ -270,3 +282,4 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 | 质量保证 / 审计 | `quality-assurance` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 多 Agent 编排（拆分 → 2–4 subagent → ID 登记 → 完成即停 → 主验收） | `multi-agent-orchestration.mdc` | `task-management` |
 | UI 文案规范 | `ui-copy-standard.mdc` | `docs/UI-DESIGN-SYSTEM.md` |
+| 多平台兼容 | —（读规则） | `.cursor/rules/cross-platform-compat.mdc` |

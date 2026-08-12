@@ -2,6 +2,7 @@
 /**
  * client-ui 统一本地 QA（改码后测试环节入口）
  *
+ * 0. Prepare UI fonts（生成 source-han-alias.css，供 fonts.css import）
  * 1. TypeScript 类型检查
  * 2. ESLint React / Hooks / jsx-key
  * 3. 仓库定制 React 模式审查（listRowKey、不稳定 hook 参数等）
@@ -9,6 +10,7 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { prepareUiFonts } from './prepare-ui-fonts.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -27,6 +29,15 @@ function runStep({ name, cmd, args }) {
     shell: process.platform === 'win32',
   })
   return result.status ?? 1
+}
+
+console.log('\n━━━ Prepare UI fonts ━━━')
+try {
+  prepareUiFonts()
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err)
+  console.log('\n[check:ui] FAILED (prepare:fonts)')
+  process.exit(1)
 }
 
 let failed = false

@@ -2360,6 +2360,7 @@ export async function unsubscribeMcpResource(id: string, uri: string) {
 export interface SandboxSettings {
   allowed_domains: string[]
   allow_lan_access: boolean
+  /** Windows：`elevated` 完整隔离 / `unelevated` 基础隔离（产品默认）；非 Windows 可持久化，运行时忽略 */
   windows_isolation_mode: 'elevated' | 'unelevated'
 }
 

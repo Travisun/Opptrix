@@ -182,7 +182,7 @@
   border-radius: 4px;
   border: 1px solid var(--opptrix-md-kbd-border);
   background: var(--opptrix-md-kbd-bg);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--opptrix-font-mono);
   font-size: 0.84em;
   line-height: 1.35;
   color: var(--opptrix-md-text);
@@ -232,7 +232,7 @@
 
 .opptrix-md-inline-code,
 .opptrix-md :not(pre) > code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--opptrix-font-mono);
   font-size: 0.86em;
   padding: 0.08em 0.32em;
   border-radius: var(--opptrix-md-radius-code);
@@ -267,7 +267,7 @@
 }
 
 .opptrix-md-pre code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--opptrix-font-mono);
   background: transparent;
   padding: 0;
   color: var(--opptrix-md-code-fg);

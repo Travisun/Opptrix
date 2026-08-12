@@ -1580,8 +1580,8 @@ export default function ChatApp() {
     />
   )
 
-  /** Electron：始终挂到 DesktopWindowChrome titleBarTrailing，与拖拽层同级可点 */
-  const sessionFilesPreviewButton = electronChrome && view === 'chat' && !isStandaloneView && !isMobile ? (
+  /** Electron：挂到 DesktopWindowChrome titleBarTrailing；右侧全宽（无聊天列）时隐藏 */
+  const sessionFilesPreviewButton = electronChrome && view === 'chat' && !isStandaloneView && !isMobile && chatVisible ? (
     <ChromeToolButton
       label="文件预览"
       active={mode === 'preview'}

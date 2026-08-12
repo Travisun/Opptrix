@@ -281,7 +281,7 @@ const useStyles = makeStyles({
   },
   panelFooterDirMuted: {
     display: 'block',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
@@ -290,7 +290,7 @@ const useStyles = makeStyles({
 
     display: 'block',
     width: '100%',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.accent,
     wordBreak: 'break-all',

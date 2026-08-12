@@ -113,7 +113,7 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     borderRadius: opptrixTokens.radiusFull,
     fontSize: 'var(--opptrix-font-sm)',
-    fontFamily: 'ui-monospace, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
   },
   footer: {
     display: 'flex',

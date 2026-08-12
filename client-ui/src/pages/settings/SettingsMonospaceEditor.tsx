@@ -21,7 +21,7 @@ const useStyles = makeStyles({
       fontSize: 'var(--opptrix-font-md)',
     },
     '& .cm-scroller': {
-      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+      fontFamily: 'var(--opptrix-font-mono)',
     },
     '& .cm-gutters': {
       backgroundColor: opptrixCssVars.canvasAlt,

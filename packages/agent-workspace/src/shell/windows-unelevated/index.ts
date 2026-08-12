@@ -7,13 +7,19 @@ import type { UnelevatedSpawnParams, UnelevatedSpawnResult } from './types.js'
 import {
   probeRestrictedTokenApi,
   UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+  UNELEVATED_SPAWN_FAILED_MESSAGE,
+  UNELEVATED_INTERNAL_ERROR_MESSAGE,
 } from './spawn-win32.js'
 
 export type { UnelevatedSpawnParams, UnelevatedSpawnResult }
 export {
   probeRestrictedTokenApi,
   UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+  UNELEVATED_SPAWN_FAILED_MESSAGE,
+  UNELEVATED_INTERNAL_ERROR_MESSAGE,
 }
+export { allocStruct, getWinApis, tryLoadKoffi } from './win-apis.js'
+export { resetUnelevatedProbeCacheForTests, quoteWindowsArg, argvToCommandLine } from './spawn-win32.js'
 
 /** 用户向：完整网络隔离与基础隔离互斥 */
 export const UNELEVATED_FULL_NETWORK_REJECT_MESSAGE =

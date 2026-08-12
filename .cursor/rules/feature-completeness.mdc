@@ -83,3 +83,4 @@ Clarify（方向问用户）→ Design（三维 + 外部参照）→ Implement�
 | `review-audit.mdc` / `post-edit-verification.mdc` | 门禁与审查条目 |
 | `multi-agent-orchestration.mdc` | 拆分与独立 Verifier；AC 须引用本规则清单 |
 | `ui-copy-standard.mdc` / `backward-compatibility.mdc` | 用户文案与数据兼容 |
+| `cross-platform-compat.mdc` | OS 维度：三平台可运行或明确降级，禁止「只通本机」 |

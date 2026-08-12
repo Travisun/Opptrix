@@ -1,0 +1,97 @@
+---
+description: 多平台兼容 — macOS / Linux / Windows 功能、路径、原生与沙盒均须可运行或有明确降级
+alwaysApply: true
+---
+
+# 多平台兼容（全仓硬性）
+
+## 核心原则
+
+1. **三平台默认可达**：`darwin` / `linux` / `win32` 均须能跑通主路径，或有**明确**的 skip / 降级 / 文档说明
+2. **禁止本机定制**：不得以当前开发机（路径、shell、原生绑定）作为唯一实现假设
+3. **成对维护**：平台分支必须成对；新增专属能力时写明其他平台行为
+4. **可选依赖可降级**：原生 / 沙盒等可选能力不得当成「全平台必达且无 fallback」
+
+## 适用
+
+任何功能、沙盒、原生模块、路径、shell、打包、CI、桌面能力改动。
+
+## 禁止
+
+| ❌ 禁止 | ✅ 要求 |
+|--------|--------|
+| 硬编码 `C:\Users\...`、`/Users/某人/...` | 用 `path` / `os.homedir()` / `app.getPath` / 环境变量 |
+| 只验 Windows 就算完成 | 设计/自检覆盖三平台，或写明未覆盖平台的 skip/降级 |
+| 假设某 OS 原生 binding 处处可用 | optional + 探测失败后的等价路径或友好降级 |
+| 把 bwrap / Seatbelt / elevated 写成唯一实现 | 为其他平台提供等价实现或明确 unsupported |
+| `process.platform === 'win32'` 只写一侧 | 成对维护 darwin/linux（或 `else` 语义清晰） |
+
+## 路径与 Shell
+
+```typescript
+// ❌ 错误：本机路径 / 仅 cmd 语法
+const db = 'C:\\Users\\Travis\\AppData\\opptrix.db'
+exec('dir /b ' + folder)
+
+// ✅ 正确：跨平台 API
+import path from 'node:path'
+import os from 'node:os'
+const db = path.join(os.homedir(), '.opptrix', 'opptrix.db')
+```
+
+- 路径拼接一律 `path.join` / `path.posix`（按约定），禁止手写 `\` / `/` 混拼业务路径
+- Shell 脚本：区分 `.sh` / `.ps1`，或用 Node 跨平台脚本；CI 矩阵勿假设 Bash 在 win32 默认可用
+
+## 平台分支与原生
+
+```typescript
+// ❌ 错误：只处理 win32，其他平台静默坏掉
+if (process.platform === 'win32') useWinSandbox()
+
+// ✅ 正确：三平台路径或明确降级
+switch (process.platform) {
+  case 'win32': return useWinSandbox()
+  case 'darwin': return useSeatbeltSandbox()
+  case 'linux': return useBwrapSandbox()
+  default: return { ok: false, reason: 'unsupported_platform' }
+}
+```
+
+- 条件编译 / 平台专属模块：PR 说明「其他平台行为」（等价实现 / skip / 功能降级）
+- 可选原生依赖：`try/catch` 或动态 `require` + 无模块时的产品级提示，禁止启动即崩
+
+## 沙盒与权限
+
+elevated vs unelevated、bwrap、Seatbelt、Windows 完整性级别等：**不得**写成唯一实现。每条平台专属路径须对应：
+
+- 其他平台的等价能力，或
+- 明确「本平台不支持」+ 用户可理解的降级（禁用该能力，不阻断核心投研）
+
+## 测试与验收
+
+- 关键路径测试须有跨平台考虑：`win32` 专属用例在非 win 上 `skip`；posix 专属同理
+- 禁止「只在当前开发机手动点过」作为完成依据
+- 涉及原生/沙盒/打包时，Verifier / 自检须含三平台项
+
+## 自检清单（改动后）
+
+- [ ] 路径 / 换行 / shell 是否依赖单一 OS？
+- [ ] `process.platform` 分支是否 darwin / linux / win32 均有结果或明确 default？
+- [ ] 原生 / 沙盒可选依赖是否有降级？
+- [ ] 测试是否对非目标平台正确 skip，而非假绿或误红？
+- [ ] 文档 / Release 是否暗示「仅某平台可用」却未说明？
+
+## 反模式
+
+- ❌ 以当前 Windows/macOS 开发环境验证替代三平台设计
+- ❌ 把可选 native addon 写进主路径且无 fallback
+- ❌ 只新增一侧 `if (win32)` / `if (darwin)` 不写其余行为
+- ❌ 沙盒文档只写 bwrap 或只写 Seatbelt，当作全平台方案
+
+## 与其他规则
+
+| 规则 | 关系 |
+|------|------|
+| `feature-completeness.mdc` | 完备性含 OS 维度；半成品含「只通本机」 |
+| `security.mdc` | 沙盒/权限实现须安全且可多平台落地 |
+| `multi-agent-orchestration.mdc` | Verifier AC 可引用本清单 |

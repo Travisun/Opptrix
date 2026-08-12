@@ -12,6 +12,7 @@ import type { ColorScheme } from '../theme/tokens'
 import type { ChartSeriesBundle } from './chartSeries'
 import {
   candlestickColors,
+  getChartLayout,
   getChartTheme,
   indicatorColors,
   stockPriceFormat,
@@ -20,6 +21,7 @@ import { createChartAxisFormatters } from './chartAxisTime'
 import { CN_TIMEZONE } from '../utils/cnTime'
 import { defaultVisibleBars, HISTORY_EDGE_THRESHOLD } from './chartViewConfig'
 import { isMinuteOhlcPeriod, isIntradayPeriod } from './chartTime'
+import { OPPTRIX_FONT_FAMILY_CHANGE_EVENT } from '../theme/fontFamily'
 
 const LINE_OPTS = {
   lineWidth: 1 as const,
@@ -57,6 +59,7 @@ export class ChartWorkspace {
   private doResize: (() => void) | null = null
   private mountOptions: ChartMountOptions | null = null
   private totalBars = 0
+  private onFontFamilyChange: (() => void) | null = null
 
   mount(refs: ChartPaneRefs, bundle: ChartSeriesBundle, options: ChartMountOptions): void {
     this.destroy()
@@ -129,10 +132,37 @@ export class ChartWorkspace {
       this.applySeries(bundle)
       this.syncTimeScales()
       this.bindResize(refs)
+      this.bindFontFamilyChange()
       this.scheduleInitialView(options)
     } catch (e) {
       this.destroy()
       throw e
+    }
+  }
+
+  /** Re-apply layout fonts after user switches界面字体. */
+  applyFontFamily(): void {
+    if (!this.alive || !this.mountOptions) return
+    const scheme = this.mountOptions.colorScheme ?? 'light'
+    const layout = getChartLayout(scheme)
+    for (const chart of [this.mainChart, this.volumeChart, this.macdChart]) {
+      if (!chart) continue
+      try {
+        chart.applyOptions({ layout })
+      } catch { /* ignore if chart already disposed */ }
+    }
+  }
+
+  private bindFontFamilyChange(): void {
+    this.unbindFontFamilyChange()
+    this.onFontFamilyChange = () => this.applyFontFamily()
+    window.addEventListener(OPPTRIX_FONT_FAMILY_CHANGE_EVENT, this.onFontFamilyChange)
+  }
+
+  private unbindFontFamilyChange(): void {
+    if (this.onFontFamilyChange) {
+      window.removeEventListener(OPPTRIX_FONT_FAMILY_CHANGE_EVENT, this.onFontFamilyChange)
+      this.onFontFamilyChange = null
     }
   }
 
@@ -341,6 +371,7 @@ export class ChartWorkspace {
 
   destroy(): void {
     this.alive = false
+    this.unbindFontFamilyChange()
     if (this.fitTimer) {
       clearTimeout(this.fitTimer)
       this.fitTimer = null

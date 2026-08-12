@@ -222,7 +222,6 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     maxHeight: '180px',
     overflow: 'auto',
   },
@@ -326,7 +325,7 @@ const useStyles = makeStyles({
   dialogSubtitle: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--opptrix-font-mono)',
     wordBreak: 'break-all',
   },
   dialogClose: {
@@ -405,7 +404,6 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     backgroundColor: opptrixCssVars.canvasAlt,
     borderRadius: opptrixTokens.radiusMd,
     padding: '8px 10px',
