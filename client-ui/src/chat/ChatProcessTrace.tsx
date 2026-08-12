@@ -623,17 +623,17 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
       {expandable && expanded && (
         <div className={s.stepBody}>
           {step.thinking && (
-            <Text className={s.detailBlock} block>
+            <Text className={mergeClasses(s.detailBlock, 'opptrix-scroll')} block>
               {`【分析思路】\n${step.thinking}`}
             </Text>
           )}
           {step.resultDetail && (
-            <Text className={s.detailBlock} block>
+            <Text className={mergeClasses(s.detailBlock, 'opptrix-scroll')} block>
               {step.resultDetail}
             </Text>
           )}
           {!step.resultDetail && step.resultPreview && (
-            <Text className={s.detailBlock} block>
+            <Text className={mergeClasses(s.detailBlock, 'opptrix-scroll')} block>
               {step.resultPreview}
             </Text>
           )}
