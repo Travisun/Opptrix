@@ -62,20 +62,30 @@ export function registerScheduleRoutes(
         os = resyncOsRegistration(scheduleService)
       }
 
-      const { resync_os: _resync, ...patch } = body
+      // run_when_closed 已废除 OS 注册：忽略客户端写入，始终保持 false
+      const { resync_os: _resync, run_when_closed: _ignoredRwc, ...rest } = body
+      const patch: Partial<ScheduleSettings> = {
+        ...rest,
+        run_when_closed: false,
+      }
       const current = scheduleService.getSettings()
-      const needsOsPending = (
+      // 仅 autostart / master 变更时标记 pending，供桌面 reconcile 同步登录项并强制 remove OS tick
+      const needsReconcilePending = (
         patch.master_enabled !== undefined && patch.master_enabled !== current.master_enabled
       ) || (
         patch.autostart !== undefined && patch.autostart !== current.autostart
       )
-      const nextPatch = needsOsPending && !body.resync_os
+      const nextPatch = needsReconcilePending && !body.resync_os
         ? { ...patch, os_tick_status: 'pending' as const, os_tick_error: null }
         : patch
 
       const settings = Object.keys(nextPatch).length > 0
         ? scheduleService.patchSettings(nextPatch)
-        : scheduleService.getSettings()
+        : scheduleService.patchSettings({ run_when_closed: false })
+
+      if (body.resync_os !== true) {
+        os = computeOsHealth(settings, scheduleService.listJobs())
+      }
 
       return { settings, os }
     },
@@ -149,6 +159,7 @@ export function registerScheduleRoutes(
     const recentFailures = summarizeRecentFailures(scheduleService)
     return {
       master_enabled: settings.master_enabled,
+      run_when_closed: settings.run_when_closed,
       allow_shell_scripts: settings.allow_shell_scripts,
       autostart: settings.autostart,
       os,
@@ -161,12 +172,13 @@ export function registerScheduleRoutes(
 
   app.get('/api/schedule/os/reconcile', async () => {
     const settings = scheduleService.getSettings()
-    const isDesktop = process.env.OPPTRIX_DESKTOP === '1'
+    // OS 级 tick 已废除：永远不注册；桌面侧每次 reconcile 仍须 removeTickRegistration
     return {
-      register_tick: settings.master_enabled,
+      register_tick: false,
+      run_when_closed: false,
       autostart: settings.autostart,
       interval_sec: 60,
-      os_tick_status: settings.os_tick_status ?? (isDesktop ? 'pending' : 'n/a'),
+      os_tick_status: settings.os_tick_status ?? 'n/a',
       os_tick_error: settings.os_tick_error ?? null,
       desktop_required: true,
     }

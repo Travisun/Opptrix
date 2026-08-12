@@ -534,33 +534,34 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 定时执行智能体提示词或受控脚本。持久化于用户 SQLite（`packages/user-store` 的 `schedule` 命名空间）；调度引擎为 `@opptrix/schedule` 的 `ScheduleService`。Sidecar 启动时注册 `registerScheduleRoutes` 并调用 `scheduleService.start()`（进程内每 **20s** 扫描到期任务，`trigger: 'timer'`）。
 
-桌面端另有一套 **OS 级通用 tick**（用户级、无需 root），经 `POST /api/schedule/tick` 触发（`trigger: 'os'`）。冷启动路径为 **HTTP-first → `ELECTRON_RUN_AS_NODE` headless sidecar**（不拉起 Opptrix GUI）；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。
+计划任务仅在 **应用运行或托盘常驻** 时由进程内 timer 执行；完全退出后不执行。桌面 `reconcile` **只**注销遗留 OS 注册（LaunchAgent / schtasks / systemd），**不再**注册系统级 tick。`POST /api/schedule/tick`（`trigger: 'os'`）仅兼容旧 runner；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/schedule/settings` | 读取全局设置 |
-| PATCH | `/api/schedule/settings` | 更新设置；可选 `resync_os: true` 触发 OS tick 重新注册 |
+| PATCH | `/api/schedule/settings` | 更新设置；可选 `resync_os: true` 清理遗留 OS 状态字段 |
 | GET | `/api/schedule/jobs` | 列出全部任务 |
 | GET | `/api/schedule/jobs/:id` | 单条任务详情 |
 | POST | `/api/schedule/jobs` | 创建任务 |
 | PATCH | `/api/schedule/jobs/:id` | 更新任务 |
 | DELETE | `/api/schedule/jobs/:id` | 删除任务 |
 | POST | `/api/schedule/jobs/:id/run` | 立即执行一次（`trigger: 'manual'`） |
-| POST | `/api/schedule/tick` | 扫描并执行到期任务（**仅本机**；`trigger: 'os'`） |
+| POST | `/api/schedule/tick` | 扫描并执行到期任务（**仅本机**；兼容旧 OS runner，`trigger: 'os'`） |
 | GET | `/api/schedule/status` | 汇总状态、启用任务数、最近失败 |
-| GET | `/api/schedule/os/reconcile` | 桌面 reconcile 提示（是否注册 OS tick、间隔等） |
+| GET | `/api/schedule/os/reconcile` | 桌面 reconcile 提示（`register_tick` 恒为 false） |
 
 **`ScheduleSettings`（GET/PATCH `/api/schedule/settings`）**
 
 | 字段 | 类型 | 默认 | 说明 |
 |------|------|------|------|
 | `master_enabled` | boolean | `true` | 总开关；为 `false` 时 `tick` 跳过所有到期任务 |
-| `autostart` | boolean | `false` | 桌面：登录项 `--background` 后台常驻 + 启用 OS tick 注册 |
+| `run_when_closed` | boolean | `false` | **兼容字段**：始终 `false`；PATCH 忽略写入；不再注册系统 crontab |
+| `autostart` | boolean | `false` | 桌面：登录项 `--background` 托盘常驻 |
 | `allow_shell_scripts` | boolean | `false` | 为 `false` 时禁止创建/改为 `shell_script` 任务 |
-| `os_tick_status` | `'synced' \| 'pending' \| 'error' \| 'n/a'` | `'n/a'` | OS 级 tick 注册状态（桌面写入） |
-| `os_tick_error` | string \| null | `null` | OS 注册失败原因 |
+| `os_tick_status` | `'synced' \| 'pending' \| 'error' \| 'n/a'` | `'n/a'` | 遗留字段；新版本通常为 `n/a` |
+| `os_tick_error` | string \| null | `null` | 遗留 OS 注销失败原因（少见） |
 
-PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，响应会将 `os_tick_status` 置为 `pending`。`resync_os: true` 时额外调用 `resyncOsRegistration` 并返回 `os` 健康摘要。
+PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，可将 `os_tick_status` 置为 `pending` 以提示桌面 reconcile（强制 remove）。`resync_os: true` 时清理任务级 `os_*` 字段并返回健康摘要。计划任务仅在 **应用运行或托盘常驻** 时由进程内 timer 执行；完全退出后不执行。
 
 **任务类型**
 
@@ -591,16 +592,17 @@ PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，响�
 - 仅允许来源 IP 为 `127.0.0.1` / `::1` / `::ffff:127.0.0.1`；否则 **403** `{ "error": "仅允许本机调用" }`
 - 成功：`{ "result": { "due": string[], "ran": string[], "skipped": string[] } }`
 - `master_enabled=false` 时返回空数组（不执行）
-- 通过乐观 claim（推进 `next_run_at` + running lease）保证幂等，避免 OS tick 与进程内 timer 重复执行同一到期窗口
+- 通过乐观 claim（推进 `next_run_at` + running lease）保证幂等，避免并发 tick 重复执行同一到期窗口
 
 **GET `/api/schedule/status` 响应（节选）**
 
 ```json
 {
   "master_enabled": true,
+  "run_when_closed": false,
   "allow_shell_scripts": false,
   "autostart": true,
-  "os": { "status": "synced", "message": "…", "error": null, "autostart": true },
+  "os": { "status": "n/a", "message": "…", "error": null, "autostart": true },
   "jobs": { "total": 2, "enabled": 1, "disabled": 1, "next_due": "2026-07-28T08:00:00.000Z" },
   "enabled_jobs": 1,
   "recent_failures": [],
@@ -610,7 +612,7 @@ PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，响�
 
 **GET `/api/schedule/os/reconcile`**
 
-供 Electron `schedule-bridge.cjs` 读取：`register_tick`（= `master_enabled`）、`autostart`、`interval_sec`（固定 **60**）、`os_tick_status`、`desktop_required: true`。
+供 Electron `schedule-bridge.cjs` 读取：`register_tick` **恒为 `false`**（不再注册系统 crontab）、`run_when_closed: false`、`autostart`、`interval_sec`（保留字段，固定 **60**）、`os_tick_status`、`desktop_required: true`。桌面侧每次 reconcile 仍调用 `removeTickRegistration` 清理旧版遗留。
 
 **错误**
 

@@ -8,7 +8,8 @@
  *    Staging renames to `deps/` so createFilter does not drop the tree (exact
  *    relative path `node_modules` is skipped). Packaged Node ESM cannot resolve
  *    bare imports via NODE_PATH — only classic `node_modules` parent walks work.
- * 2) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
+ * 2) OpptrixSchedule helper generation retired (in-process schedule only).
+ * 3) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
  */
 const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
@@ -33,6 +34,15 @@ function runtimeStageRoots(context) {
     return [path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources', 'runtime-stage')]
   }
   return [path.join(context.appOutDir, 'resources', 'runtime-stage')]
+}
+
+/**
+ * OS schedule Helper (OpptrixSchedule) is retired — in-process timer only.
+ * Kept as no-op so afterPack callers stay stable.
+ * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} _context
+ */
+function ensurePackagedScheduleHelper(_context) {
+  // no-op: do not generate OpptrixSchedule helper for OS tick cold-start
 }
 
 /**
@@ -159,8 +169,10 @@ function adhocSignMac(context) {
 exports.default = async function afterPack(context) {
   restoreMacBundleIcns(context)
   restoreSidecarNodeModules(context)
+  ensurePackagedScheduleHelper(context)
   adhocSignMac(context)
 }
 
 // Exported for lightweight plist-strip smoke tests (not used by electron-builder).
 exports.stripMacBundleIconName = stripMacBundleIconName
+exports.ensurePackagedScheduleHelper = ensurePackagedScheduleHelper

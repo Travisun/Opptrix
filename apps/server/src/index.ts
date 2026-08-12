@@ -123,7 +123,10 @@ const workspaceService = getWorkspaceService()
 scheduleService.setExecutor(createJobExecutor({
   agent: {
     createSession: opts => agent.createSession(opts),
-    chat: (sessionId, message) => agent.chat(sessionId, message),
+    chat: (sessionId, message, modelRef, opts) =>
+      agent.chat(sessionId, message, modelRef, {
+        unattended: opts?.unattended === true,
+      }),
     llmConfigured: agent.llmConfigured,
   },
   shell: {

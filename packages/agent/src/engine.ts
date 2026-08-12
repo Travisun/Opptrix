@@ -75,6 +75,14 @@ import {
   type UserPromptOption,
   UserPromptCancelledError,
 } from './user-prompt.js'
+import {
+  UNATTENDED_ASK_USER_RESULT,
+  UNATTENDED_SECRET_RESULT,
+  appendUnattendedTurnTail,
+  filterOpenAiToolsForUnattended,
+  filterToolNamesForUnattended,
+  pickUnattendedConfirmIds,
+} from './unattended.js'
 import { SessionStore, sessionToMeta, type SessionRecord, type SessionContextRef, type CreateSessionOptions, type ReasoningEffort } from './sessions.js'
 import { getExpertCatalogService } from './experts/catalog-service.js'
 import {
@@ -314,16 +322,23 @@ export class AgentEngine {
     this.expertPacksSeeded.add(seedKey)
   }
 
-  private async rebuildRoundTools(activeNames: readonly string[]) {
-    const broker = await this.createRoundBroker(activeNames)
+  private async rebuildRoundTools(activeNames: readonly string[], unattended = false) {
+    const names = unattended ? filterToolNamesForUnattended(activeNames) : activeNames
+    const broker = await this.createRoundBroker(names)
     const rawTools = await broker.openAiTools()
     const preferred = this.lastRoutePlan?.preferredTools ?? []
     // 远程 MCP 工具整体优先于本地兜底工具；preferred 排序仅在各自分组内生效。
-    const openAiTools = orderToolsByPreference(rawTools, preferred, { remoteFirst: true })
+    let openAiTools = orderToolsByPreference(rawTools, preferred, { remoteFirst: true })
+    if (unattended) openAiTools = filterOpenAiToolsForUnattended(openAiTools)
     return { broker, openAiTools }
   }
 
-  private bindWorkspaceBridge(sessionId: string, emit: (event: ChatProgressEvent) => void, signal?: AbortSignal): number {
+  private bindWorkspaceBridge(
+    sessionId: string,
+    emit: (event: ChatProgressEvent) => void,
+    signal?: AbortSignal,
+    unattended = false,
+  ): number {
     const bridge: WorkspaceToolBridge = {
       sessionId,
       signal,
@@ -335,6 +350,8 @@ export class AgentEngine {
         root_id: string
         path: string
       }) => {
+        // Unattended schedule jobs: auto-allow like scheduleShellConfirm (never waitForAnswer)
+        if (unattended) return pickUnattendedConfirmIds(payload.options)
         const promptId = createUserPromptId()
         emit({
           type: 'user_prompt',
@@ -349,6 +366,15 @@ export class AgentEngine {
         return { selected_ids: answer.selected_ids }
       },
       askUser: async (payload) => {
+        if (unattended) {
+          return {
+            kind: 'option' as const,
+            selected_ids: [] as string[],
+            selected_labels: [] as string[],
+            cancelled: true,
+            custom_text: UNATTENDED_ASK_USER_RESULT.error,
+          }
+        }
         const promptId = createUserPromptId()
         emit({
           type: 'user_prompt',
@@ -364,6 +390,18 @@ export class AgentEngine {
         return this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
       },
       askSecret: async (payload) => {
+        if (unattended) {
+          return {
+            kind: 'secret' as const,
+            selected_ids: [] as string[],
+            selected_labels: [] as string[],
+            name: payload.name,
+            saved: false,
+            session_granted: false,
+            cancelled: true,
+            custom_text: UNATTENDED_SECRET_RESULT.error,
+          }
+        }
         const promptId = createUserPromptId()
         emit({
           type: 'user_prompt',
@@ -1047,6 +1085,7 @@ export class AgentEngine {
     }
 
     const signal = progress?.signal
+    const unattended = progress?.unattended === true
 
     const toolsUsed: string[] = []
     const toolSteps: ChatToolStep[] = []
@@ -1159,17 +1198,19 @@ export class AgentEngine {
     this.seedExpertDefaultPacks(sessionId, record)
     const packBridgeGen = this.bindPackBridge(sessionId)
     const skillBridgeGen = this.bindSkillBridge(sessionId)
-    const workspaceBridgeGen = this.bindWorkspaceBridge(sessionId, emit, signal)
+    const workspaceBridgeGen = this.bindWorkspaceBridge(sessionId, emit, signal, unattended)
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
     let activeNames = toolNamesForPacks(this.lastRoundPackIds)
-    let { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
+    if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
+    let { broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended)
 
     try {
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
       // 稳定 system（无时钟/选型卡）；动态内容经 turn-tail 追加，利于前缀缓存
       const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
-      const turnTail = this.buildRoundTurnTail(sessionId, activeNames)
+      let turnTail = this.buildRoundTurnTail(sessionId, activeNames)
+      if (unattended) turnTail = appendUnattendedTurnTail(turnTail)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const resolvedModel = this.registry.resolve(activeModel)
       const modelId = resolvedModel?.model
@@ -1439,24 +1480,29 @@ export class AgentEngine {
           let result: unknown
           try {
             if (fn === 'ask_user') {
-              const parsed = parseAskUserArgs(args)
-              if (parsed.error || !parsed.payload) {
-                result = { error: parsed.error ?? 'ask_user 参数无效' }
+              if (unattended) {
+                // Defense: never emit user_prompt / waitForAnswer in background jobs
+                result = { ...UNATTENDED_ASK_USER_RESULT }
               } else {
-                const promptId = createUserPromptId()
-                const answerPromise = this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
-                emit({
-                  type: 'user_prompt',
-                  prompt: { id: promptId, ...parsed.payload },
-                })
-                const answer = await answerPromise
-                const resultPayload: Record<string, unknown> = { ok: true, ...answer }
-                if (answer.selected_ids.includes('allow_lan_session')) {
-                  applySessionLanAskChoice(sessionId, answer.selected_ids)
-                  resultPayload.lan_granted = true
-                  resultPayload.lan_note = '本对话已允许局域网；具体域名仍可能需出站确认'
+                const parsed = parseAskUserArgs(args)
+                if (parsed.error || !parsed.payload) {
+                  result = { error: parsed.error ?? 'ask_user 参数无效' }
+                } else {
+                  const promptId = createUserPromptId()
+                  const answerPromise = this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
+                  emit({
+                    type: 'user_prompt',
+                    prompt: { id: promptId, ...parsed.payload },
+                  })
+                  const answer = await answerPromise
+                  const resultPayload: Record<string, unknown> = { ok: true, ...answer }
+                  if (answer.selected_ids.includes('allow_lan_session')) {
+                    applySessionLanAskChoice(sessionId, answer.selected_ids)
+                    resultPayload.lan_granted = true
+                    resultPayload.lan_note = '本对话已允许局域网；具体域名仍可能需出站确认'
+                  }
+                  result = resultPayload
                 }
-                result = resultPayload
               }
             } else if (!activeSet.has(fn) && !parseNamespacedMcpTool(fn)) {
               result = { error: unloadedToolHint(fn) }
@@ -1515,7 +1561,8 @@ export class AgentEngine {
           await broker.close()
           this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
           activeNames = toolNamesForPacks(this.lastRoundPackIds)
-          ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames))
+          if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
+          ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended))
         }
         continue
       }

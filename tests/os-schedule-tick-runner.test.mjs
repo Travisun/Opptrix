@@ -10,6 +10,8 @@ const {
   ENDPOINT_FILENAME,
   RUNNER_SH,
   RUNNER_CMD,
+  HELPER_BASENAME_UNIX,
+  HELPER_BASENAME_WIN,
   endpointFilePath,
   runnerScriptPath,
   sanitizeEndpointHost,
@@ -18,6 +20,10 @@ const {
   resolveColdStartArgv,
   resolveHeadlessTickArgv,
   defaultHeadlessTickPath,
+  scheduleHelperFileName,
+  resolveScheduleHelperPath,
+  isScheduleHelperPath,
+  ensureOsScheduleHelperExec,
   buildBashRunnerScript,
   buildCmdRunnerScript,
   ensureOsScheduleTickRunner,
@@ -31,6 +37,17 @@ const {
 } = require('../apps/desktop/electron/os-schedule/sidecar-launch.cjs')
 
 const HEADLESS = defaultHeadlessTickPath()
+
+/**
+ * Fake Electron binary for helper copy/link tests (writable tmp).
+ * @param {string} dir
+ * @param {string} [name]
+ */
+function fakeSourceExec(dir, name = 'Opptrix') {
+  const p = path.join(dir, name)
+  fs.writeFileSync(p, '#!/bin/sh\necho fake-electron\n', { mode: 0o755 })
+  return p
+}
 
 describe('os-schedule tick-runner', () => {
   /** @type {string} */
@@ -52,7 +69,7 @@ describe('os-schedule tick-runner', () => {
   })
 
   it('writeOsScheduleEndpoint writes host/port/execPath/headlessTick (no secrets)', () => {
-    const execPath = '/Applications/Opptrix.app/Contents/MacOS/Opptrix'
+    const execPath = '/Applications/Opptrix.app/Contents/MacOS/OpptrixSchedule'
     const written = writeOsScheduleEndpoint(tmpDir, {
       host: '0.0.0.0',
       port: 8712,
@@ -83,22 +100,21 @@ describe('os-schedule tick-runner', () => {
   })
 
   it('resolveHeadlessTickArgv is ELECTRON_RUN_AS_NODE pair (no --schedule-tick)', () => {
+    const helper = '/Applications/Opptrix.app/Contents/MacOS/OpptrixSchedule'
     const packaged = resolveHeadlessTickArgv({
-      execPath: '/Applications/Opptrix.app/Contents/MacOS/Opptrix',
+      execPath: helper,
       headlessTickPath: HEADLESS,
     })
-    assert.deepEqual(packaged, [
-      '/Applications/Opptrix.app/Contents/MacOS/Opptrix',
-      HEADLESS,
-    ])
+    assert.deepEqual(packaged, [helper, HEADLESS])
     assert.ok(!packaged.includes('--schedule-tick'))
     assert.ok(!packaged.includes('--background'))
+    assert.ok(isScheduleHelperPath(packaged[0], 'darwin'))
 
     // resolveColdStartArgv aliases to headless argv
     assert.deepEqual(
       resolveColdStartArgv({
         isPackaged: true,
-        execPath: '/Applications/Opptrix.app/Contents/MacOS/Opptrix',
+        execPath: helper,
         mainCjsPath: '/ignored/main.cjs',
         headlessTickPath: HEADLESS,
       }),
@@ -106,9 +122,28 @@ describe('os-schedule tick-runner', () => {
     )
   })
 
+  it('ensureOsScheduleHelperExec creates OpptrixSchedule beside source (not productName)', () => {
+    const source = fakeSourceExec(tmpDir, 'Opptrix')
+    const { helperPath, created } = ensureOsScheduleHelperExec({
+      sourceExecPath: source,
+      platform: 'darwin',
+    })
+    assert.equal(path.basename(helperPath), HELPER_BASENAME_UNIX)
+    assert.equal(helperPath, resolveScheduleHelperPath(source, 'darwin'))
+    assert.ok(created)
+    assert.ok(fs.existsSync(helperPath))
+    assert.ok(isScheduleHelperPath(helperPath, 'darwin'))
+    assert.notEqual(path.basename(helperPath), 'Opptrix')
+
+    // idempotent refresh when already present
+    const again = ensureOsScheduleHelperExec({ sourceExecPath: source, platform: 'darwin' })
+    assert.equal(again.helperPath, helperPath)
+    assert.equal(again.created, false)
+  })
+
   it('bash runner is HTTP-first then ELECTRON_RUN_AS_NODE headless-tick', () => {
     const endpoint = path.join(tmpDir, ENDPOINT_FILENAME)
-    const execPath = '/Applications/Opptrix.app/Contents/MacOS/Opptrix'
+    const execPath = '/Applications/Opptrix.app/Contents/MacOS/OpptrixSchedule'
     const script = buildBashRunnerScript({
       endpointFile: endpoint,
       coldStartArgv: [execPath, HEADLESS],
@@ -123,6 +158,7 @@ describe('os-schedule tick-runner', () => {
     assert.doesNotMatch(script, /--schedule-tick/)
     assert.doesNotMatch(script, /--background/)
     assert.ok(script.includes(HEADLESS) || script.includes('HEADLESS_TICK'))
+    assert.ok(script.includes('OpptrixSchedule'))
     assert.ok(script.indexOf('curl') < script.indexOf('export ELECTRON_RUN_AS_NODE'))
     assert.ok(script.indexOf('export ELECTRON_RUN_AS_NODE') < script.indexOf('exec "$EXEC"'))
   })
@@ -131,7 +167,7 @@ describe('os-schedule tick-runner', () => {
     const endpoint = path.join(tmpDir, ENDPOINT_FILENAME)
     const script = buildCmdRunnerScript({
       endpointFile: endpoint,
-      coldStartArgv: ['C:\\Opptrix\\Opptrix.exe', 'C:\\Opptrix\\headless-tick.cjs'],
+      coldStartArgv: ['C:\\Opptrix\\OpptrixSchedule.exe', 'C:\\Opptrix\\headless-tick.cjs'],
     })
     assert.match(script, /curl\.exe .*\/api\/schedule\/tick/)
     assert.match(script, /set ELECTRON_RUN_AS_NODE=1/)
@@ -139,14 +175,18 @@ describe('os-schedule tick-runner', () => {
     assert.match(script, /"%EXEC%" "%HEADLESS_TICK%"/)
     assert.doesNotMatch(script, /--schedule-tick/)
     assert.doesNotMatch(script, /--background/)
+    assert.ok(script.includes('OpptrixSchedule.exe'))
     assert.ok(script.indexOf('curl.exe') < script.indexOf('ELECTRON_RUN_AS_NODE'))
   })
 
-  it('ensureOsScheduleTickRunner writes endpoint + headless fallback (no GUI flags)', () => {
+  it('ensureOsScheduleTickRunner writes helper EXEC + headless fallback (no GUI flags)', () => {
+    const binDir = path.join(tmpDir, 'MacOS')
+    fs.mkdirSync(binDir, { recursive: true })
+    const source = fakeSourceExec(binDir, 'Opptrix')
     const result = ensureOsScheduleTickRunner({
       userDataDir: tmpDir,
       isPackaged: true,
-      execPath: '/Applications/Opptrix.app/Contents/MacOS/Opptrix',
+      execPath: source,
       headlessTickPath: HEADLESS,
       platform: 'darwin',
       defaultPort: '8711',
@@ -155,59 +195,83 @@ describe('os-schedule tick-runner', () => {
     assert.equal(path.basename(result.scriptPath), RUNNER_SH)
     assert.ok(fs.existsSync(result.scriptPath))
     assert.ok(fs.existsSync(result.endpointFile))
+    assert.equal(path.basename(result.helperPath), HELPER_BASENAME_UNIX)
+    assert.ok(isScheduleHelperPath(result.coldStartArgv[0], 'darwin'))
+    assert.notEqual(path.basename(result.coldStartArgv[0]), 'Opptrix')
     const ep = readOsScheduleEndpoint(tmpDir)
-    assert.equal(ep?.execPath, '/Applications/Opptrix.app/Contents/MacOS/Opptrix')
+    assert.equal(ep?.execPath, result.helperPath)
+    assert.equal(path.basename(ep?.execPath ?? ''), HELPER_BASENAME_UNIX)
     assert.equal(ep?.headlessTick, HEADLESS)
     const body = fs.readFileSync(result.scriptPath, 'utf8')
     assert.match(body, /\/api\/schedule\/tick/)
     assert.match(body, /ELECTRON_RUN_AS_NODE=1/)
+    assert.match(body, /OpptrixSchedule/)
     assert.doesNotMatch(body, /--schedule-tick/)
     const mode = fs.statSync(result.scriptPath).mode & 0o111
     assert.ok(mode !== 0, 'runner should be executable')
   })
 
-  it('ensureOsScheduleTickRunner writes .cmd on win32', () => {
+  it('ensureOsScheduleTickRunner writes .cmd on win32 with OpptrixSchedule.exe', () => {
+    const binDir = path.join(tmpDir, 'winbin')
+    fs.mkdirSync(binDir, { recursive: true })
+    const source = fakeSourceExec(binDir, 'Opptrix.exe')
     const result = ensureOsScheduleTickRunner({
       userDataDir: tmpDir,
       isPackaged: true,
-      execPath: 'C:\\Opptrix\\Opptrix.exe',
-      headlessTickPath: 'C:\\Opptrix\\headless-tick.cjs',
+      execPath: source,
+      headlessTickPath: path.join(tmpDir, 'headless-tick.cjs'),
       platform: 'win32',
     })
     assert.equal(path.basename(result.scriptPath), RUNNER_CMD)
     assert.ok(fs.existsSync(result.scriptPath))
+    assert.equal(path.basename(result.helperPath), HELPER_BASENAME_WIN)
+    assert.equal(scheduleHelperFileName('win32'), HELPER_BASENAME_WIN)
     const body = fs.readFileSync(result.scriptPath, 'utf8')
     assert.match(body, /curl\.exe/)
     assert.match(body, /ELECTRON_RUN_AS_NODE=1/)
+    assert.match(body, /OpptrixSchedule\.exe/)
     assert.doesNotMatch(body, /--schedule-tick/)
+    const ep = readOsScheduleEndpoint(tmpDir)
+    assert.equal(path.basename(ep?.execPath ?? ''), HELPER_BASENAME_WIN)
   })
 
   it('resolveOsTickInvocation uses bash+runner on darwin/linux and cmd on win32', () => {
+    const darwinBin = path.join(tmpDir, 'darwin-bin')
+    fs.mkdirSync(darwinBin, { recursive: true })
+    const darwinSource = fakeSourceExec(darwinBin, 'Opptrix')
     const darwin = resolveOsTickInvocation({
       userDataDir: tmpDir,
       isPackaged: true,
-      execPath: '/Applications/Opptrix.app/Contents/MacOS/Opptrix',
+      execPath: darwinSource,
       headlessTickPath: HEADLESS,
       platform: 'darwin',
     })
     assert.deepEqual(darwin.programArguments, ['/bin/bash', darwin.scriptPath])
     assert.ok(!darwin.programArguments.some((a) => a.includes('Opptrix.app/Contents/MacOS')))
 
+    const linuxBin = path.join(tmpDir, 'linux-bin')
+    fs.mkdirSync(linuxBin, { recursive: true })
+    const linuxSource = fakeSourceExec(linuxBin, 'electron')
     const linux = resolveOsTickInvocation({
-      userDataDir: tmpDir,
+      userDataDir: path.join(tmpDir, 'linux-ud'),
       isPackaged: false,
-      execPath: '/usr/bin/electron',
+      execPath: linuxSource,
       headlessTickPath: HEADLESS,
       platform: 'linux',
     })
     assert.match(linux.execStart, /^\/bin\/bash /)
     assert.ok(linux.execStart.includes(linux.scriptPath))
+    const linuxEp = readOsScheduleEndpoint(path.join(tmpDir, 'linux-ud'))
+    assert.equal(path.basename(linuxEp?.execPath ?? ''), HELPER_BASENAME_UNIX)
 
+    const winBin = path.join(tmpDir, 'win-bin')
+    fs.mkdirSync(winBin, { recursive: true })
+    const winSource = fakeSourceExec(winBin, 'Opptrix.exe')
     const win = resolveOsTickInvocation({
-      userDataDir: tmpDir,
+      userDataDir: path.join(tmpDir, 'win-ud'),
       isPackaged: true,
-      execPath: 'C:\\Opptrix\\Opptrix.exe',
-      headlessTickPath: 'C:\\Opptrix\\headless-tick.cjs',
+      execPath: winSource,
+      headlessTickPath: path.join(tmpDir, 'headless-tick.cjs'),
       platform: 'win32',
     })
     assert.equal(win.programArguments.length, 1)
@@ -225,6 +289,9 @@ describe('os-schedule sidecar-launch helpers', () => {
       resolvePackagedRuntimeStage(exec),
       '/Applications/Opptrix.app/Contents/Resources/runtime-stage',
     )
+    // Helper sibling still resolves Resources via MacOS parent
+    const helper = '/Applications/Opptrix.app/Contents/MacOS/OpptrixSchedule'
+    assert.equal(resolveResourcesPathFromExec(helper), resources)
   })
 
   it('buildSidecarEnv packaged forces loopback host + ELECTRON_RUN_AS_NODE', () => {

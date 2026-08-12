@@ -139,11 +139,14 @@ function buildSidecarEnv(opts) {
  * @returns {import('node:child_process').ChildProcess}
  */
 function spawnSidecarProcess(opts) {
+  // windowsHide: 避免 Win 上弹出控制台；Node/Electron-as-Node 均支持。
   return spawn(opts.execPath, [opts.entry], {
     cwd: opts.cwd,
     env: opts.env,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
+    windowsHide: true,
+    shell: false,
   })
 }
 

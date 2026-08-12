@@ -15,56 +15,30 @@ function enabledJobCount(jobs: ScheduledJob[]): number {
   return jobs.filter(j => j.enabled).length
 }
 
-/** 根据 autostart 与任务 os_status 汇总系统定时健康状态（不含 launchd/cron 细节）。 */
+/**
+ * 进程内调度健康摘要。OS 级 tick 已废除；关闭到托盘仍执行，完全退出则不执行。
+ * `run_when_closed` 字段保留兼容，但不影响注册（永远不注册 OS tick）。
+ */
 export function computeOsHealth(
   settings: ScheduleSettings,
-  jobs: ScheduledJob[],
+  _jobs: ScheduledJob[],
 ): ScheduleOsHealth {
-  if (!settings.autostart) {
+  if (!settings.master_enabled) {
     return {
       status: 'n/a',
-      message: '未开启后台常驻，由应用内定时扫描执行',
+      message: '计划任务已关闭，不会自动执行',
       error: null,
-      autostart: false,
-    }
-  }
-
-  const enabled = jobs.filter(j => j.enabled)
-  if (enabled.length === 0) {
-    return {
-      status: 'synced',
-      message: '系统定时已就绪，当前没有启用的任务',
-      error: settings.os_tick_error ?? null,
-      autostart: true,
-    }
-  }
-
-  const errored = enabled.filter(j => j.os_status === 'error')
-  const pending = enabled.filter(j => j.os_status === 'pending' || j.os_status === 'n/a')
-
-  if (errored.length > 0 || settings.os_tick_status === 'error') {
-    return {
-      status: 'error',
-      message: '部分任务未能同步到系统定时，请重新注册',
-      error: settings.os_tick_error ?? null,
-      autostart: true,
-    }
-  }
-
-  if (pending.length > 0 || settings.os_tick_status === 'pending') {
-    return {
-      status: 'pending',
-      message: '正在等待系统定时同步完成',
-      error: settings.os_tick_error ?? null,
-      autostart: true,
+      autostart: settings.autostart,
     }
   }
 
   return {
-    status: 'synced',
-    message: '系统定时已与全部启用任务同步',
-    error: settings.os_tick_error ?? null,
-    autostart: true,
+    status: 'n/a',
+    message: settings.autostart
+      ? '登录后可在托盘常驻并按计划执行；完全退出应用后不会执行'
+      : '应用运行或驻留托盘时按计划执行；完全退出后不会执行',
+    error: null,
+    autostart: settings.autostart,
   }
 }
 
@@ -77,25 +51,26 @@ export interface OsSyncActions {
   ): ScheduledJob | null
 }
 
-/** 重新向系统定时注册全部启用任务（桌面 autostart 开启时）。 */
+/**
+ * 清理遗留 OS 注册状态（不再向系统注册 tick）。
+ * 将全局与任务级 os_* 字段置为 n/a / null。
+ */
 export function resyncOsRegistration(actions: OsSyncActions): ScheduleOsHealth {
-  const settings = actions.patchSettings({ os_tick_status: 'pending', os_tick_error: null })
   const jobs = actions.listJobs()
-
-  if (!settings.autostart) {
-    actions.patchSettings({ os_tick_status: 'n/a', os_tick_error: null })
-    return computeOsHealth(actions.patchSettings({}), jobs)
-  }
-
   try {
     for (const job of jobs) {
-      if (!job.enabled) continue
-      actions.updateJob(job.id, {
-        os_status: 'synced',
-        os_registration_id: job.os_registration_id ?? job.id,
-      })
+      if (job.os_status !== 'n/a' || job.os_registration_id != null) {
+        actions.updateJob(job.id, {
+          os_status: 'n/a',
+          os_registration_id: null,
+        })
+      }
     }
-    const next = actions.patchSettings({ os_tick_status: 'synced', os_tick_error: null })
+    const next = actions.patchSettings({
+      run_when_closed: false,
+      os_tick_status: 'n/a',
+      os_tick_error: null,
+    })
     return computeOsHealth(next, actions.listJobs())
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)

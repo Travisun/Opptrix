@@ -1,6 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { Menu, Tray } = require('electron')
+const { Menu, Tray, app } = require('electron')
 const { loadAppIconImage } = require('./icon.cjs')
 const { APP_NAME } = require('./app-meta.cjs')
 
@@ -59,6 +59,25 @@ function resolveTrayIcon() {
   return resized
 }
 
+/** Hide Dock (mac) / taskbar entry (win/linux) after close-to-tray hide. */
+function hideAppFromDockAndTaskbar(win) {
+  if (process.platform === 'darwin') {
+    try {
+      if (app.dock && typeof app.dock.hide === 'function') app.dock.hide()
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+  if (win && !win.isDestroyed() && typeof win.setSkipTaskbar === 'function') {
+    try {
+      win.setSkipTaskbar(true)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function attachCloseToTray(win, { enabled, shouldQuit }) {
   if (!enabled) return
 
@@ -66,6 +85,7 @@ function attachCloseToTray(win, { enabled, shouldQuit }) {
     if (shouldQuit()) return
     event.preventDefault()
     win.hide()
+    hideAppFromDockAndTaskbar(win)
     if (process.platform === 'darwin' && win.isFullScreen()) {
       win.setFullScreen(false)
     }

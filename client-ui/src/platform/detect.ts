@@ -70,6 +70,9 @@ declare global {
       setThemeSource?: (source: 'system' | 'light' | 'dark') => void
       shellInstallWindowsSandbox?: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>
       shellInstallLinuxSandbox?: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>
+      /** 同步登录项并注销遗留 OS 计划任务 */
+      scheduleOsReconcile?: () => Promise<unknown>
+      scheduleEnsureAutostart?: (enabled: boolean) => Promise<unknown>
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
     showSaveFilePicker?: (options?: {
