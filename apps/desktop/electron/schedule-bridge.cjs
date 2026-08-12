@@ -1,10 +1,9 @@
 const path = require('node:path')
 const { app } = require('electron')
 const { getOsScheduleAdapter } = require('./os-schedule/index.cjs')
-const { DEFAULT_TICK_INTERVAL_SEC } = require('./os-schedule/types.cjs')
 const {
   writeOsScheduleEndpoint,
-  defaultHeadlessTickPath,
+  purgeLegacyOsTickArtifacts,
 } = require('./os-schedule/tick-runner.cjs')
 
 /** @type {string} */
@@ -13,29 +12,16 @@ let apiHost = '127.0.0.1'
 let apiPort = '8711'
 
 /**
- * Persist loopback host/port + headless cold-start paths for the OS tick runner (no secrets).
- * Same endpoint JSON is reused by UI `resolveApiPort(allowReuse:true)` via host/port.
+ * Persist loopback host/port for UI `resolveApiPort(allowReuse:true)`.
+ * No longer writes OpptrixSchedule / headless-tick cold-start paths (OS tick abolished).
  */
 function persistOsScheduleEndpoint() {
   try {
     if (typeof app?.getPath !== 'function') return
-    /** @type {{
-     *   host: string
-     *   port: string | number
-     *   execPath: string
-     *   headlessTick: string
-     *   runtimeStage?: string
-     *   resourcesPath?: string
-     * }} */
+    /** @type {{ host: string; port: string | number }} */
     const opts = {
       host: apiHost,
       port: apiPort,
-      execPath: process.execPath,
-      headlessTick: defaultHeadlessTickPath(),
-    }
-    if (app.isPackaged && typeof process.resourcesPath === 'string') {
-      opts.resourcesPath = process.resourcesPath
-      opts.runtimeStage = path.join(process.resourcesPath, 'runtime-stage')
     }
     writeOsScheduleEndpoint(app.getPath('userData'), opts)
   } catch {
@@ -132,6 +118,12 @@ function probeAutostart() {
   return { enabled: current.openAtLogin, platform: process.platform }
 }
 
+/**
+ * Reconcile desktop schedule side-effects:
+ * - Always remove legacy OS tick (LaunchAgent / schtasks / systemd) — never ensure
+ * - Purge userData runner scripts + cold-start endpoint fields
+ * - Sync login-item autostart when hint.autostart is boolean
+ */
 async function reconcileOsSchedule(opts = {}) {
   const isDesktop = process.type === 'browser'
   if (!isDesktop) {
@@ -142,22 +134,25 @@ async function reconcileOsSchedule(opts = {}) {
   try {
     hint = opts.hint ?? await fetchOsReconcileHint()
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    }
+    // Sidecar may be down; still attempt OS tick purge for upgrade cleanup
+    hint = { register_tick: false, autostart: undefined }
+    console.warn(
+      '[schedule-bridge] reconcile hint failed, still removing OS tick:',
+      err instanceof Error ? err.message : String(err),
+    )
   }
 
   const adapter = getOsScheduleAdapter()
-  const shouldRegister = Boolean(hint.register_tick)
-  let tickResult
+  // Product decision: never register OS tick (ignore hint.register_tick)
+  const tickResult = await adapter.removeTickRegistration()
 
-  if (shouldRegister) {
-    tickResult = await adapter.ensureTickRegistration({
-      intervalSec: hint.interval_sec ?? DEFAULT_TICK_INTERVAL_SEC,
-    })
-  } else {
-    tickResult = await adapter.removeTickRegistration()
+  let purge = { removedRunners: [], endpointStripped: false }
+  try {
+    if (typeof app?.getPath === 'function') {
+      purge = purgeLegacyOsTickArtifacts(app.getPath('userData'))
+    }
+  } catch {
+    /* best-effort */
   }
 
   let autostartResult = null
@@ -165,10 +160,11 @@ async function reconcileOsSchedule(opts = {}) {
     autostartResult = ensureAutostart(hint.autostart)
   }
 
-  const nextStatus = tickResult.status ?? (tickResult.ok ? 'synced' : 'error')
+  const nextStatus = tickResult.status ?? (tickResult.ok ? 'n/a' : 'error')
   try {
     await patchScheduleSettings({
-      os_tick_status: nextStatus,
+      run_when_closed: false,
+      os_tick_status: nextStatus === 'synced' ? 'n/a' : nextStatus,
       os_tick_error: tickResult.error ?? null,
     })
   } catch {
@@ -177,22 +173,29 @@ async function reconcileOsSchedule(opts = {}) {
 
   return {
     ok: tickResult.ok && (autostartResult == null || autostartResult.ok !== false),
-    register_tick: shouldRegister,
+    register_tick: false,
     tick: tickResult,
     autostart: autostartResult,
+    purge,
     probe: await adapter.probeTickRegistration().catch(() => null),
   }
 }
 
 /**
- * 更新安装前暂停 OS 级 tick，避免 launchd/schtasks/systemd 在替换 .app 期间
- * 再拉起第二实例，导致 ShipIt「App Still Running」或空壳进程。
- * 不改动登录项；安装成功或恢复 UI 后由 reconcileOsSchedule 重新注册。
+ * 更新安装前暂停遗留 OS 级 tick，避免 launchd/schtasks/systemd 在替换 .app 期间
+ * 再拉起第二实例。不改动登录项；安装后仍只 remove，永不重新 ensure。
  */
 async function pauseOsScheduleForUpdateInstall() {
   const adapter = getOsScheduleAdapter()
   try {
     const tickResult = await adapter.removeTickRegistration()
+    try {
+      if (typeof app?.getPath === 'function') {
+        purgeLegacyOsTickArtifacts(app.getPath('userData'))
+      }
+    } catch {
+      /* best-effort */
+    }
     return { ok: tickResult.ok !== false, tick: tickResult }
   } catch (err) {
     return {

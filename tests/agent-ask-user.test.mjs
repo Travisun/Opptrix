@@ -194,3 +194,54 @@ test('UserPromptBridge rejects on session cancel', async () => {
   bridge.cancelSession(sessionId)
   await assert.rejects(answerPromise, UserPromptCancelledError)
 })
+
+test('unattended helpers strip ask_user / request_secret and never hang', async () => {
+  const {
+    filterToolNamesForUnattended,
+    filterOpenAiToolsForUnattended,
+    isUnattendedBlockedTool,
+    UNATTENDED_ASK_USER_RESULT,
+    UNATTENDED_SECRET_RESULT,
+    appendUnattendedTurnTail,
+    pickUnattendedConfirmIds,
+  } = await import('../packages/agent/dist/unattended.js')
+
+  assert.equal(isUnattendedBlockedTool('ask_user'), true)
+  assert.equal(isUnattendedBlockedTool('request_secret'), true)
+  assert.equal(isUnattendedBlockedTool('shell_run'), false)
+
+  assert.deepEqual(
+    filterToolNamesForUnattended(['ask_user', 'shell_run', 'request_secret', 'search_instruments']),
+    ['shell_run', 'search_instruments'],
+  )
+
+  const tools = [
+    { type: 'function', function: { name: 'ask_user', description: '', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'shell_run', description: '', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'request_secret', description: '', parameters: { type: 'object', properties: {} } } },
+  ]
+  assert.deepEqual(
+    filterOpenAiToolsForUnattended(tools).map(t => t.function.name),
+    ['shell_run'],
+  )
+
+  assert.equal(UNATTENDED_ASK_USER_RESULT.ok, false)
+  assert.equal(UNATTENDED_ASK_USER_RESULT.unattended, true)
+  assert.match(UNATTENDED_ASK_USER_RESULT.error, /无人值守/)
+
+  assert.equal(UNATTENDED_SECRET_RESULT.cancelled, true)
+  assert.equal(UNATTENDED_SECRET_RESULT.unattended, true)
+
+  const tail = appendUnattendedTurnTail('【本轮动态说明】')
+  assert.match(tail, /无人值守/)
+  assert.match(tail, /ask_user/)
+
+  assert.deepEqual(
+    pickUnattendedConfirmIds([
+      { id: 'cancel' },
+      { id: 'allow_once' },
+      { id: 'allow_session' },
+    ]),
+    { selected_ids: ['allow_session'] },
+  )
+})

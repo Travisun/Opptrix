@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
-  ArrowSyncRegular,
   CalendarClockRegular,
   CheckmarkCircleRegular,
   DismissCircleRegular,
@@ -16,7 +15,6 @@ import {
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars } from '../../theme/tokens'
 import {
-  SettingsAddBar,
   SettingsEmptyState,
   SettingsGroup,
   SettingsListPanel,
@@ -96,14 +94,14 @@ function lastStatusLabel(status: string | null): string {
   }
 }
 
-function osStatusBadge(os: ScheduleOsHealth | null, s: ReturnType<typeof useStyles>) {
+function scheduleHealthBadge(os: ScheduleOsHealth | null, s: ReturnType<typeof useStyles>) {
   if (!os) return null
   switch (os.status) {
-    case 'synced':
+    case 'error':
       return (
-        <span className={mergeClasses(s.statusBadge, s.statusReady)}>
-          <CheckmarkCircleRegular fontSize={14} />
-          已同步
+        <span className={mergeClasses(s.statusBadge, s.statusError)}>
+          <DismissCircleRegular fontSize={14} />
+          需关注
         </span>
       )
     case 'pending':
@@ -112,17 +110,17 @@ function osStatusBadge(os: ScheduleOsHealth | null, s: ReturnType<typeof useStyl
           同步中
         </span>
       )
-    case 'error':
+    case 'synced':
       return (
-        <span className={mergeClasses(s.statusBadge, s.statusError)}>
-          <DismissCircleRegular fontSize={14} />
-          同步失败
+        <span className={mergeClasses(s.statusBadge, s.statusReady)}>
+          <CheckmarkCircleRegular fontSize={14} />
+          就绪
         </span>
       )
     default:
       return (
         <span className={s.statusBadge}>
-          应用内定时
+          托盘内执行
         </span>
       )
   }
@@ -132,7 +130,6 @@ export default function ScheduleSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
   const [settings, setSettings] = useState<ScheduleSettings | null>(null)
   const [jobs, setJobs] = useState<ScheduledJob[]>([])
   const [os, setOs] = useState<ScheduleOsHealth | null>(null)
@@ -164,6 +161,13 @@ export default function ScheduleSettingsSection() {
       const resp = await scheduleApi.patchSettings(patch)
       setSettings(resp.settings)
       if (resp.os) setOs(resp.os)
+      const needsReconcile = (
+        patch.master_enabled !== undefined
+        || patch.autostart !== undefined
+      )
+      if (needsReconcile) {
+        void window.electronAPI?.scheduleOsReconcile?.().catch(() => {})
+      }
       toast.showSuccess('已保存')
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '保存失败，请稍后重试')
@@ -180,21 +184,6 @@ export default function ScheduleSettingsSection() {
       toast.showError(e instanceof Error ? e.message : '暂时无法更新任务')
     }
   }, [toast])
-
-  const handleResync = useCallback(async () => {
-    setSyncing(true)
-    try {
-      const resp = await scheduleApi.patchSettings({ resync_os: true })
-      setSettings(resp.settings)
-      if (resp.os) setOs(resp.os)
-      toast.showSuccess('已重新注册系统定时')
-      await load()
-    } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '重新注册失败，请稍后重试')
-    } finally {
-      setSyncing(false)
-    }
-  }, [load, toast])
 
   if (loading) {
     return <Spinner size="tiny" label="正在加载计划任务…" />
@@ -220,7 +209,7 @@ export default function ScheduleSettingsSection() {
         <SettingsGroup>
           <SettingsRow
             title="计划任务"
-            desc="关闭后，所有任务都不会自动执行"
+            desc="关闭后所有任务都不会自动执行。最小化到托盘时仍会按计划执行；从托盘完全退出后不会执行"
             control={(
               <Switch
                 checked={settings.master_enabled}
@@ -248,12 +237,15 @@ export default function ScheduleSettingsSection() {
         <SettingsSectionLabel>后台常驻</SettingsSectionLabel>
         <SettingsGroup>
           <SettingsRow
-            title="随应用启动"
-            desc={settings.autostart ? '应用启动后会尝试注册系统定时' : '当前由应用内定时扫描执行'}
+            title="登录时在托盘启动"
+            desc="开机后静默进入托盘，便于计划任务在后台继续执行；完全退出应用后仍不会执行"
             control={(
-              <Text style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary }}>
-                {settings.autostart ? '已开启' : '未开启'}
-              </Text>
+              <Switch
+                checked={settings.autostart}
+                disabled={!settings.master_enabled}
+                onChange={(_, data) => { void patchSettings({ autostart: Boolean(data.checked) }) }}
+                aria-label="登录时在托盘启动"
+              />
             )}
             last
           />
@@ -261,32 +253,15 @@ export default function ScheduleSettingsSection() {
       </div>
 
       <div className={s.sectionBlock}>
-        <SettingsSectionLabel>系统定时</SettingsSectionLabel>
+        <SettingsSectionLabel>运行说明</SettingsSectionLabel>
         <SettingsListPanel>
-          <SettingsAddBar
-            meta={os?.message ?? '正在获取同步状态…'}
-            actions={(
-              <OpptrixButton
-                variant="ghost"
-                size="small"
-                icon={<ArrowSyncRegular fontSize={14} />}
-                disabled={syncing}
-                onClick={() => { void handleResync() }}
-              >
-                {syncing ? '注册中…' : '重新注册'}
-              </OpptrixButton>
-            )}
-          />
           <SettingsListRow
-            title="同步状态"
+            title={os?.message ?? '应用运行或驻留托盘时按计划执行'}
             meta={summary
               ? `共 ${summary.total} 个任务，${summary.enabled} 个启用`
               : '暂无任务摘要'}
-            trailing={osStatusBadge(os, s)}
+            trailing={scheduleHealthBadge(os, s)}
           />
-          {os?.error && (
-            <SettingsListRow title={os.error} />
-          )}
         </SettingsListPanel>
       </div>
 

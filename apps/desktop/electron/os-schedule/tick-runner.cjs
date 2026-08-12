@@ -5,6 +5,9 @@
  * /api/schedule/tick when the sidecar is up — avoiding a full Opptrix GUI
  * spawn (Dock / taskbar flash). Falls back to ELECTRON_RUN_AS_NODE headless-tick
  * (spawn sidecar → tick → stop) only on failure — never `--background --schedule-tick`.
+ *
+ * Cold-start EXEC is OpptrixSchedule (renamed Electron copy beside the product
+ * binary), not Opptrix productName — so crash UI / process list stay distinct.
  */
 const path = require('node:path')
 const fs = require('node:fs')
@@ -12,12 +15,147 @@ const fs = require('node:fs')
 const ENDPOINT_FILENAME = 'os-schedule-endpoint.json'
 const RUNNER_SH = 'os-schedule-tick-runner.sh'
 const RUNNER_CMD = 'os-schedule-tick-runner.cmd'
+/** Cold-start identity distinct from Opptrix productName (crash UI / process list). */
+const HELPER_BASENAME_UNIX = 'OpptrixSchedule'
+const HELPER_BASENAME_WIN = 'OpptrixSchedule.exe'
 
 /**
  * Absolute path to headless-tick.cjs (works inside app.asar under ELECTRON_RUN_AS_NODE).
  */
 function defaultHeadlessTickPath() {
   return path.join(__dirname, 'headless-tick.cjs')
+}
+
+/**
+ * @param {NodeJS.Platform} [platform]
+ */
+function scheduleHelperFileName(platform = process.platform) {
+  return platform === 'win32' ? HELPER_BASENAME_WIN : HELPER_BASENAME_UNIX
+}
+
+/**
+ * Helper must sit beside the Electron binary so @executable_path / adjacent DLLs resolve.
+ * @param {string} sourceExecPath Absolute path to Opptrix / Electron binary
+ * @param {NodeJS.Platform} [platform]
+ */
+function resolveScheduleHelperPath(sourceExecPath, platform = process.platform) {
+  return path.join(path.dirname(sourceExecPath), scheduleHelperFileName(platform))
+}
+
+/**
+ * True when basename is OpptrixSchedule(.exe) — not the main product binary name.
+ * @param {string} execPath
+ * @param {NodeJS.Platform} [platform]
+ */
+function isScheduleHelperPath(execPath, platform = process.platform) {
+  if (typeof execPath !== 'string' || !execPath.trim()) return false
+  return path.basename(execPath.trim()) === scheduleHelperFileName(platform)
+}
+
+/**
+ * Ensure a renamed Electron copy (OpptrixSchedule) exists next to sourceExecPath.
+ * Prefer hardlink (same dir / frameworks); fallback copyFileSync. Never silently
+ * rewrite cold-start EXEC to the main Opptrix product binary name.
+ *
+ * @param {{
+ *   sourceExecPath: string
+ *   platform?: NodeJS.Platform
+ * }} opts
+ * @returns {{ helperPath: string; created: boolean; refreshed: boolean }}
+ */
+function ensureOsScheduleHelperExec(opts) {
+  const platform = opts.platform ?? process.platform
+  const sourceExecPath = optionalAbsPath(opts.sourceExecPath)
+  if (!sourceExecPath || !path.isAbsolute(sourceExecPath)) {
+    throw new Error('schedule helper: sourceExecPath must be an absolute path')
+  }
+  if (!fs.existsSync(sourceExecPath)) {
+    throw new Error(`schedule helper: source missing: ${sourceExecPath}`)
+  }
+  // Refuse to treat an already-named helper as the copy source (would clobber itself).
+  if (isScheduleHelperPath(sourceExecPath, platform)) {
+    return { helperPath: sourceExecPath, created: false, refreshed: false }
+  }
+
+  const helperPath = resolveScheduleHelperPath(sourceExecPath, platform)
+  if (path.resolve(helperPath) === path.resolve(sourceExecPath)) {
+    throw new Error('schedule helper: helper path collides with source')
+  }
+
+  let needWrite = !fs.existsSync(helperPath)
+  if (!needWrite) {
+    try {
+      const src = fs.statSync(sourceExecPath)
+      const dst = fs.statSync(helperPath)
+      needWrite = src.size !== dst.size || src.mtimeMs > dst.mtimeMs + 1000
+    } catch {
+      needWrite = true
+    }
+  }
+
+  let created = false
+  let refreshed = false
+  if (needWrite) {
+    const existed = fs.existsSync(helperPath)
+    try {
+      try {
+        if (existed) fs.unlinkSync(helperPath)
+      } catch {
+        /* Windows may lock running helper — try overwrite via temp */
+      }
+      let linked = false
+      try {
+        fs.linkSync(sourceExecPath, helperPath)
+        linked = true
+      } catch {
+        /* hardlink unsupported (permissions / FS) — copy */
+      }
+      if (!linked) {
+        const tmp = `${helperPath}.tmp-${process.pid}`
+        try {
+          fs.copyFileSync(sourceExecPath, tmp)
+          fs.renameSync(tmp, helperPath)
+        } catch (copyErr) {
+          try {
+            if (fs.existsSync(tmp)) fs.unlinkSync(tmp)
+          } catch {
+            /* ignore */
+          }
+          throw copyErr
+        }
+      }
+      if (platform !== 'win32') {
+        try {
+          fs.chmodSync(helperPath, 0o755)
+        } catch {
+          /* ignore */
+        }
+      }
+      created = !existed
+      refreshed = existed
+    } catch (err) {
+      if (fs.existsSync(helperPath) && isScheduleHelperPath(helperPath, platform)) {
+        // Keep existing helper; surface refresh failure for diagnostics without
+        // falling back to Opptrix productName.
+        console.error(
+          '[os-schedule] helper refresh failed, keeping existing OpptrixSchedule:',
+          err instanceof Error ? err.message : String(err),
+        )
+      } else {
+        throw new Error(
+          `schedule helper: cannot create OpptrixSchedule beside ${sourceExecPath}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      }
+    }
+  }
+
+  if (!fs.existsSync(helperPath) || !isScheduleHelperPath(helperPath, platform)) {
+    throw new Error(`schedule helper: OpptrixSchedule not available at ${helperPath}`)
+  }
+
+  return { helperPath, created, refreshed }
 }
 
 /**
@@ -135,6 +273,47 @@ function readOsScheduleEndpoint(userDataDir) {
   } catch {
     return null
   }
+}
+
+/**
+ * Remove legacy OS tick runner scripts and strip cold-start fields from endpoint.
+ * Idempotent; host/port retained for UI sidecar reuse.
+ * @param {string} userDataDir
+ * @returns {{ removedRunners: string[]; endpointStripped: boolean }}
+ */
+function purgeLegacyOsTickArtifacts(userDataDir) {
+  /** @type {string[]} */
+  const removedRunners = []
+  for (const name of [RUNNER_SH, RUNNER_CMD]) {
+    const p = path.join(userDataDir, name)
+    try {
+      if (fs.existsSync(p)) {
+        fs.unlinkSync(p)
+        removedRunners.push(name)
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  let endpointStripped = false
+  try {
+    const existing = readOsScheduleEndpoint(userDataDir)
+    if (
+      existing
+      && (existing.execPath || existing.headlessTick || existing.runtimeStage || existing.resourcesPath)
+    ) {
+      writeOsScheduleEndpoint(userDataDir, {
+        host: existing.host,
+        port: existing.port,
+      })
+      endpointStripped = true
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  return { removedRunners, endpointStripped }
 }
 
 /**
@@ -262,6 +441,8 @@ exit /b %ERRORLEVEL%
 
 /**
  * Write (or refresh) the OS tick runner script under userData; chmod +x on Unix.
+ * Cold-start EXEC is OpptrixSchedule helper (renamed Electron copy beside source),
+ * not the Opptrix productName binary.
  *
  * @param {{
  *   userDataDir: string
@@ -274,26 +455,42 @@ exit /b %ERRORLEVEL%
  *   platform?: NodeJS.Platform
  *   defaultPort?: string | number
  * }} opts
- * @returns {{ scriptPath: string; endpointFile: string; coldStartArgv: string[] }}
+ * @returns {{
+ *   scriptPath: string
+ *   endpointFile: string
+ *   coldStartArgv: string[]
+ *   helperPath: string
+ *   sourceExecPath: string
+ * }}
  */
 function ensureOsScheduleTickRunner(opts) {
   const platform = opts.platform ?? process.platform
   const userDataDir = opts.userDataDir
   fs.mkdirSync(userDataDir, { recursive: true })
 
+  const sourceExecPath = optionalAbsPath(opts.execPath)
+  if (!sourceExecPath) {
+    throw new Error('ensureOsScheduleTickRunner: execPath (Electron source) is required')
+  }
+
+  const { helperPath } = ensureOsScheduleHelperExec({
+    sourceExecPath,
+    platform,
+  })
+
   const headlessTickPath = opts.headlessTickPath || defaultHeadlessTickPath()
   const existing = readOsScheduleEndpoint(userDataDir)
   writeOsScheduleEndpoint(userDataDir, {
     host: existing?.host ?? '127.0.0.1',
     port: existing?.port ?? opts.defaultPort ?? '8711',
-    execPath: opts.execPath,
+    execPath: helperPath,
     headlessTick: headlessTickPath,
     runtimeStage: opts.runtimeStage ?? existing?.runtimeStage,
     resourcesPath: opts.resourcesPath ?? existing?.resourcesPath,
   })
 
   const coldStartArgv = resolveHeadlessTickArgv({
-    execPath: opts.execPath,
+    execPath: helperPath,
     headlessTickPath,
   })
   const endpointFile = endpointFilePath(userDataDir)
@@ -318,7 +515,7 @@ function ensureOsScheduleTickRunner(opts) {
     }
   }
 
-  return { scriptPath, endpointFile, coldStartArgv }
+  return { scriptPath, endpointFile, coldStartArgv, helperPath, sourceExecPath }
 }
 
 /**
@@ -358,12 +555,19 @@ module.exports = {
   ENDPOINT_FILENAME,
   RUNNER_SH,
   RUNNER_CMD,
+  HELPER_BASENAME_UNIX,
+  HELPER_BASENAME_WIN,
   defaultHeadlessTickPath,
   endpointFilePath,
   runnerScriptPath,
+  scheduleHelperFileName,
+  resolveScheduleHelperPath,
+  isScheduleHelperPath,
+  ensureOsScheduleHelperExec,
   sanitizeEndpointHost,
   writeOsScheduleEndpoint,
   readOsScheduleEndpoint,
+  purgeLegacyOsTickArtifacts,
   resolveHeadlessTickArgv,
   resolveColdStartArgv,
   shellSingleQuote,

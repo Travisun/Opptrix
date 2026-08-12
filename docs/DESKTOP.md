@@ -73,20 +73,22 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 ## 计划任务与后台常驻
 
-桌面端计划任务采用 **双轨调度**：Sidecar 内 `ScheduleService.start()` 每 **20s** 进程内扫描（`trigger: 'timer'`）；另注册 **OS 级通用 tick**（默认间隔 **60s**，用户级、**不要求 root**）。OS tick 优先经 userData 内 **HTTP-first runner** 对已运行 sidecar 发 `POST /api/schedule/tick`（`trigger: 'os'`）；仅当 sidecar 未起时才 fallback **`ELECTRON_RUN_AS_NODE` headless-tick**（无界面拉起 sidecar → tick → 停掉本次 sidecar），**不再** GUI 冷启动 `--background --schedule-tick`。两路均经乐观 claim 幂等，避免重复跑同一到期任务。
+桌面端计划任务为 **仅进程内执行**：Sidecar 内 `ScheduleService.start()` 每 **20s** 扫描到期任务（`trigger: 'timer'`）。**不再**注册 LaunchAgent / Windows schtasks / Linux systemd timer；升级启动时 `reconcileOsSchedule` **强制** `removeTickRegistration` 并清理旧 runner 脚本。
+
+关窗到托盘时 sidecar 与 timer 继续运行；从托盘 **完全退出** 后计划任务 **不会** 执行。登录项 `autostart`（`--background`）可保留，与已废除的 OS tick 无关。
 
 ### 关窗 = 托盘常驻（生产包）
 
-打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`）；sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
+打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`，并隐藏 macOS Dock / Windows·Linux 任务栏图标，仅保留系统托盘）；从托盘「显示」时 `revealAppFromTray` / `ensureMainWindowVisible` 恢复 Dock 与任务栏。sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 
-1. 安装前：`isUpdating` + `isQuitting` → 停 reconcile 轮询 → **暂停 OS tick**（launchd / 任务计划 / systemd-user；Linux 会 `stop` oneshot + `disable --now` timer）→ 销毁托盘 → 等待 sidecar 退出 → 销毁窗口（卸掉关窗进托盘）→ **`killResidualAppProcessesForUpdate`**（`kill-app-for-update.cjs`）：三端按 **.app bundle / 安装目录 / AppImage·deb 路径** 强杀残留 PID（Helper、孤儿实例、sidecar 孙进程等），**始终排除当前主进程 `process.pid`**；Linux 另用 `/proc/*/exe`+cmdline 双通道并 **settle 后再扫一轮**（与 macOS/Windows 对等），再交给 `quitAndInstall`  
-2. 安装中：`second-instance`（含 `--schedule-tick`）一律忽略，避免第二实例拖住进程  
-3. OS tick 唤醒（`--schedule-tick`）**不**自动 `quitAndInstall`，等下次正常打开再装  
-4. `quitAndInstall` 后约 3s 仍未退出 → 强制 `app.exit`（防 macOS 安装器因应用仍在运行而卡住 / Linux AppImage 占锁）；约 12s 仍存活 → 清安装态、提示用户强制退出后重开即可继续安装，并重建托盘/主窗口，再 `reconcileOsSchedule` 恢复 OS tick  
+1. 安装前：`isUpdating` + `isQuitting` → 停 reconcile 轮询 → **移除遗留 OS tick**（若仍有 launchd / 任务计划 / systemd-user）→ 销毁托盘 → 等待 sidecar 退出 → 销毁窗口（卸掉关窗进托盘）→ **`killResidualAppProcessesForUpdate`**（`kill-app-for-update.cjs`）：三端按 **.app bundle / 安装目录 / AppImage·deb 路径** 强杀残留 PID（Helper、孤儿实例、sidecar 孙进程等），**始终排除当前主进程 `process.pid`**；Linux 另用 `/proc/*/exe`+cmdline 双通道并 **settle 后再扫一轮**（与 macOS/Windows 对等），再交给 `quitAndInstall`  
+2. 安装中：`second-instance`（含旧版 `--schedule-tick`）一律忽略，避免第二实例拖住进程  
+3. 遗留 OS tick 唤醒（`--schedule-tick`）**不**自动 `quitAndInstall`，等下次正常打开再装  
+4. `quitAndInstall` 后约 3s 仍未退出 → 强制 `app.exit`（防 macOS 安装器因应用仍在运行而卡住 / Linux AppImage 占锁）；约 12s 仍存活 → 清安装态、提示用户强制退出后重开即可继续安装，并重建托盘/主窗口，再 `reconcileOsSchedule`（仅 remove + 登录项）  
 5. Windows 另有 NSIS（`nsis/installer.nsh`）在写文件前删 `OpptrixScheduleTick` 并 `taskkill` / 按 `$INSTDIR` 路径强杀；Electron 侧强杀是安装器唤起前的补强，语义对齐但不无差别先杀本进程  
-6. Linux 用户退出 / 短命 tick 结束时与 Windows 一样有短超时 `app.exit` 兜底，避免 AppImage 幽灵进程占住下一版安装  
+6. Linux 用户退出时与 Windows 一样有短超时 `app.exit` 兜底，避免 AppImage 幽灵进程占住下一版安装  
 
 
 托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）。
@@ -143,42 +145,34 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
 
 | 参数 | 含义 |
 |------|------|
-| `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar 并 reconcile OS 调度 |
-| `--schedule-tick` | **兼容**旧 LaunchAgent / 手动调试：短命 Electron worker（`runEphemeralScheduleTickWorker`）在 sidecar ready 后 `POST /api/schedule/tick`，然后退出（常与 `--background` 合用；不建托盘、不常驻）。**新注册的 OS 任务不再指向此路径** |
+| `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar；进程内 timer 工作；reconcile 仅 remove 遗留 OS tick + 同步登录项 |
+| `--schedule-tick` | **兼容**旧 LaunchAgent：短命 worker 在 sidecar ready 后 `POST /api/schedule/tick` 后退出；**新版本不再注册**此类 OS 任务 |
 
-OS 适配器注册的系统任务执行 **HTTP-first tick runner**（写在 Electron `userData`，如 `os-schedule-tick-runner.sh` / `.cmd`），**不再**把 Opptrix GUI 本体当作 StartInterval / schtasks / systemd 的主程序：
+**已废除**：系统级 OS tick（LaunchAgent / schtasks / systemd timer）、OpptrixSchedule Helper 冷启、headless-tick 作为主路径。适配器仍保留 `removeTickRegistration` / `probeTickRegistration`，供升级清理。`userData` 内旧 `os-schedule-tick-runner.*` 与 endpoint 冷启字段在 reconcile 时清除；`os-schedule-endpoint.json` 仅保留 loopback `host`/`port` 供 UI 复用 sidecar。
 
-1. 读取 `userData/os-schedule-endpoint.json`（`host` 强制 `127.0.0.1`、`port`，以及冷启动用的 `execPath` + `headlessTick`；可选 `runtimeStage` / `resourcesPath`；由 `configureScheduleBridge` / ensure runner 写入，**无密钥**）
-2. 短超时 `POST http://127.0.0.1:$PORT/api/schedule/tick`（`{"trigger":"os"}`）→ **成功则 exit 0**（应用已运行时不拉起新进程，避免 Dock / 任务栏闪烁；UI 侧 `resolveApiPort(allowReuse:true)` 可 reuse 同一 endpoint 上的健康 sidecar）
-3. 失败（sidecar 未起）再 fallback：`ELECTRON_RUN_AS_NODE=1 "$execPath" "$headlessTick"`（`os-schedule/headless-tick.cjs`：再试 POST → 必要时 spawn sidecar → health → POST tick → **停掉本次 sidecar** → exit）。**禁止** fallback 到 `Opptrix --background --schedule-tick`
+Windows NSIS（`nsis/installer.nsh`）仍会在安装前移除 `OpptrixScheduleTick`，避免旧版定时拉起阻塞覆盖安装。
 
-| 平台 | 机制 | 标识 |
-|------|------|------|
-| **macOS** | 用户 LaunchAgent `~/Library/LaunchAgents/org.opptrix.schedule-tick.plist`，`ProgramArguments` = `/bin/bash` + tick runner，`StartInterval` ≥ 30s | `launchctl` gui 域 |
-| **Windows** | 用户计划任务 `schtasks`，`/TR` 指向 tick runner `.cmd`，按分钟重复 | 任务名 `OpptrixScheduleTick` |
-| **Linux** | 用户 systemd timer；`.service` 的 `ExecStart` = `/bin/bash` + tick runner | `systemctl --user` |
-
-实现：`apps/desktop/electron/os-schedule/{tick-runner,headless-tick,sidecar-launch}.cjs` + `{darwin,win32,linux}.cjs`；入口 `os-schedule/index.cjs`。Windows NSIS 安装器（`nsis/installer.nsh`）会在安装前移除 `OpptrixScheduleTick` 并结束运行中的 Opptrix，避免旧版定时拉起阻塞覆盖安装。
-
-单实例锁：若已有实例运行，带 `--schedule-tick` 的第二次启动（仅兼容旧 plist / 手动调试）只触发 `handleScheduleTickFromOs()`（经已有 sidecar），不重复开主窗（除非未带 `--background`）。macOS 在 `requestSingleInstanceLock` 之前对 `--background` / `--schedule-tick` 尽早 `app.dock.hide()`，进一步降低秒退时的 Dock 闪烁。
+单实例锁：若已有实例运行，带 `--schedule-tick` 的第二次启动（仅兼容旧 plist）只触发 `handleScheduleTickFromOs()`，不重复开主窗（除非未带 `--background`）。
 
 ### `schedule-bridge.cjs` 与 reconcile
 
-主进程通过 bridge 调用 sidecar REST（`configureScheduleBridge({ host, port })` 同时写入 `os-schedule-endpoint.json`）：
+主进程通过 bridge 调用 sidecar REST（`configureScheduleBridge({ host, port })` 写入 endpoint 的 host/port）：
 
-1. `GET /api/schedule/os/reconcile` — 是否应注册 OS tick（`register_tick` = `master_enabled`）、`autostart`、`interval_sec`
-2. `getOsScheduleAdapter().ensureTickRegistration` / `removeTickRegistration` — 生成/刷新 tick runner 并写系统级任务
-3. `app.setLoginItemSettings({ openAtLogin, args: ['--background'] })` — macOS/Windows 登录项（`autostart`）
-4. `PATCH /api/schedule/settings` — 回写 `os_tick_status` / `os_tick_error`
+1. `GET /api/schedule/os/reconcile` — `register_tick` **恒为 false**；读取 `autostart`
+2. `getOsScheduleAdapter().removeTickRegistration()` — **每次**启动/轮询强制注销遗留 OS 任务（永不 `ensureTickRegistration`）
+3. `purgeLegacyOsTickArtifacts` — 删除旧 runner 脚本、剥离 endpoint 冷启字段
+4. `app.setLoginItemSettings({ openAtLogin, args: ['--background'] })` — macOS/Windows 登录项（`autostart`）
+5. `PATCH /api/schedule/settings` — 回写 `os_tick_status`（通常 `n/a`）
 
-前台与 `--background` 启动后均 `reconcileOsSchedule()`，并每 **30s** 轮询 reconcile（`startScheduleReconcilePoll`）。用户 PATCH settings 且 `resync_os: true` 时 sidecar 也会触发 `resyncOsRegistration`。
+前台与 `--background` 启动后均 `reconcileOsSchedule()`，并每 **30s** 轮询（幂等 remove）。
 
 ### 设置字段（与 API 一致）
 
 | 字段 | 桌面行为 |
 |------|----------|
-| `master_enabled` | 为 false 时不注册 OS tick、tick 跳过执行 |
-| `autostart` | 登录项 `--background` + 参与 OS 健康计算（`computeOsHealth`） |
+| `master_enabled` | 为 false 时 tick 跳过执行 |
+| `run_when_closed` | **兼容字段**，始终 false；API 忽略写入；UI 已隐藏 |
+| `autostart` | 登录项 `--background` 托盘常驻 |
 | `allow_shell_scripts` | 与 Agent/REST 一致；脚本类任务门禁 |
 
 REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--schedule)、[AGENT-GUIDE.md §4.2 · automation pack](./AGENT-GUIDE.md#42-agent-与-mcp)。

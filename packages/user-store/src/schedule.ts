@@ -45,6 +45,12 @@ export type SchedulePayload = AgentPromptPayload | ShellScriptPayload
 
 export interface ScheduleSettings {
   master_enabled: boolean
+  /**
+   * 兼容旧版「关闭后仍注册 OS tick」开关；产品已废除系统 crontab，
+   * 默认 false，API 忽略写入，仅进程内（托盘/前台）执行。
+   */
+  run_when_closed: boolean
+  /** 登录项以 `--background` 托盘常驻（与 OS tick 无关） */
   autostart: boolean
   allow_shell_scripts: boolean
   os_tick_status?: ScheduleOsStatus
@@ -53,6 +59,7 @@ export interface ScheduleSettings {
 
 export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   master_enabled: true,
+  run_when_closed: false,
   autostart: false,
   allow_shell_scripts: false,
   os_tick_status: 'n/a',
@@ -249,6 +256,8 @@ export class ScheduleRepository {
     return {
       ...DEFAULT_SCHEDULE_SETTINGS,
       ...raw,
+      // OS tick 已废除：始终 false（兼容旧库中 true）
+      run_when_closed: false,
       os_tick_error: raw?.os_tick_error ?? null,
     }
   }
@@ -257,6 +266,7 @@ export class ScheduleRepository {
     const next: ScheduleSettings = {
       ...this.getSettings(),
       ...patch,
+      run_when_closed: false,
     }
     this.setDocument(SETTINGS_NS, SETTINGS_ID, next)
     return next

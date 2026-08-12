@@ -2397,6 +2397,8 @@ export type ScheduleOsStatus = 'synced' | 'pending' | 'error' | 'n/a'
 
 export interface ScheduleSettings {
   master_enabled: boolean
+  /** 兼容字段：始终 false，不再注册系统定时 */
+  run_when_closed: boolean
   autostart: boolean
   allow_shell_scripts: boolean
   os_tick_status?: ScheduleOsStatus
@@ -2448,6 +2450,7 @@ export const scheduleApi = {
   getStatus: () =>
     jsonFetch<{
       master_enabled: boolean
+      run_when_closed: boolean
       allow_shell_scripts: boolean
       autostart: boolean
       os: ScheduleOsHealth

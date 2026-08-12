@@ -154,6 +154,11 @@ export interface ChatProgressOptions {
   onProgress?: (event: ChatProgressEvent) => void
   /** AbortSignal，用于用户取消聊天请求 */
   signal?: AbortSignal
+  /**
+   * 无人值守（计划任务 / 后台 Agent）：剔除 ask_user / request_secret，
+   * 禁止 waitForAnswer 挂起；工作区覆盖/删除确认自动放行，密钥类立即取消。
+   */
+  unattended?: boolean
 }
 
 // ── 工具中文标签映射 ──

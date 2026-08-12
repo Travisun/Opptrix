@@ -445,6 +445,24 @@ function isMainWindowUiHealthy(win) {
   }
 }
 
+/** Restore Dock (mac) / taskbar entry before show (paired with close-to-tray hide). */
+function restoreWindowTaskbarVisibility(win) {
+  if (process.platform === 'darwin') {
+    try {
+      if (app.dock && typeof app.dock.show === 'function') app.dock.show()
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!win || win.isDestroyed()) return
+  if (typeof win.setSkipTaskbar !== 'function') return
+  try {
+    win.setSkipTaskbar(false)
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * 托盘 / 菜单 / focus：健康窗则 restore+show；坏窗则重载；无窗则 bootstrap。
  */
@@ -452,6 +470,7 @@ async function ensureMainWindowVisible() {
   const win = getMainWindow()
   if (win) {
     if (isMainWindowUiHealthy(win)) {
+      restoreWindowTaskbarVisibility(win)
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
@@ -460,6 +479,7 @@ async function ensureMainWindowVisible() {
     try {
       await loadAppInMainWindow(win, { enforceMinSplash: false })
       if (!win.isDestroyed()) {
+        restoreWindowTaskbarVisibility(win)
         if (win.isMinimized()) win.restore()
         win.show()
         win.focus()
@@ -869,7 +889,7 @@ async function bootstrapBackgroundApp() {
   await ensureSidecarReady()
   configureScheduleBridge({ host: API_HOST, port: API_PORT })
 
-  // 新 OS 任务走 HTTP-first + headless-tick；本路径仅登录项 / 前台 / --background 常驻
+  // 登录项 / 前台 / --background 常驻：sidecar + 进程内 timer；reconcile 仅注销遗留 OS tick
   await reconcileOsSchedule().catch((err) => {
     console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
   })

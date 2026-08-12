@@ -31,6 +31,17 @@ export {
   parseAskUserArgs,
 } from './user-prompt.js'
 export {
+  UNATTENDED_ASK_USER_RESULT,
+  UNATTENDED_BLOCKED_TOOL_NAMES,
+  UNATTENDED_SECRET_RESULT,
+  UNATTENDED_TURN_TAIL_NOTE,
+  appendUnattendedTurnTail,
+  filterOpenAiToolsForUnattended,
+  filterToolNamesForUnattended,
+  isUnattendedBlockedTool,
+  pickUnattendedConfirmIds,
+} from './unattended.js'
+export {
   type AgentAppContext,
   type PublicAppSettings,
   createDefaultAppContext,

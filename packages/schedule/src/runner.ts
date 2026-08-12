@@ -15,6 +15,7 @@ export interface JobRunnerAgent {
     sessionId: string,
     message: string,
     modelRef?: string,
+    opts?: { unattended?: boolean },
   ): Promise<{ reply: string; sessionId: string }>
   llmConfigured?: boolean
 }
@@ -175,7 +176,7 @@ export class JobRunner {
     }
 
     const model = job.payload.model?.trim() || undefined
-    const chat = await this.deps.agent.chat(sessionId, prompt, model)
+    const chat = await this.deps.agent.chat(sessionId, prompt, model, { unattended: true })
     sessionId = chat.sessionId
 
     if (job.payload.session_id !== sessionId) {
