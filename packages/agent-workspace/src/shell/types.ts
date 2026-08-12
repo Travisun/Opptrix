@@ -49,6 +49,9 @@ export interface ShellRunResult {
   }
 }
 
+/** 用户向网络隔离能力：完整 / 基础 / 无 */
+export type ShellNetworkIsolationLevel = 'full' | 'basic' | 'none'
+
 export interface ShellPlatformStatus {
   platform: Platform
   supported: boolean
@@ -67,6 +70,10 @@ export interface ShellPlatformStatus {
   needs_elevation?: boolean
   /** Linux: kernel user-namespace restriction (e.g. Ubuntu 24.04+) */
   userns_restricted?: boolean
+  /** Windows：当前隔离模式（完整 / 基础） */
+  windows_isolation_mode?: 'elevated' | 'unelevated'
+  /** 用户向：网络隔离能力级别 */
+  network_isolation_level?: ShellNetworkIsolationLevel
 }
 
 export interface ShellInstallParams {

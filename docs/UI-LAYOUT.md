@@ -185,6 +185,7 @@
 
 | 区块 | 组件 | 说明 |
 |------|------|------|
-| 环境状态 | `SandboxEnvironmentStatusCard` | 调用 `GET /api/settings/sandbox/status`；展示总体就绪、命令隔离是否开启、说明文案；桌面版在需系统授权时显示「完成设置」（经 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC）；支持「刷新状态」 |
+| 环境状态 | `SandboxEnvironmentStatusCard` | 调用 `GET /api/settings/sandbox/status`；展示总体就绪、隔离保护、网络隔离能力（完整/基础）、说明文案；桌面版在需系统授权时显示「完成设置」（经 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC）；完整隔离未就绪时可「改用基础隔离」；支持「刷新状态」 |
+| 隔离强度（Windows） | `SandboxSettingsSection` | 「完整隔离 / 基础隔离」；写入 `windows_isolation_mode`（默认完整隔离） |
 | 永久允许的目标 | `SettingsMonospaceEditor` | 每行一条域名或地址；支持 `*.example.com`；500ms 防抖自动保存；底部保存状态提示 |
 | 局域网 | `SettingsGroup` + Switch | 「允许局域网访问」；开启后在 `SettingsStaticBlock` 显示风险提示 |

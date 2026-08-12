@@ -581,6 +581,21 @@ function assertSandboxRuntimeVendor(depsRoot) {
   console.log('sandbox-runtime vendor OK (srt-win + seccomp)')
 }
 
+/**
+ * Windows 基础隔离依赖 agent-workspace optionalDependency `koffi`（CreateProcessAsUserW）。
+ * win32 stage 必须能解析到 koffi，否则 unelevated 会硬失败且不得冒充就绪。
+ */
+function assertWindowsUnelevatedKoffi(depsRoot) {
+  if (target.platform !== 'win32') return
+  const koffiPkg = path.join(depsRoot, 'koffi', 'package.json')
+  if (!fs.existsSync(koffiPkg)) {
+    throw new Error(
+      `missing ${koffiPkg} — @opptrix/agent-workspace optionalDependency koffi must install on win32 runtime stage`,
+    )
+  }
+  console.log('windows unelevated koffi OK')
+}
+
 function ensureLinuxSandboxBins() {
   if (target.platform !== 'linux') return
 
@@ -726,6 +741,7 @@ function ensureLinuxSandboxBins() {
 }
 
 assertSandboxRuntimeVendor(STAGE_NM)
+assertWindowsUnelevatedKoffi(STAGE_NM)
 ensureLinuxSandboxBins()
 
 if (rebuildFailed) {

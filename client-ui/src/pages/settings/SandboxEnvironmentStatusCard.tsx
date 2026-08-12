@@ -48,6 +48,11 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
+  footerActions: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
 })
 
 type ShellInstallResult = {
@@ -63,7 +68,16 @@ function needsSetupAction(status: SandboxPlatformStatus): boolean {
   )
 }
 
-export default function SandboxEnvironmentStatusCard() {
+function networkLevelLabel(level: SandboxPlatformStatus['network_isolation_level']): string {
+  if (level === 'full') return '完整隔离'
+  if (level === 'basic') return '基础隔离'
+  return '未启用'
+}
+
+export default function SandboxEnvironmentStatusCard(props?: {
+  isolationMode?: 'elevated' | 'unelevated'
+  onSwitchToBasic?: () => void
+}) {
   const s = useStyles()
   const toast = useSettingsToast()
   const [loading, setLoading] = useState(true)
@@ -148,6 +162,15 @@ export default function SandboxEnvironmentStatusCard() {
   }
 
   const showSetup = needsSetupAction(status)
+  const mode = props?.isolationMode
+    ?? status.windows_isolation_mode
+    ?? 'elevated'
+  const showSwitchToBasic = Boolean(
+    props?.onSwitchToBasic
+    && mode === 'elevated'
+    && !status.ready
+    && (status.platform === 'windows' || electronPlatform() === 'win32'),
+  )
 
   const isolationMeta = (() => {
     if (!status.supported) {
@@ -158,7 +181,9 @@ export default function SandboxEnvironmentStatusCard() {
     }
     if (status.ready) {
       return {
-        desc: '助手运行命令时将自动启用隔离保护',
+        desc: mode === 'unelevated'
+          ? '助手运行命令时将启用基础隔离保护'
+          : '助手运行命令时将自动启用隔离保护',
         badge: (
           <span className={mergeClasses(s.statusBadge, s.statusReady)}>
             <ShieldRegular fontSize={14} />
@@ -193,7 +218,7 @@ export default function SandboxEnvironmentStatusCard() {
               >
                 {refreshing ? '刷新中…' : '刷新状态'}
               </OpptrixButton>
-              {showSetup && (
+              {showSetup && mode === 'elevated' && (
                 <OpptrixButton
                   variant="primary"
                   size="small"
@@ -225,15 +250,45 @@ export default function SandboxEnvironmentStatusCard() {
           trailing={isolationMeta.badge}
         />
 
-        {(status.setup_hint || showSetup) && (
+        <SettingsListRow
+          title="网络隔离能力"
+          meta={
+            status.network_isolation_level === 'basic'
+              ? '基础隔离：出站由确认与白名单约束'
+              : status.network_isolation_level === 'full'
+                ? '完整隔离：出站受更强保护'
+                : '当前未启用网络隔离保护'
+          }
+          trailing={(
+            <span className={s.statusBadge}>
+              {networkLevelLabel(status.network_isolation_level)}
+            </span>
+          )}
+        />
+
+        {(status.setup_hint || showSetup || showSwitchToBasic) && (
           <div className={s.footerHint}>
             {status.setup_hint && (
               <Text className={s.footerHintText} block>{status.setup_hint}</Text>
             )}
-            {showSetup && !status.setup_hint && (
+            {showSetup && !status.setup_hint && mode === 'elevated' && (
               <Text className={s.footerHintText} block>
-                待完成一次系统授权，完成后即可启用命令隔离。
+                待完成一次系统授权，完成后即可启用完整隔离。
               </Text>
+            )}
+            {showSwitchToBasic && (
+              <div className={s.footerActions}>
+                <Text className={s.footerHintText} block>
+                  完整隔离尚未就绪时，可先改用基础隔离继续使用。
+                </Text>
+                <OpptrixButton
+                  variant="secondary"
+                  size="small"
+                  onClick={() => props?.onSwitchToBasic?.()}
+                >
+                  改用基础隔离
+                </OpptrixButton>
+              </div>
             )}
           </div>
         )}

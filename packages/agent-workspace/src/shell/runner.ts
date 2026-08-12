@@ -32,6 +32,15 @@ import {
 import { ensureLinuxSandboxReady } from './ensure-linux-sandbox.js'
 import { ensureWindowsSandboxReady } from './ensure-windows-sandbox.js'
 import { getShellPlatformStatus } from './platform.js'
+import { getSandboxSettings } from '../sandbox-settings-store.js'
+import {
+  collectSandboxFailureText,
+  isRefreshableWindowsCredError,
+} from './windows-elevated-retry.js'
+import {
+  assertUnelevatedRejectsFullNetworkIsolation,
+  spawnUnelevatedRestricted,
+} from './windows-unelevated/index.js'
 import {
   argvToCommandString,
   assertAllowedShellArgv,
@@ -361,6 +370,11 @@ interface SandboxExecContext {
   signal?: AbortSignal
   sandboxAskCallback?: SandboxAskCallback
   secretInjections?: ResolvedSecretInjection[]
+  /**
+   * 仅 elevated 可开的「完整网络隔离」围栏。
+   * unelevated 下若为 true → 硬拒绝（用户向文案）。
+   */
+  requireFullNetworkIsolation?: boolean
 }
 
 /**
@@ -466,7 +480,10 @@ function createSandboxAskCallback(opts: {
   }
 }
 
-async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
+/**
+ * elevated：SandboxManager.initialize + wrap（SRT LogonW 路径）。
+ */
+async function executeSandboxOnceElevated(ctx: SandboxExecContext): Promise<{
   exitCode: number | null
   stdout: string
   stderr: string
@@ -504,6 +521,100 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
     childEnv[envName] = sentinel
   }
   return spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+}
+
+/**
+ * unelevated：不初始化 SandboxManager / SRT WFP；RestrictedToken spawn + 软出站策略。
+ */
+async function executeSandboxOnceUnelevated(ctx: SandboxExecContext): Promise<{
+  exitCode: number | null
+  stdout: string
+  stderr: string
+}> {
+  // 硬拒绝「完整网络隔离」围栏路径（与 elevated 同等的 SRT 网络围栏）
+  assertUnelevatedRejectsFullNetworkIsolation(ctx.requireFullNetworkIsolation === true)
+
+  const childEnv = await sanitizeChildEnv(
+    { ...process.env },
+    ctx.cwdAbs,
+    ctx.grantRootAbs,
+    usesElectronAsNodeArgv(ctx.normalizedArgv),
+  )
+  // secrets：unelevated 无 sentinel 代理，拒绝注入明文到子进程
+  if (ctx.secretInjections?.length) {
+    throw new WorkspaceError('基础隔离暂不支持密钥注入，请改用完整隔离')
+  }
+
+  return spawnUnelevatedRestricted({
+    argv: ctx.normalizedArgv,
+    env: childEnv,
+    cwd: ctx.cwdAbs,
+    timeoutMs: ctx.timeoutMs,
+    signal: ctx.signal,
+  })
+}
+
+async function refreshElevatedWindowsCredentials(): Promise<void> {
+  await SandboxManager.reset()
+  const ensured = await ensureWindowsSandboxReady({
+    allowAutoInstall: true,
+    forceRetry: true,
+    isolationMode: 'elevated',
+  })
+  if (!ensured.ready) {
+    throw new WorkspaceError(ensured.message ?? '命令隔离环境尚未就绪')
+  }
+}
+
+/** elevated：凭据 1326/1312 最多 force install/rotate 一次再执行 */
+async function executeSandboxOnceElevatedWithCredRetry(
+  ctx: SandboxExecContext,
+): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+  let refreshed = false
+  const refreshOnce = async (): Promise<boolean> => {
+    if (refreshed) return false
+    refreshed = true
+    await refreshElevatedWindowsCredentials()
+    return true
+  }
+
+  let first: { exitCode: number | null; stdout: string; stderr: string }
+  try {
+    first = await executeSandboxOnceElevated(ctx)
+  } catch (err) {
+    if (isRefreshableWindowsCredError(err, ctx.normalizedArgv) && await refreshOnce()) {
+      return executeSandboxOnceElevated(ctx)
+    }
+    throw err
+  }
+
+  if (first.exitCode != null && first.exitCode !== 0) {
+    const text = collectSandboxFailureText(first)
+    if (isRefreshableWindowsCredError(text, ctx.normalizedArgv) && await refreshOnce()) {
+      return executeSandboxOnceElevated(ctx)
+    }
+  }
+  return first
+}
+
+async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
+  exitCode: number | null
+  stdout: string
+  stderr: string
+}> {
+  const winMode = process.platform === 'win32'
+    ? getSandboxSettings().windows_isolation_mode
+    : 'elevated'
+
+  if (winMode === 'unelevated') {
+    return executeSandboxOnceUnelevated(ctx)
+  }
+
+  if (process.platform !== 'win32') {
+    return executeSandboxOnceElevated(ctx)
+  }
+
+  return executeSandboxOnceElevatedWithCredRetry(ctx)
 }
 
 export interface ShellRunnerDeps {
@@ -674,6 +785,9 @@ export class ShellRunner {
         })
 
       let result: { exitCode: number | null; stdout: string; stderr: string }
+      const winMode = process.platform === 'win32'
+        ? getSandboxSettings().windows_isolation_mode
+        : 'elevated'
       try {
         result = await executeSandboxOnce({
           sessionId: params.sessionId,
@@ -686,9 +800,14 @@ export class ShellRunner {
           signal: params.signal,
           sandboxAskCallback,
           secretInjections,
+          // unelevated 主路径不要求完整网络围栏（软策略：确认/白名单）
+          requireFullNetworkIsolation: false,
         })
       } finally {
-        await SandboxManager.reset()
+        // unelevated 未 initialize SRT；reset 仍安全
+        if (winMode !== 'unelevated') {
+          await SandboxManager.reset()
+        }
       }
 
       const stdoutRaw = redactSecretsInText(result.stdout, plainSecretsForRedact)

@@ -111,6 +111,22 @@ export {
   isWindowsSandboxProvisioned,
   resetWindowsSandboxAutoInstallAttempt,
 } from './ensure-windows-sandbox.js'
+export {
+  isRefreshableWindowsCredError,
+  collectSandboxFailureText,
+  withElevatedCredRefreshRetryOnThrow,
+  withElevatedCredRefreshRetryOnResult,
+  WIN_ERROR_LOGON_FAILURE,
+  WIN_ERROR_NO_SUCH_LOGON_SESSION,
+} from './windows-elevated-retry.js'
+export {
+  assertUnelevatedRejectsFullNetworkIsolation,
+  spawnUnelevatedRestricted,
+  isUnelevatedSpawnSupported,
+  probeRestrictedTokenApi,
+  UNELEVATED_FULL_NETWORK_REJECT_MESSAGE,
+  UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+} from './windows-unelevated/index.js'
 export { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './resolve-shell-argv.js'
 export type { ResolveShellArgvResult } from './resolve-shell-argv.js'
