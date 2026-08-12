@@ -7,10 +7,12 @@ import {
   resolveSrtWin,
   type Platform,
 } from '@anthropic-ai/sandbox-runtime'
+import { getSandboxSettings } from '../sandbox-settings-store.js'
 import type { ShellPlatformStatus } from './types.js'
 import { isWindowsSandboxProvisioned } from './ensure-windows-sandbox.js'
 import { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 import { getLinuxSandboxInstallState, linuxCanAutoInstall } from './linux-sandbox-common.js'
+import { isUnelevatedSpawnSupported } from './windows-unelevated/index.js'
 
 function nodePlatformToSandboxPlatform(): Platform | 'unsupported' {
   if (!SandboxManager.isSupportedPlatform()) return 'unsupported'
@@ -88,11 +90,14 @@ function linuxHint(errors: string[], canAutoInstall: boolean): string | undefine
   return '命令隔离所需组件未就绪；请使用官方 deb 安装包，或重启应用后重试'
 }
 
-function windowsHint(canAutoInstall: boolean): string | undefined {
-  if (canAutoInstall) {
-    return '首次使用命令隔离需要一次系统授权；运行命令时将自动请求，也可稍后在设置中重试'
+function windowsHint(canAutoInstall: boolean, unelevatedReady: boolean): string | undefined {
+  if (unelevatedReady) {
+    return undefined
   }
-  return '命令隔离环境尚未就绪，请稍后重试'
+  if (canAutoInstall) {
+    return '首次使用完整隔离需要一次系统授权；也可在设置中改用基础隔离'
+  }
+  return '完整隔离尚未就绪；可稍后重试，或在设置中改用基础隔离'
 }
 
 export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
@@ -104,6 +109,7 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
       sandbox_available: false,
       ready: false,
       message: '当前系统暂不支持命令隔离环境',
+      network_isolation_level: 'none',
     }
   }
 
@@ -136,6 +142,9 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
   let needsLinuxInstall = false
   let canAutoInstall = false
   let needsElevation = false
+  let windowsIsolationMode: 'elevated' | 'unelevated' | undefined
+  let networkIsolationLevel: ShellPlatformStatus['network_isolation_level'] =
+    platform === 'windows' ? 'full' : (ready ? 'full' : 'none')
 
   if (platform === 'linux') {
     const linuxState = getLinuxSandboxInstallState()
@@ -148,21 +157,43 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
     ready = ready && !needsLinuxInstall
     setupHint = linuxHint(depErrors, canAutoInstall)
     if (!ready && setupHint) message = setupHint
+    networkIsolationLevel = ready ? 'full' : 'none'
   } else if (platform === 'windows') {
-    try {
-      const srtWinExe = resolveVendoredSrtWinExe()
-      const srtWin = srtWinExe ? resolveSrtWin({ path: srtWinExe }) : undefined
-      const win = await checkWindowsSandboxStatusAsync({ srtWin })
-      const winReady = isWindowsSandboxProvisioned(win)
-      ready = ready && winReady
-      needsWindowsInstall = !winReady
-      canAutoInstall = Boolean(srtWinExe) && needsWindowsInstall
-      needsElevation = needsWindowsInstall && canAutoInstall
-      setupHint = winReady ? undefined : windowsHint(canAutoInstall)
-      if (!ready && setupHint) message = setupHint
-    } catch {
-      ready = false
-      message = '暂时无法确认命令隔离环境状态，请稍后重试'
+    windowsIsolationMode = getSandboxSettings().windows_isolation_mode
+    if (windowsIsolationMode === 'unelevated') {
+      // 基础隔离：不要求 srt credPresent；不初始化 SRT 网络围栏
+      const unelevatedOk = isUnelevatedSpawnSupported()
+      ready = unelevatedOk
+      needsWindowsInstall = false
+      canAutoInstall = false
+      needsElevation = false
+      networkIsolationLevel = unelevatedOk ? 'basic' : 'none'
+      message = unelevatedOk
+        ? '基础隔离已就绪（出站由确认与白名单约束）'
+        : '基础隔离组件不可用，请改用完整隔离或稍后重试'
+      setupHint = unelevatedOk
+        ? undefined
+        : '基础隔离组件不可用，请改用完整隔离或稍后重试'
+      // 分发缺失不影响 unelevated ready
+      depErrors = []
+    } else {
+      try {
+        const srtWinExe = resolveVendoredSrtWinExe()
+        const srtWin = srtWinExe ? resolveSrtWin({ path: srtWinExe }) : undefined
+        const win = await checkWindowsSandboxStatusAsync({ srtWin })
+        const winReady = isWindowsSandboxProvisioned(win)
+        ready = ready && winReady
+        needsWindowsInstall = !winReady
+        canAutoInstall = Boolean(srtWinExe) && needsWindowsInstall
+        needsElevation = needsWindowsInstall && canAutoInstall
+        networkIsolationLevel = ready ? 'full' : 'none'
+        setupHint = winReady ? undefined : windowsHint(canAutoInstall, false)
+        if (!ready && setupHint) message = setupHint
+      } catch {
+        ready = false
+        networkIsolationLevel = 'none'
+        message = '暂时无法确认命令隔离环境状态，请稍后重试'
+      }
     }
   }
 
@@ -179,5 +210,7 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
     can_auto_install: (platform === 'windows' || platform === 'linux') ? canAutoInstall : undefined,
     needs_elevation: (platform === 'windows' || platform === 'linux') ? needsElevation : undefined,
     userns_restricted: usernsRestricted || undefined,
+    windows_isolation_mode: windowsIsolationMode,
+    network_isolation_level: networkIsolationLevel,
   }
 }

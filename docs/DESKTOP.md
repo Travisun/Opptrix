@@ -371,36 +371,46 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 
 智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
 
+**Windows 隔离强度（设置 → 沙盒环境）**：
+
+| 模式（用户可见） | 设置值 | 你需要知道的 |
+|------------------|--------|--------------|
+| **完整隔离**（默认） | `elevated` | 网络与进程围栏最强；**首次**可能需一次系统授权。授权环境失效时，应用会**自动刷新并再执行一次**（通常你无感）。 |
+| **基础隔离** | `unelevated` | **无需**上述系统授权；进程降权运行。**网络限制更弱**（默认仍禁出站，靠确认与白名单；无法启用与完整隔离同等的完整网络围栏）。 |
+
+旧客户端未写该字段时按完整隔离处理。
+
 **出站与 DNS（默认禁网）**：
 
 - 沙箱内 **默认禁止 TCP 出站**；访问具体外网站点需你按域名确认（仅此一次 / 本对话允许该域名）。
 - **永久白名单**：在 **设置 → 沙盒环境** 配置「访问白名单」与「允许局域网访问」；与部署变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）合并，命中后不再询问。未开启局域网访问时，不能保存本地或私网地址。
-- 运行命令时若沙箱拦截出站连接，会通过 **sandboxAskCallback** 即时弹出确认（与聊天侧外网访问确认同一套选项）。
+- 运行命令时若隔离环境拦截出站连接，会即时弹出确认（与聊天侧外网访问确认同一套选项）。（架构：`sandboxAskCallback`）
 - **DNS**：命令仍可使用系统解析公网域名；沙盒内自行运行 `dig` / `nslookup` 等会被拦截（且不在允许命令列表）。解析到私网或本机地址的连接仍会被拒绝。
-- `ping` / 路由探测与运行命令**合并为一次确认**（展示命令与目标）。若仍失败，助手会提示改用 `http_fetch` 测网站连通性。
+- `ping` / 路由探测与运行命令**合并为一次确认**（展示命令与目标）。若仍失败，助手会提示改用网页连通性检测。
 
-桌面安装包会尽量自带组件并自动就绪；**仍可能需要你配合一次系统授权或系统策略调整**。
+桌面安装包会尽量自带组件并自动就绪；**完整隔离仍可能需要你配合一次系统授权或系统策略调整**。
 
 | 平台 | 分发方式 | 你需要做什么 |
 |------|----------|--------------|
 | **macOS** | 隔离能力由系统提供 | 一般无需额外操作 |
-| **Windows** | `srt-win` 随应用内置 | **首次使用命令隔离时可能出现一次 UAC 授权**；点允许即可，无需手动运行任何安装命令。若取消授权，可稍后在应用内重试 |
+| **Windows** | 隔离组件随应用内置 | **完整隔离（默认）**：首次可能出现一次系统授权，点允许即可；取消后可稍后在设置中重试。授权失效时自动刷新再试一次。可在设置改为**基础隔离**（无需该授权，网络限制更弱） |
 | **Linux deb** | `bubblewrap`、`socat`、`ripgrep` 写入包依赖 | 用 apt 安装 deb 时会**自动安装依赖**，一般无需手动操作 |
 | **Linux AppImage** | 构建时下载或内置便携二进制到 `runtime-stage/sandbox-bins/` | 若内置组件不可用，会提示改用 deb 或联系支持 |
 | **Ubuntu 24.04+ 等** | 内核可能限制非特权 user namespace | **首次使用命令隔离时可能出现一次系统授权（pkexec）**；点允许即可，无需手动执行任何命令。若取消授权，可稍后在应用内重试。无 polkit 或无管理员权限的企业机仍可能失败 |
 
 **边界说明（可行性）**：
 
-- Windows 的机器级隔离用户与网络策略需要**一次**提升授权；Opptrix 会在首次 `shell_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行 `npx … windows-install`。
+- **Windows 完整隔离**（架构：`elevated` / `srt-win` + 网络过滤器）：机器级隔离凭据与网络策略需要**一次**系统授权；Opptrix 会在首次 `shell_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行安装命令。凭据类失败（Windows 错误 **1326 / 1312**）时最多 **force 刷新再执行一次**。
+- **Windows 基础隔离**（架构：`unelevated` / RestrictedToken）：不初始化完整隔离凭据与网络过滤器；`ensureWindowsSandboxReady` 直接就绪。请求与完整隔离同等的完整网络隔离会硬拒绝；出站靠确认与白名单。
 - Windows 沙箱 `allowRead` **不会**对 `WINDIR` / Program Files / 盘符根做 ACL stamp（依赖系统默认读取权限）；请勿以「管理员运行 Opptrix」作为常规解决办法。
 - **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；访问外网或联网安装另有单独确认（`ping` 与运行命令合并为一次）。
 - Linux deb 通过 `Depends: bubblewrap, socat, ripgrep` 在系统包管理器层拉齐依赖。
 - AppImage 构建时会优先从可信源下载便携二进制到 `runtime-stage/sandbox-bins/{arch}/`（失败时回退构建机 `which`），sidecar 通过 `OPPTRIX_RUNTIME_STAGE` 注入 `bwrapPath` / `socatPath` / `ripgrep.command`。**deb 仍是最稳的安装路径**。
 - Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `shell_run` / `shell_install` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。
-- Electron 主进程提供 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC，供 UI 在 sidecar 无法完成授权时重试（同样是一次系统授权）。
-- **设置页自检**：**设置 → 沙盒环境** 顶部 `SandboxEnvironmentStatusCard` 经 `GET /api/settings/sandbox/status` 展示就绪状态与说明；未就绪且 `can_auto_install` 时显示「完成设置」，触发上述 IPC 完成一次系统授权（与首次 `shell_run` 自动请求等价，可提前在设置中完成）。
+- Electron 主进程提供 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC，供 UI 在 sidecar 无法完成授权时重试（同样是一次系统授权；完整隔离路径）。
+- **设置页自检**：**设置 → 沙盒环境** 顶部状态卡经 `GET /api/settings/sandbox/status` 展示就绪状态与说明；未就绪且可自动完成时显示「完成设置」，触发上述 IPC（与首次运行命令时的自动请求等价，可提前在设置中完成）。
 
-详见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 中 `shell_platform_status` 字段（`ready` / `needs_elevation` / `can_auto_install` / `userns_restricted` 等）；REST 等价见 [API.md · 沙盒环境设置](./API.md#沙盒环境设置)。
+详见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 中 `shell_platform_status` 字段（`ready` / `needs_elevation` / `can_auto_install` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level` 等）；REST 等价见 [API.md · 沙盒环境设置](./API.md#沙盒环境设置)。
 
 ### Window blur + sidebar
 

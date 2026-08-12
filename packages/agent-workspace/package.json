@@ -22,5 +22,8 @@
     "@anthropic-ai/sandbox-runtime": "^0.0.67",
     "@opptrix/shared": "*",
     "@opptrix/user-store": "*"
+  },
+  "optionalDependencies": {
+    "koffi": "^2.9.0"
   }
 }

@@ -70,10 +70,12 @@ export {
   DEFAULT_SANDBOX_SETTINGS,
   normalizeSandboxDomainLine,
   normalizeSandboxSettings,
+  normalizeWindowsIsolationMode,
   validateSandboxSettingsInput,
   isPrivateOrLocalHostPattern,
   type SandboxSettings,
   type ValidateSandboxSettingsResult,
+  type WindowsIsolationMode,
 } from './sandbox-settings.js'
 export type { InstalledProviderRecord, InstalledProvidersIndex } from './installed-provider.js'
 export {

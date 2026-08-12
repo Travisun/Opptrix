@@ -3,7 +3,12 @@ import {
   installWindowsSandboxAsync,
   resolveSrtWin,
 } from '@anthropic-ai/sandbox-runtime'
+import { getSandboxSettings } from '../sandbox-settings-store.js'
 import { resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
+import {
+  isUnelevatedSpawnSupported,
+  UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+} from './windows-unelevated/index.js'
 
 export interface WindowsSandboxEnsureResult {
   ready: boolean
@@ -41,12 +46,28 @@ export function resetWindowsSandboxAutoInstallAttempt(): void {
 /**
  * Windows: verify isolation is provisioned; optionally trigger one self-elevating install (UAC).
  * Idempotent — does not re-prompt on every call after a successful install or explicit cancel.
+ *
+ * unelevated（基础隔离）不要求 srt credPresent，也不初始化 SRT WFP。
  */
 export async function ensureWindowsSandboxReady(options?: {
   allowAutoInstall?: boolean
   forceRetry?: boolean
+  /** 覆盖设置中的模式（测试 / 凭据刷新路径） */
+  isolationMode?: 'elevated' | 'unelevated'
 }): Promise<WindowsSandboxEnsureResult> {
   if (process.platform !== 'win32') {
+    return { ready: true }
+  }
+
+  const mode = options?.isolationMode
+    ?? getSandboxSettings().windows_isolation_mode
+  if (mode === 'unelevated') {
+    if (!isUnelevatedSpawnSupported()) {
+      return {
+        ready: false,
+        message: UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
+      }
+    }
     return { ready: true }
   }
 

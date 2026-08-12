@@ -2360,6 +2360,7 @@ export async function unsubscribeMcpResource(id: string, uri: string) {
 export interface SandboxSettings {
   allowed_domains: string[]
   allow_lan_access: boolean
+  windows_isolation_mode: 'elevated' | 'unelevated'
 }
 
 export interface SandboxPlatformStatus {
@@ -2374,6 +2375,8 @@ export interface SandboxPlatformStatus {
   can_auto_install?: boolean
   needs_elevation?: boolean
   userns_restricted?: boolean
+  windows_isolation_mode?: 'elevated' | 'unelevated'
+  network_isolation_level?: 'full' | 'basic' | 'none'
 }
 
 export const sandboxSettings = {

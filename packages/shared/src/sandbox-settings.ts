@@ -1,14 +1,30 @@
 import net from 'node:net'
 
+/** Windows 命令隔离模式：完整隔离（elevated）/ 基础隔离（unelevated） */
+export type WindowsIsolationMode = 'elevated' | 'unelevated'
+
 /** 沙盒出站白名单 — 存 user-store `preference` / `sandbox_settings` */
 export interface SandboxSettings {
   allowed_domains: string[]
   allow_lan_access: boolean
+  /**
+   * Windows 隔离强度。缺省 / 非法值 normalize 为 elevated（兼容旧客户端）。
+   * 非 Windows 平台仍可持久化，运行时忽略。
+   */
+  windows_isolation_mode: WindowsIsolationMode
 }
 
 export const DEFAULT_SANDBOX_SETTINGS: SandboxSettings = {
   allowed_domains: [],
   allow_lan_access: false,
+  windows_isolation_mode: 'elevated',
+}
+
+export function normalizeWindowsIsolationMode(
+  raw: unknown,
+): WindowsIsolationMode {
+  if (raw === 'unelevated') return 'unelevated'
+  return 'elevated'
 }
 
 export function normalizeSandboxDomainLine(line: string): string {
@@ -78,6 +94,7 @@ export function normalizeSandboxSettings(
   return {
     allowed_domains: [...new Set(domains)],
     allow_lan_access: raw?.allow_lan_access === true,
+    windows_isolation_mode: normalizeWindowsIsolationMode(raw?.windows_isolation_mode),
   }
 }
 
@@ -120,9 +137,18 @@ export function validateSandboxSettingsInput(
     }
   }
 
+  if (
+    input.windows_isolation_mode != null
+    && input.windows_isolation_mode !== 'elevated'
+    && input.windows_isolation_mode !== 'unelevated'
+  ) {
+    return { ok: false, error: '隔离模式无效，请选择完整隔离或基础隔离' }
+  }
+
   const settings: SandboxSettings = {
     allowed_domains: [...new Set(normalized)],
     allow_lan_access: allowLan,
+    windows_isolation_mode: normalizeWindowsIsolationMode(input.windows_isolation_mode),
   }
 
   if (!allowLan) {

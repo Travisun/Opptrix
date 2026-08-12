@@ -18,10 +18,12 @@ import {
 import { useSettingsToast } from './SettingsToast'
 import SettingsMonospaceEditor from './SettingsMonospaceEditor'
 import SandboxEnvironmentStatusCard from './SandboxEnvironmentStatusCard'
+import { isElectron, electronPlatform } from '../../platform/detect'
 
 export interface SandboxSettings {
   allowed_domains: string[]
   allow_lan_access: boolean
+  windows_isolation_mode: 'elevated' | 'unelevated'
 }
 
 const SETTINGS_SAVE_MS = 500
@@ -83,6 +85,11 @@ const useStyles = makeStyles({
     lineHeight: 1.5,
     padding: '8px 2px 0',
   },
+  isolationBtnRow: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
 })
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
@@ -98,27 +105,38 @@ function textToDomains(text: string): string[] {
     .filter(Boolean)
 }
 
+const DEFAULT_SETTINGS: SandboxSettings = {
+  allowed_domains: [],
+  allow_lan_access: false,
+  windows_isolation_mode: 'elevated',
+}
+
 export default function SandboxSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
   const [tab, setTab] = useState<Tab>('status')
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState<SandboxSettings>({
-    allowed_domains: [],
-    allow_lan_access: false,
-  })
+  const [settings, setSettings] = useState<SandboxSettings>(DEFAULT_SETTINGS)
   const [domainsText, setDomainsText] = useState('')
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const skipSave = useRef(true)
   const baseline = useRef<SandboxSettings | null>(null)
+  const showWindowsIsolation = !isElectron() || electronPlatform() === 'win32'
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const resp = await sandboxApi.getSettings()
-      setSettings(resp.settings)
-      setDomainsText(domainsToText(resp.settings.allowed_domains))
-      baseline.current = resp.settings
+      const next: SandboxSettings = {
+        allowed_domains: resp.settings.allowed_domains,
+        allow_lan_access: resp.settings.allow_lan_access,
+        windows_isolation_mode: resp.settings.windows_isolation_mode === 'unelevated'
+          ? 'unelevated'
+          : 'elevated',
+      }
+      setSettings(next)
+      setDomainsText(domainsToText(next.allowed_domains))
+      baseline.current = next
       skipSave.current = true
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '加载失败')
@@ -141,9 +159,11 @@ export default function SandboxSettingsSection() {
     const next: SandboxSettings = {
       allowed_domains: nextDomains,
       allow_lan_access: settings.allow_lan_access,
+      windows_isolation_mode: settings.windows_isolation_mode,
     }
     if (
       base.allow_lan_access === next.allow_lan_access
+      && base.windows_isolation_mode === next.windows_isolation_mode
       && domainsToText(base.allowed_domains) === domainsToText(next.allowed_domains)
     ) {
       return
@@ -152,9 +172,16 @@ export default function SandboxSettingsSection() {
     setSaveState('pending')
     sandboxApi.saveSettings(next)
       .then(resp => {
-        setSettings(resp.settings)
-        setDomainsText(domainsToText(resp.settings.allowed_domains))
-        baseline.current = resp.settings
+        const saved: SandboxSettings = {
+          allowed_domains: resp.settings.allowed_domains,
+          allow_lan_access: resp.settings.allow_lan_access,
+          windows_isolation_mode: resp.settings.windows_isolation_mode === 'unelevated'
+            ? 'unelevated'
+            : 'elevated',
+        }
+        setSettings(saved)
+        setDomainsText(domainsToText(saved.allowed_domains))
+        baseline.current = saved
         setSaveState('saved')
         toast.showSuccess('已保存')
         window.setTimeout(() => setSaveState('idle'), 2000)
@@ -164,7 +191,13 @@ export default function SandboxSettingsSection() {
         toast.showError(e instanceof Error ? e.message : '保存失败')
         window.setTimeout(() => setSaveState('idle'), 2000)
       })
-  }, [domainsText, settings.allow_lan_access, loading, toast], SETTINGS_SAVE_MS)
+  }, [
+    domainsText,
+    settings.allow_lan_access,
+    settings.windows_isolation_mode,
+    loading,
+    toast,
+  ], SETTINGS_SAVE_MS)
 
   const saveHintText = (() => {
     switch (saveState) {
@@ -217,7 +250,50 @@ export default function SandboxSettingsSection() {
           <Text className={s.tabHint} block>
             查看命令隔离环境是否就绪，完成系统授权后即可启用保护。
           </Text>
-          <SandboxEnvironmentStatusCard />
+          {showWindowsIsolation && (
+            <SettingsGroup>
+              <SettingsRow
+                title="隔离强度"
+                desc={
+                  settings.windows_isolation_mode === 'unelevated'
+                    ? '基础隔离：降低权限，出站由确认与白名单约束'
+                    : '完整隔离：更强保护，首次使用可能需要系统授权'
+                }
+                control={(
+                  <div className={s.isolationBtnRow}>
+                    <OpptrixButton
+                      variant={settings.windows_isolation_mode === 'elevated' ? 'primary' : 'secondary'}
+                      size="small"
+                      onClick={() => {
+                        setSettings(prev => ({ ...prev, windows_isolation_mode: 'elevated' }))
+                      }}
+                    >
+                      完整隔离
+                    </OpptrixButton>
+                    <OpptrixButton
+                      variant={settings.windows_isolation_mode === 'unelevated' ? 'primary' : 'secondary'}
+                      size="small"
+                      onClick={() => {
+                        setSettings(prev => ({ ...prev, windows_isolation_mode: 'unelevated' }))
+                      }}
+                    >
+                      基础隔离
+                    </OpptrixButton>
+                  </div>
+                )}
+                last
+              />
+            </SettingsGroup>
+          )}
+          <SandboxEnvironmentStatusCard
+            isolationMode={settings.windows_isolation_mode}
+            onSwitchToBasic={() => {
+              setSettings(prev => ({ ...prev, windows_isolation_mode: 'unelevated' }))
+            }}
+          />
+          <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
+            {saveHintText}
+          </Text>
         </>
       )}
 
