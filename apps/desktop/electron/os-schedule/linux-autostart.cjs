@@ -15,11 +15,16 @@ const BACKGROUND_ARG = '--background'
  * @returns {string}
  */
 function resolveAutostartDir(opts = {}) {
-  const fromEnv =
-    typeof opts.configHome === 'string' && opts.configHome.trim()
-      ? opts.configHome.trim()
-      : String(process.env.XDG_CONFIG_HOME ?? '').trim()
-  if (fromEnv) return path.join(fromEnv, 'autostart')
+  // Explicit configHome (including '') bypasses process.env — tests / callers can
+  // force the ~/.config fallback without inheriting the runner's XDG_CONFIG_HOME.
+  if (Object.prototype.hasOwnProperty.call(opts ?? {}, 'configHome')) {
+    const explicit =
+      typeof opts.configHome === 'string' ? opts.configHome.trim() : ''
+    if (explicit) return path.join(explicit, 'autostart')
+  } else {
+    const fromEnv = String(process.env.XDG_CONFIG_HOME ?? '').trim()
+    if (fromEnv) return path.join(fromEnv, 'autostart')
+  }
   const home =
     typeof opts.homedir === 'string' && opts.homedir
       ? opts.homedir

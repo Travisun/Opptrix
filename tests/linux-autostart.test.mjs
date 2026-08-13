@@ -22,13 +22,20 @@ describe('linux-autostart XDG helpers', () => {
   /** @type {string} */
   let tmpConfig
 
+  /** @type {string | undefined} */
+  let prevXdgConfigHome
+
   beforeEach(() => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-xdg-home-'))
     tmpConfig = path.join(tmpHome, 'config')
     fs.mkdirSync(tmpConfig, { recursive: true })
+    prevXdgConfigHome = process.env.XDG_CONFIG_HOME
+    delete process.env.XDG_CONFIG_HOME
   })
 
   afterEach(() => {
+    if (prevXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
+    else process.env.XDG_CONFIG_HOME = prevXdgConfigHome
     fs.rmSync(tmpHome, { recursive: true, force: true })
   })
 
@@ -40,9 +47,18 @@ describe('linux-autostart XDG helpers', () => {
   })
 
   it('falls back to ~/.config/autostart', () => {
+    process.env.XDG_CONFIG_HOME = path.join(tmpHome, 'env-config')
     assert.equal(
       resolveAutostartDir({ homedir: tmpHome, configHome: '' }),
       path.join(tmpHome, '.config', 'autostart'),
+    )
+  })
+
+  it('uses process.env.XDG_CONFIG_HOME when configHome omitted', () => {
+    process.env.XDG_CONFIG_HOME = tmpConfig
+    assert.equal(
+      resolveAutostartDir({ homedir: tmpHome }),
+      path.join(tmpConfig, 'autostart'),
     )
   })
 
