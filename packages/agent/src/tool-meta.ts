@@ -774,7 +774,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       '运行 Python 脚本或 pip 安装前调用；未就绪时立即返回 preparing/installing+job_id，须再调 ensure_python({ job_id }) 轮询至 ready；成功后优先使用 Opptrix 托管解释器。',
     compliance:
-      '勿在本轮死等安装；status=preparing|installing 时用返回的 job_id 轮询；ready 时 ready=true 且 prefer 托管；failed 时 ready=false，勿假装已安装。opptrix_run 在 python 未就绪时会快速失败并提示先 ensure_python。',
+      '勿在本轮死等安装；status=preparing|installing 时用返回的 job_id 轮询（反空转对进行中 status 豁免）；ready 后勿空转同参；ready 时 ready=true 且 prefer 托管；failed 时 ready=false，勿假装已安装。opptrix_run 在 python 未就绪时会快速失败并提示先 ensure_python。',
   },
   list_local_data_apis: {
     packId: 'workspace',
@@ -790,7 +790,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     packId: 'workspace',
     usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL；冷下载可能先返回 preparing+job_id，须轮询。',
     compliance:
-      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，用 job_id 再调本工具轮询；full|incremental + local_path 就绪后自动写 offline-k-meta；adjustment_factors/presigned_url 不写 meta；成功用 root_id=shared + relative_path。',
+      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，用 job_id 再调本工具轮询（反空转对 preparing/installing 等进行中 status 豁免；ready 后勿空转同参）；full|incremental + local_path 就绪后自动写 offline-k-meta；adjustment_factors/presigned_url 不写 meta；成功用 root_id=shared + relative_path。',
   },
   request_session_lan_access: {
     packId: 'workspace',

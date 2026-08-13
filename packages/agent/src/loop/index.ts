@@ -16,6 +16,9 @@ export {
   buildSpinGuardTurnTail,
   clearSpinGuardSession,
   resetSpinGuardForTests,
+  SPIN_POLL_TOOLS,
+  isSpinPollTool,
+  isInProgressJobStatus,
   SPIN_GUARD_LIMITS,
   type SpinGuardBlock,
 } from './spin-guard.js'

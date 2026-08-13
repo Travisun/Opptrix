@@ -3,7 +3,34 @@
 const SUCCESS_REPEAT_LIMIT = 3
 const FAILURE_REPEAT_LIMIT = 2
 const STALE_ROUNDS_WITHOUT_PROGRESS = 3
+/** 白名单轮询工具：同 fingerprint 进行中 status 累计上限，防死循环 */
+const POLL_IN_FLIGHT_HARD_LIMIT = 48
 const ARGS_JSON_MAX = 480
+
+/** 异步 job 轮询工具：preparing/installing 等不计入 success/failure 重复 */
+export const SPIN_POLL_TOOLS = new Set([
+  'ensure_python',
+  'prepare_fuyao_dump',
+])
+
+const IN_PROGRESS_JOB_STATUSES = new Set([
+  'preparing',
+  'installing',
+  'running',
+  'pending',
+])
+
+export function isSpinPollTool(toolName: string): boolean {
+  return SPIN_POLL_TOOLS.has(toolName.trim())
+}
+
+/** 从 result.status 判断是否为进行中（大小写不敏感，trim） */
+export function isInProgressJobStatus(result: unknown): boolean {
+  if (result == null || typeof result !== 'object' || Array.isArray(result)) return false
+  const status = (result as Record<string, unknown>).status
+  if (typeof status !== 'string') return false
+  return IN_PROGRESS_JOB_STATUSES.has(status.trim().toLowerCase())
+}
 
 export type SpinGuardBlock = {
   error: string
@@ -14,6 +41,8 @@ export type SpinGuardBlock = {
 type FingerprintStats = {
   success: number
   failure: number
+  /** 白名单工具进行中轮询次数（不计入 success/failure） */
+  pollInFlight: number
 }
 
 type SessionSpinState = {
@@ -24,9 +53,15 @@ type SessionSpinState = {
   staleRounds: number
   forceCloseHint: boolean
   lastBlockedHint: string | null
+  /** 本轮是否有白名单进行中轮询（视为有进展） */
+  pollProgressThisRound: boolean
 }
 
 const sessions = new Map<string, SessionSpinState>()
+
+function emptyStats(): FingerprintStats {
+  return { success: 0, failure: 0, pollInFlight: 0 }
+}
 
 function getOrCreate(sessionId: string): SessionSpinState {
   let state = sessions.get(sessionId)
@@ -37,6 +72,7 @@ function getOrCreate(sessionId: string): SessionSpinState {
       staleRounds: 0,
       forceCloseHint: false,
       lastBlockedHint: null,
+      pollProgressThisRound: false,
     }
     sessions.set(sessionId, state)
   }
@@ -95,6 +131,17 @@ export function checkSpinGuard(
   const stats = state.byFingerprint.get(fp)
   if (!stats) return null
 
+  if (isSpinPollTool(toolName) && stats.pollInFlight >= POLL_IN_FLIGHT_HARD_LIMIT) {
+    const hint =
+      '同一任务轮询次数过多，可能已卡住。请换路径、说明进度异常，或基于已有材料继续，勿无限等待。'
+    state.lastBlockedHint = hint
+    return {
+      error: '已拦截过久轮询',
+      spin_guard: true,
+      hint,
+    }
+  }
+
   if (stats.success >= SUCCESS_REPEAT_LIMIT) {
     const hint = '同一查询已重复多次且结果无新意。请换数据源或角度，或开始整理成稿，勿继续空转。'
     state.lastBlockedHint = hint
@@ -130,7 +177,15 @@ export function recordSpinOutcome(
     // 新证据路径出现 → 重置空转轮计数（本轮结束时再评估）
     state.forceCloseHint = false
   }
-  const stats = state.byFingerprint.get(fp) ?? { success: 0, failure: 0 }
+  const stats = state.byFingerprint.get(fp) ?? emptyStats()
+
+  if (isSpinPollTool(toolName) && isInProgressJobStatus(result)) {
+    stats.pollInFlight += 1
+    state.pollProgressThisRound = true
+    state.byFingerprint.set(fp, stats)
+    return
+  }
+
   if (isFailureResult(result)) stats.failure += 1
   else stats.success += 1
   state.byFingerprint.set(fp, stats)
@@ -138,6 +193,7 @@ export function recordSpinOutcome(
 
 /**
  * 每 LLM 工具轮结束后调用：若本轮无新 fingerprint 且 checklist 无进展，累计空转轮。
+ * 白名单进行中轮询（pollProgressThisRound）视为有进展。
  * @returns 是否应注入强制收口 turn-tail
  */
 export function noteRoundProgress(
@@ -145,7 +201,9 @@ export function noteRoundProgress(
   opts: { hadNewFingerprint: boolean; checklistProgressed: boolean },
 ): boolean {
   const state = getOrCreate(sessionId)
-  if (opts.hadNewFingerprint || opts.checklistProgressed) {
+  const pollProgress = state.pollProgressThisRound
+  state.pollProgressThisRound = false
+  if (opts.hadNewFingerprint || opts.checklistProgressed || pollProgress) {
     state.staleRounds = 0
     state.forceCloseHint = false
     return false
@@ -204,4 +262,5 @@ export const SPIN_GUARD_LIMITS = {
   SUCCESS_REPEAT_LIMIT,
   FAILURE_REPEAT_LIMIT,
   STALE_ROUNDS_WITHOUT_PROGRESS,
+  POLL_IN_FLIGHT_HARD_LIMIT,
 } as const
