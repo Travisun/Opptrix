@@ -270,6 +270,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   /** @deprecated 兼容别名 → opptrix_run */
   shell_run: 'workspace',
   shell_install: 'workspace',
+  request_shell_network: 'workspace',
   python_env_status: 'workspace',
   ensure_python: 'workspace',
   list_local_data_apis: 'workspace',

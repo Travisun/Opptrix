@@ -751,9 +751,16 @@ export const TOOL_META: Record<string, ToolMeta> = {
   shell_install: {
     packId: 'workspace',
     usageGuide:
-      '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；与 opptrix_run 共用同一 Python；比手写 pip/npm 更安全。',
+      '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；与 opptrix_run 共用同一 Python；比手写 pip/npm 更安全。预估需联网时先 request_shell_network({intent:"install"})。',
     compliance:
-      'manager=pip|npm；pip 装进 .opptrix-packages，运行时经 PYTHONPATH 可见；python 未就绪用 ensure_python；联网安装需用户确认。',
+      'manager=pip|npm；pip 装进 .opptrix-packages，运行时经 PYTHONPATH 可见；python 未就绪用 ensure_python；联网安装需用户确认（可用 request_shell_network 预授权）。',
+  },
+  request_shell_network: {
+    packId: 'workspace',
+    usageGuide:
+      '预估需 pip/npm 安装或访问已知外网域名时，先唤起真实沙盒联网授权；走系统确认弹窗写入 sticky/preflight，禁止用 ask_user「允许联网」冒充。',
+    compliance:
+      'intent=install|egress 必填；egress 须 hosts；用 confirm 非 ask_user；局域网仍用 request_session_lan_access。',
   },
   python_env_status: {
     packId: 'workspace',

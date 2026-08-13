@@ -466,16 +466,29 @@ const INTENT_RULES: IntentRule[] = [
     hint: '测网站延迟/连通性 → 优先 http_fetch 测 HTTP 耗时；用户明确要求 ICMP 时用 opptrix_run + ping；先 get_system_info 再按平台组 argv',
   },
   {
+    intent: 'workspace_shell_network',
+    priority: 91,
+    patterns: [
+      /申请(?:沙盒)?联网|提前(?:授权|确认)联网|request_shell_network/i,
+      /允许联网安装|联网安装授权|外网域名授权/,
+      /预估需(?:要)?(?:pip|npm|联网|外网)/i,
+    ],
+    preferredTools: ['request_shell_network', 'shell_install', 'opptrix_run'],
+    avoidTools: ['ask_user', 'request_session_lan_access'],
+    confidence: 'high',
+    hint: '预估需 pip/npm 或已知外网域名 → 先 request_shell_network（confirm，禁止 ask_user 冒充）；LAN 用 request_session_lan_access',
+  },
+  {
     intent: 'workspace_shell_install',
     priority: 90,
     patterns: [
       /pip\s+install|npm\s+install|npm\s+ci|安装(?:python|py|node|npm|pip)?(?:包|依赖)/i,
       /shell_install/i,
     ],
-    preferredTools: ['shell_install', 'opptrix_run', 'shell_platform_status'],
-    avoidTools: ['workspace_write', 'http_fetch'],
+    preferredTools: ['request_shell_network', 'shell_install', 'opptrix_run', 'shell_platform_status'],
+    avoidTools: ['ask_user', 'workspace_write', 'http_fetch'],
     confidence: 'high',
-    hint: '安装依赖 → shell_install（装进工作区）；联网需用户确认',
+    hint: '安装依赖 → 先 request_shell_network({intent:install}) 再 shell_install；禁止 ask_user 冒充联网授权',
   },
   {
     intent: 'workspace_shell',

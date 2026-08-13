@@ -921,6 +921,49 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       },
     },
     {
+      name: 'request_shell_network',
+      category: '工作区',
+      description:
+        '按预需提前唤起沙盒联网授权（安装包源 / 指定域名出站）。走系统确认弹窗并写入沙盒授权；禁止用 ask_user「允许联网」冒充（ask_user 不会写入沙盒授权）',
+      parameters: S({
+        intent: {
+          type: 'string',
+          description: 'install = 联网安装包源；egress = 指定域名出站',
+        },
+        hosts: {
+          type: 'array',
+          description: 'intent=egress 时必填：域名或 URL 列表',
+          items: { type: 'string' },
+        },
+        reason: {
+          type: 'string',
+          description: '向用户说明为何需要联网（可选，拼进确认文案）',
+        },
+      }, ['intent']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const intent = String(args.intent ?? '').trim().toLowerCase()
+          const reason = args.reason != null ? String(args.reason) : undefined
+          if (intent === 'install') {
+            return await ws.requestNetworkInstall(b.sessionId, b.confirm, reason)
+          }
+          if (intent === 'egress') {
+            const hosts = Array.isArray(args.hosts)
+              ? args.hosts.map(h => String(h ?? '').trim()).filter(Boolean)
+              : []
+            if (!hosts.length) {
+              return { error: 'intent=egress 时 hosts 必填且至少一项' }
+            }
+            return await ws.requestNetworkEgress(b.sessionId, hosts, b.confirm, reason)
+          }
+          return { error: 'intent 须为 install 或 egress' }
+        } catch (err) {
+          return handleShellError(err)
+        }
+      },
+    },
+    {
       name: 'request_session_lan_access',
       category: '工作区',
       description: '本对话申请局域网访问（内部 ask_user）；可覆盖全局关闭局域网',

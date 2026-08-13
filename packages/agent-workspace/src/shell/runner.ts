@@ -12,6 +12,7 @@ import {
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
 import type { ConfirmHandler } from '../service.js'
 import { buildSandboxConfigFromGrants } from './config-from-grants.js'
+import { applyBundledCaCertEnv } from './bundled-cacert.js'
 import { resolveShellArgv } from './resolve-shell-argv.js'
 import { usesElectronAsNodeArgv } from '../node/resolve-node.js'
 import { getPythonSettings } from '../python-settings-store.js'
@@ -54,9 +55,15 @@ import {
 import {
   SessionNetworkEgressStore,
   NETWORK_EGRESS_CONFIRM_OPTIONS,
+  hostFromNetworkInput,
   normalizeEgressHost,
   parseNetworkEgressChoice,
 } from './session-network-egress.js'
+import {
+  formatNetworkInstallConfirmPrompt,
+  hostPatternsFromHttpsUrls,
+  networkDomainsForInstallAllowed,
+} from './network-policy.js'
 import { getSessionSecretAccessStore } from './session-secret-access.js'
 import { redactSecretsInText } from './secret-redact.js'
 import {
@@ -194,6 +201,7 @@ async function sanitizeChildEnv(
   } catch {
     /* Python 未就绪时仍允许非 python 命令 */
   }
+  applyBundledCaCertEnv(out)
   return out
 }
 
@@ -209,10 +217,15 @@ async function requireNetworkInstallConfirmation(
   confirm?: ConfirmHandler,
 ): Promise<void> {
   if (sticky.has(sessionId)) return
+  if (sticky.consumePreflight(sessionId)) return
+  const pipIndexUrls = getPythonSettings().pip_index_urls
+  const preferredHosts = hostPatternsFromHttpsUrls(pipIndexUrls)
+  const installDomains = networkDomainsForInstallAllowed(pipIndexUrls)
+  const prompt = formatNetworkInstallConfirmPrompt(installDomains, 8, preferredHosts)
   const payload = {
     kind: 'network_install' as const,
     title: '允许联网安装',
-    prompt: '安装依赖需要访问外部包源。是否允许本次联网安装？',
+    prompt,
     options: [...NETWORK_INSTALL_CONFIRM_OPTIONS],
   }
   if (!confirm) {
@@ -229,6 +242,161 @@ async function requireNetworkInstallConfirmation(
   const choice = parseNetworkInstallChoice(answer.selected_ids)
   if (choice === 'cancel') throw new WorkspaceError('用户已取消联网安装')
   if (choice === 'sticky') sticky.grant(sessionId)
+}
+
+export type NetworkInstallPreflightResult = {
+  ok: boolean
+  already_granted?: boolean
+  sticky?: boolean
+  once_confirmed?: boolean
+  domains?: string[]
+  message: string
+}
+
+export type NetworkEgressPreflightResult = {
+  ok: boolean
+  granted_hosts: string[]
+  once_hosts?: string[]
+  message: string
+}
+
+async function confirmNetworkInstallPreflight(
+  sessionId: string,
+  sticky: NetworkInstallStickyStore,
+  confirm?: ConfirmHandler,
+  reason?: string,
+): Promise<NetworkInstallPreflightResult> {
+  const pipIndexUrls = getPythonSettings().pip_index_urls
+  const preferredHosts = hostPatternsFromHttpsUrls(pipIndexUrls)
+  const installDomains = networkDomainsForInstallAllowed(pipIndexUrls)
+  if (sticky.has(sessionId)) {
+    return {
+      ok: true,
+      already_granted: true,
+      sticky: true,
+      domains: installDomains,
+      message: '本对话已允许联网安装，无需再次确认',
+    }
+  }
+  if (sticky.hasPreflight(sessionId)) {
+    return {
+      ok: true,
+      already_granted: true,
+      once_confirmed: true,
+      domains: installDomains,
+      message: '本对话已有一次联网安装预授权，随后 shell_install 将跳过重复确认',
+    }
+  }
+  const basePrompt = formatNetworkInstallConfirmPrompt(installDomains, 8, preferredHosts)
+  const prompt = reason?.trim()
+    ? `${reason.trim()}\n\n${basePrompt}`
+    : basePrompt
+  const payload = {
+    kind: 'network_install' as const,
+    title: '允许联网安装',
+    prompt,
+    options: [...NETWORK_INSTALL_CONFIRM_OPTIONS],
+  }
+  if (!confirm) {
+    throw new NetworkInstallConfirmationRequiredError(payload)
+  }
+  const answer = await confirm({
+    title: payload.title,
+    prompt: payload.prompt,
+    options: payload.options,
+    operation: 'overwrite',
+    root_id: 'default',
+    path: '',
+  })
+  const choice = parseNetworkInstallChoice(answer.selected_ids)
+  if (choice === 'cancel') throw new WorkspaceError('用户已取消联网安装')
+  if (choice === 'sticky') {
+    sticky.grant(sessionId)
+    return {
+      ok: true,
+      sticky: true,
+      domains: installDomains,
+      message: '本对话已一律允许联网安装；随后 shell_install 将跳过联网确认',
+    }
+  }
+  sticky.grantPreflight(sessionId)
+  return {
+    ok: true,
+    once_confirmed: true,
+    domains: installDomains,
+    message: '已预授权一次联网安装；紧接着的 shell_install 将跳过联网确认',
+  }
+}
+
+async function confirmNetworkEgressPreflight(
+  sessionId: string,
+  hosts: readonly string[],
+  egress: SessionNetworkEgressStore,
+  confirm?: ConfirmHandler,
+  reason?: string,
+): Promise<NetworkEgressPreflightResult> {
+  if (!hosts.length) {
+    throw new WorkspaceError('intent=egress 时须提供至少一个 hosts')
+  }
+  const normalized: string[] = []
+  for (const raw of hosts) {
+    const host = hostFromNetworkInput(String(raw ?? ''))
+    if (!host) throw new WorkspaceError(`无效主机：${String(raw)}`)
+    normalized.push(await assertEgressHostGrantable(host, sessionId))
+  }
+  const unique = [...new Set(normalized)]
+  const pending = unique.filter(
+    h => !isEgressHostPreAuthorized(sessionId, h, egress) && !egress.hasPreflightHost(sessionId, h),
+  )
+  if (!pending.length) {
+    return {
+      ok: true,
+      granted_hosts: unique.filter(h => egress.hasHost(sessionId, h)),
+      once_hosts: unique.filter(h => egress.hasPreflightHost(sessionId, h)),
+      message: '所列目标已授权或已有预授权，无需再次确认',
+    }
+  }
+  const hostList = pending.join('、')
+  const prompt = [
+    reason?.trim() || '命令可能需要访问以下外部目标。是否允许？',
+    '',
+    `目标：${hostList}`,
+  ].join('\n')
+  const payload = {
+    kind: 'network_egress' as const,
+    title: '允许访问外部目标',
+    prompt,
+    target_host: pending[0],
+    options: [...NETWORK_EGRESS_CONFIRM_OPTIONS],
+  }
+  if (!confirm) {
+    throw new NetworkEgressConfirmationRequiredError(payload)
+  }
+  const answer = await confirm({
+    title: payload.title,
+    prompt: payload.prompt,
+    options: payload.options,
+    operation: 'overwrite',
+    root_id: 'default',
+    path: '',
+  })
+  const choice = parseNetworkEgressChoice(answer.selected_ids)
+  if (choice === 'cancel') throw new WorkspaceError('用户已取消外网访问')
+  if (choice === 'allow_host_session') {
+    for (const h of pending) egress.grantHost(sessionId, h)
+    return {
+      ok: true,
+      granted_hosts: pending,
+      message: `本对话已允许访问：${hostList}`,
+    }
+  }
+  for (const h of pending) egress.grantPreflightHost(sessionId, h)
+  return {
+    ok: true,
+    granted_hosts: [],
+    once_hosts: pending,
+    message: `已预授权一次访问：${hostList}；随后 opptrix_run 将跳过这些目标的出站确认`,
+  }
 }
 
 async function assertDiagnosticTargetAllowed(host: string, sessionId: string): Promise<string> {
@@ -289,7 +457,10 @@ async function requireDiagnosticMergedConfirmation(
   confirm?: ConfirmHandler,
 ): Promise<EgressRunGrants> {
   const normalizedTarget = await assertEgressHostGrantable(targetHost, sessionId)
-  if (isEgressHostPreAuthorized(sessionId, normalizedTarget, egress)) {
+  if (
+    isEgressHostPreAuthorized(sessionId, normalizedTarget, egress)
+    || egress.hasPreflightHost(sessionId, normalizedTarget)
+  ) {
     return { onceHosts: [], runWithDeniedNetwork: false }
   }
 
@@ -441,6 +612,11 @@ function createSandboxAskCallback(opts: {
       return false
     }
     if (isEgressHostPreAuthorized(opts.sessionId, normalized, opts.sessionEgress)) {
+      return true
+    }
+    if (opts.sessionEgress.hasPreflightHost(opts.sessionId, normalized)) {
+      // 本 run 已合并 preflight 到 runOnceHosts；兜底再认一次
+      opts.runOnceHosts.add(normalized)
       return true
     }
     if (opts.runOnceHosts.has(normalized)) return true
@@ -755,9 +931,12 @@ export class ShellRunner {
       const sessionEgress = egressGrants.runWithDeniedNetwork
         ? undefined
         : this.deps.sessionEgress.snapshot(params.sessionId)
+      const preflightEgress = egressGrants.runWithDeniedNetwork
+        ? []
+        : this.deps.sessionEgress.consumeAllPreflight(params.sessionId)
       const onceEgressHosts = egressGrants.runWithDeniedNetwork
         ? undefined
-        : [...egressGrants.onceHosts, ...secretInjectHosts]
+        : [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
 
       const config = await buildSandboxConfigFromGrants({
         grants,
@@ -766,10 +945,11 @@ export class ShellRunner {
         sessionEgress,
         onceEgressHosts,
         sessionId: params.sessionId,
+        pipIndexUrls: getPythonSettings().pip_index_urls,
       })
 
       const runOnceHosts = new Set<string>(
-        [...egressGrants.onceHosts, ...secretInjectHosts]
+        [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
           .map(h => normalizeEgressHost(h))
           .filter(Boolean),
       )
@@ -867,6 +1047,31 @@ export class ShellRunner {
       networkIntent: 'install',
       signal: params.signal,
     }, confirm)
+  }
+
+  /** 按预需提前唤起联网安装授权（ConfirmHandler / sticky|preflight once） */
+  requestNetworkInstall(
+    sessionId: string,
+    confirm?: ConfirmHandler,
+    reason?: string,
+  ): Promise<NetworkInstallPreflightResult> {
+    return confirmNetworkInstallPreflight(sessionId, this.deps.stickyNetwork, confirm, reason)
+  }
+
+  /** 按预需提前唤起指定域名出站授权 */
+  requestNetworkEgress(
+    sessionId: string,
+    hosts: string[],
+    confirm?: ConfirmHandler,
+    reason?: string,
+  ): Promise<NetworkEgressPreflightResult> {
+    return confirmNetworkEgressPreflight(
+      sessionId,
+      hosts,
+      this.deps.sessionEgress,
+      confirm,
+      reason,
+    )
   }
 
   clearSession(sessionId: string): void {

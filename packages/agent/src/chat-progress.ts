@@ -266,6 +266,7 @@ const TOOL_LABELS: Record<string, string> = {
   opptrix_run: 'Opptrix 运行',
   shell_run: 'Opptrix 运行',
   shell_install: '安装依赖',
+  request_shell_network: '申请沙盒联网',
   shell_platform_status: '检查运行环境是否就绪',
   python_env_status: '查看 Python 环境',
   ensure_python: '准备 Python 环境',
@@ -603,6 +604,10 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const pkgs = Array.isArray(args.packages) ? args.packages.filter((p): p is string => typeof p === 'string') : []
       const pkgHint = pkgs.length ? pkgs.slice(0, 3).join(', ') : 'package.json'
       return mgr ? `${base} · ${mgr} · ${pkgHint}` : base
+    }
+    case 'request_shell_network': {
+      const intent = typeof args.intent === 'string' ? args.intent : ''
+      return intent ? `${base} · ${intent}` : base
     }
     case 'shell_platform_status':
     case 'python_env_status':
