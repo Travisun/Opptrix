@@ -5,6 +5,10 @@ const {
   writeOsScheduleEndpoint,
   purgeLegacyOsTickArtifacts,
 } = require('./os-schedule/tick-runner.cjs')
+const {
+  applyLinuxAutostart,
+  probeLinuxAutostart,
+} = require('./os-schedule/linux-autostart.cjs')
 
 /** @type {string} */
 let apiHost = '127.0.0.1'
@@ -90,32 +94,91 @@ async function fetchOsReconcileHint() {
   return fetchJson('/os/reconcile', { method: 'GET' })
 }
 
+/**
+ * Sync OS login / tray autostart for the product preference.
+ * - macOS / Windows: Electron Login Item API (`--background`)
+ * - Linux: XDG Autostart `.desktop` (Electron Login Item is a no-op)
+ * - other: explicit unsupported
+ *
+ * @param {boolean} enabled
+ * @returns {{
+ *   ok: boolean
+ *   enabled: boolean
+ *   platform: NodeJS.Platform
+ *   error?: string | null
+ * }}
+ */
 function ensureAutostart(enabled) {
-  if (process.platform !== 'darwin' && process.platform !== 'win32') {
-    return { ok: true, enabled: false, platform: process.platform }
+  const want = Boolean(enabled)
+  const platform = process.platform
+
+  if (platform === 'linux') {
+    const result = applyLinuxAutostart({
+      enabled: want,
+      execPath: process.execPath,
+      name: typeof app?.getName === 'function' ? app.getName() : 'Opptrix',
+      comment: 'Opptrix',
+    })
+    return {
+      ok: result.ok && result.enabled === want,
+      enabled: result.enabled,
+      platform,
+      error: result.error,
+    }
   }
-  /** @type {import('electron').Settings} */
-  const settings = {
-    openAtLogin: Boolean(enabled),
+
+  if (platform === 'darwin' || platform === 'win32') {
+    try {
+      /** @type {import('electron').Settings} */
+      const settings = {
+        openAtLogin: want,
+      }
+      if (want) {
+        settings.args = ['--background']
+        // macOS: prefer hidden login launch; Windows ignores openAsHidden
+        settings.openAsHidden = true
+      }
+      app.setLoginItemSettings(settings)
+      const current = app.getLoginItemSettings()
+      return {
+        ok: current.openAtLogin === want,
+        enabled: current.openAtLogin,
+        platform,
+        error: current.openAtLogin === want ? null : 'login_item_mismatch',
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        enabled: false,
+        platform,
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
   }
-  if (enabled) {
-    settings.args = ['--background']
-  }
-  app.setLoginItemSettings(settings)
-  const current = app.getLoginItemSettings()
+
   return {
-    ok: current.openAtLogin === Boolean(enabled),
-    enabled: current.openAtLogin,
-    platform: process.platform,
+    ok: false,
+    enabled: false,
+    platform,
+    error: 'unsupported_platform',
   }
 }
 
 function probeAutostart() {
-  if (process.platform !== 'darwin' && process.platform !== 'win32') {
-    return { enabled: false, platform: process.platform }
+  const platform = process.platform
+  if (platform === 'linux') {
+    const probed = probeLinuxAutostart()
+    return { enabled: probed.enabled, platform }
   }
-  const current = app.getLoginItemSettings()
-  return { enabled: current.openAtLogin, platform: process.platform }
+  if (platform === 'darwin' || platform === 'win32') {
+    try {
+      const current = app.getLoginItemSettings()
+      return { enabled: Boolean(current.openAtLogin), platform }
+    } catch {
+      return { enabled: false, platform }
+    }
+  }
+  return { enabled: false, platform }
 }
 
 /**

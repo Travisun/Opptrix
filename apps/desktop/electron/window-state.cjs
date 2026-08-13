@@ -8,12 +8,12 @@
 const fs = require('fs')
 const path = require('path')
 
-/** Comfortable default — smaller than legacy 1100×740; still ≥ MIN_*. */
-const DEFAULT_WIDTH = 960
-const DEFAULT_HEIGHT = 680
+/** Product default from preferred desktop layout (still ≥ MIN_*). */
+const DEFAULT_WIDTH = 1115
+const DEFAULT_HEIGHT = 635
 /** Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts */
 const MIN_WIDTH = 510
-const MIN_HEIGHT = 640
+const MIN_HEIGHT = 600
 const WORK_AREA_WIDTH_RATIO = 0.7
 const WORK_AREA_HEIGHT_RATIO = 0.75
 const WINDOW_STATE_FILENAME = 'window-state.json'

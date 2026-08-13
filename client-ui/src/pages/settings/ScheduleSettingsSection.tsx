@@ -158,7 +158,7 @@ export default function ScheduleSettingsSection() {
           />
           <SettingsRow
             title="允许任务运行受控脚本"
-            desc="默认只跑智能体任务；开启后才可执行脚本类任务"
+            desc="默认开启；关闭后计划任务将只跑智能体分析"
             control={(
               <Switch
                 checked={settings.allow_shell_scripts}
@@ -176,7 +176,7 @@ export default function ScheduleSettingsSection() {
         <SettingsGroup>
           <SettingsRow
             title="登录时在托盘启动"
-            desc="开机后在托盘运行，便于按时执行任务"
+            desc="默认开启；登录后在托盘运行，便于按时执行任务"
             control={(
               <Switch
                 checked={settings.autostart}

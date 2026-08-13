@@ -39,7 +39,7 @@ This builds workspace packages, starts the API sidecar + Vite HMR, and opens the
 
 ### 主窗口尺寸
 
-- **默认大小**：约 **960×680**（按主显示器 work area 约 70%×75% 再封顶），最小宽高与 UI 一致（宽 ≥ `DESKTOP_CHAT_MIN_WIDTH` / 510px，高 ≥ 640）。
+- **默认大小**：约 **1115×635**（按主显示器 work area 约 70%×75% 再封顶），最小宽高与 UI 一致（宽 ≥ `DESKTOP_CHAT_MIN_WIDTH` / 510px，高 ≥ 600）。
 - **记住窗口大小**：用户调整后的宽高与位置写入 Electron `userData` 下的 `window-state.json`（`resize` / `move` 防抖保存，关闭前再写一次）。最大化 / 全屏不会把铺满后的尺寸当成普通窗口尺寸；位置若不在任一显示器可见 work area 内，下次启动回退为居中。三端（macOS / Windows / Linux）同一套逻辑（见 `apps/desktop/electron/window-state.cjs`）。
 
 If the API is already running on port `8711`, stop it first or set `STOCK_RESEARCH_PORT` to avoid a port conflict.
@@ -80,7 +80,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 桌面端计划任务为 **仅进程内执行**：Sidecar 内 `ScheduleService.start()` 每 **20s** 扫描到期任务（`trigger: 'timer'`）。**不再**注册 LaunchAgent / Windows schtasks / Linux systemd timer；升级启动时 `reconcileOsSchedule` **强制** `removeTickRegistration` 并清理旧 runner 脚本。
 
-关窗到托盘时 sidecar 与 timer 继续运行；从托盘 **完全退出** 后计划任务 **不会** 执行。登录项 `autostart`（`--background`）可保留，与已废除的 OS tick 无关。
+关窗到托盘时 sidecar 与 timer 继续运行；从托盘 **完全退出** 后计划任务 **不会** 执行。默认开启登录自启 `autostart`（`--background` 托盘常驻）：macOS / Windows 用 Electron Login Item，Linux 写 XDG Autostart（`~/.config/autostart/opptrix.desktop`）；与已废除的 OS tick 无关。
 
 ### 关窗 = 托盘常驻（生产包）
 
@@ -166,7 +166,7 @@ Windows NSIS（`nsis/installer.nsh`）仍会在安装前移除 `OpptrixScheduleT
 1. `GET /api/schedule/os/reconcile` — `register_tick` **恒为 false**；读取 `autostart`
 2. `getOsScheduleAdapter().removeTickRegistration()` — **每次**启动/轮询强制注销遗留 OS 任务（永不 `ensureTickRegistration`）
 3. `purgeLegacyOsTickArtifacts` — 删除旧 runner 脚本、剥离 endpoint 冷启字段
-4. `app.setLoginItemSettings({ openAtLogin, args: ['--background'] })` — macOS/Windows 登录项（`autostart`）
+4. 同步 `autostart`：macOS/Windows → `app.setLoginItemSettings({ openAtLogin, openAsHidden, args: ['--background'] })`；Linux → XDG Autostart `.desktop`（`linux-autostart.cjs`）
 5. `PATCH /api/schedule/settings` — 回写 `os_tick_status`（通常 `n/a`）
 
 前台与 `--background` 启动后均 `reconcileOsSchedule()`，并每 **30s** 轮询（幂等 remove）。
@@ -177,7 +177,7 @@ Windows NSIS（`nsis/installer.nsh`）仍会在安装前移除 `OpptrixScheduleT
 |------|----------|
 | `master_enabled` | 为 false 时 tick 跳过执行 |
 | `run_when_closed` | **兼容字段**，始终 false；API 忽略写入；UI 已隐藏 |
-| `autostart` | 登录项 `--background` 托盘常驻 |
+| `autostart` | 默认 true；macOS/Windows 登录项、Linux XDG Autostart（`--background` 托盘常驻） |
 | `allow_shell_scripts` | 与 Agent/REST 一致；脚本类任务门禁 |
 
 REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--schedule)、[AGENT-GUIDE.md §4.2 · automation pack](./AGENT-GUIDE.md#42-agent-与-mcp)。

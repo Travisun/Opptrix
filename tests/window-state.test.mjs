@@ -24,9 +24,9 @@ const {
 } = require('../apps/desktop/electron/window-state.cjs')
 
 describe('window-state defaults', () => {
-  it('default size is smaller than legacy 1100×740 and ≥ mins', () => {
-    assert.ok(DEFAULT_WIDTH < 1100)
-    assert.ok(DEFAULT_HEIGHT < 740)
+  it('default size matches product constants and is ≥ mins', () => {
+    assert.equal(DEFAULT_WIDTH, 1115)
+    assert.equal(DEFAULT_HEIGHT, 635)
     assert.ok(DEFAULT_WIDTH >= MIN_WIDTH)
     assert.ok(DEFAULT_HEIGHT >= MIN_HEIGHT)
   })

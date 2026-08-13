@@ -60,8 +60,8 @@ export interface ScheduleSettings {
 export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   master_enabled: true,
   run_when_closed: false,
-  autostart: false,
-  allow_shell_scripts: false,
+  autostart: true,
+  allow_shell_scripts: true,
   os_tick_status: 'n/a',
   os_tick_error: null,
 }

@@ -569,8 +569,8 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 |------|------|------|------|
 | `master_enabled` | boolean | `true` | 总开关；为 `false` 时 `tick` 跳过所有到期任务 |
 | `run_when_closed` | boolean | `false` | **兼容字段**：始终 `false`；PATCH 忽略写入；不再注册系统 crontab |
-| `autostart` | boolean | `false` | 桌面：登录项 `--background` 托盘常驻 |
-| `allow_shell_scripts` | boolean | `false` | 为 `false` 时禁止创建/改为 `shell_script` 任务 |
+| `autostart` | boolean | `true` | 桌面：登录项 / Linux XDG Autostart，以 `--background` 托盘常驻 |
+| `allow_shell_scripts` | boolean | `true` | 为 `false` 时禁止创建/改为 `shell_script` 任务 |
 | `os_tick_status` | `'synced' \| 'pending' \| 'error' \| 'n/a'` | `'n/a'` | 遗留字段；新版本通常为 `n/a` |
 | `os_tick_error` | string \| null | `null` | 遗留 OS 注销失败原因（少见） |
 
@@ -613,7 +613,7 @@ PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，可�
 {
   "master_enabled": true,
   "run_when_closed": false,
-  "allow_shell_scripts": false,
+  "allow_shell_scripts": true,
   "autostart": true,
   "os": { "status": "n/a", "message": "…", "error": null, "autostart": true },
   "jobs": { "total": 2, "enabled": 1, "disabled": 1, "next_due": "2026-07-28T08:00:00.000Z" },

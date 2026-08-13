@@ -608,7 +608,7 @@ setProtocolDeliverHandler(deliverProtocolPayload)
 installProtocolHandlers(app, { focusMainWindow })
 
 function buildMainWindowOptions() {
-  // Default ~960×680 (capped by work area). Restores last size/position from
+  // Default ~1115×635 (capped by work area). Restores last size/position from
   // userData/window-state.json when valid (see window-state.cjs).
   /** @type {{ x: number, y: number, width: number, height: number } | null} */
   let primaryWorkArea = null
