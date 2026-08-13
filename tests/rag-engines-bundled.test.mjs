@@ -79,21 +79,40 @@ describe('rag engines bundled paths', () => {
     assert.match(sidecarLaunch, /OPPTRIX_RAG_ENGINES_BUNDLED_DIR/)
   })
 
-  it('ensureBundledRagRuntime enables embedding; layout stays retired', async () => {
+  it('server bootstrap does not force-load E5 or embedPending at boot', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'apps/server/src/index.ts'), 'utf8')
+    const bootIdx = src.indexOf('async function bootstrap()')
+    assert.ok(bootIdx >= 0)
+    const bootSlice = src.slice(bootIdx, bootIdx + 8000)
+    assert.doesNotMatch(bootSlice, /tryEnableDefaultBackend\s*\(/)
+    assert.doesNotMatch(bootSlice, /embedPendingDocuments\s*\(/)
+    assert.match(bootSlice, /ensureBundledRagRuntime/)
+  })
+
+  it('ensureBundledRagRuntime reports disk install without tryEnable/load', async () => {
     const emptyEngines = path.join(tmpRoot, 'engines-empty')
     fs.mkdirSync(emptyEngines, { recursive: true })
     process.env.OPPTRIX_RAG_ENGINES_BUNDLED_DIR = emptyEngines
-    const prev = lib.getEmbeddingService()
-    lib.setEmbeddingServiceForTests(new lib.EmbeddingService(new lib.MockEmbeddingBackend(true)))
+
+    let tryEnableCalls = 0
+    const emb = new lib.EmbeddingService()
+    const orig = emb.tryEnableDefaultBackend.bind(emb)
+    emb.tryEnableDefaultBackend = async () => {
+      tryEnableCalls += 1
+      return orig()
+    }
+    lib.setEmbeddingServiceForTests(emb)
     try {
       const r = await lib.ensureBundledRagRuntime()
-      assert.equal(typeof r.embedding, 'boolean')
+      assert.equal(tryEnableCalls, 0, 'boot must not tryEnable / load E5')
+      assert.equal(r.embedding, lib.isEmbeddingModelInstalled())
       assert.equal(typeof r.layout, 'boolean')
       assert.equal(typeof r.deep, 'boolean')
-      assert.equal(r.embedding, true)
       assert.equal(r.layout, false)
+      assert.equal(emb.isReady(), false)
     } finally {
-      lib.setEmbeddingServiceForTests(prev)
+      lib.setEmbeddingServiceForTests(null)
+      await lib.closeEmbeddingService()
     }
   })
 })

@@ -20,7 +20,7 @@ Cross-platform desktop app built with **Electron** and a **Node.js API sidecar**
 
 **Why Electron?** Mature ecosystem, consistent Chromium rendering (Markdown / Mermaid / LaTeX), and the main process is Node — a natural fit for spawning the existing API sidecar. Production uses `ELECTRON_RUN_AS_NODE` so the bundled app does not require a separate Node.js install.
 
-新闻离线翻译结果缓存在主进程内存 Map 中，防抖落盘至 `~/.opptrix/news-translation-cache.json`（对齐行情引擎 Cache：LRU + 退出 flush）。本地翻译 GGUF 在空闲约 12 分钟后真正 `dispose` 释放（`OPPTRIX_TRANSLATION_IDLE_MS`，`0` 关闭）；句段内存 LRU 保留，换模/退出亦走官方 dispose。
+新闻离线翻译结果缓存在主进程内存 Map 中，防抖落盘至 `~/.opptrix/news-translation-cache.json`（对齐行情引擎 Cache：LRU + 退出 flush）。本地翻译 GGUF **按需加载**（启动/下载完成不进显存；首次翻译或显式 `preloadTranslationModel` 才 load），空闲约 12 分钟后真正 `dispose`（`OPPTRIX_TRANSLATION_IDLE_MS`，`0` 关闭）；句段内存 LRU 保留，换模/退出亦走官方 dispose。 sidecar `LlamaRuntime` 同语义 idle unload。
 
 <p align="center">
   <img src="../screenshot.jpg" alt="Opptrix 桌面主界面" width="880" />
@@ -214,6 +214,7 @@ REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--sche
 | `OPPTRIX_DUCK_READ_CONCURRENCY` | Duck 只读并发（默认 3；低配自动 1）；写恒为 1 |
 | `OPPTRIX_HYDRATE_CONCURRENCY` | L1 `hydrateStocks` 跨标的并发（默认 2；低配 1；上限 3）；同码内股东→伙伴仍串行 |
 | `OPPTRIX_OCR_CONCURRENCY` | 文档内嵌图 OCR 批并行（默认 3；低配 / `OPPTRIX_SQLITE_MEM_PROFILE=low` 或 totalmem&lt;6GB → 2；上限 4）。语义 embedding 已加载时再降到 1（不强制卸载 embedding） |
+| `OPPTRIX_OCR_IDLE_MS` | RapidOCR（`ocr-l2`）空闲卸载超时（默认 12 分钟；`0` 关闭）；首次识别才加载，空闲后释放内存，再次 OCR 可重建 |
 | `OPPTRIX_DUCK_WARM_ON_BOOT` | 设为 `0` 跳过 MarketDataStore 启动时 `warmReadCaches`（首次查询仍会拉统计） |
 | `ELECTRON_MIRROR` / `npm_config_disturl` | Electron headers 下载镜像（本地网络受限时） |
 | `OPPTRIX_RUNTIME_STAGE` | Packaged sidecar root (`runtime-stage`); used to locate bundled sandbox tools |
@@ -313,7 +314,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 ## Composer 语音输入（本机 ASR）
 
-聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。
+聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。主进程转写等待上限 **180s**（冷启 + 较长录音）；与 UI 本机重接口超时一致，全局快路径仍为 10s。
 
 **默认引擎**：SenseVoice。Composer 语音输入与新闻音视频转写均使用本机 SenseVoice 模型；安装包内置 q8 模型与 VAD，优先加载内置资源，其次用户目录，缺失时再下载。
 
@@ -328,7 +329,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | 运行时 | 优先内置 → 开发 `OPPTRIX_LLM_DIR` / `apps/server/llms` / `llms` → `~/.opptrix/llms/multilingual-e5-small/` → 旧 `~/.opptrix/models/…` → 按需下载（开发态） |
 | 覆盖 | `OPPTRIX_E5_BUNDLED_DIR`（测试 / sidecar 注入）；可选 `OPPTRIX_LLM_DIR` |
 | 卸载 | 设置页「卸下」仅清用户目录副本，不删安装包内置 |
-| 首启 | sidecar 启动后后台 `tryEnableDefaultBackend()`；内置齐全即就绪，设置页显示「应用自带」无需再装 |
+| 首启 | sidecar 启动后后台 `ensureBundledRagRuntime()` **仅探测磁盘**是否已安装语义模型，**不**把 E5 载入内存；首次语义检索 / 入库 embed / 安装模型后再 `tryEnable`，设置页显示「应用自带」无需再装 |
 | 空闲卸载 | 成功 embed 后若一段时间无再用，卸下内存中的语义模型（默认约 12 分钟，`OPPTRIX_EMBED_IDLE_MS` 可覆盖，`0` 关闭）；磁盘「已安装」保留，下次检索会再加载。`closeDocLibraryService` 退出时一并释放 |
 
 深度整理（OCR，`ocr-l2` / `@gutenye/ocr-node`）ONNX 与语义检索模型默认内置（`resources/llms/<id>/`，用户副本 `~/.opptrix/llms/<id>/`）。**不依赖** Python 侧车；`pdfplumber` L1 已从默认路径与设置页移除。
@@ -342,6 +343,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 | 打包 | `extraResources`：`resources/llms` → `llms`；`resources/engines` → `engines`（兼容旧探测） |
 | 运行时 | Node ONNX OCR；`OPPTRIX_RAG_ENGINES_BUNDLED_DIR` 由 `sidecar-launch.cjs`（`buildSidecarEnv`）注入 |
 | 首启 | 后台 `ensureBundledRagRuntime()`：启用 embedding；OCR 模型齐全则深度整理可用 |
+| 空闲卸载 | 首次 OCR 才 `Ocr.create`；成功识别后空闲默认约 12 分钟释放 singleton（`OPPTRIX_OCR_IDLE_MS`，`0` 关闭）；`closeDocLibraryService` / server shutdown 一并清理 |
 
 禁止默认路径纳入 PyMuPDF（AGPL）。研报入库支持 `.pdf` / `.txt` / `.md` / `.docx` / `.pptx` / 图片；`.pptx` 按幻灯片分 chunk。
 
@@ -368,6 +370,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 |------|------|------|
 | `OPPTRIX_SPEECH_ENGINE` | `sensevoice` | Composer 语音引擎：`sensevoice` 或 `whisper` |
 | `OPPTRIX_EMBED_IDLE_MS` | `720000`（12 分钟） | 语义 embedding 模型空闲卸载超时；`0` 关闭空闲卸载 |
+| `OPPTRIX_OCR_IDLE_MS` | `720000`（12 分钟） | RapidOCR 空闲卸载超时；`0` 关闭；status/健康检查不创建实例 |
 | `OPPTRIX_TRANSLATION_IDLE_MS` | `720000`（12 分钟） | 本地翻译 GGUF 空闲卸载超时（真正 dispose）；`0` 关闭；句段 LRU 不随卸载清空 |
 | `OPPTRIX_EMBED_BATCH_SIZE` | `8` | transformers 真 batch 推理批大小（钳位 8～32）；失败时回退逐条 |
 | `OPPTRIX_SENSEVOICE_MODEL` | `q8` | SenseVoice 模型：`q8`（约 242MB）或 `f16`（约 448MB）；须用官方 FunAudioLLM GGUF |

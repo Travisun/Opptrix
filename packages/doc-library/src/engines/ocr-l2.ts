@@ -303,26 +303,162 @@ export async function removeRapidOcrInstall(_installDir?: string): Promise<void>
 }
 
 type OcrLine = { text?: string }
+/** @gutenye/ocr-node 实例；上游若无 dispose/close，释放时仅置空引用供 GC */
 type OcrInstance = {
   detect: (input: string | Buffer) => Promise<OcrLine[]>
+  dispose?: () => void | Promise<void>
+  close?: () => void | Promise<void>
 }
 
+/** 默认 12 分钟；`OPPTRIX_OCR_IDLE_MS=0` 关闭空闲卸载 */
+export const DEFAULT_OCR_IDLE_MS = 12 * 60 * 1000
+
+export function resolveOcrIdleMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.OPPTRIX_OCR_IDLE_MS
+  if (raw == null || raw === '') return DEFAULT_OCR_IDLE_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_OCR_IDLE_MS
+  return n
+}
+
+type OcrFactory = (modelDir: string) => Promise<OcrInstance>
+
 let ocrSingleton: Promise<OcrInstance> | null = null
+let ocrIdleTimer: ReturnType<typeof setTimeout> | null = null
+let ocrIdleUnloadPromise: Promise<void> | null = null
+let ocrLastUsedAt = 0
+/** 测试可注入，避免真实 Ocr.create */
+let ocrFactoryForTests: OcrFactory | null = null
+
+function clearOcrIdleTimer(): void {
+  if (ocrIdleTimer) {
+    clearTimeout(ocrIdleTimer)
+    ocrIdleTimer = null
+  }
+}
+
+function scheduleOcrIdleUnload(): void {
+  clearOcrIdleTimer()
+  const idleMs = resolveOcrIdleMs()
+  if (idleMs <= 0) return
+  ocrIdleTimer = setTimeout(() => {
+    ocrIdleTimer = null
+    void runOcrIdleUnload()
+  }, idleMs)
+  if (typeof ocrIdleTimer === 'object' && ocrIdleTimer && 'unref' in ocrIdleTimer) {
+    ocrIdleTimer.unref()
+  }
+}
+
+function touchOcrLastUsed(): void {
+  ocrLastUsedAt = Date.now()
+  scheduleOcrIdleUnload()
+}
+
+async function disposeOcrInstance(instance: OcrInstance): Promise<void> {
+  const disposer =
+    typeof instance.dispose === 'function'
+      ? instance.dispose.bind(instance)
+      : typeof instance.close === 'function'
+        ? instance.close.bind(instance)
+        : null
+  if (!disposer) {
+    // @gutenye/ocr-node 当前无公开 dispose/close；置空 singleton 依赖 GC 回收 ONNX 会话
+    return
+  }
+  try {
+    await disposer()
+  } catch {
+    /* ignore teardown races */
+  }
+}
+
+/**
+ * 释放 OCR singleton（取消空闲定时器；若有 dispose/close 则调用）。
+ * 失败不抛；下次 getOcrInstance / ocrImageBuffer 可再创建。
+ */
+export async function releaseOcrInstance(): Promise<void> {
+  clearOcrIdleTimer()
+  const pending = ocrSingleton
+  ocrSingleton = null
+  if (!pending) return
+  let instance: OcrInstance
+  try {
+    instance = await pending
+  } catch {
+    return
+  }
+  await disposeOcrInstance(instance)
+}
+
+async function runOcrIdleUnload(): Promise<void> {
+  if (ocrIdleUnloadPromise) {
+    await ocrIdleUnloadPromise
+    return
+  }
+  ocrIdleUnloadPromise = releaseOcrInstance().finally(() => {
+    ocrIdleUnloadPromise = null
+  })
+  await ocrIdleUnloadPromise
+}
+
+/** 关闭 OCR 单例（含进行中的空闲卸载）；server / closeDocLibrary 共用 */
+export async function closeOcrService(): Promise<void> {
+  clearOcrIdleTimer()
+  const pendingUnload = ocrIdleUnloadPromise
+  ocrIdleUnloadPromise = null
+  if (pendingUnload) {
+    try {
+      await pendingUnload
+    } catch {
+      /* ignore */
+    }
+  }
+  await releaseOcrInstance()
+}
+
+/** @internal 测试：注入/清空 OCR 工厂 */
+export function setOcrFactoryForTests(factory: OcrFactory | null): void {
+  ocrFactoryForTests = factory
+}
+
+/** @internal 测试：当前是否持有 singleton（含创建中 Promise） */
+export function hasOcrSingletonForTests(): boolean {
+  return ocrSingleton != null
+}
+
+/** @internal 测试：最近一次成功使用时间戳 */
+export function getOcrLastUsedAtForTests(): number {
+  return ocrLastUsedAt
+}
+
+/** @internal 测试：按需创建/复用 OCR 并 touch（不经 isOcrL2Available） */
+export async function warmOcrInstanceForTests(modelDir = '/__ocr_test__'): Promise<void> {
+  await getOcrInstance(modelDir)
+  touchOcrLastUsed()
+}
 
 async function getOcrInstance(modelDir: string): Promise<OcrInstance> {
   if (!ocrSingleton) {
-    ocrSingleton = (async () => {
+    const creating = (async () => {
+      if (ocrFactoryForTests) {
+        return ocrFactoryForTests(modelDir)
+      }
       const mod = await import('@gutenye/ocr-node')
       const Ocr = mod.default
-      const instance = await Ocr.create({
+      const instance = (await Ocr.create({
         models: {
           detectionPath: path.join(modelDir, 'ch_PP-OCRv4_det_mobile.onnx'),
           recognitionPath: path.join(modelDir, 'ch_PP-OCRv4_rec_mobile.onnx'),
           dictionaryPath: path.join(modelDir, 'ppocr_keys_v1.txt'),
         },
-      }) as OcrInstance
+      })) as OcrInstance
       return instance
     })()
+    ocrSingleton = creating
+    creating.catch(() => {
+      if (ocrSingleton === creating) ocrSingleton = null
+    })
   }
   return ocrSingleton
 }
@@ -410,7 +546,9 @@ export async function ocrImageBuffer(image: Buffer): Promise<string> {
     const resolved = resolveRapidOcrModelDir()
     if (resolved.source === 'missing') return ''
     const ocr = await getOcrInstance(resolved.dir)
-    return (await detectImageWithOcr(ocr, image)).trim()
+    const text = (await detectImageWithOcr(ocr, image)).trim()
+    touchOcrLastUsed()
+    return text
   } catch {
     return ''
   }
@@ -514,6 +652,7 @@ export async function runOcrL2(blob: Buffer, opts?: ParseRunOpts): Promise<Parse
         if (img) {
           try {
             text = (await detectImageWithOcr(ocr, img)).trim()
+            touchOcrLastUsed()
           } catch {
             text = ''
           }
@@ -525,6 +664,7 @@ export async function runOcrL2(blob: Buffer, opts?: ParseRunOpts): Promise<Parse
 
     // 图片或其它：整文件当一页 OCR
     const text = (await detectImageWithOcr(ocr, blob)).trim()
+    touchOcrLastUsed()
     if (!text) {
       return {
         pageCount: 1,

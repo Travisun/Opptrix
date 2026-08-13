@@ -394,13 +394,9 @@ function getTranslationModels(repoRoot) {
   }
 }
 
-async function startTranslationModelDownload(repoRoot, modelId, onProgress) {
-  const result = await downloadTranslationModel(modelId, onProgress)
-  const model = getCatalogModel(modelId)
-  if (model?.purpose === 'translation') {
-    void preloadTranslationModel(repoRoot)
-  }
-  return result
+async function startTranslationModelDownload(_repoRoot, modelId, onProgress) {
+  // 下载只落盘；不自动 preload，避免下载完成即占显存。首次翻译走 ensureChatSession。
+  return downloadTranslationModel(modelId, onProgress)
 }
 
 
@@ -421,6 +417,18 @@ async function translateArticleLocal(repoRoot, payload, onProgress, preferredMod
   const bodyText = String(payload?.bodyText ?? '').trim()
   const segments = normalizeSegments(payload?.segments)
   const targetLang = String(payload?.targetLang ?? 'Chinese')
+
+  const resolvedPath = resolveTranslationModelPath(repoRoot, preferredModel)
+  const needsColdLoad = Boolean(resolvedPath) && !(chatSession && loadedModelPath === resolvedPath)
+  if (needsColdLoad && typeof onProgress === 'function') {
+    onProgress({
+      articleId,
+      phase: 'loading',
+      current: 0,
+      total: 0,
+      engine: 'offline',
+    })
+  }
 
   const { chatSession: session, modelPath, modelFamily } = await ensureChatSession(repoRoot, preferredModel)
   const modelBasename = path.basename(modelPath)

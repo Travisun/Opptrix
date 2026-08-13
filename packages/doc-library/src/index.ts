@@ -9,6 +9,7 @@ import {
   setLanceRebuildBackfillHook,
 } from './vector-store.js'
 import { closeEmbeddingService } from './embedding.js'
+import { closeOcrService } from './engines/ocr-l2.js'
 
 export {
   DOC_LIBRARY_SCHEMA_VERSION,
@@ -68,6 +69,7 @@ export {
   getEmbeddingService,
   closeEmbeddingService,
   setEmbeddingServiceForTests,
+  resetEmbedPendingAfterEnableForTests,
   resolveEmbedIdleMs,
   DEFAULT_EMBED_IDLE_MS,
   resolveEmbedBatchSize,
@@ -165,6 +167,14 @@ export {
   runOcrL2,
   ocrImageBuffer,
   ocrImageBuffers,
+  DEFAULT_OCR_IDLE_MS,
+  resolveOcrIdleMs,
+  releaseOcrInstance,
+  closeOcrService,
+  setOcrFactoryForTests,
+  hasOcrSingletonForTests,
+  getOcrLastUsedAtForTests,
+  warmOcrInstanceForTests,
 } from './engines/ocr-l2.js'
 export type { OcrEngineStatus, RapidOcrStatus, OcrBatchOpts } from './engines/ocr-l2.js'
 export {
@@ -292,7 +302,7 @@ export function getDocLibraryService(dbPath?: string): DocLibraryService {
 }
 
 /**
- * 关闭文档库单例：先 Lance 向量库，再 embedding 模型，最后 SQLite。
+ * 关闭文档库单例：先 Lance 向量库，再 embedding / OCR 模型，最后 SQLite。
  * 生产 sidecar 退出与测试 teardown 共用；失败不抛。
  */
 export async function closeDocLibraryService(): Promise<void> {
@@ -308,6 +318,11 @@ export async function closeDocLibraryService(): Promise<void> {
   }
   try {
     await closeEmbeddingService()
+  } catch {
+    /* ignore */
+  }
+  try {
+    await closeOcrService()
   } catch {
     /* ignore */
   }

@@ -1659,19 +1659,7 @@ async function bootstrap() {
       warn: (obj, msg) => app.log.warn(obj, msg),
     },
   })
-  // e5 就绪时回填未嵌入文档（无图 Hybrid RAG）
-  void import('@opptrix/doc-library').then(async (mod) => {
-    try {
-      const embedding = mod.getEmbeddingService()
-      const ready = embedding.isReady() || await embedding.tryEnableDefaultBackend()
-      if (!ready) return
-      const svc = mod.getDocLibraryService()
-      svc.setEmbeddingService(embedding)
-      await svc.embedPendingDocuments()
-    } catch {
-      /* background */
-    }
-  }).catch(() => {})
+  // 语义模型按需加载：boot 不 tryEnable / 不 embedPending；首次检索或入库 embed 时再加载并限速回填
   scheduleService.start()
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
   // 后台清理已删会话遗留的 chat-attachments 目录（best-effort，不阻塞启动）
@@ -1707,12 +1695,12 @@ async function bootstrap() {
     console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
   }
 
-  // 桌面/有内置资源时后台启用语义检索并尽量准备 L1/L2（失败不崩）
+  // 桌面/有内置资源时后台探测磁盘 runtime（不载入 E5）；OCR 尽量就绪（失败不崩）
   void import('@opptrix/doc-library')
     .then(async (mod) => {
       const r = await mod.ensureBundledRagRuntime()
       console.log(
-        `  RAG runtime: embedding=${r.embedding ? 'ready' : 'skip'} layout=${r.layout ? 'ready' : 'skip'} deep=${r.deep ? 'ready' : 'skip'}`,
+        `  RAG runtime: embedding=${r.embedding ? 'installed' : 'skip'} layout=${r.layout ? 'ready' : 'skip'} deep=${r.deep ? 'ready' : 'skip'}`,
       )
     })
     .catch(() => {
@@ -1754,8 +1742,9 @@ async function shutdown(signal: string) {
       const docLib = await import('@opptrix/doc-library')
       await docLib.closeDocLibraryService()
       await docLib.closeEmbeddingService()
+      await docLib.closeOcrService()
     } catch (err) {
-      app.log.warn({ err }, 'doc-library / embedding shutdown failed')
+      app.log.warn({ err }, 'doc-library / embedding / OCR shutdown failed')
     }
     try {
       await closeMarketDuckRuntime()

@@ -14,10 +14,52 @@ export interface EmbeddingBackend {
   dispose?(): Promise<void>
 }
 
-type FeaturePipeline = (
+type FeaturePipeline = ((
   text: string | string[],
   opts: { pooling: 'mean'; normalize: boolean },
-) => Promise<{ data: Float32Array | number[] }>
+) => Promise<{ data: Float32Array | number[] }>) & {
+  dispose?: () => void | Promise<void>
+  close?: () => void | Promise<void>
+}
+
+/** 首次成功 tryEnable 后限速回填未嵌入文档（boot 不触发） */
+let embedPendingAfterEnableScheduled = false
+
+/** @internal 测试重置「首次 enable 后回填」调度标志 */
+export function resetEmbedPendingAfterEnableForTests(): void {
+  embedPendingAfterEnableScheduled = false
+}
+
+/**
+ * 首次成功加载语义模型后，空闲调度限速回填；禁止启动瞬间 force load。
+ * 安装语义模型 / Lance 重建路径可另行 await embedPendingDocuments。
+ */
+function scheduleEmbedPendingAfterEnable(): void {
+  if (embedPendingAfterEnableScheduled) return
+  embedPendingAfterEnableScheduled = true
+  // 单测可设 OPPTRIX_EMBED_SKIP_PENDING_BACKFILL=1，避免误开本机文档库
+  if (process.env.OPPTRIX_EMBED_SKIP_PENDING_BACKFILL === '1') return
+  const run = (): void => {
+    void (async () => {
+      try {
+        const mod = await import('./index.js')
+        const emb = getEmbeddingService()
+        if (!emb.isReady()) return
+        const svc = mod.getDocLibraryService()
+        svc.setEmbeddingService(emb)
+        const opts = mod.resolveLanceRebuildBackfillOptions()
+        await svc.embedPendingDocuments({
+          ...opts,
+          concurrency: 1,
+        })
+      } catch {
+        /* background；回填失败不影响检索主路径 */
+      }
+    })()
+  }
+  if (typeof setImmediate === 'function') setImmediate(run)
+  else setTimeout(run, 0)
+}
 
 /** 默认 12 分钟；`OPPTRIX_EMBED_IDLE_MS=0` 关闭空闲卸载 */
 export const DEFAULT_EMBED_IDLE_MS = 12 * 60 * 1000
@@ -196,7 +238,18 @@ export class TransformersE5Backend implements EmbeddingBackend {
 
   /** 卸下内存中的 pipeline；磁盘模型仍视为已安装，下次 ensureLoaded 可再加载 */
   async dispose(): Promise<void> {
+    const pipe = this.pipe
     this.pipe = null
+    if (!pipe) return
+    try {
+      if (typeof pipe.dispose === 'function') {
+        await pipe.dispose()
+      } else if (typeof pipe.close === 'function') {
+        await pipe.close()
+      }
+    } catch {
+      /* ignore teardown races / missing dispose on older transformers */
+    }
   }
 }
 
@@ -238,7 +291,10 @@ export class EmbeddingService {
     // 空闲卸 pipe 后实例仍在：允许再加载，避免 isReady=false 且 if (backend) return false 卡住
     if (this.backend instanceof TransformersE5Backend) {
       const ok = await this.backend.ensureLoaded()
-      if (ok) this.touchLastUsed()
+      if (ok) {
+        this.touchLastUsed()
+        scheduleEmbedPendingAfterEnable()
+      }
       return ok
     }
     // 已显式注入后端（含「未就绪」假后端）时不自动升格，避免测试/关闭语义检索时仍加载本机模型
@@ -250,6 +306,7 @@ export class EmbeddingService {
     if (!ok) return false
     this.backend = backend
     this.touchLastUsed()
+    scheduleEmbedPendingAfterEnable()
     return true
   }
 

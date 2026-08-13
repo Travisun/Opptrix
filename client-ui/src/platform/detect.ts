@@ -168,13 +168,14 @@ export type TranslationArticleResult = {
 
 export type TranslationProgress = {
   articleId: string
-  phase: 'title' | 'body' | 'segment'
+  phase: 'loading' | 'title' | 'body' | 'segment'
   current: number
   total: number
   segmentId?: string
   translatedText?: string
   translatedTitle?: string
   done?: boolean
+  engine?: 'offline' | 'remote'
 }
 
 export type AppUpdateState =

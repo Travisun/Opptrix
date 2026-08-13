@@ -15,7 +15,7 @@ import {
   uninstallSemanticModel,
   type SemanticModelUiStatus,
 } from './embedding-api.js'
-import { getEmbeddingService } from './embedding.js'
+import { isEmbeddingModelInstalled } from './model-downloader.js'
 import type { RapidOcrModelSource } from './paths.js'
 
 export type ParseEnginesUiStatus = {
@@ -94,8 +94,8 @@ export {
 }
 
 /**
- * 桌面首启：启用 embedding；OCR 模型内置时标记深度整理可用。
- * 失败不抛；日志不含路径与密钥。
+ * 桌面首启：仅探测磁盘/runtime（语义模型是否已安装），不把 E5 pipeline 载入内存。
+ * OCR 模型内置时标记深度整理可用。失败不抛；日志不含路径与密钥。
  */
 export async function ensureBundledRagRuntime(): Promise<{
   embedding: boolean
@@ -105,7 +105,8 @@ export async function ensureBundledRagRuntime(): Promise<{
   const result = { embedding: false, layout: false, deep: false }
 
   try {
-    result.embedding = await getEmbeddingService().tryEnableDefaultBackend()
+    // 只检查已安装；embedQuery / hybrid / scheduleEmbed 等路径按需 tryEnable
+    result.embedding = isEmbeddingModelInstalled()
   } catch {
     result.embedding = false
   }

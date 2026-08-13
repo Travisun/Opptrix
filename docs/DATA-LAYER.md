@@ -795,7 +795,7 @@ class ProviderCatalogService {
 | **`documents` JSON blob（现 Tushare 方式）** | ⚠️ 过渡 | Phase 0 可兼容；迁移后 secrets 仍可在同行 `extra_json` |
 | **`@opptrix/market-data` SQLite** | ❌ **不要** | 行情/因子库；导入 `.opmd` 会覆盖，且与「用户路由偏好」域不符 |
 
-大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。服务端启动后会周期调用 `applyRetentionPolicy`、清理 `~/.opptrix/media-cache`（TTL/容量）并 `pruneStaleHealth`，删文时级联清理 `news_enrichment`。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；病理重建空表后限速回填（search 读优先于写队列）；**news 仍不进 Lance**。
+大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。服务端启动后会周期调用 `applyRetentionPolicy`、清理 `~/.opptrix/media-cache`（TTL/容量）并 `pruneStaleHealth`，删文时级联清理 `news_enrichment`。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；病理重建空表后限速回填（search 读优先于写队列）；**news 仍不进 Lance**。语义 embedding（E5）**按需加载**：boot / `ensureBundledRagRuntime` 只探测磁盘是否已安装，不把模型进内存；首次语义检索或文档入库 embed、以及安装模型 / Lance 回填时再 `tryEnable`，空闲仍按 `OPPTRIX_EMBED_IDLE_MS` 卸载。
 
 **一句话**：在 **`opptrix.db` 新建 `provider_settings` 表**（+ 可选 binding 子表），**不要**放进 market-data 的 `stocks` 库，也**不要**把 enable/priority 写进 Provider 代码或 manifest。
 

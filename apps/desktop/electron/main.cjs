@@ -63,7 +63,6 @@ const {
   startTranslationModelDownload,
   cancelTranslationModelDownload,
   translateArticle,
-  preloadTranslationModel,
   maybeBootstrapOfflineModelDownloads,
   disposeTranslation,
 } = require('./translation-service.cjs')
@@ -1703,7 +1702,7 @@ if (!gotTheLock) {
       void requestNotificationPermission()
     }
 
-    void preloadTranslationModel(repoRoot())
+    // 本地翻译模型按需加载（首次 translate / 显式 preload），启动不占显存
     void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {

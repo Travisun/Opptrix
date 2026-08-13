@@ -468,8 +468,8 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/settings/semantic-model` | `{ installed, label, source?: 'bundled' \| 'user' \| 'missing' }` |
-| POST | `/api/settings/semantic-model/install` | 下载并校验模型；成功后尝试回填已整理文档向量 |
-| POST | `/api/settings/semantic-model/uninstall` | 删除用户目录模型副本并卸载运行时后端（不删安装包内置） |
+| POST | `/api/settings/semantic-model/install` | 下载并校验模型；成功后尝试回填已整理文档向量（客户端超时 180s，勿抬高全局 10s） |
+| POST | `/api/settings/semantic-model/uninstall` | 删除用户目录模型副本并卸载运行时后端（不删安装包内置）（客户端超时 180s） |
 
 **GET 响应示例**
 
@@ -484,9 +484,9 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/settings/parse-engines` | `{ deep, semantic }` 可用性（无路径字段给 UI） |
-| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理（确保 PP-OCRv4 mobile ONNX 模型就绪；Node ONNX 路径） |
+| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理（确保 PP-OCRv4 mobile ONNX 模型就绪；Node ONNX 路径；客户端超时 180s） |
 | POST | `/api/settings/parse-engines/deep/mark-ready` | 等价于再跑一次 prepare（兼容旧客户端） |
-| POST | `/api/settings/parse-engines/deep/uninstall` | 移除用户目录深度整理模型副本（不删安装包内置模型） |
+| POST | `/api/settings/parse-engines/deep/uninstall` | 移除用户目录深度整理模型副本（不删安装包内置模型；客户端超时 180s） |
 
 `GET /api/settings/parse-engines` 的 `deep` 含 `source: 'bundled' \| 'user' \| 'missing'`（与语义模型一致）。旧 `layout/*` 路由仍可达但返回「已停用」。
 

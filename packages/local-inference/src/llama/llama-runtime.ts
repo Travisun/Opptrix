@@ -22,12 +22,68 @@ export type LlamaHeldHandles = {
   model: DisposableHandle | null
 }
 
+/** 对齐 Electron translation-service：默认 12 分钟空闲卸载；`OPPTRIX_TRANSLATION_IDLE_MS=0` 关闭 */
+export const DEFAULT_TRANSLATION_IDLE_MS = 12 * 60 * 1000
+
 let llamaModule: LlamaModule | null = null
 let chatSession: InstanceType<LlamaModule['LlamaChatSession']> | null = null
 let llamaContext: DisposableHandle | null = null
 let llamaModel: DisposableHandle | null = null
 let loadedModelPath: string | null = null
 let loadingPromise: Promise<void> | null = null
+/** @type {ReturnType<typeof setTimeout> | null} */
+let idleTimer: ReturnType<typeof setTimeout> | null = null
+let idleUnloadPromise: Promise<void> | null = null
+let lastUsedAt = 0
+
+export function resolveTranslationIdleMs(): number {
+  const raw = process.env.OPPTRIX_TRANSLATION_IDLE_MS
+  if (raw == null || raw === '') return DEFAULT_TRANSLATION_IDLE_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_TRANSLATION_IDLE_MS
+  return n
+}
+
+function clearIdleTimer(): void {
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
+}
+
+function scheduleIdleUnload(): void {
+  clearIdleTimer()
+  const idleMs = resolveTranslationIdleMs()
+  if (idleMs <= 0) return
+  idleTimer = setTimeout(() => {
+    idleTimer = null
+    void runIdleUnload()
+  }, idleMs)
+  if (typeof idleTimer === 'object' && idleTimer && 'unref' in idleTimer) {
+    idleTimer.unref()
+  }
+}
+
+function touchLastUsed(): void {
+  lastUsedAt = Date.now()
+  scheduleIdleUnload()
+}
+
+async function runIdleUnload(): Promise<void> {
+  if (idleUnloadPromise) {
+    await idleUnloadPromise
+    return
+  }
+  idleUnloadPromise = unloadHeldResources()
+    .catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn('[llama-runtime] idle unload failed:', msg)
+    })
+    .finally(() => {
+      idleUnloadPromise = null
+    })
+  await idleUnloadPromise
+}
 
 async function getLlamaModule(): Promise<LlamaModule> {
   if (!llamaModule) {
@@ -71,6 +127,7 @@ function clearHeldRefs(): void {
 
 /** 释放当前句柄并清空引用；不碰 loadingPromise（加载协程内可安全调用） */
 async function unloadHeldResources(): Promise<void> {
+  clearIdleTimer()
   const handles: LlamaHeldHandles = {
     session: chatSession,
     context: llamaContext,
@@ -84,6 +141,7 @@ async function ensureTextSession(modelPath: string): Promise<InstanceType<LlamaM
   // 串行化加载/换模：等待进行中的加载后再判断是否命中缓存
   for (;;) {
     if (chatSession && loadedModelPath === modelPath) {
+      touchLastUsed()
       return chatSession
     }
     if (loadingPromise) {
@@ -94,6 +152,13 @@ async function ensureTextSession(modelPath: string): Promise<InstanceType<LlamaM
   }
 
   loadingPromise = (async () => {
+    if (idleUnloadPromise) {
+      try {
+        await idleUnloadPromise
+      } catch {
+        /* ignore */
+      }
+    }
     // 换模或残留句柄：先真正 dispose，再 load
     if (chatSession || llamaContext || llamaModel || loadedModelPath) {
       await unloadHeldResources()
@@ -119,6 +184,7 @@ async function ensureTextSession(modelPath: string): Promise<InstanceType<LlamaM
       // 所有权已移交模块级引用，避免 finally 重复 dispose
       model = null
       context = null
+      touchLastUsed()
     } catch (err) {
       await disposeLlamaHandles({ session: null, context, model })
       throw err
@@ -165,6 +231,7 @@ export class LlamaRuntime {
         topP: 0.6,
         repeatPenalty: { penalty: 1.05, frequencyPenalty: 0, presencePenalty: 0 },
       })
+      touchLastUsed()
       if (isHtml) {
         return cleanHtmlTranslationOutput(raw, sourceText) || String(raw ?? '').trim()
       }
@@ -174,6 +241,16 @@ export class LlamaRuntime {
 
   /** 真正 dispose model/context/session；仅置 null 会导致托盘长驻泄漏 VRAM/RAM */
   async unload(): Promise<void> {
+    clearIdleTimer()
+    const pending = idleUnloadPromise
+    idleUnloadPromise = null
+    if (pending) {
+      try {
+        await pending
+      } catch {
+        /* ignore */
+      }
+    }
     if (loadingPromise) {
       try {
         await loadingPromise
@@ -201,6 +278,16 @@ export class LlamaRuntime {
   /** @internal */
   __getLoadedPathForTests(): string | null {
     return loadedModelPath
+  }
+
+  /** @internal */
+  __touchLastUsedForTests(): void {
+    touchLastUsed()
+  }
+
+  /** @internal */
+  __getLastUsedAtForTests(): number {
+    return lastUsedAt
   }
 }
 

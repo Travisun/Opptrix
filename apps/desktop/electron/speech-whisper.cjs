@@ -5,7 +5,8 @@ const os = require('node:os')
 const API_HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024
-const TRANSCRIBE_TIMEOUT_MS = 120_000
+/** 冷启 + 较长录音：与 client LOCAL_HEAVY_TIMEOUT（3min）对齐 */
+const TRANSCRIBE_TIMEOUT_MS = 180_000
 
 function apiBase() {
   return `http://${API_HOST}:${API_PORT}/api`

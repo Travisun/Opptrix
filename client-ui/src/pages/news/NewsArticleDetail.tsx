@@ -302,13 +302,15 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
     enhanceFeedMedia(el)
   }, [translation.viewMode, translation.translatedBlocks, translation.translationLayout, translation.hasTranslation, htmlKey])
 
-  const progressLabel = translation.translating && translation.progress
-    ? `正在翻译 ${translation.progress.current}/${translation.progress.total}…`
-    : translation.translating && !translation.status?.ready
-      ? '正在准备翻译，首次约需十几秒…'
-      : translation.translating
-        ? '准备翻译…'
-        : ''
+  const progressLabel = translation.translating && translation.progress?.phase === 'loading'
+    ? '正在准备翻译，首次约需十几秒…'
+    : translation.translating && translation.progress
+      ? `正在翻译 ${translation.progress.current}/${translation.progress.total}…`
+      : translation.translating && !translation.status?.ready
+        ? '正在准备翻译，首次约需十几秒…'
+        : translation.translating
+          ? '准备翻译…'
+          : ''
 
   return (
     <div className={s.root}>

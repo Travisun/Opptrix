@@ -1,5 +1,5 @@
 /**
- * Embedding 空闲卸载 + closeDocLibrary 联动 embedding 关闭
+ * Embedding 空闲卸载 + closeDocLibrary 联动 embedding 关闭 + 按需加载
  */
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -11,20 +11,27 @@ import {
   closeEmbeddingService,
   setEmbeddingServiceForTests,
   closeDocLibraryService,
+  resetEmbedPendingAfterEnableForTests,
   resolveEmbedIdleMs,
   DEFAULT_EMBED_IDLE_MS,
 } from '../packages/doc-library/dist/index.js'
 
 describe('embedding idle unload', () => {
   let prevIdle
+  let prevSkipPending
 
   before(() => {
     prevIdle = process.env.OPPTRIX_EMBED_IDLE_MS
+    prevSkipPending = process.env.OPPTRIX_EMBED_SKIP_PENDING_BACKFILL
+    process.env.OPPTRIX_EMBED_SKIP_PENDING_BACKFILL = '1'
   })
 
   after(async () => {
     if (prevIdle === undefined) delete process.env.OPPTRIX_EMBED_IDLE_MS
     else process.env.OPPTRIX_EMBED_IDLE_MS = prevIdle
+    if (prevSkipPending === undefined) delete process.env.OPPTRIX_EMBED_SKIP_PENDING_BACKFILL
+    else process.env.OPPTRIX_EMBED_SKIP_PENDING_BACKFILL = prevSkipPending
+    resetEmbedPendingAfterEnableForTests()
     await closeEmbeddingService()
     setEmbeddingServiceForTests(null)
   })
@@ -96,6 +103,7 @@ describe('embedding idle unload', () => {
 
   it('TransformersE5Backend not-ready still allows tryEnable to call ensureLoaded', async () => {
     process.env.OPPTRIX_EMBED_IDLE_MS = '0'
+    resetEmbedPendingAfterEnableForTests()
     let ensureCalls = 0
     let ready = false
     /** @type {import('../packages/doc-library/dist/index.js').EmbeddingBackend} */
@@ -126,6 +134,54 @@ describe('embedding idle unload', () => {
     assert.equal(svc.isReady(), false)
     assert.equal(await svc.tryEnableDefaultBackend(), true)
     assert.equal(ensureCalls, 2)
+  })
+
+  it('embedQuery triggers on-demand tryEnable / load when not ready', async () => {
+    process.env.OPPTRIX_EMBED_IDLE_MS = '0'
+    resetEmbedPendingAfterEnableForTests()
+    let ensureCalls = 0
+    let ready = false
+    /** @type {import('../packages/doc-library/dist/index.js').EmbeddingBackend} */
+    const backend = Object.create(TransformersE5Backend.prototype)
+    backend.dimensions = 384
+    backend.isReady = () => ready
+    backend.ensureLoaded = async () => {
+      ensureCalls += 1
+      ready = true
+      return true
+    }
+    backend.embedQuery = async () => {
+      if (!ready) await backend.ensureLoaded()
+      return new Array(384).fill(0.02)
+    }
+    backend.embedPassages = async (texts) => texts.map(() => new Array(384).fill(0.02))
+    backend.dispose = async () => {
+      ready = false
+    }
+
+    const svc = new EmbeddingService(backend)
+    assert.equal(svc.isReady(), false)
+    const vec = await svc.embedQuery('semantic query')
+    assert.ok(vec && vec.length === 384)
+    assert.ok(ensureCalls >= 1, 'embedQuery must on-demand load')
+    assert.equal(svc.isReady(), true)
+  })
+
+  it('TransformersE5Backend.dispose invokes pipeline.dispose when present', async () => {
+    process.env.OPPTRIX_EMBED_IDLE_MS = '0'
+    let pipeDispose = 0
+    const backend = new TransformersE5Backend('/tmp/opptrix-no-such-e5-model')
+    // 注入假 pipe（绕过 ensureLoaded）；pipe 为 private，经 any 写入测 dispose
+    /** @type {{ pipe: unknown }} */
+    const mutable = /** @type {any} */ (backend)
+    mutable.pipe = {
+      dispose: async () => {
+        pipeDispose += 1
+      },
+    }
+    await backend.dispose()
+    assert.equal(pipeDispose, 1)
+    assert.equal(mutable.pipe, null)
   })
 
   it('closeDocLibraryService closes shared embedding', async () => {

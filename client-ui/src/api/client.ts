@@ -22,6 +22,8 @@ import { decodeTextBufferBytes } from '../utils/decodeTextBuffer'
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 const REQUEST_TIMEOUT = 10000 // 10s — quick reads / mutations
+/** 本机重活（语义模型安装、深度整理准备、大附件上传等）；勿抬高全局 REQUEST_TIMEOUT。 */
+const LOCAL_HEAVY_TIMEOUT = 180_000
 /** Agent chat: multiple LLM + tool rounds (server LLM timeout up to 120s per round). */
 const CHAT_REQUEST_TIMEOUT = 300_000
 
@@ -1694,7 +1696,7 @@ export async function uploadSessionAttachment(
       'X-Pinned-Total-Bytes': String(pinnedTotalBytes),
     },
     body,
-  }, 120_000)
+  }, LOCAL_HEAVY_TIMEOUT)
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({})) as {
       error?: string
@@ -2558,12 +2560,14 @@ export const semanticModelSettings = {
     jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
       '/settings/semantic-model/install',
       { method: 'POST' },
+      LOCAL_HEAVY_TIMEOUT,
     ),
 
   uninstall: () =>
     jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
       '/settings/semantic-model/uninstall',
       { method: 'POST' },
+      LOCAL_HEAVY_TIMEOUT,
     ),
 }
 
@@ -2595,11 +2599,13 @@ export const parseEnginesSettings = {
     jsonFetch<{ ok: boolean; deep: ParseEnginesStatus['deep']; message?: string; error?: string }>(
       '/settings/parse-engines/deep/prepare',
       { method: 'POST' },
+      LOCAL_HEAVY_TIMEOUT,
     ),
 
   uninstallDeep: () =>
     jsonFetch<{ ok: boolean; error?: string }>(
       '/settings/parse-engines/deep/uninstall',
       { method: 'POST' },
+      LOCAL_HEAVY_TIMEOUT,
     ),
 }

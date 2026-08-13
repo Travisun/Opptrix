@@ -41,6 +41,8 @@ export {
   LlamaRuntime,
   llamaRuntime,
   disposeLlamaHandles,
+  resolveTranslationIdleMs,
+  DEFAULT_TRANSLATION_IDLE_MS,
   type LlamaHeldHandles,
 } from './llama/llama-runtime.js'
 export * from './llama/prompts.js'
