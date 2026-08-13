@@ -39,6 +39,8 @@ npm run dev:desktop
 
 This builds workspace packages, starts the API sidecar + Vite HMR, and opens the Electron window. The main window first shows an in-window startup screen, then navigates to the app UI when the dev server is ready.
 
+**启动加速**：sidecar 在 `listen` 后才启动调度/预热（health 与静态 UI 先通）；打包启动时 splash 与 sidecar spawn 并行，最短 splash 约 1s；若本机端口 health 已通则 `reuse` 不重复 spawn（托盘/二次唤起同理）。
+
 ### 主窗口尺寸
 
 - **默认大小**：约 **1115×635**（按主显示器 work area 约 70%×75% 再封顶），最小宽高与 UI 一致（宽 ≥ `DESKTOP_CHAT_MIN_WIDTH` / 510px，高 ≥ 600）。
