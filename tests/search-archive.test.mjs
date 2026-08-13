@@ -194,4 +194,90 @@ test('ensureIndexes pages session/news into FTS without holding full article arr
     await rm(isolatedDir, { recursive: true, force: true })
   }
 })
+
+test('search hydrates session meta by hit id without listAll', async () => {
+  const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-search-meta-'))
+  const prevDataDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = isolatedDir
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+    const { SearchHub } = await import('../packages/search-hub/dist/hub.js')
+
+    try {
+      getUserDataStore().close()
+    } catch {
+      /* already closed */
+    }
+
+    const sessions = new SessionStore()
+    let listAllCalls = 0
+    const originalListAll = sessions.listAll.bind(sessions)
+    sessions.listAll = () => {
+      listAllCalls += 1
+      return originalListAll()
+    }
+
+    // 多会话噪音：确保 listAll 全表扫描会很「贵」，但 search 不应调用它。
+    for (let i = 0; i < 12; i++) {
+      sessions.create(`filler-${i}`)
+    }
+
+    const active = sessions.create('METAKEYWORD 活跃会话')
+    const activeRec = sessions.get(active.id)
+    assert.ok(activeRec)
+    activeRec.turns.push({
+      role: 'user',
+      content: 'body mentions METAKEYWORD for active hit',
+      at: new Date().toISOString(),
+    })
+    sessions.save(activeRec)
+
+    const archived = sessions.create('METAKEYWORD 归档会话')
+    const archivedRec = sessions.get(archived.id)
+    assert.ok(archivedRec)
+    archivedRec.turns.push({
+      role: 'user',
+      content: 'body mentions METAKEYWORD for archived hit',
+      at: new Date().toISOString(),
+    })
+    sessions.save(archivedRec)
+    const archivedAfter = sessions.archive(archived.id, 'research')
+    assert.ok(archivedAfter)
+
+    const stubHub = {
+      marketData: { searchStocks: () => [] },
+    }
+    const hub = new SearchHub(/** @type {any} */ (stubHub), sessions)
+    hub.ensureIndexes()
+
+    listAllCalls = 0
+    const empty = hub.search('ZZZNOHITTOKENXYZ', 10)
+    assert.equal(empty.sessions.length, 0)
+    assert.equal(listAllCalls, 0, 'FTS miss must not call listAll')
+
+    listAllCalls = 0
+    const result = hub.search('METAKEYWORD', 20)
+    assert.equal(listAllCalls, 0, 'search must not call listAll to hydrate meta')
+
+    const activeHit = result.sessions.find(h => h.id === active.id)
+    assert.ok(activeHit)
+    assert.equal(activeHit.title, 'METAKEYWORD 活跃会话')
+    assert.equal(activeHit.archived, false)
+    assert.equal(activeHit.archiveFolderId, null)
+    assert.ok(activeHit.updatedAt)
+
+    const archivedHit = result.sessions.find(h => h.id === archived.id)
+    assert.ok(archivedHit)
+    assert.equal(archivedHit.title, 'METAKEYWORD 归档会话')
+    assert.equal(archivedHit.archived, true)
+    assert.equal(archivedHit.archiveFolderId, 'research')
+    assert.ok(archivedHit.updatedAt)
+
+    getUserDataStore().close()
+  } finally {
+    process.env.OPPTRIX_DATA_DIR = prevDataDir
+    await rm(isolatedDir, { recursive: true, force: true })
+  }
+})
 })

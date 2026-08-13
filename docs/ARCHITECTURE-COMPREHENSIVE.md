@@ -220,7 +220,7 @@ CREATE VIRTUAL TABLE fts_news USING fts5(
 );
 ```
 
-`SearchHub.ensureIndexes` 首次建索引时按页投影/iterate → upsert（不驻留全量 `articles[]` / `allSessions[]`）；`search_index_v1` 已置位则跳过。
+`SearchHub.ensureIndexes` 首次建索引时按页投影/iterate → upsert（不驻留全量 `articles[]` / `allSessions[]`）；`search_index_v1` 已置位则跳过。`SearchHub.search` 会话 meta 仅对 FTS 命中 id 调用 `SessionStore.getMany`（无命中不扫会话库）。
 
 **文档操作 API**：
 

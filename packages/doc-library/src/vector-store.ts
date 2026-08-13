@@ -336,31 +336,50 @@ export class LanceVectorStore implements VectorStore {
         vector: r.vector,
       }))
 
-      const ids = valid.map(r => `'${escapeSqlString(r.chunk_id)}'`).join(', ')
-      try {
-        await table.delete(`chunk_id IN (${ids})`)
-      } catch {
-        /* 表空或谓词无匹配 */
+      let wrote = false
+      if (typeof table.mergeInsert === 'function') {
+        try {
+          await table
+            .mergeInsert('chunk_id')
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute(data)
+          wrote = true
+        } catch (err) {
+          logVectorStore('mergeInsert failed; falling back to delete+add', {
+            err: err instanceof Error ? err.message : 'unknown',
+            rows: valid.length,
+          })
+        }
       }
 
-      try {
-        await table.add(data)
-      } catch (err) {
-        logVectorStore('table.add failed; rebuilding', {
-          err: err instanceof Error ? err.message : 'unknown',
-          rows: valid.length,
-        })
-        table = await this.rebuildEmptyTableUnlocked('add_failed')
-        if (!table) return
+      if (!wrote) {
+        const ids = valid.map(r => `'${escapeSqlString(r.chunk_id)}'`).join(', ')
+        try {
+          await table.delete(`chunk_id IN (${ids})`)
+        } catch {
+          /* 表空或谓词无匹配 */
+        }
+
         try {
           await table.add(data)
-        } catch (err2) {
-          logVectorStore('table.add failed after rebuild', {
-            err: err2 instanceof Error ? err2.message : 'unknown',
+        } catch (err) {
+          logVectorStore('table.add failed; rebuilding', {
+            err: err instanceof Error ? err.message : 'unknown',
+            rows: valid.length,
           })
-          this.initFailed = true
-          this.table = null
-          return
+          table = await this.rebuildEmptyTableUnlocked('add_failed')
+          if (!table) return
+          try {
+            await table.add(data)
+          } catch (err2) {
+            logVectorStore('table.add failed after rebuild', {
+              err: err2 instanceof Error ? err2.message : 'unknown',
+            })
+            this.initFailed = true
+            this.table = null
+            return
+          }
         }
       }
 

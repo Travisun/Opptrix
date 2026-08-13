@@ -432,6 +432,17 @@ export class SessionStore {
     return normalizeRecord(raw)
   }
 
+  /** 按 id 批量取 meta；不去全表 listDocuments（供 SearchHub 等按命中补全）。 */
+  getMany(ids: string[]): Map<string, SessionMeta> {
+    const out = new Map<string, SessionMeta>()
+    for (const id of ids) {
+      if (!id || out.has(id)) continue
+      const record = this.get(id)
+      if (record) out.set(id, toMeta(record))
+    }
+    return out
+  }
+
   create(opts?: string | CreateSessionOptions): SessionRecord {
     const normalized: CreateSessionOptions = typeof opts === 'string'
       ? { title: opts }

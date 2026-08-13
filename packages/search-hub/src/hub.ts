@@ -79,9 +79,10 @@ export class SearchHub {
       ? store.searchSessions(q, { limit: cap, includeArchived: true })
       : []
 
-    const sessionMeta = new Map(
-      this.sessions.listAll().map(s => [s.id, s] as const),
-    )
+    // FTS 无命中时不扫会话库；有命中则仅按 id 取 meta（≤50），禁止 listAll。
+    const sessionMeta = sessionRows.length
+      ? this.sessions.getMany(sessionRows.map(r => r.session_id))
+      : new Map<string, SessionMeta>()
 
     const sessions: SessionSearchHit[] = sessionRows.map(row => {
       const meta = sessionMeta.get(row.session_id)

@@ -793,7 +793,7 @@ class ProviderCatalogService {
 | **`documents` JSON blob（现 Tushare 方式）** | ⚠️ 过渡 | Phase 0 可兼容；迁移后 secrets 仍可在同行 `extra_json` |
 | **`@opptrix/market-data` SQLite** | ❌ **不要** | 行情/因子库；导入 `.opmd` 会覆盖，且与「用户路由偏好」域不符 |
 
-大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。
+大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；**news 仍不进 Lance**。
 
 **一句话**：在 **`opptrix.db` 新建 `provider_settings` 表**（+ 可选 binding 子表），**不要**放进 market-data 的 `stocks` 库，也**不要**把 enable/priority 写进 Provider 代码或 manifest。
 

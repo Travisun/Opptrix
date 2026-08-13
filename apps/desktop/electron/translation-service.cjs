@@ -30,7 +30,11 @@ const {
   estimateMaxTokens,
   estimateHtmlMaxTokens,
 } = require('./translation-text.cjs')
-const { getCachedTranslation, setCachedTranslation } = require('./translation-cache.cjs')
+const {
+  getCachedTranslation,
+  setCachedTranslation,
+  flushTranslationCache,
+} = require('./translation-cache.cjs')
 
 const API_HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
@@ -522,6 +526,7 @@ async function maybeBootstrapOfflineModelDownloads(repoRoot, onProgress) {
 }
 
 async function disposeTranslation() {
+  flushTranslationCache()
   chatSession = null
   model = null
   loadedModelPath = null
