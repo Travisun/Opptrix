@@ -147,8 +147,12 @@ export function middleEllipsisFilename(name: string, maxChars = NAME_MAX_CHARS):
   return `${base.slice(0, head)}…${base.slice(-tail)}${ext}`
 }
 
+function isAttachmentUploading(item: ChatAttachmentMeta): boolean {
+  return Boolean(item.optimistic || item.id.startsWith('local-'))
+}
+
 function isAttachmentProcessing(item: ChatAttachmentMeta): boolean {
-  if (item.optimistic || item.id.startsWith('local-')) return true
+  if (isAttachmentUploading(item)) return true
   if (
     item.kind === 'pdf'
     || item.kind === 'document'
@@ -162,9 +166,19 @@ function isAttachmentProcessing(item: ChatAttachmentMeta): boolean {
 }
 
 function attachmentTitle(item: ChatAttachmentMeta): string {
+  if (isAttachmentUploading(item)) {
+    const pct = item.uploadProgress
+    if (typeof pct === 'number' && pct > 0 && pct < 1) {
+      return `${item.name}（正在添加 ${Math.round(pct * 100)}%）`
+    }
+    return `${item.name}（正在添加…）`
+  }
   if (item.extract?.status === 'failed') {
     const reason = item.extract.error?.trim() || '整理失败，请换可读文件后重试'
     return `${item.name}（${reason}）`
+  }
+  if ((item.extract?.status ?? '') === 'pending' && item.extract?.message?.trim()) {
+    return `${item.name}（${item.extract.message.trim()}）`
   }
   return item.name
 }
@@ -184,7 +198,10 @@ function AttachmentIcon({
 }) {
   if (isAttachmentProcessing(item)) {
     return (
-      <span className={spinnerSlotClass} aria-label="正在处理">
+      <span
+        className={spinnerSlotClass}
+        aria-label={isAttachmentUploading(item) ? '正在添加' : '正在处理'}
+      >
         <Spinner size="tiny" />
       </span>
     )
@@ -285,7 +302,11 @@ export default function ComposerAttachmentStrip({
             <button
               type="button"
               className={s.remove}
-              aria-label={`移除 ${item.name}`}
+              aria-label={
+                isAttachmentUploading(item)
+                  ? `取消添加 ${item.name}`
+                  : `移除 ${item.name}`
+              }
               onClick={(e) => {
                 e.stopPropagation()
                 onRemove(item.id)

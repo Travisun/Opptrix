@@ -20,7 +20,7 @@ Cross-platform desktop app built with **Electron** and a **Node.js API sidecar**
 
 **Why Electron?** Mature ecosystem, consistent Chromium rendering (Markdown / Mermaid / LaTeX), and the main process is Node — a natural fit for spawning the existing API sidecar. Production uses `ELECTRON_RUN_AS_NODE` so the bundled app does not require a separate Node.js install.
 
-新闻离线翻译结果缓存在主进程内存 Map 中，防抖落盘至 `~/.opptrix/news-translation-cache.json`（对齐行情引擎 Cache：LRU + 退出 flush）。本地翻译 GGUF **按需加载**（启动/下载完成不进显存；首次翻译或显式 `preloadTranslationModel` 才 load），空闲约 12 分钟后真正 `dispose`（`OPPTRIX_TRANSLATION_IDLE_MS`，`0` 关闭）；句段内存 LRU 保留，换模/退出亦走官方 dispose。 sidecar `LlamaRuntime` 同语义 idle unload。
+新闻离线翻译结果缓存在主进程内存 Map 中，防抖落盘至 `~/.opptrix/news-translation-cache.json`（对齐行情引擎 Cache：LRU + 退出 flush）。本地翻译 GGUF **按需加载**（启动/下载完成不进显存；首次翻译或显式 `preloadTranslationModel` 才 load），空闲约 12 分钟后真正 `dispose`（`OPPTRIX_TRANSLATION_IDLE_MS`，`0` 关闭）；句段内存 LRU 保留，换模/退出亦走官方 dispose。 sidecar `LlamaRuntime` 同语义 idle unload。`translation-start-download` IPC **立即 ack** `{ started, download }`，GGUF 后台下载，进度经 `translation-download-progress` / `translation-get-status.download`（并发不双开）。
 
 <p align="center">
   <img src="../screenshot.jpg" alt="Opptrix 桌面主界面" width="880" />
@@ -387,6 +387,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 - 用户目录：`~/.opptrix/sensevoice/`（`models/` 放 GGUF，`bin/` 放预编译 CLI）。
 - **安装包内置**：`resources/sensevoice/` → 打包后位于 `process.resourcesPath/sensevoice/`，含 `sensevoice-small-q8.gguf`（约 242MB）与 `fsmn-vad.gguf`（约 2MB）。
 - **加载优先级**：内置 → `~/.opptrix/sensevoice/models` → 按需下载到用户目录（不写内置路径）。
+- **ensure 异步**：`POST /api/news/multimodal/sensevoice/ensure` 立即返回 job，客户端轮询至 `ready`/`error`；设置页 bootstrap 与显式准备共用同一任务，不双开下载。
 - 构建时 `scripts/stage-sensevoice.mjs` 会优先从本地 `~/.opptrix/sensevoice/models` 拷贝，否则从 ModelScope 下载。
 - 模型源：ModelScope [`FunAudioLLM/SenseVoiceSmall-GGUF`](https://modelscope.cn/models/FunAudioLLM/SenseVoiceSmall-GGUF/files)；默认 `sensevoice-small-q8.gguf`。
 - 首次在无内置包环境（如 Web 自托管）转写时自动下载：预编译运行时（约 6MB）+ q8 模型 + VAD。

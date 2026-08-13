@@ -16,6 +16,9 @@ export type PythonInstallPhase =
   | 'verify'
   | 'done'
 
+/** 单例安装任务的稳定 id，供 Agent `ensure_python({ job_id })` 轮询 */
+export const PYTHON_INSTALL_JOB_ID = 'python-install'
+
 export interface PythonInstallJobSnapshot {
   state: PythonInstallJobState
   message: string
@@ -26,6 +29,8 @@ export interface PythonInstallJobSnapshot {
   bytes_total: number | null
   steps: string[]
   error: string | null
+  /** 有进行中/已结束的安装任务时为 PYTHON_INSTALL_JOB_ID；idle 为 null */
+  job_id: string | null
 }
 
 export interface PythonInstallPipelineDeps {
@@ -66,6 +71,7 @@ function createIdleSnapshot(): PythonInstallJobSnapshot {
     bytes_total: null,
     steps: [...DEFAULT_STEPS],
     error: null,
+    job_id: null,
   }
 }
 
@@ -224,10 +230,12 @@ export function getPythonInstallJobStatus(): PythonInstallJobSnapshot {
 
 export function startPythonInstallJob(): PythonInstallJobSnapshot {
   if (lastJob.state === 'running' || lastJob.state === 'queued') {
+    if (!lastJob.job_id) updateJob({ job_id: PYTHON_INSTALL_JOB_ID })
     return getPythonInstallJobStatus()
   }
 
   if (activePromise) {
+    if (!lastJob.job_id) updateJob({ job_id: PYTHON_INSTALL_JOB_ID })
     return getPythonInstallJobStatus()
   }
 
@@ -238,6 +246,7 @@ export function startPythonInstallJob(): PythonInstallJobSnapshot {
     message: '已加入安装队列…',
     phase: 'prepare',
     percent: 1,
+    job_id: PYTHON_INSTALL_JOB_ID,
   }
 
   activePromise = runInstallPipeline()

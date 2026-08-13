@@ -67,5 +67,16 @@ export {
   runSenseVoiceCli,
 } from './sensevoice/sensevoice-runtime.js'
 export { ensureSenseVoiceRuntime, findSenseVoiceExecutable } from './sensevoice/ensure-sensevoice.js'
+export {
+  startSenseVoiceEnsureJob,
+  scheduleSenseVoiceEnsureJob,
+  getSenseVoiceEnsureJobStatus,
+  toSenseVoiceEnsureUserError,
+  resetSenseVoiceEnsureJobForTests,
+  setSenseVoiceEnsurePipelineDepsForTests,
+  type SenseVoiceEnsurePhase,
+  type SenseVoiceEnsureJobSnapshot,
+  type SenseVoiceEnsurePipelineDeps,
+} from './sensevoice/sensevoice-ensure-job.js'
 export { cleanVisionOutput, isLowQualityImageExtraction } from './vision/image-quality.js'
 export { getMultimodalRuntimeStatus, type MultimodalRuntimeStatus } from './multimodal-status.js'

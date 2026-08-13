@@ -94,8 +94,8 @@ export {
 }
 
 /**
- * 桌面首启：仅探测磁盘/runtime（语义模型是否已安装），不把 E5 pipeline 载入内存。
- * OCR 模型内置时标记深度整理可用。失败不抛；日志不含路径与密钥。
+ * 桌面首启：仅探测磁盘/runtime（语义模型 / OCR 是否已就绪），不阻塞下载、不载入 E5 pipeline。
+ * 缺失时由设置页异步 prepare job 或入库路径按需准备。失败不抛；日志不含路径与密钥。
  */
 export async function ensureBundledRagRuntime(): Promise<{
   embedding: boolean
@@ -114,13 +114,8 @@ export async function ensureBundledRagRuntime(): Promise<{
   result.layout = false
 
   try {
-    const status = getOcrL2Status()
-    if (status.available) {
-      result.deep = true
-    } else {
-      const prepared = await prepareOcrL2Install()
-      result.deep = prepared.available
-    }
+    // 只探测；勿 await prepareOcrL2Install（慢网会拖死启动）
+    result.deep = getOcrL2Status().available
   } catch {
     result.deep = false
   }

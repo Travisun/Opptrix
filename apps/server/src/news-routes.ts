@@ -23,7 +23,11 @@ import {
   type NewsSettings,
   type NewsTranslationSettings,
 } from '@opptrix/news-feed'
-import { maybeBootstrapTranslationModel, shouldBootstrapSenseVoice, senseVoiceRuntime } from '@opptrix/local-inference'
+import {
+  maybeBootstrapTranslationModel,
+  shouldBootstrapSenseVoice,
+  scheduleSenseVoiceEnsureJob,
+} from '@opptrix/local-inference'
 import { resolveProjectRoot } from '@opptrix/agent'
 import { translateArticleRemote } from './translation-remote.js'
 
@@ -32,7 +36,8 @@ function scheduleOfflineModelBootstrap(settings: NewsSettings): void {
   if (shouldBootstrapSenseVoice(settings.enrichment)) {
     const modelName = settings.enrichment.offline_whisper_model?.trim() || 'q8'
     const repoRoot = resolveProjectRoot()
-    void senseVoiceRuntime.ensureAssets(modelName, repoRoot).catch(() => {})
+    // 与显式 ensure 共用同一 job，避免双开下载
+    scheduleSenseVoiceEnsureJob(modelName, repoRoot)
   }
 }
 

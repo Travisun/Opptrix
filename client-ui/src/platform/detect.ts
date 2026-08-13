@@ -45,7 +45,12 @@ declare global {
       chatDebugOpenLogDir?: () => Promise<string>
       /** Open a path under agent-workspace in the system file manager (validated in main) */
       openLocalDirectory?: (dirPath: string) => Promise<string>
-      translationStartDownload?: (modelId: string) => Promise<{ filePath: string; filename: string }>
+      /** 立即 ack；完整下载走 onTranslationDownloadProgress / translationGetStatus.download */
+      translationStartDownload?: (modelId: string) => Promise<{
+        started: boolean
+        download: TranslationDownloadProgress | null
+        alreadyPresent?: boolean
+      }>
       translationCancelDownload?: () => Promise<boolean>
       translationTranslateArticle?: (payload: TranslationArticleRequest) => Promise<TranslationArticleResult>
       onTranslationDownloadProgress?: (callback: (progress: TranslationDownloadProgress) => void) => () => void

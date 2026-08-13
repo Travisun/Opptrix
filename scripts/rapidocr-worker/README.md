@@ -49,7 +49,7 @@ stdin 一行 JSON，stdout 一行 JSON（与 L1 相同）：
 
 ```bash
 # API: POST /api/settings/parse-engines/deep/prepare
-# 同步 worker、创建 venv、pip install、ping 成功后写 READY
+# 立即返回 job；后台下载 ONNX 模型；GET 同路径或 GET /parse-engines 轮询 phase/progress
 ```
 
 开发态无内置模型时，prepare 会尝试下载到用户模型目录（ModelScope → HF 镜像 → HF）。

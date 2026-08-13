@@ -171,7 +171,18 @@ function sourcesForRemote(relPath: string): Array<{ label: string; url: string }
   ]
 }
 
-async function downloadToFile(url: string, destPath: string, timeoutMs: number): Promise<void> {
+export type OcrModelDownloadProgress = {
+  file: string
+  receivedBytes: number
+  totalBytes: number | null
+}
+
+async function downloadToFile(
+  url: string,
+  destPath: string,
+  timeoutMs: number,
+  onProgress?: (p: { receivedBytes: number; totalBytes: number | null }) => void,
+): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -183,15 +194,23 @@ async function downloadToFile(url: string, destPath: string, timeoutMs: number):
     if (!resp.ok || !resp.body) {
       throw new Error(`HTTP ${resp.status}`)
     }
+    const contentLength = resp.headers.get('content-length')
+    const totalBytes =
+      contentLength && Number.isFinite(Number(contentLength))
+        ? Number(contentLength)
+        : null
     await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
     const tempPath = `${destPath}.download`
     const fileStream = fs.createWriteStream(tempPath, { flags: 'w' })
     const reader = resp.body.getReader()
+    let receivedBytes = 0
     try {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         if (!value) continue
+        receivedBytes += value.byteLength
+        onProgress?.({ receivedBytes, totalBytes })
         await new Promise<void>((resolve, reject) => {
           fileStream.write(Buffer.from(value), (err) => (err ? reject(err) : resolve()))
         })
@@ -220,6 +239,7 @@ async function downloadToFile(url: string, destPath: string, timeoutMs: number):
 
 export async function ensureRapidOcrModelsDownloaded(
   modelDir = rapidocrUserModelDir(),
+  opts?: { onProgress?: (p: OcrModelDownloadProgress) => void },
 ): Promise<{ ok: boolean; missingFiles: string[] }> {
   await fs.promises.mkdir(modelDir, { recursive: true })
   for (const file of RAPIDOCR_MODEL_FILES) {
@@ -229,7 +249,13 @@ export async function ensureRapidOcrModelsDownloaded(
     let saved = false
     for (const source of sourcesForRemote(remote)) {
       try {
-        await downloadToFile(source.url, dest, DOWNLOAD_TIMEOUT_MS)
+        await downloadToFile(source.url, dest, DOWNLOAD_TIMEOUT_MS, (p) => {
+          opts?.onProgress?.({
+            file,
+            receivedBytes: p.receivedBytes,
+            totalBytes: p.totalBytes,
+          })
+        })
         saved = true
         break
       } catch {

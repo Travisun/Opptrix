@@ -641,7 +641,8 @@ export class MarketDataStore {
       clearTimeout(this.duckPrimaryMigrationTimer)
       this.duckPrimaryMigrationTimer = null
     }
-    void this.flushDuckWritesAsync({ throwOnError: true })
+    // fire-and-forget：不可 throwOnError，否则 duck-cli 失败会变成 unhandledRejection
+    void this.flushDuckWritesAsync({ throwOnError: false })
     if (this.dbRead !== this.db) this.dbRead.close()
     this.db.close()
   }

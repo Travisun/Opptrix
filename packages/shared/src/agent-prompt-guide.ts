@@ -203,7 +203,7 @@ export function buildLocalProgrammingPlaybook(): string {
     '2. 扫 shared/packages/*/README，能复用则复用（root_id=shared）',
     '3. 缺依赖先 shell_install（npm/pip），勿盲造轮子',
     '4. 最后自写；可复用产物写入 shared/packages/<name>/ + README',
-    '5. 离线大数据 → prepare_fuyao_dump；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
+    '5. 离线大数据 → prepare_fuyao_dump（冷下载先 preparing+job_id 再轮询）；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
     '6. 沙盒前判断联网/局域网；需 LAN → request_session_lan_access / ask_user(allow_lan_session)',
     '7. 第三方密钥：list_vault_secrets → 已有 grant_session_secret / 没有 request_secret；opptrix_run 用 secret_refs 传名字',
     '8. 沙盒做计算/清洗/汇总；聊天展示图用 ```chart``` / ```opptrix-chart```（→ @opptrix/canvas Chart），禁止默认沙盒出图代替围栏',

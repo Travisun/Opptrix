@@ -14,6 +14,7 @@ const {
 } = require('./translation-model-catalog.cjs')
 const {
   downloadTranslationModel,
+  startTranslationModelDownloadAck,
   cancelTranslationModelDownload,
   getDownloadState,
   isDownloadActive,
@@ -394,9 +395,13 @@ function getTranslationModels(repoRoot) {
   }
 }
 
-async function startTranslationModelDownload(_repoRoot, modelId, onProgress) {
-  // 下载只落盘；不自动 preload，避免下载完成即占显存。首次翻译走 ensureChatSession。
-  return downloadTranslationModel(modelId, onProgress)
+/**
+ * IPC：立即返回 `{ started, download }`，后台继续下载（进度走 onProgress / getDownloadState）。
+ * 并发不双开：已有下载时 `started: false` 并带回当前 state。
+ * 下载只落盘；不自动 preload，避免下载完成即占显存。首次翻译走 ensureChatSession。
+ */
+function startTranslationModelDownload(_repoRoot, modelId, onProgress) {
+  return startTranslationModelDownloadAck(String(modelId ?? ''), onProgress)
 }
 
 
@@ -649,7 +654,8 @@ async function maybeBootstrapOfflineModelDownloads(repoRoot, onProgress) {
       const model = getCatalogModel(modelId)
       if (!model || isCatalogModelInstalled(model, installedNames)) continue
       try {
-        const result = await startTranslationModelDownload(repoRoot, modelId, onProgress)
+        // bootstrap 需等落盘完成再下一个；IPC 路径用 startTranslationModelDownload（立即 ack）
+        const result = await downloadTranslationModel(modelId, onProgress)
         if (result?.filename) installedNames.add(result.filename)
       } catch {
         // 单个模型失败不阻断下一个

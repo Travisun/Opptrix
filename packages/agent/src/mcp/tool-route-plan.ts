@@ -448,7 +448,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
     avoidTools: ['get_system_info'],
     confidence: 'high',
-    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（会等待托管安装完成并优先托管）',
+    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪立即 preparing+job_id，须轮询至 ready）',
   },
   {
     intent: 'workspace_network_latency',

@@ -1530,6 +1530,7 @@ function registerWindowIpc() {
     return resolved
   })
 
+  // 立即 ack `{ started, download }`；GGUF 在后台继续，进度走 translation-download-progress / translation-get-status.download
   ipcMain.handle('translation-start-download', async (event, modelId) => {
     const sender = event.sender
     return startTranslationModelDownload(repoRoot(), String(modelId ?? ''), progress => {

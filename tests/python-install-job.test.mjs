@@ -105,6 +105,7 @@ describe('python install job', () => {
     assert.equal(job.accepted, false)
     assert.equal(job.phase, 'idle')
     assert.equal(job.percent, 0)
+    assert.equal(job.job_id, null)
     assert.ok(Array.isArray(job.steps) && job.steps.length >= 4)
     assert.ok(!job.message.includes('即将支持'))
   })
@@ -158,10 +159,12 @@ describe('python install job', () => {
     const first = startPythonInstallJob()
     assert.equal(first.accepted, true)
     assert.ok(first.state === 'queued' || first.state === 'running')
+    assert.equal(first.job_id, 'python-install')
 
     const second = startPythonInstallJob()
     assert.equal(second.state, getPythonInstallJobStatus().state)
     assert.equal(second.percent, getPythonInstallJobStatus().percent)
+    assert.equal(second.job_id, 'python-install')
 
     resolveDownload()
     await new Promise(r => setTimeout(r, 50))
@@ -169,6 +172,7 @@ describe('python install job', () => {
     const done = getPythonInstallJobStatus()
     assert.equal(done.state, 'completed')
     assert.equal(done.percent, 100)
+    assert.equal(done.job_id, 'python-install')
     assert.ok(done.message.includes('已安装'))
   })
 
@@ -280,7 +284,75 @@ describe('python install job', () => {
 })
 
 describe('ensurePythonReady prefer_opptrix', () => {
-  it('waits for install, sets prefer_opptrix, and reports ready with opptrix', async () => {
+  it('non-blocking: returns preparing immediately without waiting', async () => {
+    const {
+      ensurePythonReady,
+      resetEnsurePythonDepsForTests,
+      setEnsurePythonDepsForTests,
+    } = await import(
+      path.join(repoRoot, 'packages/agent-workspace/dist/python/ensure-python.js')
+    )
+
+    let waitCalled = false
+    const queuedJob = {
+      state: 'queued',
+      message: 'queued',
+      accepted: true,
+      phase: 'prepare',
+      percent: 1,
+      bytes_downloaded: 0,
+      bytes_total: null,
+      steps: [],
+      error: null,
+      job_id: 'python-install',
+    }
+
+    setEnsurePythonDepsForTests({
+      getStatus: async () => ({
+        system_path: null,
+        system_version: null,
+        opptrix_path: null,
+        opptrix_version: null,
+        active_source: 'none',
+        active_path: null,
+        active_version: null,
+        ready: false,
+        recommend_install: true,
+        message: 'not ready',
+      }),
+      startJob: () => queuedJob,
+      waitJob: async () => {
+        waitCalled = true
+        await new Promise(r => setTimeout(r, 50))
+        return { ...queuedJob, state: 'completed', phase: 'done', percent: 100 }
+      },
+      getJobStatus: () => queuedJob,
+      getSettings: () => ({
+        prefer_opptrix_python: false,
+        pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+      }),
+      saveSettings: () => ({
+        ok: true,
+        settings: {
+          prefer_opptrix_python: false,
+          pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+        },
+      }),
+    })
+
+    try {
+      const ensured = await ensurePythonReady()
+      assert.equal(ensured.ready, false)
+      assert.equal(ensured.status, 'preparing')
+      assert.equal(ensured.job_id, 'python-install')
+      assert.ok(ensured.poll_hint)
+      assert.equal(waitCalled, false)
+    } finally {
+      resetEnsurePythonDepsForTests()
+    }
+  })
+
+  it('poll with job_id finalizes prefer_opptrix when completed', async () => {
     const {
       ensurePythonReady,
       resetEnsurePythonDepsForTests,
@@ -301,6 +373,92 @@ describe('ensurePythonReady prefer_opptrix', () => {
       bytes_total: 1,
       steps: [],
       error: null,
+      job_id: 'python-install',
+    }
+
+    setEnsurePythonDepsForTests({
+      getStatus: async () => {
+        statusCalls += 1
+        if (statusCalls === 1) {
+          return {
+            system_path: null,
+            system_version: null,
+            opptrix_path: null,
+            opptrix_version: null,
+            active_source: 'none',
+            active_path: null,
+            active_version: null,
+            ready: false,
+            recommend_install: true,
+            message: 'not ready',
+          }
+        }
+        return {
+          system_path: null,
+          system_version: null,
+          opptrix_path: '/opptrix/python',
+          opptrix_version: 'Python 3.12.8',
+          active_source: 'opptrix',
+          active_path: '/opptrix/python',
+          active_version: 'Python 3.12.8',
+          ready: true,
+          recommend_install: false,
+          message: 'opptrix ready',
+        }
+      },
+      startJob: () => completedJob,
+      waitJob: async () => completedJob,
+      getJobStatus: () => completedJob,
+      getSettings: () => ({
+        prefer_opptrix_python: prefer,
+        pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+      }),
+      saveSettings: (input) => {
+        prefer = input.prefer_opptrix_python === true
+        return {
+          ok: true,
+          settings: {
+            prefer_opptrix_python: prefer,
+            pip_index_urls: input.pip_index_urls ?? ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+          },
+        }
+      },
+    })
+
+    try {
+      const ensured = await ensurePythonReady({ jobId: 'python-install' })
+      assert.equal(ensured.ok, true)
+      assert.equal(ensured.ready, true)
+      assert.equal(ensured.status, 'ready')
+      assert.equal(ensured.active_source, 'opptrix')
+      assert.equal(prefer, true)
+    } finally {
+      resetEnsurePythonDepsForTests()
+    }
+  })
+
+  it('wait:true waits for install, sets prefer_opptrix, and reports ready with opptrix', async () => {
+    const {
+      ensurePythonReady,
+      resetEnsurePythonDepsForTests,
+      setEnsurePythonDepsForTests,
+    } = await import(
+      path.join(repoRoot, 'packages/agent-workspace/dist/python/ensure-python.js')
+    )
+
+    let prefer = false
+    let statusCalls = 0
+    const completedJob = {
+      state: 'completed',
+      message: 'done',
+      accepted: true,
+      phase: 'done',
+      percent: 100,
+      bytes_downloaded: 1,
+      bytes_total: 1,
+      steps: [],
+      error: null,
+      job_id: 'python-install',
     }
 
     setEnsurePythonDepsForTests({
@@ -343,6 +501,7 @@ describe('ensurePythonReady prefer_opptrix', () => {
         bytes_total: null,
         steps: [],
         error: null,
+        job_id: 'python-install',
       }),
       waitJob: async () => completedJob,
       getJobStatus: () => completedJob,
@@ -363,9 +522,10 @@ describe('ensurePythonReady prefer_opptrix', () => {
     })
 
     try {
-      const ensured = await ensurePythonReady({ timeoutMs: 1000 })
+      const ensured = await ensurePythonReady({ timeoutMs: 1000, wait: true })
       assert.equal(ensured.ok, true)
       assert.equal(ensured.ready, true)
+      assert.equal(ensured.status, 'ready')
       assert.equal(ensured.active_source, 'opptrix')
       assert.equal(prefer, true)
       assert.ok(statusCalls >= 2)
@@ -394,6 +554,7 @@ describe('ensurePythonReady prefer_opptrix', () => {
       bytes_total: null,
       steps: [],
       error: 'boom',
+      job_id: 'python-install',
     }
 
     setEnsurePythonDepsForTests({
@@ -426,6 +587,7 @@ describe('ensurePythonReady prefer_opptrix', () => {
       const ensured = await ensurePythonReady({ timeoutMs: 1000 })
       assert.equal(ensured.ok, false)
       assert.equal(ensured.ready, false)
+      assert.equal(ensured.status, 'failed')
       assert.equal(prefer, false)
     } finally {
       resetEnsurePythonDepsForTests()

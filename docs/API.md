@@ -290,9 +290,11 @@ POST /api/research
 | PUT | `/api/news/subscriptions/:id/group` | `{ group_id }` 移动订阅 |
 | GET | `/api/news/articles/:id` | 单篇文章 |
 | POST | `/api/news/refresh` | 强制刷新全部 enabled 源 |
-| GET | `/api/news/multimodal/status` | 多模态运行时状态（ffmpeg、SenseVoice 就绪、`canEnrich*`） |
-| POST | `/api/news/multimodal/sensevoice/ensure` | 准备本机语音识别模型（内置优先，缺失则下载到用户目录） |
-| POST | `/api/news/multimodal/whisper/ensure` | **已废弃**；代理到 `sensevoice/ensure` |
+| GET | `/api/news/multimodal/status` | 多模态运行时状态（ffmpeg、SenseVoice 就绪、`canEnrich*`、`sensevoiceEnsure` 任务快照） |
+| POST | `/api/news/multimodal/sensevoice/ensure` | **立即返回** `{ ok, started, job }`；后台准备语音模型。请轮询 GET 同路径直至 `job.phase` 为 `ready` / `error` |
+| GET | `/api/news/multimodal/sensevoice/ensure` | 查询 ensure 任务：`{ job: { phase, percent, message, ready, … } }` |
+| POST | `/api/news/multimodal/whisper/ensure` | **已废弃**；代理到 `sensevoice/ensure`（同样异步 job） |
+| GET | `/api/news/multimodal/whisper/ensure` | **已废弃**；代理到 SenseVoice ensure 状态 |
 | GET | `/api/news/articles/:id/enrichment` | 文章 enrichment 结果 |
 | POST | `/api/news/articles/:id/enrich` | 触发 enrichment；返回 `{ job_id }` |
 | GET | `/api/news/enrichment/jobs/:jobId` | 查询 enrichment 任务进度 |
@@ -301,6 +303,8 @@ POST /api/research
 
 - 转写引擎：**SenseVoice q8**（设置字段 `offline_whisper_model` 保留兼容；旧值 `tiny`/`base`/… 归一化为 `q8`）。
 - 模型加载：**内置（安装包）→ `~/.opptrix/sensevoice/models` → 按需下载**。
+- **ensure 为异步 job**：`POST …/sensevoice/ensure` 不阻塞下载；客户端用短超时启动后轮询 `GET` 同路径（或 `status.sensevoiceEnsure`）。设置保存时的后台 bootstrap 与显式 ensure **共用同一 job**，不会双开下载。
+- `job.phase`：`idle` → `preparing` → `downloading` → `ready` | `error`；含 `percent` / `message`（产品级文案）。
 
 ### 沙盒环境设置
 
@@ -444,6 +448,21 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 `POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
 
+### 市场数据包（导出 / 导入）
+
+本地市场库 `.opmd` 打包可能较久，**导出主路径为异步 job**（避免单次 HTTP 卡数分钟无反馈）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/market-data/export/jobs` | 启动导出；body 可选 `{ "pack": "us"\|"crypto"\|… }`；立即返回 `job_id` |
+| GET | `/api/market-data/export/jobs/:id` | 查询进度（`queued`/`running`/`ready`/`failed`） |
+| GET | `/api/market-data/export/jobs/:id/download` | `ready` 后下载临时文件（短超时） |
+| GET | `/api/market-data/export` | **兼容旧客户端**的同步导出（可能较长；新 UI 勿用） |
+| POST | `/api/market-data/package/inspect` | 校验上传的 `.opmd`（`Content-Type: application/octet-stream`） |
+| POST | `/api/market-data/import` | 导入 `.opmd` 覆盖/合并本地库（octet-stream） |
+
+**轮询**：`POST .../export/jobs` → 每 1–2s `GET .../jobs/:id` → `status=ready` 后 `GET .../download`。
+
 ### 研报库设置（无图 Hybrid RAG）
 
 **当前主路径**：文档 parse + embed 就绪后，Agent 经 `search_library`（`searchHybrid`，FTS ⊕ 向量，`scope=library`）跨会话检索，再 `read_document(document_id)` 多跳精读；语义模型未就绪时自动降级关键词检索（FTS）。**无需建图、不依赖主题关联图**。
@@ -523,12 +542,37 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/settings/parse-engines` | `{ deep, semantic }` 可用性（无路径字段给 UI） |
-| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理（确保 PP-OCRv4 mobile ONNX 模型就绪；Node ONNX 路径；客户端超时 180s） |
-| POST | `/api/settings/parse-engines/deep/mark-ready` | 等价于再跑一次 prepare（兼容旧客户端） |
-| POST | `/api/settings/parse-engines/deep/uninstall` | 移除用户目录深度整理模型副本（不删安装包内置模型；客户端超时 180s） |
+| GET | `/api/settings/parse-engines` | `{ deep, semantic }`；`deep` 含可用性与 `job`（phase / progress / message），无路径字段给 UI |
+| GET | `/api/settings/parse-engines/deep/prepare` | `{ job }` 准备任务快照（与上 `deep.job` 同源） |
+| POST | `/api/settings/parse-engines/deep/prepare` | 启动后台下载；立即 `{ ok: true, started: true, job }`；已在 downloading 时返回当前 job，不双开；客户端用默认 10s 超时，勿阻塞等下载完成 |
+| POST | `/api/settings/parse-engines/deep/mark-ready` | 同步再跑一次 prepare（兼容旧客户端） |
+| POST | `/api/settings/parse-engines/deep/uninstall` | 移除用户目录深度整理模型副本（不删安装包内置模型） |
 
-`GET /api/settings/parse-engines` 的 `deep` 含 `source: 'bundled' \| 'user' \| 'missing'`（与语义模型一致）。旧 `layout/*` 路由仍可达但返回「已停用」。
+`GET /api/settings/parse-engines` 的 `deep` 含 `source: 'bundled' \| 'user' \| 'missing'`（与语义模型一致）；`job.phase`: `idle` \| `downloading` \| `ready` \| `error`。旧 `layout/*` 路由仍可达但返回「已停用」。
+
+**POST /deep/prepare 响应示例**
+
+```json
+{
+  "ok": true,
+  "started": true,
+  "job": {
+    "phase": "downloading",
+    "message": "正在准备扫描件文字识别…",
+    "accepted": true,
+    "started": true,
+    "percent": 1,
+    "file": null,
+    "receivedBytes": 0,
+    "totalBytes": null,
+    "error": null,
+    "available": false,
+    "installed": false,
+    "label": "扫描件识别",
+    "source": "missing"
+  }
+}
+```
 
 入库选项（服务层 `ingestFromAttachment`）：`deepParse?: boolean`、`forceEngine?: 'text-l0' \| 'office-l0' \| 'pdf-extract-l0' \| 'ocr-l2' \| 'rapidocr-l2' \| 'unlimited-ocr-l2'`（后二者为兼容别名）。
 
@@ -1083,7 +1127,7 @@ Content-Type: application/json
 
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 
-工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `opptrix_run` / `shell_install` / `list_workspace_grants` / `resolve_workspace_path_uri` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；多数**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants / file 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区，Agent **勿**用 `market sync` / `dailyDump` 作主路径。
+工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `opptrix_run` / `shell_install` / `list_workspace_grants` / `resolve_workspace_path_uri` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；多数**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants / file 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区（冷下载先 `preparing`+`job_id` 再轮询），Agent **勿**用 `market sync` / `dailyDump` 作主路径。
 
 **Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`opptrix_run`（兼容别名 `shell_run`，映射同一 handler） / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。Windows 读取 `windows_isolation_mode`（默认 `unelevated` 基础隔离；`elevated` 完整隔离，网络围栏更强，见上文「沙盒环境设置」）。完整隔离下凭据失效（1326/1312）最多自动刷新再执行一次。首次 `opptrix_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "opptrix_run"`，读侧兼容旧值 `"shell_run"`；选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，隔离运行时出站回调（架构：SRT `sandboxAskCallback`）触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 完整隔离一次系统授权、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
 

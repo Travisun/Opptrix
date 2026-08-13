@@ -17,7 +17,7 @@ import {
   type WorkspaceGrant,
   type ShellSecretRef,
 } from '@opptrix/agent-workspace'
-import { prepareFuyaoDumpForAgent, type FuyaoDumpKind, type FuyaoDumpMode } from '@opptrix/market-data-store'
+import { prepareFuyaoDumpForAgentAsync, type FuyaoDumpKind, type FuyaoDumpMode, type FuyaoDumpJobResult } from '@opptrix/market-data-store'
 import {
   buildOpptrixWsUri,
   hintOpptrixWsKind,
@@ -118,6 +118,54 @@ function formatConfirmationResult(err: ConfirmationRequiredError): {
     needs_confirmation: true,
     confirmation: err.confirmation,
   }
+}
+
+async function formatReadyFuyaoDumpResult(result: FuyaoDumpJobResult): Promise<Record<string, unknown>> {
+  if (result.url) {
+    return {
+      ok: true,
+      status: 'ready',
+      dump_kind: result.dump_kind,
+      mode: 'presigned_url',
+      url: result.url,
+      url_expires_hint: result.url_expires_hint,
+      sandbox_hint: result.sandbox_hint,
+    }
+  }
+  const fileName = path.basename(result.path ?? '')
+  const base: Record<string, unknown> = {
+    ok: true,
+    status: 'ready',
+    dump_kind: result.dump_kind,
+    mode: 'local_path',
+    root_id: SHARED_ROOT_ID,
+    relative_path: fileName ? `data/dumps/${fileName}` : 'data/dumps',
+    bytes: result.bytes,
+    from_cache: result.from_cache,
+    sandbox_hint: result.sandbox_hint,
+    note: '用 workspace_list/read 或 opptrix_run，root_id=shared + relative_path；勿注入 API Key',
+  }
+  const metaResult = await tryRecordOfflineKDumpSuccess({
+    dumpKind: result.dump_kind,
+    mode: 'local_path',
+    ok: true,
+    bytes: result.bytes,
+  })
+  if (metaResult.meta_written) {
+    return {
+      ...base,
+      meta_written: true,
+      meta_path: metaResult.meta_path,
+    }
+  }
+  if (metaResult.meta_warning) {
+    return {
+      ...base,
+      meta_written: false,
+      meta_warning: metaResult.meta_warning,
+    }
+  }
+  return base
 }
 
 function formatNetworkInstallConfirmation(err: NetworkInstallConfirmationRequiredError): {
@@ -714,12 +762,18 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'ensure_python',
       category: '工作区',
       description:
-        '确认 Python 是否可用；不可用时自动安装 Opptrix 托管版本并等待完成，成功后优先使用托管解释器',
-      parameters: S({}),
-      handler: async () => {
+        '确认 Python 是否可用；不可用时启动 Opptrix 托管安装并立即返回 preparing/installing+job_id，须用 job_id 轮询至 ready；已就绪则同步返回 ready',
+      parameters: S({
+        job_id: {
+          type: 'string',
+          description: '轮询用：上次返回 status=preparing|installing 时的 job_id',
+        },
+      }),
+      handler: async (args) => {
         try {
           requireBridge()
-          return await ws.ensurePython()
+          const jobId = String(args.job_id ?? '').trim()
+          return await ws.ensurePython(jobId ? { jobId } : undefined)
         } catch (err) {
           return toolError(err)
         }
@@ -771,90 +825,96 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'prepare_fuyao_dump',
       category: '工作区',
       description:
-        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
+        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；冷下载立即返回 preparing+job_id，需用 job_id 轮询；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
       parameters: S({
         dump_kind: {
           type: 'string',
-          description: 'full | incremental | adjustment_factors',
+          description: 'full | incremental | adjustment_factors（轮询时可选，若提供须与 job 一致）',
         },
         mode: {
           type: 'string',
           description: 'local_path（默认，落盘 shared）| presigned_url',
         },
         force_refresh: { type: 'boolean', description: '忽略缓存强制重下' },
-      }, ['dump_kind']),
+        job_id: {
+          type: 'string',
+          description: '轮询用：上次返回 status=preparing 时的 job_id',
+        },
+      }),
       handler: async (args) => {
         try {
           requireBridge()
+          const jobIdRaw = String(args.job_id ?? '').trim()
+          if (jobIdRaw) {
+            const polled = await prepareFuyaoDumpForAgentAsync({
+              dumpKind: 'incremental',
+              destDir: sharedDumpsDir(),
+              jobId: jobIdRaw,
+            })
+            if (polled.status === 'preparing') {
+              return {
+                ok: true,
+                status: 'preparing',
+                job_id: polled.job_id,
+                dump_kind: polled.dump_kind,
+                percent: polled.percent,
+                message: polled.message,
+                poll_hint: polled.poll_hint,
+                sandbox_hint: polled.sandbox_hint,
+              }
+            }
+            if (!polled.ok || polled.status === 'failed') {
+              return {
+                ok: false,
+                status: 'failed',
+                job_id: polled.job_id,
+                dump_kind: polled.dump_kind,
+                error: polled.error,
+                sandbox_hint: polled.sandbox_hint,
+              }
+            }
+            return formatReadyFuyaoDumpResult(polled)
+          }
+
           const kindRaw = String(args.dump_kind ?? '').trim()
           const kind: FuyaoDumpKind | null =
             kindRaw === 'full' || kindRaw === 'incremental' || kindRaw === 'adjustment_factors'
               ? kindRaw
               : null
           if (!kind) {
-            return { error: 'dump_kind 须为 full | incremental | adjustment_factors' }
+            return { error: 'dump_kind 须为 full | incremental | adjustment_factors（或提供 job_id 轮询）' }
           }
           const modeRaw = String(args.mode ?? 'local_path').trim()
           const mode: FuyaoDumpMode =
             modeRaw === 'presigned_url' ? 'presigned_url' : 'local_path'
-          const result = await prepareFuyaoDumpForAgent({
+          const result = await prepareFuyaoDumpForAgentAsync({
             dumpKind: kind,
             mode,
             forceRefresh: Boolean(args.force_refresh),
             destDir: sharedDumpsDir(),
           })
-          if (!result.ok) {
+          if (result.status === 'preparing') {
+            return {
+              ok: true,
+              status: 'preparing',
+              job_id: result.job_id,
+              dump_kind: result.dump_kind,
+              percent: result.percent,
+              message: result.message,
+              poll_hint: result.poll_hint,
+              sandbox_hint: result.sandbox_hint,
+            }
+          }
+          if (!result.ok || result.status === 'failed') {
             return {
               ok: false,
+              status: 'failed',
               dump_kind: result.dump_kind,
               error: result.error,
               sandbox_hint: result.sandbox_hint,
             }
           }
-          if (result.url) {
-            return {
-              ok: true,
-              dump_kind: result.dump_kind,
-              mode: 'presigned_url',
-              url: result.url,
-              url_expires_hint: result.url_expires_hint,
-              sandbox_hint: result.sandbox_hint,
-            }
-          }
-          const fileName = path.basename(result.path ?? '')
-          const base = {
-            ok: true as const,
-            dump_kind: result.dump_kind,
-            mode: 'local_path' as const,
-            root_id: SHARED_ROOT_ID,
-            relative_path: fileName ? `data/dumps/${fileName}` : 'data/dumps',
-            bytes: result.bytes,
-            from_cache: result.from_cache,
-            sandbox_hint: result.sandbox_hint,
-            note: '用 workspace_list/read 或 opptrix_run，root_id=shared + relative_path；勿注入 API Key',
-          }
-          // full|incremental + local_path 成功后自动写 offline-k-meta（等价 markUpdateSuccess）
-          const metaResult = await tryRecordOfflineKDumpSuccess({
-            dumpKind: kind,
-            mode: 'local_path',
-            ok: true,
-            bytes: result.bytes,
-          })
-          if (metaResult.meta_written) {
-            return {
-              ...base,
-              meta_written: true,
-              meta_path: metaResult.meta_path,
-            }
-          }
-          if (metaResult.meta_warning) {
-            return {
-              ...base,
-              meta_written: false,
-              meta_warning: metaResult.meta_warning,
-            }
-          }
-          return base
+          return formatReadyFuyaoDumpResult(result)
         } catch (err) {
           return toolError(err)
         }

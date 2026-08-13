@@ -580,6 +580,19 @@ export interface MultimodalStatusResponse {
   canEnrichImages: boolean
   canEnrichSpeech: boolean
   canEnrich: boolean
+  /** SenseVoice ensure 异步任务快照（轮询进度） */
+  sensevoiceEnsure?: {
+    phase: 'idle' | 'preparing' | 'downloading' | 'ready' | 'error'
+    message: string
+    accepted: boolean
+    started: boolean
+    percent: number
+    modelName: string
+    ready: boolean
+    modelsDir: string
+    source: 'bundled' | 'user' | 'missing'
+    error: string | null
+  }
   translation?: {
     offlineEnabled: boolean
     modelInstalled: boolean

@@ -484,8 +484,29 @@ export default function TranslationSettingsSection() {
   const handleDownload = async (modelId: string) => {
     if (!window.electronAPI?.translationStartDownload) return
     try {
-      await window.electronAPI.translationStartDownload(modelId)
-      await refreshEngine()
+      const ack = await window.electronAPI.translationStartDownload(modelId)
+      if (ack?.download) setDownload(ack.download)
+      if (ack?.alreadyPresent) {
+        await refreshEngine()
+        return
+      }
+      // invoke 仅 ack；进度靠事件，并用 status.download 轮询兜底（防事件丢失）
+      const pollUntilDone = async () => {
+        for (let i = 0; i < 3600; i += 1) {
+          await new Promise(r => window.setTimeout(r, 1000))
+          const next = await window.electronAPI?.translationGetStatus?.()
+          if (!next) break
+          if (next.download) setDownload(next.download)
+          const terminal = next.download?.status === 'completed'
+            || next.download?.status === 'error'
+            || (!next.downloading && !next.download)
+          if (terminal) {
+            void refreshEngine()
+            return
+          }
+        }
+      }
+      void pollUntilDone()
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '下载失败')
     }

@@ -14,7 +14,8 @@ import {
   maybeBootstrapTranslationModel,
   resolveTranslationModelPath,
   shouldBootstrapSenseVoice,
-  senseVoiceRuntime,
+  startSenseVoiceEnsureJob,
+  getSenseVoiceEnsureJobStatus,
 } from '@opptrix/local-inference'
 import { resolveProjectRoot } from '@opptrix/agent'
 
@@ -29,16 +30,15 @@ function newJobId(articleId: string): string {
   return `${articleId}:${Date.now()}`
 }
 
-async function handleSenseVoiceEnsure(modelName: string, repoRoot: string) {
-  await senseVoiceRuntime.ensureAssets(modelName, repoRoot)
-  const runtime = getMultimodalRuntimeStatus(repoRoot, modelName)
-  return {
-    ok: true as const,
-    modelName,
-    ready: runtime.sensevoice.ready,
-    modelsDir: runtime.sensevoice.modelsDir,
-    source: runtime.sensevoice.source,
-  }
+function resolveSpeechModelName(): string {
+  const settings = getNewsSettings()
+  return settings.enrichment.offline_whisper_model?.trim() || 'q8'
+}
+
+function startSenseVoiceEnsureFromSettings() {
+  const modelName = resolveSpeechModelName()
+  const repoRoot = resolveProjectRoot()
+  return startSenseVoiceEnsureJob(modelName, repoRoot)
 }
 
 export async function registerEnrichmentRoutes(app: FastifyInstance) {
@@ -48,6 +48,10 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
     const runtime = getMultimodalRuntimeStatus(
       repoRoot,
       settings.enrichment.offline_whisper_model,
+    )
+    const ensureJob = getSenseVoiceEnsureJobStatus(
+      settings.enrichment.offline_whisper_model?.trim() || 'q8',
+      repoRoot,
     )
 
     const cfg = loadConfig()
@@ -71,6 +75,7 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
       canEnrichImages: caps.images,
       canEnrichSpeech: caps.speech,
       canEnrich: caps.any,
+      sensevoiceEnsure: ensureJob,
       translation: {
         offlineEnabled: offlineTranslation,
         modelInstalled: Boolean(translationModelPath),
@@ -80,34 +85,50 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
     }
   })
 
+  /** GET：轮询 ensure 进度（与语义模型 install GET 同形） */
+  app.get('/api/news/multimodal/sensevoice/ensure', async () => {
+    const modelName = resolveSpeechModelName()
+    const repoRoot = resolveProjectRoot()
+    return { job: getSenseVoiceEnsureJobStatus(modelName, repoRoot) }
+  })
+
+  /** POST：立即返回 job；后台下载。请轮询 GET 同路径或 multimodal/status.sensevoiceEnsure */
   app.post('/api/news/multimodal/sensevoice/ensure', async (_req, reply) => {
     const settings = getNewsSettings()
     if (!shouldBootstrapSenseVoice(settings.enrichment)) {
       return reply.code(400).send({ error: '请先开启媒体提取并勾选音视频转写' })
     }
-    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'q8'
-    const repoRoot = resolveProjectRoot()
-    try {
-      return await handleSenseVoiceEnsure(modelName, repoRoot)
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      return reply.code(400).send({ error: message })
+    const job = startSenseVoiceEnsureFromSettings()
+    return {
+      ok: true,
+      started: job.started
+        || job.phase === 'preparing'
+        || job.phase === 'downloading'
+        || job.phase === 'ready',
+      job,
     }
   })
 
-  /** @deprecated 兼容旧客户端；代理到 SenseVoice ensure */
+  /** @deprecated 兼容旧客户端；代理到 SenseVoice ensure（异步 job） */
+  app.get('/api/news/multimodal/whisper/ensure', async () => {
+    const modelName = resolveSpeechModelName()
+    const repoRoot = resolveProjectRoot()
+    return { job: getSenseVoiceEnsureJobStatus(modelName, repoRoot) }
+  })
+
   app.post('/api/news/multimodal/whisper/ensure', async (_req, reply) => {
     const settings = getNewsSettings()
     if (!shouldBootstrapSenseVoice(settings.enrichment)) {
       return reply.code(400).send({ error: '请先开启媒体提取并勾选音视频转写' })
     }
-    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'q8'
-    const repoRoot = resolveProjectRoot()
-    try {
-      return await handleSenseVoiceEnsure(modelName, repoRoot)
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      return reply.code(400).send({ error: message })
+    const job = startSenseVoiceEnsureFromSettings()
+    return {
+      ok: true,
+      started: job.started
+        || job.phase === 'preparing'
+        || job.phase === 'downloading'
+        || job.phase === 'ready',
+      job,
     }
   })
 

@@ -9,8 +9,9 @@ import {
   getSemanticModelStatus,
   getSemanticModelInstallJobStatus,
   startSemanticModelInstallJob,
+  getOcrDeepPrepareJobStatus,
+  startOcrDeepPrepareJob,
   markDeepEngineReady,
-  prepareDeepEngine,
   uninstallDeepEngine,
   uninstallSemanticModel,
 } from '@opptrix/doc-library'
@@ -32,6 +33,35 @@ function semanticModelPublicStatus() {
     message: job.message,
     error: job.error,
     job,
+  }
+}
+
+function parseEnginesPublicStatus() {
+  const status = getParseEnginesStatus()
+  const job = getOcrDeepPrepareJobStatus()
+  return {
+    deep: {
+      available: status.deep.available,
+      installed: status.deep.installed,
+      label: status.deep.label,
+      hint: status.deep.hint,
+      source: status.deep.source,
+      phase: job.phase,
+      progress: {
+        file: job.file,
+        receivedBytes: job.receivedBytes,
+        totalBytes: job.totalBytes,
+        percent: job.percent,
+      },
+      message: job.message,
+      error: job.error,
+      job,
+    },
+    semantic: {
+      installed: status.semantic.installed,
+      label: status.semantic.label,
+      source: status.semantic.source,
+    },
   }
 }
 
@@ -69,23 +99,7 @@ export async function registerDocLibrarySettingsRoutes(app: FastifyInstance): Pr
     }
   })
 
-  app.get('/api/settings/parse-engines', async () => {
-    const status = getParseEnginesStatus()
-    return {
-      deep: {
-        available: status.deep.available,
-        installed: status.deep.installed,
-        label: status.deep.label,
-        hint: status.deep.hint,
-        source: status.deep.source,
-      },
-      semantic: {
-        installed: status.semantic.installed,
-        label: status.semantic.label,
-        source: status.semantic.source,
-      },
-    }
-  })
+  app.get('/api/settings/parse-engines', async () => parseEnginesPublicStatus())
 
   /** @deprecated 版面增强已停用 */
   app.post('/api/settings/parse-engines/layout/prepare', async () => {
@@ -107,21 +121,17 @@ export async function registerDocLibrarySettingsRoutes(app: FastifyInstance): Pr
     return { ok: true }
   })
 
-  app.post('/api/settings/parse-engines/deep/prepare', async (_req, reply) => {
-    try {
-      const deep = await prepareDeepEngine()
-      return {
-        ok: true,
-        deep,
-        message: deep.available
-          ? '扫描件识别已就绪'
-          : '扫描件识别尚未就绪，请稍后重试',
-      }
-    } catch {
-      return reply.status(500).send({
-        ok: false,
-        error: '暂时无法完成扫描件识别，请稍后重试',
-      })
+  /** 与 GET /parse-engines 中 deep.job 同源 */
+  app.get('/api/settings/parse-engines/deep/prepare', async () => ({
+    job: getOcrDeepPrepareJobStatus(),
+  }))
+
+  app.post('/api/settings/parse-engines/deep/prepare', async () => {
+    const job = startOcrDeepPrepareJob()
+    return {
+      ok: true,
+      started: job.started || job.phase === 'downloading' || job.phase === 'ready',
+      job,
     }
   })
 

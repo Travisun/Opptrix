@@ -387,3 +387,22 @@ export {
   type FuyaoDumpKind,
   type FuyaoDumpMode,
 } from './sync/dump-import.js'
+export {
+  startPackageExportJob,
+  getPackageExportJob,
+  getPackageExportJobFilePath,
+  resetPackageExportJobsForTests,
+  awaitPackageExportJobsForTests,
+  setPackageExportRunnerForTests,
+  type PackageExportJobSnapshot,
+  type PackageExportJobState,
+} from './package-export-job.js'
+export {
+  prepareFuyaoDumpMaybeAsync,
+  prepareFuyaoDumpForAgentAsync,
+  getFuyaoDumpJob,
+  isFuyaoDumpLocalCacheReady,
+  resetFuyaoDumpJobsForTests,
+  type FuyaoDumpJobResult,
+  type FuyaoDumpJobState,
+} from './sync/fuyao-dump-job.js'

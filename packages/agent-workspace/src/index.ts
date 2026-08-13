@@ -137,6 +137,7 @@ export {
   waitForPythonInstallJob,
   resetPythonInstallJobForTests,
   setPythonInstallPipelineDepsForTests,
+  PYTHON_INSTALL_JOB_ID,
   type PythonInstallJobSnapshot,
   type PythonInstallJobState,
   type PythonInstallPhase,
@@ -147,6 +148,7 @@ export {
   resetEnsurePythonDepsForTests,
   setEnsurePythonDepsForTests,
   type EnsurePythonResult,
+  type EnsurePythonStatus,
   type EnsurePythonDeps,
 } from './python/ensure-python.js'
 export {

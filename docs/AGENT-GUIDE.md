@@ -205,7 +205,7 @@ Opptrix/
     - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `resolve_workspace_path_uri` / `shell_platform_status` / `opptrix_run`（兼容别名 `shell_run`） / `shell_install` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` / `request_secret` / `list_vault_secrets` / `grant_session_secret` / `revoke_session_secret` / `delete_vault_secret`
     - **消息内文件引用**：聊天 Markdown 展示工作区图片/音视频/文件时，使用协议 `opptrix-ws://{root_id}/{相对路径}`（例：`opptrix-ws://shared/charts/a.png`）。可先调 `resolve_workspace_path_uri({ root_id, path })` 得到规范 `uri` 与 `exists` / `kind_hint`（合法且已授权即返回 uri，不返回本机绝对路径）。UI 将 URI 解析为 `GET /api/sessions/:id/workspace/file` 流。**禁止**消息中写 `file://` 或绝对路径。
     - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码/编程类处理）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → activate `workspace`，用 `opptrix_run` / `ensure_python` / `workspace_*` 沙盒编程实现（可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
-    - **Python 就绪（`ensure_python` / 透明续跑）**：`ensure_python` **阻塞等待**托管安装完成；成功后写入 `prefer_opptrix_python=true` 并返回 `ready=true`（`active_source=opptrix`）。失败不假 ready。`opptrix_run` 在解析 `python`/`pip` 时若尚未就绪，会走同一 ensure+wait 流程，安装成功后同轮继续执行；勿引导用户去设置页干等。系统 Python 探测：Windows 扫 PATH + `%LOCALAPPDATA%\Programs\Python\Python*`（任意 3.x，非写死 311/312）及可选 Program Files；mac/Linux 为 which + 常见路径（含 Homebrew / Framework）。
+    - **Python 就绪（`ensure_python` / 轮询）**：`ensure_python` **不阻塞**整轮对话。已就绪时同步返回 `status: "ready"`（`ready=true`，`active_source=opptrix` 或系统）。未就绪时启动托管安装并**立即**返回 `status: "preparing"|"installing"`、`job_id`、`poll_hint`；Agent **必须**再次调用 `ensure_python({ job_id })` 轮询直至 `ready` 或 `failed`。成功后写入 `prefer_opptrix_python=true`。失败不假 ready。`opptrix_run` 解析 `python`/`pip` 时若尚未就绪会快速失败并提示先 `ensure_python` 轮询，**不会**在 tool 内死等 20 分钟；勿引导用户去设置页干等。设置页仍用 `/api/settings/python/install` 的 job+poll（行为不变）。系统 Python 探测：Windows 扫 PATH + `%LOCALAPPDATA%\Programs\Python\Python*`（任意 3.x，非写死 311/312）及可选 Program Files；mac/Linux 为 which + 常见路径（含 Homebrew / Framework）。
     - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面与 Agent 摘要均称「**本对话工作区**」，**不**把 `~/.opptrix` 根目录或跨会话全局目录标为默认可写区。
     - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
     - **根目录布局**：容器根 `{userData}/agent-workspace/`（quota / 清理统计）；每会话默认 `root_id=default` → `agent-workspace/sessions/<sessionId>/`（读写，**会话隔离**）；**公共复用区** `root_id=shared` → `agent-workspace/shared/`（`packages/` / `data/dumps|exports|cache` / `docs/` + README；会话自动 grant rw；**`clearSession` 不删 shared**）；旧版全局根下散落文件幂等迁入 `_legacy/`。额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
@@ -267,16 +267,18 @@ Opptrix/
 
 - **用途**：服务端持扶摇 Key 鉴权下载 Parquet，**不把 Key 返回给 Agent/沙盒**；Agent 侧取 dump 的**唯一主路径**（见下方废弃说明）。
 - **参数**：
-  - `dump_kind`（必填）：`full` | `incremental` | `adjustment_factors`
+  - `dump_kind`（启动时必填）：`full` | `incremental` | `adjustment_factors`
   - `mode`（可选，默认 `local_path`）：`local_path`（落盘 `shared/data/dumps`）| `presigned_url`（返回短时效预签名 URL）
   - `force_refresh`（可选）：忽略缓存强制重下
-- **成功返回**：
-  - `local_path` 模式：`ok: true`、`root_id: "shared"`、`relative_path`（如 `data/dumps/<file>`）、`bytes`、`from_cache`、`sandbox_hint`
-  - `full` / `incremental` + `local_path` 成功时**额外**：服务端自动写入 `shared/data/cache/offline-k-meta.json`，返回 `meta_written: true`、`meta_path: "data/cache/offline-k-meta.json"`（写失败不改 dump 成功态，仅 `meta_warning`）
+  - `job_id`（可选）：轮询用；上次返回 `status: "preparing"` 时带上，可省略 `dump_kind`
+- **返回（兼容说明）**：
+  - **快速路径**（`presigned_url`，或 `local_path` 缓存命中）：`status: "ready"` + 原有字段（`url` 或 `relative_path` / `bytes` / `from_cache`）
+  - **冷下载**（`local_path` 且需联网下载）：**立即**返回 `ok: true`、`status: "preparing"`、`job_id`、`poll_hint`（不再阻塞 5–25 分钟）；Agent **必须**再次调用 `prepare_fuyao_dump({ job_id })` 轮询直至 `status: "ready"` 或 `failed`
+  - 就绪后 `full` / `incremental` + `local_path`：**额外**自动写 `shared/data/cache/offline-k-meta.json`（`meta_written` / `meta_warning`）
   - `adjustment_factors` / `presigned_url`：**不**写 offline-k-meta
-  - `presigned_url` 模式：`url`、`url_expires_hint`、`sandbox_hint`
 - **沙盒侧**：用 `workspace_read` / `workspace_list` / `opptrix_run`（`root_id=shared` + `relative_path`）或下载 `url`；**禁止**向 shell 环境注入 `API_KEY` / `TOKEN` / 扶摇凭证。
-- **失败**：返回 `ok: false` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
+- **失败**：返回 `ok: false` + `status: "failed"` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
+- **旧 Agent**：若只认同步 `ok`+`path`/`url`、忽略 `status`，冷下载时看不到路径——须按 `poll_hint` 用 `job_id` 轮询。
 
 **已废弃：Agent 侧 `market sync` / `dailyDump` 作为主取 dump 路径**
 

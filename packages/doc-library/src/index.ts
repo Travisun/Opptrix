@@ -130,6 +130,18 @@ export type {
   SemanticModelInstallPipelineDeps,
 } from './semantic-model-install-job.js'
 export {
+  getOcrDeepPrepareJobStatus,
+  startOcrDeepPrepareJob,
+  resetOcrDeepPrepareJobForTests,
+  setOcrDeepPreparePipelineDepsForTests,
+  toOcrDeepPrepareUserError,
+} from './ocr-deep-prepare-job.js'
+export type {
+  OcrDeepPreparePhase,
+  OcrDeepPrepareJobSnapshot,
+  OcrDeepPreparePipelineDeps,
+} from './ocr-deep-prepare-job.js'
+export {
   selectEngine,
   ParseRouter,
 } from './parse-router.js'

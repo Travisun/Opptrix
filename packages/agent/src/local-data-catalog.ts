@@ -236,8 +236,8 @@ const AGENT_TOOLS: Array<{
   {
     id: 'tool.prepare_fuyao_dump',
     title: 'prepare_fuyao_dump',
-    summary: '服务端取扶摇 dump 到 shared；full/incr 成功自动写 offline-k-meta',
-    how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })',
+    summary: '服务端取扶摇 dump 到 shared；冷下载异步 job；full/incr 就绪自动写 offline-k-meta',
+    how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })；若 status=preparing 则 prepare_fuyao_dump({ job_id }) 轮询',
     example: 'prepare_fuyao_dump({ dump_kind: "incremental", mode: "local_path" })',
   },
   {
