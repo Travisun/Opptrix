@@ -798,8 +798,9 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
 
   const hasSendPayload = hasContent || attachmentIds.length > 0
   const canEnqueueOrSend = hasSendPayload && !userPrompt && !uploading
-  const canSend = canEnqueueOrSend && !loading
-  /** 仅 ask_user / 上传中锁定编辑；执行中仍可输入以加入排队 */
+  /** 生成中也可发送纯文字作为补充说明（soft steer） */
+  const canSend = canEnqueueOrSend && (!loading || (hasContent && attachmentIds.length === 0))
+  /** 仅 ask_user / 上传中锁定编辑；执行中仍可输入以补充或排队 */
   const composerLocked = Boolean(userPrompt) || uploading
   const showWelcomeStarters = starters.length > 0 && isEmpty && !alwaysShowStarters
   const showExpertStarterBar = alwaysShowStarters && starters.length > 0
@@ -849,10 +850,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   const speechListening = speechBusy
   const speechListeningPhase = speechPhase !== 'idle' ? speechPhase : null
 
-  /** 右侧操作可并存：loading 仅 stop；非 loading 时 speechAvailable 常显 mic，canSend 另显 send */
+  /** 右侧：loading 时 stop + 可发补充；非 loading 时 mic / send */
   const showStop = loading
   const showMic = !loading && speechAvailable
-  const showSend = !loading && canSend
+  const showSend = canSend
   /** 空态仅麦 → primary 实心底；与发送并排 → ghost 透明图标 */
   const micSolo = showMic && !showSend && !speechListening
   const micBesideSend = showMic && showSend && !speechListening
@@ -1113,7 +1114,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                 aria-label="输入问题，@ 选择股票，/ 引用技能"
                 data-placeholder={
                   loading
-                    ? (isMobile ? '继续输入，将加入排队…' : '继续输入，发送后加入排队…')
+                    ? (isMobile ? '继续输入，可补充说明…' : '继续输入，发送后作为补充说明…')
                     : (isMobile
                       ? '输入问题，@ 股票，/ 技能…'
                       : '输入问题，@ 选择股票，/ 引用技能，Enter 发送…')
@@ -1205,7 +1206,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                     icon={<ArrowUpRegular fontSize={14} />}
                     disabled={!canSend}
                     onClick={() => handleSubmitMessage()}
-                    aria-label="发送"
+                    aria-label={loading ? '补充说明' : '发送'}
                   />
                 )}
               </div>

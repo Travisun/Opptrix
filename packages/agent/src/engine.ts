@@ -41,6 +41,28 @@ import {
   parseNamespacedMcpTool,
 } from '@opptrix/shared'
 import {
+  buildChecklistTurnTail,
+  buildSpinGuardTurnTail,
+  beginSpinRound,
+  checkSpinGuard,
+  clearResearchChecklistSession,
+  clearSpinGuardSession,
+  formatSteerUserMessage,
+  getChecklistProgressEpoch,
+  isBusinessToolName,
+  noteRoundProgress,
+  partitionToolCallsForExecution,
+  recordSpinOutcome,
+  resolveGatherToolChoice,
+  resolveVerifyToolChoice,
+  roundHadNewFingerprint,
+  seedChecklistOnSkillActivate,
+  resolveEffectiveResearchTier,
+  shouldEnterVerifyPhase,
+  SteerBridge,
+  VERIFY_TURN_TAIL,
+} from './loop/index.js'
+import {
   logChatDebugAbort,
   logChatDebugEmptyReply,
   logChatDebugRoundEnd,
@@ -197,6 +219,7 @@ export class AgentEngine {
   private lastRoutePlan: ToolRoutePlan | null = null
   private readonly expertPacksSeeded = new Set<string>()
   readonly userPromptBridge = new UserPromptBridge()
+  readonly steerBridge = new SteerBridge()
   private readonly workspaceService = getWorkspaceService()
   /** 会话上下文用量估算缓存（内存；切会话命中则不再 rebuildRoundTools） */
   private readonly contextUsageCache = new Map<string, SessionContextUsage>()
@@ -298,24 +321,57 @@ export class AgentEngine {
       roleLabel: expert?.title ?? null,
       activePacks: this.lastRoundPackIds,
       activeToolNames: activeNames,
-      researchTier: expert?.defaultResearchTier ?? plan.researchTier,
+      researchTier: resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier),
       dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
       agentSkillCatalog: buildSkillCatalogPrompt(),
       activatedAgentSkills: buildActivatedSkillsPrompt(activatedSkills),
     })
   }
 
-  /** 本轮动态尾注：会话时钟 + 选型卡（append 到 modelView，不进稳定 system） */
+  /** 与 system 档位一致：专家默认优先于路由 */
+  private resolveSessionResearchTier(sessionId: string) {
+    const record = this.sessions.get(sessionId)
+    const expert = record?.expertId
+      ? getExpertCatalogService().getDefinitionSync(record.expertId)
+      : null
+    const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
+      message: this.lastChatSeedMessage,
+      contextRef: record?.contextRef ?? null,
+    })
+    return resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier)
+  }
+
+  /** 本轮动态尾注：会话时钟 + 选型卡 + checklist/反空转（append 到 modelView，不进稳定 system） */
   private buildRoundTurnTail(sessionId: string, activeNames: readonly string[]) {
     const record = this.sessions.get(sessionId)
     const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
       message: this.lastChatSeedMessage,
       contextRef: record?.contextRef ?? null,
     })
-    return buildTurnTailPrompt({
+    const base = buildTurnTailPrompt({
       sessionClock: buildSessionClockPlaybook(getCurrentTime()),
       routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
     })
+    const extras = [
+      buildChecklistTurnTail(sessionId),
+      buildSpinGuardTurnTail(sessionId),
+    ].filter(Boolean)
+    if (!extras.length) return base
+    return [base, ...extras].filter(Boolean).join('\n\n')
+  }
+
+  private clearLoopSessionState(sessionId: string) {
+    clearResearchChecklistSession(sessionId)
+    clearSpinGuardSession(sessionId)
+    this.steerBridge.clear(sessionId)
+  }
+
+  /** Soft steer：仅由 API 在有进行中 chat 时调用；写入 pending，下一 LLM 轮前注入 */
+  enqueueSteer(sessionId: string, message: string): { ok: true } | { ok: false; reason: 'empty' } {
+    const text = message.trim()
+    if (!text) return { ok: false, reason: 'empty' }
+    this.steerBridge.enqueue(sessionId, text)
+    return { ok: true }
   }
 
   /** 旧会话 rolePersona 为空时惰性回填并持久化 */
@@ -503,6 +559,9 @@ export class AgentEngine {
           valid,
           { resolveDeps: (n) => resolveSkillDependencies(n) },
         )
+        if (activated.length) {
+          seedChecklistOnSkillActivate(sessionId, activated)
+        }
         const allSkipped = [...skipped, ...skippedUnknown]
         this.invalidateContextUsage(sessionId)
         const hintParts = [allSkipped.length
@@ -801,6 +860,7 @@ export class AgentEngine {
       this.toolPackSessions.clear(id)
       this.agentSkillSessions.clear(id)
       this.clearExpertPacksSeeded(id)
+      this.clearLoopSessionState(id)
     }
     return record
   }
@@ -839,6 +899,7 @@ export class AgentEngine {
 
   deleteSession(id: string) {
     this.userPromptBridge.cancelSession(id)
+    this.clearLoopSessionState(id)
     this.toolPackSessions.clear(id)
     this.agentSkillSessions.clear(id)
     this.clearExpertPacksSeeded(id)
@@ -876,6 +937,7 @@ export class AgentEngine {
   /** 截断会话至指定 user display turn 之前（编辑重发前调用） */
   truncateSession(sessionId: string, messageIndex: number) {
     this.userPromptBridge.cancelSession(sessionId)
+    this.steerBridge.clear(sessionId)
     const updated = this.sessions.truncateFromDisplayIndex(sessionId, messageIndex)
     this.invalidateContextUsage(sessionId)
     return updated
@@ -1196,6 +1258,7 @@ export class AgentEngine {
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
       logChatDebugAbort(sessionId, { reason: 'cancelled' })
       this.userPromptBridge.cancelSession(sessionId)
+      this.steerBridge.clear(sessionId)
       record!.messages = record!.messages.slice(0, messagesBeforeAssistant)
       if (record!.turns) {
         record!.turns = record!.turns.slice(0, turnsBeforeAssistant + 1)
@@ -1243,11 +1306,41 @@ export class AgentEngine {
     let { broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended)
 
     try {
+    let businessToolsUsed = 0
+    let alreadyVerified = false
+    let checklistNoneTried = false
+    let forceToolChoice: import('./llm/provider.js').LlmToolChoice | undefined
+    let ephemeralTurnTailExtra = ''
+
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
+
+      // Soft steer：下一 LLM 轮前注入可见 user 消息（unattended 忽略并清空）
+      if (unattended) {
+        this.steerBridge.clear(sessionId)
+      } else {
+        const steers = this.steerBridge.consume(sessionId)
+        for (const raw of steers) {
+          const content = formatSteerUserMessage(raw)
+          record.messages.push({ role: 'user', content })
+          if (!record.turns) record.turns = []
+          record.turns.push({
+            role: 'user',
+            content,
+            at: new Date().toISOString(),
+          })
+          emit({ type: 'steer_applied', message: content })
+        }
+        if (steers.length) this.sessions.save(record)
+      }
+
       // 稳定 system（无时钟/选型卡）；动态内容经 turn-tail 追加，利于前缀缓存
       const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
       let turnTail = this.buildRoundTurnTail(sessionId, activeNames)
+      if (ephemeralTurnTailExtra) {
+        turnTail = [turnTail, ephemeralTurnTailExtra].filter(Boolean).join('\n\n')
+        ephemeralTurnTailExtra = ''
+      }
       if (unattended) turnTail = appendUnattendedTurnTail(turnTail)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const resolvedModel = this.registry.resolve(activeModel)
@@ -1266,6 +1359,16 @@ export class AgentEngine {
 
       let overflowRetried = false
       let lastRoundEstimatedTokens: number | undefined
+      const roundToolChoice = forceToolChoice
+        ?? resolveGatherToolChoice(sessionId, {
+          preferNoneAfterChecklistDone: true,
+          checklistNoneAlreadyTried: checklistNoneTried,
+        })
+      if (roundToolChoice === 'none' && !forceToolChoice) {
+        checklistNoneTried = true
+      }
+      forceToolChoice = undefined
+
       const runLlmRound = async (aggressive: boolean) => {
         const budgeted = await this.applyContextBudget(record, {
           modelId,
@@ -1303,6 +1406,7 @@ export class AgentEngine {
           temperature: record.llmParams?.temperature,
           maxTokens: record.llmParams?.maxTokens,
           reasoningEffort: record.llmParams?.reasoningEffort,
+          toolChoice: roundToolChoice,
           onDelta: (delta) => {
             // hasToolCalls：只停 token 进度，勿 return，以免同包/后续 reasoning 被丢掉
             if (delta.hasToolCalls) {
@@ -1492,16 +1596,24 @@ export class AgentEngine {
 
         let refreshTools = false
         const activeSet = new Set(activeNames)
+        const fingerprintsBefore = beginSpinRound(sessionId)
+        const checklistEpochBefore = getChecklistProgressEpoch(sessionId)
 
-        for (const tc of turn.message.tool_calls) {
-          throwIfAborted(signal)
+        type PreparedCall = {
+          tc: (typeof turn.message.tool_calls)[number]
+          fn: string
+          args: Record<string, unknown>
+          runningStep: ChatToolStep
+        }
+
+        const prepareToolCall = (tc: (typeof turn.message.tool_calls)[number]): PreparedCall => {
           const fn = tc.function.name
           toolsUsed.push(fn)
+          if (isBusinessToolName(fn)) businessToolsUsed += 1
           let args: Record<string, unknown> = {}
           try {
             args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
           } catch { /* empty */ }
-
           const runningStep: ChatToolStep = {
             id: tc.id,
             tool: fn,
@@ -1514,12 +1626,19 @@ export class AgentEngine {
           }
           toolSteps.push(runningStep)
           emit({ type: 'tool_start', step: runningStep })
+          return { tc, fn, args, runningStep }
+        }
 
+        const runPreparedToolCall = async (prepared: PreparedCall) => {
+          throwIfAborted(signal)
+          const { tc, fn, args, runningStep } = prepared
           let result: unknown
           try {
-            if (fn === 'ask_user') {
+            const blocked = checkSpinGuard(sessionId, fn, args)
+            if (blocked) {
+              result = blocked
+            } else if (fn === 'ask_user') {
               if (unattended) {
-                // Defense: never emit user_prompt / waitForAnswer in background jobs
                 result = { ...UNATTENDED_ASK_USER_RESULT }
               } else {
                 const parsed = parseAskUserArgs(args)
@@ -1570,6 +1689,8 @@ export class AgentEngine {
             result = { error: e instanceof Error ? e.message : String(e) }
           }
 
+          recordSpinOutcome(sessionId, fn, args, result)
+
           if (result && typeof result === 'object' && !Array.isArray(result)) {
             const att = (result as Record<string, unknown>).attachment
             if (
@@ -1583,9 +1704,29 @@ export class AgentEngine {
           }
 
           const doneStep = enrichStepFromResult(runningStep, result)
-          toolSteps[toolSteps.length - 1] = doneStep
+          const stepIdx = toolSteps.findIndex(s => s.id === tc.id)
+          if (stepIdx >= 0) toolSteps[stepIdx] = doneStep
           emit({ type: 'tool_done', step: doneStep })
+          return { tc, fn, result }
+        }
 
+        const batches = partitionToolCallsForExecution(turn.message.tool_calls)
+        const orderedResults: Array<{ tc: (typeof turn.message.tool_calls)[number]; fn: string; result: unknown }> = []
+
+        for (const batch of batches) {
+          if (batch.mode === 'parallel' && batch.calls.length > 1) {
+            const prepared = batch.calls.map(prepareToolCall)
+            const settled = await Promise.all(prepared.map(p => runPreparedToolCall(p)))
+            orderedResults.push(...settled)
+          } else {
+            for (const tc of batch.calls) {
+              const prepared = prepareToolCall(tc)
+              orderedResults.push(await runPreparedToolCall(prepared))
+            }
+          }
+        }
+
+        for (const { tc, fn, result } of orderedResults) {
           record.messages.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -1595,6 +1736,13 @@ export class AgentEngine {
         }
         this.sessions.save(record)
 
+        const hadNewFp = roundHadNewFingerprint(sessionId, fingerprintsBefore)
+        const checklistProgressed = getChecklistProgressEpoch(sessionId) !== checklistEpochBefore
+        noteRoundProgress(sessionId, {
+          hadNewFingerprint: hadNewFp,
+          checklistProgressed,
+        })
+
         if (refreshTools) {
           await broker.close()
           this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
@@ -1602,6 +1750,34 @@ export class AgentEngine {
           if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
           ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended))
         }
+        continue
+      }
+
+      // F3：有效档位 L3 / 已激活 skill 且本 turn 用过业务工具 → 成稿前证据核对一轮（tool_choice:none）
+      if (
+        shouldEnterVerifyPhase({
+          researchTier: this.resolveSessionResearchTier(sessionId),
+          hasActivatedSkill: this.agentSkillSessions.getActivated(sessionId).length > 0,
+          businessToolsUsed,
+          alreadyVerified,
+          unattended,
+        })
+      ) {
+        alreadyVerified = true
+        forceToolChoice = resolveVerifyToolChoice()
+        ephemeralTurnTailExtra = VERIFY_TURN_TAIL
+        emit({
+          type: 'thinking',
+          round: round + 1,
+          label: '正在核对关键依据…',
+        })
+        // 将刚产生的终答草稿保留在 messages，供核对轮对照；不 pushAssistant
+        record.messages.push({
+          role: 'assistant',
+          content: turnContentText || null,
+          reasoningContent: turn.reasoningContent ?? '',
+        })
+        this.sessions.save(record)
         continue
       }
 

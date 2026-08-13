@@ -69,6 +69,7 @@ export type ChatProgressEvent =
   | { type: 'tool_start'; step: ChatToolStep }
   | { type: 'tool_done'; step: ChatToolStep }
   | { type: 'user_prompt'; prompt: ChatUserPromptPayload }
+  | { type: 'steer_applied'; message: string }
   | { type: 'reply'; content?: string; estimatedTokens?: number }
   | {
     type: 'done'

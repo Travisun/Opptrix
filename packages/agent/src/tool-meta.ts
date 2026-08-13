@@ -583,6 +583,11 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '激活工作流技能，将完整步骤注入本会话 system；用户提到早报/收盘报告/产业链/财报速读/深度分析流程时使用。技能正文中的 `@skill:依赖` 会自动递归激活。',
     compliance: 'skill_names 为字符串数组；同会话最多 3 个；无效名或超额进入 skipped；循环依赖会被检测并跳过。',
   },
+  update_research_checklist: {
+    packId: 'meta',
+    usageGuide: '维护本轮研究步骤清单（待办/完成/跳过）；多步投研或已激活技能时用来对照进度，避免漏步。',
+    compliance: 'mode=replace|merge；items 为 { id?, title, status: pending|done|skipped }[]；merge 按 id 合并。',
+  },
   get_agent_skill: {
     packId: 'meta',
     usageGuide: '预览单个工作流技能的完整说明；确认后再 activate_agent_skill。',

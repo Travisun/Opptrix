@@ -166,6 +166,11 @@ Opptrix/
     - 单测：`tests/external-mcp-failover.test.mjs`
   - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
   - **投研完备性闭环（`buildResearchCompletenessLoop`，仅 L2/L3 注入）**：出报告前强制「缺口自检 → 针对性补齐（换源重试 / activate_tool_pack / 远程重试降级项）→ 重新纳入分析 → 收敛输出」；同一缺口最多补 1 轮，取不到则如实标注缺口。L1 事实快答不注入，避免过度拉数
+  - **投研 Agent Loop 增强**（`packages/agent/src/loop/`，engine 仅编排）：
+    1. **只读同轮并行**：连续只读工具可 `Promise.all`；`ask_user` / workspace 写删 / shell / secret / schedule 变更 / `activate_*` / MCP 变更 / browser 会话态 / 外部 `serverId__tool` **必须串行**；tool 消息写回仍按原 `tool_calls` 顺序；每 call 各自 `runInToolSession`
+    2. **Checklist + 反空转**：会话内存 checklist（`update_research_checklist`，meta pack）；Skill 激活写入占位步骤；turn-tail 注入未完成项。同 fingerprint（工具名+规范化 args）成功重复 ≥3 或失败 ≥2 → 短路返回 `spin_guard`；连续多轮无新指纹且无 checklist 进展 → 强制收口提示。`deleteSession` / 归档旁路清理
+    3. **证据核对 + 分段 `tool_choice`**：`LlmChatOpts.toolChoice` 可配置，上游 400/422 对该字段 fallback（改 `auto` 或省略）。有效档位（`expert.defaultResearchTier ?? route.researchTier`，与 system 一致）为 L3 或已激活 skill，且本 turn 用过 ≥1 业务工具时，纯文本终答前追加核对轮（`tool_choice:'none'` + 核对说明）；L1/无 skill 不强制。SSE thinking 文案：「正在核对关键依据…」
+    4. **Soft steer**：`POST /api/sessions/:id/chat/steer`；仅有进行中 chat 时接受；不 abort；下一 `runLlmRound` 前写入可见 user「（补充）…」；cancel 清 pending；无人值守忽略
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
   - **消息正文插图（无需 pack，日常默认）**：L2/L3 有对比/趋势/占比/强弱矩阵等定量数据时，助手回复 Markdown 可用 ` ```chart ` / ` ```opptrix-chart ` 围栏（内容为 JSON，非 TSX）直接渲染 `@opptrix/canvas` 的 `Chart`（与画布同源），无需授权、无需 `artifacts`。「画个图」用围栏，勿误当成完整报告；**禁止**用 `opptrix_run` + Python（matplotlib/seaborn/plotly 等）出图再当聊天插图（用户明确要求导出图像文件到工作区时除外）。多折线/分组柱须 `data[].series`；单折线勿用每点不同 `color` 冒充多指标；类目密时建议 `showValues:false`、`showTooltip:true`。见 `buildResearchEpistemicPlaybook`。
   - **画布与脑图（`artifacts` pack）**：实现 `packages/agent/src/canvas-tools.ts`；非 always-on，意图播种（可视化报告/画布/脑图/思维导图）或 `activate_tool_pack({ pack_ids: ["artifacts"] })`

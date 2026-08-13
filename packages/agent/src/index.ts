@@ -31,6 +31,35 @@ export {
   parseAskUserArgs,
 } from './user-prompt.js'
 export {
+  SteerBridge,
+  formatSteerUserMessage,
+  isSerialTool,
+  SERIAL_TOOL_NAMES,
+  partitionToolCallsForExecution,
+  fingerprintToolCall,
+  checkSpinGuard,
+  recordSpinOutcome,
+  buildSpinGuardTurnTail,
+  clearSpinGuardSession,
+  resetSpinGuardForTests,
+  SPIN_GUARD_LIMITS,
+  updateResearchChecklist,
+  buildChecklistTurnTail,
+  clearResearchChecklistSession,
+  resetResearchChecklistForTests,
+  seedChecklistOnSkillActivate,
+  getResearchChecklist,
+  resolveEffectiveResearchTier,
+  shouldEnterVerifyPhase,
+  resolveGatherToolChoice,
+  resolveVerifyToolChoice,
+  VERIFY_TURN_TAIL,
+  type ResearchChecklistItem,
+  type ToolCallLike,
+  type ToolExecutionBatch,
+  type SpinGuardBlock,
+} from './loop/index.js'
+export {
   UNATTENDED_ASK_USER_RESULT,
   UNATTENDED_BLOCKED_TOOL_NAMES,
   UNATTENDED_SECRET_RESULT,
@@ -327,9 +356,12 @@ export {
   autoOutputBudget,
   looksLikeReasoningModel,
   resolveRequestMaxTokens,
+  resolveBodyToolChoice,
   type LlmConfig,
   type LlmTurn,
   type LlmChatDelta,
+  type LlmChatOpts,
+  type LlmToolChoice,
 } from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'
 

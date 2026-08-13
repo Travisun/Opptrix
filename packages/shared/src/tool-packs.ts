@@ -157,6 +157,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   activate_tool_pack: 'meta',
   list_agent_skills: 'meta',
   activate_agent_skill: 'meta',
+  update_research_checklist: 'meta',
   get_agent_skill: 'meta',
   get_agent_skill_file: 'meta',
   create_agent_skill: 'meta',
