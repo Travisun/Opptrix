@@ -60,14 +60,43 @@
     "eslint-plugin-react": "^7.37.3",
     "eslint-plugin-react-hooks": "^5.1.0",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.2"
+    "typescript-eslint": "^8.67.0"
   },
   "dependencies": {
-    "apache-arrow": "^21.1.0"
+    "apache-arrow": "^21.1.0",
+    "sharp": "0.35.3"
   },
   "overrides": {
-    "tar": "^7.5.20",
-    "node-gyp": "^12.4.0"
+    "tar": "^7.5.22",
+    "node-gyp": "^12.4.0",
+    "find-my-way": "9.7.0",
+    "fast-uri@3": "3.1.5",
+    "fast-uri@4": "4.1.2",
+    "dompurify": "^3.4.13",
+    "hono": "^4.13.1",
+    "@hono/node-server": "^1.19.15",
+    "brace-expansion@1": "1.1.18",
+    "brace-expansion@2": "2.1.4",
+    "brace-expansion@4": "4.0.1",
+    "brace-expansion@5": "5.0.9",
+    "undici": "^7.29.0",
+    "js-yaml": "^4.3.1",
+    "ip-address": "^10.5.0",
+    "nanoid@3": "3.3.18",
+    "postcss": "^8.5.26",
+    "sharp": "$sharp",
+    "@gutenye/ocr-node": {
+      "sharp": "$sharp"
+    },
+    "@huggingface/transformers": {
+      "sharp": "$sharp"
+    },
+    "@lancedb/lancedb": {
+      "sharp": "$sharp",
+      "@huggingface/transformers": {
+        "sharp": "$sharp"
+      }
+    }
   },
   "allowScripts": {
     "better-sqlite3": true,
@@ -77,6 +106,7 @@
     "esbuild": true,
     "ffmpeg-static": true,
     "node-llama-cpp": true,
-    "fsevents": true
+    "fsevents": true,
+    "sharp": true
   }
 }

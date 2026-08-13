@@ -28,7 +28,7 @@
     "@opptrix/schedule": "*",
     "@opptrix/shared": "*",
     "@opptrix/user-store": "*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "pdf-parse": "^1.1.1"
   }
 }

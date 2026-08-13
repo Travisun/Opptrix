@@ -22,7 +22,7 @@
     "mcp": "npm run build -w @opptrix/agent && node ../../packages/agent/dist/mcp/stdio-entry.js"
   },
   "dependencies": {
-    "@fastify/static": "^10.1.0",
+    "@fastify/static": "^10.1.3",
     "@opptrix/agent-workspace": "*",
     "@opptrix/agent-skills": "*",
     "@opptrix/agent": "*",
@@ -37,13 +37,13 @@
     "@opptrix/schedule": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
-    "fastify": "^5.2.0",
+    "fastify": "^5.11.3",
     "ffmpeg-static": "^5.3.0",
     "node-llama-cpp": "^3.19.0",
     "nodejs-whisper": "^0.3.0"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2"
   }
 }
