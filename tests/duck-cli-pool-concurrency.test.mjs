@@ -1,5 +1,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 const ENV_KEYS = [
   'OPPTRIX_DUCK_READ_CONCURRENCY',
@@ -24,6 +27,8 @@ afterEach(async () => {
   }
   const { resetDuckCliPools } = await import('../packages/market-data/dist/duck/duck-cli-pool.js')
   await resetDuckCliPools()
+  const { resetDuckNeoReaders } = await import('../packages/market-data/dist/duck/duck-neo-reader.js')
+  await resetDuckNeoReaders()
 })
 
 describe('DuckCliPool read concurrency + boot warm', () => {
@@ -90,5 +95,50 @@ describe('DuckCliPool read concurrency + boot warm', () => {
     process.env.OPPTRIX_DUCK_WARM_ON_BOOT = '1'
     process.env.OPPTRIX_SQLITE_MEM_PROFILE = 'low'
     assert.equal(shouldWarmDuckReadCachesOnBoot(), true)
+  })
+
+  it('DuckNeoReader bootstrap locks same resolveDuckReadConcurrency (low → 1)', async () => {
+    process.env.OPPTRIX_SQLITE_MEM_PROFILE = 'low'
+    const { DuckDBInstance } = await import('@duckdb/node-api')
+    const {
+      resolveDuckReadConcurrency,
+      DuckCliPool,
+    } = await import('../packages/market-data/dist/duck/duck-cli-pool.js')
+    const {
+      getDuckNeoReader,
+      peekDuckNeoReaderConcurrency,
+    } = await import('../packages/market-data/dist/duck/duck-neo-reader.js')
+
+    assert.equal(resolveDuckReadConcurrency(), 1)
+    const pool = new DuckCliPool('neo-align-low')
+    assert.equal(pool.readConcurrency, 1)
+
+    const tmp = path.join(os.tmpdir(), `opptrix-neo-conc-${process.pid}-${Date.now()}.duckdb`)
+    const created = await DuckDBInstance.create(tmp)
+    created.closeSync()
+    try {
+      await getDuckNeoReader(tmp).queryAll('SELECT 1 AS x')
+      assert.equal(peekDuckNeoReaderConcurrency(tmp), 1)
+    } finally {
+      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
+      try { fs.unlinkSync(`${tmp}.wal`) } catch { /* ignore */ }
+    }
+    await pool.close()
+  })
+})
+
+describe('marketStats merged SQL + field keys', () => {
+  it('NEO_MARKET_STATS_KEYS covers NeoMarketDuckStats / EMPTY shape', async () => {
+    const {
+      NEO_MARKET_STATS_KEYS,
+      buildMarketStatsSql,
+    } = await import('../packages/market-data/dist/duck/duck-neo-reader.js')
+    assert.equal(NEO_MARKET_STATS_KEYS.length, 22)
+    const sql = buildMarketStatsSql('cn_daily_bars')
+    for (const key of NEO_MARKET_STATS_KEYS) {
+      assert.match(sql, new RegExp(`\\bAS\\s+${key}\\b`), `missing alias AS ${key}`)
+    }
+    assert.match(sql, /SELECT[\s\S]*\(SELECT COUNT\(\*\)::BIGINT FROM stocks\) AS stocks/)
+    assert.doesNotMatch(sql, /await q\(/)
   })
 })

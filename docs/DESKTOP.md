@@ -98,7 +98,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 **Sidecar 守护（生产包，兜底）**：主进程在常驻启动成功后监督自有 sidecar（非开发、非 `reuse` 端口）。子进程意外退出时按指数退避（1s→2s→…→30s）自动拉起并重新做 health；另有约 20s 健康巡检，发现「进程在但端口无响应」或进程已消失时同样重启（与 exit 路径共用单飞锁，避免双启）。用户退出、更新安装或短命 tick 退出前会停止守护，并对 sidecar 给予 ≥8.5s 软关闭窗口（对齐 server 内原生 Duck/Lance/ONNX 关闭），再 SIGKILL，减轻 macOS「意外退出」类崩溃框。`before-quit`（含 Cmd+Q）在 sidecar 未就绪退出前会 `preventDefault` 并等待宽限关闭。
 
-> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯（`source_type=news`）不再写入 Lance**（仅 SQLite + FTS）；研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后由 `embedPendingDocuments`（已排除 news）/ 下次研报 embed 回填（可接受短暂回填窗口）。
+> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯（`source_type=news`）不再写入 Lance**（仅 SQLite + FTS）；统一搜索首次 `ensureIndexes` 按页灌入 FTS、不驻留全量文章对象。研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后由 `embedPendingDocuments`（已排除 news）/ 下次研报 embed 回填（可接受短暂回填窗口）。
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 

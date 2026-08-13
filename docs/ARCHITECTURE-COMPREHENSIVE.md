@@ -220,6 +220,8 @@ CREATE VIRTUAL TABLE fts_news USING fts5(
 );
 ```
 
+`SearchHub.ensureIndexes` 首次建索引时按页投影/iterate → upsert（不驻留全量 `articles[]` / `allSessions[]`）；`search_index_v1` 已置位则跳过。
+
 **文档操作 API**：
 
 ```typescript

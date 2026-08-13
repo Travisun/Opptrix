@@ -16,24 +16,61 @@ import {
   createSdkConnection,
   parseToolResult,
   toOpenAiTool,
+  type ExternalToolDef,
   type SdkConnection,
 } from './connection.js'
 import { ExternalMcpHealth } from './health.js'
+import { mapPool, resolveMcpHydrateConcurrency } from './pool.js'
 
 export interface BindingCandidate {
   serverId: string
   remoteTool: string
 }
 
+type ListedMcpTool = {
+  name: string
+  description?: string
+  inputSchema?: unknown
+}
+
 export class ExternalMcpRegistry {
   private connections = new Map<string, SdkConnection>()
   private toolCounts = new Map<string, number>()
   private toolNames = new Map<string, Set<string>>()
+  /** hydrate / 连接时缓存的 tools schema，供 listNamespacedOpenAiTools 避免每轮 listTools RPC */
+  private toolSchemas = new Map<string, ExternalToolDef[]>()
   readonly health = new ExternalMcpHealth()
   private hydratePromise: Promise<void> | null = null
 
   private get repo() {
     return getUserDataStore().mcpServers
+  }
+
+  private clearServerCaches(id: string): void {
+    this.toolCounts.delete(id)
+    this.toolNames.delete(id)
+    this.toolSchemas.delete(id)
+  }
+
+  private dropConnection(id: string): void {
+    this.connections.delete(id)
+    this.clearServerCaches(id)
+  }
+
+  private cacheTools(serverId: string, tools: ListedMcpTool[]): void {
+    const defs: ExternalToolDef[] = tools.map(t => ({
+      name: t.name,
+      description: t.description ?? '',
+      inputSchema: (t.inputSchema ?? { type: 'object', properties: {} }) as JsonSchema,
+    }))
+    this.toolCounts.set(serverId, defs.length)
+    this.toolNames.set(serverId, new Set(defs.map(t => t.name)))
+    this.toolSchemas.set(serverId, defs)
+  }
+
+  private async refreshToolSchemas(serverId: string, conn: SdkConnection): Promise<void> {
+    const { tools } = await conn.client.listTools()
+    this.cacheTools(serverId, tools)
   }
 
   listRecords(): McpServerRecord[] {
@@ -60,12 +97,23 @@ export class ExternalMcpRegistry {
     for (const id of [...this.connections.keys()]) {
       if (!want.has(id)) {
         await this.connections.get(id)?.client.close().catch(() => {})
-        this.connections.delete(id)
-        this.toolCounts.delete(id)
-        this.toolNames.delete(id)
+        this.dropConnection(id)
       }
     }
-    await Promise.all(rows.map(row => this.ensureConnected(row)))
+    const concurrency = resolveMcpHydrateConcurrency()
+    await mapPool(rows, concurrency, 0, async (row) => {
+      const reused = this.connections.has(row.id)
+      const conn = await this.ensureConnected(row)
+      if (!conn) return
+      // 复用连接时仍刷新 schema（新连接已在 ensureConnected 内 listTools + 缓存）
+      if (reused && this.connections.get(row.id) === conn) {
+        try {
+          await this.refreshToolSchemas(row.id, conn)
+        } catch (e) {
+          this.health.recordFailure(row.id, e)
+        }
+      }
+    })
   }
 
   private async ensureConnected(row: McpServerRecord): Promise<SdkConnection | null> {
@@ -77,9 +125,7 @@ export class ExternalMcpRegistry {
         && JSON.stringify(prev.secrets) === JSON.stringify(row.secrets)
       if (same) return entry
       await entry.client.close().catch(() => {})
-      this.connections.delete(row.id)
-      this.toolCounts.delete(row.id)
-      this.toolNames.delete(row.id)
+      this.dropConnection(row.id)
     }
     const conn = createSdkConnection(row)
     try {
@@ -87,8 +133,7 @@ export class ExternalMcpRegistry {
       this.connections.set(row.id, conn)
       this.health.recordSuccess(row.id)
       const { tools } = await conn.client.listTools()
-      this.toolCounts.set(row.id, tools.length)
-      this.toolNames.set(row.id, new Set(tools.map(t => t.name)))
+      this.cacheTools(row.id, tools)
       const cur = this.repo.get(row.id)
       if (cur) {
         getUserDataStore().setDocument('mcp_servers', row.id, {
@@ -111,6 +156,7 @@ export class ExternalMcpRegistry {
         })
       }
       await conn.client.close().catch(() => {})
+      this.dropConnection(row.id)
       return null
     }
   }
@@ -130,9 +176,7 @@ export class ExternalMcpRegistry {
     const row = this.repo.save(id, patch)
     if (!row.enabled || row.paused) {
       void this.connections.get(id)?.client.close().then(() => {
-        this.connections.delete(id)
-        this.toolCounts.delete(id)
-        this.toolNames.delete(id)
+        this.dropConnection(id)
       })
       this.health.reset(id)
     }
@@ -141,9 +185,7 @@ export class ExternalMcpRegistry {
 
   delete(id: string): boolean {
     void this.connections.get(id)?.client.close()
-    this.connections.delete(id)
-    this.toolCounts.delete(id)
-    this.toolNames.delete(id)
+    this.dropConnection(id)
     this.health.reset(id)
     return this.repo.delete(id)
   }
@@ -152,7 +194,10 @@ export class ExternalMcpRegistry {
     return this.repo.reorder(ids)
   }
 
-  /** 已启用且健康的服务器上的 namespaced 独有工具（未出现在 bindings 值中的） */
+  /**
+   * 已启用且健康的服务器上的 namespaced 独有工具（未出现在 bindings 值中的）。
+   * 优先读 hydrate 缓存的 tools schema，仅缓存未命中时才 listTools RPC。
+   */
   async listNamespacedOpenAiTools(): Promise<OpenAiTool[]> {
     const out: OpenAiTool[] = []
     const rows = this.repo.listAll()
@@ -164,16 +209,15 @@ export class ExternalMcpRegistry {
       const conn = this.connections.get(row.id)
       if (!conn) continue
       const boundRemotes = new Set(Object.values(row.capabilityBindings))
-      const { tools } = await conn.client.listTools()
+      let tools = this.toolSchemas.get(row.id)
+      if (!tools) {
+        const listed = await conn.client.listTools()
+        this.cacheTools(row.id, listed.tools)
+        tools = this.toolSchemas.get(row.id) ?? []
+      }
       for (const t of tools) {
         if (boundRemotes.has(t.name)) continue
-        out.push(toOpenAiTool(
-          row.id,
-          t.name,
-          t.description ?? '',
-          (t.inputSchema ?? { type: 'object', properties: {} }) as JsonSchema,
-          true,
-        ))
+        out.push(toOpenAiTool(row.id, t.name, t.description, t.inputSchema, true))
       }
     }
     return out
@@ -489,6 +533,37 @@ export class ExternalMcpRegistry {
     this.connections.clear()
     this.toolCounts.clear()
     this.toolNames.clear()
+    this.toolSchemas.clear()
+  }
+
+  /**
+   * 测试钩子：注入已连接 server + schema 缓存（不走真实 transport）。
+   * @internal
+   */
+  seedConnectedServerForTest(
+    serverId: string,
+    tools: ExternalToolDef[],
+    listToolsFn?: () => Promise<{ tools: ListedMcpTool[] }>,
+  ): { listToolsCalls: () => number } {
+    let listToolsCalls = 0
+    const client = {
+      listTools: async () => {
+        listToolsCalls++
+        if (listToolsFn) return listToolsFn()
+        return {
+          tools: tools.map(t => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          })),
+        }
+      },
+      close: async () => {},
+    }
+    this.connections.set(serverId, { client, transport: {} } as unknown as SdkConnection)
+    this.cacheTools(serverId, tools)
+    this.health.recordSuccess(serverId)
+    return { listToolsCalls: () => listToolsCalls }
   }
 }
 

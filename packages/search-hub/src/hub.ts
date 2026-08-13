@@ -1,7 +1,6 @@
 import type { ResearchHub } from '@opptrix/research-hub'
-import type { SessionMeta, SessionRecord } from '@opptrix/agent'
+import type { SessionMeta } from '@opptrix/agent'
 import { SessionStore } from '@opptrix/agent'
-import { getEnrichmentStore } from '@opptrix/article-enrichment'
 import { NewsFeedStore } from '@opptrix/news-feed'
 import { getUserDataStore } from '@opptrix/user-store'
 import { buildInstrumentNamespace, inferCnAssetClassFromSymbol } from '@opptrix/shared'
@@ -59,26 +58,13 @@ export class SearchHub {
     const store = getUserDataStore()
     if (store.getMetaFlag(INDEX_FLAG)) return
 
-    // TODO(phase-B): 增量 FTS 重建；失效 INDEX_FLAG 时避免 clear+全量拉齐。
-    // 当前用分页 helper 装载 session，降低单次 SQL .all 峰值；仍会在内存中聚合后 rebuild。
-    const allSessions: SessionRecord[] = []
-    for (const page of store.iterateDocumentPages<SessionRecord>('session', 100)) {
-      for (const row of page) allSessions.push(row.data)
-    }
-    rebuildSessionSearchIndex(allSessions)
+    // 一次性重建：按页读 → upsert → 丢弃页；不驻留 allSessions[] / articles[] / enrichmentMap。
+    // INDEX_FLAG 已建则跳过；增量失效策略另议。
+    rebuildSessionSearchIndex()
 
-    const newsStore = new NewsFeedStore()
-    const articleIds = newsStore.listArticleIds()
-    const articles = articleIds
-      .map(id => newsStore.getArticle(id))
-      .filter((a): a is NonNullable<typeof a> => Boolean(a))
-    const enrichmentStore = getEnrichmentStore()
-    const enrichmentMap = new Map<string, import('@opptrix/news-feed').ArticleEnrichment>()
-    for (const id of articleIds) {
-      const doc = enrichmentStore.get(id)
-      if (doc) enrichmentMap.set(id, doc)
-    }
-    rebuildNewsSearchIndex(articles, enrichmentMap)
+    // 先跑资讯迁移（legacy news_cache → news_article），再按页投影灌 FTS。
+    new NewsFeedStore().listArticleIds()
+    rebuildNewsSearchIndex()
 
     store.setMetaFlag(INDEX_FLAG)
   }

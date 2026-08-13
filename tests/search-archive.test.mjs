@@ -112,4 +112,86 @@ test('FTS indexes and searches session content', async () => {
 
   store.close()
 })
+
+test('ensureIndexes pages session/news into FTS without holding full article arrays', async () => {
+  // 独立临时库，避免本 suite 前序 close()/FTS 手工灌入干扰 INDEX_FLAG 与检索。
+  const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-ensure-idx-'))
+  const prevDataDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = isolatedDir
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+    const { SearchHub } = await import('../packages/search-hub/dist/hub.js')
+    const { getEnrichmentStore } = await import('../packages/article-enrichment/dist/index.js')
+
+    // 若前序用例关过 singleton，这里重新打开到 isolatedDir
+    try {
+      getUserDataStore().close()
+    } catch {
+      /* already closed */
+    }
+
+    const store = getUserDataStore()
+    const sessions = new SessionStore()
+    const sess = sessions.create('ensure index session')
+    const record = sessions.get(sess.id)
+    assert.ok(record)
+    record.turns.push({
+      role: 'user',
+      content: 'talk about TOKENBYD session body',
+      at: new Date().toISOString(),
+    })
+    sessions.save(record)
+
+    const articleId = 'news-fts-1'
+    store.setDocument('news_article', articleId, {
+      id: articleId,
+      subscription_id: 'sub-1',
+      title: 'TOKENNEWTITLE weekly',
+      link: 'https://example.com/a1',
+      pub_date: new Date().toISOString(),
+      summary: 'summary mentions TOKENSUMMARY',
+      content_html: '<p>body keyword <strong>TOKENLFP</strong> production</p>',
+      source_title: 'TestSource',
+    })
+    getEnrichmentStore().save({
+      article_id: articleId,
+      status: 'ready',
+      segments: [
+        {
+          id: 'seg-1',
+          kind: 'html_text',
+          text: 'enrichment TOKENSOLIDSTATE materials',
+          anchor: { insert: 'append_block' },
+          created_at: new Date().toISOString(),
+        },
+      ],
+      updated_at: new Date().toISOString(),
+      version: 1,
+    })
+
+    const stubHub = {
+      marketData: { searchStocks: () => [] },
+    }
+    const hub = new SearchHub(/** @type {any} */ (stubHub), sessions)
+    hub.ensureIndexes()
+
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+
+    const result = hub.search('TOKENBYD', 10)
+    assert.ok(result.sessions.some(h => h.id === sess.id))
+
+    assert.ok(hub.search('TOKENNEWTITLE', 10).news.some(h => h.id === articleId))
+    assert.ok(hub.search('TOKENLFP', 10).news.some(h => h.id === articleId))
+    assert.ok(hub.search('TOKENSOLIDSTATE', 10).news.some(h => h.id === articleId))
+
+    hub.ensureIndexes()
+    assert.ok(hub.search('TOKENLFP', 5).news.some(h => h.id === articleId))
+
+    store.close()
+  } finally {
+    process.env.OPPTRIX_DATA_DIR = prevDataDir
+    await rm(isolatedDir, { recursive: true, force: true })
+  }
+})
 })
