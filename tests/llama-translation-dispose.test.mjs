@@ -250,18 +250,37 @@ describe('translation-service dispose + idle + on-demand', () => {
   })
 
   it('download success path source does not auto-preload', () => {
-    const src = fs.readFileSync(
+    const serviceSrc = fs.readFileSync(
       path.join(repoRoot, 'apps/desktop/electron/translation-service.cjs'),
       'utf8',
     )
-    const match = src.match(
-      /async function startTranslationModelDownload\([\s\S]*?\n\}/,
+    const downloadSrc = fs.readFileSync(
+      path.join(repoRoot, 'apps/desktop/electron/translation-download.cjs'),
+      'utf8',
     )
-    assert.ok(match, 'startTranslationModelDownload not found')
+    // IPC 入口已改为同步 ack（startTranslationModelDownload → startTranslationModelDownloadAck）
+    const serviceMatch = serviceSrc.match(
+      /function startTranslationModelDownload\([\s\S]*?\n\}/,
+    )
+    assert.ok(serviceMatch, 'startTranslationModelDownload not found')
     assert.equal(
-      /preloadTranslationModel/.test(match[0]),
+      /preloadTranslationModel/.test(serviceMatch[0]),
       false,
-      'download complete must not auto-preload',
+      'download IPC entry must not auto-preload',
+    )
+    const ackMatch = downloadSrc.match(
+      /function startTranslationModelDownloadAck\([\s\S]*?\n\}/,
+    )
+    assert.ok(ackMatch, 'startTranslationModelDownloadAck not found')
+    assert.equal(
+      /preloadTranslationModel/.test(ackMatch[0]),
+      false,
+      'download ack path must not auto-preload',
+    )
+    assert.equal(
+      /preloadTranslationModel/.test(downloadSrc),
+      false,
+      'translation-download must not reference preloadTranslationModel',
     )
   })
 
