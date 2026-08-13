@@ -487,6 +487,7 @@ open /Applications/Opptrix.app
 ### Windows
 
 - 使用 NSIS 安装器（`oneClick: false`，允许用户选择安装目录）。
+- `runAfterFinish: false`：安装完成后不显示「启动应用」勾选，安装器直接结束；用户从桌面/开始菜单快捷方式自行启动（与应用内更新后的 `quitAndInstall` 自动 relaunch 无关）。
 - 建议配置 Authenticode 签名，减少 SmartScreen 警告。
 
 ### Linux

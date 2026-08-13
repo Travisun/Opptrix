@@ -378,6 +378,11 @@ console.log('audit-desktop-pack: start')
     } else {
       ok('build.nsis installer/uninstaller icons wired')
     }
+    if (nsisCfg?.runAfterFinish !== false) {
+      fail('build.nsis.runAfterFinish must be false (no finish-page Run checkbox; user starts via shortcut)')
+    } else {
+      ok('build.nsis.runAfterFinish is false')
+    }
     const prepareIconsSrc = read('scripts/prepare-icons.mjs')
     if (!prepareIconsSrc.includes('createNsisIcons') || !prepareIconsSrc.includes('installerIcon.ico')) {
       fail('prepare-icons.mjs must generate installerIcon.ico / uninstallerIcon.ico from icons/nsis')

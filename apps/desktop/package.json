@@ -186,6 +186,7 @@
       "shortcutName": "Opptrix",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": false,
       "installerIcon": "build/icons/installerIcon.ico",
       "uninstallerIcon": "build/icons/uninstallerIcon.ico",
       "installerHeaderIcon": "build/icons/installerIcon.ico",
