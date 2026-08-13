@@ -12,7 +12,6 @@ import {
 import {
   ChevronDownRegular,
   ChevronRightRegular,
-  LightbulbFilamentRegular,
   SparkleRegular,
   DocumentSearchRegular,
   CopyRegular,
@@ -650,7 +649,8 @@ interface ReasoningTimelineProps {
   active: boolean
 }
 
-/** 思考竖轴 — 复用 step 视觉；多段显示「第 N 段思路」，单段省略段标题 */
+/** 思考竖轴 — 复用 step 视觉；多段显示「第 N 段思路」，单段省略段标题。
+ * live 时不另起 spinner 行：状态由外层 ChatProcessTrace 状态头统一承载，避免双 spinner。 */
 function ReasoningTimeline({ segments, active }: ReasoningTimelineProps) {
   const s = useStyles()
   const bodyScrollRef = useRef<HTMLDivElement>(null)
@@ -666,20 +666,10 @@ function ReasoningTimeline({ segments, active }: ReasoningTimelineProps) {
 
   return (
     <div className={s.stepRow}>
-      {active && (
-        <div className={s.stepHead} aria-disabled>
-          <span className={s.stepIcon} aria-hidden>
-            <ThinkingDots className={s.runningDots} label="" />
-          </span>
-          <LightbulbFilamentRegular className={s.leadIcon} aria-hidden />
-          <Text className={mergeClasses(s.stepLabel, s.stepLabelRunning)} block>
-            正在梳理思路…
-          </Text>
-        </div>
-      )}
       <div
         ref={bodyScrollRef}
         className={mergeClasses(s.detailBlock, 'opptrix-scroll')}
+        aria-label={active ? '正在梳理思路' : undefined}
       >
         <div className={s.timeline}>
           {segments.map((seg, index) => {
@@ -755,11 +745,9 @@ export default function ChatProcessTrace({
   const statusLabel = live
     ? (formatLiveThinkingStatus(phaseLabel, estimatedTokens, steps.length) ?? thinkingLabel)
     : thinkingLabel
-  const phaseHint = phaseLabel ?? thinkingLabel ?? ''
-  const snippetActive = modelThinking && /思路|思考|梳理/.test(phaseHint)
   const hasThinking = segments.length > 0
-  const hideStatusForSnippet = snippetActive && hasThinking
-  const showStatusHead = Boolean(statusLabel && (live || hasThinking)) && !hideStatusForSnippet
+  // live 时始终保留外层状态头（唯一 spinner）；思路正文不再重复「正在梳理思路」行
+  const showStatusHead = Boolean(statusLabel && (live || hasThinking))
   const showLiveSnippet = live && hasThinking
   const showHistorySnippet = hasThinking && !live
   const lastSegLen = segments[segments.length - 1]?.content.length ?? 0
