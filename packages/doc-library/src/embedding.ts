@@ -1,5 +1,6 @@
 /**
  * multilingual-e5-small embedding：e5 惯例前缀 query: / passage:；未安装则 isReady=false。
+ * 成功 embed 后按空闲超时卸下内存中的模型（磁盘「已安装」保留），下次检索可再 ensureLoaded。
  */
 import path from 'node:path'
 import { EMBEDDING_DIM, EMBEDDING_MODEL_ID } from './paths.js'
@@ -17,6 +18,17 @@ type FeaturePipeline = (
   text: string | string[],
   opts: { pooling: 'mean'; normalize: boolean },
 ) => Promise<{ data: Float32Array | number[] }>
+
+/** 默认 12 分钟；`OPPTRIX_EMBED_IDLE_MS=0` 关闭空闲卸载 */
+export const DEFAULT_EMBED_IDLE_MS = 12 * 60 * 1000
+
+export function resolveEmbedIdleMs(): number {
+  const raw = process.env.OPPTRIX_EMBED_IDLE_MS
+  if (raw == null || raw === '') return DEFAULT_EMBED_IDLE_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_EMBED_IDLE_MS
+  return n
+}
 
 function asNumberVector(data: Float32Array | number[], dim: number): number[] {
   const arr = Array.isArray(data) ? data : Array.from(data)
@@ -49,6 +61,10 @@ export class MockEmbeddingBackend implements EmbeddingBackend {
 
   async embedPassages(texts: string[]): Promise<number[][]> {
     return texts.map(t => this.hashEmbed(`passage: ${t}`))
+  }
+
+  async dispose(): Promise<void> {
+    this.ready = false
   }
 
   /** 确定性伪向量：保证同文同量、维数正确 */
@@ -132,6 +148,7 @@ export class TransformersE5Backend implements EmbeddingBackend {
     return results
   }
 
+  /** 卸下内存中的 pipeline；磁盘模型仍视为已安装，下次 ensureLoaded 可再加载 */
   async dispose(): Promise<void> {
     this.pipe = null
   }
@@ -139,12 +156,17 @@ export class TransformersE5Backend implements EmbeddingBackend {
 
 export class EmbeddingService {
   private backend: EmbeddingBackend | null
+  private lastUsedAt = 0
+  private idleTimer: ReturnType<typeof setTimeout> | null = null
+  /** 空闲卸载进行中，避免并发 dispose */
+  private idleUnloadPromise: Promise<void> | null = null
 
   constructor(backend: EmbeddingBackend | null = null) {
     this.backend = backend
   }
 
   setBackend(backend: EmbeddingBackend | null): void {
+    this.clearIdleTimer()
     this.backend = backend
   }
 
@@ -156,9 +178,23 @@ export class EmbeddingService {
     return this.backend?.isReady() ?? false
   }
 
-  /** 尝试加载默认后端（优先安装包内置）；失败不抛，返回 false */
+  getLastUsedAt(): number {
+    return this.lastUsedAt
+  }
+
+  /**
+   * 尝试加载默认后端（优先安装包内置）；失败不抛，返回 false。
+   * 空闲卸载后 backend=null，可再次 enable；显式注入的 Mock 仍不自动升格。
+   * TransformersE5Backend 在 pipe 已卸但实例仍挂着时，允许再 ensureLoaded。
+   */
   async tryEnableDefaultBackend(): Promise<boolean> {
     if (this.backend?.isReady()) return true
+    // 空闲卸 pipe 后实例仍在：允许再加载，避免 isReady=false 且 if (backend) return false 卡住
+    if (this.backend instanceof TransformersE5Backend) {
+      const ok = await this.backend.ensureLoaded()
+      if (ok) this.touchLastUsed()
+      return ok
+    }
     // 已显式注入后端（含「未就绪」假后端）时不自动升格，避免测试/关闭语义检索时仍加载本机模型
     if (this.backend) return false
     if (!isEmbeddingModelInstalled()) return false
@@ -167,6 +203,7 @@ export class EmbeddingService {
     const ok = await backend.ensureLoaded()
     if (!ok) return false
     this.backend = backend
+    this.touchLastUsed()
     return true
   }
 
@@ -176,7 +213,9 @@ export class EmbeddingService {
       if (!enabled || !this.backend) return null
     }
     try {
-      return await this.backend.embedQuery(text)
+      const vec = await this.backend.embedQuery(text)
+      this.touchLastUsed()
+      return vec
     } catch {
       return null
     }
@@ -189,14 +228,20 @@ export class EmbeddingService {
       if (!enabled || !this.backend) return null
     }
     try {
-      return await this.backend.embedPassages(texts)
+      const vecs = await this.backend.embedPassages(texts)
+      this.touchLastUsed()
+      return vecs
     } catch {
       return null
     }
   }
 
-  /** 释放后端（onnx / transformers）；失败不抛 */
-  async dispose(): Promise<void> {
+  /**
+   * 空闲卸载：dispose 当前后端并 setBackend(null)，下次 tryEnable / embed 可再加载。
+   * 注入的 Mock 亦会卸下；测试可再 setBackend，或依赖 tryEnableDefaultBackend。
+   */
+  async releaseLoadedModel(): Promise<void> {
+    this.clearIdleTimer()
     const backend = this.backend
     this.backend = null
     if (!backend?.dispose) return
@@ -204,6 +249,65 @@ export class EmbeddingService {
       await backend.dispose()
     } catch {
       /* ignore teardown races */
+    }
+  }
+
+  /** 释放后端（onnx / transformers）并取消空闲定时器；失败不抛 */
+  async dispose(): Promise<void> {
+    this.clearIdleTimer()
+    const pending = this.idleUnloadPromise
+    this.idleUnloadPromise = null
+    if (pending) {
+      try {
+        await pending
+      } catch {
+        /* ignore */
+      }
+    }
+    const backend = this.backend
+    this.backend = null
+    if (!backend?.dispose) return
+    try {
+      await backend.dispose()
+    } catch {
+      /* ignore teardown races */
+    }
+  }
+
+  private touchLastUsed(): void {
+    this.lastUsedAt = Date.now()
+    this.scheduleIdleUnload()
+  }
+
+  private scheduleIdleUnload(): void {
+    this.clearIdleTimer()
+    const idleMs = resolveEmbedIdleMs()
+    if (idleMs <= 0) return
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null
+      void this.runIdleUnload()
+    }, idleMs)
+    // 不阻塞进程退出
+    if (typeof this.idleTimer === 'object' && this.idleTimer && 'unref' in this.idleTimer) {
+      this.idleTimer.unref()
+    }
+  }
+
+  private async runIdleUnload(): Promise<void> {
+    if (this.idleUnloadPromise) {
+      await this.idleUnloadPromise
+      return
+    }
+    this.idleUnloadPromise = this.releaseLoadedModel().finally(() => {
+      this.idleUnloadPromise = null
+    })
+    await this.idleUnloadPromise
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer)
+      this.idleTimer = null
     }
   }
 }

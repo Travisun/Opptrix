@@ -43,4 +43,11 @@ export {
   type CreateScheduledJobInput,
   type UpdateScheduledJobInput,
 } from './schedule.js'
-export { UserDataStore, getUserDataStore } from './store.js'
+export {
+  UserDataStore,
+  getUserDataStore,
+  type DocumentPageCursor,
+  type ListDocumentPageOpts,
+  type DocumentPageRow,
+  type DocumentExtractPageRow,
+} from './store.js'

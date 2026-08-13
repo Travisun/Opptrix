@@ -46,7 +46,7 @@
 
 | 组件 | 路径 | 职责 |
 |------|------|------|
-| `AshareEngine` | `packages/a-stock-layer/src/engine.ts` | 统一 facade；按 Capability 在 driver 间回退；内置 cache |
+| `AshareEngine` | `packages/a-stock-layer/src/engine.ts` | 统一 facade；按 Capability 在 driver 间回退；内置 cache（`queryScoped` / QueryPlan K 线：**读**可走缓存，**写**仅 watchlist，与关注列表 TTL 对齐，避免任意标的长 K 堆积） |
 | `BaseDriver` | `packages/a-stock-layer/src/providers/common/base.ts` | 数据源抽象；可选方法 + `capabilities()` |
 | `DriverRegistry` | `packages/a-stock-layer/src/core/registry.ts` | Capability → 按 priority 排序的 driver 列表 |
 | `Capability` | `packages/a-stock-layer/src/core/capabilities.ts` | 56 个数据维度枚举 |
@@ -59,6 +59,8 @@
 2. **优先级回退链**：`DriverRegistry.getDriversForCapability()` + Engine 循环尝试，生产环境已验证。
 3. **Provider 粒度合理**：东财、Tushare、TDX 等各占一个 module，职责清晰。
 4. **QueryResult 统一响应**：`success / data / source / cached / error` 便于上层与 Agent 消费。
+
+**热缓存（`Cache`，`@opptrix/market-data-core`）**：内存 LRU 有界（默认约 1200 条 / 粗估 80MB，可用 `OPPTRIX_CACHE_MAX_ENTRIES`、`OPPTRIX_CACHE_MAX_BYTES` 覆盖）；`set*` 经 debounce（约 1.5s）落盘为紧凑 JSON，`clear*` 立即 flush；单条过大仅留内存、不写入 `cache.json`；TTL=0 仍不缓存。淘汰后调用方走网络重拉，命中时返回完整 `data`。
 
 ### 2.3 主要瓶颈（多市场前必须解决）
 
@@ -791,6 +793,8 @@ class ProviderCatalogService {
 | **`documents` JSON blob（现 Tushare 方式）** | ⚠️ 过渡 | Phase 0 可兼容；迁移后 secrets 仍可在同行 `extra_json` |
 | **`@opptrix/market-data` SQLite** | ❌ **不要** | 行情/因子库；导入 `.opmd` 会覆盖，且与「用户路由偏好」域不符 |
 
+大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。
+
 **一句话**：在 **`opptrix.db` 新建 `provider_settings` 表**（+ 可选 binding 子表），**不要**放进 market-data 的 `stocks` 库，也**不要**把 enable/priority 写进 Provider 代码或 manifest。
 
 #### 7.7.2 配置分层（代码 vs 用户）
@@ -1146,6 +1150,7 @@ flowchart LR
 2. **单标的实时/分时** → 直查 Online Engine，可选短 TTL cache。
 3. **筛选/发现/雷达** → 优先 Local Store，降低源站压力（现有设计正确）。
 4. **多市场 Store**：Phase 2 起可按 `market` 分库或单库分表；首阶段 ETF 与 EQUITY 共库。
+5. **SQLite 内存档位**：开库统一走 `@opptrix/shared` 的 `applySqliteMemoryPragmas`（`cache_size` / `mmap_size` / `temp_store`）；可用 `OPPTRIX_SQLITE_MEM_PROFILE=low|medium|high` 强制，默认按 `os.totalmem()` 粗分。WAL / `busy_timeout` 仍由各 Store 自行设置。
 
 ---
 

@@ -411,6 +411,69 @@ describe('doc-library hybrid without graph', () => {
     fs.rmSync(dir, { recursive: true, force: true })
     delete process.env.OPPTRIX_DATA_DIR
   })
+
+  it('listLibraryDocumentIds pages and excludes news among many ids', async () => {
+    const {
+      openDocLibraryDb,
+      listLibraryDocumentIds,
+      iterateLibraryDocumentIdPages,
+      LIBRARY_DOCUMENT_ID_PAGE_SIZE,
+    } = await import('../packages/doc-library/dist/index.js')
+    const dir = tmpDir()
+    process.env.OPPTRIX_DATA_DIR = dir
+    const dbPath = path.join(dir, 'doc-library', 'hybrid-page-ids.db')
+    const db = openDocLibraryDb(dbPath)
+    const now = new Date().toISOString()
+    const reportN = LIBRARY_DOCUMENT_ID_PAGE_SIZE + 40
+    for (let i = 0; i < reportN; i++) {
+      const id = `pg-r-${String(i).padStart(4, '0')}`
+      db.prepare(`
+        INSERT INTO documents(
+          id, content_sha256, name, mime, kind, byte_size, blob_path,
+          source_type, external_id, created_at, updated_at
+        ) VALUES (?, ?, ?, 'text/plain', 'text', 10, '/t', 'report', NULL, ?, ?)
+      `).run(id, `sha-${id}`, `${id}.txt`, now, now)
+      db.prepare(`
+        INSERT INTO parse_artifacts(
+          document_id, engine_id, engine_version, status, page_count, char_count, md_path, error, ready_at, parse_fingerprint
+        ) VALUES (?, 'text-l0', 't', 'ready', 1, 10, NULL, NULL, ?, NULL)
+      `).run(id, now)
+    }
+    for (let i = 0; i < 15; i++) {
+      const id = `pg-n-${String(i).padStart(4, '0')}`
+      db.prepare(`
+        INSERT INTO documents(
+          id, content_sha256, name, mime, kind, byte_size, blob_path,
+          source_type, external_id, created_at, updated_at
+        ) VALUES (?, ?, ?, 'text/plain', 'text', 10, '/t', 'news', NULL, ?, ?)
+      `).run(id, `sha-${id}`, `${id}.txt`, now, now)
+      db.prepare(`
+        INSERT INTO parse_artifacts(
+          document_id, engine_id, engine_version, status, page_count, char_count, md_path, error, ready_at, parse_fingerprint
+        ) VALUES (?, 'text-l0', 't', 'ready', 1, 10, NULL, NULL, ?, NULL)
+      `).run(id, now)
+    }
+
+    let pages = 0
+    let pageMax = 0
+    for (const page of iterateLibraryDocumentIdPages(db, undefined, 50)) {
+      pages += 1
+      pageMax = Math.max(pageMax, page.length)
+      assert.ok(page.every(id => !id.startsWith('pg-n-')), '分页预筛不得含 news')
+      assert.ok(page.length <= 50)
+    }
+    assert.ok(pages >= 2, '大量 id 应拆成多页')
+    assert.ok(pageMax <= 50)
+
+    const ids = listLibraryDocumentIds(db)
+    assert.equal(ids.length, reportN)
+    assert.ok(ids.every(id => id.startsWith('pg-r-')))
+    assert.equal(listLibraryDocumentIds(db, 'news').length, 0)
+
+    db.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+    delete process.env.OPPTRIX_DATA_DIR
+  })
 })
 
 describe('doc-library ingest + FTS + session filter', () => {

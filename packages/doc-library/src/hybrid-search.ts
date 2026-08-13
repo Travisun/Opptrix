@@ -2,8 +2,11 @@ import type Database from 'better-sqlite3'
 import { searchFtsChunks } from './fts.js'
 import { rrfFuse } from './rrf.js'
 import type { EmbeddingService } from './embedding.js'
-import type { VectorStore } from './vector-store.js'
+import type { VectorStore, VectorSearchHit } from './vector-store.js'
 import type { DocSearchScope, DocumentSourceType, FtsSearchHit } from './types.js'
+
+/** library 文档 id 分页大小 — 向量预筛按页聚合，避免一次加载全库 id */
+export const LIBRARY_DOCUMENT_ID_PAGE_SIZE = 256
 
 export interface HybridSearchChunksOpts {
   sessionId: string
@@ -59,16 +62,14 @@ export async function searchHybridChunks(
   } else if (scope === 'session') {
     documentIds = listSessionDocumentIds(db, opts.sessionId, opts.attachmentId)
     if (!documentIds.length) return ftsHits
-  } else if (scope === 'library') {
-    // library + 可选 source_type：预筛 documentIds，避免全表向量扫
-    documentIds = listLibraryDocumentIds(db, opts.sourceType)
-    if (!documentIds.length) return ftsHits
   }
 
-  const vectorHits = await opts.vectorStore.search(queryVec, {
-    documentIds,
-    limit,
-  })
+  const vectorHits = scope === 'library' && !opts.documentId
+    ? await searchLibraryVectorsPaged(db, queryVec, opts.vectorStore, limit, opts.sourceType)
+    : await opts.vectorStore.search(queryVec, {
+      documentIds,
+      limit,
+    })
 
   if (!vectorHits.length) {
     return ftsHits
@@ -124,31 +125,126 @@ function listSessionDocumentIds(
 }
 
 /** library 范围：ready 文档；可选按 source_type 预筛；向量路径排除 news */
-function listLibraryDocumentIds(
+export function listLibraryDocumentIds(
   db: Database.Database,
   sourceType?: DocumentSourceType,
 ): string[] {
-  if (sourceType === 'news') {
-    return []
+  const out: string[] = []
+  for (const page of iterateLibraryDocumentIdPages(db, sourceType)) {
+    out.push(...page)
   }
+  return out
+}
+
+/**
+ * 分页列举 library ready 文档 id（排除 news，除非显式 sourceType）。
+ * 供向量预筛按页聚合，避免无界数组。
+ */
+export function* iterateLibraryDocumentIdPages(
+  db: Database.Database,
+  sourceType?: DocumentSourceType,
+  pageSize = LIBRARY_DOCUMENT_ID_PAGE_SIZE,
+): Generator<string[]> {
+  if (sourceType === 'news') return
+
+  const limit = Math.min(Math.max(pageSize, 1), 2000)
+  let afterId: string | undefined
+
+  for (;;) {
+    const page = listLibraryDocumentIdPage(db, { sourceType, limit, afterId })
+    if (!page.length) return
+    yield page
+    afterId = page[page.length - 1]
+    if (page.length < limit) return
+  }
+}
+
+function listLibraryDocumentIdPage(
+  db: Database.Database,
+  opts: {
+    sourceType?: DocumentSourceType
+    limit: number
+    afterId?: string
+  },
+): string[] {
+  const { sourceType, limit, afterId } = opts
+  if (sourceType === 'news') return []
+
   if (sourceType) {
-    const rows = db.prepare(`
-      SELECT d.id AS document_id
-      FROM documents d
-      JOIN parse_artifacts pa ON pa.document_id = d.id
-      WHERE pa.status = 'ready'
-        AND COALESCE(d.source_type, 'report') = ?
-    `).all(sourceType) as Array<{ document_id: string }>
+    const rows = afterId
+      ? db.prepare(`
+          SELECT d.id AS document_id
+          FROM documents d
+          JOIN parse_artifacts pa ON pa.document_id = d.id
+          WHERE pa.status = 'ready'
+            AND COALESCE(d.source_type, 'report') = ?
+            AND d.id > ?
+          ORDER BY d.id ASC
+          LIMIT ?
+        `).all(sourceType, afterId, limit) as Array<{ document_id: string }>
+      : db.prepare(`
+          SELECT d.id AS document_id
+          FROM documents d
+          JOIN parse_artifacts pa ON pa.document_id = d.id
+          WHERE pa.status = 'ready'
+            AND COALESCE(d.source_type, 'report') = ?
+          ORDER BY d.id ASC
+          LIMIT ?
+        `).all(sourceType, limit) as Array<{ document_id: string }>
     return rows.map(r => r.document_id)
   }
-  const rows = db.prepare(`
-    SELECT d.id AS document_id
-    FROM documents d
-    JOIN parse_artifacts pa ON pa.document_id = d.id
-    WHERE pa.status = 'ready'
-      AND COALESCE(d.source_type, 'report') != 'news'
-  `).all() as Array<{ document_id: string }>
+
+  const rows = afterId
+    ? db.prepare(`
+        SELECT d.id AS document_id
+        FROM documents d
+        JOIN parse_artifacts pa ON pa.document_id = d.id
+        WHERE pa.status = 'ready'
+          AND COALESCE(d.source_type, 'report') != 'news'
+          AND d.id > ?
+        ORDER BY d.id ASC
+        LIMIT ?
+      `).all(afterId, limit) as Array<{ document_id: string }>
+    : db.prepare(`
+        SELECT d.id AS document_id
+        FROM documents d
+        JOIN parse_artifacts pa ON pa.document_id = d.id
+        WHERE pa.status = 'ready'
+          AND COALESCE(d.source_type, 'report') != 'news'
+        ORDER BY d.id ASC
+        LIMIT ?
+      `).all(limit) as Array<{ document_id: string }>
   return rows.map(r => r.document_id)
+}
+
+/**
+ * 按页取 library documentIds，分别向量检索后合并全局 top-K。
+ * 每页 top-K ∪ 再取 top-K ≡ 全量候选上的 top-K（精确相似度成立）。
+ */
+async function searchLibraryVectorsPaged(
+  db: Database.Database,
+  queryVec: number[],
+  vectorStore: VectorStore,
+  limit: number,
+  sourceType?: DocumentSourceType,
+): Promise<VectorSearchHit[]> {
+  const merged = new Map<string, VectorSearchHit>()
+  let anyPage = false
+
+  for (const page of iterateLibraryDocumentIdPages(db, sourceType)) {
+    anyPage = true
+    const hits = await vectorStore.search(queryVec, { documentIds: page, limit })
+    for (const h of hits) {
+      const prev = merged.get(h.chunk_id)
+      if (!prev || h.score > prev.score) merged.set(h.chunk_id, h)
+    }
+  }
+
+  if (!anyPage) return []
+
+  return [...merged.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
 }
 
 function hydrateSessionChunks(

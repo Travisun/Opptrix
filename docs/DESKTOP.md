@@ -208,6 +208,9 @@ REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--sche
 | `OPPTRIX_RUNTIME_ARCH` | Sidecar native target arch (`arm64` / `x64`); CI macOS Intel 交叉构建时使用 |
 | `OPPTRIX_RUNTIME_PLATFORM` | Sidecar native target platform (`darwin` / `win32` / `linux`); 默认取当前 OS |
 | `OPPTRIX_PREBUILD_MIRROR` | `better-sqlite3` prebuild 镜像根 URL（默认 npmmirror CDN） |
+| `OPPTRIX_SQLITE_MEM_PROFILE` | SQLite 每连接内存档位：`low` / `medium` / `high`（未设则按机器总内存自动：&lt;6GB low，&lt;12GB medium，否则 high）；作用于 user-store / market-data / doc-library；`low` 时 Duck 读并发与 boot warm 亦按低配收敛 |
+| `OPPTRIX_DUCK_READ_CONCURRENCY` | Duck 只读并发（默认 3；低配自动 1）；写恒为 1 |
+| `OPPTRIX_DUCK_WARM_ON_BOOT` | 设为 `0` 跳过 MarketDataStore 启动时 `warmReadCaches`（首次查询仍会拉统计） |
 | `ELECTRON_MIRROR` / `npm_config_disturl` | Electron headers 下载镜像（本地网络受限时） |
 | `OPPTRIX_RUNTIME_STAGE` | Packaged sidecar root (`runtime-stage`); used to locate bundled sandbox tools |
 | `PLAYWRIGHT_BROWSERS_PATH` | Agent 浏览器 Chromium 目录；桌面生产包由 sidecar 指向 `runtime-stage/playwright-browsers` |
@@ -322,8 +325,11 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | 覆盖 | `OPPTRIX_E5_BUNDLED_DIR`（测试 / sidecar 注入）；可选 `OPPTRIX_LLM_DIR` |
 | 卸载 | 设置页「卸下」仅清用户目录副本，不删安装包内置 |
 | 首启 | sidecar 启动后后台 `tryEnableDefaultBackend()`；内置齐全即就绪，设置页显示「应用自带」无需再装 |
+| 空闲卸载 | 成功 embed 后若一段时间无再用，卸下内存中的语义模型（默认约 12 分钟，`OPPTRIX_EMBED_IDLE_MS` 可覆盖，`0` 关闭）；磁盘「已安装」保留，下次检索会再加载。`closeDocLibraryService` 退出时一并释放 |
 
 深度整理（OCR，`ocr-l2` / `@gutenye/ocr-node`）ONNX 与语义检索模型默认内置（`resources/llms/<id>/`，用户副本 `~/.opptrix/llms/<id>/`）。**不依赖** Python 侧车；`pdfplumber` L1 已从默认路径与设置页移除。
+
+Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 分页（游标）**，避免一次全表进内存；向量侧按页聚合 top-K，**news 仍不进 Lance**。
 
 | 项 | 说明 |
 |----|------|
@@ -357,6 +363,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `OPPTRIX_SPEECH_ENGINE` | `sensevoice` | Composer 语音引擎：`sensevoice` 或 `whisper` |
+| `OPPTRIX_EMBED_IDLE_MS` | `720000`（12 分钟） | 语义 embedding 模型空闲卸载超时；`0` 关闭空闲卸载 |
 | `OPPTRIX_SENSEVOICE_MODEL` | `q8` | SenseVoice 模型：`q8`（约 242MB）或 `f16`（约 448MB）；须用官方 FunAudioLLM GGUF |
 
 | `OPPTRIX_SENSEVOICE_BIN` | — | 可选，覆盖 SenseVoice CLI 路径 |

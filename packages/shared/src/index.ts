@@ -79,6 +79,15 @@ export {
 } from './sandbox-settings.js'
 export type { InstalledProviderRecord, InstalledProvidersIndex } from './installed-provider.js'
 export {
+  applySqliteMemoryPragmas,
+  resolveSqliteMemProfile,
+  sqliteMemoryPragmaValues,
+  type SqliteMemProfile,
+  type SqliteMemRole,
+  type SqliteMemoryPragmaValues,
+  type SqlitePragmaCapable,
+} from './sqlite-memory-pragmas.js'
+export {
   computeMarketRegime,
   computeMaPositionPct,
   computePricePercentile,

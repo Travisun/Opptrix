@@ -29,6 +29,8 @@ const INDEX_ID = 'main'
 const ARTICLE_NS = 'news_article'
 const LEGACY_CACHE_NS = 'news_cache'
 const LEGACY_CACHE_ID = 'merged'
+/** retention / 订阅删除扫描页大小 — 有界，避免一次全表 parse */
+const RETENTION_PAGE_SIZE = 200
 
 let articlePersistHook: ((article: FeedArticle) => void) | null = null
 
@@ -364,18 +366,47 @@ export class NewsFeedStore {
   }
 
   private listAllArticles(): FeedArticle[] {
-    return this.store.listDocuments<FeedArticle>(ARTICLE_NS)
+    const out: FeedArticle[] = []
+    for (const page of this.store.iterateDocumentPages<FeedArticle>(ARTICLE_NS, RETENTION_PAGE_SIZE)) {
+      for (const row of page) out.push(row.data)
+    }
+    return out
+  }
+
+  /** 轻量扫描：仅 id + pub_date，不解析正文 HTML */
+  private listArticleRetentionMeta(): Array<Pick<FeedArticle, 'id' | 'pub_date'>> {
+    const out: Array<Pick<FeedArticle, 'id' | 'pub_date'>> = []
+    let after: { updatedAt: string; id: string } | undefined
+    for (;;) {
+      const page = this.store.listDocumentExtractPage(
+        ARTICLE_NS,
+        ['$.pub_date'],
+        { limit: RETENTION_PAGE_SIZE, after },
+      )
+      if (!page.length) break
+      for (const row of page) {
+        const pub = row.values[0]
+        out.push({
+          id: row.id,
+          pub_date: typeof pub === 'string' ? pub : '',
+        })
+      }
+      const last = page[page.length - 1]
+      after = { updatedAt: last.updated_at, id: last.id }
+      if (page.length < RETENTION_PAGE_SIZE) break
+    }
+    return out
   }
 
   private applyRetentionPolicy(): void {
     const settings = this.getSettings()
-    const all = this.listAllArticles()
-    const kept = selectRetainedArticles(all, settings)
+    const meta = this.listArticleRetentionMeta()
+    const kept = selectRetainedArticles(meta, settings)
     const keepIds = new Set(kept.map(a => a.id))
 
-    for (const article of all) {
-      if (!keepIds.has(article.id)) {
-        this.store.deleteDocument(ARTICLE_NS, article.id)
+    for (const row of meta) {
+      if (!keepIds.has(row.id)) {
+        this.store.deleteDocument(ARTICLE_NS, row.id)
       }
     }
 
@@ -385,10 +416,24 @@ export class NewsFeedStore {
   }
 
   private deleteArticlesBySubscription(subscriptionId: string): void {
-    const articles = this.store.listDocuments<FeedArticle>(ARTICLE_NS)
-      .filter(a => a.subscription_id === subscriptionId)
-    for (const a of articles) {
-      this.store.deleteDocument(ARTICLE_NS, a.id)
+    const toDelete: string[] = []
+    let after: { updatedAt: string; id: string } | undefined
+    for (;;) {
+      const page = this.store.listDocumentExtractPage(
+        ARTICLE_NS,
+        ['$.subscription_id'],
+        { limit: RETENTION_PAGE_SIZE, after },
+      )
+      if (!page.length) break
+      for (const row of page) {
+        if (row.values[0] === subscriptionId) toDelete.push(row.id)
+      }
+      const last = page[page.length - 1]
+      after = { updatedAt: last.updated_at, id: last.id }
+      if (page.length < RETENTION_PAGE_SIZE) break
+    }
+    for (const id of toDelete) {
+      this.store.deleteDocument(ARTICLE_NS, id)
     }
     this.rebuildArticleIndex()
   }

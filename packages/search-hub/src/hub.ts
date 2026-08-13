@@ -59,7 +59,12 @@ export class SearchHub {
     const store = getUserDataStore()
     if (store.getMetaFlag(INDEX_FLAG)) return
 
-    const allSessions = store.listDocuments<SessionRecord>('session')
+    // TODO(phase-B): 增量 FTS 重建；失效 INDEX_FLAG 时避免 clear+全量拉齐。
+    // 当前用分页 helper 装载 session，降低单次 SQL .all 峰值；仍会在内存中聚合后 rebuild。
+    const allSessions: SessionRecord[] = []
+    for (const page of store.iterateDocumentPages<SessionRecord>('session', 100)) {
+      for (const row of page) allSessions.push(row.data)
+    }
     rebuildSessionSearchIndex(allSessions)
 
     const newsStore = new NewsFeedStore()

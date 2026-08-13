@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { applySqliteMemoryPragmas, resolveUserDataRoot } from '@opptrix/shared'
 import {
   initProviderSettingsSchema,
   ProviderSettingsRepository,
@@ -40,6 +40,30 @@ import {
 } from './fts.js'
 
 const DB_FILE = 'opptrix.db'
+const DEFAULT_DOCUMENT_PAGE_SIZE = 200
+
+export interface DocumentPageCursor {
+  updatedAt: string
+  id: string
+}
+
+export interface ListDocumentPageOpts {
+  limit?: number
+  /** 上一页末行游标（ORDER BY updated_at DESC, id DESC，不含该行） */
+  after?: DocumentPageCursor
+}
+
+export interface DocumentPageRow<T = unknown> {
+  id: string
+  updated_at: string
+  data: T
+}
+
+export interface DocumentExtractPageRow {
+  id: string
+  updated_at: string
+  values: Array<string | number | boolean | null>
+}
 
 export class UserDataStore {
   private static inst: UserDataStore | null = null
@@ -55,6 +79,7 @@ export class UserDataStore {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
+    applySqliteMemoryPragmas(this.db, 'write')
     initProviderSettingsSchema(this.db)
     initSpeedRankingSchema(this.db)
     initFreeProviderThrottleSchema(this.db)
@@ -228,24 +253,164 @@ export class UserDataStore {
     this.db.prepare('DELETE FROM documents WHERE namespace = ? AND id = ?').run(namespace, id)
   }
 
-  listDocuments<T>(namespace: string): T[] {
-    const rows = this.db.prepare(
-      'SELECT data FROM documents WHERE namespace = ? ORDER BY updated_at DESC',
-    ).all(namespace) as { data: string }[]
-    const out: T[] = []
+  /**
+   * 分页列举文档（ORDER BY updated_at DESC, id DESC）。
+   * 大 namespace（资讯/会话）请用本方法或 `iterateDocumentPages`，避免一次全表进内存。
+   */
+  listDocumentPage<T>(namespace: string, opts?: ListDocumentPageOpts): DocumentPageRow<T>[] {
+    const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_DOCUMENT_PAGE_SIZE, 1), 1000)
+    const after = opts?.after
+    const rows = after
+      ? this.db.prepare(`
+          SELECT id, updated_at, data FROM documents
+          WHERE namespace = ?
+            AND (
+              updated_at < ?
+              OR (updated_at = ? AND id < ?)
+            )
+          ORDER BY updated_at DESC, id DESC
+          LIMIT ?
+        `).all(namespace, after.updatedAt, after.updatedAt, after.id, limit) as Array<{
+          id: string
+          updated_at: string
+          data: string
+        }>
+      : this.db.prepare(`
+          SELECT id, updated_at, data FROM documents
+          WHERE namespace = ?
+          ORDER BY updated_at DESC, id DESC
+          LIMIT ?
+        `).all(namespace, limit) as Array<{
+          id: string
+          updated_at: string
+          data: string
+        }>
+
+    const out: DocumentPageRow<T>[] = []
     for (const row of rows) {
       try {
-        out.push(JSON.parse(row.data) as T)
+        out.push({
+          id: row.id,
+          updated_at: row.updated_at,
+          data: JSON.parse(row.data) as T,
+        })
       } catch { /* skip corrupt */ }
     }
     return out
   }
 
+  /**
+   * 轻量投影分页：只取 id + json_extract 字段，不把整篇 JSON 解析进 JS 对象图。
+   * `paths` 如 `['$.pub_date', '$.subscription_id']`，对应返回 `values` 同序。
+   */
+  listDocumentExtractPage(
+    namespace: string,
+    paths: string[],
+    opts?: ListDocumentPageOpts,
+  ): DocumentExtractPageRow[] {
+    if (!paths.length) return []
+    for (const p of paths) {
+      if (!/^\$(\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(p)) {
+        throw new Error(`invalid json extract path: ${p}`)
+      }
+    }
+    const limit = Math.min(Math.max(opts?.limit ?? DEFAULT_DOCUMENT_PAGE_SIZE, 1), 1000)
+    const extractCols = paths.map((p, i) => `json_extract(data, '${p}') AS e${i}`).join(', ')
+    const after = opts?.after
+    const sql = after
+      ? `
+          SELECT id, updated_at, ${extractCols}
+          FROM documents
+          WHERE namespace = ?
+            AND (
+              updated_at < ?
+              OR (updated_at = ? AND id < ?)
+            )
+          ORDER BY updated_at DESC, id DESC
+          LIMIT ?
+        `
+      : `
+          SELECT id, updated_at, ${extractCols}
+          FROM documents
+          WHERE namespace = ?
+          ORDER BY updated_at DESC, id DESC
+          LIMIT ?
+        `
+    const rawRows = after
+      ? this.db.prepare(sql).all(namespace, after.updatedAt, after.updatedAt, after.id, limit)
+      : this.db.prepare(sql).all(namespace, limit)
+
+    return (rawRows as Array<Record<string, unknown>>).map(row => ({
+      id: String(row.id ?? ''),
+      updated_at: String(row.updated_at ?? ''),
+      values: paths.map((_, i) => {
+        const v = row[`e${i}`]
+        if (v == null) return null
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v
+        return String(v)
+      }),
+    }))
+  }
+
+  /** 按页迭代整个 namespace（每页有界） */
+  *iterateDocumentPages<T>(
+    namespace: string,
+    pageSize = DEFAULT_DOCUMENT_PAGE_SIZE,
+  ): Generator<DocumentPageRow<T>[]> {
+    let after: DocumentPageCursor | undefined
+    for (;;) {
+      const page = this.listDocumentPage<T>(namespace, { limit: pageSize, after })
+      if (!page.length) return
+      yield page
+      const last = page[page.length - 1]
+      after = { updatedAt: last.updated_at, id: last.id }
+      if (page.length < pageSize) return
+    }
+  }
+
+  /**
+   * 一次加载 namespace 下全部文档到数组。大表慎用 — 优先 `listDocumentPage` / `iterateDocumentPages`。
+   */
+  listDocuments<T>(namespace: string): T[] {
+    const out: T[] = []
+    for (const page of this.iterateDocumentPages<T>(namespace)) {
+      for (const row of page) out.push(row.data)
+    }
+    return out
+  }
+
   listDocumentIds(namespace: string): string[] {
-    const rows = this.db.prepare(
-      'SELECT id FROM documents WHERE namespace = ? ORDER BY updated_at DESC',
-    ).all(namespace) as { id: string }[]
-    return rows.map(row => row.id)
+    const out: string[] = []
+    const pageSize = DEFAULT_DOCUMENT_PAGE_SIZE
+    let after: DocumentPageCursor | undefined
+    for (;;) {
+      const rows = after
+        ? this.db.prepare(`
+            SELECT id, updated_at FROM documents
+            WHERE namespace = ?
+              AND (
+                updated_at < ?
+                OR (updated_at = ? AND id < ?)
+              )
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?
+          `).all(namespace, after.updatedAt, after.updatedAt, after.id, pageSize) as Array<{
+            id: string
+            updated_at: string
+          }>
+        : this.db.prepare(`
+            SELECT id, updated_at FROM documents
+            WHERE namespace = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?
+          `).all(namespace, pageSize) as Array<{ id: string; updated_at: string }>
+      if (!rows.length) break
+      for (const row of rows) out.push(row.id)
+      const last = rows[rows.length - 1]
+      after = { updatedAt: last.updated_at, id: last.id }
+      if (rows.length < pageSize) break
+    }
+    return out
   }
 
   indexSessionSearch(row: FtsSessionRow) {

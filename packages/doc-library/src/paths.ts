@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { applySqliteMemoryPragmas, resolveUserDataRoot } from '@opptrix/shared'
 import { migrateDocLibrarySchema } from './schema-migrate.js'
 
 const DB_FILE = 'doc-library.db'
@@ -334,6 +334,7 @@ export function openDocLibraryDb(dbPath = docLibraryDbPath()): Database.Database
   const db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
+  applySqliteMemoryPragmas(db, 'write')
   migrateDocLibrarySchema(db)
   return db
 }

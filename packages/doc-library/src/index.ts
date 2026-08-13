@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { DocLibraryService } from './service.js'
 import { openDocLibraryDb, docLibraryDbPath } from './paths.js'
 import { closeVectorStore } from './vector-store.js'
+import { closeEmbeddingService } from './embedding.js'
 
 export {
   DOC_LIBRARY_SCHEMA_VERSION,
@@ -48,6 +49,11 @@ export type { EmbeddingModelSource } from './paths.js'
 export { ftsQuery, replaceFtsForDocument, searchFtsChunks } from './fts.js'
 export type { FtsSearchChunksOpts, FtsSearchRow } from './fts.js'
 export type { HybridSearchChunksOpts } from './hybrid-search.js'
+export {
+  listLibraryDocumentIds,
+  iterateLibraryDocumentIdPages,
+  LIBRARY_DOCUMENT_ID_PAGE_SIZE,
+} from './hybrid-search.js'
 export { rrfFuse } from './rrf.js'
 export {
   EmbeddingService,
@@ -56,6 +62,8 @@ export {
   getEmbeddingService,
   closeEmbeddingService,
   setEmbeddingServiceForTests,
+  resolveEmbedIdleMs,
+  DEFAULT_EMBED_IDLE_MS,
 } from './embedding.js'
 export type { EmbeddingBackend } from './embedding.js'
 export {
@@ -225,12 +233,17 @@ export function getDocLibraryService(dbPath?: string): DocLibraryService {
 }
 
 /**
- * 关闭文档库单例：先 Lance 向量库，再 SQLite。
- * 生产 sidecar 退出与测试 teardown 共用；失败不抛。
- */
+   * 关闭文档库单例：先 Lance 向量库，再 embedding 模型，最后 SQLite。
+   * 生产 sidecar 退出与测试 teardown 共用；失败不抛。
+   */
 export async function closeDocLibraryService(): Promise<void> {
   try {
     await closeVectorStore()
+  } catch {
+    /* ignore */
+  }
+  try {
+    await closeEmbeddingService()
   } catch {
     /* ignore */
   }

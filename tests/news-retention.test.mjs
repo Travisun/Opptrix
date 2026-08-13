@@ -57,3 +57,82 @@ test('retention_years 0 keeps all when no max', () => {
   ], normalizeNewsSettings({ refresh_interval_min: 15, retention_years: 0, max_articles: null }))
   assert.equal(kept.length, 2)
 })
+
+test('applyRetentionPolicy enforces max_articles via paged extract (no full-body listDocuments)', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const dataDir = await mkdtemp(join(tmpdir(), 'opptrix-news-retention-page-'))
+  const prevDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = dataDir
+
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    // 确保单例指向临时目录
+    try { getUserDataStore().close() } catch { /* first open */ }
+
+    const userStore = getUserDataStore()
+    let extractPages = 0
+    const origExtract = userStore.listDocumentExtractPage.bind(userStore)
+    userStore.listDocumentExtractPage = (...args) => {
+      extractPages += 1
+      return origExtract(...args)
+    }
+    let fullListCalls = 0
+    const origList = userStore.listDocuments.bind(userStore)
+    userStore.listDocuments = (...args) => {
+      fullListCalls += 1
+      return origList(...args)
+    }
+
+    const total = 25
+    const maxKeep = 5
+    for (let i = 0; i < total; i++) {
+      const id = `art-${String(i).padStart(3, '0')}`
+      const day = String((i % 28) + 1).padStart(2, '0')
+      userStore.setDocument('news_article', id, {
+        id,
+        subscription_id: 'sub-ret',
+        title: `t-${i}`,
+        link: `https://example.com/${id}`,
+        pub_date: `2024-06-${day}T12:00:00.000Z`,
+        content_html: `<p>${'x'.repeat(2000)}</p>`,
+        source_title: '源',
+      })
+    }
+    userStore.setDocument('news_index', 'main', {
+      refreshed_at: null,
+      subscription_meta: {},
+      article_order: [],
+    })
+    userStore.setDocument('preference', 'news_settings', normalizeNewsSettings({
+      refresh_interval_min: 15,
+      retention_years: 0,
+      max_articles: maxKeep,
+    }))
+
+    const { getNewsFeedStore } = await import('../packages/news-feed/dist/store.js')
+    // 重置 news store 单例（模块可能已缓存）
+    const storeMod = await import('../packages/news-feed/dist/store.js')
+    const store = storeMod.getNewsFeedStore()
+    store.saveSettings(normalizeNewsSettings({
+      refresh_interval_min: 15,
+      retention_years: 0,
+      max_articles: maxKeep,
+    }))
+
+    const remaining = userStore.listDocumentIds('news_article')
+    assert.equal(remaining.length, maxKeep)
+    assert.ok(extractPages >= 1, '应走 listDocumentExtractPage 分页')
+    assert.equal(fullListCalls, 0, 'retention 路径不应调用 listDocuments 全量 parse')
+
+    const order = store.listArticleIds()
+    assert.equal(order.length, maxKeep)
+  } finally {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    try { getUserDataStore().close() } catch { /* ignore */ }
+    if (prevDir === undefined) delete process.env.OPPTRIX_DATA_DIR
+    else process.env.OPPTRIX_DATA_DIR = prevDir
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})

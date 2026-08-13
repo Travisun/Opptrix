@@ -85,7 +85,9 @@ export function retentionCutoffDate(settings: NewsSettings): Date | null {
   return d
 }
 
-export function sortArticlesByPubDate(articles: FeedArticle[]): FeedArticle[] {
+export function sortArticlesByPubDate<T extends Pick<FeedArticle, 'id' | 'pub_date'>>(
+  articles: T[],
+): T[] {
   return articles.slice().sort((a, b) => {
     const dt = new Date(b.pub_date).getTime() - new Date(a.pub_date).getTime()
     if (dt !== 0) return dt
@@ -94,10 +96,10 @@ export function sortArticlesByPubDate(articles: FeedArticle[]): FeedArticle[] {
 }
 
 /** 按发布时间保留最新文章；超出年限或数量上限的删除 */
-export function selectRetainedArticles(
-  articles: FeedArticle[],
+export function selectRetainedArticles<T extends Pick<FeedArticle, 'id' | 'pub_date'>>(
+  articles: T[],
   settings: NewsSettings,
-): FeedArticle[] {
+): T[] {
   const normalized = normalizeNewsSettings(settings)
   let kept = sortArticlesByPubDate(articles)
 

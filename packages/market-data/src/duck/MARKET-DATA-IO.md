@@ -12,14 +12,14 @@
 ## 短读（Neo）
 
 - 单文件只读实例：`DuckDBInstance.fromCache(path, { access_mode: 'read_only' })`
-- 读并发：`p-queue` concurrency=3
+- 读并发：`p-queue` 默认 concurrency=3；低配（`OPPTRIX_SQLITE_MEM_PROFILE=low` / totalmem<6GB / `OPPTRIX_DUCK_READ_CONCURRENCY`）→ 1
 - **Hub / API**：`queryAllAsync` / `marketStatsAsync`（不阻塞事件循环）
 - **Store 同步 / 测试 / 导出**：`queryAllSync` / `marketStatsSync` / `applyBatchSync` → 同 duck-cli 二进制，经 `spawnSync`（可靠阻塞，无事件循环依赖）
-- 启动预热：`getDuckNeoReader(path).warmReadCaches()`（async 填充 TTL 缓存）
+- 启动预热：默认 `warmReadCaches()`；低配或 `OPPTRIX_DUCK_WARM_ON_BOOT=0` 跳过（首次查询仍会拉 stats）
 
 ## 写路径
 
-- `p-queue` concurrency=1 + `duck-cli` worker 线程
+- `p-queue` concurrency=1（恒定）+ `duck-cli` worker 线程
 - **测试 flush / .opmd 导出**：`flushDuckWritesSync` / `syncMarketDataToSqliteSync` → `spawnSync duck-cli`
 - 衍生维护期间主进程暂停写入队列（`isDerivedMaintenanceActive()`）
 

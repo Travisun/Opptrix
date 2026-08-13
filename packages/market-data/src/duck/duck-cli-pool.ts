@@ -2,20 +2,22 @@
  * DuckDB I/O 调度层 — 业内「单写者多读者 + 优先级队列」模式。
  *
  * - 写：p-queue concurrency=1（串行写入，等同 DuckDB 单写者语义）
- * - 读：p-queue concurrency=3（并行只读 duck-cli，DuckDB MVCC 允许）
+ * - 读：默认 concurrency=3；低配（见 `resolveDuckReadConcurrency`）降为 1，削峰值
  * - 执行：worker_threads 内 spawn duck-cli，主进程仅 await Promise，不阻塞事件循环
  *
  * 参考：better-sqlite3 WAL + worker_threads；DuckDB node-api cooperative tasks。
  */
 import { spawnSync } from 'node:child_process'
+import os from 'node:os'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import PQueue from 'p-queue'
 import type { DuckCliWorkerRequest, DuckCliWorkerResponse } from './duck-cli-worker.js'
 
 const DEFAULT_MAX_BUFFER = 128 * 1024 * 1024
-const READ_CONCURRENCY = 3
+const DEFAULT_READ_CONCURRENCY = 3
 const WRITE_CONCURRENCY = 1
+const LOW_MEM_BYTES = 6 * 1024 * 1024 * 1024
 const CLI_PATH = fileURLToPath(new URL('../kline/duck-cli.js', import.meta.url))
 
 /** UI / Hub 交互读 — 高于后台统计 */
@@ -23,16 +25,56 @@ export const DUCK_READ_PRIORITY_INTERACTIVE = 10
 /** 后台同步 / 迁移读 */
 export const DUCK_READ_PRIORITY_BACKGROUND = 1
 
+/**
+ * 低配判定：`OPPTRIX_SQLITE_MEM_PROFILE=low`，或未强制 high/medium 且 totalmem<6GB。
+ * 供读并发与 boot warm 共用；测试可 env 覆盖。
+ */
+export function isDuckLowMemProfile(): boolean {
+  const profile = String(process.env.OPPTRIX_SQLITE_MEM_PROFILE ?? '').trim().toLowerCase()
+  if (profile === 'low') return true
+  if (profile === 'high' || profile === 'medium') return false
+  return os.totalmem() < LOW_MEM_BYTES
+}
+
+/**
+ * DuckCliPool 读并发：默认 3；`OPPTRIX_DUCK_READ_CONCURRENCY` 优先；低配 → 1。
+ * 写并发恒为 1（见 `WRITE_CONCURRENCY`）。
+ */
+export function resolveDuckReadConcurrency(): number {
+  const raw = process.env.OPPTRIX_DUCK_READ_CONCURRENCY
+  if (raw != null && String(raw).trim() !== '') {
+    const n = Number.parseInt(String(raw).trim(), 10)
+    if (Number.isFinite(n) && n >= 1) return Math.floor(n)
+  }
+  return isDuckLowMemProfile() ? 1 : DEFAULT_READ_CONCURRENCY
+}
+
+/**
+ * 启动时是否 warm Neo 读缓存：低配或 `OPPTRIX_DUCK_WARM_ON_BOOT=0` 跳过（首次查询仍会拉 stats）。
+ */
+export function shouldWarmDuckReadCachesOnBoot(): boolean {
+  const warm = String(process.env.OPPTRIX_DUCK_WARM_ON_BOOT ?? '').trim().toLowerCase()
+  if (warm === '0' || warm === 'false' || warm === 'off') return false
+  if (warm === '1' || warm === 'true' || warm === 'on') return true
+  return !isDuckLowMemProfile()
+}
+
 export class DuckCliPool {
   private worker: Worker | null = null
   private nextId = 0
   private readonly pending = new Map<number, { resolve: (v: string) => void; reject: (e: Error) => void }>()
-  private readonly readQueue = new PQueue({ concurrency: READ_CONCURRENCY })
+  private readonly readQueue: PQueue
   private readonly writeQueue = new PQueue({ concurrency: WRITE_CONCURRENCY })
   private workerBoot: Promise<void> | null = null
   private syncWriteLock = false
+  /** 构造时锁定的读并发（便于测试 / 观测） */
+  readonly readConcurrency: number
+  readonly writeConcurrency = WRITE_CONCURRENCY
 
-  constructor(private readonly label = 'default') {}
+  constructor(private readonly label = 'default') {
+    this.readConcurrency = resolveDuckReadConcurrency()
+    this.readQueue = new PQueue({ concurrency: this.readConcurrency })
+  }
 
   private ensureWorker(): Promise<void> {
     if (this.worker) return Promise.resolve()

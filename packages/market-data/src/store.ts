@@ -17,7 +17,7 @@ import {
   stockProfilesUsesInstrumentNs,
 } from './instrument-ns.js'
 import type { InstrumentRef } from '@opptrix/shared'
-import { normalizeInstrumentRef } from '@opptrix/shared'
+import { applySqliteMemoryPragmas, normalizeInstrumentRef } from '@opptrix/shared'
 import { yieldToEventLoop } from './sync/event-loop.js'
 import {
   getMarketDuckGateway,
@@ -26,6 +26,7 @@ import {
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
 import { isMarketSyncActive, isDerivedMaintenanceActive } from './duck/duck-subprocess-gate.js'
+import { shouldWarmDuckReadCachesOnBoot } from './duck/duck-cli-pool.js'
 import { getDuckNeoReader } from './duck/duck-neo-reader.js'
 import {
   isDuckPrimaryMigrationComplete,
@@ -289,8 +290,7 @@ export class MarketDataStore {
     this.klineDuckDbPath = duckPath ?? duckDbPathForMarketDb(dbPath)
     this.db = new Database(dbPath)
     this.dbRead = isMemorySqlitePath(dbPath) ? this.db : new Database(dbPath, { readonly: true })
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('busy_timeout = 5000')
+    this.configureSqliteConnections()
     migrate(this.db)
     if (!isDuckPrimaryMigrationComplete(this.db)) {
       if (this.canSkipDuckPrimaryMigrationForEmptyInstall()) {
@@ -299,7 +299,8 @@ export class MarketDataStore {
         this.scheduleDuckPrimaryMigration()
       }
     }
-    if (fs.existsSync(this.klineDuckDbPath)) {
+    // 低配 / OPPTRIX_DUCK_WARM_ON_BOOT=0：跳过启动预热，削开机尖峰；首次查询仍会拉 stats
+    if (fs.existsSync(this.klineDuckDbPath) && shouldWarmDuckReadCachesOnBoot()) {
       getDuckNeoReader(this.klineDuckDbPath).warmReadCaches()
     }
   }
@@ -612,11 +613,21 @@ export class MarketDataStore {
     this.db.close()
   }
 
+  /** WAL + busy_timeout 保留；cache/mmap/temp 按机器档位（只读更保守） */
+  private configureSqliteConnections(): void {
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('busy_timeout = 5000')
+    applySqliteMemoryPragmas(this.db, 'write')
+    if (this.dbRead !== this.db) {
+      this.dbRead.pragma('busy_timeout = 5000')
+      applySqliteMemoryPragmas(this.dbRead, 'read')
+    }
+  }
+
   private reopenDb(): void {
     this.db = new Database(this.dbPath)
     this.dbRead = isMemorySqlitePath(this.dbPath) ? this.db : new Database(this.dbPath, { readonly: true })
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('busy_timeout = 5000')
+    this.configureSqliteConnections()
   }
 
   /** 导出 .opmd 前将 DuckDB 主存储回写 SQLite 快照 */
