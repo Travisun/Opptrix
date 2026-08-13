@@ -7,37 +7,48 @@ import type { FastifyInstance } from 'fastify'
 import {
   getParseEnginesStatus,
   getSemanticModelStatus,
-  installSemanticModel,
+  getSemanticModelInstallJobStatus,
+  startSemanticModelInstallJob,
   markDeepEngineReady,
   prepareDeepEngine,
   uninstallDeepEngine,
   uninstallSemanticModel,
 } from '@opptrix/doc-library'
 
-export async function registerDocLibrarySettingsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/settings/semantic-model', async () => {
-    const status = getSemanticModelStatus()
-    return {
-      installed: status.installed,
-      label: status.label,
-      source: status.source,
-    }
-  })
+function semanticModelPublicStatus() {
+  const status = getSemanticModelStatus()
+  const job = getSemanticModelInstallJobStatus()
+  return {
+    installed: status.installed,
+    label: status.label,
+    source: status.source,
+    phase: job.phase,
+    progress: {
+      file: job.file,
+      receivedBytes: job.receivedBytes,
+      totalBytes: job.totalBytes,
+      percent: job.percent,
+    },
+    message: job.message,
+    error: job.error,
+    job,
+  }
+}
 
-  app.post('/api/settings/semantic-model/install', async (_req, reply) => {
-    try {
-      const status = await installSemanticModel()
-      return {
-        ok: true,
-        installed: status.installed,
-        label: status.label,
-        source: status.source,
-      }
-    } catch {
-      return reply.status(500).send({
-        ok: false,
-        error: '语义检索模型下载失败，请稍后重试',
-      })
+export async function registerDocLibrarySettingsRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/settings/semantic-model', async () => semanticModelPublicStatus())
+
+  /** 与 GET /semantic-model 同源；便于对照 Python /install 轮询 */
+  app.get('/api/settings/semantic-model/install', async () => ({
+    job: getSemanticModelInstallJobStatus(),
+  }))
+
+  app.post('/api/settings/semantic-model/install', async () => {
+    const job = startSemanticModelInstallJob()
+    return {
+      ok: true,
+      started: job.started || job.phase === 'downloading' || job.phase === 'enabling' || job.phase === 'ready',
+      job,
     }
   })
 

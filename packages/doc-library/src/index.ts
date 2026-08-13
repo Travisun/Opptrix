@@ -118,6 +118,18 @@ export {
 } from './embedding-api.js'
 export type { SemanticModelUiStatus } from './embedding-api.js'
 export {
+  getSemanticModelInstallJobStatus,
+  startSemanticModelInstallJob,
+  resetSemanticModelInstallJobForTests,
+  setSemanticModelInstallPipelineDepsForTests,
+  toSemanticInstallUserError,
+} from './semantic-model-install-job.js'
+export type {
+  SemanticModelInstallPhase,
+  SemanticModelInstallJobSnapshot,
+  SemanticModelInstallPipelineDeps,
+} from './semantic-model-install-job.js'
+export {
   selectEngine,
   ParseRouter,
 } from './parse-router.js'

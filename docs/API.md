@@ -465,16 +465,56 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 本地语义检索（Hybrid RAG 向量侧）。与桌面内置策略一致：**桌面安装包默认内置** multilingual-e5-small（`resources/llms/multilingual-e5-small/`）；运行时优先内置 → 用户目录 `~/.opptrix/llms/`（兼容旧 `~/.opptrix/models/`）→ 开发态按需下载。未就绪时 `search_document` / `searchHybrid` / `search_library` 自动降级为 FTS，不中断对话。用户可见文案使用「语义检索模型」，勿暴露内部引擎名。
 
+安装为**异步任务**（对照托管 Python）：`POST …/install` **立即返回**并在后台下载；客户端用默认短超时（约 10s）即可，**勿再 await 完整下载**。轮询 `GET …/semantic-model`（或 `GET …/install`）查看 `phase` / 进度。安装成功后按需 `tryEnable`，向量回填延后执行（非 boot 阻塞）。旧客户端若仍长超时 await POST，会立刻拿到 `{ ok, started, job }`，须改为轮询。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/settings/semantic-model` | `{ installed, label, source?: 'bundled' \| 'user' \| 'missing' }` |
-| POST | `/api/settings/semantic-model/install` | 下载并校验模型；成功后尝试回填已整理文档向量（客户端超时 180s，勿抬高全局 10s） |
-| POST | `/api/settings/semantic-model/uninstall` | 删除用户目录模型副本并卸载运行时后端（不删安装包内置）（客户端超时 180s） |
+| GET | `/api/settings/semantic-model` | `{ installed, label, source?, phase, progress, message, error, job }`；`phase`: `idle` \| `downloading` \| `enabling` \| `ready` \| `error` |
+| GET | `/api/settings/semantic-model/install` | `{ job }` 安装任务快照（与上同源） |
+| POST | `/api/settings/semantic-model/install` | 启动后台下载；立即 `{ ok: true, started: true, job }`；已在 downloading/enabling 时返回当前 job，不双开 |
+| POST | `/api/settings/semantic-model/uninstall` | 同步：删除用户目录模型副本并卸载运行时后端（不删安装包内置） |
 
-**GET 响应示例**
+**GET 响应示例（空闲未装）**
 
 ```json
-{ "installed": true, "label": "语义检索模型", "source": "bundled" }
+{
+  "installed": false,
+  "label": "语义检索模型",
+  "source": "missing",
+  "phase": "idle",
+  "progress": { "file": null, "receivedBytes": 0, "totalBytes": null, "percent": 0 },
+  "message": "尚未安装语义检索模型。可在设置中一键安装。",
+  "error": null
+}
+```
+
+**POST /install 响应示例**
+
+```json
+{
+  "ok": true,
+  "started": true,
+  "job": {
+    "phase": "downloading",
+    "message": "正在下载语义检索模型…",
+    "accepted": true,
+    "started": true,
+    "percent": 1,
+    "file": null,
+    "receivedBytes": 0,
+    "totalBytes": null,
+    "error": null,
+    "installed": false,
+    "label": "语义检索模型",
+    "source": "missing"
+  }
+}
+```
+
+**GET 响应示例（已就绪）**
+
+```json
+{ "installed": true, "label": "语义检索模型", "source": "bundled", "phase": "ready", "progress": { "file": null, "receivedBytes": 0, "totalBytes": null, "percent": 100 }, "message": "语义检索已就绪", "error": null }
 ```
 
 ### 研报整理引擎（Parse Router）

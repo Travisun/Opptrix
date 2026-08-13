@@ -2545,23 +2545,58 @@ export const pythonSettings = {
     jsonFetch<{ job: PythonInstallJobSnapshot }>('/settings/python/install'),
 }
 
+export type SemanticModelInstallPhase =
+  | 'idle'
+  | 'downloading'
+  | 'enabling'
+  | 'ready'
+  | 'error'
+
+export type SemanticModelInstallJobSnapshot = {
+  phase: SemanticModelInstallPhase
+  message: string
+  accepted: boolean
+  started: boolean
+  percent: number
+  file: string | null
+  receivedBytes: number
+  totalBytes: number | null
+  error: string | null
+  installed: boolean
+  label: string
+  source: 'bundled' | 'user' | 'missing'
+}
+
 export type SemanticModelStatus = {
   installed: boolean
   label: string
   /** bundled = 应用自带；user = 本机副本；missing = 未就绪 */
   source?: 'bundled' | 'user' | 'missing'
+  phase?: SemanticModelInstallPhase
+  progress?: {
+    file: string | null
+    receivedBytes: number
+    totalBytes: number | null
+    percent: number
+  }
+  message?: string
+  error?: string | null
+  job?: SemanticModelInstallJobSnapshot
 }
 
 export const semanticModelSettings = {
   getStatus: () =>
     jsonFetch<SemanticModelStatus>('/settings/semantic-model'),
 
+  /** 立即返回；后台下载。请轮询 getStatus / getInstallJob。 */
   install: () =>
-    jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
+    jsonFetch<{ ok: boolean; started: boolean; job: SemanticModelInstallJobSnapshot }>(
       '/settings/semantic-model/install',
       { method: 'POST' },
-      LOCAL_HEAVY_TIMEOUT,
     ),
+
+  getInstallJob: () =>
+    jsonFetch<{ job: SemanticModelInstallJobSnapshot }>('/settings/semantic-model/install'),
 
   uninstall: () =>
     jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
