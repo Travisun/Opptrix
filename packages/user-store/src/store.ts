@@ -6,6 +6,7 @@ import {
   applySqliteMemoryPragmas,
   resolveUserDataRoot,
   runSqliteLightMaintenance,
+  tryEnableSqliteIncrementalAutoVacuum,
   type SqliteLightMaintenanceOpts,
   type SqliteLightMaintenanceResult,
 } from '@opptrix/shared'
@@ -84,6 +85,8 @@ export class UserDataStore {
   private constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     this.db = new Database(dbPath)
+    // 新空库：建表前启用 INCREMENTAL，便于日后 incremental_vacuum 还盘
+    tryEnableSqliteIncrementalAutoVacuum(this.db)
     this.db.pragma('journal_mode = WAL')
     applySqliteMemoryPragmas(this.db, 'write')
     initProviderSettingsSchema(this.db)

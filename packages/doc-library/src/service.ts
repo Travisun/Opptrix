@@ -23,6 +23,11 @@ import { searchHybridChunks } from './hybrid-search.js'
 import { extractTextL0, TEXT_L0_ENGINE_VERSION } from './engines/text-l0.js'
 import { isPlainTextDocument } from './document-kind.js'
 import { shouldEmbedToVector } from './embed-policy.js'
+import {
+  pruneOrphanBlobsAndMarkdown as pruneOrphanBlobsAndMarkdownImpl,
+  type PruneOrphanBlobsOptions,
+  type PruneOrphanBlobsResult,
+} from './orphan-gc.js'
 
 export { shouldEmbedToVector } from './embed-policy.js'
 
@@ -758,5 +763,21 @@ export class DocLibraryService {
 
   getRepository(): DocLibraryRepository {
     return this.repo
+  }
+
+  /**
+   * 删除文档：SQLite 行 + md/blob（blob 共享去重）+ 异步清向量。
+   * 返回 false 表示文档不存在。
+   */
+  deleteDocument(documentId: string): boolean {
+    const ok = this.repo.deleteDocument(documentId)
+    if (!ok) return false
+    void this.vectorStore.deleteByDocument(documentId).catch(() => {})
+    return true
+  }
+
+  /** retention / boot：孤儿 blob + markdown 限速清扫 */
+  pruneOrphanBlobsAndMarkdown(opts?: PruneOrphanBlobsOptions): PruneOrphanBlobsResult {
+    return pruneOrphanBlobsAndMarkdownImpl(this.db, opts)
   }
 }

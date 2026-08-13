@@ -11,8 +11,16 @@ import {
   isValidEmbeddingVector,
   filterValidUpsertRows,
   detectLanceDatasetPathology,
+  countLanceVersions,
   lanceTableDatasetDir,
   LANCE_VERSIONS_PATHOLOGY_THRESHOLD,
+  DEFAULT_LANCE_MAX_VERSIONS,
+  DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES,
+  DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS,
+  resolveLanceMaxVersions,
+  resolveLancePathologyMaxVersions,
+  resolveLanceOptimizeEveryNWrites,
+  resolveLanceCleanupOlderThanMs,
   MemoryVectorStore,
   LanceVectorStore,
   LanceOpScheduler,
@@ -435,5 +443,77 @@ describe('LanceVectorStore upsert mergeInsert vs delete+add', () => {
     assert.equal(shouldEmbedToVector('news'), false)
     assert.equal(shouldEmbedToVector('report'), true)
     assert.equal(shouldEmbedToVector(null), true)
+  })
+})
+
+describe('lance version window (env + soft maintenance)', () => {
+  it('resolves env defaults and 0 disables soft max', () => {
+    assert.equal(resolveLanceMaxVersions(undefined, {}), DEFAULT_LANCE_MAX_VERSIONS)
+    assert.equal(
+      resolveLancePathologyMaxVersions(undefined, {}),
+      LANCE_VERSIONS_PATHOLOGY_THRESHOLD,
+    )
+    assert.equal(
+      resolveLanceOptimizeEveryNWrites(undefined, {}),
+      DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES,
+    )
+    assert.equal(
+      resolveLanceCleanupOlderThanMs(undefined, {}),
+      DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS,
+    )
+    assert.equal(resolveLanceMaxVersions(undefined, { OPPTRIX_LANCE_MAX_VERSIONS: '0' }), 0)
+    assert.equal(
+      resolveLanceMaxVersions(undefined, { OPPTRIX_LANCE_MAX_VERSIONS: '32' }),
+      32,
+    )
+    assert.equal(
+      resolveLancePathologyMaxVersions(undefined, { OPPTRIX_LANCE_PATHOLOGY_MAX_VERSIONS: '200' }),
+      200,
+    )
+    assert.equal(
+      resolveLanceOptimizeEveryNWrites(undefined, { OPPTRIX_LANCE_OPTIMIZE_EVERY_N_WRITES: '2' }),
+      2,
+    )
+    assert.equal(resolveLanceMaxVersions(12, { OPPTRIX_LANCE_MAX_VERSIONS: '99' }), 12)
+  })
+
+  it('pathology threshold is env-overridable without touching soft max default', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-lance-soft-'))
+    const ds = lanceTableDatasetDir(root)
+    const versions = path.join(ds, '_versions')
+    fs.mkdirSync(versions, { recursive: true })
+    for (let i = 0; i < 10; i++) {
+      fs.writeFileSync(path.join(versions, `${i}.manifest`), 'x')
+    }
+    assert.equal(countLanceVersions(ds), 10)
+    const softOk = detectLanceDatasetPathology(ds, {
+      pathologyMaxVersions: 500,
+    })
+    assert.equal(softOk.pathological, false)
+    const hard = detectLanceDatasetPathology(ds, {
+      pathologyMaxVersions: 5,
+    })
+    assert.equal(hard.pathological, true)
+    assert.equal(hard.reason, 'versions_count_exceeded')
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('runVersionMaintenance skips when under soft max and does not delete dataset', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-lance-maint-'))
+    const ds = lanceTableDatasetDir(root)
+    const versions = path.join(ds, '_versions')
+    fs.mkdirSync(versions, { recursive: true })
+    fs.writeFileSync(path.join(versions, '1.manifest'), 'x')
+    fs.writeFileSync(path.join(versions, '2.manifest'), 'x')
+
+    const store = new LanceVectorStore(root)
+    const result = await store.runVersionMaintenance({ maxVersions: 64 })
+    assert.equal(result.ran, false)
+    assert.equal(result.optimized, false)
+    assert.equal(result.versionsBefore, 2)
+    assert.equal(fs.existsSync(ds), true)
+    assert.equal(countLanceVersions(ds), 2)
+    await store.close?.()
+    fs.rmSync(root, { recursive: true, force: true })
   })
 })

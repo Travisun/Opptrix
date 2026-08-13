@@ -62,13 +62,95 @@ type LanceTable = {
 }
 
 const TABLE_NAME = 'doc_chunks'
-/** `_versions` 文件数超过此阈值视为版本爆炸，触发安全重建 */
+/**
+ * `_versions` 文件数超过此阈值视为版本爆炸，触发安全重建。
+ * 运行时可用 `OPPTRIX_LANCE_PATHOLOGY_MAX_VERSIONS` 覆盖（默认仍为 500）。
+ */
 export const LANCE_VERSIONS_PATHOLOGY_THRESHOLD = 500
-/** 成功写次数达到此值后触发 optimize（另有 debounce） */
-const OPTIMIZE_EVERY_N_WRITES = 8
+/** 软顶：超过则在 retention / 写路径触发更积极的 optimize（默认 64） */
+export const DEFAULT_LANCE_MAX_VERSIONS = 64
+/** 成功写次数达到此值后触发 optimize（另有 debounce）；默认 4，更积极收敛碎片 */
+export const DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES = 4
+/** cleanupOlderThan 相对「现在」的偏移；默认 0 = 立刻可回收已提交旧版本 */
+export const DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS = 0
+
 const OPTIMIZE_DEBOUNCE_MS = 3_000
 /** manifest 版本号超过此值（或接近 u64 溢出包装）视为损坏 */
 const MANIFEST_VERSION_SUSPECT = 1_000_000_000
+
+const ENV_LANCE_MAX_VERSIONS = 'OPPTRIX_LANCE_MAX_VERSIONS'
+const ENV_LANCE_PATHOLOGY_MAX_VERSIONS = 'OPPTRIX_LANCE_PATHOLOGY_MAX_VERSIONS'
+const ENV_LANCE_OPTIMIZE_EVERY_N = 'OPPTRIX_LANCE_OPTIMIZE_EVERY_N_WRITES'
+const ENV_LANCE_CLEANUP_OLDER_THAN_MS = 'OPPTRIX_LANCE_CLEANUP_OLDER_THAN_MS'
+
+function asNonNegInt(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw)
+  }
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  }
+  return null
+}
+
+/** 软顶版本数；`0` 关闭 retention 主动 optimize。opts 优先于 env。 */
+export function resolveLanceMaxVersions(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts >= 0 && Number.isFinite(opts) ? Math.floor(opts) : DEFAULT_LANCE_MAX_VERSIONS
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_MAX_VERSIONS])
+  if (fromEnv != null) return fromEnv
+  return DEFAULT_LANCE_MAX_VERSIONS
+}
+
+/** 病理重建硬顶；须 ≥ 软顶。opts 优先于 env。 */
+export function resolveLancePathologyMaxVersions(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts > 0 && Number.isFinite(opts)
+      ? Math.floor(opts)
+      : LANCE_VERSIONS_PATHOLOGY_THRESHOLD
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_PATHOLOGY_MAX_VERSIONS])
+  if (fromEnv != null && fromEnv > 0) return fromEnv
+  return LANCE_VERSIONS_PATHOLOGY_THRESHOLD
+}
+
+/** 每 N 次成功写触发 optimize；至少为 1。 */
+export function resolveLanceOptimizeEveryNWrites(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts >= 1 && Number.isFinite(opts)
+      ? Math.floor(opts)
+      : DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_OPTIMIZE_EVERY_N])
+  if (fromEnv != null && fromEnv >= 1) return fromEnv
+  return DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES
+}
+
+/** cleanupOlderThan 偏移 ms；`0` = 立刻回收已提交旧版本。 */
+export function resolveLanceCleanupOlderThanMs(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts >= 0 && Number.isFinite(opts)
+      ? Math.floor(opts)
+      : DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_CLEANUP_OLDER_THAN_MS])
+  if (fromEnv != null) return fromEnv
+  return DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS
+}
 
 function escapeSqlString(value: string): string {
   return value.replace(/'/g, "''")
@@ -111,15 +193,31 @@ export interface LancePathologyResult {
   versionsCount: number
 }
 
+export type LanceVersionMaintenanceResult = {
+  ran: boolean
+  optimized: boolean
+  versionsBefore: number
+  versionsAfter: number
+  maxVersions: number
+}
+
 /**
  * 检测 Lance dataset 目录是否版本爆炸 / manifest 异常。
  * 不打开原生连接；供 ensureTable 与单测使用。
+ * `pathologyMaxVersions` / env 可覆盖硬顶；失败不抛。
  */
-export function detectLanceDatasetPathology(datasetDir: string): LancePathologyResult {
+export function detectLanceDatasetPathology(
+  datasetDir: string,
+  opts?: { pathologyMaxVersions?: number; env?: NodeJS.ProcessEnv },
+): LancePathologyResult {
   const versionsDir = path.join(datasetDir, '_versions')
   if (!fs.existsSync(datasetDir)) {
     return { pathological: false, reason: null, versionsCount: 0 }
   }
+  const pathologyMax = resolveLancePathologyMaxVersions(
+    opts?.pathologyMaxVersions,
+    opts?.env ?? process.env,
+  )
   let versionsCount = 0
   try {
     if (fs.existsSync(versionsDir)) {
@@ -138,7 +236,7 @@ export function detectLanceDatasetPathology(datasetDir: string): LancePathologyR
           }
         }
       }
-      if (versionsCount > LANCE_VERSIONS_PATHOLOGY_THRESHOLD) {
+      if (versionsCount > pathologyMax) {
         return {
           pathological: true,
           reason: 'versions_count_exceeded',
@@ -150,6 +248,17 @@ export function detectLanceDatasetPathology(datasetDir: string): LancePathologyR
     return { pathological: true, reason: 'versions_readdir_failed', versionsCount }
   }
   return { pathological: false, reason: null, versionsCount }
+}
+
+/** 仅统计 `_versions` 文件数；目录缺失或不可读返回 0。 */
+export function countLanceVersions(datasetDir: string): number {
+  try {
+    const versionsDir = path.join(datasetDir, '_versions')
+    if (!fs.existsSync(versionsDir)) return 0
+    return fs.readdirSync(versionsDir).length
+  } catch {
+    return 0
+  }
 }
 
 function logVectorStore(msg: string, extra?: Record<string, number | string | boolean>): void {
@@ -437,18 +546,91 @@ export class LanceVectorStore implements VectorStore {
     }
   }
 
-  private async optimizeUnlocked(): Promise<void> {
+  private async optimizeUnlocked(opts?: {
+    cleanupOlderThanMs?: number
+    env?: NodeJS.ProcessEnv
+  }): Promise<void> {
     const table = this.table
     if (!table?.optimize) return
     try {
-      // cleanupOlderThan: 立刻可回收已提交旧版本（官方 0.33 API）
-      await table.optimize({ cleanupOlderThan: new Date(), deleteUnverified: false })
+      const olderMs = resolveLanceCleanupOlderThanMs(
+        opts?.cleanupOlderThanMs,
+        opts?.env ?? process.env,
+      )
+      // cleanupOlderThan: 默认立刻可回收已提交旧版本（官方 0.33 API）
+      const cleanupOlderThan = new Date(Date.now() - olderMs)
+      await table.optimize({ cleanupOlderThan, deleteUnverified: false })
       this.writesSinceOptimize = 0
     } catch (err) {
       logVectorStore('optimize failed', {
         err: err instanceof Error ? err.message : 'unknown',
       })
     }
+  }
+
+  /**
+   * retention / boot：版本数超过软顶时跑 optimize 收紧碎片窗口。
+   * 失败 swallow；不删可读 dataset（仅 optimize，不做病理重建）。
+   */
+  async runVersionMaintenance(opts?: {
+    maxVersions?: number
+    cleanupOlderThanMs?: number
+    env?: NodeJS.ProcessEnv
+  }): Promise<LanceVersionMaintenanceResult> {
+    const env = opts?.env ?? process.env
+    const maxVersions = resolveLanceMaxVersions(opts?.maxVersions, env)
+    const versionsBefore = countLanceVersions(this.datasetDir())
+    if (maxVersions <= 0 || versionsBefore <= maxVersions) {
+      return {
+        ran: false,
+        optimized: false,
+        versionsBefore,
+        versionsAfter: versionsBefore,
+        maxVersions,
+      }
+    }
+    return this.scheduleWrite(async () => {
+      try {
+        const table = await this.ensureTableUnlocked()
+        if (!table) {
+          return {
+            ran: true,
+            optimized: false,
+            versionsBefore,
+            versionsAfter: countLanceVersions(this.datasetDir()),
+            maxVersions,
+          }
+        }
+        await this.optimizeUnlocked({
+          cleanupOlderThanMs: opts?.cleanupOlderThanMs,
+          env,
+        })
+        const versionsAfter = countLanceVersions(this.datasetDir())
+        logVectorStore('version maintenance optimize', {
+          versionsBefore,
+          versionsAfter,
+          maxVersions,
+        })
+        return {
+          ran: true,
+          optimized: true,
+          versionsBefore,
+          versionsAfter,
+          maxVersions,
+        }
+      } catch (err) {
+        logVectorStore('version maintenance failed', {
+          err: err instanceof Error ? err.message : 'unknown',
+        })
+        return {
+          ran: true,
+          optimized: false,
+          versionsBefore,
+          versionsAfter: countLanceVersions(this.datasetDir()),
+          maxVersions,
+        }
+      }
+    })
   }
 
   async upsert(rows: VectorChunkRow[]): Promise<void> {
@@ -522,10 +704,19 @@ export class LanceVectorStore implements VectorStore {
       }
 
       this.writesSinceOptimize += 1
-      if (this.writesSinceOptimize >= OPTIMIZE_EVERY_N_WRITES) {
+      const everyN = resolveLanceOptimizeEveryNWrites()
+      if (this.writesSinceOptimize >= everyN) {
         await this.optimizeUnlocked()
       } else {
         this.scheduleOptimizeDebounced()
+      }
+      // 写路径软顶：版本数偏高时再挤一次 optimize（失败已 swallow）
+      const softMax = resolveLanceMaxVersions()
+      if (softMax > 0) {
+        const vc = countLanceVersions(this.datasetDir())
+        if (vc > softMax) {
+          await this.optimizeUnlocked()
+        }
       }
     })
   }
@@ -660,6 +851,43 @@ let sharedStore: VectorStore | null = null
 export function getVectorStore(): VectorStore {
   if (!sharedStore) sharedStore = new LanceVectorStore()
   return sharedStore
+}
+
+/**
+ * retention / boot 入口：对共享 Lance 向量库做版本软顶维护。
+ * Memory / 非 Lance store → no-op；失败 swallow。
+ */
+export async function runLanceVersionMaintenance(opts?: {
+  maxVersions?: number
+  cleanupOlderThanMs?: number
+  env?: NodeJS.ProcessEnv
+}): Promise<LanceVersionMaintenanceResult> {
+  const env = opts?.env ?? process.env
+  const maxVersions = resolveLanceMaxVersions(opts?.maxVersions, env)
+  const store = getVectorStore()
+  if (!(store instanceof LanceVectorStore)) {
+    return {
+      ran: false,
+      optimized: false,
+      versionsBefore: 0,
+      versionsAfter: 0,
+      maxVersions,
+    }
+  }
+  try {
+    return await store.runVersionMaintenance(opts)
+  } catch (err) {
+    logVectorStore('runLanceVersionMaintenance failed', {
+      err: err instanceof Error ? err.message : 'unknown',
+    })
+    return {
+      ran: true,
+      optimized: false,
+      versionsBefore: 0,
+      versionsAfter: 0,
+      maxVersions,
+    }
+  }
 }
 
 /** 关闭共享向量库（若已打开）；未打开则 no-op */

@@ -20,6 +20,8 @@ type FeaturePipeline = ((
 ) => Promise<{ data: Float32Array | number[] }>) & {
   dispose?: () => void | Promise<void>
   close?: () => void | Promise<void>
+  /** transformers.js / onnxruntime session when present */
+  session?: { release?: () => void | Promise<void>; dispose?: () => void | Promise<void> }
 }
 
 /** 首次成功 tryEnable 后限速回填未嵌入文档（boot 不触发） */
@@ -246,6 +248,10 @@ export class TransformersE5Backend implements EmbeddingBackend {
         await pipe.dispose()
       } else if (typeof pipe.close === 'function') {
         await pipe.close()
+      } else if (typeof pipe.session?.release === 'function') {
+        await pipe.session.release()
+      } else if (typeof pipe.session?.dispose === 'function') {
+        await pipe.session.dispose()
       }
     } catch {
       /* ignore teardown races / missing dispose on older transformers */

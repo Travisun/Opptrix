@@ -35,6 +35,12 @@ export { DocLibraryService } from './service.js'
 export type { LegacyExtractWriter, ParseLifecycleHooks, EmbedPendingOptions } from './service.js'
 export { shouldEmbedToVector, resolveLanceRebuildBackfillOptions } from './service.js'
 export {
+  pruneOrphanBlobsAndMarkdown,
+  DEFAULT_ORPHAN_BLOB_MIN_AGE_MS,
+  DEFAULT_ORPHAN_BLOB_MAX_REMOVE,
+} from './orphan-gc.js'
+export type { PruneOrphanBlobsOptions, PruneOrphanBlobsResult } from './orphan-gc.js'
+export {
   docLibraryRoot,
   docLibraryDbPath,
   blobPathForSha,
@@ -87,17 +93,27 @@ export {
   setVectorStoreForTests,
   setLanceRebuildBackfillHook,
   getLanceRebuildBackfillHook,
+  runLanceVersionMaintenance,
   isValidEmbeddingVector,
   filterValidUpsertRows,
   detectLanceDatasetPathology,
+  countLanceVersions,
   lanceTableDatasetDir,
   LANCE_VERSIONS_PATHOLOGY_THRESHOLD,
+  DEFAULT_LANCE_MAX_VERSIONS,
+  DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES,
+  DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS,
+  resolveLanceMaxVersions,
+  resolveLancePathologyMaxVersions,
+  resolveLanceOptimizeEveryNWrites,
+  resolveLanceCleanupOlderThanMs,
 } from './vector-store.js'
 export type {
   VectorStore,
   VectorChunkRow,
   VectorSearchHit,
   LancePathologyResult,
+  LanceVersionMaintenanceResult,
   LanceScheduleKind,
   LanceRebuildBackfillHook,
 } from './vector-store.js'

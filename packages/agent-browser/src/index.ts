@@ -17,3 +17,13 @@ export {
   closeAllRegisteredBrowserSessions,
   registerBrowserShutdownHooks,
 } from './shutdown.js'
+export {
+  DEFAULT_BROWSER_SCREENSHOT_MAX_AGE_MS,
+  DEFAULT_BROWSER_SCREENSHOT_MAX_BYTES,
+  pruneBrowserScreenshots,
+  resolveBrowserScreenshotMaxAgeMs,
+  resolveBrowserScreenshotMaxBytes,
+  resolveScreenshotDir,
+  type PruneBrowserScreenshotsOptions,
+  type PruneBrowserScreenshotsResult,
+} from './screenshot-prune.js'

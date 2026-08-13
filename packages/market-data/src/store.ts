@@ -21,6 +21,7 @@ import {
   applySqliteMemoryPragmas,
   normalizeInstrumentRef,
   runSqliteLightMaintenance,
+  tryEnableSqliteIncrementalAutoVacuum,
   type SqliteLightMaintenanceOpts,
   type SqliteLightMaintenanceResult,
 } from '@opptrix/shared'
@@ -151,6 +152,8 @@ export interface BootstrapReadiness {
 export const SYNC_LOGS_GLOBAL_MAX = 8000
 /** 单 session 日志上限 */
 export const SYNC_LOGS_PER_SESSION_MAX = 2000
+/** sync_sessions 元数据硬顶（保留最近 N 条；级联清关联 sync_logs） */
+export const SYNC_SESSIONS_KEEP_MAX = 80
 /** append 路径每 N 次触发一次 session prune（避免每次 COUNT） */
 const SYNC_LOGS_APPEND_PRUNE_EVERY = 256
 
@@ -649,6 +652,8 @@ export class MarketDataStore {
 
   /** WAL + busy_timeout 保留；cache/mmap/temp 按机器档位（只读更保守） */
   private configureSqliteConnections(): void {
+    // 新空库：建表前启用 INCREMENTAL，便于日后 incremental_vacuum 还盘（已有库跳过）
+    tryEnableSqliteIncrementalAutoVacuum(this.db)
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
     applySqliteMemoryPragmas(this.db, 'write')
@@ -659,10 +664,15 @@ export class MarketDataStore {
   }
 
   /**
-   * 低频轻维护（写连接）：incremental_vacuum / wal_checkpoint(TRUNCATE)；
+   * 低频轻维护（写连接）：先 prune sync_sessions；再 incremental_vacuum / wal_checkpoint；
    * 全库 VACUUM 默认关（`OPPTRIX_SQLITE_VACUUM=1` 或 opts.allowVacuum）。
    */
   runLightMaintenance(opts?: SqliteLightMaintenanceOpts): SqliteLightMaintenanceResult {
+    try {
+      this.pruneSyncSessions()
+    } catch {
+      /* prune 失败不阻断还盘路径 */
+    }
     return runSqliteLightMaintenance(this.db, opts)
   }
 
@@ -2790,9 +2800,10 @@ export class MarketDataStore {
     this.db.prepare(`
       UPDATE sync_sessions SET status = ?, finished_at = ?, message = ? WHERE id = ?
     `).run(status, nowIso(), message ?? null, sessionId)
-    // Session end is infrequent — prune session excess + enforce global hard cap.
+    // Session end is infrequent — prune logs + session metadata hard caps.
     this.pruneSyncLogsForSession(sessionId)
     this.pruneSyncLogsGlobal()
+    this.pruneSyncSessions()
   }
 
   getSession(sessionId: number) {
@@ -2878,6 +2889,31 @@ export class MarketDataStore {
       )
     `).run(keepMax - 1)
     return result.changes
+  }
+
+  /**
+   * Keep newest `keepMax` sync_sessions rows; cascade-delete orphaned sync_logs.
+   * Prefer finishSession / retention / light maintenance（勿阻塞启动热路径）。
+   */
+  pruneSyncSessions(keepMax = SYNC_SESSIONS_KEEP_MAX): { sessions: number; logs: number } {
+    if (keepMax <= 0) return { sessions: 0, logs: 0 }
+    const cutoff = this.db.prepare(`
+      SELECT id FROM sync_sessions
+      ORDER BY id DESC
+      LIMIT 1 OFFSET ?
+    `).get(keepMax - 1) as { id: number } | undefined
+    if (!cutoff) return { sessions: 0, logs: 0 }
+
+    const logs = this.db.prepare(`
+      DELETE FROM sync_logs
+      WHERE session_id IS NOT NULL AND session_id < ?
+    `).run(cutoff.id).changes
+
+    const sessions = this.db.prepare(`
+      DELETE FROM sync_sessions WHERE id < ?
+    `).run(cutoff.id).changes
+
+    return { sessions, logs }
   }
 
   getRecentLogs(sessionId: number | null, limit = 500): string[] {

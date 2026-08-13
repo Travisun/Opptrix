@@ -5,7 +5,11 @@
 import fs from 'node:fs'
 import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api'
 import PQueue from 'p-queue'
-import { isDuckLowMemProfile, resolveDuckReadConcurrency } from './duck-cli-pool.js'
+import {
+  isDuckLowMemProfile,
+  resolveDuckMaxPending,
+  resolveDuckReadConcurrency,
+} from './duck-cli-pool.js'
 import { CN_DAILY_TABLE } from './market-schema.js'
 import {
   buildLatestBarsPageQuery,
@@ -70,6 +74,8 @@ type ReaderHandle = {
   readQueue: PQueue
   /** 与 CliPool 同源：`resolveDuckReadConcurrency()` 在 bootstrap 时锁定 */
   readConcurrency: number
+  /** 与 CliPool 同源：`resolveDuckMaxPending()` 在 bootstrap 时锁定 */
+  maxPending: number
   syncCache: Map<string, { at: number; value: unknown }>
 }
 
@@ -120,7 +126,13 @@ export function runAsyncSync<T>(_promise: Promise<T>): T {
   throw new Error('runAsyncSync 不可用：请使用 MarketDuckGateway 同步路径（spawnSync duck-cli）或 async API')
 }
 
-function runQueued<T>(queue: PQueue, fn: () => Promise<T>): Promise<T> {
+function runQueued<T>(queue: PQueue, fn: () => Promise<T>, maxPending: number): Promise<T> {
+  if (queue.size >= maxPending) {
+    console.warn(
+      `[duck-neo-reader] read queue full (waiting=${queue.size}, maxPending=${maxPending}); rejecting`,
+    )
+    return Promise.reject(new Error(`DuckNeoReader queue full (maxPending=${maxPending})`))
+  }
   return queue.add(fn) as Promise<T>
 }
 
@@ -178,9 +190,11 @@ async function bootstrapReader(duckDbPath: string): Promise<ReaderHandle | null>
           access_mode: 'read_only',
         })
         const readConcurrency = resolveDuckReadConcurrency()
+        const maxPending = resolveDuckMaxPending()
         const handle: ReaderHandle = {
           instance,
           readConcurrency,
+          maxPending,
           readQueue: new PQueue({ concurrency: readConcurrency }),
           syncCache: new Map(),
         }
@@ -239,7 +253,7 @@ export class DuckNeoReader {
       const rows = await withConnection(this.duckDbPath, conn => runReadAll<T>(conn, sql, params))
       handle.syncCache.set(key, { at: Date.now(), value: rows })
       return rows
-    })
+    }, handle.maxPending)
   }
 
   async queryOne<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T | undefined> {
@@ -365,25 +379,28 @@ export class DuckNeoReader {
     if (cached) return cached
     const handle = await this.handle()
     if (!handle) return { rows: 0, codes: 0, maxDate: null }
-    const stats = await runQueued(handle.readQueue, async (): Promise<NeoKlineDuckStats> =>
-      withConnection(this.duckDbPath, async conn => {
-        const row = await runReadOne<{
-          rows: number
-          codes: number
-          maxDate: string | null
-        }>(conn, `
-          SELECT
-            COUNT(*)::BIGINT AS rows,
-            COUNT(DISTINCT code)::BIGINT AS codes,
-            MAX(trade_date) AS maxDate
-          FROM ${CN_DAILY_TABLE}
-        `)
-        return {
-          rows: Number(row?.rows ?? 0),
-          codes: Number(row?.codes ?? 0),
-          maxDate: row?.maxDate?.slice(0, 10) ?? null,
-        }
-      }),
+    const stats = await runQueued(
+      handle.readQueue,
+      async (): Promise<NeoKlineDuckStats> =>
+        withConnection(this.duckDbPath, async conn => {
+          const row = await runReadOne<{
+            rows: number
+            codes: number
+            maxDate: string | null
+          }>(conn, `
+            SELECT
+              COUNT(*)::BIGINT AS rows,
+              COUNT(DISTINCT code)::BIGINT AS codes,
+              MAX(trade_date) AS maxDate
+            FROM ${CN_DAILY_TABLE}
+          `)
+          return {
+            rows: Number(row?.rows ?? 0),
+            codes: Number(row?.codes ?? 0),
+            maxDate: row?.maxDate?.slice(0, 10) ?? null,
+          }
+        }),
+      handle.maxPending,
     )
     handle.syncCache.set(key, { at: Date.now(), value: stats })
     return stats
@@ -402,11 +419,14 @@ export class DuckNeoReader {
     if (cached) return cached
     const handle = await this.handle()
     if (!handle) return { ...EMPTY_MARKET_STATS }
-    const stats = await runQueued(handle.readQueue, async (): Promise<NeoMarketDuckStats> =>
-      withConnection(this.duckDbPath, async conn => {
-        const row = await runReadOne<Record<string, unknown>>(conn, buildMarketStatsSql())
-        return rowToMarketStats(row)
-      }),
+    const stats = await runQueued(
+      handle.readQueue,
+      async (): Promise<NeoMarketDuckStats> =>
+        withConnection(this.duckDbPath, async conn => {
+          const row = await runReadOne<Record<string, unknown>>(conn, buildMarketStatsSql())
+          return rowToMarketStats(row)
+        }),
+      handle.maxPending,
     )
     handle.syncCache.set(key, { at: Date.now(), value: stats })
     return stats

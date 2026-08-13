@@ -4,6 +4,7 @@
  * - 写：p-queue concurrency=1（串行写入，等同 DuckDB 单写者语义）
  * - 读：默认 concurrency=3；低配（见 `resolveDuckReadConcurrency`）降为 1，削峰值
  * - 执行：worker_threads 内 spawn duck-cli，主进程仅 await Promise，不阻塞事件循环
+ * - pending / PQueue：有界 maxPending（默认 128），超限拒绝并打日志，禁止静默无限涨
  *
  * 参考：better-sqlite3 WAL + worker_threads；DuckDB node-api cooperative tasks。
  */
@@ -17,6 +18,8 @@ import type { DuckCliWorkerRequest, DuckCliWorkerResponse } from './duck-cli-wor
 const DEFAULT_MAX_BUFFER = 128 * 1024 * 1024
 const DEFAULT_READ_CONCURRENCY = 3
 const WRITE_CONCURRENCY = 1
+/** 每条 PQueue 等待深度 + worker pending Map 硬顶（不含 running） */
+export const DEFAULT_DUCK_MAX_PENDING = 128
 const LOW_MEM_BYTES = 6 * 1024 * 1024 * 1024
 const CLI_PATH = fileURLToPath(new URL('../kline/duck-cli.js', import.meta.url))
 
@@ -24,6 +27,14 @@ const CLI_PATH = fileURLToPath(new URL('../kline/duck-cli.js', import.meta.url))
 export const DUCK_READ_PRIORITY_INTERACTIVE = 10
 /** 后台同步 / 迁移读 */
 export const DUCK_READ_PRIORITY_BACKGROUND = 1
+
+export interface DuckCliPoolOptions {
+  /**
+   * 读/写各自 PQueue 等待上限，以及 worker 在途 pending Map 上限。
+   * 默认 128；可用 `OPPTRIX_DUCK_MAX_PENDING` 覆盖。
+   */
+  maxPending?: number
+}
 
 /**
  * 低配判定：`OPPTRIX_SQLITE_MEM_PROFILE=low`，或未强制 high/medium 且 totalmem<6GB。
@@ -50,6 +61,21 @@ export function resolveDuckReadConcurrency(): number {
 }
 
 /**
+ * Duck 队列 / worker pending 硬顶：默认 128；`OPPTRIX_DUCK_MAX_PENDING` 优先（≥1）。
+ */
+export function resolveDuckMaxPending(override?: number): number {
+  if (override != null && Number.isFinite(override) && override >= 1) {
+    return Math.floor(override)
+  }
+  const raw = process.env.OPPTRIX_DUCK_MAX_PENDING
+  if (raw != null && String(raw).trim() !== '') {
+    const n = Number.parseInt(String(raw).trim(), 10)
+    if (Number.isFinite(n) && n >= 1) return Math.floor(n)
+  }
+  return DEFAULT_DUCK_MAX_PENDING
+}
+
+/**
  * 启动时是否 warm Neo 读缓存：低配或 `OPPTRIX_DUCK_WARM_ON_BOOT=0` 跳过（首次查询仍会拉 stats）。
  */
 export function shouldWarmDuckReadCachesOnBoot(): boolean {
@@ -59,21 +85,79 @@ export function shouldWarmDuckReadCachesOnBoot(): boolean {
   return !isDuckLowMemProfile()
 }
 
+function warnQueueFull(label: string, mode: string, maxPending: number, waiting: number): void {
+  console.warn(
+    `[DuckCliPool:${label}] ${mode} queue full (waiting=${waiting}, maxPending=${maxPending}); rejecting`,
+  )
+}
+
 export class DuckCliPool {
   private worker: Worker | null = null
   private nextId = 0
   private readonly pending = new Map<number, { resolve: (v: string) => void; reject: (e: Error) => void }>()
+  /** 尚未开始的 queue.add 外层 Promise（PQueue.clear 不会 settle，需自管） */
+  private readonly waiting = new Set<{ reject: (e: Error) => void }>()
   private readonly readQueue: PQueue
-  private readonly writeQueue = new PQueue({ concurrency: WRITE_CONCURRENCY })
+  private readonly writeQueue: PQueue
   private workerBoot: Promise<void> | null = null
   private syncWriteLock = false
+  private closed = false
   /** 构造时锁定的读并发（便于测试 / 观测） */
   readonly readConcurrency: number
   readonly writeConcurrency = WRITE_CONCURRENCY
+  /** 读/写各自等待深度与 worker pending Map 硬顶 */
+  readonly maxPending: number
 
-  constructor(private readonly label = 'default') {
+  constructor(
+    private readonly label = 'default',
+    opts?: DuckCliPoolOptions,
+  ) {
     this.readConcurrency = resolveDuckReadConcurrency()
+    this.maxPending = resolveDuckMaxPending(opts?.maxPending)
     this.readQueue = new PQueue({ concurrency: this.readConcurrency })
+    this.writeQueue = new PQueue({ concurrency: WRITE_CONCURRENCY })
+  }
+
+  /** 读队列等待中任务数（不含 running） */
+  get waitingReads(): number {
+    return this.readQueue.size
+  }
+
+  /** 写队列等待中任务数（不含 running） */
+  get waitingWrites(): number {
+    return this.writeQueue.size
+  }
+
+  /** worker 在途回调数 */
+  get inflightPending(): number {
+    return this.pending.size
+  }
+
+  /** 测试：暂停调度，便于把 waiting 填满而不进入 worker */
+  pauseQueues(): void {
+    this.readQueue.pause()
+    this.writeQueue.pause()
+  }
+
+  /** 测试：恢复调度 */
+  startQueues(): void {
+    this.readQueue.start()
+    this.writeQueue.start()
+  }
+
+  private rejectAllPending(reason: string): void {
+    for (const [, job] of this.pending) {
+      job.reject(new Error(reason))
+    }
+    this.pending.clear()
+  }
+
+  private rejectAllWaiting(reason: string): void {
+    const err = new Error(reason)
+    for (const entry of this.waiting) {
+      entry.reject(err)
+    }
+    this.waiting.clear()
   }
 
   private ensureWorker(): Promise<void> {
@@ -92,12 +176,14 @@ export class DuckCliPool {
       worker.on('error', err => {
         this.worker = null
         this.workerBoot = null
+        this.rejectAllPending(err instanceof Error ? err.message : 'duck-cli worker error')
         reject(err)
       })
       worker.on('exit', code => {
-        if (code !== 0) {
-          this.worker = null
-          this.workerBoot = null
+        this.worker = null
+        this.workerBoot = null
+        if (this.pending.size > 0) {
+          this.rejectAllPending(`duck-cli worker exited (${code ?? 'null'})`)
         }
       })
       worker.on('online', () => {
@@ -123,10 +209,21 @@ export class DuckCliPool {
 
   private dispatch(args: string[], maxBuffer: number): Promise<string> {
     return this.ensureWorker().then(() => new Promise((resolve, reject) => {
+      if (this.pending.size >= this.maxPending) {
+        warnQueueFull(this.label, 'worker-pending', this.maxPending, this.pending.size)
+        reject(new Error(`DuckCliPool worker pending full (maxPending=${this.maxPending})`))
+        return
+      }
       const id = ++this.nextId
       this.pending.set(id, { resolve, reject })
       const req: DuckCliWorkerRequest = { id, args, maxBuffer }
-      this.worker!.postMessage(req)
+      const w = this.worker
+      if (!w) {
+        this.pending.delete(id)
+        reject(new Error('DuckCliPool worker unavailable'))
+        return
+      }
+      w.postMessage(req)
     }))
   }
 
@@ -157,19 +254,47 @@ export class DuckCliPool {
     mode: 'read' | 'write',
     options: { maxBuffer?: number; priority?: number } = {},
   ): Promise<string> {
+    if (this.closed) {
+      return Promise.reject(new Error('DuckCliPool closed'))
+    }
     const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER
     const priority = options.priority ?? (mode === 'read' ? DUCK_READ_PRIORITY_BACKGROUND : 0)
     const queue = mode === 'write' ? this.writeQueue : this.readQueue
-    return queue.add(async () => this.dispatch(args, maxBuffer), { priority }) as Promise<string>
+    if (queue.size >= this.maxPending) {
+      warnQueueFull(this.label, mode, this.maxPending, queue.size)
+      return Promise.reject(
+        new Error(`DuckCliPool ${mode} queue full (maxPending=${this.maxPending})`),
+      )
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      const entry = { reject }
+      this.waiting.add(entry)
+      void queue.add(
+        async () => {
+          if (!this.waiting.has(entry)) return
+          this.waiting.delete(entry)
+          if (this.closed) {
+            reject(new Error('DuckCliPool closed'))
+            return
+          }
+          try {
+            resolve(await this.dispatch(args, maxBuffer))
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)))
+          }
+        },
+        { priority },
+      )
+    })
   }
 
   async close(): Promise<void> {
+    this.closed = true
     this.readQueue.clear()
     this.writeQueue.clear()
-    for (const [, job] of this.pending) {
-      job.reject(new Error('DuckCliPool closed'))
-    }
-    this.pending.clear()
+    this.rejectAllWaiting('DuckCliPool closed')
+    this.rejectAllPending('DuckCliPool closed')
     if (this.worker) {
       await this.worker.terminate()
       this.worker = null

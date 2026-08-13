@@ -5,7 +5,7 @@ import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
 import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
-import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError } from '@opptrix/agent-workspace'
+import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
@@ -1656,6 +1656,7 @@ async function bootstrap() {
   startEnrichmentScheduler(90_000, resolveProjectRoot())
   startRetentionMaintenance({
     hub,
+    listKnownSessionIds: () => agent.listAllSessions().map(s => s.id),
     log: {
       info: (obj, msg) => app.log.info(obj, msg),
       warn: (obj, msg) => app.log.warn(obj, msg),
@@ -1664,17 +1665,21 @@ async function bootstrap() {
   // 语义模型按需加载：boot 不 tryEnable / 不 embedPending；首次检索或入库 embed 时再加载并限速回填
   scheduleService.start()
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
-  // 后台清理已删会话遗留的 chat-attachments 目录（best-effort，不阻塞启动）
+  // 后台清理已删会话遗留的 chat-attachments / session-state 目录（best-effort，不阻塞启动）
   setImmediate(() => {
     try {
       const known = agent.listAllSessions().map(s => s.id)
-      const removed = pruneOrphanChatAttachments(known)
-      if (removed > 0) {
-        console.log(`  Pruned ${removed} orphan chat-attachment session dir(s)`)
+      const removedAttachments = pruneOrphanChatAttachments(known)
+      if (removedAttachments > 0) {
+        console.log(`  Pruned ${removedAttachments} orphan chat-attachment session dir(s)`)
+      }
+      const removedState = pruneOrphanSessionState(known)
+      if (removedState > 0) {
+        console.log(`  Pruned ${removedState} orphan session-state dir(s)`)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.warn(`[boot] prune orphan chat-attachments failed: ${msg}`)
+      console.warn(`[boot] prune orphan chat-attachments / session-state failed: ${msg}`)
     }
   })
   serveUi = shouldServeUi()

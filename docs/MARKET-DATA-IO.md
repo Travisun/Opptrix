@@ -12,4 +12,4 @@ Neo 短读与 CliPool 共用 `resolveDuckReadConcurrency()`；`marketStats` 为�
 
 ## 同步控制面日志（sync_logs）
 
-`market.db` 的 `sync_logs` 有硬顶：单 session ≤2000 行、全局 ≤8000 行；`finishSession` 时 prune，`appendLog` 每 256 次做一次 session prune（不每次 COUNT）。
+`market.db` 的 `sync_logs` 有硬顶：单 session ≤2000 行、全局 ≤8000 行；`sync_sessions` 保留最近 80 条（级联清关联日志）。`finishSession` / retention / light maintenance 触发 prune；`appendLog` 每 256 次做一次 session 日志 prune（不每次 COUNT）。本地库删数据后的还盘：新库开 `auto_vacuum=INCREMENTAL` 后走 `incremental_vacuum`；已有库可用 `OPPTRIX_SQLITE_VACUUM=1` 全库 VACUUM（默认关，不阻塞启动）。

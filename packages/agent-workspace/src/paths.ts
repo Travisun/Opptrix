@@ -1,3 +1,4 @@
+import fsSync from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { resolveUserDataRoot } from '@opptrix/shared'
@@ -113,4 +114,45 @@ export async function deleteSessionStateDirectory(sessionId: string): Promise<vo
   const safe = assertSafeSessionId(sessionId)
   const dir = resolveSessionStateDir(safe)
   await fs.rm(dir, { recursive: true, force: true })
+}
+
+/**
+ * 清理孤儿 session-state 目录：根下存在、但不在 knownSessionIds 中的子目录。
+ * 与 `pruneOrphanChatAttachments` 对齐；best-effort，单目录失败只 warn，不抛。
+ */
+export function pruneOrphanSessionState(knownSessionIds: string[]): number {
+  const known = new Set(
+    knownSessionIds
+      .map(id => (typeof id === 'string' ? id.trim() : ''))
+      .filter(Boolean),
+  )
+  const root = resolveSessionStateRoot()
+  if (!fsSync.existsSync(root)) return 0
+
+  let entries: string[]
+  try {
+    entries = fsSync.readdirSync(root)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[session-state] 扫描根目录失败: ${msg}`)
+    return 0
+  }
+
+  let removed = 0
+  for (const name of entries) {
+    if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) continue
+    if (known.has(name)) continue
+    if (!SAFE_SESSION_ID.test(name)) continue
+    const full = path.join(root, name)
+    try {
+      const st = fsSync.lstatSync(full)
+      if (!st.isDirectory()) continue
+      fsSync.rmSync(full, { recursive: true, force: true })
+      removed += 1
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[session-state] 清理孤儿目录失败 (${name}): ${msg}`)
+    }
+  }
+  return removed
 }

@@ -274,6 +274,7 @@ export {
   MarketDataStore,
   SYNC_LOGS_GLOBAL_MAX,
   SYNC_LOGS_PER_SESSION_MAX,
+  SYNC_SESSIONS_KEEP_MAX,
 } from './store.js'
 export {
   getMarketDuckGateway,
@@ -387,6 +388,18 @@ export {
   type FuyaoDumpKind,
   type FuyaoDumpMode,
 } from './sync/dump-import.js'
+export {
+  pruneMarketDumps,
+  resolveMarketDumpsDir,
+  resolveDumpsMaxAgeMs,
+  resolveDumpsMaxBytes,
+  resolveDumpsIncompleteMaxAgeMs,
+  DEFAULT_DUMPS_MAX_AGE_MS,
+  DEFAULT_DUMPS_MAX_BYTES,
+  DEFAULT_DUMPS_INCOMPLETE_MAX_AGE_MS,
+  type PruneMarketDumpsOptions,
+  type PruneMarketDumpsResult,
+} from './sync/dumps-prune.js'
 export {
   startPackageExportJob,
   getPackageExportJob,

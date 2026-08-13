@@ -95,11 +95,22 @@ export {
   readSqliteLightMaintenanceStamp,
   writeSqliteLightMaintenanceStamp,
   isSqliteLightMaintenanceDue,
+  tryEnableSqliteIncrementalAutoVacuum,
   runSqliteLightMaintenance,
   type SqliteAutoVacuumMode,
   type SqliteLightMaintenanceResult,
   type SqliteLightMaintenanceOpts,
+  type SqliteOpenCapable,
 } from './sqlite-light-maintenance.js'
+export {
+  pruneIncompleteUserDataTemps,
+  isIncompleteTempName,
+  DEFAULT_INCOMPLETE_TEMP_MAX_AGE_MS,
+  DEFAULT_INCOMPLETE_TEMP_MAX_REMOVE,
+  DEFAULT_INCOMPLETE_TEMP_MAX_DEPTH,
+  type PruneIncompleteUserDataTempsOptions,
+  type PruneIncompleteUserDataTempsResult,
+} from './user-data-temp-prune.js'
 export {
   computeMarketRegime,
   computeMaPositionPct,

@@ -2,6 +2,10 @@
  * 低频 SQLite 轻维护：优先 incremental_vacuum（若 auto_vacuum=INCREMENTAL），
  * 否则 wal_checkpoint(TRUNCATE)；全库 VACUUM 仅 opt-in（默认关）。
  *
+ * auto_vacuum=INCREMENTAL 仅能在**建表前**生效（见 tryEnableSqliteIncrementalAutoVacuum）；
+ * 已有库无法无 VACUUM 切换——删数据后还盘靠 incremental_vacuum（新库）或
+ * `OPPTRIX_SQLITE_VACUUM=1` 全库 VACUUM。
+ *
  * 不改 journal_mode / busy_timeout；失败由调用方 swallow。
  */
 import fs from 'node:fs'
@@ -36,6 +40,11 @@ export type SqliteLightMaintenanceOpts = {
   allowVacuum?: boolean
   /** incremental_vacuum 页数上限（默认 2048） */
   incrementalPages?: number
+}
+
+/** better-sqlite3 最小表面：轻维护 + 新库探测（prepare 用内部断言，避免 Statement 泛型冲突） */
+export type SqliteOpenCapable = SqlitePragmaCapable & {
+  prepare: (sql: string) => { get: (...params: never[]) => unknown }
 }
 
 type StampFile = {
@@ -121,8 +130,42 @@ function readAutoVacuum(db: SqlitePragmaCapable): SqliteAutoVacuumMode {
   return 'unknown'
 }
 
+function countUserTables(db: SqlitePragmaCapable): number | null {
+  try {
+    const prepare = (db as { prepare?: (sql: string) => { get: (...params: never[]) => unknown } }).prepare
+    if (typeof prepare !== 'function') return null
+    const row = prepare.call(
+      db,
+      `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+    ).get() as { c?: unknown } | undefined
+    const n = asNumber(row?.c)
+    return n != null ? Math.max(0, Math.floor(n)) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 仅在**尚无用户表**的新库上设置 `auto_vacuum=INCREMENTAL`，使后续
+ * `incremental_vacuum(N)` 可还盘。已有表的库无法无全库 VACUUM 切换，返回 false。
+ * 须在首个 CREATE TABLE / migrate 之前调用；不阻塞、失败 swallow。
+ */
+export function tryEnableSqliteIncrementalAutoVacuum(db: SqlitePragmaCapable): boolean {
+  try {
+    if (readAutoVacuum(db) === 'incremental') return true
+    const tables = countUserTables(db)
+    if (tables == null || tables > 0) return false
+    db.pragma('auto_vacuum = INCREMENTAL')
+    return readAutoVacuum(db) === 'incremental'
+  } catch {
+    return false
+  }
+}
+
 /**
  * 对已打开的写连接做轻量维护（无 due 判断；调用方负责低频）。
+ * 安全时跑 `PRAGMA incremental_vacuum(N)`；否则仅 wal_checkpoint；
+ * 全库 VACUUM 仅 opt-in（env / allowVacuum）。
  */
 export function runSqliteLightMaintenance(
   db: SqlitePragmaCapable,

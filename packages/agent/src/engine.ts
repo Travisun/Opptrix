@@ -203,6 +203,29 @@ export class AgentEngine {
   /** 附件 GET 与 content parts 本地 URL 前缀 */
   private apiBaseUrl = 'http://127.0.0.1:8711/api'
 
+  /** 按 sessionId 前缀清理专家 pack 播种标记（delete / archive 对齐 pack/skill 清旁路） */
+  private clearExpertPacksSeeded(sessionId: string): void {
+    const prefix = `${sessionId}:`
+    for (const key of [...this.expertPacksSeeded]) {
+      if (key.startsWith(prefix)) this.expertPacksSeeded.delete(key)
+    }
+  }
+
+  /** @internal 测试用 */
+  expertPacksSeededSizeForTests(): number {
+    return this.expertPacksSeeded.size
+  }
+
+  /** @internal 测试用 */
+  hasExpertPackSeedForTests(sessionId: string, expertId: string): boolean {
+    return this.expertPacksSeeded.has(`${sessionId}:${expertId}`)
+  }
+
+  /** @internal 测试用 */
+  markExpertPackSeededForTests(sessionId: string, expertId: string): void {
+    this.expertPacksSeeded.add(`${sessionId}:${expertId}`)
+  }
+
   setApiBaseUrl(url: string) {
     const trimmed = url.trim().replace(/\/$/, '')
     if (trimmed) this.apiBaseUrl = trimmed
@@ -772,7 +795,14 @@ export class AgentEngine {
   }
 
   archiveSession(id: string, folderId: string) {
-    return this.sessions.archive(id, folderId)
+    const record = this.sessions.archive(id, folderId)
+    if (record) {
+      // 归档后对齐旁路清理：pack / skill / 专家播种标记（不清 workspace 目录，避免不可逆）
+      this.toolPackSessions.clear(id)
+      this.agentSkillSessions.clear(id)
+      this.clearExpertPacksSeeded(id)
+    }
+    return record
   }
 
   unarchiveSession(id: string) {
@@ -811,6 +841,7 @@ export class AgentEngine {
     this.userPromptBridge.cancelSession(id)
     this.toolPackSessions.clear(id)
     this.agentSkillSessions.clear(id)
+    this.clearExpertPacksSeeded(id)
     this.workspaceService.clearSession(id)
     void deleteSessionStateDirectory(id).catch(err => {
       const msg = err instanceof Error ? err.message : String(err)

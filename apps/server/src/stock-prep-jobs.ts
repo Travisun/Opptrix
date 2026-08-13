@@ -46,8 +46,55 @@ function idleSnapshot(code: string): StockPrepSnapshot {
   }
 }
 
+/** 终态快照 TTL；running 不受误删。与下方「done 1h 复用」配合，避免 Map 无限涨 */
+const SNAPSHOT_TTL_MS = 45 * 60 * 1000
+const MAX_SNAPSHOTS = 200
+
 const snapshots = new Map<string, StockPrepSnapshot>()
 const running = new Set<string>()
+
+export const STOCK_PREP_SNAPSHOT_TTL_MS = SNAPSHOT_TTL_MS
+export const STOCK_PREP_MAX_SNAPSHOTS = MAX_SNAPSHOTS
+
+function isProtected(code: string, snap: StockPrepSnapshot): boolean {
+  return running.has(code) || snap.status === 'running'
+}
+
+/** 驱逐过期 / 超额终态；running 保留 */
+export function pruneStockPrepSnapshots(now = Date.now()): void {
+  for (const [code, snap] of snapshots) {
+    if (isProtected(code, snap)) continue
+    const updated = Date.parse(snap.updated_at)
+    if (!Number.isFinite(updated) || now - updated > SNAPSHOT_TTL_MS) {
+      snapshots.delete(code)
+    }
+  }
+  while (snapshots.size > MAX_SNAPSHOTS) {
+    const oldest = [...snapshots.entries()]
+      .filter(([code, snap]) => !isProtected(code, snap))
+      .sort((a, b) => Date.parse(a[1].updated_at) - Date.parse(b[1].updated_at))[0]
+    if (!oldest) break
+    snapshots.delete(oldest[0])
+  }
+}
+
+/** @internal 测试用 */
+export function resetStockPrepSnapshotsForTests(): void {
+  snapshots.clear()
+  running.clear()
+}
+
+/** @internal 测试用 */
+export function stockPrepSnapshotsSizeForTests(): number {
+  return snapshots.size
+}
+
+/** @internal 测试用 */
+export function injectStockPrepSnapshotForTests(snap: StockPrepSnapshot, opts?: { running?: boolean }): void {
+  snapshots.set(snap.code, snap)
+  if (opts?.running) running.add(snap.code)
+  else running.delete(snap.code)
+}
 
 function patch(code: string, patch: Partial<StockPrepSnapshot>) {
   const prev = snapshots.get(code) ?? idleSnapshot(code)
@@ -69,11 +116,13 @@ function patchStep(code: string, stepId: StockPrepStepId, stepPatch: Partial<Sto
 }
 
 export function getStockPrep(code: string): StockPrepSnapshot {
+  pruneStockPrepSnapshots()
   const normalized = normalizeCode(code)
   return snapshots.get(normalized) ?? idleSnapshot(normalized)
 }
 
 export function startStockPrep(hub: ResearchHub, code: string, opts?: { force?: boolean }): StockPrepSnapshot {
+  pruneStockPrepSnapshots()
   const normalized = normalizeCode(code)
   const existing = snapshots.get(normalized)
   if (running.has(normalized)) {

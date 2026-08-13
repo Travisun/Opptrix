@@ -28,16 +28,16 @@ export const DEFAULT_TTL: Record<string, number> = {
   crypto_kline: 300,
 }
 
-const DEFAULT_MAX_ENTRIES = 1200
-const DEFAULT_MAX_APPROX_BYTES = 80 * 1024 * 1024
+const DEFAULT_MAX_ENTRIES = 1024
+const DEFAULT_MAX_APPROX_BYTES = 64 * 1024 * 1024
 const DEFAULT_PERSIST_DEBOUNCE_MS = 1500
 /** Single entry above this stays in memory LRU but is omitted from disk (avoids cache.json bloat). */
 const DEFAULT_MAX_DISK_ENTRY_BYTES = 1.5 * 1024 * 1024
 
 export interface CacheOptions {
-  /** Cap on live entries (default 1200; env OPPTRIX_CACHE_MAX_ENTRIES). */
+  /** Cap on live entries (default 1024; env OPPTRIX_CACHE_MAX_ENTRIES). */
   maxEntries?: number
-  /** Rough JSON-size budget in bytes (default 80MB; env OPPTRIX_CACHE_MAX_BYTES). */
+  /** Rough JSON-size budget in bytes (default 64MB; env OPPTRIX_CACHE_MAX_BYTES). */
   maxApproxBytes?: number
   /** Debounce window for disk flush (default 1500ms). */
   persistDebounceMs?: number
@@ -413,7 +413,7 @@ export class Cache {
 }
 
 /** Hard cap for deprecated MemoryCache (prevents unbounded Map growth if misused). */
-const MEMORY_CACHE_DEFAULT_MAX_ENTRIES = 256
+const MEMORY_CACHE_DEFAULT_MAX_ENTRIES = 128
 
 /**
  * @deprecated Use {@link Cache} (bounded LRU + optional disk). Kept for legacy

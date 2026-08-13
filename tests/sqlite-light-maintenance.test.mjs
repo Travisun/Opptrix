@@ -11,6 +11,7 @@ const {
   writeSqliteLightMaintenanceStamp,
   readSqliteLightMaintenanceStamp,
   resolveSqliteVacuumEnabled,
+  tryEnableSqliteIncrementalAutoVacuum,
   DEFAULT_SQLITE_LIGHT_MAINTENANCE_INTERVAL_MS,
 } = await import('../packages/shared/dist/sqlite-light-maintenance.js')
 
@@ -115,6 +116,27 @@ describe('sqlite light maintenance', () => {
       assert.equal(result.vacuum, true)
       assert.equal(result.walCheckpoint, true)
       db.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('tryEnableSqliteIncrementalAutoVacuum only on empty new db', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'opptrix-sqlite-av-'))
+    const emptyPath = join(dir, 'empty.db')
+    const existingPath = join(dir, 'existing.db')
+    try {
+      const empty = new Database(emptyPath)
+      assert.equal(tryEnableSqliteIncrementalAutoVacuum(empty), true)
+      empty.exec('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+      assert.equal(empty.pragma('auto_vacuum', { simple: true }), 2)
+      empty.close()
+
+      const existing = new Database(existingPath)
+      existing.exec('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+      assert.equal(tryEnableSqliteIncrementalAutoVacuum(existing), false)
+      assert.equal(existing.pragma('auto_vacuum', { simple: true }), 0)
+      existing.close()
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

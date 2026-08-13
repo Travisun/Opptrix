@@ -9,6 +9,7 @@ export {
   migrateLegacyWorkspaceFiles,
   deleteSessionWorkspaceDirectory,
   deleteSessionStateDirectory,
+  pruneOrphanSessionState,
   DEFAULT_ROOT_ID,
   SHARED_ROOT_ID,
   SESSIONS_SUBDIR,

@@ -389,4 +389,45 @@ export class DocLibraryRepository {
       return null
     }
   }
+
+  /**
+   * 删除文档行（FK 级联 chunks / parse_artifacts / session_documents）并 unlink 对应 md；
+   * blob 仅在无其他 documents 引用同一 content_sha256 时删除。
+   */
+  deleteDocument(documentId: string): boolean {
+    const doc = this.getDocument(documentId)
+    if (!doc) return false
+
+    const artifact = this.getParseArtifact(documentId)
+    const sha = doc.content_sha256
+    const blobPath = doc.blob_path || blobPathForSha(sha)
+    const mdPath = artifact?.md_path || markdownPathForDocument(documentId)
+
+    const otherRefs = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM documents WHERE content_sha256 = ? AND id != ?
+    `).get(sha, documentId) as { c: number }
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM fts_chunks WHERE document_id = ?').run(documentId)
+      this.db.prepare('DELETE FROM documents WHERE id = ?').run(documentId)
+    })
+    tx()
+
+    try {
+      if (mdPath && fs.existsSync(mdPath)) fs.unlinkSync(mdPath)
+    } catch {
+      /* ignore */
+    }
+
+    if (Number(otherRefs?.c ?? 0) === 0) {
+      try {
+        const target = blobPath || blobPathForSha(sha)
+        if (target && fs.existsSync(target)) fs.unlinkSync(target)
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return true
+  }
 }

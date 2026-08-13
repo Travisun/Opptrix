@@ -8,6 +8,7 @@ const ENV_KEYS = [
   'OPPTRIX_DUCK_READ_CONCURRENCY',
   'OPPTRIX_SQLITE_MEM_PROFILE',
   'OPPTRIX_DUCK_WARM_ON_BOOT',
+  'OPPTRIX_DUCK_MAX_PENDING',
 ]
 
 /** @type {Record<string, string | undefined>} */
@@ -140,5 +141,57 @@ describe('marketStats merged SQL + field keys', () => {
     }
     assert.match(sql, /SELECT[\s\S]*\(SELECT COUNT\(\*\)::BIGINT FROM stocks\) AS stocks/)
     assert.doesNotMatch(sql, /await q\(/)
+  })
+})
+
+describe('DuckCliPool maxPending hard cap', () => {
+  it('resolveDuckMaxPending defaults 128; env / ctor override', async () => {
+    const {
+      resolveDuckMaxPending,
+      DEFAULT_DUCK_MAX_PENDING,
+      DuckCliPool,
+    } = await import('../packages/market-data/dist/duck/duck-cli-pool.js')
+    assert.equal(DEFAULT_DUCK_MAX_PENDING, 128)
+    assert.equal(resolveDuckMaxPending(), 128)
+    process.env.OPPTRIX_DUCK_MAX_PENDING = '64'
+    assert.equal(resolveDuckMaxPending(), 64)
+    const pool = new DuckCliPool('test-max-pending-ctor', { maxPending: 3 })
+    assert.equal(pool.maxPending, 3)
+    await pool.close()
+  })
+
+  it('rejects read exec when waiting queue exceeds maxPending (no silent growth)', async () => {
+    const { DuckCliPool } = await import('../packages/market-data/dist/duck/duck-cli-pool.js')
+    const pool = new DuckCliPool('test-queue-full', { maxPending: 2 })
+    pool.pauseQueues()
+    const p1 = pool.exec(['--help'], 'read')
+    const p2 = pool.exec(['--help'], 'read')
+    assert.equal(pool.waitingReads, 2)
+    await assert.rejects(
+      () => pool.exec(['--help'], 'read'),
+      (err) => err instanceof Error && /queue full/i.test(err.message) && /maxPending=2/.test(err.message),
+    )
+    assert.equal(pool.waitingReads, 2)
+    await pool.close()
+    await assert.rejects(() => p1)
+    await assert.rejects(() => p2)
+  })
+
+  it('rejects write exec independently when write waiting is full', async () => {
+    const { DuckCliPool } = await import('../packages/market-data/dist/duck/duck-cli-pool.js')
+    const pool = new DuckCliPool('test-write-full', { maxPending: 1 })
+    pool.pauseQueues()
+    const w1 = pool.exec(['--help'], 'write')
+    assert.equal(pool.waitingWrites, 1)
+    await assert.rejects(
+      () => pool.exec(['--help'], 'write'),
+      (err) => err instanceof Error && /write queue full/i.test(err.message),
+    )
+    // read queue still accepts
+    const r1 = pool.exec(['--help'], 'read')
+    assert.equal(pool.waitingReads, 1)
+    await pool.close()
+    await assert.rejects(() => w1)
+    await assert.rejects(() => r1)
   })
 })

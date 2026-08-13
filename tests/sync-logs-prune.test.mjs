@@ -7,6 +7,7 @@ import {
   MarketDataStore,
   SYNC_LOGS_GLOBAL_MAX,
   SYNC_LOGS_PER_SESSION_MAX,
+  SYNC_SESSIONS_KEEP_MAX,
 } from '../packages/market-data/dist/store.js'
 
 let dataDir = ''
@@ -89,6 +90,56 @@ test('pruneSyncLogsGlobal enforces hard cap across sessions', () => {
   store.finishSession(b, 'completed')
   assert.ok(countLogs(store) <= SYNC_LOGS_GLOBAL_MAX)
   assert.ok(store.getRecentLogs(b, 5).length > 0)
+
+  store.close()
+})
+
+test('sync_sessions prune constants are within expected hard-cap range', () => {
+  assert.ok(SYNC_SESSIONS_KEEP_MAX >= 50 && SYNC_SESSIONS_KEEP_MAX <= 100)
+})
+
+test('pruneSyncSessions keeps newest N and cascades sync_logs; finishSession triggers', () => {
+  const dbPath = join(dataDir, 'session-meta-prune.db')
+  const store = new MarketDataStore(dbPath)
+
+  const ids = []
+  for (let i = 0; i < 12; i++) {
+    const id = store.beginSession('incremental', 1)
+    store.appendLog(id, `s${i}-log`)
+    store.finishSession(id, 'completed')
+    ids.push(id)
+  }
+
+  assert.equal(
+    store.db.prepare('SELECT COUNT(*) AS c FROM sync_sessions').get().c,
+    12,
+  )
+
+  const pruned = store.pruneSyncSessions(5)
+  assert.equal(pruned.sessions, 7)
+  assert.ok(pruned.logs >= 7)
+  assert.equal(
+    store.db.prepare('SELECT COUNT(*) AS c FROM sync_sessions').get().c,
+    5,
+  )
+  assert.equal(countLogs(store), 5)
+
+  const kept = store.db.prepare(
+    'SELECT id FROM sync_sessions ORDER BY id ASC',
+  ).all().map(r => r.id)
+  assert.deepEqual(kept, ids.slice(-5))
+
+  // Under limit — no-op
+  assert.deepEqual(store.pruneSyncSessions(5), { sessions: 0, logs: 0 })
+
+  // finishSession also prunes sessions (default keepMax >> 5)
+  const extra = store.beginSession('full', 1)
+  store.appendLog(extra, 'extra')
+  store.finishSession(extra, 'completed')
+  assert.ok(
+    store.db.prepare('SELECT COUNT(*) AS c FROM sync_sessions').get().c
+      <= SYNC_SESSIONS_KEEP_MAX,
+  )
 
   store.close()
 })

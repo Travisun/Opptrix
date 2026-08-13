@@ -100,7 +100,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 **Sidecar 守护（生产包，兜底）**：主进程在常驻启动成功后监督自有 sidecar（非开发、非 `reuse` 端口）。子进程意外退出时按指数退避（1s→2s→…→30s）自动拉起并重新做 health；另有约 20s 健康巡检，发现「进程在但端口无响应」或进程已消失时同样重启（与 exit 路径共用单飞锁，避免双启）。用户退出、更新安装或短命 tick 退出前会停止守护，并对 sidecar 给予 ≥8.5s 软关闭窗口（对齐 server 内原生 Duck/Lance/ONNX 关闭），再 SIGKILL，减轻 macOS「意外退出」类崩溃框。`before-quit`（含 Cmd+Q）在 sidecar 未就绪退出前会 `preventDefault` 并等待宽限关闭。
 
-> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯仅一处 FTS**（user-store，与统一搜索同源；**不再**双写 doc-library 切块、**不**写入 Lance）；统一搜索首次 `ensureIndexes` 按页灌入 FTS、不驻留全量文章对象。研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建；`upsert` 优先 `mergeInsert(on: chunk_id)`，不可用时回退 delete+add；**search 读优先**（可插队尚未开始的写/optimize，写仍互斥串行）；Lance pending 有界（超限丢弃最旧尚未开始的 write）。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后**限速**调度 `embedPendingDocuments`（清非 news 的 `embedded_at` 后回填；`OPPTRIX_LANCE_BACKFILL_LIMIT` / `OPPTRIX_LANCE_BACKFILL_DELAY_MS` 可调；失败不阻断打开空表）。
+> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯仅一处 FTS**（user-store，与统一搜索同源；**不再**双写 doc-library 切块、**不**写入 Lance）；统一搜索首次 `ensureIndexes` 按页灌入 FTS、不驻留全量文章对象。研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建；`upsert` 优先 `mergeInsert(on: chunk_id)`，不可用时回退 delete+add；**search 读优先**（可插队尚未开始的写/optimize，写仍互斥串行）；Lance pending 有界（超限丢弃最旧尚未开始的 write）；版本软顶 `OPPTRIX_LANCE_MAX_VERSIONS`（默认 64）在写路径与 retention 触发更积极 optimize。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后**限速**调度 `embedPendingDocuments`（清非 news 的 `embedded_at` 后回填；`OPPTRIX_LANCE_BACKFILL_LIMIT` / `OPPTRIX_LANCE_BACKFILL_DELAY_MS` 可调；失败不阻断打开空表）。
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 
@@ -405,7 +405,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`opptrix_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
+智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`opptrix_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；浏览截图目录同样按保留天数与容量硬顶自动回收（默认约 7 天 / 512MiB，可用 `OPPTRIX_BROWSER_SCREENSHOT_MAX_AGE_MS` / `OPPTRIX_BROWSER_SCREENSHOT_MAX_BYTES` 调节，`0` 关闭对应维度；关闭浏览器会话不会立刻删图）。本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint，并在新库启用 `auto_vacuum=INCREMENTAL` 时跑 `incremental_vacuum` 还盘（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）；启动与周期维护会扫掉已无对应会话的孤儿目录。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。研报库会限速回收无文档引用的 blob/markdown，并清理用户数据根下过期的半成品下载临时文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
 
 **Windows 隔离强度（设置 → 沙盒环境）**：
 
