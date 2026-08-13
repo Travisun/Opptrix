@@ -11,6 +11,12 @@ test('portfolioInstrumentRef — CN six-digit, HK five-digit, US ticker', () => 
   const cn = portfolioInstrumentRef('600519', 'CN')
   assert.equal(cn.market, 'CN')
   assert.equal(cn.symbol, '600519')
+  assert.equal(cn.assetClass, 'EQUITY')
+
+  const cnEtf = portfolioInstrumentRef('510300', 'CN')
+  assert.equal(cnEtf.market, 'CN')
+  assert.equal(cnEtf.symbol, '510300')
+  assert.equal(cnEtf.assetClass, 'ETF')
 
   const hk = portfolioInstrumentRef('700', 'HK')
   assert.equal(hk.market, 'HK')

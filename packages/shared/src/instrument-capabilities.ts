@@ -40,7 +40,7 @@ const CN_INDEX: ApplicationCapability[] = [
 ]
 
 const CN_ETF: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'scorecard', 'discover_mine',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'scorecard', 'discover_mine', 'portfolio_pnl',
 ]
 
 const US_EQUITY: ApplicationCapability[] = [

@@ -269,7 +269,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
           <SidebarListEmpty
             icon={<BriefcaseRegular />}
             title="还没有持仓记录"
-            hint="在个股详情里录入买卖后，会在这里汇总市值与盈亏"
+            hint="在个股或 ETF 详情里录入买卖后，会在这里汇总市值与盈亏"
           />
         ) : (
           holdings.map((h, index) => {
@@ -280,11 +280,13 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
               || portfolioHoldingsKey(selectedCode, h.market) === displayCode
               || (() => {
                 const parsed = parseInstrumentInput(selectedCode)
-                return parsed ? instrumentKey(parsed) === instrumentKey({
-                  market: (h.market ?? 'CN') as import('../types/instrument').Market,
-                  assetClass: 'EQUITY',
-                  symbol: h.code,
-                }) : false
+                if (!parsed) return false
+                const market = (h.market ?? 'CN') as import('../types/instrument').Market
+                // CN 用 parseInstrumentInput 推断真实 assetClass（ETF/INDEX/EQUITY）；非 CN 仍为 EQUITY
+                const holdingRef = market === 'CN'
+                  ? parseInstrumentInput(h.code)
+                  : { market, assetClass: 'EQUITY' as const, symbol: h.code }
+                return instrumentKey(parsed) === instrumentKey(holdingRef)
               })()
             )
             const sharesLabel = formatShares(h.shares)

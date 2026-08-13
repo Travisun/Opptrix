@@ -208,6 +208,18 @@ test('gateInstrumentEvaluation — CN equity supported, US technical bundle', ()
   assert.equal(hasApplicationCapability({ market: 'HK', assetClass: 'EQUITY', symbol: '00700' }, 'discover_mine'), true)
 })
 
+test('hasApplicationCapability — CN ETF portfolio_pnl enabled', () => {
+  assert.equal(
+    hasApplicationCapability({ market: 'CN', assetClass: 'ETF', symbol: '510300' }, 'portfolio_pnl'),
+    true,
+  )
+  // 个股路径仍开放，避免回归
+  assert.equal(
+    hasApplicationCapability({ market: 'CN', assetClass: 'EQUITY', symbol: '600519' }, 'portfolio_pnl'),
+    true,
+  )
+})
+
 test('gateInstrumentAnalytics — US strategy_signal supported', () => {
   assert.equal(
     gateInstrumentAnalytics({ market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' }, 'strategy_signal').status,
