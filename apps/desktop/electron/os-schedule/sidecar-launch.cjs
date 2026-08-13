@@ -181,7 +181,7 @@ async function waitForHealth(host, port, timeoutMs = 30_000) {
 
 /**
  * SIGTERM then SIGKILL — does not wait for exit.
- * Soft-kill grace defaults to SIDECAR_GRACEFUL_MS (≥ server native shutdown 8s).
+ * Soft-kill grace defaults to SIDECAR_GRACEFUL_MS（≥ server forceExit 12s + 缓冲；见 sidecar-supervisor.cjs）。
  * @param {import('node:child_process').ChildProcess | null | undefined} proc
  * @param {{ killGraceMs?: number }} [opts]
  */

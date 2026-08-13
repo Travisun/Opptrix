@@ -50,13 +50,14 @@ import { registerSpeechRoutes } from './speech-routes.js'
 import { ensureMediaTranscriptBridge } from './media-transcript-bridge.js'
 import {
   startNewsFeedScheduler,
+  stopNewsFeedScheduler,
   getNewsSettings,
   setNewsArticlePersistHook,
   setNewsArticleDeleteHook,
   getArticle,
 } from '@opptrix/news-feed'
-import { maybeBootstrapTranslationModel } from '@opptrix/local-inference'
-import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
+import { maybeBootstrapTranslationModel, llamaRuntime } from '@opptrix/local-inference'
+import { startEnrichmentScheduler, stopEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
 import { createJobExecutor, getScheduleService, type ScheduleJobNotificationEvent } from '@opptrix/schedule'
 import {
@@ -67,6 +68,7 @@ import {
 } from '@opptrix/search-hub'
 import { fetchUserAgreementHtml } from './legal-document.js'
 import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
+import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -1734,41 +1736,48 @@ async function shutdown(signal: string) {
   if (shuttingDown) return
   shuttingDown = true
   app.log.info(`received ${signal}, shutting down`)
-  const forceExit = setTimeout(() => {
-    app.log.warn('shutdown timeout — forcing exit (sync/import may have blocked the event loop)')
-    process.exit(signal === 'uncaughtException' ? 1 : 0)
-  }, 8_000)
-  try {
-    await browserSessionManager.closeAll()
-    scheduleService.stop()
-    stopRetentionMaintenance()
-    await app.close()
-    // 原生模块（lancedb / onnx / duckdb）须在 process.exit 前显式关闭，否则 macOS 上
-    // __cxa_finalize 可能 SIGABRT，表现为「Opptrix 意外退出」。
-    try {
+  await runSidecarShutdown({
+    log: {
+      info: (msg) => app.log.info(msg),
+      warn: (obj, msg) => {
+        if (msg) app.log.warn(obj, msg)
+        else app.log.warn(obj)
+      },
+      error: (obj, msg) => {
+        if (msg) app.log.error(obj, msg)
+        else app.log.error(obj)
+      },
+    },
+    forceExitMs: resolveSidecarForceExitMs(),
+    exitCode: signal === 'uncaughtException' ? 1 : 0,
+    stopSchedulers: () => {
+      scheduleService.stop()
+      stopRetentionMaintenance()
+      stopNewsFeedScheduler()
+      stopEnrichmentScheduler()
+    },
+    closeBrowsers: () => browserSessionManager.closeAll(),
+    closeHttpApp: () => app.close(),
+    unloadLlama: async () => {
+      try {
+        await llamaRuntime.unload()
+      } catch {
+        /* swallow — unload must not block teardown */
+      }
+    },
+    closeDocLibrary: async () => {
       const docLib = await import('@opptrix/doc-library')
+      // closeDocLibraryService 已含 Lance / embedding / OCR / doc sqlite；勿重复 close*
       await docLib.closeDocLibraryService()
-      await docLib.closeEmbeddingService()
-      await docLib.closeOcrService()
-    } catch (err) {
-      app.log.warn({ err }, 'doc-library / embedding / OCR shutdown failed')
-    }
-    try {
-      await closeMarketDuckRuntime()
-    } catch (err) {
-      app.log.warn({ err }, 'market duck runtime shutdown failed')
-    }
-    try {
+    },
+    closeMarketDuck: () => closeMarketDuckRuntime(),
+    closeMarketStore: () => {
       getMarketDataService().store.close()
-    } catch (err) {
-      app.log.warn({ err }, 'market store close failed')
-    }
-  } catch (err) {
-    app.log.error({ err }, 'shutdown error')
-  } finally {
-    clearTimeout(forceExit)
-    process.exit(0)
-  }
+    },
+    closeUserStore: () => {
+      getUserDataStore().close()
+    },
+  })
 }
 
 process.on('SIGTERM', () => { void shutdown('SIGTERM') })

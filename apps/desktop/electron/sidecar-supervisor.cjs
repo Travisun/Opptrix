@@ -1,11 +1,16 @@
 /**
  * Sidecar supervision helpers — pure Node (no electron).
  * Used by Electron main for auto-restart + graceful stop timing aligned with
- * server shutdown (native closeDocLibrary / closeMarketDuck ~8s).
+ * server shutdown (native closeDocLibrary / llama / Duck / user-store).
+ *
+ * Timing contract (keep in sync with apps/server `OPPTRIX_SIDECAR_FORCE_EXIT_MS`):
+ * - Server default forceExit = 12_000ms (env override)
+ * - Soft grace here must be ≥ forceExit so SIGKILL does not cut native teardown mid-flight
+ * - Hard finish = soft + SIDECAR_HARD_EXTRA_MS
  */
 
-/** Soft-kill grace: must be ≥ server `shutdown` forceExit (8s). */
-const SIDECAR_GRACEFUL_MS = 8500
+/** Soft-kill grace: ≥ server shutdown forceExit (12s) + small buffer. */
+const SIDECAR_GRACEFUL_MS = 14_000
 
 /** Extra wait after SIGKILL before giving up on `exit`. */
 const SIDECAR_HARD_EXTRA_MS = 2500
