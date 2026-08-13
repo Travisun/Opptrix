@@ -66,7 +66,9 @@ const useStyles = makeStyles({
   },
   drawer: {
     width: '100%',
-    maxWidth: `${DRAWER_MAX_WIDTH}px`,
+    minWidth: 0,
+    maxWidth: `min(100%, ${DRAWER_MAX_WIDTH}px)`,
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
     maxHeight: 'min(78%, 520px)',
@@ -137,7 +139,10 @@ const useStyles = makeStyles({
   },
   drawerBody: {
     flex: 1,
+    minWidth: 0,
     minHeight: 0,
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
@@ -145,7 +150,10 @@ const useStyles = makeStyles({
   },
   contentStack: {
     flex: 1,
+    minWidth: 0,
     minHeight: 0,
+    maxWidth: '100%',
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
@@ -192,16 +200,21 @@ const useStyles = makeStyles({
     letterSpacing: '0.04em',
   },
   tabRow: {
-    display: 'inline-flex',
+    display: 'flex',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
     gap: '2px',
     padding: '2px',
     borderRadius: opptrixTokens.radiusXl,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    width: 'fit-content',
     flexShrink: 0,
   },
   tabBtn: {...ghostInteractive,
 
+    flex: '1 1 0',
+    minWidth: 0,
     border: 'none',
     backgroundColor: 'transparent',
     color: opptrixCssVars.textSecondary,
@@ -212,6 +225,8 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusFull,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
 ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
       color: opptrixCssVars.textPrimary,
@@ -246,15 +261,28 @@ const useStyles = makeStyles({
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '6px',
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
+  },
+  tradeFullRow: {
+    gridColumn: '1 / -1',
+    minWidth: 0,
+    width: '100%',
+    boxSizing: 'border-box',
   },
   tradeSideRow: {
     gridColumn: '1 / -1',
     display: 'flex',
+    alignItems: 'stretch',
+    width: '100%',
+    minWidth: 0,
     gap: '4px',
   },
   sideBtn: {...ghostInteractive,
 
-    flex: 1,
+    flex: '1 1 0',
+    minWidth: 0,
     minHeight: '26px',
     borderRadius: opptrixTokens.radiusFull,
     border: 'none',
@@ -275,11 +303,13 @@ const useStyles = makeStyles({
     color: MARKET_DOWN,
   },
   glassInput: {
+    minWidth: 0,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     borderRadius: opptrixTokens.radiusMd,
   },
   feeHint: {
     gridColumn: '1 / -1',
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
@@ -691,11 +721,13 @@ export default function FollowStockDialog({
                     value={tradeForm.price}
                     onChange={(_, data) => setTradeForm(prev => ({ ...prev, price: data.value }))}
                   />
-                  <TradeDateField
-                    className={s.glassInput}
-                    value={tradeForm.date}
-                    onChange={date => setTradeForm(prev => ({ ...prev, date }))}
-                  />
+                  <div className={s.tradeFullRow}>
+                    <TradeDateField
+                      className={s.glassInput}
+                      value={tradeForm.date}
+                      onChange={date => setTradeForm(prev => ({ ...prev, date }))}
+                    />
+                  </div>
                   {previewFees && tradeForm.shares && tradeForm.price && (
                     <Text className={s.feeHint}>
                       预估成交额 {formatCompactNumberForMarket(stockRef?.market, estimateTradeAmount(Number(tradeForm.shares), Number(tradeForm.price)))}
@@ -704,7 +736,9 @@ export default function FollowStockDialog({
                     </Text>
                   )}
                   <OpptrixButton
+                    className={s.tradeFullRow}
                     variant="primary"
+                    block
                     disabled={submitting || !tradeForm.shares || !tradeForm.price}
                     onClick={() => void handleSubmitTrade()}
                   >
