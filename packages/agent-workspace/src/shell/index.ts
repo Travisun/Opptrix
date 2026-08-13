@@ -30,6 +30,7 @@ export {
   buildPipInstallArgv,
   commandNeedsNetwork,
   commandMayNeedEgressConfirmation,
+  injectPipCertArgv,
   isNetworkDiagnosticCommand,
   parseDiagnosticTargetHost,
 } from './package-policy.js'
@@ -54,6 +55,7 @@ export {
 } from './network-policy.js'
 export {
   resolveBundledCaCertPath,
+  materializeBundledCaCert,
   applyBundledCaCertEnv,
   bundledCaCertAllowReadPaths,
 } from './bundled-cacert.js'
