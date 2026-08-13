@@ -258,7 +258,7 @@ async function requireShellRunConfirmation(
   if (sticky.has(sessionId)) return
   const commandSummary = summarizeShellArgv(argv)
   const payload = {
-    kind: 'shell_run' as const,
+    kind: 'opptrix_run' as const,
     title: '允许运行命令',
     prompt: `将在隔离环境中运行：\n${commandSummary}\n\n仅限本对话工作区与已授权目录；系统隔离执行。`,
     command_summary: commandSummary,

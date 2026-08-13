@@ -262,7 +262,8 @@ const TOOL_LABELS: Record<string, string> = {
   browser_type: '输入',
   browser_screenshot: '网页截图',
   browser_close: '关闭网页浏览',
-  shell_run: '运行命令',
+  opptrix_run: 'Opptrix 运行',
+  shell_run: 'Opptrix 运行',
   shell_install: '安装依赖',
   shell_platform_status: '检查运行环境是否就绪',
   python_env_status: '查看 Python 环境',
@@ -587,6 +588,7 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const short = q.length > 36 ? `${q.slice(0, 36)}…` : q
       return `等待你的确认：${short}`
     }
+    case 'opptrix_run':
     case 'shell_run': {
       const argv = Array.isArray(args.argv)
         ? args.argv.filter((v): v is string => typeof v === 'string').slice(0, 4)
@@ -1017,6 +1019,7 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
       if (labels.length) return `已选择：${labels.join('、')}`
       return '已收到你的确认'
     }
+    case 'opptrix_run':
     case 'shell_run':
     case 'shell_install':
     case 'shell_platform_status':

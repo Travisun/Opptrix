@@ -50,13 +50,13 @@ describe('formatLiveThinkingStatus', () => {
 })
 
 describe('applyChatProgressEvent pendingUserPrompt', () => {
-  it('clears pending on tool_done for shell_run', () => {
+  it('clears pending on tool_done for opptrix_run', () => {
     const next = applyChatProgressEvent(snapshotWithPending(), {
       type: 'tool_done',
       step: {
         id: 'step-1',
-        tool: 'shell_run',
-        label: '运行命令',
+        tool: 'opptrix_run',
+        label: 'Opptrix 运行',
         status: 'done',
         startedAt: new Date().toISOString(),
       },

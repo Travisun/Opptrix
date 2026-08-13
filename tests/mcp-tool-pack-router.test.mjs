@@ -121,7 +121,7 @@ test('unknown tool hint falls back to workspace sandbox', () => {
   const hint = unloadedToolHint('totally_fake_tool_xyz')
   assert.match(hint, /list_tool_packs/)
   assert.match(hint, /workspace/)
-  assert.match(hint, /shell_run|ensure_python|workspace_/)
+  assert.match(hint, /opptrix_run|shell_run|ensure_python|workspace_/)
   assert.match(hint, /勿虚构/)
 })
 
@@ -139,7 +139,7 @@ test('pack catalog prompt is slim vs legacy routing tables', () => {
   assert.match(prompt, /activate_tool_pack/)
   assert.match(prompt, /调用纪律/)
   assert.match(prompt, /workspace/)
-  assert.match(prompt, /shell_run|沙盒|编程实现/)
+  assert.match(prompt, /opptrix_run|shell_run|沙盒|编程实现/)
   assert.match(prompt, /禁止仅为「开工」再 activate|勿仪式化|已加载/)
   assert.ok(prompt.length < 5000, 'catalog should stay compact')
   assert.ok(!prompt.includes('Tier 1'))

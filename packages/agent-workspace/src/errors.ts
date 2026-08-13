@@ -84,7 +84,8 @@ export class NetworkEgressConfirmationRequiredError extends WorkspaceError {
 
 export class ShellRunConfirmationRequiredError extends WorkspaceError {
   readonly confirmation: {
-    kind: 'shell_run'
+    /** 主 kind；读侧仍兼容旧值 shell_run */
+    kind: 'opptrix_run' | 'shell_run'
     title: string
     prompt: string
     command_summary: string

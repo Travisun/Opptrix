@@ -62,6 +62,7 @@ const {
   resolveWebPort,
   logPortPlan,
 } = require('./resolve-ports.cjs')
+const windowState = require('./window-state.cjs')
 
 const isDev = !app.isPackaged
 const launchArgs = parseLaunchArgs()
@@ -95,6 +96,10 @@ let splashShownAt = 0
 /** @type {(() => void) | null} */
 let resolveShellReady = null
 let shellReadyPending = false
+/** Apply maximize after create when last session ended maximized. */
+let pendingMainWindowMaximize = false
+/** Last non-maximized bounds persisted to userData/window-state.json */
+let lastNormalWindowState = null
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -603,46 +608,48 @@ setProtocolDeliverHandler(deliverProtocolPayload)
 installProtocolHandlers(app, { focusMainWindow })
 
 function buildMainWindowOptions() {
-  // Default window size: comfortable on common laptop screens without
-  // overwhelming the display. Capped below screen work area on first launch.
-  const DEFAULT_WIDTH = 1100
-  const DEFAULT_HEIGHT = 740
-  const MIN_WIDTH = 510 // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
-  const MIN_HEIGHT = 640
-
-  let width = DEFAULT_WIDTH
-  let height = DEFAULT_HEIGHT
-  let center = true
+  // Default ~960×680 (capped by work area). Restores last size/position from
+  // userData/window-state.json when valid (see window-state.cjs).
+  /** @type {{ x: number, y: number, width: number, height: number } | null} */
+  let primaryWorkArea = null
+  /** @type {{ x: number, y: number, width: number, height: number }[]} */
+  let allWorkAreas = []
   try {
     const { screen } = require('electron')
-    const display = screen.getPrimaryDisplay()
-    const { width: sw, height: sh } = display.workAreaSize
-    // Use up to 75% width / 80% height of the work area, but no larger than defaults
-    const targetW = Math.min(DEFAULT_WIDTH, Math.round(sw * 0.78))
-    const targetH = Math.min(DEFAULT_HEIGHT, Math.round(sh * 0.82))
-    width = Math.max(MIN_WIDTH, targetW)
-    height = Math.max(MIN_HEIGHT, targetH)
+    const primary = screen.getPrimaryDisplay()
+    primaryWorkArea = primary.workArea
+    allWorkAreas = screen.getAllDisplays().map((d) => d.workArea)
   } catch {
     // screen unavailable (headless tests); fall back to defaults
   }
 
+  const saved = windowState.readWindowStateFile(app.getPath('userData'))
+  lastNormalWindowState = saved
+  const placement = windowState.resolveWindowPlacement(saved, primaryWorkArea, allWorkAreas)
+  pendingMainWindowMaximize = placement.isMaximized === true
+
   /** @type {import('electron').BrowserWindowConstructorOptions} */
   const options = {
-    width,
-    height,
-    minWidth: MIN_WIDTH,
-    minHeight: MIN_HEIGHT,
+    width: placement.width,
+    height: placement.height,
+    minWidth: windowState.MIN_WIDTH,
+    minHeight: windowState.MIN_HEIGHT,
     title: APP_TITLE,
     // Splash / Linux 默认实色；mac/win 有原生毛玻璃时启动阶段仍先用不透明底防闪
     // 路线 1：系统窗形（圆角/阴影由 OS 提供）；禁止 transparent:true
     backgroundColor: SPLASH_CANVAS,
     show: false,
-    center,
+    center: placement.center,
     webPreferences: mainWindowWebPreferences({
       isDev,
       preloadPath: path.join(__dirname, 'preload.cjs'),
     }),
     ...windowIconOptions(),
+  }
+
+  if (!placement.center && Number.isFinite(placement.x) && Number.isFinite(placement.y)) {
+    options.x = placement.x
+    options.y = placement.y
   }
 
   if (process.platform === 'darwin') {
@@ -660,6 +667,45 @@ function buildMainWindowOptions() {
   }
 
   return options
+}
+
+function persistMainWindowState(win) {
+  if (!win || win.isDestroyed()) return
+  try {
+    const next = windowState.buildStateToSave(
+      {
+        bounds: win.getBounds(),
+        isMaximized: win.isMaximized(),
+        isFullScreen: win.isFullScreen(),
+      },
+      lastNormalWindowState,
+    )
+    if (!win.isMaximized() && !win.isFullScreen()) {
+      lastNormalWindowState = next
+    } else {
+      lastNormalWindowState = {
+        ...(lastNormalWindowState || {}),
+        width: next.width,
+        height: next.height,
+        isMaximized: next.isMaximized,
+        ...(Number.isFinite(next.x) ? { x: next.x } : {}),
+        ...(Number.isFinite(next.y) ? { y: next.y } : {}),
+      }
+    }
+    windowState.writeWindowStateFile(app.getPath('userData'), next)
+  } catch (err) {
+    console.warn('[window-state] persist failed:', err)
+  }
+}
+
+function attachWindowStatePersistence(win) {
+  const scheduler = windowState.createPersistScheduler(
+    () => persistMainWindowState(win),
+    windowState.SAVE_DEBOUNCE_MS,
+  )
+  win.on('resize', () => scheduler.schedule())
+  win.on('move', () => scheduler.schedule())
+  win.on('close', () => scheduler.flush())
 }
 
 function attachMainWindowHandlers(win) {
@@ -710,6 +756,8 @@ function attachMainWindowHandlers(win) {
     shouldQuit: () => app.isQuitting === true,
   })
 
+  attachWindowStatePersistence(win)
+
   setOpaqueWindowBackground(win)
   hideNativeMacTrafficLights(win)
 }
@@ -723,6 +771,15 @@ function createMainWindow() {
   const win = new BrowserWindow(buildMainWindowOptions())
   mainWindow = win
   attachMainWindowHandlers(win)
+
+  if (pendingMainWindowMaximize) {
+    pendingMainWindowMaximize = false
+    try {
+      win.maximize()
+    } catch {
+      /* older Electron / headless */
+    }
+  }
 
   if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
     win.webContents.openDevTools({ mode: 'bottom' })

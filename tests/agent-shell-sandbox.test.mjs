@@ -597,7 +597,7 @@ test('shell run sticky store and argv summary', () => {
   assert.ok(long.endsWith('…'))
 })
 
-test('shell_run runs interpreter without upfront egress confirm', async () => {
+test('opptrix_run runs interpreter without upfront egress confirm', async () => {
   await withTmpDataDir(async () => {
     const shellSticky = new ShellRunStickyStore()
     shellSticky.grant('interp-confirm')
@@ -623,7 +623,7 @@ test('shell_run runs interpreter without upfront egress confirm', async () => {
   })
 })
 
-test('shell_run skips run confirmation when session sticky granted', async () => {
+test('opptrix_run skips run confirmation when session sticky granted', async () => {
   await withTmpDataDir(async () => {
     const shellSticky = new ShellRunStickyStore()
     shellSticky.grant('sticky-run')
@@ -775,7 +775,7 @@ test('resolveBundledSandboxBinConfig is safe on host without runtime stage', asy
   assert.ok(typeof cfg === 'object')
 })
 
-test('shell_run ping requires single merged confirm then grants host', async () => {
+test('opptrix_run ping requires single merged confirm then grants host', async () => {
   await withTmpDataDir(async () => {
     const egress = new SessionNetworkEgressStore()
     const svc = new WorkspaceService({ sessionNetworkEgress: egress })
@@ -810,7 +810,7 @@ test('shell_run ping requires single merged confirm then grants host', async () 
   })
 })
 
-test('shell_run merged ping confirm is single dialog on cancel', async () => {
+test('opptrix_run merged ping confirm is single dialog on cancel', async () => {
   await withTmpDataDir(async () => {
     const svc = new WorkspaceService()
     const sessionId = 'ping-confirm'
@@ -833,7 +833,7 @@ test('shell_run merged ping confirm is single dialog on cancel', async () => {
   })
 })
 
-test('shell_run ping completes with one confirm when user allows host once', async () => {
+test('opptrix_run ping completes with one confirm when user allows host once', async () => {
   await withTmpDataDir(async () => {
     const status = await getShellPlatformStatus()
     if (!status.ready) return
@@ -859,7 +859,7 @@ test('shell_run ping completes with one confirm when user allows host once', asy
   })
 })
 
-test('shell_run rejects ping to private address', async () => {
+test('opptrix_run rejects ping to private address', async () => {
   await withTmpDataDir(async () => {
     const svc = new WorkspaceService()
     const sessionId = 'ping-private'
@@ -875,7 +875,7 @@ test('shell_run rejects ping to private address', async () => {
   })
 })
 
-test('shell_run requires network confirmation without sticky', async () => {
+test('opptrix_run requires network confirmation without sticky', async () => {
   await withTmpDataDir(async () => {
     const svc = new WorkspaceService()
     const sessionId = 'net-confirm'

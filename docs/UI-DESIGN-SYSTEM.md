@@ -79,7 +79,7 @@
 
 | 变量 | 默认值 | 用途 |
 |------|--------|------|
-| `--opptrix-font-sans` | `"Noto Sans SC", sans-serif` | 界面正文 |
+| `--opptrix-font-sans` | `"Inter", "Noto Sans SC", sans-serif` | 界面正文（现代无衬线） |
 | `--opptrix-font-mono` | `"JetBrains Mono", …` | 代码 / 等宽 |
 
 字重打包：Regular(400) + Medium(500) + Bold(700)。思源黑体与 Noto Sans SC 同源，通过 `@font-face family: "Source Han Sans SC"` 指向同一字体文件，避免双份 CJK 体积。许可证见 `client-ui/public/fonts/LICENSE`（OFL）。
@@ -109,8 +109,8 @@
 
 | 预设 id | 展示名 | 字体栈 |
 |---------|--------|--------|
-| `noto-sans`（默认） | 清晰黑体 | `"Noto Sans SC", sans-serif` |
-| `inter` | 现代无衬线 | `"Inter", "Noto Sans SC", sans-serif` |
+| `inter`（默认） | 现代无衬线 | `"Inter", "Noto Sans SC", sans-serif` |
+| `noto-sans` | 清晰黑体 | `"Noto Sans SC", sans-serif` |
 | `source-han` | 思源黑体 | `"Source Han Sans SC", "Noto Sans SC", sans-serif` |
 
 实现：`theme/fontFamily.ts` 提供 `applyFontFamily` / `readFontFamilyPreference` / `writeFontFamilyPreference`，持久化到 `localStorage` key `opptrix-font-family`；切换时派发 `opptrix-font-family-change`，行情图 / Mermaid / Canvas 监听并刷新。

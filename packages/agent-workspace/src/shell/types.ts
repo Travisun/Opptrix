@@ -2,7 +2,7 @@ import type { Platform } from '@anthropic-ai/sandbox-runtime'
 
 export type ShellNetworkIntent = 'none' | 'install'
 
-/** shell_run 引用保险箱条目 — 仅传名字；host 注入 sentinel，明文不进子进程 env */
+/** opptrix_run 引用保险箱条目 — 仅传名字；host 注入 sentinel，明文不进子进程 env */
 export interface ShellSecretRef {
   name: string
   /** 注入到子进程的环境变量名，默认与 name 相同 */
@@ -22,7 +22,7 @@ export interface ShellRunParams {
   secret_refs?: ShellSecretRef[]
 }
 
-/** shell_run / shell_install 附带的 Python 运行时摘要（不暴露绝对路径） */
+/** opptrix_run / shell_install 附带的 Python 运行时摘要（不暴露绝对路径） */
 export interface ShellPythonRuntimeInfo {
   source: 'system' | 'opptrix' | 'none'
   version: string | null

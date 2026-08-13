@@ -81,7 +81,7 @@ export const RIGHT_PANEL_PEER_SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 /** @deprecated alias */
 export const DESKTOP_SIDEBAR_COLLAPSE_WIDTH = DESKTOP_SIDEBAR_OVERLAY_THRESHOLD
 
-/** Minimum window width */
+/** Minimum window width — keep in sync with apps/desktop/electron/window-state.cjs MIN_WIDTH */
 export const DESKTOP_CHAT_MIN_WIDTH = 510
 
 /** Draggable split between chat column and right panel */

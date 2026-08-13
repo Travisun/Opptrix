@@ -247,10 +247,10 @@ const AGENT_TOOLS: Array<{
     how: 'Agent tool request_session_lan_access（内部 ask_user）',
   },
   {
-    id: 'tool.shell_run',
-    title: 'shell_run',
+    id: 'tool.opptrix_run',
+    title: 'opptrix_run',
     summary: '沙盒运行 node/python/npm',
-    how: 'Agent tool shell_run；须已 activate workspace',
+    how: 'Agent tool opptrix_run；须已 activate workspace',
   },
   {
     id: 'tool.http_fetch',
@@ -302,7 +302,7 @@ const SHARED_PACKAGES: LocalDataApiDetail = {
   summary: '跨对话共享脚本/包（packages/<name>）',
   access: 'shared',
   how_to_call:
-    'workspace_list({ root_id: "shared", path: "packages" }) → 读 packages/<name>/README.md；可复用则 shell_run cwd 指向该包',
+    'workspace_list({ root_id: "shared", path: "packages" }) → 读 packages/<name>/README.md；可复用则 opptrix_run cwd 指向该包',
   layer_entry: 'resolveSharedWorkspaceRoot()/packages',
   notes: [
     '写回新包须含 README（目的/入口/入参出参/依赖/示例）',
@@ -385,7 +385,7 @@ const WORKSPACE_FS: LocalDataApiDetail[] = [
     title: '公共复用区',
     summary: '跨对话 packages/data/docs；会话结束不删',
     access: 'shared',
-    how_to_call: 'workspace_* / shell_run，root_id=shared；dumps 用 prepare_fuyao_dump',
+    how_to_call: 'workspace_* / opptrix_run，root_id=shared；dumps 用 prepare_fuyao_dump',
     layer_entry: '~/.opptrix/agent-workspace/shared（对用户脱敏）',
     notes: ['自动 grant rw', 'clearSession 不删 shared'],
     examples: [

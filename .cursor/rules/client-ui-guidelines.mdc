@@ -18,7 +18,7 @@ alwaysApply: false
 - Electron **始终 desktop 布局**（不因窗口变窄切 MobileTopBar）。
 - 小窗口侧栏：宽 < 侧栏 × 2.5 时**全高浮层**（`top:0; bottom:0`），白底轻毛玻璃，**无全屏遮罩**。
 - 标题栏 z-index（低→高）：`DESKTOP_Z_TITLE` → `DESKTOP_Z_OVERLAY_SIDEBAR` → `DESKTOP_Z_PANEL_TITLE` → `DESKTOP_Z_TOPBAR` → `DESKTOP_Z_SESSION_TITLE`（`desktop/constants.ts`）。
-- 最小宽度 `DESKTOP_CHAT_MIN_WIDTH`（510px），与 `apps/desktop/electron/main.cjs` 同步。
+- 最小宽度 `DESKTOP_CHAT_MIN_WIDTH`（510px），与 `apps/desktop/electron/window-state.cjs` 同步。
 - 小窗口左侧 8px 边缘 hover 可唤出浮层侧栏。
 
 ## 界面文案（面向投资者）

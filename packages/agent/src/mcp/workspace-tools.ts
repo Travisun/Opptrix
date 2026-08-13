@@ -595,11 +595,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         }
       },
     },
-    {
-      name: 'shell_run',
-      category: '工作区',
-      description: '在系统隔离环境中运行允许的命令（python/node/npm/pip/ping 等）；测网站延迟优先 http_fetch；只能访问已授权工作区',
-      parameters: S({
+    ...(() => {
+      const opptrixRunParams = S({
         root_id: { type: 'string', description: '工作区 root_id，默认 default' },
         cwd: { type: 'string', description: '相对工作目录，默认根目录' },
         argv: {
@@ -622,8 +619,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             },
           },
         },
-      }, ['argv']),
-      handler: async (args) => {
+      }, ['argv'])
+      const opptrixRunHandler = async (args: Record<string, unknown>) => {
         try {
           const b = requireBridge()
           const argv = parseArgv(args.argv)
@@ -642,8 +639,26 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         } catch (err) {
           return handleShellError(err)
         }
-      },
-    },
+      }
+      return [
+        {
+          name: 'opptrix_run',
+          category: '工作区',
+          description:
+            '在系统隔离环境中运行允许的命令（python/node/npm/pip/ping 等）；测网站延迟优先 http_fetch；只能访问已授权工作区',
+          parameters: opptrixRunParams,
+          handler: opptrixRunHandler,
+        },
+        {
+          name: 'shell_run',
+          category: '工作区',
+          description:
+            'opptrix_run 的兼容别名（参数与行为相同）；新调用请用 opptrix_run',
+          parameters: opptrixRunParams,
+          handler: opptrixRunHandler,
+        },
+      ]
+    })(),
     {
       name: 'shell_install',
       category: '工作区',
@@ -816,7 +831,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             bytes: result.bytes,
             from_cache: result.from_cache,
             sandbox_hint: result.sandbox_hint,
-            note: '用 workspace_list/read 或 shell_run，root_id=shared + relative_path；勿注入 API Key',
+            note: '用 workspace_list/read 或 opptrix_run，root_id=shared + relative_path；勿注入 API Key',
           }
           // full|incremental + local_path 成功后自动写 offline-k-meta（等价 markUpdateSuccess）
           const metaResult = await tryRecordOfflineKDumpSuccess({
@@ -1026,7 +1041,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             name,
             session_granted: granted.granted,
             message: granted.granted
-              ? `本对话已可使用「${name}」；shell_run 请用 secret_refs 引用名称`
+              ? `本对话已可使用「${name}」；opptrix_run 请用 secret_refs 引用名称`
               : '用户未授权本对话使用该密钥',
           }
         } catch (err) {

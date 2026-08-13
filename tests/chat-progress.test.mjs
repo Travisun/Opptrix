@@ -65,17 +65,22 @@ test('enrichStepFromResult marks failed hub responses as error', () => {
 })
 
 test('shell tools have Chinese labels and result summaries', () => {
-  const runLabel = formatToolLabel('shell_run', { argv: ['python3', '-c', 'print(1)'] })
-  assert.match(runLabel, /运行命令/)
+  const runLabel = formatToolLabel('opptrix_run', { argv: ['python3', '-c', 'print(1)'] })
+  assert.match(runLabel, /Opptrix 运行/)
   assert.match(runLabel, /python3/)
 
   const { preview: runPreview } = formatResultPreview({
     ok: true,
     exit_code: 0,
     stdout: 'hello\n',
-  }, 'shell_run')
+  }, 'opptrix_run')
   assert.match(runPreview, /退出码 0/)
   assert.match(runPreview, /hello/)
+
+  // 兼容别名：旧名仍显示同一产品文案
+  const aliasLabel = formatToolLabel('shell_run', { argv: ['node', '-e', '1'] })
+  assert.match(aliasLabel, /Opptrix 运行/)
+  assert.match(aliasLabel, /node/)
 
   const { preview: statusPreview } = formatResultPreview({
     ready: true,

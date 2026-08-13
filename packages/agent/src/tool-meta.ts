@@ -458,7 +458,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   get_system_info: {
     miningEligible: false,
-    usageGuide: '运行 shell_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
+    usageGuide: '运行 opptrix_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
     compliance:
       '只读；看 python_priority / python_source / sandbox_python_version 与 python_argv_hint；只用 argv「python|pip」，禁止手写系统/托管绝对路径；不含密钥与内部绝对路径。',
   },
@@ -729,17 +729,23 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '运行代码或安装依赖前，确认系统隔离环境是否就绪；不可用时向用户说明缺少组件。',
     compliance: '只读；返回平台与就绪状态；用户文案勿暴露内部实现细节。',
   },
-  shell_run: {
+  opptrix_run: {
     packId: 'workspace',
     usageGuide:
       '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。',
     compliance:
       '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；未就绪时解析 python/pip 会自动 ensure+wait 托管安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
   },
+  /** @deprecated 兼容别名 → opptrix_run */
+  shell_run: {
+    packId: 'workspace',
+    usageGuide: '已弃用别名，请改用 opptrix_run（参数与行为相同）。',
+    compliance: '兼容旧会话/旧提示；新调用一律用 opptrix_run。',
+  },
   shell_install: {
     packId: 'workspace',
     usageGuide:
-      '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；与 shell_run 共用同一 Python；比手写 pip/npm 更安全。',
+      '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；与 opptrix_run 共用同一 Python；比手写 pip/npm 更安全。',
     compliance:
       'manager=pip|npm；pip 装进 .opptrix-packages，运行时经 PYTHONPATH 可见；python 未就绪用 ensure_python；联网安装需用户确认。',
   },
@@ -755,7 +761,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       '运行 Python 脚本或 pip 安装前调用；未就绪时会阻塞等待托管安装完成，成功后优先使用 Opptrix 托管解释器。',
     compliance:
-      '会等到安装结束再返回；成功时 ready=true 且 prefer 托管；失败时 ready=false，勿假装已安装。shell_run python 未就绪时也会自动走同一安装等待流程。',
+      '会等到安装结束再返回；成功时 ready=true 且 prefer 托管；失败时 ready=false，勿假装已安装。opptrix_run python 未就绪时也会自动走同一安装等待流程。',
   },
   list_local_data_apis: {
     packId: 'workspace',
@@ -790,7 +796,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   grant_session_secret: {
     packId: 'workspace',
-    usageGuide: '保险箱已有条目时，为本对话授权使用（用户确认）；再 shell_run.secret_refs。',
+    usageGuide: '保险箱已有条目时，为本对话授权使用（用户确认）；再 opptrix_run.secret_refs。',
     compliance: 'name 必填且须已存在；内部 ask_user；clearSession 清除授权。',
   },
   revoke_session_secret: {

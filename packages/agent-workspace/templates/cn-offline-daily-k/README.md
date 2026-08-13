@@ -18,7 +18,7 @@ Agent 侧典型流程：
 1. `prepare_fuyao_dump({ dump_kind: "full"|"incremental" })`（服务端持 Key 落盘；**成功会自动写** `data/cache/offline-k-meta.json`）
 2. （可选）本包 `markUpdateSuccess(...)` 仅作手动补写
 3. full/incr 成功后补算全市场指标并写入 `data/cache/indicators/`
-4. `shell_run` + 本包 `query` / `screen` 做挖掘（优先读已落盘指标）
+4. `opptrix_run` + 本包 `query` / `screen` 做挖掘（优先读已落盘指标）
 
 ## 入参 / 出参
 

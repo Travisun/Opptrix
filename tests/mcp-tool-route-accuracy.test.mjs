@@ -92,8 +92,8 @@ const PRIMARY_CASES = [
   { message: '你能访问哪些目录', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '本对话有哪些授权工作区', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '能读哪些文件夹', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
-  { message: '运行这段 python 脚本', expectPrimary: 'shell_run', intent: 'workspace_shell' },
-  { message: 'ping 一下 baidu.com', expectPrimary: 'shell_run', intent: 'workspace_shell' },
+  { message: '运行这段 python 脚本', expectPrimary: 'opptrix_run', intent: 'workspace_shell' },
+  { message: 'ping 一下 baidu.com', expectPrimary: 'opptrix_run', intent: 'workspace_shell' },
   { message: '测一下到百度的网络延迟', expectPrimary: 'http_fetch', intent: 'workspace_network_latency' },
   { message: 'pip install requests 装进工作区', expectPrimary: 'shell_install', intent: 'workspace_shell_install' },
   { message: '检查一下 Python 环境', expectPrimary: 'python_env_status', intent: 'python_env' },
@@ -228,7 +228,7 @@ test('D4 route playbook only names loaded tools', () => {
   const noPreferredCard = buildRoundRoutePlaybook(cold, [])
   assert.match(noPreferredCard, /list_tool_packs/)
   assert.match(noPreferredCard, /workspace/)
-  assert.match(noPreferredCard, /shell_run|ensure_python|workspace_/)
+  assert.match(noPreferredCard, /opptrix_run|shell_run|ensure_python|workspace_/)
   assert.match(noPreferredCard, /勿直接声称无法完成|勿空转/)
 })
 
@@ -375,14 +375,14 @@ test('system rules include workspace access guardrails', () => {
   const rules = buildAgentSystemRules()
   assert.match(rules, /list_workspace_grants/)
   assert.match(rules, /禁止把 get_project_info/)
-  assert.match(rules, /shell_run/)
+  assert.match(rules, /opptrix_run/)
   assert.ok(!rules.includes('禁止 Shell 执行'))
 })
 
-test('system rules require shell_run when loaded', () => {
+test('system rules require opptrix_run when loaded', () => {
   const rules = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'workspace'],
-    activeToolNames: ['shell_run', 'http_fetch', 'workspace_list'],
+    activeToolNames: ['opptrix_run', 'http_fetch', 'workspace_list'],
   })
   assert.match(rules, /禁止声称「出于安全规范禁止执行 Shell」/)
   assert.match(rules, /http_fetch/)

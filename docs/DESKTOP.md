@@ -37,6 +37,11 @@ npm run dev:desktop
 
 This builds workspace packages, starts the API sidecar + Vite HMR, and opens the Electron window. The main window first shows an in-window startup screen, then navigates to the app UI when the dev server is ready.
 
+### 主窗口尺寸
+
+- **默认大小**：约 **960×680**（按主显示器 work area 约 70%×75% 再封顶），最小宽高与 UI 一致（宽 ≥ `DESKTOP_CHAT_MIN_WIDTH` / 510px，高 ≥ 640）。
+- **记住窗口大小**：用户调整后的宽高与位置写入 Electron `userData` 下的 `window-state.json`（`resize` / `move` 防抖保存，关闭前再写一次）。最大化 / 全屏不会把铺满后的尺寸当成普通窗口尺寸；位置若不在任一显示器可见 work area 内，下次启动回退为居中。三端（macOS / Windows / Linux）同一套逻辑（见 `apps/desktop/electron/window-state.cjs`）。
+
 If the API is already running on port `8711`, stop it first or set `STOCK_RESEARCH_PORT` to avoid a port conflict.
 
 Optional: `ELECTRON_OPEN_DEVTOOLS=1 npm run dev:desktop` opens DevTools（仅开发模式）。
@@ -369,7 +374,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
+智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`opptrix_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
 
 **Windows 隔离强度（设置 → 沙盒环境）**：
 
@@ -400,13 +405,13 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 
 **边界说明（可行性）**：
 
-- **Windows 完整隔离**（架构：`elevated` / `srt-win` + 网络过滤器）：机器级隔离凭据与网络策略需要**一次**系统授权；Opptrix 会在首次 `shell_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行安装命令。凭据类失败（Windows 错误 **1326 / 1312**）时最多 **force 刷新再执行一次**。
+- **Windows 完整隔离**（架构：`elevated` / `srt-win` + 网络过滤器）：机器级隔离凭据与网络策略需要**一次**系统授权；Opptrix 会在首次 `opptrix_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行安装命令。凭据类失败（Windows 错误 **1326 / 1312**）时最多 **force 刷新再执行一次**。
 - **Windows 基础隔离**（架构：`unelevated` / RestrictedToken）：不初始化完整隔离凭据与网络过滤器；`ensureWindowsSandboxReady` 直接就绪。请求与完整隔离同等的完整网络隔离会硬拒绝；出站靠确认与白名单。
 - Windows 沙箱 `allowRead` **不会**对 `WINDIR` / Program Files / 盘符根做 ACL stamp（依赖系统默认读取权限）；请勿以「管理员运行 Opptrix」作为常规解决办法。
 - **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；访问外网或联网安装另有单独确认（`ping` 与运行命令合并为一次）。
 - Linux deb 通过 `Depends: bubblewrap, socat, ripgrep` 在系统包管理器层拉齐依赖。
 - AppImage 构建时会优先从可信源下载便携二进制到 `runtime-stage/sandbox-bins/{arch}/`（失败时回退构建机 `which`），sidecar 通过 `OPPTRIX_RUNTIME_STAGE` 注入 `bwrapPath` / `socatPath` / `ripgrep.command`。**deb 仍是最稳的安装路径**。
-- Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `shell_run` / `shell_install` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。
+- Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `opptrix_run` / `shell_install` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。
 - Electron 主进程提供 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC，供 UI 在 sidecar 无法完成授权时重试（同样是一次系统授权；完整隔离路径）。
 - **设置页自检**：**设置 → 沙盒环境** 顶部状态卡经 `GET /api/settings/sandbox/status` 展示就绪状态与说明；未就绪且可自动完成时显示「完成设置」，触发上述 IPC（与首次运行命令时的自动请求等价，可提前在设置中完成）。
 
@@ -443,4 +448,4 @@ On **macOS**, native traffic lights are hidden (`setWindowButtonVisibility(false
 
 Standalone pages (news / market / experts / settings) reuse `StandaloneElectronTitleBar` with left inset from `desktopChromeToolbarReserve` when the session sidebar is fully collapsed (same as chat `desktopTitleLeft(false)`), and right inset from `desktopTitleBarActionsRight()`. Settings sidebar matches the session sidebar’s top-through glass; `StandaloneElectronTitleBar` only covers the settings content column (panel mode uses the compact title inset; overlay mode keeps `chromeToolbarReserve`).
 
-Narrow windows (&lt; current session sidebar width × 2.5): left sidebar becomes a **full-height overlay** (`top: 0; bottom: 0`), light glass, **no fullscreen scrim**. At ≥ × 3, growing the window auto-expands the inline sidebar. Sidebar width defaults to 250px, draggable between ~196–360px, persisted in `localStorage` (`opptrix-sidebar-width`). Minimum window width: `DESKTOP_CHAT_MIN_WIDTH` (510px), synced with `apps/desktop/electron/main.cjs`.
+Narrow windows (&lt; current session sidebar width × 2.5): left sidebar becomes a **full-height overlay** (`top: 0; bottom: 0`), light glass, **no fullscreen scrim**. At ≥ × 3, growing the window auto-expands the inline sidebar. Sidebar width defaults to 250px, draggable between ~196–360px, persisted in `localStorage` (`opptrix-sidebar-width`). Minimum window width: `DESKTOP_CHAT_MIN_WIDTH` (510px), synced with `apps/desktop/electron/window-state.cjs` (`MIN_WIDTH`). Outer window default size and last size/position: see [主窗口尺寸](#主窗口尺寸).
