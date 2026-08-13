@@ -88,6 +88,19 @@ export {
   type SqlitePragmaCapable,
 } from './sqlite-memory-pragmas.js'
 export {
+  DEFAULT_SQLITE_LIGHT_MAINTENANCE_INTERVAL_MS,
+  resolveSqliteVacuumEnabled,
+  resolveSqliteLightMaintenanceIntervalMs,
+  sqliteLightMaintenanceStampPath,
+  readSqliteLightMaintenanceStamp,
+  writeSqliteLightMaintenanceStamp,
+  isSqliteLightMaintenanceDue,
+  runSqliteLightMaintenance,
+  type SqliteAutoVacuumMode,
+  type SqliteLightMaintenanceResult,
+  type SqliteLightMaintenanceOpts,
+} from './sqlite-light-maintenance.js'
+export {
   computeMarketRegime,
   computeMaPositionPct,
   computePricePercentile,

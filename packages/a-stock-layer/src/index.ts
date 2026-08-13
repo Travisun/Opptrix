@@ -127,6 +127,11 @@ export { normalizeWatchlistGroupsDocument, WatchlistGroupsStore } from './watchl
 export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument } from './watchlist/instrument.js'
 
 export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, cnSecSymbol, secXueqiuSymbol } from './utils/helpers.js'
+export {
+  LruMap,
+  createNameCache,
+  DEFAULT_NAME_CACHE_MAX_ENTRIES,
+} from './utils/lru-map.js'
 export { instrumentRefKey } from '@opptrix/shared'
 export { isCnEtfCode, toInstrumentRef, inferCnAssetClass, inferMarketFromSymbol, instrumentId } from './core/instrument.js'
 export {

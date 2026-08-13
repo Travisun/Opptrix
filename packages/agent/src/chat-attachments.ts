@@ -709,6 +709,57 @@ export function deleteAttachment(sessionId: string, attachmentId: string): boole
   return true
 }
 
+/**
+ * 删除某会话下全部聊天附件目录（`chat-attachments/<sessionId>/`）。
+ * 幂等：目录不存在返回 false；失败抛错，由调用方 warn（不阻断删会话）。
+ */
+export function deleteSessionAttachments(sessionId: string): boolean {
+  const dir = sessionDir(sessionId)
+  if (!fs.existsSync(dir)) return false
+  fs.rmSync(dir, { recursive: true, force: true })
+  return true
+}
+
+/**
+ * 启动时清理孤儿附件会话目录：根下存在、但不在 knownSessionIds 中的子目录。
+ * best-effort：单目录失败只 warn，不抛；返回成功删除的目录数。
+ */
+export function pruneOrphanChatAttachments(knownSessionIds: string[]): number {
+  const known = new Set(
+    knownSessionIds
+      .map(id => (typeof id === 'string' ? id.trim() : ''))
+      .filter(Boolean),
+  )
+  const root = attachmentsRoot()
+  if (!fs.existsSync(root)) return 0
+
+  let removed = 0
+  let entries: string[]
+  try {
+    entries = fs.readdirSync(root)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[chat-attachments] 扫描附件根目录失败: ${msg}`)
+    return 0
+  }
+
+  for (const name of entries) {
+    if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) continue
+    if (known.has(name)) continue
+    const full = path.join(root, name)
+    try {
+      const st = fs.lstatSync(full)
+      if (!st.isDirectory()) continue
+      fs.rmSync(full, { recursive: true, force: true })
+      removed += 1
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[chat-attachments] 清理孤儿附件目录失败 (${name}): ${msg}`)
+    }
+  }
+  return removed
+}
+
 export function isAttachmentReferenced(
   attachmentId: string,
   turns: Array<{ attachments?: ChatAttachmentMeta[] }> | undefined,

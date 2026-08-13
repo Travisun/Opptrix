@@ -50,15 +50,119 @@ async function fetchNewsSettings() {
 let chatSession = null
 /** @type {import('node-llama-cpp').LlamaModel | null} */
 let model = null
+/** @type {import('node-llama-cpp').LlamaContext | null} */
+let llamaContext = null
 let loadedModelPath = null
 let loadingPromise = null
 let preloadPromise = null
 let loadedModelFamily = 'generic'
 let lastLoadError = null
 
+/** 对齐 embedding：默认 12 分钟空闲卸载；`OPPTRIX_TRANSLATION_IDLE_MS=0` 关闭 */
+const DEFAULT_TRANSLATION_IDLE_MS = 12 * 60 * 1000
+/** @type {ReturnType<typeof setTimeout> | null} */
+let idleTimer = null
+/** @type {Promise<void> | null} */
+let idleUnloadPromise = null
+let lastUsedAt = 0
+
 /** @type {Map<string, string>} */
 const segmentMemoryCache = new Map()
 const SEGMENT_MEMORY_CACHE_MAX = 800
+
+function resolveTranslationIdleMs() {
+  const raw = process.env.OPPTRIX_TRANSLATION_IDLE_MS
+  if (raw == null || raw === '') return DEFAULT_TRANSLATION_IDLE_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_TRANSLATION_IDLE_MS
+  return n
+}
+
+function clearIdleTimer() {
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
+}
+
+function scheduleIdleUnload() {
+  clearIdleTimer()
+  const idleMs = resolveTranslationIdleMs()
+  if (idleMs <= 0) return
+  idleTimer = setTimeout(() => {
+    idleTimer = null
+    void runIdleUnload()
+  }, idleMs)
+  if (typeof idleTimer === 'object' && idleTimer && 'unref' in idleTimer) {
+    idleTimer.unref()
+  }
+}
+
+function touchLastUsed() {
+  lastUsedAt = Date.now()
+  scheduleIdleUnload()
+}
+
+/**
+ * 按 node-llama-cpp 官方 API dispose；失败不抛。
+ * @param {{ session?: { dispose?: Function, disposed?: boolean } | null, context?: { dispose?: Function, disposed?: boolean } | null, model?: { dispose?: Function, disposed?: boolean } | null }} handles
+ */
+async function disposeLlamaHandles(handles) {
+  const run = async (label, fn) => {
+    try {
+      await fn()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[translation-service] ${label} dispose failed:`, msg)
+    }
+  }
+  const { session, context, model: modelHandle } = handles
+  if (session && typeof session.dispose === 'function' && !session.disposed) {
+    await run('session', () => session.dispose({ disposeSequence: true }))
+  }
+  if (context && typeof context.dispose === 'function' && !context.disposed) {
+    await run('context', () => context.dispose())
+  }
+  if (modelHandle && typeof modelHandle.dispose === 'function' && !modelHandle.disposed) {
+    await run('model', () => modelHandle.dispose())
+  }
+}
+
+function clearHeldRefs() {
+  chatSession = null
+  llamaContext = null
+  model = null
+  loadedModelPath = null
+  loadedModelFamily = 'generic'
+}
+
+/** 释放当前模型句柄；保留 segmentMemoryCache LRU */
+async function unloadHeldResources() {
+  clearIdleTimer()
+  const handles = {
+    session: chatSession,
+    context: llamaContext,
+    model,
+  }
+  clearHeldRefs()
+  await disposeLlamaHandles(handles)
+}
+
+async function runIdleUnload() {
+  if (idleUnloadPromise) {
+    await idleUnloadPromise
+    return
+  }
+  idleUnloadPromise = unloadHeldResources()
+    .catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn('[translation-service] idle unload failed:', msg)
+    })
+    .finally(() => {
+      idleUnloadPromise = null
+    })
+  await idleUnloadPromise
+}
 
 function getGenerationProfile() {
   return {
@@ -102,35 +206,58 @@ async function ensureChatSession(repoRoot, preferredModel = '__auto__') {
 
   const modelFamily = detectModelFamily(modelPath)
 
-  if (chatSession && loadedModelPath === modelPath) {
-    return { chatSession, modelPath, modelFamily: loadedModelFamily }
-  }
-
-  if (loadingPromise) {
-    await loadingPromise
-    if (!chatSession) throw new Error(lastLoadError ?? '翻译模型加载失败')
-    return { chatSession, modelPath: loadedModelPath, modelFamily: loadedModelFamily }
+  for (;;) {
+    if (chatSession && loadedModelPath === modelPath) {
+      touchLastUsed()
+      return { chatSession, modelPath, modelFamily: loadedModelFamily }
+    }
+    if (loadingPromise) {
+      await loadingPromise
+      continue
+    }
+    break
   }
 
   loadingPromise = (async () => {
     lastLoadError = null
     const family = detectModelFamily(modelPath)
+    /** @type {import('node-llama-cpp').LlamaModel | null} */
+    let nextModel = null
+    /** @type {import('node-llama-cpp').LlamaContext | null} */
+    let nextContext = null
     try {
+      if (idleUnloadPromise) {
+        try {
+          await idleUnloadPromise
+        } catch {
+          /* ignore */
+        }
+      }
+      if (chatSession || llamaContext || model || loadedModelPath) {
+        await unloadHeldResources()
+      }
       const { getLlama, LlamaChatSession } = await import('node-llama-cpp')
       const llama = await getLlama()
-      model = await llama.loadModel({
+      nextModel = await llama.loadModel({
         modelPath,
         gpuLayers: process.platform === 'darwin' ? 'max' : 'auto',
       })
-      const context = await model.createContext({
+      nextContext = await nextModel.createContext({
         contextSize: getContextSize(),
         threads: 0,
       })
-      chatSession = new LlamaChatSession({ contextSequence: context.getSequence() })
+      chatSession = new LlamaChatSession({ contextSequence: nextContext.getSequence() })
+      model = nextModel
+      llamaContext = nextContext
       loadedModelPath = modelPath
       loadedModelFamily = family
+      nextModel = null
+      nextContext = null
+      touchLastUsed()
     } catch (error) {
+      await disposeLlamaHandles({ session: chatSession, context: nextContext ?? llamaContext, model: nextModel ?? model })
       chatSession = null
+      llamaContext = null
       model = null
       loadedModelPath = null
       loadedModelFamily = 'generic'
@@ -151,6 +278,7 @@ async function ensureChatSession(repoRoot, preferredModel = '__auto__') {
   })()
 
   await loadingPromise
+  if (!chatSession) throw new Error(lastLoadError ?? '翻译模型加载失败')
   return { chatSession, modelPath, modelFamily: loadedModelFamily }
 }
 
@@ -526,13 +654,51 @@ async function maybeBootstrapOfflineModelDownloads(repoRoot, onProgress) {
 }
 
 async function disposeTranslation() {
-  flushTranslationCache()
-  chatSession = null
-  model = null
-  loadedModelPath = null
+  clearIdleTimer()
+  const pending = idleUnloadPromise
+  idleUnloadPromise = null
+  if (pending) {
+    try {
+      await pending
+    } catch {
+      /* ignore */
+    }
+  }
+  if (loadingPromise) {
+    try {
+      await loadingPromise
+    } catch {
+      /* ignore load failure during teardown */
+    }
+  }
   loadingPromise = null
   preloadPromise = null
-  loadedModelFamily = 'generic'
+  flushTranslationCache()
+  // 保留 segmentMemoryCache LRU；仅释放 native 模型句柄
+  await unloadHeldResources()
+}
+
+/**
+ * @internal 测试注入已加载句柄
+ * @param {{ chatSession?: unknown, model?: unknown, context?: unknown, loadedModelPath?: string | null }} handles
+ */
+function __setTranslationRuntimeForTests(handles = {}) {
+  chatSession = handles.chatSession ?? null
+  model = handles.model ?? null
+  llamaContext = handles.context ?? null
+  loadedModelPath = handles.loadedModelPath ?? null
+}
+
+/** @internal */
+function __getTranslationRuntimeForTests() {
+  return {
+    chatSession,
+    model,
+    context: llamaContext,
+    loadedModelPath,
+    lastUsedAt,
+    segmentMemoryCacheSize: segmentMemoryCache.size,
+  }
 }
 
 module.exports = {
@@ -547,4 +713,10 @@ module.exports = {
   preloadTranslationModel,
   disposeTranslation,
   articleLikelyNeedsChineseTranslation,
+  resolveTranslationIdleMs,
+  DEFAULT_TRANSLATION_IDLE_MS,
+  disposeLlamaHandles,
+  __setTranslationRuntimeForTests,
+  __getTranslationRuntimeForTests,
+  __touchLastUsedForTests: touchLastUsed,
 }

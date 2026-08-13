@@ -2,7 +2,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import { applySqliteMemoryPragmas, resolveUserDataRoot } from '@opptrix/shared'
+import {
+  applySqliteMemoryPragmas,
+  resolveUserDataRoot,
+  runSqliteLightMaintenance,
+  type SqliteLightMaintenanceOpts,
+  type SqliteLightMaintenanceResult,
+} from '@opptrix/shared'
 import {
   initProviderSettingsSchema,
   ProviderSettingsRepository,
@@ -124,6 +130,14 @@ export class UserDataStore {
   close() {
     this.db.close()
     UserDataStore.inst = null
+  }
+
+  /**
+   * 低频轻维护：incremental_vacuum（若启用）+ wal_checkpoint(TRUNCATE)；
+   * 全库 VACUUM 仅当 opts/env 显式开启。不抛错由调用方决定。
+   */
+  runLightMaintenance(opts?: SqliteLightMaintenanceOpts): SqliteLightMaintenanceResult {
+    return runSqliteLightMaintenance(this.db, opts)
   }
 
   private initSchema() {

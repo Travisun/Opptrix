@@ -20,11 +20,13 @@ import {
   ymdDaysAgo,
 } from '../../normalize/index.js'
 import { isBse920Code, normalizeCode } from '../../../../utils/helpers.js'
+import { createNameCache } from '../../../../utils/lru-map.js'
 
 /** Tushare Pro — 2000 积分档常用接口（bulk 优先） */
 
 export class TushareMarketHandler extends MarketHandlerShell {
-  private nameCache = new Map<string, string>()
+  private nameCache = createNameCache()
+  /** 按交易日单槽：换日即整表替换，不做多日堆积 */
   private snapshotCache: { tradeDate: string; quotes: Map<string, StockRealtime> } | null = null
 
   private client(): TushareClient | null {

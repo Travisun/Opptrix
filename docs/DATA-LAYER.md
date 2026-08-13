@@ -60,7 +60,9 @@
 3. **Provider 粒度合理**：东财、Tushare、TDX 等各占一个 module，职责清晰。
 4. **QueryResult 统一响应**：`success / data / source / cached / error` 便于上层与 Agent 消费。
 
-**热缓存（`Cache`，`@opptrix/market-data-core`）**：内存 LRU 有界（默认约 1200 条 / 粗估 80MB，可用 `OPPTRIX_CACHE_MAX_ENTRIES`、`OPPTRIX_CACHE_MAX_BYTES` 覆盖）；条目 `approxBytes` 用类型/采样粗估（避免每次全量 `JSON.stringify`），`set*` 经 debounce（约 1.5s）落盘为紧凑 JSON，`clear*` 立即 flush；单条过大仅留内存、不写入 `cache.json`；TTL=0 仍不缓存。淘汰后调用方走网络重拉，命中时返回完整 `data`。自选 `WatchlistStore` 对 SQLite 写短防抖合并，`flush()` 退出/测试落盘。
+**热缓存（`Cache`，`@opptrix/market-data-core`）**：内存 LRU 有界（默认约 1200 条 / 粗估 80MB，可用 `OPPTRIX_CACHE_MAX_ENTRIES`、`OPPTRIX_CACHE_MAX_BYTES` 覆盖）；条目 `approxBytes` 用类型/采样粗估（避免每次全量 `JSON.stringify`），`set*` 经 debounce（约 1.5s）落盘为紧凑 JSON，`clear*` 立即 flush；单条过大仅留内存、不写入 `cache.json`；TTL=0 仍不缓存。淘汰后调用方走网络重拉，命中时返回完整 `data`。遗留 `MemoryCache` 已 deprecate 且带硬顶 LRU（默认 256），请改用 `Cache`。自选 `WatchlistStore` 对 SQLite 写短防抖合并，`flush()` 退出/测试落盘。Provider 进程内 `nameCache`（同花顺 / Tushare / BaoStock / Zzshare 等）经共享 `LruMap` 硬顶（默认 8000）；日线 `snapshotCache` 仍按交易日单槽，不堆积多日。
+
+**有界队列（突发防 OOM）**：`HostnameRateLimiter` 每 host 等待队列有上限（默认 128，超限 reject）并定期 prune 空闲 host；本地推理 `InferenceJobQueue` pending 有界（默认 48）；研报 Lance `LanceOpScheduler` pending 有界（默认 256，超限丢弃最旧尚未开始的 write，读优先与 running 不受影响）。
 
 ### 2.3 主要瓶颈（多市场前必须解决）
 
@@ -793,7 +795,7 @@ class ProviderCatalogService {
 | **`documents` JSON blob（现 Tushare 方式）** | ⚠️ 过渡 | Phase 0 可兼容；迁移后 secrets 仍可在同行 `extra_json` |
 | **`@opptrix/market-data` SQLite** | ❌ **不要** | 行情/因子库；导入 `.opmd` 会覆盖，且与「用户路由偏好」域不符 |
 
-大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；病理重建空表后限速回填（search 读优先于写队列）；**news 仍不进 Lance**。
+大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。服务端启动后会周期调用 `applyRetentionPolicy`、清理 `~/.opptrix/media-cache`（TTL/容量）并 `pruneStaleHealth`，删文时级联清理 `news_enrichment`。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；病理重建空表后限速回填（search 读优先于写队列）；**news 仍不进 Lance**。
 
 **一句话**：在 **`opptrix.db` 新建 `provider_settings` 表**（+ 可选 binding 子表），**不要**放进 market-data 的 `stocks` 库，也**不要**把 enable/priority 写进 Provider 代码或 manifest。
 
@@ -1151,6 +1153,7 @@ flowchart LR
 3. **筛选/发现/雷达** → 优先 Local Store，降低源站压力（现有设计正确）。
 4. **多市场 Store**：Phase 2 起可按 `market` 分库或单库分表；首阶段 ETF 与 EQUITY 共库。
 5. **SQLite 内存档位**：开库统一走 `@opptrix/shared` 的 `applySqliteMemoryPragmas`（`cache_size` / `mmap_size` / `temp_store`）；可用 `OPPTRIX_SQLITE_MEM_PROFILE=low|medium|high` 强制，默认按 `os.totalmem()` 粗分。WAL / `busy_timeout` 仍由各 Store 自行设置。
+6. **sync_logs 硬顶**：控制面 `sync_logs` 按 session/全局上限 prune（详见 `docs/MARKET-DATA-IO.md`），避免只插不删撑爆 `market.db`。
 
 ---
 

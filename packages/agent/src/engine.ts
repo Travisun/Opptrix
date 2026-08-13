@@ -119,6 +119,7 @@ import {
   type TokenUsage,
 } from './llm/token-usage.js'
 import {
+  deleteSessionAttachments,
   isLibraryExtractReady,
   isTranscriptExtractReady,
   readAttachmentMeta,
@@ -815,6 +816,12 @@ export class AgentEngine {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[agent] 清理会话状态目录失败 (${id}): ${msg}`)
     })
+    try {
+      deleteSessionAttachments(id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[agent] 清理会话附件目录失败 (${id}): ${msg}`)
+    }
     this.sessions.delete(id)
     this.invalidateContextUsage(id)
   }

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
@@ -65,6 +65,7 @@ import {
   syncSessionSearchIndex,
 } from '@opptrix/search-hub'
 import { fetchUserAgreementHtml } from './legal-document.js'
+import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -115,7 +116,15 @@ setNewsArticlePersistHook(article => {
   // 资讯仅写入 user-store FTS（统一搜索 + Agent search_library）；不再双写 doc-library
   syncNewsSearchIndex(article, getEnrichmentStore().get(article.id))
 })
-setNewsArticleDeleteHook(removeNewsSearchIndex)
+setNewsArticleDeleteHook(articleId => {
+  removeNewsSearchIndex(articleId)
+  // retention / 退订 / 去重删文时级联清理 enrichment
+  try {
+    getEnrichmentStore().delete(articleId)
+  } catch {
+    /* best-effort */
+  }
+})
 
 setEnrichmentPersistHook(doc => {
   const article = getArticle(doc.article_id)
@@ -1643,6 +1652,13 @@ async function bootstrap() {
   await registerSpeechRoutes(app)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
+  startRetentionMaintenance({
+    hub,
+    log: {
+      info: (obj, msg) => app.log.info(obj, msg),
+      warn: (obj, msg) => app.log.warn(obj, msg),
+    },
+  })
   // e5 就绪时回填未嵌入文档（无图 Hybrid RAG）
   void import('@opptrix/doc-library').then(async (mod) => {
     try {
@@ -1658,6 +1674,19 @@ async function bootstrap() {
   }).catch(() => {})
   scheduleService.start()
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
+  // 后台清理已删会话遗留的 chat-attachments 目录（best-effort，不阻塞启动）
+  setImmediate(() => {
+    try {
+      const known = agent.listAllSessions().map(s => s.id)
+      const removed = pruneOrphanChatAttachments(known)
+      if (removed > 0) {
+        console.log(`  Pruned ${removed} orphan chat-attachment session dir(s)`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[boot] prune orphan chat-attachments failed: ${msg}`)
+    }
+  })
   serveUi = shouldServeUi()
   if (serveUi) {
     serveUi = await registerStaticUi(app)
@@ -1717,6 +1746,7 @@ async function shutdown(signal: string) {
   try {
     await browserSessionManager.closeAll()
     scheduleService.stop()
+    stopRetentionMaintenance()
     await app.close()
     // 原生模块（lancedb / onnx / duckdb）须在 process.exit 前显式关闭，否则 macOS 上
     // __cxa_finalize 可能 SIGABRT，表现为「Opptrix 意外退出」。

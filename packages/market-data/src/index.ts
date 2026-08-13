@@ -269,7 +269,12 @@ export function getMarketDataService(): MarketDataService {
   return sharedService
 }
 
-export { getMarketDataStore, MarketDataStore } from './store.js'
+export {
+  getMarketDataStore,
+  MarketDataStore,
+  SYNC_LOGS_GLOBAL_MAX,
+  SYNC_LOGS_PER_SESSION_MAX,
+} from './store.js'
 export {
   getMarketDuckGateway,
   resetMarketDuckGateways,
@@ -280,6 +285,17 @@ export {
   type LatestBarRow,
   type LatestBarsPageOpts,
 } from './duck/market-duck-gateway.js'
+export {
+  DEFAULT_DUCK_TEMP_MAX_AGE_MS,
+  OPPTRIX_DUCK_TEMP_PREFIXES,
+  listOpptrixDuckTempJson,
+  pruneOrphanDuckTempJson,
+  withCompactTempJsonAsync,
+  withCompactTempJsonSync,
+  type DuckTempJsonKind,
+  type PruneOrphanDuckTempJsonOptions,
+  type PruneOrphanDuckTempJsonResult,
+} from './duck/duck-temp-json.js'
 export {
   stitchLatestBarsPages,
   stitchLatestBarsPagesSync,

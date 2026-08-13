@@ -90,6 +90,7 @@ type Props = {
   loading: boolean
   loadingMore: boolean
   hasMore: boolean
+  listCapReached?: boolean
   total: number
   hasAnyArticles: boolean
   hasSubscriptions: boolean
@@ -138,6 +139,7 @@ export default function NewsFeedSidebar({
   loading,
   loadingMore,
   hasMore,
+  listCapReached = false,
   total,
   hasAnyArticles,
   hasSubscriptions,
@@ -215,6 +217,7 @@ export default function NewsFeedSidebar({
             listPulseEpoch={listPulseEpoch}
             loadingMore={loadingMore || listSyncing}
             hasMore={view === 'timeline' ? hasMore : false}
+            listCapReached={view === 'timeline' ? listCapReached : false}
             onLoadMore={view === 'timeline' ? onLoadMore : undefined}
             hasAnyArticles={hasAnyArticles}
             hasSubscriptions={hasSubscriptions}

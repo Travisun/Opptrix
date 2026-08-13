@@ -24,6 +24,14 @@ export {
   resetSharedWorkspaceLayoutCacheForTests,
 } from './shared-workspace.js'
 export {
+  pruneSharedWorkspace,
+  isProtectedSharedRelative,
+  DEFAULT_SHARED_WORKSPACE_MAX_AGE_MS,
+  DEFAULT_SHARED_WORKSPACE_MAX_BYTES,
+  type PruneSharedWorkspaceOptions,
+  type PruneSharedWorkspaceResult,
+} from './shared-prune.js'
+export {
   OFFLINE_K_META_RELATIVE_PATH,
   FULL_DUMP_RELATIVE_PATH,
   INCR_DUMP_RELATIVE_PATH,

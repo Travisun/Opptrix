@@ -22,7 +22,7 @@
 ## 写路径
 
 - `p-queue` concurrency=1（恒定）+ `duck-cli` worker 线程
-- **批写临时 JSON**：Gateway `apply-batch` / `upsert` / `query-json` 经 `duck-temp-json` 紧凑写入 `os.tmpdir` 并立即 unlink；同进程 `upsertCnDailyBarsBatch` 默认 VALUES 直连不落盘
+- **批写临时 JSON**：Gateway `apply-batch` / `upsert` / `query-json` 经 `duck-temp-json` 紧凑写入 `os.tmpdir` 并立即 unlink；同进程 `upsertCnDailyBarsBatch` 默认 VALUES 直连不落盘；boot/retention 另跑 `pruneOrphanDuckTempJson`（mtime > 1h）清崩溃残留，与 finally unlink 并存
 - **测试 flush / .opmd 导出**：`flushDuckWritesSync` / `syncMarketDataToSqliteSync` → `spawnSync duck-cli`
 - 衍生维护期间主进程暂停写入队列（`isDerivedMaintenanceActive()`）
 

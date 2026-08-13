@@ -1,6 +1,13 @@
 export * from './types.js'
 export * from './paths.js'
 export {
+  pruneMediaCache,
+  DEFAULT_MEDIA_CACHE_MAX_AGE_MS,
+  DEFAULT_MEDIA_CACHE_MAX_BYTES,
+  type PruneMediaCacheOptions,
+  type PruneMediaCacheResult,
+} from './media-cache-prune.js'
+export {
   MODEL_CATALOG,
   BOOTSTRAP_MODEL_IDS,
   TRANSLATION_BOOTSTRAP_MODEL_IDS,
@@ -30,7 +37,12 @@ export {
   type EnrichmentBootstrapSettings,
 } from './catalog/bootstrap-policy.js'
 export { globalInferenceQueue, InferenceJobQueue } from './runtime/job-queue.js'
-export { LlamaRuntime, llamaRuntime } from './llama/llama-runtime.js'
+export {
+  LlamaRuntime,
+  llamaRuntime,
+  disposeLlamaHandles,
+  type LlamaHeldHandles,
+} from './llama/llama-runtime.js'
 export * from './llama/prompts.js'
 export { FfmpegRuntime, ffmpegRuntime } from './media/ffmpeg-runtime.js'
 export {

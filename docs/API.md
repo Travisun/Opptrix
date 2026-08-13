@@ -547,7 +547,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 定时执行智能体提示词或受控脚本。持久化于用户 SQLite（`packages/user-store` 的 `schedule` 命名空间）；调度引擎为 `@opptrix/schedule` 的 `ScheduleService`。Sidecar 启动时注册 `registerScheduleRoutes` 并调用 `scheduleService.start()`（进程内每 **20s** 扫描到期任务，`trigger: 'timer'`）。
 
-计划任务仅在 **应用运行或托盘常驻** 时由进程内 timer 执行；完全退出后不执行。桌面 `reconcile` **只**注销遗留 OS 注册（LaunchAgent / schtasks / systemd），**不再**注册系统级 tick。`POST /api/schedule/tick`（`trigger: 'os'`）仅兼容旧 runner；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。
+计划任务仅在 **应用运行或托盘常驻** 时由进程内 timer 执行；完全退出后不执行。桌面 `reconcile` **只**注销遗留 OS 注册（LaunchAgent / schtasks / systemd），**不再**注册系统级 tick。`POST /api/schedule/tick`（`trigger: 'os'`）仅兼容旧 runner；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。tick / claim 前会释放超时 `running` lease（默认 45 分钟标为 `interrupted`），每个 job 的 `scheduled_job_runs` 硬顶保留最近 100 条。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

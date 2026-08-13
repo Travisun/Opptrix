@@ -11,6 +11,7 @@ import {
   isContextProjectionRef,
   writeContextProjectionToDisk,
 } from './context/session-projection-disk.js'
+import { applySessionPersistSoftCap } from './context/session-persist-soft-cap.js'
 
 import type { ChatAttachmentMeta } from './media-types.js'
 import type { ExpertIcon } from '@opptrix/shared'
@@ -204,6 +205,8 @@ export function setSessionPersistHooks(hooks: {
 
 function writeRecord(record: SessionRecord) {
   record.updatedAt = new Date().toISOString()
+  // Soft disk cap: only extreme sessions; keeps recent UI turns + sessionMemory.
+  applySessionPersistSoftCap(record)
   const full = record.contextProjection ?? null
   // 盘上全文；SQLite 仅指针（引擎内存仍保留完整投影）
   writeContextProjectionToDisk(record.id, full)

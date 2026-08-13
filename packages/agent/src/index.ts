@@ -162,6 +162,8 @@ export {
   readAttachmentMeta,
   readAttachmentBuffer,
   deleteAttachment,
+  deleteSessionAttachments,
+  pruneOrphanChatAttachments,
   resolveAttachmentFilePath,
   validateAttachmentAgainstCapabilities,
   isAttachmentReferenced,
@@ -267,6 +269,14 @@ export {
   emptySessionMemory,
   parseSessionMemoryFromModelText,
 } from './context/session-memory.js'
+export {
+  applySessionPersistSoftCap,
+  estimateSessionPersistBytes,
+  SESSION_PERSIST_TURNS_TRIGGER,
+  SESSION_PERSIST_JSON_BYTES_TRIGGER,
+  SESSION_PERSIST_KEEP_RECENT_TURNS,
+  type SoftCapResult,
+} from './context/session-persist-soft-cap.js'
 export {
   ensureContextBudget,
   buildBudgetForModel,

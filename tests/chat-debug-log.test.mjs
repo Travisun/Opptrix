@@ -16,8 +16,12 @@ import {
   isChatDebugLoggingEnabled,
   logChatDebugRoundEnd,
   logChatDebugRoundStart,
+  pruneChatDebugLogDir,
   resetChatDebugLogCacheForTests,
+  resolveChatDebugLogDir,
   resolveChatDebugLogPath,
+  rotateChatDebugLogIfNeeded,
+  setChatDebugLogLimitsForTests,
   truncateForChatDebug,
 } from '../packages/agent/dist/chat-debug-log.js'
 
@@ -34,6 +38,11 @@ function withTempStore(fn) {
     if (prev == null) delete process.env.OPPTRIX_DATA_DIR
     else process.env.OPPTRIX_DATA_DIR = prev
   })
+}
+
+function enableChatDebug() {
+  getUserDataStore().setDocument('preference', CHAT_DEBUG_LOGGING_KEY, { enabled: true })
+  resetChatDebugLogCacheForTests()
 }
 
 test('parseChatDebugLoggingSettings defaults to disabled', () => {
@@ -99,5 +108,103 @@ test('isChatDebugLoggingEnabled defaults false and writes only when enabled', as
     assert.equal(end.cacheWarmth, 'warm')
     assert.equal(end.usage.cachedPromptTokens, 80)
     assert.ok(!JSON.stringify(end).toLowerCase().includes('bearer'))
+  })
+})
+
+test('rotateChatDebugLogIfNeeded renames oversized file to .1', async () => {
+  await withTempStore(async () => {
+    enableChatDebug()
+    const logPath = resolveChatDebugLogPath('sess-rotate')
+    fs.mkdirSync(path.dirname(logPath), { recursive: true })
+    fs.writeFileSync(logPath, 'x'.repeat(500), 'utf8')
+    assert.equal(rotateChatDebugLogIfNeeded(logPath, 200), true)
+    assert.equal(fs.existsSync(logPath), false)
+    assert.equal(fs.existsSync(`${logPath}.1`), true)
+    assert.equal(fs.statSync(`${logPath}.1`).size, 500)
+
+    // 再次超限：覆盖旧 `.1`，不无限堆积
+    fs.writeFileSync(logPath, 'y'.repeat(300), 'utf8')
+    assert.equal(rotateChatDebugLogIfNeeded(logPath, 200), true)
+    assert.equal(fs.existsSync(logPath), false)
+    assert.equal(fs.readFileSync(`${logPath}.1`, 'utf8'), 'y'.repeat(300))
+  })
+})
+
+test('append rotates when file exceeds limit (enabled debug is bounded)', async () => {
+  await withTempStore(async () => {
+    enableChatDebug()
+    setChatDebugLogLimitsForTests({
+      maxFileBytes: 400,
+      maxSessionFiles: 40,
+      maxDirBytes: 10 * 1024 * 1024,
+      dirPruneEvery: 1000,
+    })
+    const sid = 'sess-big'
+    const pad = 'p'.repeat(80)
+    for (let i = 0; i < 20; i++) {
+      logChatDebugRoundStart(sid, { round: i + 1, model: pad })
+    }
+    const logPath = resolveChatDebugLogPath(sid)
+    assert.equal(fs.existsSync(logPath), true)
+    assert.ok(fs.statSync(logPath).size < 400, 'active file stays under limit after rotate')
+    assert.equal(fs.existsSync(`${logPath}.1`), true)
+    // 开启 debug 也不会无限膨胀：最多 active + 一个 `.1`
+    const dir = resolveChatDebugLogDir()
+    const siblings = fs.readdirSync(dir).filter(n => n.startsWith('sess-big'))
+    assert.deepEqual(siblings.sort(), ['sess-big.jsonl', 'sess-big.jsonl.1'].sort())
+  })
+})
+
+test('pruneChatDebugLogDir removes oldest sessions under soft caps', async () => {
+  await withTempStore(async () => {
+    enableChatDebug()
+    const dir = resolveChatDebugLogDir()
+    fs.mkdirSync(dir, { recursive: true })
+    const older = path.join(dir, 'old.jsonl')
+    const mid = path.join(dir, 'mid.jsonl')
+    const newer = path.join(dir, 'new.jsonl')
+    fs.writeFileSync(older, '{"event":"old"}\n', 'utf8')
+    fs.writeFileSync(mid, '{"event":"mid"}\n', 'utf8')
+    fs.writeFileSync(newer, '{"event":"new"}\n', 'utf8')
+    const t0 = Date.now() - 60_000
+    fs.utimesSync(older, t0 / 1000, t0 / 1000)
+    fs.utimesSync(mid, (t0 + 10_000) / 1000, (t0 + 10_000) / 1000)
+    fs.utimesSync(newer, (t0 + 20_000) / 1000, (t0 + 20_000) / 1000)
+
+    const removed = pruneChatDebugLogDir(dir, {
+      maxSessionFiles: 2,
+      maxDirBytes: 10 * 1024 * 1024,
+      keepPath: newer,
+    })
+    assert.ok(removed >= 1)
+    assert.equal(fs.existsSync(older), false)
+    assert.equal(fs.existsSync(mid), true)
+    assert.equal(fs.existsSync(newer), true)
+  })
+})
+
+test('append prunes oldest sessions when over maxSessionFiles', async () => {
+  await withTempStore(async () => {
+    enableChatDebug()
+    setChatDebugLogLimitsForTests({
+      maxFileBytes: 12 * 1024 * 1024,
+      maxSessionFiles: 2,
+      maxDirBytes: 50 * 1024 * 1024,
+      dirPruneEvery: 1,
+    })
+    const dir = resolveChatDebugLogDir()
+    fs.mkdirSync(dir, { recursive: true })
+    const a = path.join(dir, 'a.jsonl')
+    const b = path.join(dir, 'b.jsonl')
+    fs.writeFileSync(a, 'a\n', 'utf8')
+    fs.writeFileSync(b, 'b\n', 'utf8')
+    const t0 = Date.now() - 30_000
+    fs.utimesSync(a, t0 / 1000, t0 / 1000)
+    fs.utimesSync(b, (t0 + 5_000) / 1000, (t0 + 5_000) / 1000)
+
+    logChatDebugRoundStart('c', { round: 1, model: 'm' })
+    assert.equal(fs.existsSync(resolveChatDebugLogPath('c')), true)
+    assert.equal(fs.existsSync(a), false, 'oldest session pruned')
+    assert.equal(fs.existsSync(b), true)
   })
 })

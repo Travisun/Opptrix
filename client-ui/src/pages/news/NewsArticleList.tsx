@@ -126,6 +126,8 @@ type Props = {
   compact?: boolean
   loadingMore?: boolean
   hasMore?: boolean
+  /** Timeline stopped further loads after hitting the in-memory window cap. */
+  listCapReached?: boolean
   onLoadMore?: () => void
   listPulseEpoch?: number
   /** 全部分组 / 全部来源时，各区块可展开收起 */
@@ -142,6 +144,7 @@ export default function NewsArticleList({
   compact,
   loadingMore,
   hasMore,
+  listCapReached = false,
   onLoadMore,
   listPulseEpoch = 0,
   sectionsCollapsible = false,
@@ -279,6 +282,11 @@ export default function NewsArticleList({
           <div className={s.loadMore}>
             <BookOpenRegular className={s.loadMoreIcon} />
             继续下滑加载更多
+          </div>
+        )}
+        {!sections && !loadingMore && listCapReached && articles.length > 0 && (
+          <div className={s.loadMore}>
+            已达可浏览上限，请用日期筛选或刷新列表
           </div>
         )}
         {flatArticles.length === 0 && (

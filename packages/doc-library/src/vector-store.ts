@@ -161,18 +161,47 @@ function logVectorStore(msg: string, extra?: Record<string, number | string | bo
 
 export type LanceScheduleKind = 'read' | 'write'
 
+export interface LanceOpSchedulerOptions {
+  /** 尚未开始的 pending 上限（不含 running）；默认 256 */
+  maxPending?: number
+}
+
+type LanceQueuedOp = {
+  kind: LanceScheduleKind
+  start: () => void
+  reject: (err: Error) => void
+}
+
 /**
  * Lance 操作调度：全局互斥串行；search（read）可插队到尚未开始的 write 之前，
  * 避免大量 upsert/optimize 长时间堵住检索。写与 optimize 仍不得并发。
+ * pending 有界：超限丢弃最旧尚未开始的 write（不丢 running）；无 write 可丢时拒绝新任务。
  */
 export class LanceOpScheduler {
-  private readonly queue: Array<{ kind: LanceScheduleKind; start: () => void }> = []
+  private readonly queue: LanceQueuedOp[] = []
   private running = false
+  private readonly maxPending: number
+
+  constructor(opts?: LanceOpSchedulerOptions) {
+    this.maxPending = opts?.maxPending ?? 256
+  }
+
+  get maxPendingOps(): number {
+    return this.maxPending
+  }
 
   schedule<T>(kind: LanceScheduleKind, fn: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      const item = {
+      if (this.queue.length >= this.maxPending) {
+        if (!this.evictOldestPendingWrite()) {
+          reject(new Error(`LanceOpScheduler queue full (maxPending=${this.maxPending})`))
+          return
+        }
+      }
+
+      const item: LanceQueuedOp = {
         kind,
+        reject,
         start: () => {
           Promise.resolve()
             .then(fn)
@@ -197,6 +226,16 @@ export class LanceOpScheduler {
   /** 测试：尚未执行的任务种类（不含进行中） */
   pendingKinds(): LanceScheduleKind[] {
     return this.queue.map(j => j.kind)
+  }
+
+  /** 丢弃队列中最旧的尚未开始的 write；不触碰 running */
+  private evictOldestPendingWrite(): boolean {
+    const idx = this.queue.findIndex(j => j.kind === 'write')
+    if (idx < 0) return false
+    const [evicted] = this.queue.splice(idx, 1)
+    if (!evicted) return false
+    evicted.reject(new Error('LanceOpScheduler dropped oldest write (queue full)'))
+    return true
   }
 
   private pump(): void {

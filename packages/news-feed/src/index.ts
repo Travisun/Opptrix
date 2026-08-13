@@ -31,6 +31,8 @@ export { resolveFeedUrl } from './url.js'
 export {
   getNewsFeedStore,
   NewsFeedStore,
+  applyNewsRetentionPolicy,
+  resetNewsFeedStoreForTests,
   setNewsArticlePersistHook,
   setNewsArticleDeleteHook,
 } from './store.js'

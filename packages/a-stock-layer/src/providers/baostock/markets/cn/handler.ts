@@ -5,6 +5,7 @@ import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends
 import {
   isBse920Code, isShIndexCode, normalizeCode, type StockMarket,
 } from '../../../../utils/helpers.js'
+import { createNameCache } from '../../../../utils/lru-map.js'
 import { isCnEtfCode } from '../../../../core/instrument.js'
 import {
   mapIndexConstToEtfHoldings,
@@ -56,7 +57,7 @@ function isIndexCode(code: string): boolean {
 /** 证券宝 BaoStock — 免费开源 A 股历史数据 */
 
 export class BaostockCnHandler extends MarketHandlerShell {
-  private nameCache = new Map<string, string>()
+  private nameCache = createNameCache()
   private clientInstance: BaostockClient | null = null
 
   private client(): BaostockClient | null {

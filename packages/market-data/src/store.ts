@@ -17,7 +17,13 @@ import {
   stockProfilesUsesInstrumentNs,
 } from './instrument-ns.js'
 import type { InstrumentRef } from '@opptrix/shared'
-import { applySqliteMemoryPragmas, normalizeInstrumentRef } from '@opptrix/shared'
+import {
+  applySqliteMemoryPragmas,
+  normalizeInstrumentRef,
+  runSqliteLightMaintenance,
+  type SqliteLightMaintenanceOpts,
+  type SqliteLightMaintenanceResult,
+} from '@opptrix/shared'
 import { yieldToEventLoop } from './sync/event-loop.js'
 import {
   getMarketDuckGateway,
@@ -141,6 +147,13 @@ export interface BootstrapReadiness {
   kline_cross_market: boolean
 }
 
+/** sync_logs 全局硬顶（最旧优先删） */
+export const SYNC_LOGS_GLOBAL_MAX = 8000
+/** 单 session 日志上限 */
+export const SYNC_LOGS_PER_SESSION_MAX = 2000
+/** append 路径每 N 次触发一次 session prune（避免每次 COUNT） */
+const SYNC_LOGS_APPEND_PRUNE_EVERY = 256
+
 export class MarketDataStore {
   db: Database.Database
   /** 只读连接 — 控制面读与写路径解耦（WAL 模式） */
@@ -158,6 +171,8 @@ export class MarketDataStore {
   private statusLightCache: { at: number; value: MarketDbStatus } | null = null
   /** 衍生维护期间冻结的快照 — 避免 rebuild 触发 Duck 子进程读 */
   private statusLightFrozen: MarketDbStatus | null = null
+  /** appendLog 计数器 — 每 SYNC_LOGS_APPEND_PRUNE_EVERY 次做一次 session prune */
+  private syncLogAppendsSincePrune = 0
   private static readonly STATUS_LIGHT_CACHE_MS = 30_000
 
   /** 设置页 / Hub 轮询仅聚合这些 job 的 per-code 进度（走 job_name 索引，避免全表 GROUP BY） */
@@ -640,6 +655,14 @@ export class MarketDataStore {
       this.dbRead.pragma('busy_timeout = 5000')
       applySqliteMemoryPragmas(this.dbRead, 'read')
     }
+  }
+
+  /**
+   * 低频轻维护（写连接）：incremental_vacuum / wal_checkpoint(TRUNCATE)；
+   * 全库 VACUUM 默认关（`OPPTRIX_SQLITE_VACUUM=1` 或 opts.allowVacuum）。
+   */
+  runLightMaintenance(opts?: SqliteLightMaintenanceOpts): SqliteLightMaintenanceResult {
+    return runSqliteLightMaintenance(this.db, opts)
   }
 
   private reopenDb(): void {
@@ -2766,6 +2789,9 @@ export class MarketDataStore {
     this.db.prepare(`
       UPDATE sync_sessions SET status = ?, finished_at = ?, message = ? WHERE id = ?
     `).run(status, nowIso(), message ?? null, sessionId)
+    // Session end is infrequent — prune session excess + enforce global hard cap.
+    this.pruneSyncLogsForSession(sessionId)
+    this.pruneSyncLogsGlobal()
   }
 
   getSession(sessionId: number) {
@@ -2806,6 +2832,51 @@ export class MarketDataStore {
     this.db.prepare(`
       INSERT INTO sync_logs (session_id, message, created_at) VALUES (?, ?, ?)
     `).run(sessionId, message, nowIso())
+    // Avoid COUNT(*) on every insert — prune this session every N appends.
+    this.syncLogAppendsSincePrune += 1
+    if (this.syncLogAppendsSincePrune >= SYNC_LOGS_APPEND_PRUNE_EVERY) {
+      this.syncLogAppendsSincePrune = 0
+      this.pruneSyncLogsForSession(sessionId)
+    }
+  }
+
+  /**
+   * Delete oldest sync_logs for a session beyond `keepMax`.
+   * Uses id cutoff (no full-table COUNT). Returns deleted row count.
+   */
+  pruneSyncLogsForSession(
+    sessionId: number,
+    keepMax = SYNC_LOGS_PER_SESSION_MAX,
+  ): number {
+    if (keepMax <= 0) return 0
+    const result = this.db.prepare(`
+      DELETE FROM sync_logs
+      WHERE session_id = ?
+        AND id < (
+          SELECT id FROM sync_logs
+          WHERE session_id = ?
+          ORDER BY id DESC
+          LIMIT 1 OFFSET ?
+        )
+    `).run(sessionId, sessionId, keepMax - 1)
+    return result.changes
+  }
+
+  /**
+   * Enforce global sync_logs hard cap — delete oldest rows beyond `keepMax`.
+   * Prefer calling from finishSession (not every append).
+   */
+  pruneSyncLogsGlobal(keepMax = SYNC_LOGS_GLOBAL_MAX): number {
+    if (keepMax <= 0) return 0
+    const result = this.db.prepare(`
+      DELETE FROM sync_logs
+      WHERE id < (
+        SELECT id FROM sync_logs
+        ORDER BY id DESC
+        LIMIT 1 OFFSET ?
+      )
+    `).run(keepMax - 1)
+    return result.changes
   }
 
   getRecentLogs(sessionId: number | null, limit = 500): string[] {

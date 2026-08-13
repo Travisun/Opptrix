@@ -412,17 +412,51 @@ export class Cache {
   }
 }
 
-/** @deprecated use Cache */
+/** Hard cap for deprecated MemoryCache (prevents unbounded Map growth if misused). */
+const MEMORY_CACHE_DEFAULT_MAX_ENTRIES = 256
+
+/**
+ * @deprecated Use {@link Cache} (bounded LRU + optional disk). Kept for legacy
+ * call sites; not re-exported from package index. Enforces maxEntries LRU.
+ */
 export class MemoryCache {
   private store = new Map<string, Entry>()
+  private readonly maxEntries: number
+
+  constructor(maxEntries = MEMORY_CACHE_DEFAULT_MAX_ENTRIES) {
+    this.maxEntries = Math.max(1, maxEntries)
+  }
+
+  get size(): number {
+    return this.store.size
+  }
+
   get<T>(key: string) {
     const e = this.store.get(key)
-    if (!e || Date.now() > e.expires) return null
+    if (!e || Date.now() > e.expires) {
+      if (e) this.store.delete(key)
+      return null
+    }
+    // Map insertion order = LRU: re-insert on hit.
+    this.store.delete(key)
+    this.store.set(key, e)
     return e.data as T
   }
+
   set<T>(key: string, data: T, ttlMs = 60_000) {
-    this.store.set(key, { data, expires: Date.now() + ttlMs, approxBytes: estimateBytes(data) })
+    if (this.store.has(key)) this.store.delete(key)
+    this.store.set(key, {
+      data,
+      expires: Date.now() + ttlMs,
+      approxBytes: estimateBytes(data),
+    })
+    while (this.store.size > this.maxEntries) {
+      const oldest = this.store.keys().next().value
+      if (oldest === undefined) break
+      this.store.delete(oldest)
+    }
   }
+
   key(type: string, method: string, params: Record<string, string | number>) {
     return `${type}:${method}:${JSON.stringify(params)}`
   }

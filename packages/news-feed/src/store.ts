@@ -410,7 +410,12 @@ export class NewsFeedStore {
     return out
   }
 
-  private applyRetentionPolicy(): void {
+  /**
+   * 按 settings 裁剪过期/超量资讯。
+   * upsert / 改设置时会调用；服务端周期任务也会调用，保证长时间无写入仍会裁剪。
+   */
+  applyRetentionPolicy(): void {
+    this.ensureMigrated()
     const settings = this.getSettings()
     const meta = this.listArticleRetentionMeta()
     const kept = selectRetainedArticles(meta, settings)
@@ -553,4 +558,14 @@ let storeInst: NewsFeedStore | null = null
 export function getNewsFeedStore(): NewsFeedStore {
   if (!storeInst) storeInst = new NewsFeedStore()
   return storeInst
+}
+
+/** 按当前资讯保留策略裁剪（无 upsert 也可调用） */
+export function applyNewsRetentionPolicy(): void {
+  getNewsFeedStore().applyRetentionPolicy()
+}
+
+/** @internal 测试用：重置单例 */
+export function resetNewsFeedStoreForTests(): void {
+  storeInst = null
 }

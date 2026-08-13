@@ -80,6 +80,7 @@ export function useNewsFeed() {
     selectedId: snap.selectedId,
     selected: getSelectedArticle(),
     hasMore: snap.hasMore,
+    listCapReached: snap.listCapReached,
     total: snap.total,
     view: snap.view,
     timelineDate: snap.timelineDate,

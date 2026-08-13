@@ -143,3 +143,18 @@ describe('market-data Cache LRU + persist throttle', () => {
     assert.ok(s.approxBytes > 100_000)
   })
 })
+
+describe('deprecated MemoryCache hard maxEntries LRU', () => {
+  it('evicts oldest when over maxEntries', async () => {
+    const { MemoryCache } = await import('../packages/market-data-core/dist/core/cache.js')
+    const mem = new MemoryCache(2)
+    mem.set('a', 1, 60_000)
+    mem.set('b', 2, 60_000)
+    assert.equal(mem.get('a'), 1) // touch a → b becomes LRU
+    mem.set('c', 3, 60_000)
+    assert.equal(mem.size, 2)
+    assert.equal(mem.get('b'), null)
+    assert.equal(mem.get('a'), 1)
+    assert.equal(mem.get('c'), 3)
+  })
+})

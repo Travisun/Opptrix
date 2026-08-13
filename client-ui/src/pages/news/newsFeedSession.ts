@@ -5,12 +5,17 @@ import type {
   FeedSubscription,
   NewsGroupedFeed,
 } from '../../types/schemas'
+import {
+  applyArticlesMemoryCap,
+  NEWS_ARTICLES_MEMORY_CAP,
+} from './articlesMemoryCap'
 import { dedupeArticlesByTitle } from './newsUtils'
 
 export type NewsListView = 'timeline' | 'group' | 'source'
 
 export const NEWS_PAGE_SIZE = 20
 export const NEWS_PRELOAD_THRESHOLD = 3
+export { NEWS_ARTICLES_MEMORY_CAP }
 
 export type NewsFeedSnapshot = {
   articles: FeedArticle[]
@@ -19,6 +24,8 @@ export type NewsFeedSnapshot = {
   groups: FeedGroup[]
   refreshedAt: string | null
   hasMore: boolean
+  /** Timeline hit in-memory window cap; further loadMore stopped. */
+  listCapReached: boolean
   total: number
   cursor: string | null
   view: NewsListView
@@ -47,6 +54,7 @@ function emptySnapshot(): NewsFeedSnapshot {
     groups: [],
     refreshedAt: null,
     hasMore: false,
+    listCapReached: false,
     total: 0,
     cursor: null,
     view: 'timeline',
@@ -215,10 +223,15 @@ async function loadTimelinePage(append: boolean) {
     date: snapshot.timelineDate,
   })
   const merged = append ? [...snapshot.articles, ...resp.articles] : resp.articles
-  const articles = dedupeArticlesByTitle(merged)
+  const deduped = dedupeArticlesByTitle(merged)
+  const { articles, capped } = applyArticlesMemoryCap(deduped)
+  const listCapReached = capped || (
+    articles.length >= NEWS_ARTICLES_MEMORY_CAP && resp.has_more
+  )
   patch({
     cursor: resp.next_cursor,
-    hasMore: resp.has_more,
+    hasMore: resp.has_more && !listCapReached,
+    listCapReached,
     total: resp.total,
     refreshedAt: resp.refreshed_at,
     articles,
@@ -323,6 +336,10 @@ export function setNewsFeedSourceFilter(subscriptionId: string) {
 
 export async function loadMoreNewsFeed() {
   if (snapshot.view !== 'timeline' || snapshot.loadingMore || !snapshot.hasMore || snapshot.listSyncing) return
+  if (snapshot.listCapReached || snapshot.articles.length >= NEWS_ARTICLES_MEMORY_CAP) {
+    patch({ hasMore: false, listCapReached: true })
+    return
+  }
   patch({ loadingMore: true, error: '' })
   try {
     await loadTimelinePage(true)

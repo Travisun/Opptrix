@@ -109,6 +109,29 @@ describe('lance op scheduler (read priority)', () => {
     await Promise.all([w1, w2, rd])
     assert.deepEqual(log, ['w1-start', 'w1-end', 'read', 'w2'])
   })
+
+  it('drops oldest pending write when maxPending exceeded', async () => {
+    const sched = new LanceOpScheduler({ maxPending: 1 })
+    /** @type {() => void} */
+    let release
+    const gate = new Promise((resolve) => {
+      release = resolve
+    })
+    const running = sched.schedule('write', async () => {
+      await gate
+      return 1
+    })
+    await new Promise((r) => setTimeout(r, 5))
+    const oldPending = sched.schedule('write', async () => 2)
+    const newer = sched.schedule('write', async () => 3)
+    await assert.rejects(
+      () => oldPending,
+      (err) => err instanceof Error && /dropped oldest write/i.test(err.message),
+    )
+    release()
+    assert.equal(await running, 1)
+    assert.equal(await newer, 3)
+  })
 })
 
 describe('lance pathology detection', () => {
