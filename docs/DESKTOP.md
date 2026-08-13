@@ -78,13 +78,27 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 ## 计划任务与后台常驻
 
-桌面端计划任务为 **仅进程内执行**：Sidecar 内 `ScheduleService.start()` 每 **20s** 扫描到期任务（`trigger: 'timer'`）。**不再**注册 LaunchAgent / Windows schtasks / Linux systemd timer；升级启动时 `reconcileOsSchedule` **强制** `removeTickRegistration` 并清理旧 runner 脚本。
+### 唯一主路径（产品设计）
+
+```
+登录 / 前台 / 托盘常驻
+  → Electron 主进程（托盘 UI）
+  → 唯一 sidecar API（ScheduleService.start 每 20s tick）
+完全退出 → 不跑计划任务
+不再注册 LaunchAgent / schtasks / systemd timer
+```
+
+桌面端计划任务 **仅** 在 sidecar 进程内执行：`ScheduleService.start()` 每 **20s** 扫描到期任务（`trigger: 'timer'`）。**headless-tick** 若被旧 OS runner 误触发，**只**对已有 sidecar `POST /api/schedule/tick`；**禁止**再 `spawnSidecarProcess`（应用未运行 = 计划不应执行）。**不再**注册 LaunchAgent / Windows schtasks / Linux systemd timer；升级启动时 `reconcileOsSchedule` **强制** `removeTickRegistration` 并清理旧 runner 脚本（清扫能力保留）。
 
 关窗到托盘时 sidecar 与 timer 继续运行；从托盘 **完全退出** 后计划任务 **不会** 执行。默认开启登录自启 `autostart`（`--background` 托盘常驻）：macOS / Windows 用 Electron Login Item，Linux 写 XDG Autostart（`~/.config/autostart/opptrix.desktop`）；与已废除的 OS tick 无关。
 
 ### 关窗 = 托盘常驻（生产包）
 
 打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`，并隐藏 macOS Dock / Windows·Linux 任务栏图标，仅保留系统托盘）；从托盘「显示」时 `revealAppFromTray` / `ensureMainWindowVisible` 恢复 Dock 与任务栏。sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
+
+**Sidecar 守护（生产包，兜底）**：主进程在常驻启动成功后监督自有 sidecar（非开发、非 `reuse` 端口）。子进程意外退出时按指数退避（1s→2s→…→30s）自动拉起并重新做 health；另有约 20s 健康巡检，发现「进程在但端口无响应」或进程已消失时同样重启（与 exit 路径共用单飞锁，避免双启）。用户退出、更新安装或短命 tick 退出前会停止守护，并对 sidecar 给予 ≥8.5s 软关闭窗口（对齐 server 内原生 Duck/Lance/ONNX 关闭），再 SIGKILL，减轻 macOS「意外退出」类崩溃框。`before-quit`（含 Cmd+Q）在 sidecar 未就绪退出前会 `preventDefault` 并等待宽限关闭。
+
+> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯（`source_type=news`）不再写入 Lance**（仅 SQLite + FTS）；研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后由 `embedPendingDocuments`（已排除 news）/ 下次研报 embed 回填（可接受短暂回填窗口）。
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 
@@ -153,7 +167,7 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
 | `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar；进程内 timer 工作；reconcile 仅 remove 遗留 OS tick + 同步登录项 |
 | `--schedule-tick` | **兼容**旧 LaunchAgent：短命 worker 在 sidecar ready 后 `POST /api/schedule/tick` 后退出；**新版本不再注册**此类 OS 任务 |
 
-**已废除**：系统级 OS tick（LaunchAgent / schtasks / systemd timer）、OpptrixSchedule Helper 冷启、headless-tick 作为主路径。适配器仍保留 `removeTickRegistration` / `probeTickRegistration`，供升级清理。`userData` 内旧 `os-schedule-tick-runner.*` 与 endpoint 冷启字段在 reconcile 时清除；`os-schedule-endpoint.json` 仅保留 loopback `host`/`port` 供 UI 复用 sidecar。
+**已废除**：系统级 OS tick（LaunchAgent / schtasks / systemd timer）、OpptrixSchedule Helper 冷启、headless-tick 冷启 sidecar。适配器仍保留 `removeTickRegistration` / `probeTickRegistration`，供升级清理。`userData` 内旧 `os-schedule-tick-runner.*` 与 endpoint 冷启字段在 reconcile 时清除；`os-schedule-endpoint.json` 仅保留 loopback `host`/`port` 供 UI 复用 sidecar。遗留 runner 若仍调用 `headless-tick.cjs`，仅 HTTP tick，失败即 exit≠0。
 
 Windows NSIS（`nsis/installer.nsh`）仍会在安装前移除 `OpptrixScheduleTick`，避免旧版定时拉起阻塞覆盖安装。
 

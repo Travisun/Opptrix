@@ -174,11 +174,21 @@ export function buildDocumentTools(): DocumentToolDef[] {
     {
       name: 'search_library',
       category: '研报',
-      description: '在本机研报库与资讯库中按关键词检索相关片段（跨会话），返回文档名、页码与摘录',
+      description:
+        '在本机研报库与资讯库检索片段（跨会话）。研报可混合关键词与语义相关；资讯（source_type=news）仅为关键词全文检索、无向量。'
+        + '查资讯时应用具体关键词（股票代码、公司简称、主题、事件词），可一次带多个词组合；避免空泛「相关报道」式查询。返回文档名、页码与摘录。',
       parameters: S({
-        query: { type: 'string', description: '检索关键词，如公司名、主题、评级' },
+        query: {
+          type: 'string',
+          description:
+            '检索词：研报可用主题/语义相关表述；查资讯须用具体关键词（代码、公司名、主题、事件），可多词空格分隔组合',
+        },
         limit: { type: 'number', description: '最多返回条数，默认 8，上限 20' },
-        source_type: { type: 'string', description: '可选：report（研报）或 news（资讯）' },
+        source_type: {
+          type: 'string',
+          description:
+            '可选：report（研报，可混合/语义）或 news（资讯，仅关键词 FTS、无向量；请多带具体词）',
+        },
       }, ['query']),
       handler: async (args) => {
         const query = String(args.query ?? '').trim()

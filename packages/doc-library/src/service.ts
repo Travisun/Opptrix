@@ -22,6 +22,9 @@ import { getVectorStore, type VectorStore } from './vector-store.js'
 import { searchHybridChunks } from './hybrid-search.js'
 import { extractTextL0, TEXT_L0_ENGINE_VERSION } from './engines/text-l0.js'
 import { isPlainTextDocument } from './document-kind.js'
+import { shouldEmbedToVector } from './embed-policy.js'
+
+export { shouldEmbedToVector } from './embed-policy.js'
 
 export type LegacyExtractWriter = (
   sessionId: string,
@@ -255,7 +258,7 @@ export class DocLibraryService {
   }
 
   /**
-   * 纯文本入库（资讯等）：同步 text-l0 切块，再异步 embed。
+   * 纯文本入库（资讯等）：同步 text-l0 切块；研报可异步 embed，资讯仅 FTS。
    * 以 external_id + sourceType 去重；正文变更则覆盖并重建 chunk。
    */
   ingestFromText(input: IngestFromTextInput): IngestFromTextResult | null {
@@ -346,7 +349,9 @@ export class DocLibraryService {
       })
     }
 
-    void this.scheduleEmbed(documentId)
+    if (shouldEmbedToVector(input.sourceType)) {
+      void this.scheduleEmbed(documentId)
+    }
 
     const ready = this.repo.getParseArtifact(documentId)
     return {
@@ -461,8 +466,12 @@ export class DocLibraryService {
     }
   }
 
-  /** parse ready 后异步 embed；幂等；无模型不中断 */
+  /** parse ready 后异步 embed；幂等；无模型不中断；news 跳过 */
   scheduleEmbed(documentId: string): Promise<void> {
+    const doc = this.repo.getDocument(documentId)
+    if (doc && !shouldEmbedToVector(doc.source_type)) {
+      return Promise.resolve()
+    }
     const existing = this.embedInflight.get(documentId)
     if (existing) return existing
     const job = this.runEmbed(documentId).finally(() => {
@@ -474,6 +483,9 @@ export class DocLibraryService {
 
   private async runEmbed(documentId: string): Promise<void> {
     try {
+      const doc = this.repo.getDocument(documentId)
+      if (doc && !shouldEmbedToVector(doc.source_type)) return
+
       const ready = this.embedding.isReady()
         || await this.embedding.tryEnableDefaultBackend()
       if (!ready) return
@@ -509,13 +521,16 @@ export class DocLibraryService {
     }
   }
 
-  /** 模型安装后回填未嵌入文档 */
+  /** 模型安装后回填未嵌入文档（排除 news） */
   async embedPendingDocuments(limit = 50): Promise<number> {
     const rows = this.db.prepare(`
       SELECT DISTINCT c.document_id
       FROM chunks c
       JOIN parse_artifacts pa ON pa.document_id = c.document_id
-      WHERE pa.status = 'ready' AND c.embedded_at IS NULL
+      JOIN documents d ON d.id = c.document_id
+      WHERE pa.status = 'ready'
+        AND c.embedded_at IS NULL
+        AND COALESCE(d.source_type, 'report') != 'news'
       LIMIT ?
     `).all(limit) as Array<{ document_id: string }>
     let n = 0

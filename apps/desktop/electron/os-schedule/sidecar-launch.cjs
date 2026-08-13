@@ -5,6 +5,10 @@
 const path = require('node:path')
 const fs = require('node:fs')
 const { spawn } = require('node:child_process')
+const {
+  SIDECAR_GRACEFUL_MS,
+  SIDECAR_HARD_EXTRA_MS,
+} = require('../sidecar-supervisor.cjs')
 
 /**
  * Derive Electron `resources` dir from the binary path when `process.resourcesPath`
@@ -177,12 +181,13 @@ async function waitForHealth(host, port, timeoutMs = 30_000) {
 
 /**
  * SIGTERM then SIGKILL — does not wait for exit.
+ * Soft-kill grace defaults to SIDECAR_GRACEFUL_MS (≥ server native shutdown 8s).
  * @param {import('node:child_process').ChildProcess | null | undefined} proc
  * @param {{ killGraceMs?: number }} [opts]
  */
 function stopChild(proc, opts = {}) {
   if (!proc || proc.killed || proc.exitCode != null) return
-  const graceMs = opts.killGraceMs ?? 3000
+  const graceMs = opts.killGraceMs ?? SIDECAR_GRACEFUL_MS
   try {
     proc.kill('SIGTERM')
   } catch {
@@ -200,16 +205,19 @@ function stopChild(proc, opts = {}) {
 
 /**
  * Stop and wait for exit (or timeout).
+ * Soft SIGKILL at min(SIDECAR_GRACEFUL_MS, timeoutMs); hard finish after soft + HARD_EXTRA.
  * @param {import('node:child_process').ChildProcess | null | undefined} proc
- * @param {number} [timeoutMs]
+ * @param {number} [timeoutMs] default ≥ server shutdown window
  * @returns {Promise<void>}
  */
-function stopChildAndWait(proc, timeoutMs = 2500) {
+function stopChildAndWait(proc, timeoutMs = SIDECAR_GRACEFUL_MS) {
   return new Promise((resolve) => {
     if (!proc || proc.killed || proc.exitCode != null) {
       resolve()
       return
     }
+    const softMs = Math.min(SIDECAR_GRACEFUL_MS, timeoutMs)
+    const hardMs = softMs + SIDECAR_HARD_EXTRA_MS
     let settled = false
     const finish = () => {
       if (settled) return
@@ -231,8 +239,8 @@ function stopChildAndWait(proc, timeoutMs = 2500) {
       } catch {
         /* ignore */
       }
-    }, Math.min(1500, timeoutMs))
-    const hardTimer = setTimeout(finish, timeoutMs)
+    }, softMs)
+    const hardTimer = setTimeout(finish, hardMs)
   })
 }
 
@@ -246,4 +254,6 @@ module.exports = {
   waitForHealth,
   stopChild,
   stopChildAndWait,
+  SIDECAR_GRACEFUL_MS,
+  SIDECAR_HARD_EXTRA_MS,
 }

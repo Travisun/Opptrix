@@ -25,6 +25,7 @@ export { documentKindFromMime, extOfFilename, isPlainTextDocument } from './docu
 export { DocLibraryRepository } from './repository.js'
 export { DocLibraryService } from './service.js'
 export type { LegacyExtractWriter, ParseLifecycleHooks } from './service.js'
+export { shouldEmbedToVector } from './embed-policy.js'
 export {
   docLibraryRoot,
   docLibraryDbPath,
@@ -63,8 +64,13 @@ export {
   getVectorStore,
   closeVectorStore,
   setVectorStoreForTests,
+  isValidEmbeddingVector,
+  filterValidUpsertRows,
+  detectLanceDatasetPathology,
+  lanceTableDatasetDir,
+  LANCE_VERSIONS_PATHOLOGY_THRESHOLD,
 } from './vector-store.js'
-export type { VectorStore, VectorChunkRow, VectorSearchHit } from './vector-store.js'
+export type { VectorStore, VectorChunkRow, VectorSearchHit, LancePathologyResult } from './vector-store.js'
 export {
   downloadEmbeddingModel,
   removeEmbeddingModel,

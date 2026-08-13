@@ -32,6 +32,11 @@ export async function searchHybridChunks(
     limit,
   })
 
+  // 资讯不进 Lance：source_type=news 时仅关键词 FTS
+  if (opts.sourceType === 'news') {
+    return ftsHits
+  }
+
   const embeddingReady = opts.embedding.isReady()
     || await opts.embedding.tryEnableDefaultBackend()
   if (!embeddingReady) {
@@ -118,11 +123,14 @@ function listSessionDocumentIds(
   return rows.map(r => r.document_id)
 }
 
-/** library 范围：ready 文档；可选按 source_type 预筛 */
+/** library 范围：ready 文档；可选按 source_type 预筛；向量路径排除 news */
 function listLibraryDocumentIds(
   db: Database.Database,
   sourceType?: DocumentSourceType,
 ): string[] {
+  if (sourceType === 'news') {
+    return []
+  }
   if (sourceType) {
     const rows = db.prepare(`
       SELECT d.id AS document_id
@@ -138,6 +146,7 @@ function listLibraryDocumentIds(
     FROM documents d
     JOIN parse_artifacts pa ON pa.document_id = d.id
     WHERE pa.status = 'ready'
+      AND COALESCE(d.source_type, 'report') != 'news'
   `).all() as Array<{ document_id: string }>
   return rows.map(r => r.document_id)
 }

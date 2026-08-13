@@ -493,7 +493,9 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   sections.push(
     '【文档 RAG — 多跳检索】',
     '1) 本会话附件：list_session_documents → search_document（可省略 attachment_id 搜全部）→ read_document 按页精读',
-    '2) 跨会话/全库：search_library 按关键词找片段 → read_document(document_id) 精读；可换词多跳直至信息足够',
+    '2) 跨会话/全库：search_library → read_document(document_id) 精读；可换词多跳直至信息足够',
+    '   - 研报：可混合关键词与语义相关',
+    '   - 资讯（source_type=news）：仅关键词全文检索、无向量；须用代码/公司名/主题/事件等具体词，可一次多词组合，忌空泛「相关报道」',
     '3) 引用须带文档名与页码；禁止臆造未读内容；勿一次灌全文',
   )
 

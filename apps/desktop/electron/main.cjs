@@ -11,6 +11,16 @@ const {
   stopChild,
   serverEntryPath,
 } = require('./os-schedule/sidecar-launch.cjs')
+const {
+  SIDECAR_GRACEFUL_MS,
+  SIDECAR_HARD_EXTRA_MS,
+  SIDECAR_HEALTH_POLL_MS,
+  restartDelayMs,
+  shouldAutoRestart,
+  createBackoffState,
+  resetBackoff,
+  recordBackoffFailure,
+} = require('./sidecar-supervisor.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu, listApplicationMenuTopItems, popupApplicationMenuAt } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
@@ -90,6 +100,19 @@ let recoverDesktopAfterUpdateStall = null
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let serverProcess = null
+/** Intentional stop (quit / update / watchdog recycle) — suppress auto-restart. */
+let intentionalSidecarStop = false
+/** @type {ReturnType<typeof setTimeout> | null} */
+let sidecarRestartTimer = null
+/** @type {ReturnType<typeof setInterval> | null} */
+let sidecarHealthTimer = null
+/** @type {Promise<void> | null} */
+let sidecarRestartPromise = null
+const sidecarBackoff = createBackoffState()
+/** Cmd+Q / before-quit: allow second pass after graceful sidecar stop. */
+let allowQuit = false
+/** Sidecar already stopped (or never owned) for this quit cycle. */
+let sidecarQuitPrepared = false
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindow = null
 let splashShownAt = 0
@@ -244,6 +267,27 @@ function sidecarEnv(root) {
   })
 }
 
+function sidecarRestartContext() {
+  return {
+    intentionalStop: intentionalSidecarStop,
+    isQuitting: Boolean(app.isQuitting),
+    isUpdating: Boolean(app.isUpdating),
+    isDev,
+    apiPortMode,
+  }
+}
+
+function stopSidecarSupervision() {
+  if (sidecarRestartTimer) {
+    clearTimeout(sidecarRestartTimer)
+    sidecarRestartTimer = null
+  }
+  if (sidecarHealthTimer) {
+    clearInterval(sidecarHealthTimer)
+    sidecarHealthTimer = null
+  }
+}
+
 function spawnSidecar() {
   const root = repoRoot()
   const entry = serverEntryPath(root)
@@ -257,6 +301,7 @@ function spawnSidecar() {
     cwd: root,
     env: sidecarEnv(root),
   })
+  intentionalSidecarStop = false
 
   serverProcess.stdout?.on('data', (chunk) => {
     process.stdout.write(`[api] ${chunk}`)
@@ -264,8 +309,15 @@ function spawnSidecar() {
   serverProcess.stderr?.on('data', (chunk) => {
     process.stderr.write(`[api] ${chunk}`)
   })
-  serverProcess.on('exit', () => {
+  serverProcess.on('exit', (code, signal) => {
     serverProcess = null
+    if (!shouldAutoRestart(sidecarRestartContext())) return
+    const fails = recordBackoffFailure(sidecarBackoff)
+    console.warn(
+      `[sidecar] exited unexpectedly (code=${code ?? 'null'} signal=${signal ?? 'null'}); ` +
+        `scheduling restart (failCount=${fails})`,
+    )
+    scheduleSidecarRestart('exit')
   })
 
   return serverProcess
@@ -273,6 +325,119 @@ function spawnSidecar() {
 
 async function waitForHealth(timeoutMs = 30_000) {
   await waitForSidecarHealth(API_HOST, API_PORT, timeoutMs)
+}
+
+/**
+ * Short health probe for watchdog (does not throw).
+ * @param {number} [timeoutMs]
+ * @returns {Promise<boolean>}
+ */
+async function probeSidecarHealth(timeoutMs = 2500) {
+  const url = `http://${API_HOST}:${API_PORT}/api/health`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch(url, { signal: controller.signal })
+    return resp.ok
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function scheduleSidecarRestart(reason) {
+  if (!shouldAutoRestart(sidecarRestartContext())) return
+  if (sidecarRestartTimer || sidecarRestartPromise) return
+  const delay = restartDelayMs(Math.max(0, sidecarBackoff.failCount - 1))
+  console.warn(`[sidecar] restart in ${delay}ms (${reason})`)
+  sidecarRestartTimer = setTimeout(() => {
+    sidecarRestartTimer = null
+    void requestSidecarRestart(reason)
+  }, delay)
+  if (typeof sidecarRestartTimer.unref === 'function') {
+    sidecarRestartTimer.unref()
+  }
+}
+
+/**
+ * Single-flight restart: stop unhealthy child if needed, spawn, wait health.
+ * @param {string} reason
+ * @returns {Promise<void>}
+ */
+function requestSidecarRestart(reason) {
+  if (!shouldAutoRestart(sidecarRestartContext())) {
+    return Promise.resolve()
+  }
+  if (sidecarRestartPromise) return sidecarRestartPromise
+
+  sidecarRestartPromise = (async () => {
+    try {
+      const alive =
+        serverProcess &&
+        serverProcess.exitCode == null &&
+        !serverProcess.killed
+      if (alive) {
+        // Recycle hung process; mark intentional so exit handler does not double-schedule.
+        intentionalSidecarStop = true
+        await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+        intentionalSidecarStop = false
+      }
+      if (!shouldAutoRestart(sidecarRestartContext())) return
+      if (!serverProcess) spawnSidecar()
+      await waitForHealth(30_000)
+      resetBackoff(sidecarBackoff)
+      startSidecarHealthWatchdog()
+      console.log(`[sidecar] restarted ok (${reason})`)
+    } catch (err) {
+      recordBackoffFailure(sidecarBackoff)
+      console.warn(
+        '[sidecar] restart failed:',
+        err instanceof Error ? err.message : err,
+      )
+      if (shouldAutoRestart(sidecarRestartContext())) {
+        scheduleSidecarRestart('retry-after-fail')
+      }
+    } finally {
+      sidecarRestartPromise = null
+    }
+  })()
+
+  return sidecarRestartPromise
+}
+
+async function runSidecarHealthWatchdogTick() {
+  if (!shouldAutoRestart(sidecarRestartContext())) return
+  if (sidecarRestartPromise || sidecarRestartTimer) return
+
+  const procGone =
+    !serverProcess ||
+    serverProcess.killed ||
+    serverProcess.exitCode != null
+  if (procGone) {
+    // exit 路径通常已记 failCount；此处只调度，避免双计
+    scheduleSidecarRestart('health-watchdog:process-gone')
+    return
+  }
+
+  const ok = await probeSidecarHealth(2500)
+  if (ok) return
+  if (!shouldAutoRestart(sidecarRestartContext())) return
+  if (sidecarRestartPromise || sidecarRestartTimer) return
+  recordBackoffFailure(sidecarBackoff)
+  console.warn('[sidecar] health probe failed; scheduling restart')
+  scheduleSidecarRestart('health-watchdog:unhealthy')
+}
+
+function startSidecarHealthWatchdog() {
+  if (sidecarHealthTimer) return
+  if (!shouldAutoRestart(sidecarRestartContext())) return
+  sidecarHealthTimer = setInterval(() => {
+    void runSidecarHealthWatchdogTick()
+  }, SIDECAR_HEALTH_POLL_MS)
+  if (typeof sidecarHealthTimer.unref === 'function') {
+    sidecarHealthTimer.unref()
+  }
 }
 
 async function waitForAppUi(timeoutMs = 60_000) {
@@ -291,19 +456,26 @@ async function waitForAppUi(timeoutMs = 60_000) {
 }
 
 function stopSidecar() {
+  intentionalSidecarStop = true
+  stopSidecarSupervision()
   const proc = serverProcess
   serverProcess = null
-  stopChild(proc)
+  stopChild(proc, { killGraceMs: SIDECAR_GRACEFUL_MS })
 }
 
 /**
- * 更新安装前等待 sidecar 退出，避免 Windows/Linux 安装程序或 macOS 替换 .app 时文件仍被占用。
+ * Wait for sidecar exit so native modules can close before SIGKILL.
+ * Soft SIGKILL at ≥ SIDECAR_GRACEFUL_MS; hard finish = soft + SIDECAR_HARD_EXTRA_MS.
  * @param {number} [timeoutMs]
  * @returns {Promise<void>}
  */
-function stopSidecarAndWait(timeoutMs = 2500) {
+function stopSidecarAndWait(timeoutMs = SIDECAR_GRACEFUL_MS) {
+  intentionalSidecarStop = true
+  stopSidecarSupervision()
+  const softMs = Math.max(timeoutMs, SIDECAR_GRACEFUL_MS)
   return new Promise((resolve) => {
     if (!serverProcess || serverProcess.killed || serverProcess.exitCode != null) {
+      serverProcess = null
       resolve()
       return
     }
@@ -326,9 +498,9 @@ function stopSidecarAndWait(timeoutMs = 2500) {
       } catch {
         /* ignore */
       }
-    }, timeoutMs)
+    }, softMs)
     // 硬超时：SIGKILL 后仍拿不到 exit（极端情况），兜底放行，避免卡死退出流程。
-    const hardTimer = setTimeout(finish, timeoutMs + 2000)
+    const hardTimer = setTimeout(finish, softMs + SIDECAR_HARD_EXTRA_MS)
     try {
       proc.kill('SIGTERM')
     } catch {
@@ -545,8 +717,9 @@ function prepareForUpdateInstall() {
     }
     // 3) 托盘会让进程在关窗后仍存活；安装前必须拆掉
     destroyTray()
-    // 4) sidecar 可能正跑计划任务；多等一会再强杀，再交给 ShipIt
-    await stopSidecarAndWait(5_000)
+    // 4) sidecar 可能正跑计划任务；宽限原生模块关闭后再强杀，再交给 ShipIt
+    await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+    sidecarQuitPrepared = true
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue
       try {
@@ -578,9 +751,13 @@ async function quitApp() {
   }
   if (app.isUpdating) return
   app.isQuitting = true
+  intentionalSidecarStop = true
+  stopSidecarSupervision()
   stopScheduleReconcilePoll()
   destroyTray()
-  await stopSidecarAndWait(2_500)
+  await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+  sidecarQuitPrepared = true
+  allowQuit = true
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
     try {
@@ -959,9 +1136,13 @@ async function bootstrapBackgroundApp() {
  */
 async function exitAfterEphemeralScheduleTick() {
   app.isQuitting = true
+  intentionalSidecarStop = true
+  stopSidecarSupervision()
   stopScheduleReconcilePoll()
   destroyTray()
-  await stopSidecarAndWait(2_500)
+  await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+  sidecarQuitPrepared = true
+  allowQuit = true
   app.quit()
   if (process.platform === 'win32' || process.platform === 'linux') {
     setTimeout(() => {
@@ -1531,6 +1712,7 @@ if (!gotTheLock) {
       }
     })
     initUpdater({ version: VERSION })
+    startSidecarHealthWatchdog()
     return true
   }
 
@@ -1539,6 +1721,9 @@ if (!gotTheLock) {
     app.isUpdating = false
     app.isQuitting = false
     prepareForUpdateInstallPromise = null
+    allowQuit = false
+    sidecarQuitPrepared = false
+    intentionalSidecarStop = false
     await continueDesktopBootstrap({ withSplash: true, background: false })
   }
 
@@ -1546,15 +1731,61 @@ if (!gotTheLock) {
     // 更新安装中由 quitAndInstall 接管退出；勿抢先 app.quit()
     if (app.isUpdating) return
     if (app.isPackaged && hasTray()) return
-    stopSidecar()
-    app.quit()
+    // quitApp / before-quit 已在停 sidecar：勿双重 SIGKILL
+    if (app.isQuitting) {
+      if (allowQuit || sidecarQuitPrepared || !serverProcess) {
+        app.quit()
+      }
+      return
+    }
+    app.isQuitting = true
+    intentionalSidecarStop = true
+    stopSidecarSupervision()
+    void (async () => {
+      await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+      sidecarQuitPrepared = true
+      allowQuit = true
+      app.quit()
+    })()
   })
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     app.isQuitting = true
+    intentionalSidecarStop = true
+    stopSidecarSupervision()
     stopScheduleReconcilePoll()
-    destroyTray()
-    stopSidecar()
-    void disposeTranslation()
+
+    if (allowQuit || sidecarQuitPrepared) {
+      destroyTray()
+      void disposeTranslation()
+      return
+    }
+
+    // quitApp 等路径已等过 sidecar（process 已 null）→ 直接放行
+    if (!serverProcess || serverProcess.killed || serverProcess.exitCode != null) {
+      serverProcess = null
+      sidecarQuitPrepared = true
+      destroyTray()
+      void disposeTranslation()
+      return
+    }
+
+    // Cmd+Q：先宽限停 sidecar，再允许真正退出（避免硬杀原生模块导致 SIGABRT）
+    event.preventDefault()
+    void (async () => {
+      try {
+        await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+      } catch (err) {
+        console.warn(
+          '[sidecar] graceful stop on quit failed:',
+          err instanceof Error ? err.message : err,
+        )
+      }
+      sidecarQuitPrepared = true
+      allowQuit = true
+      destroyTray()
+      void disposeTranslation()
+      app.quit()
+    })()
   })
 }

@@ -18,6 +18,7 @@ import {
   isEmbeddingModelInstalled,
   setEmbeddingServiceForTests,
   setVectorStoreForTests,
+  shouldEmbedToVector,
 } from '../packages/doc-library/dist/index.js'
 
 /** @type {import('../packages/doc-library/dist/index.js').ParseRunner} */
@@ -217,10 +218,16 @@ describe('doc-library schema', () => {
 })
 
 describe('doc-library hybrid without graph', () => {
-  it('ingestFromText news embeds without graph tables', async () => {
+  it('ingestFromText news skips vector upsert', async () => {
     const dir = tmpDir()
     process.env.OPPTRIX_DATA_DIR = dir
     const store = new MemoryVectorStore()
+    let upsertCalls = 0
+    const origUpsert = store.upsert.bind(store)
+    store.upsert = async rows => {
+      upsertCalls += 1
+      return origUpsert(rows)
+    }
     setVectorStoreForTests(store)
     const dbPath = path.join(dir, 'doc-library', 'news-ingest.db')
     const db = openDocLibraryDb(dbPath)
@@ -239,13 +246,15 @@ describe('doc-library hybrid without graph', () => {
     assert.equal(result.parseStatus, 'ready')
     assert.equal(result.reused, false)
 
-    for (let i = 0; i < 40; i++) {
-      const chunks = db.prepare(`
-        SELECT embedded_at FROM chunks WHERE document_id = ? LIMIT 1
-      `).get(result.documentId)
-      if (chunks?.embedded_at) break
-      await new Promise(r => setTimeout(r, 25))
-    }
+    await svc.scheduleEmbed(result.documentId)
+    await new Promise(r => setTimeout(r, 50))
+
+    const chunks = db.prepare(`
+      SELECT embedded_at FROM chunks WHERE document_id = ?
+    `).all(result.documentId)
+    assert.ok(chunks.length >= 1)
+    assert.ok(chunks.every(c => c.embedded_at == null), 'news 不得标记 embedded_at')
+    assert.equal(upsertCalls, 0, 'news 不得调用 vector upsert')
 
     const doc = db.prepare(`
       SELECT source_type, external_id FROM documents WHERE id = ?
@@ -263,6 +272,60 @@ describe('doc-library hybrid without graph', () => {
     assert.ok(again)
     assert.equal(again.documentId, result.documentId)
     assert.equal(again.reused, true)
+
+    setVectorStoreForTests(null)
+    db.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+    delete process.env.OPPTRIX_DATA_DIR
+  })
+
+  it('shouldEmbedToVector excludes news', () => {
+    assert.equal(shouldEmbedToVector('news'), false)
+    assert.equal(shouldEmbedToVector('report'), true)
+    assert.equal(shouldEmbedToVector(undefined), true)
+    assert.equal(shouldEmbedToVector(null), true)
+  })
+
+  it('embedPendingDocuments excludes news', async () => {
+    const dir = tmpDir()
+    process.env.OPPTRIX_DATA_DIR = dir
+    const store = new MemoryVectorStore()
+    setVectorStoreForTests(store)
+    const dbPath = path.join(dir, 'doc-library', 'embed-pending-news.db')
+    const db = openDocLibraryDb(dbPath)
+    const svc = new DocLibraryService(db)
+    svc.setEmbeddingService(new EmbeddingService(new MockEmbeddingBackend(true)))
+    svc.setVectorStore(store)
+
+    const now = new Date().toISOString()
+    for (const row of [
+      { id: 'ep-r', sha: 'sha-ep-r', st: 'report', text: 'report pending embed body long enough' },
+      { id: 'ep-n', sha: 'sha-ep-n', st: 'news', text: 'news pending embed body long enough xx' },
+    ]) {
+      db.prepare(`
+        INSERT INTO documents(
+          id, content_sha256, name, mime, kind, byte_size, blob_path,
+          source_type, external_id, created_at, updated_at
+        ) VALUES (?, ?, ?, 'text/plain', 'text', 10, '/t', ?, NULL, ?, ?)
+      `).run(row.id, row.sha, row.id + '.txt', row.st, now, now)
+      db.prepare(`
+        INSERT INTO parse_artifacts(
+          document_id, engine_id, engine_version, status, page_count, char_count, md_path, error, ready_at, parse_fingerprint
+        ) VALUES (?, 'text-l0', 't', 'ready', 1, 40, NULL, NULL, ?, NULL)
+      `).run(row.id, now)
+      const chunkId = `${row.id}:c0`
+      db.prepare(`
+        INSERT INTO chunks(id, document_id, seq, page, offset, text, char_count, embedded_at)
+        VALUES (?, ?, 0, 1, 0, ?, ?, NULL)
+      `).run(chunkId, row.id, row.text, row.text.length)
+    }
+
+    const n = await svc.embedPendingDocuments(50)
+    assert.equal(n, 1, 'embedPending 只应调度研报')
+    const newsChunk = db.prepare(`SELECT embedded_at FROM chunks WHERE document_id = 'ep-n'`).get()
+    assert.equal(newsChunk.embedded_at, null)
+    const reportChunk = db.prepare(`SELECT embedded_at FROM chunks WHERE document_id = 'ep-r'`).get()
+    assert.ok(reportChunk.embedded_at)
 
     setVectorStoreForTests(null)
     db.close()
