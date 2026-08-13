@@ -186,9 +186,9 @@
       "shortcutName": "Opptrix",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icons/icon.ico",
-      "uninstallerIcon": "build/icons/icon.ico",
-      "installerHeaderIcon": "build/icons/icon.ico",
+      "installerIcon": "build/icons/installerIcon.ico",
+      "uninstallerIcon": "build/icons/uninstallerIcon.ico",
+      "installerHeaderIcon": "build/icons/installerIcon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "include": "nsis/installer.nsh"

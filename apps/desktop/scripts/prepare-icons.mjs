@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-/** Stage repo icons/ into apps/desktop/build/icons for Electron runtime + electron-builder. */
+/**
+ * Stage repo icons/ into apps/desktop/build/icons for Electron runtime + electron-builder.
+ *
+ * NSIS installer/uninstaller icons use hand-aligned PNGs in icons/nsis/
+ * (installer-{16,32,48,256}.png) — not logo@* or @2x/@3x variants.
+ */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -179,6 +184,34 @@ async function createWindowsIco() {
   }
 }
 
+/** NSIS installer / uninstaller — hand-aligned icons/nsis/installer-{16,32,48,256}.png */
+const NSIS_INSTALLER_PNGS = [
+  { size: 16, file: 'installer-16.png' },
+  { size: 32, file: 'installer-32.png' },
+  { size: 48, file: 'installer-48.png' },
+  { size: 256, file: 'installer-256.png' },
+]
+
+async function createNsisIcons() {
+  const { default: pngToIco } = await import('png-to-ico')
+  const nsisSrc = path.join(SOURCE_DIR, 'nsis')
+  const paths = []
+  for (const { size, file } of NSIS_INSTALLER_PNGS) {
+    const src = path.join(nsisSrc, file)
+    if (!fs.existsSync(src)) {
+      throw new Error(`Missing NSIS installer icon source: ${src}`)
+    }
+    const { width, height } = readPngDimensions(src)
+    if (width !== size || height !== size) {
+      throw new Error(`NSIS icon ${file} must be ${size}x${size}, got ${width}x${height}`)
+    }
+    paths.push(src)
+  }
+  const ico = await pngToIco(paths)
+  fs.writeFileSync(path.join(OUT_DIR, 'installerIcon.ico'), ico)
+  fs.writeFileSync(path.join(OUT_DIR, 'uninstallerIcon.ico'), ico)
+}
+
 function createMacIcns() {
   if (process.platform !== 'darwin') {
     console.log('Skipping .icns generation (iconutil requires macOS); electron-builder will convert PNG on Mac CI.')
@@ -227,9 +260,11 @@ copyFile(
 stageLinuxIcons()
 await stageTrayIcons()
 await createWindowsIco()
+await createNsisIcons()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
 console.log('  staged: icon.icon (mac App / Icon Composer)')
 console.log('  staged: icon.icns (DMG + Dock fallback)')
 console.log('  staged: tray/ (mac Template + Win tray.ico + Linux color PNG)')
+console.log('  staged: installerIcon.ico + uninstallerIcon.ico (NSIS ← icons/nsis/)')
 console.log('  synced: client-ui/public/app-icon.png ← logo@64.png')
 
