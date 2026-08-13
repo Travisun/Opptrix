@@ -277,6 +277,8 @@ export {
   invalidateHasMarketDuckDataCache,
   type MarketDuckGateway,
   type MarketDuckStats,
+  type LatestBarRow,
+  type LatestBarsPageOpts,
 } from './duck/market-duck-gateway.js'
 export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'

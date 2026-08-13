@@ -16,6 +16,7 @@
 - **Hub / API**：`queryAllAsync` / `marketStatsAsync`（不阻塞事件循环）
 - **Store 同步 / 测试 / 导出**：`queryAllSync` / `marketStatsSync` / `applyBatchSync` → 同 duck-cli 二进制，经 `spawnSync`（可靠阻塞，无事件循环依赖）
 - 启动预热：默认 `warmReadCaches()`；低配或 `OPPTRIX_DUCK_WARM_ON_BOOT=0` 跳过（首次查询仍会拉 stats）
+- **最新截面**：无参 `latestBars` / `latestBarSnapshot` 仍返回全量；大库用 `latestBarsPage({ afterCode, limit })` / `latestBarSnapshotPage`（默认 limit 1000，硬顶 2000，`code` 升序游标）
 
 ## 写路径
 

@@ -6,6 +6,11 @@ import fs from 'node:fs'
 import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api'
 import PQueue from 'p-queue'
 import { CN_DAILY_TABLE } from './market-schema.js'
+import {
+  buildLatestBarsPageQuery,
+  type LatestBarRow,
+  type LatestBarsPageOpts,
+} from './latest-bars-page.js'
 
 export type NeoKlineDuckStats = {
   rows: number
@@ -450,6 +455,7 @@ export class DuckNeoReader {
     return rows.map(r => r.code)
   }
 
+  /** 全市场最新截面（兼容）；大库请用 latestBarsPage */
   async latestBars(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
     if (tradeDate) {
       return this.queryAll(`
@@ -463,6 +469,12 @@ export class DuckNeoReader {
         SELECT code, MAX(trade_date) AS trade_date FROM ${CN_DAILY_TABLE} GROUP BY code
       ) l ON k.code = l.code AND k.trade_date = l.trade_date
     `)
+  }
+
+  /** 分页截面：afterCode 游标 + limit（默认 1000，顶 2000） */
+  async latestBarsPage(opts: LatestBarsPageOpts = {}): Promise<LatestBarRow[]> {
+    const { sql, params } = buildLatestBarsPageQuery(CN_DAILY_TABLE, opts)
+    return this.queryAll<LatestBarRow>(sql, params)
   }
 }
 

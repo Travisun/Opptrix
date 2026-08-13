@@ -25,6 +25,7 @@ import {
   type MarketDuckGateway,
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
+import type { LatestBarsPageOpts } from './duck/latest-bars-page.js'
 import { isMarketSyncActive, isDerivedMaintenanceActive } from './duck/duck-subprocess-gate.js'
 import { shouldWarmDuckReadCachesOnBoot } from './duck/duck-cli-pool.js'
 import { getDuckNeoReader } from './duck/duck-neo-reader.js'
@@ -562,6 +563,11 @@ export class MarketDataStore {
 
   duckLatestBars(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
     return this.duckGateway().latestBarsSync(tradeDate)
+  }
+
+  /** 分页最新截面 — 低配/大库优先；全量仍用 duckLatestBars */
+  duckLatestBarsPage(opts: LatestBarsPageOpts = {}) {
+    return this.duckGateway().latestBarsPageAsync(opts)
   }
 
   /** 解析 A 股 EQUITY 命名空间 — 优先 instruments 表，回退 stocks.market */

@@ -210,6 +210,7 @@ REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--sche
 | `OPPTRIX_PREBUILD_MIRROR` | `better-sqlite3` prebuild 镜像根 URL（默认 npmmirror CDN） |
 | `OPPTRIX_SQLITE_MEM_PROFILE` | SQLite 每连接内存档位：`low` / `medium` / `high`（未设则按机器总内存自动：&lt;6GB low，&lt;12GB medium，否则 high）；作用于 user-store / market-data / doc-library；`low` 时 Duck 读并发与 boot warm 亦按低配收敛 |
 | `OPPTRIX_DUCK_READ_CONCURRENCY` | Duck 只读并发（默认 3；低配自动 1）；写恒为 1 |
+| `OPPTRIX_HYDRATE_CONCURRENCY` | L1 `hydrateStocks` 跨标的并发（默认 2；低配 1；上限 3）；同码内股东→伙伴仍串行 |
 | `OPPTRIX_DUCK_WARM_ON_BOOT` | 设为 `0` 跳过 MarketDataStore 启动时 `warmReadCaches`（首次查询仍会拉统计） |
 | `ELECTRON_MIRROR` / `npm_config_disturl` | Electron headers 下载镜像（本地网络受限时） |
 | `OPPTRIX_RUNTIME_STAGE` | Packaged sidecar root (`runtime-stage`); used to locate bundled sandbox tools |
