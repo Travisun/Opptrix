@@ -448,7 +448,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
     avoidTools: ['get_system_info'],
     confidence: 'high',
-    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪立即 preparing+job_id，须轮询至 ready）',
+    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪立即 preparing|installing+job_id，须 ensure_python({ job_id }) 轮询至 ready，勿死等）',
   },
   {
     intent: 'workspace_network_latency',
@@ -523,7 +523,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['prepare_fuyao_dump', 'list_local_data_apis', 'workspace_list'],
     avoidTools: ['http_fetch', 'opptrix_run'],
     confidence: 'high',
-    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；禁止 Key 进沙盒，勿 sync/dailyDump',
+    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；冷下载 preparing+job_id，须 prepare_fuyao_dump({ job_id }) 轮询；禁止 Key 进沙盒，勿 sync/dailyDump',
   },
   {
     intent: 'session_lan',
