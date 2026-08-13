@@ -93,7 +93,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['search_library', 'read_document'],
     avoidTools: ['list_news_articles', 'workspace_read', 'list_session_documents', 'search_document'],
     confidence: 'high',
-    hint: '跨会话/跨研报 → 先 search_library 找片段；查资讯用 source_type=news + 多具体关键词（代码/公司/主题/事件），非语义向量；命中后 read_document(document_id) 精读；可换关键词多跳；勿灌全文',
+    hint: '跨会话/跨研报 → 先 search_library 找片段；查资讯用 source_type=news + 多具体关键词（代码/公司/主题/事件），走本机资讯全文检索非语义向量，以摘录为准；研报命中后 read_document(document_id) 精读；可换关键词多跳；勿灌全文',
   },
   {
     intent: 'etf_profile',

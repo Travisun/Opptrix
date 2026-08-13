@@ -6,4 +6,6 @@ Neo 短读与 CliPool 共用 `resolveDuckReadConcurrency()`；`marketStats` 为�
 
 ## K 线批量写入
 
-`cn_daily_bars` 大批量 upsert 经临时 JSON + 单次 `INSERT OR REPLACE … SELECT`（或分块）灌入，禁止逐行 `INSERT` 循环；生产仍走 Gateway → duck-cli，测试可直连 `KlineDuckStore`。
+`cn_daily_bars` 大批量 upsert：同进程（`KlineDuckStore` / duck-cli 内）优先 `INSERT OR REPLACE … VALUES` 直连、零临时 JSON；Gateway 跨进程仍用 `os.tmpdir` 紧凑 JSON + 写完立即 unlink（禁止 pretty / 残留放大）。语义仍为 PRIMARY KEY 幂等覆盖。
+
+最新日 K 截面：热路径用 `latestBarsPage*` / `stitchLatestBarsPages`（或 `latestBarsAsync`）分页拼回，勿一次无界全表进内存；无参全量 API 仅保留给测试/兼容。

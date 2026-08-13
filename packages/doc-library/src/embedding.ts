@@ -22,6 +22,11 @@ type FeaturePipeline = (
 /** 默认 12 分钟；`OPPTRIX_EMBED_IDLE_MS=0` 关闭空闲卸载 */
 export const DEFAULT_EMBED_IDLE_MS = 12 * 60 * 1000
 
+/** 真 batch 推理默认批大小；`OPPTRIX_EMBED_BATCH_SIZE` 可调，钳位 8～32 */
+export const DEFAULT_EMBED_BATCH_SIZE = 8
+export const MIN_EMBED_BATCH_SIZE = 8
+export const MAX_EMBED_BATCH_SIZE = 32
+
 export function resolveEmbedIdleMs(): number {
   const raw = process.env.OPPTRIX_EMBED_IDLE_MS
   if (raw == null || raw === '') return DEFAULT_EMBED_IDLE_MS
@@ -30,12 +35,38 @@ export function resolveEmbedIdleMs(): number {
   return n
 }
 
+export function resolveEmbedBatchSize(): number {
+  const raw = process.env.OPPTRIX_EMBED_BATCH_SIZE
+  if (raw == null || raw === '') return DEFAULT_EMBED_BATCH_SIZE
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return DEFAULT_EMBED_BATCH_SIZE
+  return Math.min(MAX_EMBED_BATCH_SIZE, Math.max(MIN_EMBED_BATCH_SIZE, Math.floor(n)))
+}
+
 function asNumberVector(data: Float32Array | number[], dim: number): number[] {
   const arr = Array.isArray(data) ? data : Array.from(data)
   if (arr.length < dim) {
     throw new Error(`embedding dim mismatch: got ${arr.length}, want ${dim}`)
   }
   return arr.slice(0, dim)
+}
+
+/** 将 pipeline 批输出（扁平 Float32Array / number[]）拆成 count 条 dim 维向量 */
+function splitBatchVectors(
+  data: Float32Array | number[],
+  count: number,
+  dim: number,
+): number[][] {
+  const arr = Array.isArray(data) ? data : Array.from(data)
+  const need = count * dim
+  if (arr.length < need) {
+    throw new Error(`embedding batch size mismatch: got ${arr.length}, want >= ${need}`)
+  }
+  const out: number[][] = []
+  for (let i = 0; i < count; i++) {
+    out.push(asNumberVector(arr.slice(i * dim, (i + 1) * dim), dim))
+  }
+  return out
 }
 
 /** 可注入的假后端（测试） */
@@ -139,11 +170,26 @@ export class TransformersE5Backend implements EmbeddingBackend {
   async embedPassages(texts: string[]): Promise<number[][]> {
     const ok = await this.ensureLoaded()
     if (!ok || !this.pipe) throw new Error('embedding model not ready')
+    if (!texts.length) return []
+
+    const pipe = this.pipe
+    const dim = this.dimensions
+    const batchSize = resolveEmbedBatchSize()
     const results: number[][] = []
-    for (const text of texts) {
-      const prefixed = `passage: ${text.trim()}`
-      const out = await this.pipe(prefixed, { pooling: 'mean', normalize: true })
-      results.push(asNumberVector(out.data, this.dimensions))
+
+    for (let i = 0; i < texts.length; i += batchSize) {
+      const slice = texts.slice(i, i + batchSize)
+      const prefixed = slice.map(t => `passage: ${t.trim()}`)
+      try {
+        const out = await pipe(prefixed, { pooling: 'mean', normalize: true })
+        results.push(...splitBatchVectors(out.data, prefixed.length, dim))
+      } catch {
+        // 批推理失败则回退逐条，保持语义与维数契约
+        for (const p of prefixed) {
+          const out = await pipe(p, { pooling: 'mean', normalize: true })
+          results.push(asNumberVector(out.data, dim))
+        }
+      }
     }
     return results
   }

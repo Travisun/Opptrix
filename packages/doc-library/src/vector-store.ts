@@ -2,8 +2,8 @@
  * LanceDB 向量索引：chunk_id / document_id / vector(384) / text。
  * 未可用时所有方法安全降级（空结果 / no-op）。
  *
- * 写路径必须串行 + 校验向量 + 定期 optimize；损坏库在 ensure 时安全重建，
- * 避免 delete+add 版本爆炸导致原生 SIGTRAP。
+ * 写路径必须串行 + 校验向量 + 定期 optimize；search 读优先插队；
+ * 损坏库在 ensure 时安全重建并限速回填，避免 delete+add 版本爆炸导致原生 SIGTRAP。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -159,29 +159,126 @@ function logVectorStore(msg: string, extra?: Record<string, number | string | bo
   console.warn(`[doc-library/lance] ${msg}${suffix}`)
 }
 
+export type LanceScheduleKind = 'read' | 'write'
+
+/**
+ * Lance 操作调度：全局互斥串行；search（read）可插队到尚未开始的 write 之前，
+ * 避免大量 upsert/optimize 长时间堵住检索。写与 optimize 仍不得并发。
+ */
+export class LanceOpScheduler {
+  private readonly queue: Array<{ kind: LanceScheduleKind; start: () => void }> = []
+  private running = false
+
+  schedule<T>(kind: LanceScheduleKind, fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const item = {
+        kind,
+        start: () => {
+          Promise.resolve()
+            .then(fn)
+            .then(resolve, reject)
+            .finally(() => {
+              this.running = false
+              this.pump()
+            })
+        },
+      }
+      if (kind === 'read') {
+        const idx = this.queue.findIndex(j => j.kind === 'write')
+        if (idx >= 0) this.queue.splice(idx, 0, item)
+        else this.queue.push(item)
+      } else {
+        this.queue.push(item)
+      }
+      this.pump()
+    })
+  }
+
+  /** 测试：尚未执行的任务种类（不含进行中） */
+  pendingKinds(): LanceScheduleKind[] {
+    return this.queue.map(j => j.kind)
+  }
+
+  private pump(): void {
+    if (this.running) return
+    const next = this.queue.shift()
+    if (!next) return
+    this.running = true
+    next.start()
+  }
+}
+
+/** 病理重建成功后限速回填钩子（由 DocLibrary 注入；失败不得抛） */
+export type LanceRebuildBackfillHook = () => void | Promise<void>
+
+let rebuildBackfillHook: LanceRebuildBackfillHook | null = null
+
+export function setLanceRebuildBackfillHook(hook: LanceRebuildBackfillHook | null): void {
+  rebuildBackfillHook = hook
+}
+
+export function getLanceRebuildBackfillHook(): LanceRebuildBackfillHook | null {
+  return rebuildBackfillHook
+}
+
+/** 重建后回填冷却，避免失败写路径反复 rebuild→backfill 风暴 */
+const REBUILD_BACKFILL_COOLDOWN_MS = 60_000
+
 export class LanceVectorStore implements VectorStore {
   private readonly dir: string
   private conn: LanceConnection | null = null
   private table: LanceTable | null = null
   private initFailed = false
-  /** 全局串行：禁止并发 delete/add/optimize/connect */
-  private asyncChain: Promise<void> = Promise.resolve()
+  /** 读优先互斥队列：write 串行；read 可插队未开始的 write */
+  private readonly opScheduler = new LanceOpScheduler()
   private writesSinceOptimize = 0
   private optimizeTimer: ReturnType<typeof setTimeout> | null = null
   private rejectedVectorCount = 0
+  private backfillInflight: Promise<void> | null = null
+  private lastRebuildBackfillAt = 0
 
   constructor(dir = lanceDbDir()) {
     this.dir = dir
   }
 
-  private schedule<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.asyncChain.then(fn)
-    this.asyncChain = run.then(() => undefined, () => undefined)
-    return run
+  /** @internal 测试用 */
+  getOpSchedulerForTests(): LanceOpScheduler {
+    return this.opScheduler
+  }
+
+  private scheduleWrite<T>(fn: () => Promise<T>): Promise<T> {
+    return this.opScheduler.schedule('write', fn)
+  }
+
+  private scheduleRead<T>(fn: () => Promise<T>): Promise<T> {
+    return this.opScheduler.schedule('read', fn)
+  }
+
+  /** 重建空表成功后异步调度回填；不 await、失败不抛、冷却防循环 */
+  private notifyRebuildBackfill(): void {
+    const hook = rebuildBackfillHook
+    if (!hook) return
+    const now = Date.now()
+    if (this.backfillInflight) return
+    if (now - this.lastRebuildBackfillAt < REBUILD_BACKFILL_COOLDOWN_MS) {
+      logVectorStore('skip rebuild backfill (cooldown)')
+      return
+    }
+    this.lastRebuildBackfillAt = now
+    this.backfillInflight = Promise.resolve()
+      .then(() => hook())
+      .then(() => undefined, err => {
+        logVectorStore('rebuild backfill failed', {
+          err: err instanceof Error ? err.message : 'unknown',
+        })
+      })
+      .finally(() => {
+        this.backfillInflight = null
+      })
   }
 
   async isAvailable(): Promise<boolean> {
-    return this.schedule(async () => {
+    return this.scheduleWrite(async () => {
       if (this.initFailed) return false
       try {
         await this.ensureTableUnlocked()
@@ -244,6 +341,8 @@ export class LanceVectorStore implements VectorStore {
       await this.table.delete(`chunk_id = '${escapeSqlString('__init__')}'`)
       this.initFailed = false
       this.writesSinceOptimize = 0
+      // 空表已可打开；回填异步限速，失败不影响本路径
+      this.notifyRebuildBackfill()
       return this.table
     } catch (err) {
       logVectorStore('rebuild createTable failed', {
@@ -292,7 +391,7 @@ export class LanceVectorStore implements VectorStore {
     if (this.optimizeTimer) clearTimeout(this.optimizeTimer)
     this.optimizeTimer = setTimeout(() => {
       this.optimizeTimer = null
-      void this.schedule(() => this.optimizeUnlocked())
+      void this.scheduleWrite(() => this.optimizeUnlocked())
     }, OPTIMIZE_DEBOUNCE_MS)
     if (typeof this.optimizeTimer === 'object' && this.optimizeTimer && 'unref' in this.optimizeTimer) {
       this.optimizeTimer.unref()
@@ -315,7 +414,7 @@ export class LanceVectorStore implements VectorStore {
 
   async upsert(rows: VectorChunkRow[]): Promise<void> {
     if (!rows.length) return
-    return this.schedule(async () => {
+    return this.scheduleWrite(async () => {
       const { valid, rejected } = filterValidUpsertRows(rows)
       if (rejected > 0) {
         this.rejectedVectorCount += rejected
@@ -393,7 +492,7 @@ export class LanceVectorStore implements VectorStore {
   }
 
   async deleteByDocument(documentId: string): Promise<void> {
-    return this.schedule(async () => {
+    return this.scheduleWrite(async () => {
       const table = await this.ensureTableUnlocked()
       if (!table) return
       try {
@@ -411,7 +510,7 @@ export class LanceVectorStore implements VectorStore {
     opts: { documentIds?: string[]; limit?: number },
   ): Promise<VectorSearchHit[]> {
     if (!isValidEmbeddingVector(vector)) return []
-    return this.schedule(async () => {
+    return this.scheduleRead(async () => {
       const table = await this.ensureTableUnlocked()
       if (!table) return []
       const limit = Math.min(Math.max(opts.limit ?? 8, 1), 20)
@@ -433,7 +532,7 @@ export class LanceVectorStore implements VectorStore {
 
   /** 关闭 Lance 连接，避免 process.exit 时原生析构 SIGABRT */
   async close(): Promise<void> {
-    return this.schedule(async () => {
+    return this.scheduleWrite(async () => {
       if (this.optimizeTimer) {
         clearTimeout(this.optimizeTimer)
         this.optimizeTimer = null

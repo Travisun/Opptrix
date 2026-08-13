@@ -37,7 +37,6 @@ import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
 import { registerDocLibrarySettingsRoutes } from './doc-library-settings-routes.js'
-import { ingestNewsArticleToDocLibrary } from './news-doc-ingest.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import {
@@ -52,13 +51,19 @@ import {
   startNewsFeedScheduler,
   getNewsSettings,
   setNewsArticlePersistHook,
+  setNewsArticleDeleteHook,
   getArticle,
 } from '@opptrix/news-feed'
 import { maybeBootstrapTranslationModel } from '@opptrix/local-inference'
 import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
 import { createJobExecutor, getScheduleService, type ScheduleJobNotificationEvent } from '@opptrix/schedule'
-import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
+import {
+  removeNewsSearchIndex,
+  removeSessionSearchIndex,
+  syncNewsSearchIndex,
+  syncSessionSearchIndex,
+} from '@opptrix/search-hub'
 import { fetchUserAgreementHtml } from './legal-document.js'
 import { createRequire } from 'node:module'
 
@@ -107,9 +112,10 @@ setSessionPersistHooks({
 })
 
 setNewsArticlePersistHook(article => {
+  // 资讯仅写入 user-store FTS（统一搜索 + Agent search_library）；不再双写 doc-library
   syncNewsSearchIndex(article, getEnrichmentStore().get(article.id))
-  ingestNewsArticleToDocLibrary(article)
 })
+setNewsArticleDeleteHook(removeNewsSearchIndex)
 
 setEnrichmentPersistHook(doc => {
   const article = getArticle(doc.article_id)

@@ -56,10 +56,11 @@ export class SearchHub {
 
   ensureIndexes() {
     const store = getUserDataStore()
+    // INDEX_FLAG 仅表示「至少完成过一次全量灌入」；已置位则跳过重建。
+    // 后续会话/资讯变更走增量 upsert/delete（persist hooks），不 clear 本 flag。
     if (store.getMetaFlag(INDEX_FLAG)) return
 
     // 一次性重建：按页读 → upsert → 丢弃页；不驻留 allSessions[] / articles[] / enrichmentMap。
-    // INDEX_FLAG 已建则跳过；增量失效策略另议。
     rebuildSessionSearchIndex()
 
     // 先跑资讯迁移（legacy news_cache → news_article），再按页投影灌 FTS。

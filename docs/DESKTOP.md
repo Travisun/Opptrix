@@ -100,7 +100,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 **Sidecar 守护（生产包，兜底）**：主进程在常驻启动成功后监督自有 sidecar（非开发、非 `reuse` 端口）。子进程意外退出时按指数退避（1s→2s→…→30s）自动拉起并重新做 health；另有约 20s 健康巡检，发现「进程在但端口无响应」或进程已消失时同样重启（与 exit 路径共用单飞锁，避免双启）。用户退出、更新安装或短命 tick 退出前会停止守护，并对 sidecar 给予 ≥8.5s 软关闭窗口（对齐 server 内原生 Duck/Lance/ONNX 关闭），再 SIGKILL，减轻 macOS「意外退出」类崩溃框。`before-quit`（含 Cmd+Q）在 sidecar 未就绪退出前会 `preventDefault` 并等待宽限关闭。
 
-> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯（`source_type=news`）不再写入 Lance**（仅 SQLite + FTS）；统一搜索首次 `ensureIndexes` 按页灌入 FTS、不驻留全量文章对象。研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建；`upsert` 优先 `mergeInsert(on: chunk_id)`，不可用时回退 delete+add。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后由 `embedPendingDocuments`（已排除 news）/ 下次研报 embed 回填（可接受短暂回填窗口）。
+> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯仅一处 FTS**（user-store，与统一搜索同源；**不再**双写 doc-library 切块、**不**写入 Lance）；统一搜索首次 `ensureIndexes` 按页灌入 FTS、不驻留全量文章对象。研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建；`upsert` 优先 `mergeInsert(on: chunk_id)`，不可用时回退 delete+add；**search 读优先**（可插队尚未开始的写/optimize，写仍互斥串行）。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后**限速**调度 `embedPendingDocuments`（清非 news 的 `embedded_at` 后回填；`OPPTRIX_LANCE_BACKFILL_LIMIT` / `OPPTRIX_LANCE_BACKFILL_DELAY_MS` 可调；失败不阻断打开空表）。
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 
@@ -210,9 +210,10 @@ REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--sche
 | `OPPTRIX_RUNTIME_ARCH` | Sidecar native target arch (`arm64` / `x64`); CI macOS Intel 交叉构建时使用 |
 | `OPPTRIX_RUNTIME_PLATFORM` | Sidecar native target platform (`darwin` / `win32` / `linux`); 默认取当前 OS |
 | `OPPTRIX_PREBUILD_MIRROR` | `better-sqlite3` prebuild 镜像根 URL（默认 npmmirror CDN） |
-| `OPPTRIX_SQLITE_MEM_PROFILE` | SQLite 每连接内存档位：`low` / `medium` / `high`（未设则按机器总内存自动：&lt;6GB low，&lt;12GB medium，否则 high）；作用于 user-store / market-data / doc-library；`low` 时 Duck 读并发与 boot warm 亦按低配收敛 |
+| `OPPTRIX_SQLITE_MEM_PROFILE` | SQLite 每连接内存档位：`low` / `medium` / `high`（未设则按机器总内存自动：&lt;6GB low，&lt;12GB medium，否则 high）；作用于 user-store / market-data / doc-library；`low` 时 Duck 读并发、boot warm、OCR 批并行亦按低配收敛 |
 | `OPPTRIX_DUCK_READ_CONCURRENCY` | Duck 只读并发（默认 3；低配自动 1）；写恒为 1 |
 | `OPPTRIX_HYDRATE_CONCURRENCY` | L1 `hydrateStocks` 跨标的并发（默认 2；低配 1；上限 3）；同码内股东→伙伴仍串行 |
+| `OPPTRIX_OCR_CONCURRENCY` | 文档内嵌图 OCR 批并行（默认 3；低配 / `OPPTRIX_SQLITE_MEM_PROFILE=low` 或 totalmem&lt;6GB → 2；上限 4）。语义 embedding 已加载时再降到 1（不强制卸载 embedding） |
 | `OPPTRIX_DUCK_WARM_ON_BOOT` | 设为 `0` 跳过 MarketDataStore 启动时 `warmReadCaches`（首次查询仍会拉统计） |
 | `ELECTRON_MIRROR` / `npm_config_disturl` | Electron headers 下载镜像（本地网络受限时） |
 | `OPPTRIX_RUNTIME_STAGE` | Packaged sidecar root (`runtime-stage`); used to locate bundled sandbox tools |
@@ -367,6 +368,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 |------|------|------|
 | `OPPTRIX_SPEECH_ENGINE` | `sensevoice` | Composer 语音引擎：`sensevoice` 或 `whisper` |
 | `OPPTRIX_EMBED_IDLE_MS` | `720000`（12 分钟） | 语义 embedding 模型空闲卸载超时；`0` 关闭空闲卸载 |
+| `OPPTRIX_EMBED_BATCH_SIZE` | `8` | transformers 真 batch 推理批大小（钳位 8～32）；失败时回退逐条 |
 | `OPPTRIX_SENSEVOICE_MODEL` | `q8` | SenseVoice 模型：`q8`（约 242MB）或 `f16`（约 448MB）；须用官方 FunAudioLLM GGUF |
 
 | `OPPTRIX_SENSEVOICE_BIN` | — | 可选，覆盖 SenseVoice CLI 路径 |

@@ -280,6 +280,15 @@ export {
   type LatestBarRow,
   type LatestBarsPageOpts,
 } from './duck/market-duck-gateway.js'
+export {
+  stitchLatestBarsPages,
+  stitchLatestBarsPagesSync,
+  resolveLatestBarsPageLimit,
+  clampLatestBarsPageLimit,
+  LATEST_BARS_PAGE_DEFAULT_LIMIT,
+  LATEST_BARS_PAGE_LOW_MEM_LIMIT,
+  LATEST_BARS_PAGE_MAX_LIMIT,
+} from './duck/latest-bars-page.js'
 export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'

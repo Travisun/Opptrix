@@ -118,6 +118,7 @@ export {
 } from './portfolio/instrument.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'
 export { WatchlistManager } from './watchlist/manager.js'
+export { WatchlistStore } from './watchlist/store.js'
 export { WatchlistGroupsManager } from './watchlist/groups-manager.js'
 export type { WatchlistItem } from './watchlist/models.js'
 export type { WatchlistGroup, WatchlistGroupsDocument } from './watchlist/groups-models.js'

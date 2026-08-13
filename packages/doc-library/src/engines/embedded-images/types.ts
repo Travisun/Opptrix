@@ -30,9 +30,6 @@ export const MIN_IMAGE_BYTES = 2_048
 /** 任一边长过小则跳过（像素） */
 export const MIN_IMAGE_EDGE = 32
 
-/** OCR 并行度 */
-export const OCR_CONCURRENCY = 3
-
 /**
  * @deprecated 内嵌 OCR 不再硬截断；整份 parse 在后台跑完再 markParseReady。
  * 保留常量以免旧 import 炸；传 timeoutMs 时仍可测试用短超时。

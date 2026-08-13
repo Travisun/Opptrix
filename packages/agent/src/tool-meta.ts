@@ -485,9 +485,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   search_library: {
     miningEligible: false,
     usageGuide:
-      '跨会话检索本机研报库/资讯库。研报可混合关键词与语义相关；资讯无向量、仅为关键词全文检索——查资讯时用股票代码、公司简称、主题、事件等具体词，可一次多词组合，避免空泛「相关报道」。用户问「哪些研报提到某标的」「跨研报找主题」或「本机库里某公司资讯」时首选；命中后 read_document(document_id) 精读，可换词多跳。',
+      '跨会话检索本机研报库/资讯。研报走文档库（可混合关键词与语义）；资讯走本机资讯全文检索（与统一搜索同源、无向量）——查资讯时用股票代码、公司简称、主题、事件等具体词，可一次多词组合，避免空泛「相关报道」。用户问「哪些研报提到某标的」「跨研报找主题」或「本机库里某公司资讯」时首选；研报命中后 read_document(document_id) 精读；资讯命中以摘录为准。',
     compliance:
-      '只读；query 必填；可选 source_type=report|news、limit≤20；source_type=news 时勿依赖语义/向量；引用须带文档名与页码；勿编造未读内容。',
+      '只读；query 必填；可选 source_type=report|news、limit≤20；source_type=news 时勿依赖语义/向量，勿对资讯 document_id 调用 read_document；研报引用须带文档名与页码；勿编造未读内容。',
   },
   search_document: {
     miningEligible: false,

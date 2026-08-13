@@ -118,4 +118,28 @@ describe('market-data Cache LRU + persist throttle', () => {
     assert.ok(keys[0].includes('stock_profile'))
     assert.ok(!keys[0].includes('"id":"big"'))
   })
+
+  it('large array set stays fast (sampled estimateBytes) and still hits', () => {
+    cache = new Cache(filePath, {
+      persistDebounceMs: 60_000,
+      disableExitFlush: true,
+    })
+    const rows = Array.from({ length: 40_000 }, (_, i) => ({
+      i,
+      o: 10 + (i % 7),
+      h: 11,
+      l: 9,
+      c: 10.5,
+      v: 1000 + i,
+    }))
+    const t0 = performance.now()
+    cache.setWithTtl('stock_kline', rows, 'kl', { code: '600519' }, 3600, 'tencent')
+    const elapsed = performance.now() - t0
+    assert.ok(elapsed < 250, `setWithTtl took ${elapsed.toFixed(1)}ms`)
+    const hit = cache.getWithTtl('stock_kline', 'kl', { code: '600519' }, 3600)
+    assert.equal(hit, rows)
+    assert.equal(hit.length, 40_000)
+    const s = cache.stats()
+    assert.ok(s.approxBytes > 100_000)
+  })
 })

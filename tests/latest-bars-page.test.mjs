@@ -14,7 +14,13 @@ const duckPath = join(dir, 'kline.duckdb')
 const { KlineDuckStore } = await import(
   pathToFileURL(join(process.cwd(), 'packages/market-data/dist/kline/duck-store.js')).href
 )
-const { buildLatestBarsPageQuery, clampLatestBarsPageLimit } = await import(
+const {
+  buildLatestBarsPageQuery,
+  clampLatestBarsPageLimit,
+  resolveLatestBarsPageLimit,
+  stitchLatestBarsPages,
+  LATEST_BARS_PAGE_LOW_MEM_LIMIT,
+} = await import(
   pathToFileURL(join(process.cwd(), 'packages/market-data/dist/duck/latest-bars-page.js')).href
 )
 
@@ -42,6 +48,17 @@ describe('latestBarsPage helpers', () => {
     assert.equal(clampLatestBarsPageLimit(9999), 2000)
   })
 
+  it('resolveLatestBarsPageLimit respects lowMem and env', () => {
+    const prev = process.env.OPPTRIX_LATEST_BARS_PAGE_LIMIT
+    delete process.env.OPPTRIX_LATEST_BARS_PAGE_LIMIT
+    assert.equal(resolveLatestBarsPageLimit({ lowMem: true }), LATEST_BARS_PAGE_LOW_MEM_LIMIT)
+    assert.equal(resolveLatestBarsPageLimit({ limit: 120 }), 120)
+    process.env.OPPTRIX_LATEST_BARS_PAGE_LIMIT = '250'
+    assert.equal(resolveLatestBarsPageLimit(), 250)
+    if (prev == null) delete process.env.OPPTRIX_LATEST_BARS_PAGE_LIMIT
+    else process.env.OPPTRIX_LATEST_BARS_PAGE_LIMIT = prev
+  })
+
   it('builds tradeDate + afterCode SQL', () => {
     const { sql, params } = buildLatestBarsPageQuery('cn_daily_bars', {
       tradeDate: '2024-01-02',
@@ -53,6 +70,27 @@ describe('latestBarsPage helpers', () => {
     assert.match(sql, /ORDER BY code/)
     assert.match(sql, /LIMIT \?/)
     assert.deepEqual(params, ['2024-01-02', '000002', 50])
+  })
+
+  it('stitchLatestBarsPages concatenates pages without drop/dup', async () => {
+    const all = [
+      { code: 'a', close: 1, change_pct: 0 },
+      { code: 'b', close: 2, change_pct: 0 },
+      { code: 'c', close: 3, change_pct: 0 },
+      { code: 'd', close: 4, change_pct: 0 },
+      { code: 'e', close: 5, change_pct: 0 },
+    ]
+    let calls = 0
+    const stitched = await stitchLatestBarsPages(async ({ afterCode, limit }) => {
+      calls++
+      const start = afterCode
+        ? all.findIndex(r => r.code > afterCode)
+        : 0
+      if (start < 0) return []
+      return all.slice(start, start + limit)
+    }, { limit: 2 })
+    assert.equal(calls, 3)
+    assert.deepEqual(stitched.map(r => r.code), ['a', 'b', 'c', 'd', 'e'])
   })
 })
 
@@ -90,30 +128,14 @@ describe('KlineDuckStore latestBarSnapshotPage', () => {
     const fullLatest = sortKey(await store.latestBarSnapshot())
     const fullDated = sortKey(await store.latestBarSnapshot('2024-01-02'))
 
-    async function stitch(tradeDate) {
-      const out = []
-      let afterCode = null
-      const seen = new Set()
-      for (;;) {
-        const page = await store.latestBarSnapshotPage({
-          tradeDate,
-          afterCode,
-          limit: 2,
-        })
-        if (!page.length) break
-        for (const r of page) {
-          assert.ok(!seen.has(r.code), `duplicate code ${r.code}`)
-          seen.add(r.code)
-          out.push(r)
-        }
-        afterCode = page[page.length - 1].code
-        if (page.length < 2) break
-      }
-      return sortKey(out)
-    }
-
-    const stitchedLatest = await stitch(null)
-    const stitchedDated = await stitch('2024-01-02')
+    const stitchedLatest = sortKey(await stitchLatestBarsPages(
+      opts => store.latestBarSnapshotPage(opts),
+      { limit: 2 },
+    ))
+    const stitchedDated = sortKey(await stitchLatestBarsPages(
+      opts => store.latestBarSnapshotPage(opts),
+      { tradeDate: '2024-01-02', limit: 2 },
+    ))
 
     assert.equal(stitchedLatest.length, fullLatest.length)
     assert.equal(stitchedDated.length, fullDated.length)

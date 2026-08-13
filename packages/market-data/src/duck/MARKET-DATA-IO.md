@@ -17,11 +17,12 @@
 - **Hub / API**：`queryAllAsync` / `marketStatsAsync`（不阻塞事件循环）
 - **Store 同步 / 测试 / 导出**：`queryAllSync` / `marketStatsSync` / `applyBatchSync` → 同 duck-cli 二进制，经 `spawnSync`（可靠阻塞，无事件循环依赖）
 - 启动预热：默认 `warmReadCaches()`；低配或 `OPPTRIX_DUCK_WARM_ON_BOOT=0` 跳过（首次查询仍会拉 stats）
-- **最新截面**：无参 `latestBars` / `latestBarSnapshot` 仍返回全量；大库用 `latestBarsPage({ afterCode, limit })` / `latestBarSnapshotPage`（默认 limit 1000，硬顶 2000，`code` 升序游标）
+- **最新截面**：无参 `latestBars` / `latestBarSnapshot` 仍返回全量（测试/兼容）；Hub / 热路径用 `latestBarsPage*` + `stitchLatestBarsPages` 分页拼回（默认 limit 1000，低配 500，硬顶 2000），`latestBarsAsync` / `duckLatestBarsAll` 已走拼回。
 
 ## 写路径
 
 - `p-queue` concurrency=1（恒定）+ `duck-cli` worker 线程
+- **批写临时 JSON**：Gateway `apply-batch` / `upsert` / `query-json` 经 `duck-temp-json` 紧凑写入 `os.tmpdir` 并立即 unlink；同进程 `upsertCnDailyBarsBatch` 默认 VALUES 直连不落盘
 - **测试 flush / .opmd 导出**：`flushDuckWritesSync` / `syncMarketDataToSqliteSync` → `spawnSync duck-cli`
 - 衍生维护期间主进程暂停写入队列（`isDerivedMaintenanceActive()`）
 

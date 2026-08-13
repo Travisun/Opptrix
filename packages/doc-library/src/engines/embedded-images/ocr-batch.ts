@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
+import { resolveOcrConcurrency } from './ocr-concurrency.js'
 import {
   MAX_EMBEDDED_IMAGES,
-  OCR_CONCURRENCY,
   type EmbeddedMedia,
   type OcrImageFn,
 } from './types.js'
@@ -25,7 +25,7 @@ export async function ocrEmbeddedMediaBatch(
   } = {},
 ): Promise<Map<number, string[]>> {
   const maxImages = opts.maxImages ?? MAX_EMBEDDED_IMAGES
-  const concurrency = Math.max(1, Math.min(opts.concurrency ?? OCR_CONCURRENCY, 4))
+  const concurrency = Math.max(1, Math.min(opts.concurrency ?? resolveOcrConcurrency(), 4))
   const limited = media.slice(0, maxImages)
 
   const uniqueShas: string[] = []

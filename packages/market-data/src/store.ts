@@ -561,13 +561,25 @@ export class MarketDataStore {
     return this.duckGateway().queryKlinesSync(code, limit, before)
   }
 
+  /**
+   * 同步截面（兼容 / 缓存）；结果可能为空直至预热完成。
+   * 产品热路径请用 duckLatestBarsAll（分页拼回）。
+   */
   duckLatestBars(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
     return this.duckGateway().latestBarsSync(tradeDate)
   }
 
-  /** 分页最新截面 — 低配/大库优先；全量仍用 duckLatestBars */
+  /** 单页最新截面 — afterCode 游标 + limit */
   duckLatestBarsPage(opts: LatestBarsPageOpts = {}) {
     return this.duckGateway().latestBarsPageAsync(opts)
+  }
+
+  /**
+   * 热路径全量截面：分页拼回至空页；结果 ≡ 无参全量 latestBars（可拼回）。
+   * 默认 page 1000，低配更小；单次查询有界。
+   */
+  duckLatestBarsAll(tradeDate?: string | null) {
+    return this.duckGateway().latestBarsAsync(tradeDate)
   }
 
   /** 解析 A 股 EQUITY 命名空间 — 优先 instruments 表，回退 stocks.market */

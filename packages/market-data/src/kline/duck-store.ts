@@ -143,7 +143,7 @@ export class KlineDuckStore {
     }))
   }
 
-  /** 全量截面（兼容）；大库请用 latestBarSnapshotPage */
+  /** 全量截面（兼容 / 测试）；热路径请用 latestBarSnapshotPage + stitchLatestBarsPages */
   async latestBarSnapshot(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
     if (tradeDate) {
       return this.q(`

@@ -1,5 +1,5 @@
 /**
- * LanceVectorStore 防护：向量校验、串行写队列、病理目录检测。
+ * LanceVectorStore 防护：向量校验、读优先写队列、病理目录检测、重建回填。
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,6 +15,8 @@ import {
   LANCE_VERSIONS_PATHOLOGY_THRESHOLD,
   MemoryVectorStore,
   LanceVectorStore,
+  LanceOpScheduler,
+  setLanceRebuildBackfillHook,
   shouldEmbedToVector,
 } from '../packages/doc-library/dist/index.js'
 
@@ -57,19 +59,11 @@ describe('lance vector validation', () => {
   })
 })
 
-describe('lance serial async queue (upsert chain)', () => {
-  it('serializes overlapping async work without interleaving', async () => {
-    // Mirrors LanceVectorStore.schedule — proves concurrent upserts cannot cross.
-    let chain = Promise.resolve()
-    /** @type {(fn: () => Promise<unknown>) => Promise<unknown>} */
-    const schedule = (fn) => {
-      const run = chain.then(fn)
-      chain = run.then(() => undefined, () => undefined)
-      return run
-    }
-
+describe('lance op scheduler (read priority)', () => {
+  it('serializes overlapping writes without interleaving', async () => {
+    const sched = new LanceOpScheduler()
     const log = []
-    const jobs = [1, 2, 3].map((id) => schedule(async () => {
+    const jobs = [1, 2, 3].map((id) => sched.schedule('write', async () => {
       log.push(`start-${id}`)
       await new Promise((r) => setTimeout(r, 15 - id * 3))
       log.push(`end-${id}`)
@@ -83,6 +77,37 @@ describe('lance serial async queue (upsert chain)', () => {
       'start-2', 'end-2',
       'start-3', 'end-3',
     ])
+  })
+
+  it('lets read jump ahead of queued writes while writes stay serial', async () => {
+    const sched = new LanceOpScheduler()
+    const log = []
+    /** @type {() => void} */
+    let releaseW1
+    const gate = new Promise((resolve) => {
+      releaseW1 = resolve
+    })
+
+    const w1 = sched.schedule('write', async () => {
+      log.push('w1-start')
+      await gate
+      log.push('w1-end')
+    })
+
+    // 等 w1 进入 running，再排队 w2 与 read
+    await new Promise((r) => setTimeout(r, 10))
+    const w2 = sched.schedule('write', async () => {
+      log.push('w2')
+    })
+    const rd = sched.schedule('read', async () => {
+      log.push('read')
+    })
+
+    assert.deepEqual(sched.pendingKinds(), ['read', 'write'])
+
+    releaseW1()
+    await Promise.all([w1, w2, rd])
+    assert.deepEqual(log, ['w1-start', 'w1-end', 'read', 'w2'])
   })
 })
 
@@ -144,6 +169,62 @@ describe('lance pathology detection', () => {
 
     assert.equal(fs.existsSync(path.join(ds, 'CORRUPT_MARKER')), false,
       'pathological dataset directory must be removed before recreate')
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('successful rebuild schedules injectable embedPending backfill hook', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-lance-backfill-'))
+    const ds = lanceTableDatasetDir(root)
+    const versions = path.join(ds, '_versions')
+    fs.mkdirSync(versions, { recursive: true })
+    fs.writeFileSync(path.join(versions, '18446744073709551611.manifest'), 'x')
+
+    let hookCalls = 0
+    /** @type {Promise<void>} */
+    let hookDone
+    hookDone = new Promise((resolve) => {
+      setLanceRebuildBackfillHook(() => {
+        hookCalls += 1
+        resolve()
+      })
+    })
+
+    const store = new LanceVectorStore(root)
+    const available = await store.isAvailable().catch(() => false)
+    // 原生 Lance 可用时重建成功才会触发 hook；不可用则跳过断言
+    if (available) {
+      await Promise.race([
+        hookDone,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('backfill hook timeout')), 5_000)),
+      ])
+      assert.equal(hookCalls, 1)
+    } else {
+      // 无原生时仍应清掉病理目录；hook 可能未触发（rebuild createTable 失败）
+      assert.equal(fs.existsSync(path.join(versions, '18446744073709551611.manifest')), false)
+    }
+
+    await store.close?.()
+    setLanceRebuildBackfillHook(null)
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('notifyRebuildBackfill invokes injectable hook and swallows errors', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-lance-hook-'))
+    let hookCalls = 0
+    setLanceRebuildBackfillHook(() => {
+      hookCalls += 1
+      throw new Error('backfill boom')
+    })
+    const store = new LanceVectorStore(root)
+    // private 方法：编译后仍可调用；不依赖原生 Lance
+    store.notifyRebuildBackfill()
+    await new Promise((r) => setTimeout(r, 30))
+    assert.equal(hookCalls, 1)
+    // 冷却期内第二次不重复调度
+    store.notifyRebuildBackfill()
+    await new Promise((r) => setTimeout(r, 30))
+    assert.equal(hookCalls, 1)
+    setLanceRebuildBackfillHook(null)
     fs.rmSync(root, { recursive: true, force: true })
   })
 })

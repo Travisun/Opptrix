@@ -60,7 +60,7 @@
 3. **Provider 粒度合理**：东财、Tushare、TDX 等各占一个 module，职责清晰。
 4. **QueryResult 统一响应**：`success / data / source / cached / error` 便于上层与 Agent 消费。
 
-**热缓存（`Cache`，`@opptrix/market-data-core`）**：内存 LRU 有界（默认约 1200 条 / 粗估 80MB，可用 `OPPTRIX_CACHE_MAX_ENTRIES`、`OPPTRIX_CACHE_MAX_BYTES` 覆盖）；`set*` 经 debounce（约 1.5s）落盘为紧凑 JSON，`clear*` 立即 flush；单条过大仅留内存、不写入 `cache.json`；TTL=0 仍不缓存。淘汰后调用方走网络重拉，命中时返回完整 `data`。
+**热缓存（`Cache`，`@opptrix/market-data-core`）**：内存 LRU 有界（默认约 1200 条 / 粗估 80MB，可用 `OPPTRIX_CACHE_MAX_ENTRIES`、`OPPTRIX_CACHE_MAX_BYTES` 覆盖）；条目 `approxBytes` 用类型/采样粗估（避免每次全量 `JSON.stringify`），`set*` 经 debounce（约 1.5s）落盘为紧凑 JSON，`clear*` 立即 flush；单条过大仅留内存、不写入 `cache.json`；TTL=0 仍不缓存。淘汰后调用方走网络重拉，命中时返回完整 `data`。自选 `WatchlistStore` 对 SQLite 写短防抖合并，`flush()` 退出/测试落盘。
 
 ### 2.3 主要瓶颈（多市场前必须解决）
 
@@ -793,7 +793,7 @@ class ProviderCatalogService {
 | **`documents` JSON blob（现 Tushare 方式）** | ⚠️ 过渡 | Phase 0 可兼容；迁移后 secrets 仍可在同行 `extra_json` |
 | **`@opptrix/market-data` SQLite** | ❌ **不要** | 行情/因子库；导入 `.opmd` 会覆盖，且与「用户路由偏好」域不符 |
 
-大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；**news 仍不进 Lance**。
+大 namespace（资讯文章、会话）列举请用 **`listDocumentPage` / `listDocumentExtractPage` 游标分页**；资讯 retention 与文档库 hybrid id 预筛均已按页扫描，避免一次全表进内存。研报 Lance 向量 `upsert` 优先 `mergeInsert(on: chunk_id)`（失败回退 delete+add）；病理重建空表后限速回填（search 读优先于写队列）；**news 仍不进 Lance**。
 
 **一句话**：在 **`opptrix.db` 新建 `provider_settings` 表**（+ 可选 binding 子表），**不要**放进 market-data 的 `stocks` 库，也**不要**把 enable/priority 写进 Provider 代码或 manifest。
 

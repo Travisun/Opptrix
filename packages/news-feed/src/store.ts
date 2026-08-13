@@ -33,9 +33,15 @@ const LEGACY_CACHE_ID = 'merged'
 const RETENTION_PAGE_SIZE = 200
 
 let articlePersistHook: ((article: FeedArticle) => void) | null = null
+let articleDeleteHook: ((articleId: string) => void) | null = null
 
 export function setNewsArticlePersistHook(hook: ((article: FeedArticle) => void) | null) {
   articlePersistHook = hook
+}
+
+/** 资讯删除（retention / 退订 / 去重）时增量摘除 FTS 等旁路索引 */
+export function setNewsArticleDeleteHook(hook: ((articleId: string) => void) | null) {
+  articleDeleteHook = hook
 }
 
 function emptyIndex(): NewsFeedIndex {
@@ -66,6 +72,12 @@ export class NewsFeedStore {
 
   private get store() {
     return getUserDataStore()
+  }
+
+  /** 删除资讯文档并触发增量索引钩子（retention / 去重 / 取消订阅共用） */
+  private deleteArticleDocument(articleId: string): void {
+    this.store.deleteDocument(ARTICLE_NS, articleId)
+    articleDeleteHook?.(articleId)
   }
 
   private ensureMigrated() {
@@ -134,7 +146,7 @@ export class NewsFeedStore {
       this.store.setDocument(ARTICLE_NS, canonicalId, merged)
       for (const dupe of dupes) {
         if (dupe.id !== canonicalId) {
-          this.store.deleteDocument(ARTICLE_NS, dupe.id)
+          this.deleteArticleDocument(dupe.id)
           changed = true
         }
       }
@@ -154,7 +166,7 @@ export class NewsFeedStore {
       const existingStatus =
         extractTwitterStatusId(existing.guid ?? '') ?? extractTwitterStatusId(existing.link ?? '')
       if (existingStatus === statusId && existing.id !== canonicalId) {
-        this.store.deleteDocument(ARTICLE_NS, existing.id)
+        this.deleteArticleDocument(existing.id)
       }
     }
   }
@@ -406,7 +418,7 @@ export class NewsFeedStore {
 
     for (const row of meta) {
       if (!keepIds.has(row.id)) {
-        this.store.deleteDocument(ARTICLE_NS, row.id)
+        this.deleteArticleDocument(row.id)
       }
     }
 
@@ -433,7 +445,7 @@ export class NewsFeedStore {
       if (page.length < RETENTION_PAGE_SIZE) break
     }
     for (const id of toDelete) {
-      this.store.deleteDocument(ARTICLE_NS, id)
+      this.deleteArticleDocument(id)
     }
     this.rebuildArticleIndex()
   }

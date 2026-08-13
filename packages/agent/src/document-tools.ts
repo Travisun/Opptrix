@@ -1,5 +1,6 @@
 /**
  * 会话附件研报工具：list / search / read（库优先，legacy 回退）。
+ * 资讯检索走 user-store 新闻 FTS（与 SearchHub 同源），不经 doc-library。
  */
 import './doc-library-bridge.js'
 import { TOOL_META } from './tool-meta.js'
@@ -12,6 +13,7 @@ import {
 import { ensureDocLibraryBridge } from './doc-library-bridge.js'
 import { currentToolSessionId } from './mcp/tool-session-context.js'
 import type { DocumentSourceType } from '@opptrix/doc-library'
+import { getUserDataStore } from '@opptrix/user-store'
 
 type JsonSchema = {
   type: 'object'
@@ -130,6 +132,54 @@ async function searchLibraryHybrid(
   return mapHybridHits(hits, svc)
 }
 
+/** 资讯 FTS → 与 search_library hits 同形（document_id = article_id） */
+function mapNewsFtsHits(
+  rows: Array<{
+    article_id: string
+    title: string
+    snippet: string
+    rank: number
+  }>,
+): LibraryHit[] {
+  return rows.map(row => ({
+    chunk_id: row.article_id,
+    document_id: row.article_id,
+    name: row.title,
+    page: 1,
+    score: Math.abs(row.rank),
+    excerpt: row.snippet.replace(/<\/?b>/g, ''),
+  }))
+}
+
+function searchNewsLibraryHits(query: string, limit: number): LibraryHit[] {
+  return mapNewsFtsHits(getUserDataStore().searchNews(query, limit))
+}
+
+/**
+ * 研报 → doc-library hybrid；资讯 → user-store FTS（与统一搜索同源）。
+ * 未指定 source_type 时合并两侧，按 score 截断；研报侧强制 report 以免与旧双写 news 重复。
+ */
+async function searchLibraryUnified(
+  svc: DocLibrarySvc,
+  query: string,
+  opts: { sourceType?: DocumentSourceType; limit?: number },
+): Promise<LibraryHit[]> {
+  const limit = opts.limit ?? 8
+  if (opts.sourceType === 'news') {
+    return searchNewsLibraryHits(query, limit)
+  }
+  if (opts.sourceType === 'report') {
+    return searchLibraryHybrid(svc, query, { sourceType: 'report', limit })
+  }
+  const [reportHits, newsHits] = await Promise.all([
+    searchLibraryHybrid(svc, query, { sourceType: 'report', limit }),
+    Promise.resolve(searchNewsLibraryHits(query, limit)),
+  ])
+  return [...reportHits, ...newsHits]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+}
+
 export function buildDocumentTools(): DocumentToolDef[] {
   return [
     {
@@ -175,8 +225,8 @@ export function buildDocumentTools(): DocumentToolDef[] {
       name: 'search_library',
       category: '研报',
       description:
-        '在本机研报库与资讯库检索片段（跨会话）。研报可混合关键词与语义相关；资讯（source_type=news）仅为关键词全文检索、无向量。'
-        + '查资讯时应用具体关键词（股票代码、公司简称、主题、事件词），可一次带多个词组合；避免空泛「相关报道」式查询。返回文档名、页码与摘录。',
+        '在本机研报库与资讯库检索片段（跨会话）。研报走文档库（可混合关键词与语义）；资讯（source_type=news）走本机资讯全文检索（与统一搜索同源、仅关键词、无向量）。'
+        + '查资讯时应用具体关键词（股票代码、公司简称、主题、事件词），可一次带多个词组合；避免空泛「相关报道」式查询。返回标题与摘录；资讯命中以摘录为准。',
       parameters: S({
         query: {
           type: 'string',
@@ -187,7 +237,7 @@ export function buildDocumentTools(): DocumentToolDef[] {
         source_type: {
           type: 'string',
           description:
-            '可选：report（研报，可混合/语义）或 news（资讯，仅关键词 FTS、无向量；请多带具体词）',
+            '可选：report（研报，可混合/语义）或 news（资讯，本机资讯全文检索、无向量；请多带具体词）',
         },
       }, ['query']),
       handler: async (args) => {
@@ -197,13 +247,13 @@ export function buildDocumentTools(): DocumentToolDef[] {
         const sourceType = parseSourceType(args.source_type)
 
         const svc = ensureDocLibraryBridge()
-        const hits = await searchLibraryHybrid(svc, query, { sourceType, limit })
+        const hits = await searchLibraryUnified(svc, query, { sourceType, limit })
         return {
           query,
           source_type: sourceType,
           hits,
           hit_count: hits.length,
-          source: 'library' as const,
+          source: sourceType === 'news' ? 'news_fts' as const : 'library' as const,
         }
       },
       meta: TOOL_META.search_library,

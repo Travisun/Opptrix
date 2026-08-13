@@ -5,10 +5,12 @@
 import fs from 'node:fs'
 import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api'
 import PQueue from 'p-queue'
-import { resolveDuckReadConcurrency } from './duck-cli-pool.js'
+import { isDuckLowMemProfile, resolveDuckReadConcurrency } from './duck-cli-pool.js'
 import { CN_DAILY_TABLE } from './market-schema.js'
 import {
   buildLatestBarsPageQuery,
+  resolveLatestBarsPageLimit,
+  stitchLatestBarsPages,
   type LatestBarRow,
   type LatestBarsPageOpts,
 } from './latest-bars-page.js'
@@ -312,7 +314,12 @@ export class DuckNeoReader {
     const key = `__latest_bars__:${tradeDate ?? ''}`
     const hit = this.peekCached<Array<{ code: string; close: number | null; change_pct: number | null }>>(key, 60_000)
     if (hit) return hit
-    void this.latestBars(tradeDate).then(rows => {
+    // 热路径预热：分页拼回，避免一次无界全表进内存
+    const limit = resolveLatestBarsPageLimit({ lowMem: isDuckLowMemProfile() })
+    void stitchLatestBarsPages(
+      opts => this.latestBarsPage(opts),
+      { tradeDate, limit },
+    ).then(rows => {
       void this.handle().then(h => {
         if (h) h.syncCache.set(key, { at: Date.now(), value: rows })
       })
@@ -480,7 +487,7 @@ export class DuckNeoReader {
     return rows.map(r => r.code)
   }
 
-  /** 全市场最新截面（兼容）；大库请用 latestBarsPage */
+  /** 全市场最新截面（兼容 / 测试）；热路径请用 latestBarsPage + stitchLatestBarsPages */
   async latestBars(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
     if (tradeDate) {
       return this.queryAll(`

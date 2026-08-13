@@ -1,7 +1,13 @@
 import type Database from 'better-sqlite3'
-import { DocLibraryService } from './service.js'
+import {
+  DocLibraryService,
+  resolveLanceRebuildBackfillOptions,
+} from './service.js'
 import { openDocLibraryDb, docLibraryDbPath } from './paths.js'
-import { closeVectorStore } from './vector-store.js'
+import {
+  closeVectorStore,
+  setLanceRebuildBackfillHook,
+} from './vector-store.js'
 import { closeEmbeddingService } from './embedding.js'
 
 export {
@@ -25,8 +31,8 @@ export * from './types.js'
 export { documentKindFromMime, extOfFilename, isPlainTextDocument } from './document-kind.js'
 export { DocLibraryRepository } from './repository.js'
 export { DocLibraryService } from './service.js'
-export type { LegacyExtractWriter, ParseLifecycleHooks } from './service.js'
-export { shouldEmbedToVector } from './embed-policy.js'
+export type { LegacyExtractWriter, ParseLifecycleHooks, EmbedPendingOptions } from './service.js'
+export { shouldEmbedToVector, resolveLanceRebuildBackfillOptions } from './service.js'
 export {
   docLibraryRoot,
   docLibraryDbPath,
@@ -64,21 +70,35 @@ export {
   setEmbeddingServiceForTests,
   resolveEmbedIdleMs,
   DEFAULT_EMBED_IDLE_MS,
+  resolveEmbedBatchSize,
+  DEFAULT_EMBED_BATCH_SIZE,
+  MIN_EMBED_BATCH_SIZE,
+  MAX_EMBED_BATCH_SIZE,
 } from './embedding.js'
 export type { EmbeddingBackend } from './embedding.js'
 export {
   LanceVectorStore,
   MemoryVectorStore,
+  LanceOpScheduler,
   getVectorStore,
   closeVectorStore,
   setVectorStoreForTests,
+  setLanceRebuildBackfillHook,
+  getLanceRebuildBackfillHook,
   isValidEmbeddingVector,
   filterValidUpsertRows,
   detectLanceDatasetPathology,
   lanceTableDatasetDir,
   LANCE_VERSIONS_PATHOLOGY_THRESHOLD,
 } from './vector-store.js'
-export type { VectorStore, VectorChunkRow, VectorSearchHit, LancePathologyResult } from './vector-store.js'
+export type {
+  VectorStore,
+  VectorChunkRow,
+  VectorSearchHit,
+  LancePathologyResult,
+  LanceScheduleKind,
+  LanceRebuildBackfillHook,
+} from './vector-store.js'
 export {
   downloadEmbeddingModel,
   removeEmbeddingModel,
@@ -163,6 +183,12 @@ export {
   MIN_IMAGE_BYTES,
   MIN_IMAGE_EDGE,
   EMBEDDED_OCR_TIMEOUT_MS,
+  OCR_CONCURRENCY,
+  OCR_CONCURRENCY_DEFAULT,
+  OCR_CONCURRENCY_LOW,
+  OCR_CONCURRENCY_MAX,
+  OCR_CONCURRENCY_WITH_EMBEDDING,
+  resolveOcrConcurrency,
 } from './engines/embedded-images/index.js'
 export type {
   EmbeddedMedia,
@@ -170,6 +196,7 @@ export type {
   OcrImageFn,
   PageText,
   EnhanceEmbeddedOcrOpts,
+  ResolveOcrConcurrencyOpts,
 } from './engines/embedded-images/index.js'
 export {
   createUnlimitedOcrL2Runner,
@@ -219,6 +246,37 @@ export type { RapidOcrModelSource, RagEngineId } from './paths.js'
 let serviceInst: DocLibraryService | null = null
 let serviceDb: Database.Database | null = null
 
+/** 将 Lance 病理重建成功挂钩到限速 embedPending（排除 news） */
+export function wireLanceRebuildBackfill(svc: DocLibraryService): void {
+  setLanceRebuildBackfillHook(async () => {
+    try {
+      const opts = resolveLanceRebuildBackfillOptions()
+      const batch = opts.limit ?? 8
+      const maxRoundsRaw = process.env.OPPTRIX_LANCE_BACKFILL_MAX_ROUNDS
+      const maxRoundsParsed = maxRoundsRaw != null && maxRoundsRaw !== ''
+        ? Number(maxRoundsRaw)
+        : 32
+      const maxRounds = Number.isFinite(maxRoundsParsed) && maxRoundsParsed > 0
+        ? Math.floor(maxRoundsParsed)
+        : 32
+      let first = true
+      for (let round = 0; round < maxRounds; round++) {
+        const n = await svc.embedPendingDocuments({
+          ...opts,
+          resetEmbeddedFlags: first,
+        })
+        first = false
+        if (n < batch) break
+        if ((opts.delayMs ?? 0) > 0) {
+          await new Promise<void>(resolve => setTimeout(resolve, opts.delayMs))
+        }
+      }
+    } catch {
+      /* 回填失败不阻断打开空表 */
+    }
+  })
+}
+
 /** 生产单例；测试可传 dbPath 隔离 */
 export function getDocLibraryService(dbPath?: string): DocLibraryService {
   if (dbPath) {
@@ -228,15 +286,21 @@ export function getDocLibraryService(dbPath?: string): DocLibraryService {
   if (!serviceInst) {
     serviceDb = openDocLibraryDb()
     serviceInst = new DocLibraryService(serviceDb)
+    wireLanceRebuildBackfill(serviceInst)
   }
   return serviceInst
 }
 
 /**
-   * 关闭文档库单例：先 Lance 向量库，再 embedding 模型，最后 SQLite。
-   * 生产 sidecar 退出与测试 teardown 共用；失败不抛。
-   */
+ * 关闭文档库单例：先 Lance 向量库，再 embedding 模型，最后 SQLite。
+ * 生产 sidecar 退出与测试 teardown 共用；失败不抛。
+ */
 export async function closeDocLibraryService(): Promise<void> {
+  try {
+    setLanceRebuildBackfillHook(null)
+  } catch {
+    /* ignore */
+  }
   try {
     await closeVectorStore()
   } catch {

@@ -76,12 +76,71 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-function estimateBytes(data: unknown): number {
-  try {
-    return Buffer.byteLength(JSON.stringify(data), 'utf8')
-  } catch {
-    return 256
+/** Stop refining once we already know the entry is huge (LRU / disk-omit still work). */
+const ESTIMATE_HARD_CAP = 64 * 1024 * 1024
+const ESTIMATE_ARRAY_SAMPLE = 8
+const ESTIMATE_OBJECT_KEY_SAMPLE = 12
+/** Below this UTF-16 length, full stringify of a small root object is still cheap. */
+const ESTIMATE_SMALL_STRINGIFY_CHARS = 4096
+
+/**
+ * Rough serialized size for LRU / approxBytes stats — avoids `JSON.stringify` on every
+ * large payload. Prefer typed sizes, array/object sampling + extrapolation, and a hard
+ * cap short-circuit. Not exact JSON bytes; intentionally ~O(sample) for big klines.
+ */
+function estimateBytes(data: unknown, depth = 0): number {
+  if (data === null || data === undefined) return 4
+  if (typeof data === 'boolean') return 5
+  if (typeof data === 'number') return 16
+  if (typeof data === 'bigint') return 24
+  if (typeof data === 'string') return 2 + Buffer.byteLength(data, 'utf8')
+  if (typeof data === 'function' || typeof data === 'symbol') return 32
+  if (Buffer.isBuffer(data)) return data.byteLength
+  if (data instanceof Uint8Array) return data.byteLength
+  if (data instanceof ArrayBuffer) return data.byteLength
+  if (depth > 6) return 256
+
+  if (Array.isArray(data)) {
+    const n = data.length
+    if (n === 0) return 2
+    const sample = Math.min(n, ESTIMATE_ARRAY_SAMPLE)
+    let sum = 0
+    for (let i = 0; i < sample; i++) {
+      sum += estimateBytes(data[i], depth + 1)
+      if (sum >= ESTIMATE_HARD_CAP) return ESTIMATE_HARD_CAP
+    }
+    const approx = Math.ceil((sum / sample) * n) + n + 2
+    return Math.min(ESTIMATE_HARD_CAP, approx)
   }
+
+  if (typeof data === 'object') {
+    const obj = data as Record<string, unknown>
+    const keys = Object.keys(obj)
+    if (keys.length === 0) return 2
+
+    // Tiny root objects: exact size is cheap and keeps disk-omit thresholds accurate.
+    if (depth === 0 && keys.length <= 8) {
+      try {
+        const s = JSON.stringify(data)
+        if (s.length <= ESTIMATE_SMALL_STRINGIFY_CHARS) {
+          return Buffer.byteLength(s, 'utf8')
+        }
+      } catch {
+        /* fall through to sampling */
+      }
+    }
+
+    const sample = Math.min(keys.length, ESTIMATE_OBJECT_KEY_SAMPLE)
+    let sum = 0
+    for (let i = 0; i < sample; i++) {
+      const k = keys[i]!
+      sum += Buffer.byteLength(k, 'utf8') + 4 + estimateBytes(obj[k], depth + 1)
+      if (sum >= ESTIMATE_HARD_CAP) return ESTIMATE_HARD_CAP
+    }
+    return Math.min(ESTIMATE_HARD_CAP, Math.ceil((sum / sample) * keys.length) + 2)
+  }
+
+  return 256
 }
 
 /** In-memory LRU + debounced JSON file cache (aaashare Cache port). */

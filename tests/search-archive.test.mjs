@@ -280,4 +280,120 @@ test('search hydrates session meta by hit id without listAll', async () => {
     await rm(isolatedDir, { recursive: true, force: true })
   }
 })
+
+test('after INDEX_FLAG, incremental session/news upsert+delete are searchable without rebuild', async () => {
+  const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-search-incr-'))
+  const prevDataDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = isolatedDir
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore, setSessionPersistHooks } = await import('../packages/agent/dist/sessions.js')
+    const { SearchHub } = await import('../packages/search-hub/dist/hub.js')
+    const {
+      syncSessionSearchIndex,
+      removeSessionSearchIndex,
+      syncNewsSearchIndex,
+      removeNewsSearchIndex,
+      rebuildSessionSearchIndex,
+      rebuildNewsSearchIndex,
+    } = await import('../packages/search-hub/dist/index.js')
+    const {
+      NewsFeedStore,
+      setNewsArticlePersistHook,
+      setNewsArticleDeleteHook,
+    } = await import('../packages/news-feed/dist/index.js')
+
+    try {
+      getUserDataStore().close()
+    } catch {
+      /* already closed */
+    }
+
+    setSessionPersistHooks({
+      onPersist: syncSessionSearchIndex,
+      onDelete: removeSessionSearchIndex,
+    })
+    setNewsArticlePersistHook(article => syncNewsSearchIndex(article))
+    setNewsArticleDeleteHook(removeNewsSearchIndex)
+
+    const store = getUserDataStore()
+    const sessions = new SessionStore()
+    const stubHub = { marketData: { searchStocks: () => [] } }
+    const hub = new SearchHub(/** @type {any} */ (stubHub), sessions)
+
+    // 全量路径：空库建 INDEX_FLAG
+    hub.ensureIndexes()
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+
+    // 增量新增会话（不清 flag）
+    const sess = sessions.create('INCRSESS 增量会话')
+    const rec = sessions.get(sess.id)
+    assert.ok(rec)
+    rec.turns.push({
+      role: 'user',
+      content: 'body keyword INCRSESSBODY for incremental hit',
+      at: new Date().toISOString(),
+    })
+    sessions.save(rec)
+
+    assert.equal(store.getMetaFlag('search_index_v1'), true, 'incremental must not clear INDEX_FLAG')
+    assert.ok(hub.search('INCRSESSBODY', 10).sessions.some(h => h.id === sess.id))
+
+    // 增量新增资讯（经 NewsFeedStore persist hook）
+    const feed = new NewsFeedStore()
+    feed.upsertSubscription({
+      id: 'sub-incr',
+      title: 'incr',
+      url: 'https://example.com/feed',
+      resolved_url: 'https://example.com/feed',
+      kind: 'rss',
+      enabled: true,
+    })
+    const articleId = 'news-incr-1'
+    feed.upsertArticlesForSubscription('sub-incr', [{
+      id: articleId,
+      subscription_id: 'sub-incr',
+      title: 'INCRNEWSTITLE weekly',
+      link: 'https://example.com/incr',
+      pub_date: new Date().toISOString(),
+      summary: 'summary INCRNEWSBODY',
+      content_html: '<p>INCRNEWSBODY</p>',
+      source_title: 'IncrSource',
+    }])
+
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+    assert.ok(hub.search('INCRNEWSTITLE', 10).news.some(h => h.id === articleId))
+    assert.ok(hub.search('INCRNEWSBODY', 10).news.some(h => h.id === articleId))
+
+    // 删除后不再命中
+    sessions.delete(sess.id)
+    assert.equal(hub.search('INCRSESSBODY', 10).sessions.some(h => h.id === sess.id), false)
+
+    feed.deleteSubscription('sub-incr')
+    assert.equal(hub.search('INCRNEWSTITLE', 10).news.some(h => h.id === articleId), false)
+
+    // 全量 rebuild 路径仍可用（显式 rebuild，不清 INDEX_FLAG 语义）
+    const sess2 = sessions.create('REBUILDTOKEN session')
+    const rec2 = sessions.get(sess2.id)
+    assert.ok(rec2)
+    rec2.turns.push({
+      role: 'user',
+      content: 'REBUILDTOKEN body',
+      at: new Date().toISOString(),
+    })
+    sessions.save(rec2)
+    rebuildSessionSearchIndex()
+    rebuildNewsSearchIndex()
+    assert.ok(hub.search('REBUILDTOKEN', 10).sessions.some(h => h.id === sess2.id))
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+
+    setSessionPersistHooks({})
+    setNewsArticlePersistHook(null)
+    setNewsArticleDeleteHook(null)
+    store.close()
+  } finally {
+    process.env.OPPTRIX_DATA_DIR = prevDataDir
+    await rm(isolatedDir, { recursive: true, force: true })
+  }
+})
 })
