@@ -14,6 +14,7 @@ const {
 } = require('./translation-model-catalog.cjs')
 const {
   downloadTranslationModel,
+  startTranslationModelDownloadAck,
   cancelTranslationModelDownload,
   getDownloadState,
   isDownloadActive,
@@ -30,7 +31,11 @@ const {
   estimateMaxTokens,
   estimateHtmlMaxTokens,
 } = require('./translation-text.cjs')
-const { getCachedTranslation, setCachedTranslation } = require('./translation-cache.cjs')
+const {
+  getCachedTranslation,
+  setCachedTranslation,
+  flushTranslationCache,
+} = require('./translation-cache.cjs')
 
 const API_HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
@@ -46,15 +51,119 @@ async function fetchNewsSettings() {
 let chatSession = null
 /** @type {import('node-llama-cpp').LlamaModel | null} */
 let model = null
+/** @type {import('node-llama-cpp').LlamaContext | null} */
+let llamaContext = null
 let loadedModelPath = null
 let loadingPromise = null
 let preloadPromise = null
 let loadedModelFamily = 'generic'
 let lastLoadError = null
 
+/** 对齐 embedding：默认 12 分钟空闲卸载；`OPPTRIX_TRANSLATION_IDLE_MS=0` 关闭 */
+const DEFAULT_TRANSLATION_IDLE_MS = 12 * 60 * 1000
+/** @type {ReturnType<typeof setTimeout> | null} */
+let idleTimer = null
+/** @type {Promise<void> | null} */
+let idleUnloadPromise = null
+let lastUsedAt = 0
+
 /** @type {Map<string, string>} */
 const segmentMemoryCache = new Map()
 const SEGMENT_MEMORY_CACHE_MAX = 800
+
+function resolveTranslationIdleMs() {
+  const raw = process.env.OPPTRIX_TRANSLATION_IDLE_MS
+  if (raw == null || raw === '') return DEFAULT_TRANSLATION_IDLE_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_TRANSLATION_IDLE_MS
+  return n
+}
+
+function clearIdleTimer() {
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
+}
+
+function scheduleIdleUnload() {
+  clearIdleTimer()
+  const idleMs = resolveTranslationIdleMs()
+  if (idleMs <= 0) return
+  idleTimer = setTimeout(() => {
+    idleTimer = null
+    void runIdleUnload()
+  }, idleMs)
+  if (typeof idleTimer === 'object' && idleTimer && 'unref' in idleTimer) {
+    idleTimer.unref()
+  }
+}
+
+function touchLastUsed() {
+  lastUsedAt = Date.now()
+  scheduleIdleUnload()
+}
+
+/**
+ * 按 node-llama-cpp 官方 API dispose；失败不抛。
+ * @param {{ session?: { dispose?: Function, disposed?: boolean } | null, context?: { dispose?: Function, disposed?: boolean } | null, model?: { dispose?: Function, disposed?: boolean } | null }} handles
+ */
+async function disposeLlamaHandles(handles) {
+  const run = async (label, fn) => {
+    try {
+      await fn()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[translation-service] ${label} dispose failed:`, msg)
+    }
+  }
+  const { session, context, model: modelHandle } = handles
+  if (session && typeof session.dispose === 'function' && !session.disposed) {
+    await run('session', () => session.dispose({ disposeSequence: true }))
+  }
+  if (context && typeof context.dispose === 'function' && !context.disposed) {
+    await run('context', () => context.dispose())
+  }
+  if (modelHandle && typeof modelHandle.dispose === 'function' && !modelHandle.disposed) {
+    await run('model', () => modelHandle.dispose())
+  }
+}
+
+function clearHeldRefs() {
+  chatSession = null
+  llamaContext = null
+  model = null
+  loadedModelPath = null
+  loadedModelFamily = 'generic'
+}
+
+/** 释放当前模型句柄；保留 segmentMemoryCache LRU */
+async function unloadHeldResources() {
+  clearIdleTimer()
+  const handles = {
+    session: chatSession,
+    context: llamaContext,
+    model,
+  }
+  clearHeldRefs()
+  await disposeLlamaHandles(handles)
+}
+
+async function runIdleUnload() {
+  if (idleUnloadPromise) {
+    await idleUnloadPromise
+    return
+  }
+  idleUnloadPromise = unloadHeldResources()
+    .catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn('[translation-service] idle unload failed:', msg)
+    })
+    .finally(() => {
+      idleUnloadPromise = null
+    })
+  await idleUnloadPromise
+}
 
 function getGenerationProfile() {
   return {
@@ -98,35 +207,58 @@ async function ensureChatSession(repoRoot, preferredModel = '__auto__') {
 
   const modelFamily = detectModelFamily(modelPath)
 
-  if (chatSession && loadedModelPath === modelPath) {
-    return { chatSession, modelPath, modelFamily: loadedModelFamily }
-  }
-
-  if (loadingPromise) {
-    await loadingPromise
-    if (!chatSession) throw new Error(lastLoadError ?? '翻译模型加载失败')
-    return { chatSession, modelPath: loadedModelPath, modelFamily: loadedModelFamily }
+  for (;;) {
+    if (chatSession && loadedModelPath === modelPath) {
+      touchLastUsed()
+      return { chatSession, modelPath, modelFamily: loadedModelFamily }
+    }
+    if (loadingPromise) {
+      await loadingPromise
+      continue
+    }
+    break
   }
 
   loadingPromise = (async () => {
     lastLoadError = null
     const family = detectModelFamily(modelPath)
+    /** @type {import('node-llama-cpp').LlamaModel | null} */
+    let nextModel = null
+    /** @type {import('node-llama-cpp').LlamaContext | null} */
+    let nextContext = null
     try {
+      if (idleUnloadPromise) {
+        try {
+          await idleUnloadPromise
+        } catch {
+          /* ignore */
+        }
+      }
+      if (chatSession || llamaContext || model || loadedModelPath) {
+        await unloadHeldResources()
+      }
       const { getLlama, LlamaChatSession } = await import('node-llama-cpp')
       const llama = await getLlama()
-      model = await llama.loadModel({
+      nextModel = await llama.loadModel({
         modelPath,
         gpuLayers: process.platform === 'darwin' ? 'max' : 'auto',
       })
-      const context = await model.createContext({
+      nextContext = await nextModel.createContext({
         contextSize: getContextSize(),
         threads: 0,
       })
-      chatSession = new LlamaChatSession({ contextSequence: context.getSequence() })
+      chatSession = new LlamaChatSession({ contextSequence: nextContext.getSequence() })
+      model = nextModel
+      llamaContext = nextContext
       loadedModelPath = modelPath
       loadedModelFamily = family
+      nextModel = null
+      nextContext = null
+      touchLastUsed()
     } catch (error) {
+      await disposeLlamaHandles({ session: chatSession, context: nextContext ?? llamaContext, model: nextModel ?? model })
       chatSession = null
+      llamaContext = null
       model = null
       loadedModelPath = null
       loadedModelFamily = 'generic'
@@ -147,6 +279,7 @@ async function ensureChatSession(repoRoot, preferredModel = '__auto__') {
   })()
 
   await loadingPromise
+  if (!chatSession) throw new Error(lastLoadError ?? '翻译模型加载失败')
   return { chatSession, modelPath, modelFamily: loadedModelFamily }
 }
 
@@ -262,13 +395,13 @@ function getTranslationModels(repoRoot) {
   }
 }
 
-async function startTranslationModelDownload(repoRoot, modelId, onProgress) {
-  const result = await downloadTranslationModel(modelId, onProgress)
-  const model = getCatalogModel(modelId)
-  if (model?.purpose === 'translation') {
-    void preloadTranslationModel(repoRoot)
-  }
-  return result
+/**
+ * IPC：立即返回 `{ started, download }`，后台继续下载（进度走 onProgress / getDownloadState）。
+ * 并发不双开：已有下载时 `started: false` 并带回当前 state。
+ * 下载只落盘；不自动 preload，避免下载完成即占显存。首次翻译走 ensureChatSession。
+ */
+function startTranslationModelDownload(_repoRoot, modelId, onProgress) {
+  return startTranslationModelDownloadAck(String(modelId ?? ''), onProgress)
 }
 
 
@@ -289,6 +422,18 @@ async function translateArticleLocal(repoRoot, payload, onProgress, preferredMod
   const bodyText = String(payload?.bodyText ?? '').trim()
   const segments = normalizeSegments(payload?.segments)
   const targetLang = String(payload?.targetLang ?? 'Chinese')
+
+  const resolvedPath = resolveTranslationModelPath(repoRoot, preferredModel)
+  const needsColdLoad = Boolean(resolvedPath) && !(chatSession && loadedModelPath === resolvedPath)
+  if (needsColdLoad && typeof onProgress === 'function') {
+    onProgress({
+      articleId,
+      phase: 'loading',
+      current: 0,
+      total: 0,
+      engine: 'offline',
+    })
+  }
 
   const { chatSession: session, modelPath, modelFamily } = await ensureChatSession(repoRoot, preferredModel)
   const modelBasename = path.basename(modelPath)
@@ -509,7 +654,8 @@ async function maybeBootstrapOfflineModelDownloads(repoRoot, onProgress) {
       const model = getCatalogModel(modelId)
       if (!model || isCatalogModelInstalled(model, installedNames)) continue
       try {
-        const result = await startTranslationModelDownload(repoRoot, modelId, onProgress)
+        // bootstrap 需等落盘完成再下一个；IPC 路径用 startTranslationModelDownload（立即 ack）
+        const result = await downloadTranslationModel(modelId, onProgress)
         if (result?.filename) installedNames.add(result.filename)
       } catch {
         // 单个模型失败不阻断下一个
@@ -522,12 +668,51 @@ async function maybeBootstrapOfflineModelDownloads(repoRoot, onProgress) {
 }
 
 async function disposeTranslation() {
-  chatSession = null
-  model = null
-  loadedModelPath = null
+  clearIdleTimer()
+  const pending = idleUnloadPromise
+  idleUnloadPromise = null
+  if (pending) {
+    try {
+      await pending
+    } catch {
+      /* ignore */
+    }
+  }
+  if (loadingPromise) {
+    try {
+      await loadingPromise
+    } catch {
+      /* ignore load failure during teardown */
+    }
+  }
   loadingPromise = null
   preloadPromise = null
-  loadedModelFamily = 'generic'
+  flushTranslationCache()
+  // 保留 segmentMemoryCache LRU；仅释放 native 模型句柄
+  await unloadHeldResources()
+}
+
+/**
+ * @internal 测试注入已加载句柄
+ * @param {{ chatSession?: unknown, model?: unknown, context?: unknown, loadedModelPath?: string | null }} handles
+ */
+function __setTranslationRuntimeForTests(handles = {}) {
+  chatSession = handles.chatSession ?? null
+  model = handles.model ?? null
+  llamaContext = handles.context ?? null
+  loadedModelPath = handles.loadedModelPath ?? null
+}
+
+/** @internal */
+function __getTranslationRuntimeForTests() {
+  return {
+    chatSession,
+    model,
+    context: llamaContext,
+    loadedModelPath,
+    lastUsedAt,
+    segmentMemoryCacheSize: segmentMemoryCache.size,
+  }
 }
 
 module.exports = {
@@ -542,4 +727,10 @@ module.exports = {
   preloadTranslationModel,
   disposeTranslation,
   articleLikelyNeedsChineseTranslation,
+  resolveTranslationIdleMs,
+  DEFAULT_TRANSLATION_IDLE_MS,
+  disposeLlamaHandles,
+  __setTranslationRuntimeForTests,
+  __getTranslationRuntimeForTests,
+  __touchLastUsedForTests: touchLastUsed,
 }

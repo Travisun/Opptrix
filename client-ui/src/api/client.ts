@@ -11,6 +11,10 @@ import type {
 import type { ChatProgressEvent } from '../types/chatProgress'
 import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel, ChatAttachmentMeta, SessionAttachmentListItem } from '../types/chat'
 import { resolveFileMime } from '../chat/mediaCapabilities'
+import {
+  attachmentUploadTimeoutMs,
+  formatAttachmentUploadError,
+} from '../chat/attachmentUpload'
 import type { ExportDestination, ExportPackageResult } from '../platform/saveMarketPackage'
 import {
   formatExportResultMessage,
@@ -22,6 +26,8 @@ import { decodeTextBufferBytes } from '../utils/decodeTextBuffer'
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 const REQUEST_TIMEOUT = 10000 // 10s — quick reads / mutations
+/** 本机重活（语义模型卸载、深度整理卸载、大附件上传等）；勿抬高全局 REQUEST_TIMEOUT。 */
+const LOCAL_HEAVY_TIMEOUT = 180_000
 /** Agent chat: multiple LLM + tool rounds (server LLM timeout up to 120s per round). */
 const CHAT_REQUEST_TIMEOUT = 300_000
 
@@ -756,19 +762,81 @@ export interface MarketDataPackageInspectResult {
 
 export type { ExportDestination, ExportPackageResult }
 
-const MARKET_PACKAGE_TIMEOUT = 300_000
+const MARKET_PACKAGE_POLL_TIMEOUT = 30_000
+const MARKET_PACKAGE_DOWNLOAD_TIMEOUT = 120_000
+/** inspect / import：上传后解析或落盘，仍可能较长但远短于全量导出打包 */
+const MARKET_PACKAGE_UPLOAD_TIMEOUT = 180_000
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export interface PackageExportJobSnapshot {
+  job_id: string
+  status: 'queued' | 'running' | 'ready' | 'failed'
+  pack: string | null
+  percent: number
+  message: string
+  error: string | null
+  filename: string | null
+  bytes: number | null
+  download_path: string | null
+}
+
+async function startMarketPackageExportJob(pack?: SupplementPackId): Promise<PackageExportJobSnapshot> {
+  const json = await jsonFetch<{ success?: boolean; data?: PackageExportJobSnapshot; error?: string }>(
+    '/market-data/export/jobs',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pack ? { pack } : {}),
+    },
+    MARKET_PACKAGE_POLL_TIMEOUT,
+  )
+  if (!json.data?.job_id) {
+    throw new Error(json.error || '无法启动导出')
+  }
+  return json.data
+}
+
+async function pollMarketPackageExportJob(jobId: string): Promise<PackageExportJobSnapshot> {
+  const json = await jsonFetch<{ success?: boolean; data?: PackageExportJobSnapshot; error?: string }>(
+    `/market-data/export/jobs/${encodeURIComponent(jobId)}`,
+    {},
+    MARKET_PACKAGE_POLL_TIMEOUT,
+  )
+  if (!json.data) {
+    throw new Error(json.error || '导出任务不存在')
+  }
+  return json.data
+}
 
 async function fetchMarketDataPackageBlob(pack?: SupplementPackId): Promise<{ blob: Blob; filename: string }> {
-  const qs = pack ? `?pack=${pack}` : ''
-  const resp = await fetchWithTimeout(`${API_BASE}/market-data/export${qs}`, {}, MARKET_PACKAGE_TIMEOUT)
+  const started = await startMarketPackageExportJob(pack)
+  let job = started
+  const deadline = Date.now() + 25 * 60 * 1000
+  while (job.status === 'queued' || job.status === 'running') {
+    if (Date.now() > deadline) {
+      throw new Error('导出超时，请稍后重试')
+    }
+    await sleep(1500)
+    job = await pollMarketPackageExportJob(job.job_id)
+  }
+  if (job.status === 'failed') {
+    throw new Error(job.error || job.message || '导出失败')
+  }
+  const downloadPath = job.download_path
+    ?? `/market-data/export/jobs/${encodeURIComponent(job.job_id)}/download`
+  const path = downloadPath.startsWith('/api/') ? downloadPath.slice(4) : downloadPath
+  const resp = await fetchWithTimeout(`${API_BASE}${path.startsWith('/') ? path : `/${path}`}`, {}, MARKET_PACKAGE_DOWNLOAD_TIMEOUT)
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({})) as { error?: string }
-    throw new Error(err.error || `导出失败（${resp.status}）`)
+    throw new Error(err.error || `下载失败（${resp.status}）`)
   }
   const blob = await resp.blob()
   const cd = resp.headers.get('Content-Disposition') ?? ''
   const match = /filename="([^"]+)"/.exec(cd)
-  const filename = match?.[1] ?? (pack ? `opptrix-market-${pack}.opmd` : 'opptrix-market.opmd')
+  const filename = match?.[1] ?? job.filename ?? (pack ? `opptrix-market-${pack}.opmd` : 'opptrix-market.opmd')
   return { blob, filename }
 }
 
@@ -788,7 +856,7 @@ export async function inspectMarketDataPackageFile(file: File): Promise<MarketDa
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: buffer,
-  }, MARKET_PACKAGE_TIMEOUT)
+  }, MARKET_PACKAGE_UPLOAD_TIMEOUT)
   const json = await resp.json().catch(() => ({})) as {
     success?: boolean
     error?: string
@@ -811,7 +879,7 @@ export async function importMarketDataPackageFile(file: File) {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: buffer,
-  }, MARKET_PACKAGE_TIMEOUT)
+  }, MARKET_PACKAGE_UPLOAD_TIMEOUT)
 }
 
 export async function listDiscoverJobs() {
@@ -1676,42 +1744,115 @@ export async function listSessionAttachments(
   return data.attachments
 }
 
+export type UploadSessionAttachmentOptions = {
+  /** 用户取消 / 移除乐观项时中止上传 */
+  signal?: AbortSignal
+  /** 浏览器 XHR 上传进度（0–1）；不可用时不回调 */
+  onProgress?: (ratio: number) => void
+}
+
+/**
+ * 会话附件上传。使用 XHR 以支持可读进度与 AbortSignal；
+ * 超时按体积抬高（基准 LOCAL_HEAVY_TIMEOUT，上限 10min），不抬高全局 REQUEST_TIMEOUT。
+ */
 export async function uploadSessionAttachment(
   sessionId: string,
   file: File,
   pinnedCount = 0,
   pinnedTotalBytes = 0,
+  opts?: UploadSessionAttachmentOptions,
 ): Promise<ChatAttachmentMeta> {
   // 强制 octet-stream：部分环境会用 File.type（如 video/mp4）覆盖请求头，导致服务端未命中高限 parser
   const body = file.slice(0, file.size, 'application/octet-stream')
-  const resp = await fetchWithTimeout(`${API_BASE}/sessions/${sessionId}/attachments`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'X-Attachment-Mime': resolveFileMime(file),
-      'X-Attachment-Name': encodeURIComponent(file.name),
-      'X-Pinned-Count': String(pinnedCount),
-      'X-Pinned-Total-Bytes': String(pinnedTotalBytes),
-    },
-    body,
-  }, 120_000)
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({})) as {
-      error?: string
-      message?: string
-      code?: string
+  const url = `${API_BASE}/sessions/${sessionId}/attachments`
+  const timeoutMs = attachmentUploadTimeoutMs(file.size)
+  const signal = opts?.signal
+  const onProgress = opts?.onProgress
+
+  return new Promise<ChatAttachmentMeta>((resolve, reject) => {
+    if (signal?.aborted) {
+      const err = new Error('已取消添加')
+      err.name = 'AbortError'
+      reject(err)
+      return
     }
-    const raw = (err.error || err.message || '').trim()
-    const tooLarge = resp.status === 413
-      || /payload\s*too\s*large/i.test(raw)
-      || err.code === 'FST_ERR_CTP_BODY_TOO_LARGE'
-    if (tooLarge) {
-      throw new Error('暂时无法添加该文件，请稍后重试')
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.timeout = timeoutMs
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    xhr.setRequestHeader('X-Attachment-Mime', resolveFileMime(file))
+    xhr.setRequestHeader('X-Attachment-Name', encodeURIComponent(file.name))
+    xhr.setRequestHeader('X-Pinned-Count', String(pinnedCount))
+    xhr.setRequestHeader('X-Pinned-Total-Bytes', String(pinnedTotalBytes))
+    xhr.responseType = 'text'
+
+    let lastRatio = -1
+    xhr.upload.onprogress = (ev) => {
+      if (!onProgress || !ev.lengthComputable || ev.total <= 0) return
+      const ratio = Math.min(1, Math.max(0, ev.loaded / ev.total))
+      // 避免过密 setState：至少变动 1%
+      if (ratio - lastRatio < 0.01 && ratio < 1) return
+      lastRatio = ratio
+      onProgress(ratio)
     }
-    throw new Error(raw || `上传失败 (${resp.status})`)
-  }
-  const data = await resp.json() as { attachment: ChatAttachmentMeta }
-  return data.attachment
+
+    const onExternalAbort = () => {
+      xhr.abort()
+    }
+    signal?.addEventListener('abort', onExternalAbort)
+
+    const cleanup = () => {
+      signal?.removeEventListener('abort', onExternalAbort)
+    }
+
+    xhr.onload = () => {
+      cleanup()
+      const status = xhr.status
+      let parsed: {
+        attachment?: ChatAttachmentMeta
+        error?: string
+        message?: string
+        code?: string
+      } = {}
+      try {
+        const text = xhr.responseText?.trim()
+        if (text) parsed = JSON.parse(text) as typeof parsed
+      } catch {
+        parsed = {}
+      }
+      if (status >= 200 && status < 300 && parsed.attachment) {
+        onProgress?.(1)
+        resolve(parsed.attachment)
+        return
+      }
+      const raw = (parsed.error || parsed.message || '').trim()
+      reject(new Error(formatAttachmentUploadError(null, {
+        status,
+        code: parsed.code,
+        raw,
+      })))
+    }
+
+    xhr.onerror = () => {
+      cleanup()
+      reject(new Error(formatAttachmentUploadError(new Error('network'))))
+    }
+
+    xhr.ontimeout = () => {
+      cleanup()
+      reject(new Error(formatAttachmentUploadError(new Error('timeout'))))
+    }
+
+    xhr.onabort = () => {
+      cleanup()
+      const err = new Error('已取消添加')
+      err.name = 'AbortError'
+      reject(err)
+    }
+
+    xhr.send(body)
+  })
 }
 
 export function sessionAttachmentUrl(sessionId: string, attachmentId: string): string {
@@ -1879,6 +2020,26 @@ export async function streamSessionChat(
 
 // ─── News feed API ───
 
+export type SenseVoiceEnsurePhase =
+  | 'idle'
+  | 'preparing'
+  | 'downloading'
+  | 'ready'
+  | 'error'
+
+export type SenseVoiceEnsureJobSnapshot = {
+  phase: SenseVoiceEnsurePhase
+  message: string
+  accepted: boolean
+  started: boolean
+  percent: number
+  modelName: string
+  ready: boolean
+  modelsDir: string
+  source: 'bundled' | 'user' | 'missing'
+  error: string | null
+}
+
 async function newsJsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return jsonFetch<T>(path, init)
 }
@@ -2025,22 +2186,77 @@ export const news = {
   getMultimodalStatus: () =>
     newsJsonFetch<import('../types/schemas').MultimodalStatusResponse>('/news/multimodal/status'),
 
-  ensureSenseVoiceModel: () =>
-    newsJsonFetch<{
+  /** POST 立即返回 job（短超时）；内部轮询直至 ready/error。 */
+  ensureSenseVoiceModel: async (
+    opts?: {
+      onProgress?: (job: SenseVoiceEnsureJobSnapshot) => void
+      signal?: AbortSignal
+      pollIntervalMs?: number
+    },
+  ): Promise<SenseVoiceEnsureJobSnapshot> => {
+    const started = await jsonFetch<{
       ok: boolean
-      modelName: string
-      ready: boolean
-      modelsDir: string
-      source?: 'bundled' | 'user' | 'missing'
-    }>('/news/multimodal/sensevoice/ensure', {
-      method: 'POST',
-    }),
+      started: boolean
+      job: SenseVoiceEnsureJobSnapshot
+    }>('/news/multimodal/sensevoice/ensure', { method: 'POST' }, REQUEST_TIMEOUT)
 
-  /** @deprecated 兼容旧调用；服务端已代理到 SenseVoice */
-  ensureWhisperModel: () =>
-    newsJsonFetch<{ ok: boolean; modelName: string }>('/news/multimodal/whisper/ensure', {
-      method: 'POST',
-    }),
+    let job = started.job
+    opts?.onProgress?.(job)
+    if (job.phase === 'ready') return job
+    if (job.phase === 'error') {
+      throw new Error(job.error || job.message || '语音识别模型准备失败')
+    }
+
+    const pollMs = opts?.pollIntervalMs ?? 1500
+    const deadline = Date.now() + 30 * 60 * 1000
+    while (Date.now() < deadline) {
+      if (opts?.signal?.aborted) {
+        throw new Error('已取消准备')
+      }
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer)
+          reject(new Error('已取消准备'))
+        }
+        const timer = setTimeout(() => {
+          opts?.signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }, pollMs)
+        if (opts?.signal) {
+          if (opts.signal.aborted) {
+            clearTimeout(timer)
+            reject(new Error('已取消准备'))
+            return
+          }
+          opts.signal.addEventListener('abort', onAbort, { once: true })
+        }
+      })
+      const polled = await jsonFetch<{ job: SenseVoiceEnsureJobSnapshot }>(
+        '/news/multimodal/sensevoice/ensure',
+        undefined,
+        REQUEST_TIMEOUT,
+      )
+      job = polled.job
+      opts?.onProgress?.(job)
+      if (job.phase === 'ready') return job
+      if (job.phase === 'error') {
+        throw new Error(job.error || job.message || '语音识别模型准备失败')
+      }
+    }
+    throw new Error('准备超时，请确认网络后重试')
+  },
+
+  getSenseVoiceEnsureJob: () =>
+    newsJsonFetch<{ job: SenseVoiceEnsureJobSnapshot }>('/news/multimodal/sensevoice/ensure'),
+
+  /** @deprecated 兼容旧调用；服务端已代理到 SenseVoice（异步 job + 轮询） */
+  ensureWhisperModel: (
+    opts?: {
+      onProgress?: (job: SenseVoiceEnsureJobSnapshot) => void
+      signal?: AbortSignal
+      pollIntervalMs?: number
+    },
+  ) => news.ensureSenseVoiceModel(opts),
 
   refresh: () =>
     newsJsonFetch<{
@@ -2517,6 +2733,8 @@ export interface PythonInstallJobSnapshot {
   bytes_total: number | null
   steps: string[]
   error: string | null
+  /** Agent 轮询用；设置页可忽略 */
+  job_id?: string | null
 }
 
 export const pythonSettings = {
@@ -2543,27 +2761,64 @@ export const pythonSettings = {
     jsonFetch<{ job: PythonInstallJobSnapshot }>('/settings/python/install'),
 }
 
+export type SemanticModelInstallPhase =
+  | 'idle'
+  | 'downloading'
+  | 'enabling'
+  | 'ready'
+  | 'error'
+
+export type SemanticModelInstallJobSnapshot = {
+  phase: SemanticModelInstallPhase
+  message: string
+  accepted: boolean
+  started: boolean
+  percent: number
+  file: string | null
+  receivedBytes: number
+  totalBytes: number | null
+  error: string | null
+  installed: boolean
+  label: string
+  source: 'bundled' | 'user' | 'missing'
+}
+
 export type SemanticModelStatus = {
   installed: boolean
   label: string
   /** bundled = 应用自带；user = 本机副本；missing = 未就绪 */
   source?: 'bundled' | 'user' | 'missing'
+  phase?: SemanticModelInstallPhase
+  progress?: {
+    file: string | null
+    receivedBytes: number
+    totalBytes: number | null
+    percent: number
+  }
+  message?: string
+  error?: string | null
+  job?: SemanticModelInstallJobSnapshot
 }
 
 export const semanticModelSettings = {
   getStatus: () =>
     jsonFetch<SemanticModelStatus>('/settings/semantic-model'),
 
+  /** 立即返回；后台下载。请轮询 getStatus / getInstallJob。 */
   install: () =>
-    jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
+    jsonFetch<{ ok: boolean; started: boolean; job: SemanticModelInstallJobSnapshot }>(
       '/settings/semantic-model/install',
       { method: 'POST' },
     ),
+
+  getInstallJob: () =>
+    jsonFetch<{ job: SemanticModelInstallJobSnapshot }>('/settings/semantic-model/install'),
 
   uninstall: () =>
     jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
       '/settings/semantic-model/uninstall',
       { method: 'POST' },
+      LOCAL_HEAVY_TIMEOUT,
     ),
 }
 
@@ -2583,23 +2838,60 @@ export type ParseEnginesStatus = {
     hint: string
     /** bundled = 应用自带；user = 本机准备；missing = 未就绪 */
     source?: 'bundled' | 'user' | 'missing'
+    phase?: OcrDeepPreparePhase
+    progress?: {
+      file: string | null
+      receivedBytes: number
+      totalBytes: number | null
+      percent: number
+    }
+    message?: string
+    error?: string | null
+    job?: OcrDeepPrepareJobSnapshot
   }
   semantic: { installed: boolean; label: string; source?: 'bundled' | 'user' | 'missing' }
+}
+
+export type OcrDeepPreparePhase =
+  | 'idle'
+  | 'downloading'
+  | 'ready'
+  | 'error'
+
+export type OcrDeepPrepareJobSnapshot = {
+  phase: OcrDeepPreparePhase
+  message: string
+  accepted: boolean
+  started: boolean
+  percent: number
+  file: string | null
+  receivedBytes: number
+  totalBytes: number | null
+  error: string | null
+  available: boolean
+  installed: boolean
+  label: string
+  source: 'bundled' | 'user' | 'missing'
 }
 
 export const parseEnginesSettings = {
   getStatus: () =>
     jsonFetch<ParseEnginesStatus>('/settings/parse-engines'),
 
+  /** 立即返回；后台下载。请轮询 getStatus / getPrepareJob。 */
   prepareDeep: () =>
-    jsonFetch<{ ok: boolean; deep: ParseEnginesStatus['deep']; message?: string; error?: string }>(
+    jsonFetch<{ ok: boolean; started: boolean; job: OcrDeepPrepareJobSnapshot }>(
       '/settings/parse-engines/deep/prepare',
       { method: 'POST' },
     ),
+
+  getPrepareJob: () =>
+    jsonFetch<{ job: OcrDeepPrepareJobSnapshot }>('/settings/parse-engines/deep/prepare'),
 
   uninstallDeep: () =>
     jsonFetch<{ ok: boolean; error?: string }>(
       '/settings/parse-engines/deep/uninstall',
       { method: 'POST' },
+      LOCAL_HEAVY_TIMEOUT,
     ),
 }

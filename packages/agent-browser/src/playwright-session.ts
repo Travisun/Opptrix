@@ -1,10 +1,10 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
-import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
+import { isDesktopRuntime } from '@opptrix/shared'
 import { configurePlaywrightBrowsersPath, ensureChromiumAvailable } from './chromium-install.js'
 import { RefMap, RefNotFoundError, normalizeRef } from './ref-map.js'
+import { resolveScreenshotDir } from './screenshot-prune.js'
 import { truncateSnapshot } from './snapshot.js'
 import { normalizeUrl, UrlPolicyError } from './url-policy.js'
 import {
@@ -17,12 +17,6 @@ import {
   type BrowserTypeResult,
   type WaitUntil,
 } from './types.js'
-
-function resolveScreenshotDir(): string {
-  const dir = path.join(resolveUserDataRoot(), 'browser-screenshots')
-  fs.mkdirSync(dir, { recursive: true })
-  return dir
-}
 
 function formatBrowserError(err: unknown): Error {
   if (err instanceof UrlPolicyError || err instanceof RefNotFoundError) {

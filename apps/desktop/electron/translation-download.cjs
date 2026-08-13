@@ -7,8 +7,10 @@ const DOWNLOAD_USER_AGENT = 'Opptrix-Desktop/1.0'
 
 /** @type {AbortController | null} */
 let activeAbort = null
-/** @type {{ modelId: string; filename: string; receivedBytes: number; totalBytes: number; status: string; source?: string; sourceLabel?: string } | null} */
+/** @type {{ modelId: string; filename: string; receivedBytes: number; totalBytes: number; status: string; source?: string; sourceLabel?: string; error?: string } | null} */
 let activeDownload = null
+/** @type {Promise<{ filePath: string; filename: string; source?: string } | null> | null} */
+let activeDownloadPromise = null
 
 function getDownloadState() {
   if (!activeDownload) return null
@@ -92,50 +94,27 @@ async function downloadFromSource(model, source, onProgress) {
   }
 }
 
-async function downloadTranslationModel(modelId, onProgress) {
-  if (isDownloadActive()) {
-    throw new Error('已有模型正在下载，请稍后再试')
-  }
-
-  const model = getCatalogModel(modelId)
-  if (!model) throw new Error('未找到该离线翻译模型')
-
-  const dir = await ensureDownloadDir()
-  const targetPath = path.join(dir, model.filename)
-
-  if (fs.existsSync(targetPath)) {
-    onProgress?.({
-      modelId,
-      filename: model.filename,
-      status: 'completed',
-      receivedBytes: model.sizeBytes,
-      totalBytes: model.sizeBytes,
-      filePath: targetPath,
-    })
-    return { filePath: targetPath, filename: model.filename }
-  }
-
-  activeAbort = new AbortController()
-  activeDownload = {
-    modelId,
-    filename: model.filename,
-    receivedBytes: 0,
-    totalBytes: model.sizeBytes,
-    status: 'downloading',
-  }
-
+/**
+ * 同步占位后跑下载任务；finally 清理 slot。
+ * @param {NonNullable<ReturnType<typeof getCatalogModel>>} model
+ * @param {string} targetPath
+ * @param {(p: object) => void} [onProgress]
+ */
+async function runDownloadJob(model, targetPath, onProgress) {
   const errors = []
   try {
     for (const source of model.urls) {
       try {
         const result = await downloadFromSource(model, source, onProgress)
-        activeDownload.status = 'completed'
-        onProgress?.({
-          ...activeDownload,
-          filePath: result.filePath,
-          source: source.source,
-          sourceLabel: source.label,
-        })
+        if (activeDownload) {
+          activeDownload.status = 'completed'
+          onProgress?.({
+            ...activeDownload,
+            filePath: result.filePath,
+            source: source.source,
+            sourceLabel: source.label,
+          })
+        }
         return result
       } catch (error) {
         if (activeAbort?.signal.aborted) throw error
@@ -158,7 +137,102 @@ async function downloadTranslationModel(modelId, onProgress) {
   } finally {
     activeAbort = null
     activeDownload = null
+    activeDownloadPromise = null
   }
+}
+
+/**
+ * 同步认领下载槽；已在下载则返回 null（调用方决定 throw 或 ack started:false）。
+ * @returns {{ model: NonNullable<ReturnType<typeof getCatalogModel>>; targetPath: string; alreadyPresent: boolean } | null}
+ */
+function tryClaimDownload(modelId) {
+  // 含 downloading→error/completed 到 finally 清槽的短暂窗口，避免双开
+  if (activeDownload || activeDownloadPromise) return null
+
+  const model = getCatalogModel(modelId)
+  if (!model) throw new Error('未找到该离线翻译模型')
+
+  const targetPath = path.join(getDefaultDownloadDir(), model.filename)
+  if (fs.existsSync(targetPath)) {
+    return { model, targetPath, alreadyPresent: true }
+  }
+
+  activeAbort = new AbortController()
+  activeDownload = {
+    modelId,
+    filename: model.filename,
+    receivedBytes: 0,
+    totalBytes: model.sizeBytes,
+    status: 'downloading',
+  }
+  return { model, targetPath, alreadyPresent: false }
+}
+
+/**
+ * 阻塞至下载完成（bootstrap / 测试）。并发时抛错。
+ * @param {string} modelId
+ * @param {(p: object) => void} [onProgress]
+ */
+async function downloadTranslationModel(modelId, onProgress) {
+  const claim = tryClaimDownload(modelId)
+  if (!claim) {
+    throw new Error('已有模型正在下载，请稍后再试')
+  }
+
+  const { model, targetPath, alreadyPresent } = claim
+  if (alreadyPresent) {
+    onProgress?.({
+      modelId,
+      filename: model.filename,
+      status: 'completed',
+      receivedBytes: model.sizeBytes,
+      totalBytes: model.sizeBytes,
+      filePath: targetPath,
+    })
+    return { filePath: targetPath, filename: model.filename }
+  }
+
+  const job = runDownloadJob(model, targetPath, onProgress)
+  activeDownloadPromise = job.catch(() => null)
+  return job
+}
+
+/**
+ * IPC 用：立即 ack，后台继续下载。并发不双开（started:false + 当前 state）。
+ * @param {string} modelId
+ * @param {(p: object) => void} [onProgress]
+ * @returns {{ started: boolean; download: ReturnType<typeof getDownloadState>; alreadyPresent?: boolean }}
+ */
+function startTranslationModelDownloadAck(modelId, onProgress) {
+  if (activeDownload || activeDownloadPromise) {
+    return { started: false, download: getDownloadState() }
+  }
+
+  const claim = tryClaimDownload(modelId)
+  if (!claim) {
+    return { started: false, download: getDownloadState() }
+  }
+
+  const { model, targetPath, alreadyPresent } = claim
+  if (alreadyPresent) {
+    const download = {
+      modelId,
+      filename: model.filename,
+      status: 'completed',
+      receivedBytes: model.sizeBytes,
+      totalBytes: model.sizeBytes,
+      filePath: targetPath,
+    }
+    onProgress?.(download)
+    return { started: true, download, alreadyPresent: true }
+  }
+
+  const job = runDownloadJob(model, targetPath, onProgress)
+  activeDownloadPromise = job.catch(() => null)
+  // 后台继续；错误已通过 onProgress(status=error) 上报
+  void job.catch(() => {})
+
+  return { started: true, download: getDownloadState() }
 }
 
 function cancelTranslationModelDownload() {
@@ -170,9 +244,27 @@ function cancelTranslationModelDownload() {
   return true
 }
 
+/** @internal */
+function __resetDownloadStateForTests() {
+  if (activeAbort) {
+    try { activeAbort.abort() } catch { /* ignore */ }
+  }
+  activeAbort = null
+  activeDownload = null
+  activeDownloadPromise = null
+}
+
+/** @internal */
+function __getActiveDownloadPromiseForTests() {
+  return activeDownloadPromise
+}
+
 module.exports = {
   downloadTranslationModel,
+  startTranslationModelDownloadAck,
   cancelTranslationModelDownload,
   getDownloadState,
   isDownloadActive,
+  __resetDownloadStateForTests,
+  __getActiveDownloadPromiseForTests,
 }

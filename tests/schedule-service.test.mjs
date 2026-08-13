@@ -112,3 +112,67 @@ test('tick runs due job once and advances next_run', async () => {
     assert.equal(r2.ran.length, 0)
   })
 })
+
+test('stale running lease is reconciled so claim can succeed again', async () => {
+  await withStore(async ({ store }) => {
+    const Database = (await import('better-sqlite3')).default
+    const dueAt = new Date(Date.now() - 1000).toISOString()
+    const job = store.schedule.createJob({
+      title: 'stale-lease',
+      kind: 'agent_prompt',
+      schedule_kind: 'interval',
+      schedule: { every_sec: 60 },
+      payload: { prompt: 'hello' },
+    }, dueAt)
+
+    const stuck = store.schedule.startRun(job.id, 'timer')
+    assert.equal(store.schedule.listActiveRunsForJob(job.id).length, 1)
+
+    const staleStarted = new Date(Date.now() - 50 * 60 * 1000).toISOString()
+    const db = new Database(path.join(process.env.OPPTRIX_DATA_DIR, 'opptrix.db'))
+    db.prepare('UPDATE scheduled_job_runs SET started_at = ? WHERE id = ?').run(staleStarted, stuck.id)
+    db.close()
+
+    // fresh claim must fail while lease is active without reconcile of non-stale;
+    // after backdating past SCHEDULE_STALE_RUN_MS, tryClaim reconciles then succeeds
+    const freshJob = store.schedule.getJob(job.id)
+    assert.ok(freshJob)
+    const nowIso = new Date().toISOString()
+    const leaseUntil = new Date(Date.now() + 60_000).toISOString()
+    const claimed = store.schedule.tryClaimDueJob(freshJob, nowIso, leaseUntil, 'timer')
+    assert.ok(claimed, 'claim should succeed after stale lease reconcile')
+    assert.equal(claimed.status, 'running')
+    assert.notEqual(claimed.id, stuck.id)
+
+    const interrupted = store.schedule.listRuns(job.id, 10).filter((r) => r.status === 'interrupted')
+    assert.equal(interrupted.length, 1)
+    assert.equal(interrupted[0].id, stuck.id)
+    assert.equal(store.schedule.listActiveRunsForJob(job.id).length, 1)
+  })
+})
+
+test('pruneJobRuns keeps at most K recent runs per job', async () => {
+  await withStore(async ({ store }) => {
+    const job = store.schedule.createJob({
+      title: 'prune',
+      kind: 'agent_prompt',
+      schedule_kind: 'interval',
+      schedule: { every_sec: 60 },
+      payload: { prompt: 'hello' },
+    }, new Date().toISOString())
+
+    for (let i = 0; i < 15; i += 1) {
+      const run = store.schedule.startRun(job.id, 'timer')
+      store.schedule.finishRun(run.id, { status: 'ok', summary: `n=${i}` })
+    }
+
+    assert.equal(store.schedule.listRuns(job.id, 50).length, 15)
+    const deleted = store.schedule.pruneJobRuns(job.id, 5)
+    assert.equal(deleted, 10)
+    const keep = store.schedule.listRuns(job.id, 20)
+    assert.equal(keep.length, 5)
+    // 最近插入的 5 条（rowid 最大）应保留
+    const summaries = keep.map((r) => r.summary).sort()
+    assert.deepEqual(summaries, ['n=10', 'n=11', 'n=12', 'n=13', 'n=14'])
+  })
+})

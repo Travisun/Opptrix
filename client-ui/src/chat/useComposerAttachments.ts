@@ -11,6 +11,10 @@ import {
   isTranscriptExtractKind,
   LARGE_FILE_WARN_BYTES,
 } from './mediaCapabilities'
+import {
+  formatAttachmentUploadError,
+  isAttachmentUploadAbortError,
+} from './attachmentUpload'
 
 function isLocalAttachmentId(id: string): boolean {
   return id.startsWith('local-')
@@ -31,18 +35,33 @@ export function useComposerAttachments(
   const fileInputRef = useRef<HTMLInputElement>(null)
   const effectiveSessionIdRef = useRef<string | null>(sessionId ?? null)
   const prevSessionIdRef = useRef(sessionId)
+  /** localId → 进行中上传的 AbortController */
+  const uploadControllersRef = useRef<Map<string, AbortController>>(new Map())
+
+  const abortAllUploads = useCallback(() => {
+    for (const ac of uploadControllersRef.current.values()) {
+      ac.abort()
+    }
+    uploadControllersRef.current.clear()
+  }, [])
 
   useEffect(() => {
     const prev = prevSessionIdRef.current ?? null
     const next = sessionId ?? null
     if (prev != null && next != null && prev !== next) {
+      abortAllUploads()
       setPinned([])
     } else if (prev != null && next == null) {
+      abortAllUploads()
       setPinned([])
     }
     prevSessionIdRef.current = sessionId
     if (sessionId) effectiveSessionIdRef.current = sessionId
-  }, [sessionId])
+  }, [sessionId, abortAllUploads])
+
+  useEffect(() => () => {
+    abortAllUploads()
+  }, [abortAllUploads])
 
   // 轮询整理/转写状态（PDF·文档·图片 OCR + 音视频转写）；跳过尚未入库的乐观项
   useEffect(() => {
@@ -76,7 +95,7 @@ export function useComposerAttachments(
 
   const clearToastLater = useCallback((msg: string) => {
     setToast(msg)
-    window.setTimeout(() => setToast(null), 3200)
+    window.setTimeout(() => setToast(null), 4200)
   }, [])
 
   const resolveSessionId = useCallback(async (): Promise<string | null> => {
@@ -108,8 +127,8 @@ export function useComposerAttachments(
       const ok = await confirm({
         title: '文件较大',
         message: largeCount === 1
-          ? '所选文件较大，处理可能需要更长时间。确定继续添加吗？'
-          : `有 ${largeCount} 个文件较大（约 500MB 及以上），处理可能需要更长时间。确定继续添加吗？`,
+          ? '所选文件较大，添加可能需要更长时间。确定继续吗？可随时点芯片上的关闭取消。'
+          : `有 ${largeCount} 个文件较大（约 500MB 及以上），添加可能需要更长时间。确定继续吗？可随时取消。`,
         confirmLabel: '继续添加',
         cancelLabel: '取消',
       })
@@ -147,6 +166,7 @@ export function useComposerAttachments(
         size: file.size,
         createdAt: new Date().toISOString(),
         optimistic: true,
+        uploadProgress: 0,
         ...((isLibraryIngestKind(kind) || isTranscriptExtractKind(kind))
           ? { extract: { status: 'pending' as const } }
           : {}),
@@ -166,8 +186,23 @@ export function useComposerAttachments(
       let uploadedTotal = pinned.filter(isServerAttachment).reduce((sum, p) => sum + p.size, 0)
 
       for (const { localId, file } of queue) {
+        const ac = new AbortController()
+        uploadControllersRef.current.set(localId, ac)
         try {
-          const meta = await uploadSessionAttachment(sid, file, uploadedCount, uploadedTotal)
+          const meta = await uploadSessionAttachment(
+            sid,
+            file,
+            uploadedCount,
+            uploadedTotal,
+            {
+              signal: ac.signal,
+              onProgress: (ratio) => {
+                setPinned(prev => prev.map(p => (
+                  p.id === localId ? { ...p, uploadProgress: ratio } : p
+                )))
+              },
+            },
+          )
           uploadedCount += 1
           uploadedTotal += meta.size
           setPinned(prev => {
@@ -180,7 +215,11 @@ export function useComposerAttachments(
           })
         } catch (e) {
           setPinned(prev => prev.filter(p => p.id !== localId))
-          clearToastLater(e instanceof Error ? e.message : '上传失败，请稍后重试')
+          if (!isAttachmentUploadAbortError(e)) {
+            clearToastLater(formatAttachmentUploadError(e))
+          }
+        } finally {
+          uploadControllersRef.current.delete(localId)
         }
       }
     } finally {
@@ -189,6 +228,11 @@ export function useComposerAttachments(
   }, [pinned, clearToastLater, resolveSessionId, confirm])
 
   const removePinned = useCallback(async (id: string) => {
+    const ac = uploadControllersRef.current.get(id)
+    if (ac) {
+      ac.abort()
+      uploadControllersRef.current.delete(id)
+    }
     setPinned(prev => prev.filter(p => p.id !== id))
     if (isLocalAttachmentId(id)) return
     const sid = effectiveSessionIdRef.current ?? sessionId
@@ -207,6 +251,13 @@ export function useComposerAttachments(
     if (!pinned.length) return
     const { kept, removedIds } = partitionPinsForModel(pinned, media)
     if (removedIds.length) {
+      for (const id of removedIds) {
+        const ac = uploadControllersRef.current.get(id)
+        if (ac) {
+          ac.abort()
+          uploadControllersRef.current.delete(id)
+        }
+      }
       setPinned(kept)
       clearToastLater('部分附件与当前模型不兼容，已自动移除')
       const sid = effectiveSessionIdRef.current ?? sessionId
@@ -219,7 +270,10 @@ export function useComposerAttachments(
     }
   }, [pinned, clearToastLater, sessionId])
 
-  const clearPinned = useCallback(() => setPinned([]), [])
+  const clearPinned = useCallback(() => {
+    abortAllUploads()
+    setPinned([])
+  }, [abortAllUploads])
 
   const openFilePicker = useCallback(() => {
     fileInputRef.current?.click()

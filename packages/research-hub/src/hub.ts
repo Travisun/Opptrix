@@ -3988,6 +3988,9 @@ export class ResearchHub {
   private watchlistSave(params: Record<string, unknown>, t0: number) {
     const items = Array.isArray(params.items) ? params.items as import('@opptrix/a-stock-layer').WatchlistItem[] : []
     const saved = this.de.watchlist.replace(items)
+    // Durable across process restart: debounce merges rapid in-process replaces,
+    // but HTTP save must flush before the response returns.
+    this.de.watchlist.flush()
     return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
   }
 

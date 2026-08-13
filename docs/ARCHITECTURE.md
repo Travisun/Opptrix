@@ -127,7 +127,7 @@ Electron main
 | `~/.opptrix/opptrix.db` | 配置、会话、关注、Provider 设置等（主存储） |
 | `~/.opptrix/portfolio.json` | A 股模拟组合账本 |
 | `~/.opptrix/market-data/` | 多市场本地基础数据包（`.opmd` 格式）：A 股全市场 + 美股/加密货币/港股/日股/韩股本地列表 |
-| `~/.opptrix/snapshots/` | 因子评估快照（stock-eval） |
+| `~/.stock_eval/store/<prefix>/<code>.json` | 因子评估快照（stock-eval；旧 `store.json` 首次访问时懒迁移到分片） |
 | `OPPTRIX_DATA_DIR` | 覆盖上述用户数据根目录 |
 
 `.gitignore` 已排除密钥、构建产物与运行时数据。

@@ -233,17 +233,19 @@ export class ScheduleService {
   /**
    * 扫描到期任务。master 关闭时跳过。
    * 通过乐观 claim（推进 next_run + running lease）保证幂等。
+   * 先 reconcile 超时 running lease，避免崩溃后永久无法领取。
    */
   async tick(opts: { trigger: ScheduleRunTrigger }): Promise<{ due: string[]; ran: string[]; skipped: string[] }> {
     const dueIds: string[] = []
     const ran: string[] = []
     const skipped: string[] = []
+    const now = new Date()
+    const nowIso = now.toISOString()
+    this.repo.reconcileStaleRuns(nowIso)
     const settings = this.repo.getSettings()
     if (!settings.master_enabled) {
       return { due: dueIds, ran, skipped }
     }
-    const now = new Date()
-    const nowIso = now.toISOString()
     const due = this.repo.listDueJobs(nowIso)
     for (const job of due) {
       dueIds.push(job.id)

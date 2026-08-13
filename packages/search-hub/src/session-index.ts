@@ -1,6 +1,8 @@
 import type { SessionRecord } from '@opptrix/agent'
 import { getUserDataStore } from '@opptrix/user-store'
 
+const SESSION_REBUILD_PAGE = 100
+
 export function sessionBodyText(record: SessionRecord): string {
   const parts: string[] = []
   for (const turn of record.turns ?? []) {
@@ -32,8 +34,18 @@ export function removeSessionSearchIndex(sessionId: string) {
   getUserDataStore().removeSessionSearch(sessionId)
 }
 
-export function rebuildSessionSearchIndex(records: SessionRecord[]) {
+/**
+ * 重建会话 FTS。无参时按页 iterate → upsert，避免一次性持有全部 SessionRecord。
+ * 传入 `records` 时保持旧批处理语义（测试/调用方显式灌入）。
+ */
+export function rebuildSessionSearchIndex(records?: SessionRecord[]) {
   const store = getUserDataStore()
   store.clearSessionSearchIndex()
-  for (const record of records) syncSessionSearchIndex(record)
+  if (records) {
+    for (const record of records) syncSessionSearchIndex(record)
+    return
+  }
+  for (const page of store.iterateDocumentPages<SessionRecord>('session', SESSION_REBUILD_PAGE)) {
+    for (const row of page) syncSessionSearchIndex(row.data)
+  }
 }

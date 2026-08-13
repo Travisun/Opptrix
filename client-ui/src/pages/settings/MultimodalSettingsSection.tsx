@@ -140,14 +140,25 @@ export default function MultimodalSettingsSection() {
   const [providers, setProviders] = useState<PublicProvider[]>([])
   const [mmStatus, setMmStatus] = useState<MultimodalStatusResponse | null>(null)
   const [speechEnsuring, setSpeechEnsuring] = useState(false)
+  const [speechEnsureMessage, setSpeechEnsureMessage] = useState('')
+  const [speechEnsurePercent, setSpeechEnsurePercent] = useState(0)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [viewMode, setViewMode] = useState<ViewMode>('enrichment')
   const skipSettingsSave = useRef(true)
   const settingsBaseline = useRef<{ enrichment: NewsEnrichmentSettings; translation: NewsSettings['translation'] } | null>(null)
+  const speechEnsureAbort = useRef<AbortController | null>(null)
 
   const refreshStatus = useCallback(async () => {
     const status = await news.getMultimodalStatus()
     setMmStatus(status)
+    const ensure = status.sensevoiceEnsure
+    if (ensure && (ensure.phase === 'preparing' || ensure.phase === 'downloading')) {
+      if (!speechEnsureAbort.current) {
+        setSpeechEnsuring(true)
+        setSpeechEnsureMessage(ensure.message || '正在准备语音识别…')
+        setSpeechEnsurePercent(ensure.percent || 0)
+      }
+    }
   }, [])
 
   const load = useCallback(async () => {
@@ -173,6 +184,42 @@ export default function MultimodalSettingsSection() {
   }, [refreshStatus, toast])
 
   useEffect(() => { void load() }, [load])
+
+  // bootstrap / 他处已启动的 ensure：进入设置页时接上同一 job 轮询，不双开
+  useEffect(() => {
+    const ensure = mmStatus?.sensevoiceEnsure
+    if (!ensure || (ensure.phase !== 'preparing' && ensure.phase !== 'downloading')) {
+      return undefined
+    }
+    // 显式「立即准备」已在轮询，避免双 toast / 双轮询
+    if (speechEnsureAbort.current) return undefined
+    setSpeechEnsuring(true)
+    setSpeechEnsureMessage(ensure.message || '正在准备语音识别…')
+    setSpeechEnsurePercent(ensure.percent || 0)
+    const timer = window.setInterval(() => {
+      if (speechEnsureAbort.current) return
+      void news.getSenseVoiceEnsureJob()
+        .then(({ job }) => {
+          setSpeechEnsureMessage(job.message || '')
+          setSpeechEnsurePercent(job.percent || 0)
+          if (job.phase === 'ready') {
+            setSpeechEnsuring(false)
+            setSpeechEnsureMessage('')
+            setSpeechEnsurePercent(0)
+            toast.showSuccess('语音识别已就绪')
+            void refreshStatus()
+          } else if (job.phase === 'error') {
+            setSpeechEnsuring(false)
+            setSpeechEnsureMessage('')
+            setSpeechEnsurePercent(0)
+            toast.showError(job.error || job.message || '语音识别模型准备失败')
+            void refreshStatus()
+          }
+        })
+        .catch(() => { /* 轮询失败静默，下次重试 */ })
+    }, 1500)
+    return () => window.clearInterval(timer)
+  }, [mmStatus?.sensevoiceEnsure?.phase, refreshStatus, toast])
 
   useDebouncedEffect(() => {
     if (loading || skipSettingsSave.current) {
@@ -219,15 +266,31 @@ export default function MultimodalSettingsSection() {
       toast.showError('请先开启媒体提取并勾选音视频')
       return
     }
+    speechEnsureAbort.current?.abort()
+    const ac = new AbortController()
+    speechEnsureAbort.current = ac
     setSpeechEnsuring(true)
+    setSpeechEnsureMessage('正在准备语音识别…')
+    setSpeechEnsurePercent(0)
     try {
-      await news.ensureSenseVoiceModel()
-      toast.showSuccess('语音识别模型已就绪')
+      await news.ensureSenseVoiceModel({
+        signal: ac.signal,
+        onProgress: (job) => {
+          setSpeechEnsureMessage(job.message || '正在准备语音识别…')
+          setSpeechEnsurePercent(job.percent || 0)
+        },
+      })
+      toast.showSuccess('语音识别已就绪')
       await refreshStatus()
     } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '语音识别模型准备失败')
+      if (!ac.signal.aborted) {
+        toast.showError(e instanceof Error ? e.message : '语音识别模型准备失败')
+      }
     } finally {
+      if (speechEnsureAbort.current === ac) speechEnsureAbort.current = null
       setSpeechEnsuring(false)
+      setSpeechEnsureMessage('')
+      setSpeechEnsurePercent(0)
     }
   }
 
@@ -513,15 +576,23 @@ export default function MultimodalSettingsSection() {
               meta={
                 !runtime?.sensevoice
                   ? '转写能力暂时不可用，请重启应用后再试'
-                  : runtime.sensevoice.ready
-                    ? runtime.sensevoice.source === 'bundled'
-                      ? '已随应用安装，可直接转写'
-                      : '模型已就绪，可直接转写'
-                    : '开启媒体提取后会自动准备；也可点击立即准备'
+                  : speechEnsuring
+                    ? (speechEnsureMessage || '正在准备语音识别…')
+                    : runtime.sensevoice.ready
+                      ? runtime.sensevoice.source === 'bundled'
+                        ? '已随应用安装，可直接转写'
+                        : '模型已就绪，可直接转写'
+                      : '开启媒体提取后会自动准备；也可点击立即准备'
               }
               trailing={
                 !runtime?.sensevoice ? (
                   <span className={mergeClasses(s.statusBadge, s.statusWarn)}>暂不可用</span>
+                ) : speechEnsuring ? (
+                  <span className={mergeClasses(s.statusBadge)}>
+                    {speechEnsurePercent > 0
+                      ? `准备中 ${speechEnsurePercent}%`
+                      : '准备中…'}
+                  </span>
                 ) : !runtime.sensevoice.ready ? (
                   <OpptrixButton
                     variant="secondary"
@@ -529,7 +600,7 @@ export default function MultimodalSettingsSection() {
                     disabled={speechEnsuring}
                     onClick={() => { void handleEnsureSpeech() }}
                   >
-                    {speechEnsuring ? '准备中…' : '立即准备'}
+                    立即准备
                   </OpptrixButton>
                 ) : (
                   <span className={mergeClasses(s.statusBadge, s.statusReady)}>已就绪</span>

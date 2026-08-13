@@ -112,4 +112,288 @@ test('FTS indexes and searches session content', async () => {
 
   store.close()
 })
+
+test('ensureIndexes pages session/news into FTS without holding full article arrays', async () => {
+  // 独立临时库，避免本 suite 前序 close()/FTS 手工灌入干扰 INDEX_FLAG 与检索。
+  const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-ensure-idx-'))
+  const prevDataDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = isolatedDir
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+    const { SearchHub } = await import('../packages/search-hub/dist/hub.js')
+    const { getEnrichmentStore } = await import('../packages/article-enrichment/dist/index.js')
+
+    // 若前序用例关过 singleton，这里重新打开到 isolatedDir
+    try {
+      getUserDataStore().close()
+    } catch {
+      /* already closed */
+    }
+
+    const store = getUserDataStore()
+    const sessions = new SessionStore()
+    const sess = sessions.create('ensure index session')
+    const record = sessions.get(sess.id)
+    assert.ok(record)
+    record.turns.push({
+      role: 'user',
+      content: 'talk about TOKENBYD session body',
+      at: new Date().toISOString(),
+    })
+    sessions.save(record)
+
+    const articleId = 'news-fts-1'
+    store.setDocument('news_article', articleId, {
+      id: articleId,
+      subscription_id: 'sub-1',
+      title: 'TOKENNEWTITLE weekly',
+      link: 'https://example.com/a1',
+      pub_date: new Date().toISOString(),
+      summary: 'summary mentions TOKENSUMMARY',
+      content_html: '<p>body keyword <strong>TOKENLFP</strong> production</p>',
+      source_title: 'TestSource',
+    })
+    getEnrichmentStore().save({
+      article_id: articleId,
+      status: 'ready',
+      segments: [
+        {
+          id: 'seg-1',
+          kind: 'html_text',
+          text: 'enrichment TOKENSOLIDSTATE materials',
+          anchor: { insert: 'append_block' },
+          created_at: new Date().toISOString(),
+        },
+      ],
+      updated_at: new Date().toISOString(),
+      version: 1,
+    })
+
+    const stubHub = {
+      marketData: { searchStocks: () => [] },
+    }
+    const hub = new SearchHub(/** @type {any} */ (stubHub), sessions)
+    hub.ensureIndexes()
+
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+
+    const result = hub.search('TOKENBYD', 10)
+    assert.ok(result.sessions.some(h => h.id === sess.id))
+
+    assert.ok(hub.search('TOKENNEWTITLE', 10).news.some(h => h.id === articleId))
+    assert.ok(hub.search('TOKENLFP', 10).news.some(h => h.id === articleId))
+    assert.ok(hub.search('TOKENSOLIDSTATE', 10).news.some(h => h.id === articleId))
+
+    hub.ensureIndexes()
+    assert.ok(hub.search('TOKENLFP', 5).news.some(h => h.id === articleId))
+
+    store.close()
+  } finally {
+    process.env.OPPTRIX_DATA_DIR = prevDataDir
+    await rm(isolatedDir, { recursive: true, force: true })
+  }
+})
+
+test('search hydrates session meta by hit id without listAll', async () => {
+  const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-search-meta-'))
+  const prevDataDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = isolatedDir
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+    const { SearchHub } = await import('../packages/search-hub/dist/hub.js')
+
+    try {
+      getUserDataStore().close()
+    } catch {
+      /* already closed */
+    }
+
+    const sessions = new SessionStore()
+    let listAllCalls = 0
+    const originalListAll = sessions.listAll.bind(sessions)
+    sessions.listAll = () => {
+      listAllCalls += 1
+      return originalListAll()
+    }
+
+    // 多会话噪音：确保 listAll 全表扫描会很「贵」，但 search 不应调用它。
+    for (let i = 0; i < 12; i++) {
+      sessions.create(`filler-${i}`)
+    }
+
+    const active = sessions.create('METAKEYWORD 活跃会话')
+    const activeRec = sessions.get(active.id)
+    assert.ok(activeRec)
+    activeRec.turns.push({
+      role: 'user',
+      content: 'body mentions METAKEYWORD for active hit',
+      at: new Date().toISOString(),
+    })
+    sessions.save(activeRec)
+
+    const archived = sessions.create('METAKEYWORD 归档会话')
+    const archivedRec = sessions.get(archived.id)
+    assert.ok(archivedRec)
+    archivedRec.turns.push({
+      role: 'user',
+      content: 'body mentions METAKEYWORD for archived hit',
+      at: new Date().toISOString(),
+    })
+    sessions.save(archivedRec)
+    const archivedAfter = sessions.archive(archived.id, 'research')
+    assert.ok(archivedAfter)
+
+    const stubHub = {
+      marketData: { searchStocks: () => [] },
+    }
+    const hub = new SearchHub(/** @type {any} */ (stubHub), sessions)
+    hub.ensureIndexes()
+
+    listAllCalls = 0
+    const empty = hub.search('ZZZNOHITTOKENXYZ', 10)
+    assert.equal(empty.sessions.length, 0)
+    assert.equal(listAllCalls, 0, 'FTS miss must not call listAll')
+
+    listAllCalls = 0
+    const result = hub.search('METAKEYWORD', 20)
+    assert.equal(listAllCalls, 0, 'search must not call listAll to hydrate meta')
+
+    const activeHit = result.sessions.find(h => h.id === active.id)
+    assert.ok(activeHit)
+    assert.equal(activeHit.title, 'METAKEYWORD 活跃会话')
+    assert.equal(activeHit.archived, false)
+    assert.equal(activeHit.archiveFolderId, null)
+    assert.ok(activeHit.updatedAt)
+
+    const archivedHit = result.sessions.find(h => h.id === archived.id)
+    assert.ok(archivedHit)
+    assert.equal(archivedHit.title, 'METAKEYWORD 归档会话')
+    assert.equal(archivedHit.archived, true)
+    assert.equal(archivedHit.archiveFolderId, 'research')
+    assert.ok(archivedHit.updatedAt)
+
+    getUserDataStore().close()
+  } finally {
+    process.env.OPPTRIX_DATA_DIR = prevDataDir
+    await rm(isolatedDir, { recursive: true, force: true })
+  }
+})
+
+test('after INDEX_FLAG, incremental session/news upsert+delete are searchable without rebuild', async () => {
+  const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-search-incr-'))
+  const prevDataDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = isolatedDir
+  try {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore, setSessionPersistHooks } = await import('../packages/agent/dist/sessions.js')
+    const { SearchHub } = await import('../packages/search-hub/dist/hub.js')
+    const {
+      syncSessionSearchIndex,
+      removeSessionSearchIndex,
+      syncNewsSearchIndex,
+      removeNewsSearchIndex,
+      rebuildSessionSearchIndex,
+      rebuildNewsSearchIndex,
+    } = await import('../packages/search-hub/dist/index.js')
+    const {
+      NewsFeedStore,
+      setNewsArticlePersistHook,
+      setNewsArticleDeleteHook,
+    } = await import('../packages/news-feed/dist/index.js')
+
+    try {
+      getUserDataStore().close()
+    } catch {
+      /* already closed */
+    }
+
+    setSessionPersistHooks({
+      onPersist: syncSessionSearchIndex,
+      onDelete: removeSessionSearchIndex,
+    })
+    setNewsArticlePersistHook(article => syncNewsSearchIndex(article))
+    setNewsArticleDeleteHook(removeNewsSearchIndex)
+
+    const store = getUserDataStore()
+    const sessions = new SessionStore()
+    const stubHub = { marketData: { searchStocks: () => [] } }
+    const hub = new SearchHub(/** @type {any} */ (stubHub), sessions)
+
+    // 全量路径：空库建 INDEX_FLAG
+    hub.ensureIndexes()
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+
+    // 增量新增会话（不清 flag）
+    const sess = sessions.create('INCRSESS 增量会话')
+    const rec = sessions.get(sess.id)
+    assert.ok(rec)
+    rec.turns.push({
+      role: 'user',
+      content: 'body keyword INCRSESSBODY for incremental hit',
+      at: new Date().toISOString(),
+    })
+    sessions.save(rec)
+
+    assert.equal(store.getMetaFlag('search_index_v1'), true, 'incremental must not clear INDEX_FLAG')
+    assert.ok(hub.search('INCRSESSBODY', 10).sessions.some(h => h.id === sess.id))
+
+    // 增量新增资讯（经 NewsFeedStore persist hook）
+    const feed = new NewsFeedStore()
+    feed.upsertSubscription({
+      id: 'sub-incr',
+      title: 'incr',
+      url: 'https://example.com/feed',
+      resolved_url: 'https://example.com/feed',
+      kind: 'rss',
+      enabled: true,
+    })
+    const articleId = 'news-incr-1'
+    feed.upsertArticlesForSubscription('sub-incr', [{
+      id: articleId,
+      subscription_id: 'sub-incr',
+      title: 'INCRNEWSTITLE weekly',
+      link: 'https://example.com/incr',
+      pub_date: new Date().toISOString(),
+      summary: 'summary INCRNEWSBODY',
+      content_html: '<p>INCRNEWSBODY</p>',
+      source_title: 'IncrSource',
+    }])
+
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+    assert.ok(hub.search('INCRNEWSTITLE', 10).news.some(h => h.id === articleId))
+    assert.ok(hub.search('INCRNEWSBODY', 10).news.some(h => h.id === articleId))
+
+    // 删除后不再命中
+    sessions.delete(sess.id)
+    assert.equal(hub.search('INCRSESSBODY', 10).sessions.some(h => h.id === sess.id), false)
+
+    feed.deleteSubscription('sub-incr')
+    assert.equal(hub.search('INCRNEWSTITLE', 10).news.some(h => h.id === articleId), false)
+
+    // 全量 rebuild 路径仍可用（显式 rebuild，不清 INDEX_FLAG 语义）
+    const sess2 = sessions.create('REBUILDTOKEN session')
+    const rec2 = sessions.get(sess2.id)
+    assert.ok(rec2)
+    rec2.turns.push({
+      role: 'user',
+      content: 'REBUILDTOKEN body',
+      at: new Date().toISOString(),
+    })
+    sessions.save(rec2)
+    rebuildSessionSearchIndex()
+    rebuildNewsSearchIndex()
+    assert.ok(hub.search('REBUILDTOKEN', 10).sessions.some(h => h.id === sess2.id))
+    assert.equal(store.getMetaFlag('search_index_v1'), true)
+
+    setSessionPersistHooks({})
+    setNewsArticlePersistHook(null)
+    setNewsArticleDeleteHook(null)
+    store.close()
+  } finally {
+    process.env.OPPTRIX_DATA_DIR = prevDataDir
+    await rm(isolatedDir, { recursive: true, force: true })
+  }
+})
 })

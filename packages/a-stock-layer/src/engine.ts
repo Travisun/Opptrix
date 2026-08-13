@@ -437,12 +437,15 @@ export class MarketDataEngine {
     }
     const want = Math.max(1, count)
     const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    // 读缓存保留（兼容旧盘）；写仅 watchlist，与 queryScoped 对齐，避免长 K 键空间爆炸
+    const writeCache = this.isWatchlistTarget('CN', assetClass, [code])
     return this.queryPlans.execute<StockKline>(
       this.queryPlans.getPlan('cn_equity_stock_kline_daily'),
       {
         method: 'kline',
         cacheType: defaultCacheType(Capability.STOCK_KLINE, 'stock_kline'),
         useCache: true,
+        writeCache,
         args: [code, period, '', '', want, market, startOffset],
         assetClass,
       },
@@ -476,12 +479,14 @@ export class MarketDataEngine {
       return this.fetchCnIndexMinuteFromTencent(code, period, count)
     }
     const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const writeCache = this.isWatchlistTarget('CN', assetClass, [code])
     const viaPlan = await this.queryPlans.execute<StockKline>(
       this.queryPlans.getPlan('cn_equity_stock_kline_minute'),
       {
         method: 'kline',
         cacheType: defaultCacheType(Capability.STOCK_KLINE, 'stock_kline'),
         useCache: true,
+        writeCache,
         args: [code, period, '', '', count, market, startOffset],
         assetClass,
       },
@@ -527,12 +532,14 @@ export class MarketDataEngine {
     period = 'daily',
   ): Promise<QueryResult<IndexKline[]>> {
     const want = Math.max(1, count)
+    const writeCache = this.isWatchlistTarget('CN', 'INDEX', [code])
     return this.queryPlans.execute<IndexKline>(
       this.queryPlans.getPlan('cn_index_index_kline'),
       {
         method: 'indexKline',
         cacheType: defaultCacheType(Capability.INDEX_KLINE, 'index_kline'),
         useCache: true,
+        writeCache,
         args: [code, period, '', '', want],
         assetClass: 'INDEX',
       },

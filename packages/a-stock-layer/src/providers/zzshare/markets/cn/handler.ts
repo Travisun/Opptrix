@@ -3,6 +3,7 @@ import type {
 } from '../../../../core/schema.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
 import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
+import { createNameCache } from '../../../../utils/lru-map.js'
 import { isCnEtfCode, inferCnAssetClass } from '../../../../core/instrument.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { ZzshareClient } from '../../api/client.js'
@@ -150,8 +151,9 @@ function resampleKlines(klines: StockKline[], mode: 'weekly' | 'monthly'): Stock
 /** 自在量化 Zzshare — A 股行情、涨停复盘、龙虎榜、情绪 */
 
 export class ZzshareCnHandler extends MarketHandlerShell {
-  private nameCache = new Map<string, string>()
+  private nameCache = createNameCache()
   private clientInstance: ZzshareClient | null = null
+  /** 按交易日单槽：换日即整表替换，不做多日堆积 */
   private dailySnapshotCache: { tradeDate: string; quotes: Map<string, StockRealtime> } | null = null
   /** 防止 realtime ↔ indexRealtime 等路径意外互相调用导致栈溢出 */
   private readonly inflightQuotes = new Set<string>()

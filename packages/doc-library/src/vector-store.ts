@@ -1,8 +1,12 @@
 /**
  * LanceDB 向量索引：chunk_id / document_id / vector(384) / text。
  * 未可用时所有方法安全降级（空结果 / no-op）。
+ *
+ * 写路径必须串行 + 校验向量 + 定期 optimize；search 读优先插队；
+ * 损坏库在 ensure 时安全重建并限速回填，避免 delete+add 版本爆炸导致原生 SIGTRAP。
  */
 import fs from 'node:fs'
+import path from 'node:path'
 import { lanceDbDir, EMBEDDING_DIM } from './paths.js'
 
 export interface VectorChunkRow {
@@ -47,6 +51,7 @@ type LanceTable = {
       toArray: () => Promise<Record<string, unknown>[]>
     }
   }
+  optimize?: (options?: { cleanupOlderThan?: Date; deleteUnverified?: boolean }) => Promise<unknown>
   mergeInsert?: (on: string) => {
     whenMatchedUpdateAll: () => {
       whenNotMatchedInsertAll: () => {
@@ -57,33 +62,387 @@ type LanceTable = {
 }
 
 const TABLE_NAME = 'doc_chunks'
+/**
+ * `_versions` 文件数超过此阈值视为版本爆炸，触发安全重建。
+ * 运行时可用 `OPPTRIX_LANCE_PATHOLOGY_MAX_VERSIONS` 覆盖（默认仍为 500）。
+ */
+export const LANCE_VERSIONS_PATHOLOGY_THRESHOLD = 500
+/** 软顶：超过则在 retention / 写路径触发更积极的 optimize（默认 64） */
+export const DEFAULT_LANCE_MAX_VERSIONS = 64
+/** 成功写次数达到此值后触发 optimize（另有 debounce）；默认 4，更积极收敛碎片 */
+export const DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES = 4
+/** cleanupOlderThan 相对「现在」的偏移；默认 0 = 立刻可回收已提交旧版本 */
+export const DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS = 0
+
+const OPTIMIZE_DEBOUNCE_MS = 3_000
+/** manifest 版本号超过此值（或接近 u64 溢出包装）视为损坏 */
+const MANIFEST_VERSION_SUSPECT = 1_000_000_000
+
+const ENV_LANCE_MAX_VERSIONS = 'OPPTRIX_LANCE_MAX_VERSIONS'
+const ENV_LANCE_PATHOLOGY_MAX_VERSIONS = 'OPPTRIX_LANCE_PATHOLOGY_MAX_VERSIONS'
+const ENV_LANCE_OPTIMIZE_EVERY_N = 'OPPTRIX_LANCE_OPTIMIZE_EVERY_N_WRITES'
+const ENV_LANCE_CLEANUP_OLDER_THAN_MS = 'OPPTRIX_LANCE_CLEANUP_OLDER_THAN_MS'
+
+function asNonNegInt(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw)
+  }
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n)
+  }
+  return null
+}
+
+/** 软顶版本数；`0` 关闭 retention 主动 optimize。opts 优先于 env。 */
+export function resolveLanceMaxVersions(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts >= 0 && Number.isFinite(opts) ? Math.floor(opts) : DEFAULT_LANCE_MAX_VERSIONS
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_MAX_VERSIONS])
+  if (fromEnv != null) return fromEnv
+  return DEFAULT_LANCE_MAX_VERSIONS
+}
+
+/** 病理重建硬顶；须 ≥ 软顶。opts 优先于 env。 */
+export function resolveLancePathologyMaxVersions(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts > 0 && Number.isFinite(opts)
+      ? Math.floor(opts)
+      : LANCE_VERSIONS_PATHOLOGY_THRESHOLD
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_PATHOLOGY_MAX_VERSIONS])
+  if (fromEnv != null && fromEnv > 0) return fromEnv
+  return LANCE_VERSIONS_PATHOLOGY_THRESHOLD
+}
+
+/** 每 N 次成功写触发 optimize；至少为 1。 */
+export function resolveLanceOptimizeEveryNWrites(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts >= 1 && Number.isFinite(opts)
+      ? Math.floor(opts)
+      : DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_OPTIMIZE_EVERY_N])
+  if (fromEnv != null && fromEnv >= 1) return fromEnv
+  return DEFAULT_LANCE_OPTIMIZE_EVERY_N_WRITES
+}
+
+/** cleanupOlderThan 偏移 ms；`0` = 立刻回收已提交旧版本。 */
+export function resolveLanceCleanupOlderThanMs(
+  opts?: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (opts !== undefined) {
+    return opts >= 0 && Number.isFinite(opts)
+      ? Math.floor(opts)
+      : DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS
+  }
+  const fromEnv = asNonNegInt(env[ENV_LANCE_CLEANUP_OLDER_THAN_MS])
+  if (fromEnv != null) return fromEnv
+  return DEFAULT_LANCE_CLEANUP_OLDER_THAN_MS
+}
 
 function escapeSqlString(value: string): string {
   return value.replace(/'/g, "''")
 }
+
+/** 校验 embedding 向量：长度=EMBEDDING_DIM 且全部有限数 */
+export function isValidEmbeddingVector(vector: unknown): vector is number[] {
+  if (!Array.isArray(vector) || vector.length !== EMBEDDING_DIM) return false
+  for (const v of vector) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return false
+  }
+  return true
+}
+
+/** 过滤不合格行；不记录正文，仅计数量 */
+export function filterValidUpsertRows(rows: VectorChunkRow[]): {
+  valid: VectorChunkRow[]
+  rejected: number
+} {
+  const valid: VectorChunkRow[] = []
+  let rejected = 0
+  for (const row of rows) {
+    if (!row?.chunk_id || !isValidEmbeddingVector(row.vector)) {
+      rejected++
+      continue
+    }
+    valid.push(row)
+  }
+  return { valid, rejected }
+}
+
+/** `~/.opptrix/lancedb/doc_chunks/doc_chunks.lance` */
+export function lanceTableDatasetDir(lanceRoot: string): string {
+  return path.join(lanceRoot, `${TABLE_NAME}.lance`)
+}
+
+export interface LancePathologyResult {
+  pathological: boolean
+  reason: string | null
+  versionsCount: number
+}
+
+export type LanceVersionMaintenanceResult = {
+  ran: boolean
+  optimized: boolean
+  versionsBefore: number
+  versionsAfter: number
+  maxVersions: number
+}
+
+/**
+ * 检测 Lance dataset 目录是否版本爆炸 / manifest 异常。
+ * 不打开原生连接；供 ensureTable 与单测使用。
+ * `pathologyMaxVersions` / env 可覆盖硬顶；失败不抛。
+ */
+export function detectLanceDatasetPathology(
+  datasetDir: string,
+  opts?: { pathologyMaxVersions?: number; env?: NodeJS.ProcessEnv },
+): LancePathologyResult {
+  const versionsDir = path.join(datasetDir, '_versions')
+  if (!fs.existsSync(datasetDir)) {
+    return { pathological: false, reason: null, versionsCount: 0 }
+  }
+  const pathologyMax = resolveLancePathologyMaxVersions(
+    opts?.pathologyMaxVersions,
+    opts?.env ?? process.env,
+  )
+  let versionsCount = 0
+  try {
+    if (fs.existsSync(versionsDir)) {
+      const entries = fs.readdirSync(versionsDir)
+      versionsCount = entries.length
+      for (const name of entries) {
+        const m = /^(\d+)\.manifest$/i.exec(name)
+        if (!m) continue
+        const ver = Number(m[1])
+        // u64 wrap / 异常巨大版本号（本机曾出现 18446744073709551611）
+        if (!Number.isSafeInteger(ver) || ver > MANIFEST_VERSION_SUSPECT) {
+          return {
+            pathological: true,
+            reason: 'suspect_manifest_version',
+            versionsCount,
+          }
+        }
+      }
+      if (versionsCount > pathologyMax) {
+        return {
+          pathological: true,
+          reason: 'versions_count_exceeded',
+          versionsCount,
+        }
+      }
+    }
+  } catch {
+    return { pathological: true, reason: 'versions_readdir_failed', versionsCount }
+  }
+  return { pathological: false, reason: null, versionsCount }
+}
+
+/** 仅统计 `_versions` 文件数；目录缺失或不可读返回 0。 */
+export function countLanceVersions(datasetDir: string): number {
+  try {
+    const versionsDir = path.join(datasetDir, '_versions')
+    if (!fs.existsSync(versionsDir)) return 0
+    return fs.readdirSync(versionsDir).length
+  } catch {
+    return 0
+  }
+}
+
+function logVectorStore(msg: string, extra?: Record<string, number | string | boolean>): void {
+  const suffix = extra
+    ? ` ${Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(' ')}`
+    : ''
+  console.warn(`[doc-library/lance] ${msg}${suffix}`)
+}
+
+export type LanceScheduleKind = 'read' | 'write'
+
+export interface LanceOpSchedulerOptions {
+  /** 尚未开始的 pending 上限（不含 running）；默认 256 */
+  maxPending?: number
+}
+
+type LanceQueuedOp = {
+  kind: LanceScheduleKind
+  start: () => void
+  reject: (err: Error) => void
+}
+
+/**
+ * Lance 操作调度：全局互斥串行；search（read）可插队到尚未开始的 write 之前，
+ * 避免大量 upsert/optimize 长时间堵住检索。写与 optimize 仍不得并发。
+ * pending 有界：超限丢弃最旧尚未开始的 write（不丢 running）；无 write 可丢时拒绝新任务。
+ */
+export class LanceOpScheduler {
+  private readonly queue: LanceQueuedOp[] = []
+  private running = false
+  private readonly maxPending: number
+
+  constructor(opts?: LanceOpSchedulerOptions) {
+    this.maxPending = opts?.maxPending ?? 256
+  }
+
+  get maxPendingOps(): number {
+    return this.maxPending
+  }
+
+  schedule<T>(kind: LanceScheduleKind, fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (this.queue.length >= this.maxPending) {
+        if (!this.evictOldestPendingWrite()) {
+          reject(new Error(`LanceOpScheduler queue full (maxPending=${this.maxPending})`))
+          return
+        }
+      }
+
+      const item: LanceQueuedOp = {
+        kind,
+        reject,
+        start: () => {
+          Promise.resolve()
+            .then(fn)
+            .then(resolve, reject)
+            .finally(() => {
+              this.running = false
+              this.pump()
+            })
+        },
+      }
+      if (kind === 'read') {
+        const idx = this.queue.findIndex(j => j.kind === 'write')
+        if (idx >= 0) this.queue.splice(idx, 0, item)
+        else this.queue.push(item)
+      } else {
+        this.queue.push(item)
+      }
+      this.pump()
+    })
+  }
+
+  /** 测试：尚未执行的任务种类（不含进行中） */
+  pendingKinds(): LanceScheduleKind[] {
+    return this.queue.map(j => j.kind)
+  }
+
+  /** 丢弃队列中最旧的尚未开始的 write；不触碰 running */
+  private evictOldestPendingWrite(): boolean {
+    const idx = this.queue.findIndex(j => j.kind === 'write')
+    if (idx < 0) return false
+    const [evicted] = this.queue.splice(idx, 1)
+    if (!evicted) return false
+    evicted.reject(new Error('LanceOpScheduler dropped oldest write (queue full)'))
+    return true
+  }
+
+  private pump(): void {
+    if (this.running) return
+    const next = this.queue.shift()
+    if (!next) return
+    this.running = true
+    next.start()
+  }
+}
+
+/** 病理重建成功后限速回填钩子（由 DocLibrary 注入；失败不得抛） */
+export type LanceRebuildBackfillHook = () => void | Promise<void>
+
+let rebuildBackfillHook: LanceRebuildBackfillHook | null = null
+
+export function setLanceRebuildBackfillHook(hook: LanceRebuildBackfillHook | null): void {
+  rebuildBackfillHook = hook
+}
+
+export function getLanceRebuildBackfillHook(): LanceRebuildBackfillHook | null {
+  return rebuildBackfillHook
+}
+
+/** 重建后回填冷却，避免失败写路径反复 rebuild→backfill 风暴 */
+const REBUILD_BACKFILL_COOLDOWN_MS = 60_000
 
 export class LanceVectorStore implements VectorStore {
   private readonly dir: string
   private conn: LanceConnection | null = null
   private table: LanceTable | null = null
   private initFailed = false
+  /** 读优先互斥队列：write 串行；read 可插队未开始的 write */
+  private readonly opScheduler = new LanceOpScheduler()
+  private writesSinceOptimize = 0
+  private optimizeTimer: ReturnType<typeof setTimeout> | null = null
+  private rejectedVectorCount = 0
+  private backfillInflight: Promise<void> | null = null
+  private lastRebuildBackfillAt = 0
 
   constructor(dir = lanceDbDir()) {
     this.dir = dir
   }
 
-  async isAvailable(): Promise<boolean> {
-    if (this.initFailed) return false
-    try {
-      await this.ensureTable()
-      return this.table !== null
-    } catch {
-      this.initFailed = true
-      return false
-    }
+  /** @internal 测试用 */
+  getOpSchedulerForTests(): LanceOpScheduler {
+    return this.opScheduler
   }
 
-  private async connect(): Promise<LanceConnection> {
+  private scheduleWrite<T>(fn: () => Promise<T>): Promise<T> {
+    return this.opScheduler.schedule('write', fn)
+  }
+
+  private scheduleRead<T>(fn: () => Promise<T>): Promise<T> {
+    return this.opScheduler.schedule('read', fn)
+  }
+
+  /** 重建空表成功后异步调度回填；不 await、失败不抛、冷却防循环 */
+  private notifyRebuildBackfill(): void {
+    const hook = rebuildBackfillHook
+    if (!hook) return
+    const now = Date.now()
+    if (this.backfillInflight) return
+    if (now - this.lastRebuildBackfillAt < REBUILD_BACKFILL_COOLDOWN_MS) {
+      logVectorStore('skip rebuild backfill (cooldown)')
+      return
+    }
+    this.lastRebuildBackfillAt = now
+    this.backfillInflight = Promise.resolve()
+      .then(() => hook())
+      .then(() => undefined, err => {
+        logVectorStore('rebuild backfill failed', {
+          err: err instanceof Error ? err.message : 'unknown',
+        })
+      })
+      .finally(() => {
+        this.backfillInflight = null
+      })
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return this.scheduleWrite(async () => {
+      if (this.initFailed) return false
+      try {
+        await this.ensureTableUnlocked()
+        return this.table !== null
+      } catch {
+        this.initFailed = true
+        return false
+      }
+    })
+  }
+
+  private datasetDir(): string {
+    return lanceTableDatasetDir(this.dir)
+  }
+
+  private async connectUnlocked(): Promise<LanceConnection> {
     if (this.conn) return this.conn
     fs.mkdirSync(this.dir, { recursive: true })
     const lancedb = await import('@lancedb/lancedb')
@@ -91,11 +450,69 @@ export class LanceVectorStore implements VectorStore {
     return this.conn
   }
 
-  private async ensureTable(): Promise<LanceTable | null> {
+  private dropNativeHandles(): void {
+    const conn = this.conn
+    this.table = null
+    this.conn = null
+    try {
+      conn?.close?.()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** 删除损坏 dataset 目录后重建空表（不删用户 SQLite 文档库） */
+  private async rebuildEmptyTableUnlocked(reason: string): Promise<LanceTable | null> {
+    logVectorStore('rebuilding pathological lance dataset', { reason })
+    this.dropNativeHandles()
+    const ds = this.datasetDir()
+    try {
+      if (fs.existsSync(ds)) {
+        fs.rmSync(ds, { recursive: true, force: true })
+      }
+    } catch (err) {
+      logVectorStore('failed to remove pathological dataset', {
+        err: err instanceof Error ? err.message : 'unknown',
+      })
+      this.initFailed = true
+      return null
+    }
+    try {
+      const db = await this.connectUnlocked()
+      const placeholder: Record<string, unknown> = {
+        chunk_id: '__init__',
+        document_id: '__init__',
+        text: '',
+        vector: new Array<number>(EMBEDDING_DIM).fill(0),
+      }
+      this.table = await db.createTable(TABLE_NAME, [placeholder], { mode: 'overwrite' })
+      await this.table.delete(`chunk_id = '${escapeSqlString('__init__')}'`)
+      this.initFailed = false
+      this.writesSinceOptimize = 0
+      // 空表已可打开；回填异步限速，失败不影响本路径
+      this.notifyRebuildBackfill()
+      return this.table
+    } catch (err) {
+      logVectorStore('rebuild createTable failed', {
+        err: err instanceof Error ? err.message : 'unknown',
+      })
+      this.initFailed = true
+      this.table = null
+      return null
+    }
+  }
+
+  private async ensureTableUnlocked(): Promise<LanceTable | null> {
     if (this.table) return this.table
     if (this.initFailed) return null
+
+    const pathology = detectLanceDatasetPathology(this.datasetDir())
+    if (pathology.pathological) {
+      return this.rebuildEmptyTableUnlocked(pathology.reason ?? 'pathology')
+    }
+
     try {
-      const db = await this.connect()
+      const db = await this.connectUnlocked()
       const names = await db.tableNames()
       if (names.includes(TABLE_NAME)) {
         this.table = await db.openTable(TABLE_NAME)
@@ -110,78 +527,250 @@ export class LanceVectorStore implements VectorStore {
         await this.table.delete(`chunk_id = '${escapeSqlString('__init__')}'`)
       }
       return this.table
-    } catch {
-      this.initFailed = true
-      this.table = null
-      return null
+    } catch (err) {
+      logVectorStore('ensureTable open failed; attempting rebuild', {
+        err: err instanceof Error ? err.message : 'unknown',
+      })
+      return this.rebuildEmptyTableUnlocked('open_failed')
     }
+  }
+
+  private scheduleOptimizeDebounced(): void {
+    if (this.optimizeTimer) clearTimeout(this.optimizeTimer)
+    this.optimizeTimer = setTimeout(() => {
+      this.optimizeTimer = null
+      void this.scheduleWrite(() => this.optimizeUnlocked())
+    }, OPTIMIZE_DEBOUNCE_MS)
+    if (typeof this.optimizeTimer === 'object' && this.optimizeTimer && 'unref' in this.optimizeTimer) {
+      this.optimizeTimer.unref()
+    }
+  }
+
+  private async optimizeUnlocked(opts?: {
+    cleanupOlderThanMs?: number
+    env?: NodeJS.ProcessEnv
+  }): Promise<void> {
+    const table = this.table
+    if (!table?.optimize) return
+    try {
+      const olderMs = resolveLanceCleanupOlderThanMs(
+        opts?.cleanupOlderThanMs,
+        opts?.env ?? process.env,
+      )
+      // cleanupOlderThan: 默认立刻可回收已提交旧版本（官方 0.33 API）
+      const cleanupOlderThan = new Date(Date.now() - olderMs)
+      await table.optimize({ cleanupOlderThan, deleteUnverified: false })
+      this.writesSinceOptimize = 0
+    } catch (err) {
+      logVectorStore('optimize failed', {
+        err: err instanceof Error ? err.message : 'unknown',
+      })
+    }
+  }
+
+  /**
+   * retention / boot：版本数超过软顶时跑 optimize 收紧碎片窗口。
+   * 失败 swallow；不删可读 dataset（仅 optimize，不做病理重建）。
+   */
+  async runVersionMaintenance(opts?: {
+    maxVersions?: number
+    cleanupOlderThanMs?: number
+    env?: NodeJS.ProcessEnv
+  }): Promise<LanceVersionMaintenanceResult> {
+    const env = opts?.env ?? process.env
+    const maxVersions = resolveLanceMaxVersions(opts?.maxVersions, env)
+    const versionsBefore = countLanceVersions(this.datasetDir())
+    if (maxVersions <= 0 || versionsBefore <= maxVersions) {
+      return {
+        ran: false,
+        optimized: false,
+        versionsBefore,
+        versionsAfter: versionsBefore,
+        maxVersions,
+      }
+    }
+    return this.scheduleWrite(async () => {
+      try {
+        const table = await this.ensureTableUnlocked()
+        if (!table) {
+          return {
+            ran: true,
+            optimized: false,
+            versionsBefore,
+            versionsAfter: countLanceVersions(this.datasetDir()),
+            maxVersions,
+          }
+        }
+        await this.optimizeUnlocked({
+          cleanupOlderThanMs: opts?.cleanupOlderThanMs,
+          env,
+        })
+        const versionsAfter = countLanceVersions(this.datasetDir())
+        logVectorStore('version maintenance optimize', {
+          versionsBefore,
+          versionsAfter,
+          maxVersions,
+        })
+        return {
+          ran: true,
+          optimized: true,
+          versionsBefore,
+          versionsAfter,
+          maxVersions,
+        }
+      } catch (err) {
+        logVectorStore('version maintenance failed', {
+          err: err instanceof Error ? err.message : 'unknown',
+        })
+        return {
+          ran: true,
+          optimized: false,
+          versionsBefore,
+          versionsAfter: countLanceVersions(this.datasetDir()),
+          maxVersions,
+        }
+      }
+    })
   }
 
   async upsert(rows: VectorChunkRow[]): Promise<void> {
     if (!rows.length) return
-    const table = await this.ensureTable()
-    if (!table) return
+    return this.scheduleWrite(async () => {
+      const { valid, rejected } = filterValidUpsertRows(rows)
+      if (rejected > 0) {
+        this.rejectedVectorCount += rejected
+        logVectorStore('rejected invalid embedding vectors', {
+          rejected,
+          totalRejected: this.rejectedVectorCount,
+        })
+      }
+      if (!valid.length) return
 
-    const data = rows.map(r => ({
-      chunk_id: r.chunk_id,
-      document_id: r.document_id,
-      text: r.text.slice(0, 2000),
-      vector: r.vector,
-    }))
+      let table = await this.ensureTableUnlocked()
+      if (!table) return
 
-    // 先删后加，保证幂等（重复入库不炸）
-    const ids = rows.map(r => `'${escapeSqlString(r.chunk_id)}'`).join(', ')
-    try {
-      await table.delete(`chunk_id IN (${ids})`)
-    } catch {
-      /* 表空或谓词无匹配 */
-    }
-    await table.add(data)
+      const data = valid.map(r => ({
+        chunk_id: r.chunk_id,
+        document_id: r.document_id,
+        text: r.text.slice(0, 2000),
+        vector: r.vector,
+      }))
+
+      let wrote = false
+      if (typeof table.mergeInsert === 'function') {
+        try {
+          await table
+            .mergeInsert('chunk_id')
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute(data)
+          wrote = true
+        } catch (err) {
+          logVectorStore('mergeInsert failed; falling back to delete+add', {
+            err: err instanceof Error ? err.message : 'unknown',
+            rows: valid.length,
+          })
+        }
+      }
+
+      if (!wrote) {
+        const ids = valid.map(r => `'${escapeSqlString(r.chunk_id)}'`).join(', ')
+        try {
+          await table.delete(`chunk_id IN (${ids})`)
+        } catch {
+          /* 表空或谓词无匹配 */
+        }
+
+        try {
+          await table.add(data)
+        } catch (err) {
+          logVectorStore('table.add failed; rebuilding', {
+            err: err instanceof Error ? err.message : 'unknown',
+            rows: valid.length,
+          })
+          table = await this.rebuildEmptyTableUnlocked('add_failed')
+          if (!table) return
+          try {
+            await table.add(data)
+          } catch (err2) {
+            logVectorStore('table.add failed after rebuild', {
+              err: err2 instanceof Error ? err2.message : 'unknown',
+            })
+            this.initFailed = true
+            this.table = null
+            return
+          }
+        }
+      }
+
+      this.writesSinceOptimize += 1
+      const everyN = resolveLanceOptimizeEveryNWrites()
+      if (this.writesSinceOptimize >= everyN) {
+        await this.optimizeUnlocked()
+      } else {
+        this.scheduleOptimizeDebounced()
+      }
+      // 写路径软顶：版本数偏高时再挤一次 optimize（失败已 swallow）
+      const softMax = resolveLanceMaxVersions()
+      if (softMax > 0) {
+        const vc = countLanceVersions(this.datasetDir())
+        if (vc > softMax) {
+          await this.optimizeUnlocked()
+        }
+      }
+    })
   }
 
   async deleteByDocument(documentId: string): Promise<void> {
-    const table = await this.ensureTable()
-    if (!table) return
-    try {
-      await table.delete(`document_id = '${escapeSqlString(documentId)}'`)
-    } catch {
-      /* ignore */
-    }
+    return this.scheduleWrite(async () => {
+      const table = await this.ensureTableUnlocked()
+      if (!table) return
+      try {
+        await table.delete(`document_id = '${escapeSqlString(documentId)}'`)
+        this.writesSinceOptimize += 1
+        this.scheduleOptimizeDebounced()
+      } catch {
+        /* ignore */
+      }
+    })
   }
 
   async search(
     vector: number[],
     opts: { documentIds?: string[]; limit?: number },
   ): Promise<VectorSearchHit[]> {
-    const table = await this.ensureTable()
-    if (!table) return []
-    const limit = Math.min(Math.max(opts.limit ?? 8, 1), 20)
+    if (!isValidEmbeddingVector(vector)) return []
+    return this.scheduleRead(async () => {
+      const table = await this.ensureTableUnlocked()
+      if (!table) return []
+      const limit = Math.min(Math.max(opts.limit ?? 8, 1), 20)
 
-    try {
-      let query = table.search(vector).limit(limit)
-      if (opts.documentIds?.length) {
-        const inList = opts.documentIds.map(id => `'${escapeSqlString(id)}'`).join(', ')
-        const rows = await query.where(`document_id IN (${inList})`).toArray()
+      try {
+        const query = table.search(vector).limit(limit)
+        if (opts.documentIds?.length) {
+          const inList = opts.documentIds.map(id => `'${escapeSqlString(id)}'`).join(', ')
+          const rows = await query.where(`document_id IN (${inList})`).toArray()
+          return mapHits(rows)
+        }
+        const rows = await query.toArray()
         return mapHits(rows)
+      } catch {
+        return []
       }
-      const rows = await query.toArray()
-      return mapHits(rows)
-    } catch {
-      return []
-    }
+    })
   }
 
   /** 关闭 Lance 连接，避免 process.exit 时原生析构 SIGABRT */
   async close(): Promise<void> {
-    const conn = this.conn
-    this.table = null
-    this.conn = null
-    this.initFailed = false
-    try {
-      conn?.close?.()
-    } catch {
-      /* ignore teardown races */
-    }
+    return this.scheduleWrite(async () => {
+      if (this.optimizeTimer) {
+        clearTimeout(this.optimizeTimer)
+        this.optimizeTimer = null
+      }
+      this.dropNativeHandles()
+      this.initFailed = false
+      this.writesSinceOptimize = 0
+    })
   }
 }
 
@@ -203,7 +792,8 @@ export class MemoryVectorStore implements VectorStore {
   }
 
   async upsert(rows: VectorChunkRow[]): Promise<void> {
-    for (const row of rows) {
+    const { valid } = filterValidUpsertRows(rows)
+    for (const row of valid) {
       this.rows.set(row.chunk_id, row)
     }
   }
@@ -218,6 +808,7 @@ export class MemoryVectorStore implements VectorStore {
     vector: number[],
     opts: { documentIds?: string[]; limit?: number },
   ): Promise<VectorSearchHit[]> {
+    if (!isValidEmbeddingVector(vector)) return []
     const limit = Math.min(Math.max(opts.limit ?? 8, 1), 20)
     const allow = opts.documentIds ? new Set(opts.documentIds) : null
     const scored: VectorSearchHit[] = []
@@ -260,6 +851,43 @@ let sharedStore: VectorStore | null = null
 export function getVectorStore(): VectorStore {
   if (!sharedStore) sharedStore = new LanceVectorStore()
   return sharedStore
+}
+
+/**
+ * retention / boot 入口：对共享 Lance 向量库做版本软顶维护。
+ * Memory / 非 Lance store → no-op；失败 swallow。
+ */
+export async function runLanceVersionMaintenance(opts?: {
+  maxVersions?: number
+  cleanupOlderThanMs?: number
+  env?: NodeJS.ProcessEnv
+}): Promise<LanceVersionMaintenanceResult> {
+  const env = opts?.env ?? process.env
+  const maxVersions = resolveLanceMaxVersions(opts?.maxVersions, env)
+  const store = getVectorStore()
+  if (!(store instanceof LanceVectorStore)) {
+    return {
+      ran: false,
+      optimized: false,
+      versionsBefore: 0,
+      versionsAfter: 0,
+      maxVersions,
+    }
+  }
+  try {
+    return await store.runVersionMaintenance(opts)
+  } catch (err) {
+    logVectorStore('runLanceVersionMaintenance failed', {
+      err: err instanceof Error ? err.message : 'unknown',
+    })
+    return {
+      ran: true,
+      optimized: false,
+      versionsBefore: 0,
+      versionsAfter: 0,
+      maxVersions,
+    }
+  }
 }
 
 /** 关闭共享向量库（若已打开）；未打开则 no-op */

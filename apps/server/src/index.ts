@@ -4,8 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
-import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError } from '@opptrix/agent-workspace'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
@@ -36,8 +36,8 @@ import { registerNewsRoutes } from './news-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
+import { registerMarketDataPackageRoutes } from './market-data-package-routes.js'
 import { registerDocLibrarySettingsRoutes } from './doc-library-settings-routes.js'
-import { ingestNewsArticleToDocLibrary } from './news-doc-ingest.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import {
@@ -52,14 +52,21 @@ import {
   startNewsFeedScheduler,
   getNewsSettings,
   setNewsArticlePersistHook,
+  setNewsArticleDeleteHook,
   getArticle,
 } from '@opptrix/news-feed'
 import { maybeBootstrapTranslationModel } from '@opptrix/local-inference'
 import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
 import { createJobExecutor, getScheduleService, type ScheduleJobNotificationEvent } from '@opptrix/schedule'
-import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
+import {
+  removeNewsSearchIndex,
+  removeSessionSearchIndex,
+  syncNewsSearchIndex,
+  syncSessionSearchIndex,
+} from '@opptrix/search-hub'
 import { fetchUserAgreementHtml } from './legal-document.js'
+import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -107,8 +114,17 @@ setSessionPersistHooks({
 })
 
 setNewsArticlePersistHook(article => {
+  // 资讯仅写入 user-store FTS（统一搜索 + Agent search_library）；不再双写 doc-library
   syncNewsSearchIndex(article, getEnrichmentStore().get(article.id))
-  ingestNewsArticleToDocLibrary(article)
+})
+setNewsArticleDeleteHook(articleId => {
+  removeNewsSearchIndex(articleId)
+  // retention / 退订 / 去重删文时级联清理 enrichment
+  try {
+    getEnrichmentStore().delete(articleId)
+  } catch {
+    /* best-effort */
+  }
 })
 
 setEnrichmentPersistHook(doc => {
@@ -1627,6 +1643,7 @@ async function bootstrap() {
   registerSandboxSettingsRoutes(app)
   registerScheduleRoutes(app, scheduleService)
   registerPythonSettingsRoutes(app)
+  registerMarketDataPackageRoutes(app)
   await registerDocLibrarySettingsRoutes(app)
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
@@ -1637,21 +1654,34 @@ async function bootstrap() {
   await registerSpeechRoutes(app)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
-  // e5 就绪时回填未嵌入文档（无图 Hybrid RAG）
-  void import('@opptrix/doc-library').then(async (mod) => {
-    try {
-      const embedding = mod.getEmbeddingService()
-      const ready = embedding.isReady() || await embedding.tryEnableDefaultBackend()
-      if (!ready) return
-      const svc = mod.getDocLibraryService()
-      svc.setEmbeddingService(embedding)
-      await svc.embedPendingDocuments()
-    } catch {
-      /* background */
-    }
-  }).catch(() => {})
+  startRetentionMaintenance({
+    hub,
+    listKnownSessionIds: () => agent.listAllSessions().map(s => s.id),
+    log: {
+      info: (obj, msg) => app.log.info(obj, msg),
+      warn: (obj, msg) => app.log.warn(obj, msg),
+    },
+  })
+  // 语义模型按需加载：boot 不 tryEnable / 不 embedPending；首次检索或入库 embed 时再加载并限速回填
   scheduleService.start()
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
+  // 后台清理已删会话遗留的 chat-attachments / session-state 目录（best-effort，不阻塞启动）
+  setImmediate(() => {
+    try {
+      const known = agent.listAllSessions().map(s => s.id)
+      const removedAttachments = pruneOrphanChatAttachments(known)
+      if (removedAttachments > 0) {
+        console.log(`  Pruned ${removedAttachments} orphan chat-attachment session dir(s)`)
+      }
+      const removedState = pruneOrphanSessionState(known)
+      if (removedState > 0) {
+        console.log(`  Pruned ${removedState} orphan session-state dir(s)`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[boot] prune orphan chat-attachments / session-state failed: ${msg}`)
+    }
+  })
   serveUi = shouldServeUi()
   if (serveUi) {
     serveUi = await registerStaticUi(app)
@@ -1672,12 +1702,12 @@ async function bootstrap() {
     console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
   }
 
-  // 桌面/有内置资源时后台启用语义检索并尽量准备 L1/L2（失败不崩）
+  // 桌面/有内置资源时后台探测磁盘 runtime（不载入 E5）；OCR 尽量就绪（失败不崩）
   void import('@opptrix/doc-library')
     .then(async (mod) => {
       const r = await mod.ensureBundledRagRuntime()
       console.log(
-        `  RAG runtime: embedding=${r.embedding ? 'ready' : 'skip'} layout=${r.layout ? 'ready' : 'skip'} deep=${r.deep ? 'ready' : 'skip'}`,
+        `  RAG runtime: embedding=${r.embedding ? 'installed' : 'skip'} layout=${r.layout ? 'ready' : 'skip'} deep=${r.deep ? 'ready' : 'skip'}`,
       )
     })
     .catch(() => {
@@ -1711,6 +1741,7 @@ async function shutdown(signal: string) {
   try {
     await browserSessionManager.closeAll()
     scheduleService.stop()
+    stopRetentionMaintenance()
     await app.close()
     // 原生模块（lancedb / onnx / duckdb）须在 process.exit 前显式关闭，否则 macOS 上
     // __cxa_finalize 可能 SIGABRT，表现为「Opptrix 意外退出」。
@@ -1718,8 +1749,9 @@ async function shutdown(signal: string) {
       const docLib = await import('@opptrix/doc-library')
       await docLib.closeDocLibraryService()
       await docLib.closeEmbeddingService()
+      await docLib.closeOcrService()
     } catch (err) {
-      app.log.warn({ err }, 'doc-library / embedding shutdown failed')
+      app.log.warn({ err }, 'doc-library / embedding / OCR shutdown failed')
     }
     try {
       await closeMarketDuckRuntime()

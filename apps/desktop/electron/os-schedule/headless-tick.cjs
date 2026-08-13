@@ -1,10 +1,13 @@
 /**
- * Headless OS schedule tick — no Electron GUI / no Dock flash.
+ * Headless OS schedule tick — HTTP tick only (legacy OS runner compatibility).
  *
- * Invoked by the OS tick runner when HTTP tick fails:
+ * Invoked by leftover OS tick runners if any still exist after upgrade:
  *   ELECTRON_RUN_AS_NODE=1 "$EXEC" "$HEADLESS_TICK"
  *
- * Flow: POST tick → if fail, spawn sidecar → health → POST tick → stop sidecar → exit.
+ * Product model: tray + in-sidecar ScheduleService (20s) is the only main path.
+ * Application not running ⇒ schedule must not run — do NOT spawn a sidecar here.
+ * Fail with exit≠0 when POST /api/schedule/tick fails.
+ *
  * Do not require('electron').app.
  */
 const path = require('node:path')
@@ -14,15 +17,6 @@ const {
   readOsScheduleEndpoint,
   sanitizeEndpointHost,
 } = require('./tick-runner.cjs')
-const {
-  resolveResourcesPathFromExec,
-  resolvePackagedRuntimeStage,
-  serverEntryPath,
-  buildSidecarEnv,
-  spawnSidecarProcess,
-  waitForHealth,
-  stopChildAndWait,
-} = require('./sidecar-launch.cjs')
 
 /**
  * @param {string} msg
@@ -55,13 +49,7 @@ function readEndpointRecord(file) {
     const port = typeof raw.port === 'string' || typeof raw.port === 'number'
       ? String(raw.port)
       : '8711'
-    const execPath = typeof raw.execPath === 'string' && raw.execPath.trim()
-      ? raw.execPath.trim()
-      : process.execPath
-    const headlessTick = typeof raw.headlessTick === 'string' ? raw.headlessTick.trim() : ''
-    const runtimeStage = typeof raw.runtimeStage === 'string' ? raw.runtimeStage.trim() : ''
-    const resourcesPath = typeof raw.resourcesPath === 'string' ? raw.resourcesPath.trim() : ''
-    return { host, port, execPath, headlessTick, runtimeStage, resourcesPath }
+    return { host, port }
   } catch {
     return null
   }
@@ -91,41 +79,6 @@ async function postScheduleTick(host, port, timeoutMs = 3000) {
   }
 }
 
-/**
- * Monorepo root when running unpackaged (headless-tick lives under electron/os-schedule).
- */
-function resolveDevRepoRoot() {
-  return path.resolve(__dirname, '../../../..')
-}
-
-/**
- * @param {{
- *   host: string
- *   port: string
- *   execPath: string
- *   runtimeStage?: string
- *   resourcesPath?: string
- * }} ep
- */
-function resolveSidecarRoot(ep) {
-  if (ep.runtimeStage && fs.existsSync(ep.runtimeStage)) {
-    return { root: ep.runtimeStage, isDev: false, resourcesPath: ep.resourcesPath || resolveResourcesPathFromExec(ep.execPath) }
-  }
-  const packaged = resolvePackagedRuntimeStage(ep.execPath, ep.resourcesPath || undefined)
-  if (packaged && fs.existsSync(packaged)) {
-    return {
-      root: packaged,
-      isDev: false,
-      resourcesPath: ep.resourcesPath || resolveResourcesPathFromExec(ep.execPath),
-    }
-  }
-  const devRoot = resolveDevRepoRoot()
-  if (fs.existsSync(serverEntryPath(devRoot))) {
-    return { root: devRoot, isDev: true, resourcesPath: null }
-  }
-  return null
-}
-
 async function run() {
   const endpointFile = resolveEndpointFile()
   if (!endpointFile) {
@@ -149,65 +102,9 @@ async function run() {
     return
   }
 
-  const resolved = resolveSidecarRoot({
-    host,
-    port,
-    execPath: ep.execPath || process.execPath,
-    runtimeStage: ep.runtimeStage,
-    resourcesPath: ep.resourcesPath,
-  })
-  if (!resolved) {
-    logErr('cannot resolve runtime-stage / server entry for sidecar')
-    process.exitCode = 1
-    return
-  }
-
-  const entry = serverEntryPath(resolved.root)
-  if (!fs.existsSync(entry)) {
-    logErr(`server entry not found: ${entry}`)
-    process.exitCode = 1
-    return
-  }
-
-  const execPath = ep.execPath || process.execPath
-  const env = buildSidecarEnv({
-    root: resolved.root,
-    host,
-    port,
-    resourcesPath: resolved.resourcesPath,
-    isDev: resolved.isDev,
-    version: process.env.OPPTRIX_APP_VERSION,
-  })
-
-  logErr(`spawning sidecar on ${host}:${port} (cwd=${resolved.root})`)
-  const child = spawnSidecarProcess({
-    execPath,
-    entry,
-    cwd: resolved.root,
-    env,
-  })
-
-  child.stdout?.on('data', (chunk) => {
-    process.stderr.write(`[sidecar] ${chunk}`)
-  })
-  child.stderr?.on('data', (chunk) => {
-    process.stderr.write(`[sidecar] ${chunk}`)
-  })
-
-  let ok = false
-  try {
-    await waitForHealth(host, port, 45_000)
-    ok = await postScheduleTick(host, port, 10_000)
-    if (!ok) {
-      logErr('POST /api/schedule/tick failed after sidecar ready')
-    }
-  } catch (err) {
-    logErr(err instanceof Error ? err.message : String(err))
-  } finally {
-    await stopChildAndWait(child, 4000)
-  }
-
-  process.exitCode = ok ? 0 : 1
+  // Tray model: no app / no sidecar ⇒ do not cold-start API just to run jobs.
+  logErr(`POST /api/schedule/tick failed (${host}:${port}); not spawning sidecar`)
+  process.exitCode = 1
 }
 
 run().catch((err) => {

@@ -17,11 +17,19 @@ import type {
 import { DocLibraryRepository } from './repository.js'
 import { searchFtsChunks } from './fts.js'
 import { newDocumentId, sha256Buffer } from './paths.js'
-import { EmbeddingService, getEmbeddingService } from './embedding.js'
+import { EmbeddingService, getEmbeddingService, resolveEmbedBatchSize } from './embedding.js'
 import { getVectorStore, type VectorStore } from './vector-store.js'
 import { searchHybridChunks } from './hybrid-search.js'
 import { extractTextL0, TEXT_L0_ENGINE_VERSION } from './engines/text-l0.js'
 import { isPlainTextDocument } from './document-kind.js'
+import { shouldEmbedToVector } from './embed-policy.js'
+import {
+  pruneOrphanBlobsAndMarkdown as pruneOrphanBlobsAndMarkdownImpl,
+  type PruneOrphanBlobsOptions,
+  type PruneOrphanBlobsResult,
+} from './orphan-gc.js'
+
+export { shouldEmbedToVector } from './embed-policy.js'
 
 export type LegacyExtractWriter = (
   sessionId: string,
@@ -48,7 +56,35 @@ export interface ParseLifecycleHooks {
 }
 
 const MIN_USEFUL_CHARS = 24
-const EMBED_BATCH_SIZE = 8
+
+export type EmbedPendingOptions = {
+  /** 本轮最多处理的文档数 */
+  limit?: number
+  /** 文档之间的间隔（限速） */
+  delayMs?: number
+  /** 并发文档数（重建回填固定 1） */
+  concurrency?: number
+  /** 重建后先清 embedded_at 再回填 */
+  resetEmbeddedFlags?: boolean
+}
+
+function envNonNegInt(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw == null || raw === '') return fallback
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return fallback
+  return Math.floor(n)
+}
+
+/** 病理重建后限速回填参数（可 env 覆盖） */
+export function resolveLanceRebuildBackfillOptions(): EmbedPendingOptions {
+  return {
+    limit: Math.max(1, envNonNegInt('OPPTRIX_LANCE_BACKFILL_LIMIT', 8)),
+    delayMs: envNonNegInt('OPPTRIX_LANCE_BACKFILL_DELAY_MS', 100),
+    concurrency: 1,
+    resetEmbeddedFlags: true,
+  }
+}
 
 export class DocLibraryService {
   private readonly repo: DocLibraryRepository
@@ -255,7 +291,8 @@ export class DocLibraryService {
   }
 
   /**
-   * 纯文本入库（资讯等）：同步 text-l0 切块，再异步 embed。
+   * 纯文本入库（研报等）：同步 text-l0 切块；可异步 embed。
+   * 资讯主路径已收敛至 user-store FTS，不再经此双写；若仍调用 sourceType=news 则仅 SQLite+FTS、不进 Lance。
    * 以 external_id + sourceType 去重；正文变更则覆盖并重建 chunk。
    */
   ingestFromText(input: IngestFromTextInput): IngestFromTextResult | null {
@@ -346,7 +383,9 @@ export class DocLibraryService {
       })
     }
 
-    void this.scheduleEmbed(documentId)
+    if (shouldEmbedToVector(input.sourceType)) {
+      void this.scheduleEmbed(documentId)
+    }
 
     const ready = this.repo.getParseArtifact(documentId)
     return {
@@ -461,8 +500,12 @@ export class DocLibraryService {
     }
   }
 
-  /** parse ready 后异步 embed；幂等；无模型不中断 */
+  /** parse ready 后异步 embed；幂等；无模型不中断；news 跳过 */
   scheduleEmbed(documentId: string): Promise<void> {
+    const doc = this.repo.getDocument(documentId)
+    if (doc && !shouldEmbedToVector(doc.source_type)) {
+      return Promise.resolve()
+    }
     const existing = this.embedInflight.get(documentId)
     if (existing) return existing
     const job = this.runEmbed(documentId).finally(() => {
@@ -474,6 +517,9 @@ export class DocLibraryService {
 
   private async runEmbed(documentId: string): Promise<void> {
     try {
+      const doc = this.repo.getDocument(documentId)
+      if (doc && !shouldEmbedToVector(doc.source_type)) return
+
       const ready = this.embedding.isReady()
         || await this.embedding.tryEnableDefaultBackend()
       if (!ready) return
@@ -490,8 +536,9 @@ export class DocLibraryService {
       const chunks = this.repo.getChunks(documentId)
       if (!chunks.length) return
 
-      for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
-        const batch = chunks.slice(i, i + EMBED_BATCH_SIZE)
+      const batchSize = resolveEmbedBatchSize()
+      for (let i = 0; i < chunks.length; i += batchSize) {
+        const batch = chunks.slice(i, i + batchSize)
         const vectors = await this.embedding.embedPassages(batch.map(c => c.text))
         if (!vectors) return
         await this.vectorStore.upsert(
@@ -509,20 +556,57 @@ export class DocLibraryService {
     }
   }
 
-  /** 模型安装后回填未嵌入文档 */
-  async embedPendingDocuments(limit = 50): Promise<number> {
+  /** 模型安装 / Lance 重建后回填未嵌入文档（排除 news）；可限速 */
+  async embedPendingDocuments(
+    limitOrOpts: number | EmbedPendingOptions = 50,
+  ): Promise<number> {
+    const opts: EmbedPendingOptions = typeof limitOrOpts === 'number'
+      ? { limit: limitOrOpts }
+      : limitOrOpts
+    const limit = Math.max(1, opts.limit ?? 50)
+    const delayMs = Math.max(0, opts.delayMs ?? 0)
+    const concurrency = Math.max(1, Math.min(opts.concurrency ?? 1, 4))
+
+    if (opts.resetEmbeddedFlags) {
+      this.repo.clearEmbeddedAtForVectorEligible()
+    }
+
     const rows = this.db.prepare(`
       SELECT DISTINCT c.document_id
       FROM chunks c
       JOIN parse_artifacts pa ON pa.document_id = c.document_id
-      WHERE pa.status = 'ready' AND c.embedded_at IS NULL
+      JOIN documents d ON d.id = c.document_id
+      WHERE pa.status = 'ready'
+        AND c.embedded_at IS NULL
+        AND COALESCE(d.source_type, 'report') != 'news'
       LIMIT ?
     `).all(limit) as Array<{ document_id: string }>
+
     let n = 0
-    for (const row of rows) {
-      await this.scheduleEmbed(row.document_id)
-      n += 1
+    if (concurrency <= 1) {
+      for (const row of rows) {
+        await this.scheduleEmbed(row.document_id)
+        n += 1
+        if (delayMs > 0 && n < rows.length) {
+          await new Promise<void>(resolve => setTimeout(resolve, delayMs))
+        }
+      }
+      return n
     }
+
+    const queue = [...rows]
+    const workers = Array.from({ length: concurrency }, async () => {
+      while (queue.length) {
+        const row = queue.shift()
+        if (!row) break
+        await this.scheduleEmbed(row.document_id)
+        n += 1
+        if (delayMs > 0 && queue.length) {
+          await new Promise<void>(resolve => setTimeout(resolve, delayMs))
+        }
+      }
+    })
+    await Promise.all(workers)
     return n
   }
 
@@ -679,5 +763,21 @@ export class DocLibraryService {
 
   getRepository(): DocLibraryRepository {
     return this.repo
+  }
+
+  /**
+   * 删除文档：SQLite 行 + md/blob（blob 共享去重）+ 异步清向量。
+   * 返回 false 表示文档不存在。
+   */
+  deleteDocument(documentId: string): boolean {
+    const ok = this.repo.deleteDocument(documentId)
+    if (!ok) return false
+    void this.vectorStore.deleteByDocument(documentId).catch(() => {})
+    return true
+  }
+
+  /** retention / boot：孤儿 blob + markdown 限速清扫 */
+  pruneOrphanBlobsAndMarkdown(opts?: PruneOrphanBlobsOptions): PruneOrphanBlobsResult {
+    return pruneOrphanBlobsAndMarkdownImpl(this.db, opts)
   }
 }

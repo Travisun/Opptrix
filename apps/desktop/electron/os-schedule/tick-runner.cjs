@@ -1,13 +1,14 @@
 /**
  * OS schedule tick: HTTP-first runner + loopback endpoint file.
  *
- * LaunchAgent / schtasks / systemd invoke a small script that POSTs
- * /api/schedule/tick when the sidecar is up — avoiding a full Opptrix GUI
+ * Legacy LaunchAgent / schtasks / systemd (if still present) invoke a small script
+ * that POSTs /api/schedule/tick when the sidecar is up — avoiding a full Opptrix GUI
  * spawn (Dock / taskbar flash). Falls back to ELECTRON_RUN_AS_NODE headless-tick
- * (spawn sidecar → tick → stop) only on failure — never `--background --schedule-tick`.
+ * which only retries HTTP tick (does NOT spawn sidecar) — tray model: app not running
+ * ⇒ schedule does not run. Never `--background --schedule-tick` as the product path.
  *
- * Cold-start EXEC is OpptrixSchedule (renamed Electron copy beside the product
- * binary), not Opptrix productName — so crash UI / process list stay distinct.
+ * Product main path: Electron tray + sidecar ScheduleService 20s timer only.
+ * This module's ensure/write helpers remain for upgrade purge / removeTickRegistration.
  */
 const path = require('node:path')
 const fs = require('node:fs')

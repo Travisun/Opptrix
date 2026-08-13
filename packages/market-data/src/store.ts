@@ -17,7 +17,14 @@ import {
   stockProfilesUsesInstrumentNs,
 } from './instrument-ns.js'
 import type { InstrumentRef } from '@opptrix/shared'
-import { normalizeInstrumentRef } from '@opptrix/shared'
+import {
+  applySqliteMemoryPragmas,
+  normalizeInstrumentRef,
+  runSqliteLightMaintenance,
+  tryEnableSqliteIncrementalAutoVacuum,
+  type SqliteLightMaintenanceOpts,
+  type SqliteLightMaintenanceResult,
+} from '@opptrix/shared'
 import { yieldToEventLoop } from './sync/event-loop.js'
 import {
   getMarketDuckGateway,
@@ -25,7 +32,9 @@ import {
   type MarketDuckGateway,
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
+import type { LatestBarsPageOpts } from './duck/latest-bars-page.js'
 import { isMarketSyncActive, isDerivedMaintenanceActive } from './duck/duck-subprocess-gate.js'
+import { shouldWarmDuckReadCachesOnBoot } from './duck/duck-cli-pool.js'
 import { getDuckNeoReader } from './duck/duck-neo-reader.js'
 import {
   isDuckPrimaryMigrationComplete,
@@ -139,6 +148,15 @@ export interface BootstrapReadiness {
   kline_cross_market: boolean
 }
 
+/** sync_logs 全局硬顶（最旧优先删） */
+export const SYNC_LOGS_GLOBAL_MAX = 8000
+/** 单 session 日志上限 */
+export const SYNC_LOGS_PER_SESSION_MAX = 2000
+/** sync_sessions 元数据硬顶（保留最近 N 条；级联清关联 sync_logs） */
+export const SYNC_SESSIONS_KEEP_MAX = 80
+/** append 路径每 N 次触发一次 session prune（避免每次 COUNT） */
+const SYNC_LOGS_APPEND_PRUNE_EVERY = 256
+
 export class MarketDataStore {
   db: Database.Database
   /** 只读连接 — 控制面读与写路径解耦（WAL 模式） */
@@ -156,6 +174,8 @@ export class MarketDataStore {
   private statusLightCache: { at: number; value: MarketDbStatus } | null = null
   /** 衍生维护期间冻结的快照 — 避免 rebuild 触发 Duck 子进程读 */
   private statusLightFrozen: MarketDbStatus | null = null
+  /** appendLog 计数器 — 每 SYNC_LOGS_APPEND_PRUNE_EVERY 次做一次 session prune */
+  private syncLogAppendsSincePrune = 0
   private static readonly STATUS_LIGHT_CACHE_MS = 30_000
 
   /** 设置页 / Hub 轮询仅聚合这些 job 的 per-code 进度（走 job_name 索引，避免全表 GROUP BY） */
@@ -289,8 +309,7 @@ export class MarketDataStore {
     this.klineDuckDbPath = duckPath ?? duckDbPathForMarketDb(dbPath)
     this.db = new Database(dbPath)
     this.dbRead = isMemorySqlitePath(dbPath) ? this.db : new Database(dbPath, { readonly: true })
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('busy_timeout = 5000')
+    this.configureSqliteConnections()
     migrate(this.db)
     if (!isDuckPrimaryMigrationComplete(this.db)) {
       if (this.canSkipDuckPrimaryMigrationForEmptyInstall()) {
@@ -299,7 +318,8 @@ export class MarketDataStore {
         this.scheduleDuckPrimaryMigration()
       }
     }
-    if (fs.existsSync(this.klineDuckDbPath)) {
+    // 低配 / OPPTRIX_DUCK_WARM_ON_BOOT=0：跳过启动预热，削开机尖峰；首次查询仍会拉 stats
+    if (fs.existsSync(this.klineDuckDbPath) && shouldWarmDuckReadCachesOnBoot()) {
       getDuckNeoReader(this.klineDuckDbPath).warmReadCaches()
     }
   }
@@ -559,8 +579,25 @@ export class MarketDataStore {
     return this.duckGateway().queryKlinesSync(code, limit, before)
   }
 
+  /**
+   * 同步截面（兼容 / 缓存）；结果可能为空直至预热完成。
+   * 产品热路径请用 duckLatestBarsAll（分页拼回）。
+   */
   duckLatestBars(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
     return this.duckGateway().latestBarsSync(tradeDate)
+  }
+
+  /** 单页最新截面 — afterCode 游标 + limit */
+  duckLatestBarsPage(opts: LatestBarsPageOpts = {}) {
+    return this.duckGateway().latestBarsPageAsync(opts)
+  }
+
+  /**
+   * 热路径全量截面：分页拼回至空页；结果 ≡ 无参全量 latestBars（可拼回）。
+   * 默认 page 1000，低配更小；单次查询有界。
+   */
+  duckLatestBarsAll(tradeDate?: string | null) {
+    return this.duckGateway().latestBarsAsync(tradeDate)
   }
 
   /** 解析 A 股 EQUITY 命名空间 — 优先 instruments 表，回退 stocks.market */
@@ -607,16 +644,42 @@ export class MarketDataStore {
       clearTimeout(this.duckPrimaryMigrationTimer)
       this.duckPrimaryMigrationTimer = null
     }
-    void this.flushDuckWritesAsync({ throwOnError: true })
+    // fire-and-forget：不可 throwOnError，否则 duck-cli 失败会变成 unhandledRejection
+    void this.flushDuckWritesAsync({ throwOnError: false })
     if (this.dbRead !== this.db) this.dbRead.close()
     this.db.close()
+  }
+
+  /** WAL + busy_timeout 保留；cache/mmap/temp 按机器档位（只读更保守） */
+  private configureSqliteConnections(): void {
+    // 新空库：建表前启用 INCREMENTAL，便于日后 incremental_vacuum 还盘（已有库跳过）
+    tryEnableSqliteIncrementalAutoVacuum(this.db)
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('busy_timeout = 5000')
+    applySqliteMemoryPragmas(this.db, 'write')
+    if (this.dbRead !== this.db) {
+      this.dbRead.pragma('busy_timeout = 5000')
+      applySqliteMemoryPragmas(this.dbRead, 'read')
+    }
+  }
+
+  /**
+   * 低频轻维护（写连接）：先 prune sync_sessions；再 incremental_vacuum / wal_checkpoint；
+   * 全库 VACUUM 默认关（`OPPTRIX_SQLITE_VACUUM=1` 或 opts.allowVacuum）。
+   */
+  runLightMaintenance(opts?: SqliteLightMaintenanceOpts): SqliteLightMaintenanceResult {
+    try {
+      this.pruneSyncSessions()
+    } catch {
+      /* prune 失败不阻断还盘路径 */
+    }
+    return runSqliteLightMaintenance(this.db, opts)
   }
 
   private reopenDb(): void {
     this.db = new Database(this.dbPath)
     this.dbRead = isMemorySqlitePath(this.dbPath) ? this.db : new Database(this.dbPath, { readonly: true })
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('busy_timeout = 5000')
+    this.configureSqliteConnections()
   }
 
   /** 导出 .opmd 前将 DuckDB 主存储回写 SQLite 快照 */
@@ -2737,6 +2800,10 @@ export class MarketDataStore {
     this.db.prepare(`
       UPDATE sync_sessions SET status = ?, finished_at = ?, message = ? WHERE id = ?
     `).run(status, nowIso(), message ?? null, sessionId)
+    // Session end is infrequent — prune logs + session metadata hard caps.
+    this.pruneSyncLogsForSession(sessionId)
+    this.pruneSyncLogsGlobal()
+    this.pruneSyncSessions()
   }
 
   getSession(sessionId: number) {
@@ -2777,6 +2844,76 @@ export class MarketDataStore {
     this.db.prepare(`
       INSERT INTO sync_logs (session_id, message, created_at) VALUES (?, ?, ?)
     `).run(sessionId, message, nowIso())
+    // Avoid COUNT(*) on every insert — prune this session every N appends.
+    this.syncLogAppendsSincePrune += 1
+    if (this.syncLogAppendsSincePrune >= SYNC_LOGS_APPEND_PRUNE_EVERY) {
+      this.syncLogAppendsSincePrune = 0
+      this.pruneSyncLogsForSession(sessionId)
+    }
+  }
+
+  /**
+   * Delete oldest sync_logs for a session beyond `keepMax`.
+   * Uses id cutoff (no full-table COUNT). Returns deleted row count.
+   */
+  pruneSyncLogsForSession(
+    sessionId: number,
+    keepMax = SYNC_LOGS_PER_SESSION_MAX,
+  ): number {
+    if (keepMax <= 0) return 0
+    const result = this.db.prepare(`
+      DELETE FROM sync_logs
+      WHERE session_id = ?
+        AND id < (
+          SELECT id FROM sync_logs
+          WHERE session_id = ?
+          ORDER BY id DESC
+          LIMIT 1 OFFSET ?
+        )
+    `).run(sessionId, sessionId, keepMax - 1)
+    return result.changes
+  }
+
+  /**
+   * Enforce global sync_logs hard cap — delete oldest rows beyond `keepMax`.
+   * Prefer calling from finishSession (not every append).
+   */
+  pruneSyncLogsGlobal(keepMax = SYNC_LOGS_GLOBAL_MAX): number {
+    if (keepMax <= 0) return 0
+    const result = this.db.prepare(`
+      DELETE FROM sync_logs
+      WHERE id < (
+        SELECT id FROM sync_logs
+        ORDER BY id DESC
+        LIMIT 1 OFFSET ?
+      )
+    `).run(keepMax - 1)
+    return result.changes
+  }
+
+  /**
+   * Keep newest `keepMax` sync_sessions rows; cascade-delete orphaned sync_logs.
+   * Prefer finishSession / retention / light maintenance（勿阻塞启动热路径）。
+   */
+  pruneSyncSessions(keepMax = SYNC_SESSIONS_KEEP_MAX): { sessions: number; logs: number } {
+    if (keepMax <= 0) return { sessions: 0, logs: 0 }
+    const cutoff = this.db.prepare(`
+      SELECT id FROM sync_sessions
+      ORDER BY id DESC
+      LIMIT 1 OFFSET ?
+    `).get(keepMax - 1) as { id: number } | undefined
+    if (!cutoff) return { sessions: 0, logs: 0 }
+
+    const logs = this.db.prepare(`
+      DELETE FROM sync_logs
+      WHERE session_id IS NOT NULL AND session_id < ?
+    `).run(cutoff.id).changes
+
+    const sessions = this.db.prepare(`
+      DELETE FROM sync_sessions WHERE id < ?
+    `).run(cutoff.id).changes
+
+    return { sessions, logs }
   }
 
   getRecentLogs(sessionId: number | null, limit = 500): string[] {

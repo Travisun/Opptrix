@@ -75,8 +75,16 @@ export interface QueryExecutionContext {
   method: string
   /** 缓存类型键（如 "stock_kline"、"stock_realtime"），为空则不缓存 */
   cacheType: string
-  /** 是否启用缓存读写 */
+  /**
+   * 是否尝试读缓存。
+   * 与 `writeCache` 拆分：可读旧盘缓存、同时避免非关注标的长 K 无限写入。
+   */
   useCache: boolean
+  /**
+   * 是否在成功后写入缓存。缺省等于 `useCache`（向后兼容：旧调用仍读写都开）。
+   * Engine K 线路径对非 watchlist 传 `false`，与 `queryScoped` 仅 watchlist 写缓存对齐。
+   */
+  writeCache?: boolean
   /** 传递给 Provider 方法的参数列表 */
   args: unknown[]
   /** merge 策略下的去重键函数，默认按归一化 code 去重 */
@@ -156,10 +164,12 @@ export class QueryPlanExecutor {
   }
 
   /**
-   * 执行查询计划 — 检查缓存 → 按策略调用 Provider → 写入缓存 → 返回结果。
+   * 执行查询计划 — 检查缓存 → 按策略调用 Provider →（可选）写入缓存 → 返回结果。
+   * 读：`useCache`；写：`writeCache ?? useCache`（与 queryScoped / watchlist 对齐时可只读不写）。
    * @typeParam T - 返回数据元素类型
    */
   async execute<T>(plan: QueryPlan, ctx: QueryExecutionContext): Promise<QueryResult<T[]>> {
+    const shouldWrite = ctx.writeCache ?? ctx.useCache
     if (ctx.useCache && ctx.cacheType) {
       const params = {
         method: ctx.method,
@@ -176,7 +186,7 @@ export class QueryPlanExecutor {
       ? await this.executeMerge<T>(plan, ctx)
       : await this.executeSequential<T>(plan, ctx)
 
-    if (result.success && result.data && ctx.useCache && ctx.cacheType) {
+    if (result.success && result.data && shouldWrite && ctx.cacheType) {
       this.cache.set(ctx.cacheType, result.data, ctx.method, {
         method: ctx.method,
         plan: plan.id,

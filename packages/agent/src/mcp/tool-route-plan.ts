@@ -93,7 +93,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['search_library', 'read_document'],
     avoidTools: ['list_news_articles', 'workspace_read', 'list_session_documents', 'search_document'],
     confidence: 'high',
-    hint: '跨会话/跨研报 → 先 search_library 找片段；命中后 read_document(document_id) 精读；可换关键词多跳；勿灌全文',
+    hint: '跨会话/跨研报 → 先 search_library 找片段；查资讯用 source_type=news + 多具体关键词（代码/公司/主题/事件），走本机资讯全文检索非语义向量，以摘录为准；研报命中后 read_document(document_id) 精读；可换关键词多跳；勿灌全文',
   },
   {
     intent: 'etf_profile',
@@ -448,7 +448,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
     avoidTools: ['get_system_info'],
     confidence: 'high',
-    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（会等待托管安装完成并优先托管）',
+    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪立即 preparing|installing+job_id，须 ensure_python({ job_id }) 轮询至 ready，勿死等）',
   },
   {
     intent: 'workspace_network_latency',
@@ -523,7 +523,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['prepare_fuyao_dump', 'list_local_data_apis', 'workspace_list'],
     avoidTools: ['http_fetch', 'opptrix_run'],
     confidence: 'high',
-    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；禁止 Key 进沙盒，勿 sync/dailyDump',
+    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；冷下载 preparing+job_id，须 prepare_fuyao_dump({ job_id }) 轮询；禁止 Key 进沙盒，勿 sync/dailyDump',
   },
   {
     intent: 'session_lan',

@@ -2,17 +2,20 @@
  * L0 内嵌图 OCR 增强：从 docx/pptx/pdf 抽图 → 本地 OCR → 合并进对应页。
  * OCR 未就绪：静默保留已有正文，不阻断入库。整份 parse 在后台跑完再 ready。
  */
+import { getEmbeddingService } from '../../embedding.js'
 import { isOcrL2Available, ocrImageBuffer } from '../ocr-l2.js'
 import { extractDocxEmbeddedImages, extractPptxEmbeddedImages } from './ooxml-media.js'
 import { extractPdfEmbeddedImages } from './pdf-media.js'
 import { ocrEmbeddedMediaBatch } from './ocr-batch.js'
 import { mergeImageOcrIntoPages, pagesToParseResult } from './merge.js'
 import {
-  OCR_CONCURRENCY,
-  type EmbeddedImageFormat,
-  type EmbeddedMedia,
-  type OcrImageFn,
-  type PageText,
+  resolveOcrConcurrency,
+} from './ocr-concurrency.js'
+import type {
+  EmbeddedImageFormat,
+  EmbeddedMedia,
+  OcrImageFn,
+  PageText,
 } from './types.js'
 import type { ParseProgress, ParseRunResult } from '../../types.js'
 
@@ -21,9 +24,17 @@ export {
   MAX_EMBEDDED_IMAGES,
   MIN_IMAGE_BYTES,
   MIN_IMAGE_EDGE,
-  OCR_CONCURRENCY,
   EMBEDDED_OCR_TIMEOUT_MS,
 } from './types.js'
+export {
+  OCR_CONCURRENCY,
+  OCR_CONCURRENCY_DEFAULT,
+  OCR_CONCURRENCY_LOW,
+  OCR_CONCURRENCY_MAX,
+  OCR_CONCURRENCY_WITH_EMBEDDING,
+  resolveOcrConcurrency,
+} from './ocr-concurrency.js'
+export type { ResolveOcrConcurrencyOpts } from './ocr-concurrency.js'
 export type {
   EmbeddedMedia,
   EmbeddedImageFormat,
@@ -73,8 +84,14 @@ export async function enhancePagesWithEmbeddedImageOcr(
     try {
       const media = await extractMedia(blob, opts.format)
       if (!media.length) return pages
+      // 低配降并发；embedding 已加载时再降到 1 + 脱敏日志（不 unload）
+      const concurrency =
+        opts.concurrency
+        ?? resolveOcrConcurrency({
+          embeddingReady: getEmbeddingService().isReady(),
+        })
       const pageOcr = await ocrEmbeddedMediaBatch(media, ocrFn, {
-        concurrency: opts.concurrency ?? OCR_CONCURRENCY,
+        concurrency,
         onProgress: (done, total) => {
           opts.onProgress?.({
             phase: 'ocr',

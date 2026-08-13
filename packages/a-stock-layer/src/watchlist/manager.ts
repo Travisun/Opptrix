@@ -25,4 +25,9 @@ export class WatchlistManager {
   codes(): string[] {
     return this.store.codes()
   }
+
+  /** Flush pending watchlist SQLite writes (exit / tests). */
+  flush() {
+    this.store.flush()
+  }
 }

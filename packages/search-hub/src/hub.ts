@@ -1,7 +1,6 @@
 import type { ResearchHub } from '@opptrix/research-hub'
-import type { SessionMeta, SessionRecord } from '@opptrix/agent'
+import type { SessionMeta } from '@opptrix/agent'
 import { SessionStore } from '@opptrix/agent'
-import { getEnrichmentStore } from '@opptrix/article-enrichment'
 import { NewsFeedStore } from '@opptrix/news-feed'
 import { getUserDataStore } from '@opptrix/user-store'
 import { buildInstrumentNamespace, inferCnAssetClassFromSymbol } from '@opptrix/shared'
@@ -57,23 +56,16 @@ export class SearchHub {
 
   ensureIndexes() {
     const store = getUserDataStore()
+    // INDEX_FLAG 仅表示「至少完成过一次全量灌入」；已置位则跳过重建。
+    // 后续会话/资讯变更走增量 upsert/delete（persist hooks），不 clear 本 flag。
     if (store.getMetaFlag(INDEX_FLAG)) return
 
-    const allSessions = store.listDocuments<SessionRecord>('session')
-    rebuildSessionSearchIndex(allSessions)
+    // 一次性重建：按页读 → upsert → 丢弃页；不驻留 allSessions[] / articles[] / enrichmentMap。
+    rebuildSessionSearchIndex()
 
-    const newsStore = new NewsFeedStore()
-    const articleIds = newsStore.listArticleIds()
-    const articles = articleIds
-      .map(id => newsStore.getArticle(id))
-      .filter((a): a is NonNullable<typeof a> => Boolean(a))
-    const enrichmentStore = getEnrichmentStore()
-    const enrichmentMap = new Map<string, import('@opptrix/news-feed').ArticleEnrichment>()
-    for (const id of articleIds) {
-      const doc = enrichmentStore.get(id)
-      if (doc) enrichmentMap.set(id, doc)
-    }
-    rebuildNewsSearchIndex(articles, enrichmentMap)
+    // 先跑资讯迁移（legacy news_cache → news_article），再按页投影灌 FTS。
+    new NewsFeedStore().listArticleIds()
+    rebuildNewsSearchIndex()
 
     store.setMetaFlag(INDEX_FLAG)
   }
@@ -88,9 +80,10 @@ export class SearchHub {
       ? store.searchSessions(q, { limit: cap, includeArchived: true })
       : []
 
-    const sessionMeta = new Map(
-      this.sessions.listAll().map(s => [s.id, s] as const),
-    )
+    // FTS 无命中时不扫会话库；有命中则仅按 id 取 meta（≤50），禁止 listAll。
+    const sessionMeta = sessionRows.length
+      ? this.sessions.getMany(sessionRows.map(r => r.session_id))
+      : new Map<string, SessionMeta>()
 
     const sessions: SessionSearchHit[] = sessionRows.map(row => {
       const meta = sessionMeta.get(row.session_id)

@@ -1,9 +1,29 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
 import type { MarketDataStore } from '../store.js'
+import { isDuckLowMemProfile } from '../duck/duck-cli-pool.js'
 import { daysSince } from '../utils.js'
 import { SYNC_JOB_CONFIG } from './config.js'
+import { mapPool } from './pool.js'
 
 export type HydrateManifest = 'watchlist' | 'detail'
+
+const DEFAULT_HYDRATE_CONCURRENCY = 2
+const MAX_HYDRATE_CONCURRENCY = 3
+
+/**
+ * L1 hydrate 跨 code 并发：默认 2；低配 1；`OPPTRIX_HYDRATE_CONCURRENCY` 可覆盖，上限 3。
+ * 保持保守以免股东等免费源触发 FreeProviderThrottle。
+ */
+export function resolveHydrateConcurrency(): number {
+  const raw = process.env.OPPTRIX_HYDRATE_CONCURRENCY
+  if (raw != null && String(raw).trim() !== '') {
+    const n = Number.parseInt(String(raw).trim(), 10)
+    if (Number.isFinite(n) && n >= 1) {
+      return Math.min(MAX_HYDRATE_CONCURRENCY, Math.floor(n))
+    }
+  }
+  return isDuckLowMemProfile() ? 1 : DEFAULT_HYDRATE_CONCURRENCY
+}
 
 function needsRefresh(syncedAt: string | null, ttlDays: number): boolean {
   if (!syncedAt) return true
@@ -37,10 +57,12 @@ export async function hydrateStocks(
 ): Promise<{ shareholders: number; partners: number }> {
   const holderTtl = SYNC_JOB_CONFIG.shareholders?.ttlDays ?? 90
   const partnerTtl = SYNC_JOB_CONFIG.partners?.ttlDays ?? 90
-  let shareholders = 0
-  let partners = 0
+  const concurrency = resolveHydrateConcurrency()
 
-  for (const code of codes) {
+  const perCode = await mapPool(codes, concurrency, 0, async (code) => {
+    let shareholders = 0
+    let partners = 0
+
     const holderStale = needsRefresh(store.shareholderSyncedAt(code), holderTtl)
     if (holderStale) {
       try {
@@ -55,6 +77,7 @@ export async function hydrateStocks(
       }
     }
 
+    // Per-code: shareholders then partners — avoid same-code concurrent DB writes.
     if (manifest === 'detail') {
       const partnerStale = needsRefresh(store.partnerSyncedAt(code), partnerTtl)
       if (partnerStale) {
@@ -74,7 +97,15 @@ export async function hydrateStocks(
         }
       }
     }
-  }
 
+    return { shareholders, partners }
+  })
+
+  let shareholders = 0
+  let partners = 0
+  for (const row of perCode) {
+    shareholders += row.shareholders
+    partners += row.partners
+  }
   return { shareholders, partners }
 }

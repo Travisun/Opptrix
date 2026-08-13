@@ -9,6 +9,7 @@ export {
   migrateLegacyWorkspaceFiles,
   deleteSessionWorkspaceDirectory,
   deleteSessionStateDirectory,
+  pruneOrphanSessionState,
   DEFAULT_ROOT_ID,
   SHARED_ROOT_ID,
   SESSIONS_SUBDIR,
@@ -23,6 +24,14 @@ export {
   sharedDumpsDir,
   resetSharedWorkspaceLayoutCacheForTests,
 } from './shared-workspace.js'
+export {
+  pruneSharedWorkspace,
+  isProtectedSharedRelative,
+  DEFAULT_SHARED_WORKSPACE_MAX_AGE_MS,
+  DEFAULT_SHARED_WORKSPACE_MAX_BYTES,
+  type PruneSharedWorkspaceOptions,
+  type PruneSharedWorkspaceResult,
+} from './shared-prune.js'
 export {
   OFFLINE_K_META_RELATIVE_PATH,
   FULL_DUMP_RELATIVE_PATH,
@@ -129,6 +138,7 @@ export {
   waitForPythonInstallJob,
   resetPythonInstallJobForTests,
   setPythonInstallPipelineDepsForTests,
+  PYTHON_INSTALL_JOB_ID,
   type PythonInstallJobSnapshot,
   type PythonInstallJobState,
   type PythonInstallPhase,
@@ -139,6 +149,7 @@ export {
   resetEnsurePythonDepsForTests,
   setEnsurePythonDepsForTests,
   type EnsurePythonResult,
+  type EnsurePythonStatus,
   type EnsurePythonDeps,
 } from './python/ensure-python.js'
 export {

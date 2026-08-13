@@ -115,6 +115,7 @@ function NewsCenterContent({
     selectedId,
     selected,
     hasMore,
+    listCapReached,
     total,
     view,
     setSelectedId,
@@ -231,6 +232,7 @@ function NewsCenterContent({
             loading={loading}
             loadingMore={loadingMore}
             hasMore={hasMore}
+            listCapReached={listCapReached}
             total={total}
             hasAnyArticles={hasAnyArticles}
             hasSubscriptions={subscriptions.length > 0}

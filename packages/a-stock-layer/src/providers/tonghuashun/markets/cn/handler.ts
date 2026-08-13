@@ -4,6 +4,7 @@ import type {
 } from '../../../../core/schema.js'
 import { isCnEtfCode } from '../../../../core/instrument.js'
 import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
+import { createNameCache } from '../../../../utils/lru-map.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { FuyaoClient } from '../../api/client.js'
 import { isTonghuashunEnabled } from '../../config.js'
@@ -58,7 +59,7 @@ function isIndexCode(code: string): boolean {
 
 /** 同花顺金融数据 API（fuyao.aicubes.cn） */
 export class TonghuashunMarketHandler extends MarketHandlerShell {
-  private nameCache = new Map<string, string>()
+  private nameCache = createNameCache()
 
   private client(): FuyaoClient | null {
     if (!isTonghuashunEnabled()) return null

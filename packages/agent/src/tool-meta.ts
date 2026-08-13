@@ -485,8 +485,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   search_library: {
     miningEligible: false,
     usageGuide:
-      '跨会话在本机研报库/资讯库按关键词检索片段；用户问「哪些研报提到某标的」「跨研报找主题」等首选；命中后 read_document(document_id) 精读，可换词多跳。',
-    compliance: '只读；query 必填；可选 source_type=report|news、limit≤20；引用须带文档名与页码；勿编造未读内容。',
+      '跨会话检索本机研报库/资讯。研报走文档库（可混合关键词与语义）；资讯走本机资讯全文检索（与统一搜索同源、无向量）——查资讯时用股票代码、公司简称、主题、事件等具体词，可一次多词组合，避免空泛「相关报道」。用户问「哪些研报提到某标的」「跨研报找主题」或「本机库里某公司资讯」时首选；研报命中后 read_document(document_id) 精读；资讯命中以摘录为准。',
+    compliance:
+      '只读；query 必填；可选 source_type=report|news、limit≤20；source_type=news 时勿依赖语义/向量，勿对资讯 document_id 调用 read_document；研报引用须带文档名与页码；勿编造未读内容。',
   },
   search_document: {
     miningEligible: false,
@@ -734,7 +735,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。',
     compliance:
-      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；未就绪时解析 python/pip 会自动 ensure+wait 托管安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
+      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；python 未就绪时先 ensure_python 并按 job_id 轮询至 ready，勿在 tool 内死等安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
   },
   /** @deprecated 兼容别名 → opptrix_run */
   shell_run: {
@@ -759,9 +760,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   ensure_python: {
     packId: 'workspace',
     usageGuide:
-      '运行 Python 脚本或 pip 安装前调用；未就绪时会阻塞等待托管安装完成，成功后优先使用 Opptrix 托管解释器。',
+      '运行 Python 脚本或 pip 安装前调用；未就绪时立即返回 preparing/installing+job_id，须再调 ensure_python({ job_id }) 轮询至 ready；成功后优先使用 Opptrix 托管解释器。',
     compliance:
-      '会等到安装结束再返回；成功时 ready=true 且 prefer 托管；失败时 ready=false，勿假装已安装。opptrix_run python 未就绪时也会自动走同一安装等待流程。',
+      '勿在本轮死等安装；status=preparing|installing 时用返回的 job_id 轮询；ready 时 ready=true 且 prefer 托管；failed 时 ready=false，勿假装已安装。opptrix_run 在 python 未就绪时会快速失败并提示先 ensure_python。',
   },
   list_local_data_apis: {
     packId: 'workspace',
@@ -775,9 +776,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   prepare_fuyao_dump: {
     packId: 'workspace',
-    usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL。',
+    usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL；冷下载可能先返回 preparing+job_id，须轮询。',
     compliance:
-      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；full|incremental + local_path 成功会自动写 offline-k-meta（返回 meta_written）；adjustment_factors/presigned_url 不写 meta；成功用 root_id=shared + relative_path。',
+      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，用 job_id 再调本工具轮询；full|incremental + local_path 就绪后自动写 offline-k-meta；adjustment_factors/presigned_url 不写 meta；成功用 root_id=shared + relative_path。',
   },
   request_session_lan_access: {
     packId: 'workspace',

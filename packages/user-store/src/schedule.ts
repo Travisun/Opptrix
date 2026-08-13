@@ -11,7 +11,13 @@ export type ScheduleJobKind = 'agent_prompt' | 'shell_script'
 export type ScheduleKind = 'once' | 'interval' | 'cron'
 export type ScheduleOsStatus = 'synced' | 'pending' | 'error' | 'n/a'
 export type ScheduleRunTrigger = 'timer' | 'os' | 'manual' | 'agent'
-export type ScheduleRunStatus = 'running' | 'ok' | 'error' | 'skipped'
+export type ScheduleRunStatus = 'running' | 'ok' | 'error' | 'skipped' | 'interrupted'
+
+/** running lease 超过该时长视为崩溃遗留，强制收尾后允许再次领取 */
+export const SCHEDULE_STALE_RUN_MS = 45 * 60 * 1000
+
+/** 每个 job 在 scheduled_job_runs 中最多保留的最近记录数 */
+export const SCHEDULE_MAX_RUNS_PER_JOB = 100
 
 export interface OnceSchedule {
   run_at: string
@@ -387,6 +393,61 @@ export class ScheduleRepository {
   }
 
   /**
+   * 将超时仍 running 的 lease 强制收尾为 interrupted，避免进程崩溃后永久卡死。
+   * @returns 收尾条数
+   */
+  reconcileStaleRuns(
+    nowIso: string = new Date().toISOString(),
+    staleMs: number = SCHEDULE_STALE_RUN_MS,
+  ): number {
+    const cutoffMs = new Date(nowIso).getTime() - Math.max(0, staleMs)
+    if (Number.isNaN(cutoffMs)) return 0
+    const cutoffIso = new Date(cutoffMs).toISOString()
+    const stale = this.db.prepare(`
+      SELECT * FROM scheduled_job_runs
+      WHERE status = 'running'
+        AND finished_at IS NULL
+        AND started_at <= ?
+      ORDER BY started_at ASC
+    `).all(cutoffIso) as RunRow[]
+    let n = 0
+    for (const row of stale) {
+      const done = this.finishRun(row.id, {
+        status: 'interrupted',
+        error: '执行超时或进程中断，已释放占用以便重新领取',
+        summary: 'stale_lease',
+      }, { prune: false })
+      if (done) {
+        n += 1
+        this.updateJob(row.job_id, {
+          last_run_at: nowIso,
+          last_status: 'interrupted',
+        })
+      }
+    }
+    return n
+  }
+
+  /**
+   * 每个 job 只保留最近 keep 条 runs；deleteJob 仍会整表删 runs。
+   * @returns 删除条数
+   */
+  pruneJobRuns(jobId: string, keep: number = SCHEDULE_MAX_RUNS_PER_JOB): number {
+    const limit = Math.max(1, Math.floor(keep))
+    // SQLite：ORDER BY + LIMIT 在 NOT IN 子查询中不可靠；用 OFFSET 丢掉较旧行
+    const result = this.db.prepare(`
+      DELETE FROM scheduled_job_runs
+      WHERE rowid IN (
+        SELECT rowid FROM scheduled_job_runs
+        WHERE job_id = ?
+        ORDER BY started_at DESC, rowid DESC
+        LIMIT -1 OFFSET ?
+      )
+    `).run(jobId, limit)
+    return result.changes
+  }
+
+  /**
    * 乐观领取：推进 next_run_at + 写入 running lease，防止并发 tick 重复领取。
    * 真正下次时间在 finish 时由 ScheduleService 回写。
    */
@@ -396,6 +457,7 @@ export class ScheduleRepository {
     leaseUntilIso: string,
     trigger: ScheduleRunTrigger = 'timer',
   ): ScheduledJobRun | null {
+    this.reconcileStaleRuns(nowIso)
     if (this.listActiveRunsForJob(job.id).length > 0) return null
     const claimed = this.db.prepare(`
       UPDATE scheduled_jobs
@@ -427,6 +489,7 @@ export class ScheduleRepository {
         id, job_id, started_at, finished_at, status, trigger, summary, error, session_id
       ) VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL, NULL)
     `).run(run.id, run.job_id, run.started_at, run.status, run.trigger)
+    this.pruneJobRuns(jobId)
     return run
   }
 
@@ -438,6 +501,7 @@ export class ScheduleRepository {
       error?: string | null
       session_id?: string | null
     },
+    opts?: { prune?: boolean },
   ): ScheduledJobRun | null {
     const finishedAt = new Date().toISOString()
     this.db.prepare(`
@@ -457,14 +521,18 @@ export class ScheduleRepository {
       runId,
     )
     const row = this.db.prepare('SELECT * FROM scheduled_job_runs WHERE id = ?').get(runId) as RunRow | undefined
-    return row ? rowToRun(row) : null
+    if (!row) return null
+    if (opts?.prune !== false) {
+      this.pruneJobRuns(row.job_id)
+    }
+    return rowToRun(row)
   }
 
   listRuns(jobId: string, limit = 50): ScheduledJobRun[] {
     const rows = this.db.prepare(`
       SELECT * FROM scheduled_job_runs
       WHERE job_id = ?
-      ORDER BY started_at DESC
+      ORDER BY started_at DESC, rowid DESC
       LIMIT ?
     `).all(jobId, limit) as RunRow[]
     return rows.map(rowToRun)

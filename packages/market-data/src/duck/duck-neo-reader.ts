@@ -5,7 +5,19 @@
 import fs from 'node:fs'
 import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api'
 import PQueue from 'p-queue'
+import {
+  isDuckLowMemProfile,
+  resolveDuckMaxPending,
+  resolveDuckReadConcurrency,
+} from './duck-cli-pool.js'
 import { CN_DAILY_TABLE } from './market-schema.js'
+import {
+  buildLatestBarsPageQuery,
+  resolveLatestBarsPageLimit,
+  stitchLatestBarsPages,
+  type LatestBarRow,
+  type LatestBarsPageOpts,
+} from './latest-bars-page.js'
 
 export type NeoKlineDuckStats = {
   rows: number
@@ -38,7 +50,15 @@ export type NeoMarketDuckStats = {
   buybacks: number
 }
 
-const READ_CONCURRENCY = 3
+/** Neo / Gateway `marketStats` 字段键（与 `NeoMarketDuckStats` / `MarketDuckStats` 对齐） */
+export const NEO_MARKET_STATS_KEYS = [
+  'stocks', 'instruments', 'taxonomy', 'quotes', 'factors', 'klines',
+  'kline_codes', 'kline_codes_min60', 'profiles', 'etf',
+  'cn_equity', 'hk_equity', 'us_equity',
+  'announcements', 'dividends', 'partners', 'segments',
+  'shareholders', 'forecasts', 'inst_holdings', 'insider_trades', 'buybacks',
+] as const satisfies readonly (keyof NeoMarketDuckStats)[]
+
 const SYNC_CACHE_MS = 5_000
 
 const EMPTY_MARKET_STATS: NeoMarketDuckStats = {
@@ -52,7 +72,53 @@ const EMPTY_MARKET_STATS: NeoMarketDuckStats = {
 type ReaderHandle = {
   instance: DuckDBInstance
   readQueue: PQueue
+  /** 与 CliPool 同源：`resolveDuckReadConcurrency()` 在 bootstrap 时锁定 */
+  readConcurrency: number
+  /** 与 CliPool 同源：`resolveDuckMaxPending()` 在 bootstrap 时锁定 */
+  maxPending: number
   syncCache: Map<string, { at: number; value: unknown }>
+}
+
+/**
+ * 单条多标量子查询 — 替代串行 COUNT；语义与历史逐表 COUNT 一致。
+ * @param klineTable 日 K 表名（默认 `CN_DAILY_TABLE`）
+ */
+export function buildMarketStatsSql(klineTable = CN_DAILY_TABLE): string {
+  return `
+    SELECT
+      (SELECT COUNT(*)::BIGINT FROM stocks) AS stocks,
+      (SELECT COUNT(*)::BIGINT FROM instruments) AS instruments,
+      (SELECT COUNT(*)::BIGINT FROM taxonomy_nodes) AS taxonomy,
+      (SELECT COUNT(*)::BIGINT FROM stock_quotes_daily) AS quotes,
+      (SELECT COUNT(*)::BIGINT FROM stock_factors) AS factors,
+      (SELECT COUNT(*)::BIGINT FROM ${klineTable}) AS klines,
+      (SELECT COUNT(DISTINCT code)::BIGINT FROM ${klineTable}) AS kline_codes,
+      (SELECT COUNT(*)::BIGINT FROM (
+        SELECT code FROM ${klineTable} GROUP BY code HAVING COUNT(*) >= 60
+      ) t) AS kline_codes_min60,
+      (SELECT COUNT(*)::BIGINT FROM stock_profiles) AS profiles,
+      (SELECT COUNT(*)::BIGINT FROM etf_profiles) AS etf,
+      (SELECT COUNT(*)::BIGINT FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY') AS cn_equity,
+      (SELECT COUNT(*)::BIGINT FROM instruments WHERE market = 'HK' AND asset_class = 'EQUITY') AS hk_equity,
+      (SELECT COUNT(*)::BIGINT FROM instruments WHERE market = 'US' AND asset_class = 'EQUITY') AS us_equity,
+      (SELECT COUNT(*)::BIGINT FROM stock_announcements) AS announcements,
+      (SELECT COUNT(*)::BIGINT FROM stock_dividends) AS dividends,
+      (SELECT COUNT(*)::BIGINT FROM stock_partners) AS partners,
+      (SELECT COUNT(*)::BIGINT FROM stock_business_segments) AS segments,
+      (SELECT COUNT(*)::BIGINT FROM stock_shareholder_summary) AS shareholders,
+      (SELECT COUNT(*)::BIGINT FROM stock_forecasts) AS forecasts,
+      (SELECT COUNT(*)::BIGINT FROM stock_inst_holdings) AS inst_holdings,
+      (SELECT COUNT(*)::BIGINT FROM stock_insider_trades) AS insider_trades,
+      (SELECT COUNT(*)::BIGINT FROM stock_buybacks) AS buybacks
+  `
+}
+
+function rowToMarketStats(row: Record<string, unknown> | undefined): NeoMarketDuckStats {
+  const out: NeoMarketDuckStats = { ...EMPTY_MARKET_STATS }
+  for (const key of NEO_MARKET_STATS_KEYS) {
+    out[key] = Number(row?.[key] ?? 0)
+  }
+  return out
 }
 
 /** @deprecated Node 无法用 receiveMessageOnPort 驱动事件循环；同步读请用 duck-cli spawnSync */
@@ -60,7 +126,13 @@ export function runAsyncSync<T>(_promise: Promise<T>): T {
   throw new Error('runAsyncSync 不可用：请使用 MarketDuckGateway 同步路径（spawnSync duck-cli）或 async API')
 }
 
-function runQueued<T>(queue: PQueue, fn: () => Promise<T>): Promise<T> {
+function runQueued<T>(queue: PQueue, fn: () => Promise<T>, maxPending: number): Promise<T> {
+  if (queue.size >= maxPending) {
+    console.warn(
+      `[duck-neo-reader] read queue full (waiting=${queue.size}, maxPending=${maxPending}); rejecting`,
+    )
+    return Promise.reject(new Error(`DuckNeoReader queue full (maxPending=${maxPending})`))
+  }
   return queue.add(fn) as Promise<T>
 }
 
@@ -117,9 +189,13 @@ async function bootstrapReader(duckDbPath: string): Promise<ReaderHandle | null>
         const instance = await DuckDBInstance.fromCache(duckDbPath, {
           access_mode: 'read_only',
         })
+        const readConcurrency = resolveDuckReadConcurrency()
+        const maxPending = resolveDuckMaxPending()
         const handle: ReaderHandle = {
           instance,
-          readQueue: new PQueue({ concurrency: READ_CONCURRENCY }),
+          readConcurrency,
+          maxPending,
+          readQueue: new PQueue({ concurrency: readConcurrency }),
           syncCache: new Map(),
         }
         readers.set(duckDbPath, handle)
@@ -177,7 +253,7 @@ export class DuckNeoReader {
       const rows = await withConnection(this.duckDbPath, conn => runReadAll<T>(conn, sql, params))
       handle.syncCache.set(key, { at: Date.now(), value: rows })
       return rows
-    })
+    }, handle.maxPending)
   }
 
   async queryOne<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T | undefined> {
@@ -252,7 +328,12 @@ export class DuckNeoReader {
     const key = `__latest_bars__:${tradeDate ?? ''}`
     const hit = this.peekCached<Array<{ code: string; close: number | null; change_pct: number | null }>>(key, 60_000)
     if (hit) return hit
-    void this.latestBars(tradeDate).then(rows => {
+    // 热路径预热：分页拼回，避免一次无界全表进内存
+    const limit = resolveLatestBarsPageLimit({ lowMem: isDuckLowMemProfile() })
+    void stitchLatestBarsPages(
+      opts => this.latestBarsPage(opts),
+      { tradeDate, limit },
+    ).then(rows => {
       void this.handle().then(h => {
         if (h) h.syncCache.set(key, { at: Date.now(), value: rows })
       })
@@ -298,25 +379,28 @@ export class DuckNeoReader {
     if (cached) return cached
     const handle = await this.handle()
     if (!handle) return { rows: 0, codes: 0, maxDate: null }
-    const stats = await runQueued(handle.readQueue, async (): Promise<NeoKlineDuckStats> =>
-      withConnection(this.duckDbPath, async conn => {
-        const row = await runReadOne<{
-          rows: number
-          codes: number
-          maxDate: string | null
-        }>(conn, `
-          SELECT
-            COUNT(*)::BIGINT AS rows,
-            COUNT(DISTINCT code)::BIGINT AS codes,
-            MAX(trade_date) AS maxDate
-          FROM ${CN_DAILY_TABLE}
-        `)
-        return {
-          rows: Number(row?.rows ?? 0),
-          codes: Number(row?.codes ?? 0),
-          maxDate: row?.maxDate?.slice(0, 10) ?? null,
-        }
-      }),
+    const stats = await runQueued(
+      handle.readQueue,
+      async (): Promise<NeoKlineDuckStats> =>
+        withConnection(this.duckDbPath, async conn => {
+          const row = await runReadOne<{
+            rows: number
+            codes: number
+            maxDate: string | null
+          }>(conn, `
+            SELECT
+              COUNT(*)::BIGINT AS rows,
+              COUNT(DISTINCT code)::BIGINT AS codes,
+              MAX(trade_date) AS maxDate
+            FROM ${CN_DAILY_TABLE}
+          `)
+          return {
+            rows: Number(row?.rows ?? 0),
+            codes: Number(row?.codes ?? 0),
+            maxDate: row?.maxDate?.slice(0, 10) ?? null,
+          }
+        }),
+      handle.maxPending,
     )
     handle.syncCache.set(key, { at: Date.now(), value: stats })
     return stats
@@ -335,41 +419,14 @@ export class DuckNeoReader {
     if (cached) return cached
     const handle = await this.handle()
     if (!handle) return { ...EMPTY_MARKET_STATS }
-    const stats = await runQueued(handle.readQueue, async (): Promise<NeoMarketDuckStats> =>
-      withConnection(this.duckDbPath, async conn => {
-        const q = async (sql: string, ...params: unknown[]) => {
-          const row = await runReadOne<{ c: number }>(conn, sql, params)
-          return Number(row?.c ?? 0)
-        }
-        return {
-          stocks: await q('SELECT COUNT(*)::BIGINT AS c FROM stocks'),
-          instruments: await q('SELECT COUNT(*)::BIGINT AS c FROM instruments'),
-          taxonomy: await q('SELECT COUNT(*)::BIGINT AS c FROM taxonomy_nodes'),
-          quotes: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_quotes_daily'),
-          factors: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_factors'),
-          klines: await q(`SELECT COUNT(*)::BIGINT AS c FROM ${CN_DAILY_TABLE}`),
-          kline_codes: await q(`SELECT COUNT(DISTINCT code)::BIGINT AS c FROM ${CN_DAILY_TABLE}`),
-          kline_codes_min60: await q(`
-            SELECT COUNT(*)::BIGINT AS c FROM (
-              SELECT code FROM ${CN_DAILY_TABLE} GROUP BY code HAVING COUNT(*) >= 60
-            ) t
-          `),
-          profiles: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_profiles'),
-          etf: await q('SELECT COUNT(*)::BIGINT AS c FROM etf_profiles'),
-          cn_equity: await q(`SELECT COUNT(*)::BIGINT AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`),
-          hk_equity: await q(`SELECT COUNT(*)::BIGINT AS c FROM instruments WHERE market = 'HK' AND asset_class = 'EQUITY'`),
-          us_equity: await q(`SELECT COUNT(*)::BIGINT AS c FROM instruments WHERE market = 'US' AND asset_class = 'EQUITY'`),
-          announcements: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_announcements'),
-          dividends: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_dividends'),
-          partners: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_partners'),
-          segments: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_business_segments'),
-          shareholders: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_shareholder_summary'),
-          forecasts: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_forecasts'),
-          inst_holdings: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_inst_holdings'),
-          insider_trades: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_insider_trades'),
-          buybacks: await q('SELECT COUNT(*)::BIGINT AS c FROM stock_buybacks'),
-        }
-      }),
+    const stats = await runQueued(
+      handle.readQueue,
+      async (): Promise<NeoMarketDuckStats> =>
+        withConnection(this.duckDbPath, async conn => {
+          const row = await runReadOne<Record<string, unknown>>(conn, buildMarketStatsSql())
+          return rowToMarketStats(row)
+        }),
+      handle.maxPending,
     )
     handle.syncCache.set(key, { at: Date.now(), value: stats })
     return stats
@@ -450,6 +507,7 @@ export class DuckNeoReader {
     return rows.map(r => r.code)
   }
 
+  /** 全市场最新截面（兼容 / 测试）；热路径请用 latestBarsPage + stitchLatestBarsPages */
   async latestBars(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
     if (tradeDate) {
       return this.queryAll(`
@@ -464,10 +522,21 @@ export class DuckNeoReader {
       ) l ON k.code = l.code AND k.trade_date = l.trade_date
     `)
   }
+
+  /** 分页截面：afterCode 游标 + limit（默认 1000，顶 2000） */
+  async latestBarsPage(opts: LatestBarsPageOpts = {}): Promise<LatestBarRow[]> {
+    const { sql, params } = buildLatestBarsPageQuery(CN_DAILY_TABLE, opts)
+    return this.queryAll<LatestBarRow>(sql, params)
+  }
 }
 
 export function getDuckNeoReader(duckDbPath: string): DuckNeoReader {
   return new DuckNeoReader(duckDbPath)
+}
+
+/** 已 bootstrap 的 Neo 读并发（测试 / 观测）；未打开则 undefined */
+export function peekDuckNeoReaderConcurrency(duckDbPath: string): number | undefined {
+  return readers.get(duckDbPath)?.readConcurrency
 }
 
 export async function resetDuckNeoReaders(): Promise<void> {

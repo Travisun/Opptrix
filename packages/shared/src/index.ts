@@ -79,6 +79,39 @@ export {
 } from './sandbox-settings.js'
 export type { InstalledProviderRecord, InstalledProvidersIndex } from './installed-provider.js'
 export {
+  applySqliteMemoryPragmas,
+  resolveSqliteMemProfile,
+  sqliteMemoryPragmaValues,
+  type SqliteMemProfile,
+  type SqliteMemRole,
+  type SqliteMemoryPragmaValues,
+  type SqlitePragmaCapable,
+} from './sqlite-memory-pragmas.js'
+export {
+  DEFAULT_SQLITE_LIGHT_MAINTENANCE_INTERVAL_MS,
+  resolveSqliteVacuumEnabled,
+  resolveSqliteLightMaintenanceIntervalMs,
+  sqliteLightMaintenanceStampPath,
+  readSqliteLightMaintenanceStamp,
+  writeSqliteLightMaintenanceStamp,
+  isSqliteLightMaintenanceDue,
+  tryEnableSqliteIncrementalAutoVacuum,
+  runSqliteLightMaintenance,
+  type SqliteAutoVacuumMode,
+  type SqliteLightMaintenanceResult,
+  type SqliteLightMaintenanceOpts,
+  type SqliteOpenCapable,
+} from './sqlite-light-maintenance.js'
+export {
+  pruneIncompleteUserDataTemps,
+  isIncompleteTempName,
+  DEFAULT_INCOMPLETE_TEMP_MAX_AGE_MS,
+  DEFAULT_INCOMPLETE_TEMP_MAX_REMOVE,
+  DEFAULT_INCOMPLETE_TEMP_MAX_DEPTH,
+  type PruneIncompleteUserDataTempsOptions,
+  type PruneIncompleteUserDataTempsResult,
+} from './user-data-temp-prune.js'
+export {
   computeMarketRegime,
   computeMaPositionPct,
   computePricePercentile,

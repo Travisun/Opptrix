@@ -35,6 +35,11 @@ export function getSemanticModelStatus(): SemanticModelUiStatus {
   }
 }
 
+/**
+ * 同步安装语义模型（下载 + tryEnable）。
+ * 向量回填由 tryEnable → scheduleEmbedPendingAfterEnable 延后执行，勿在此阻塞。
+ * 设置页请用 startSemanticModelInstallJob（异步 + 进度）。
+ */
 export async function installSemanticModel(opts: {
   onProgress?: (p: DownloadProgress) => void
   timeoutMs?: number
@@ -45,15 +50,6 @@ export async function installSemanticModel(opts: {
   })
   const embedding = getEmbeddingService()
   await embedding.tryEnableDefaultBackend()
-  // 安装后尽量回填已整理文档的向量（动态 import 避免与 index 循环依赖）
-  try {
-    const { getDocLibraryService } = await import('./index.js')
-    const svc = getDocLibraryService()
-    svc.setEmbeddingService(embedding)
-    await svc.embedPendingDocuments()
-  } catch {
-    /* 回填失败不阻断安装成功 */
-  }
   return getSemanticModelStatus()
 }
 

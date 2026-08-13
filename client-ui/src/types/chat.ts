@@ -185,6 +185,8 @@ export interface ChatAttachmentMeta {
   mindmap?: MindmapAttachmentMeta
   /** 前端乐观插入标记；服务端不会返回此字段 */
   optimistic?: boolean
+  /** 前端上传进度 0–1；仅乐观项，服务端不会返回 */
+  uploadProgress?: number
   /** 列表 API：是否已被会话 turns 引用（可选，仅 GET list 返回） */
   referenced?: boolean
 }

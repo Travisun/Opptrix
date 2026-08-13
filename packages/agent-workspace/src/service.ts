@@ -421,8 +421,8 @@ export class WorkspaceService {
     return getPythonPlatformStatus().then(status => toAgentPythonEnvView(status))
   }
 
-  ensurePython() {
-    return ensurePythonReady()
+  ensurePython(opts?: { jobId?: string }) {
+    return ensurePythonReady({ jobId: opts?.jobId })
   }
 }
 

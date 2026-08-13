@@ -269,7 +269,13 @@ export function getMarketDataService(): MarketDataService {
   return sharedService
 }
 
-export { getMarketDataStore, MarketDataStore } from './store.js'
+export {
+  getMarketDataStore,
+  MarketDataStore,
+  SYNC_LOGS_GLOBAL_MAX,
+  SYNC_LOGS_PER_SESSION_MAX,
+  SYNC_SESSIONS_KEEP_MAX,
+} from './store.js'
 export {
   getMarketDuckGateway,
   resetMarketDuckGateways,
@@ -277,7 +283,29 @@ export {
   invalidateHasMarketDuckDataCache,
   type MarketDuckGateway,
   type MarketDuckStats,
+  type LatestBarRow,
+  type LatestBarsPageOpts,
 } from './duck/market-duck-gateway.js'
+export {
+  DEFAULT_DUCK_TEMP_MAX_AGE_MS,
+  OPPTRIX_DUCK_TEMP_PREFIXES,
+  listOpptrixDuckTempJson,
+  pruneOrphanDuckTempJson,
+  withCompactTempJsonAsync,
+  withCompactTempJsonSync,
+  type DuckTempJsonKind,
+  type PruneOrphanDuckTempJsonOptions,
+  type PruneOrphanDuckTempJsonResult,
+} from './duck/duck-temp-json.js'
+export {
+  stitchLatestBarsPages,
+  stitchLatestBarsPagesSync,
+  resolveLatestBarsPageLimit,
+  clampLatestBarsPageLimit,
+  LATEST_BARS_PAGE_DEFAULT_LIMIT,
+  LATEST_BARS_PAGE_LOW_MEM_LIMIT,
+  LATEST_BARS_PAGE_MAX_LIMIT,
+} from './duck/latest-bars-page.js'
 export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
@@ -360,3 +388,34 @@ export {
   type FuyaoDumpKind,
   type FuyaoDumpMode,
 } from './sync/dump-import.js'
+export {
+  pruneMarketDumps,
+  resolveMarketDumpsDir,
+  resolveDumpsMaxAgeMs,
+  resolveDumpsMaxBytes,
+  resolveDumpsIncompleteMaxAgeMs,
+  DEFAULT_DUMPS_MAX_AGE_MS,
+  DEFAULT_DUMPS_MAX_BYTES,
+  DEFAULT_DUMPS_INCOMPLETE_MAX_AGE_MS,
+  type PruneMarketDumpsOptions,
+  type PruneMarketDumpsResult,
+} from './sync/dumps-prune.js'
+export {
+  startPackageExportJob,
+  getPackageExportJob,
+  getPackageExportJobFilePath,
+  resetPackageExportJobsForTests,
+  awaitPackageExportJobsForTests,
+  setPackageExportRunnerForTests,
+  type PackageExportJobSnapshot,
+  type PackageExportJobState,
+} from './package-export-job.js'
+export {
+  prepareFuyaoDumpMaybeAsync,
+  prepareFuyaoDumpForAgentAsync,
+  getFuyaoDumpJob,
+  isFuyaoDumpLocalCacheReady,
+  resetFuyaoDumpJobsForTests,
+  type FuyaoDumpJobResult,
+  type FuyaoDumpJobState,
+} from './sync/fuyao-dump-job.js'

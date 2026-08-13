@@ -65,6 +65,7 @@ function lastStatusLabel(status: string | null): string {
     case 'ok': return '上次成功'
     case 'error': return '上次失败'
     case 'skipped': return '上次跳过'
+    case 'interrupted': return '上次中断'
     case 'running': return '正在执行'
     default: return '尚未执行'
   }

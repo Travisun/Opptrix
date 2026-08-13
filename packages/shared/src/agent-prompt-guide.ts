@@ -165,7 +165,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 运行 opptrix_run 前先 get_system_info（或 python_env_status 查 Python）；确认 node_ready / npm_ready / python_ready / python_priority 与 platform',
     '- opptrix_run / shell_install argv 只用字面量 python / python3 / pip（或 node/npm）；禁止手写系统或 Opptrix 托管绝对路径；运行时会静默改写到当前优先解释器',
     '- install 与 run 共用同一解释器；pip 依赖装进工作区 .opptrix-packages，运行时自动经 PYTHONPATH 可见',
-    '- 依赖安装用 shell_install(manager=pip|npm)；pip 镜像由设置注入；python 未就绪时先 ensure_python',
+    '- 依赖安装用 shell_install(manager=pip|npm)；pip 镜像由设置注入；python 未就绪时先 ensure_python（未就绪立即 preparing|installing+job_id → 再调 ensure_python({ job_id }) 轮询，勿死等）',
     '- python_env_status 只描述当前优先解释器；勿把「系统 / 托管」两套都当可执行选项',
     '',
     '【opptrix_run — 先识平台，再组 argv】',
@@ -203,7 +203,7 @@ export function buildLocalProgrammingPlaybook(): string {
     '2. 扫 shared/packages/*/README，能复用则复用（root_id=shared）',
     '3. 缺依赖先 shell_install（npm/pip），勿盲造轮子',
     '4. 最后自写；可复用产物写入 shared/packages/<name>/ + README',
-    '5. 离线大数据 → prepare_fuyao_dump；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
+    '5. 离线大数据 → prepare_fuyao_dump（冷下载先 preparing+job_id 再轮询）；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
     '6. 沙盒前判断联网/局域网；需 LAN → request_session_lan_access / ask_user(allow_lan_session)',
     '7. 第三方密钥：list_vault_secrets → 已有 grant_session_secret / 没有 request_secret；opptrix_run 用 secret_refs 传名字',
     '8. 沙盒做计算/清洗/汇总；聊天展示图用 ```chart``` / ```opptrix-chart```（→ @opptrix/canvas Chart），禁止默认沙盒出图代替围栏',
@@ -493,7 +493,9 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   sections.push(
     '【文档 RAG — 多跳检索】',
     '1) 本会话附件：list_session_documents → search_document（可省略 attachment_id 搜全部）→ read_document 按页精读',
-    '2) 跨会话/全库：search_library 按关键词找片段 → read_document(document_id) 精读；可换词多跳直至信息足够',
+    '2) 跨会话/全库：search_library → 研报再 read_document(document_id) 精读；可换词多跳直至信息足够',
+    '   - 研报：可混合关键词与语义相关',
+    '   - 资讯（source_type=news）：本机资讯全文检索（与统一搜索同源、无向量）；须用代码/公司名/主题/事件等具体词，可一次多词组合，忌空泛「相关报道」；以返回摘录为准，勿对资讯 id 调用 read_document',
     '3) 引用须带文档名与页码；禁止臆造未读内容；勿一次灌全文',
   )
 

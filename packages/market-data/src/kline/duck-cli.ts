@@ -14,11 +14,13 @@ import {
   attachSqlite,
   detachSqlite,
 } from './duck-connection.js'
+import { upsertCnDailyBarsBatch } from './kline-batch-upsert.js'
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
 import { analyticsStats } from '../analytics/duck-compute.js'
 import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDataMigrationNeeded, marketDuckStats } from '../duck/market-migrate.js'
 import { applyDuckWriteOps, type DuckWriteOp } from '../duck/market-writes.js'
+import { buildLatestBarsPageQuery } from '../duck/latest-bars-page.js'
 
 const CN_TABLE = CN_DAILY_TABLE
 
@@ -255,6 +257,17 @@ async function cmdLatestBars(flags: Record<string, string>) {
   const conn = connectDuck(db)
   try {
     await ensureKlineImportSchema(conn)
+    const wantsPage = flags.limit != null || flags.after != null
+    if (wantsPage) {
+      const { sql, params } = buildLatestBarsPageQuery(CN_TABLE, {
+        tradeDate: tradeDate ?? null,
+        afterCode: flags.after ?? null,
+        limit: flags.limit != null ? Number(flags.limit) : undefined,
+      })
+      const rows = await duckAll(conn, sql, ...params)
+      process.stdout.write(JSON.stringify(rows))
+      return
+    }
     const rows = tradeDate
       ? await duckAll(conn, `SELECT code, close, change_pct FROM ${CN_TABLE} WHERE trade_date = ?`, tradeDate)
       : await duckAll(conn, `
@@ -291,15 +304,7 @@ async function cmdUpsert(flags: Record<string, string>) {
     await ensureKlineImportSchema(conn)
     const syncedAt = new Date().toISOString()
     await duckRun(conn, 'BEGIN TRANSACTION')
-    for (const r of rows) {
-      const code = String(r.code).padStart(6, '0')
-      await duckRun(conn, `
-        INSERT OR REPLACE INTO ${CN_TABLE} (
-          trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, r.tradeDate, code, r.open ?? null, r.high ?? null, r.low ?? null, r.close ?? null,
-      r.volume ?? null, r.amount ?? null, r.changePct ?? null, syncedAt)
-    }
+    await upsertCnDailyBarsBatch(conn, CN_TABLE, rows, syncedAt, { beginTransaction: false })
     await duckRun(conn, 'COMMIT')
     await attachSqlite(conn, sqlitePath, 'md', false)
     const minDate = rows.reduce((m, r) => (r.tradeDate < m ? r.tradeDate : m), rows[0]!.tradeDate)

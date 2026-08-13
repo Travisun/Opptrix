@@ -24,6 +24,8 @@ export {
   SCHEDULE_SCHEMA_MIGRATION_KEY,
   SCHEDULE_SETTINGS_NS,
   SCHEDULE_SETTINGS_ID,
+  SCHEDULE_STALE_RUN_MS,
+  SCHEDULE_MAX_RUNS_PER_JOB,
   DEFAULT_SCHEDULE_SETTINGS,
   type ScheduleSettings,
   type ScheduleJobKind,
@@ -43,4 +45,11 @@ export {
   type CreateScheduledJobInput,
   type UpdateScheduledJobInput,
 } from './schedule.js'
-export { UserDataStore, getUserDataStore } from './store.js'
+export {
+  UserDataStore,
+  getUserDataStore,
+  type DocumentPageCursor,
+  type ListDocumentPageOpts,
+  type DocumentPageRow,
+  type DocumentExtractPageRow,
+} from './store.js'

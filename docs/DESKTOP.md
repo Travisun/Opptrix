@@ -20,6 +20,8 @@ Cross-platform desktop app built with **Electron** and a **Node.js API sidecar**
 
 **Why Electron?** Mature ecosystem, consistent Chromium rendering (Markdown / Mermaid / LaTeX), and the main process is Node — a natural fit for spawning the existing API sidecar. Production uses `ELECTRON_RUN_AS_NODE` so the bundled app does not require a separate Node.js install.
 
+新闻离线翻译结果缓存在主进程内存 Map 中，防抖落盘至 `~/.opptrix/news-translation-cache.json`（对齐行情引擎 Cache：LRU + 退出 flush）。本地翻译 GGUF **按需加载**（启动/下载完成不进显存；首次翻译或显式 `preloadTranslationModel` 才 load），空闲约 12 分钟后真正 `dispose`（`OPPTRIX_TRANSLATION_IDLE_MS`，`0` 关闭）；句段内存 LRU 保留，换模/退出亦走官方 dispose。 sidecar `LlamaRuntime` 同语义 idle unload。`translation-start-download` IPC **立即 ack** `{ started, download }`，GGUF 后台下载，进度经 `translation-download-progress` / `translation-get-status.download`（并发不双开）。
+
 <p align="center">
   <img src="../screenshot.jpg" alt="Opptrix 桌面主界面" width="880" />
 </p>
@@ -78,13 +80,27 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 ## 计划任务与后台常驻
 
-桌面端计划任务为 **仅进程内执行**：Sidecar 内 `ScheduleService.start()` 每 **20s** 扫描到期任务（`trigger: 'timer'`）。**不再**注册 LaunchAgent / Windows schtasks / Linux systemd timer；升级启动时 `reconcileOsSchedule` **强制** `removeTickRegistration` 并清理旧 runner 脚本。
+### 唯一主路径（产品设计）
+
+```
+登录 / 前台 / 托盘常驻
+  → Electron 主进程（托盘 UI）
+  → 唯一 sidecar API（ScheduleService.start 每 20s tick）
+完全退出 → 不跑计划任务
+不再注册 LaunchAgent / schtasks / systemd timer
+```
+
+桌面端计划任务 **仅** 在 sidecar 进程内执行：`ScheduleService.start()` 每 **20s** 扫描到期任务（`trigger: 'timer'`）。**headless-tick** 若被旧 OS runner 误触发，**只**对已有 sidecar `POST /api/schedule/tick`；**禁止**再 `spawnSidecarProcess`（应用未运行 = 计划不应执行）。**不再**注册 LaunchAgent / Windows schtasks / Linux systemd timer；升级启动时 `reconcileOsSchedule` **强制** `removeTickRegistration` 并清理旧 runner 脚本（清扫能力保留）。
 
 关窗到托盘时 sidecar 与 timer 继续运行；从托盘 **完全退出** 后计划任务 **不会** 执行。默认开启登录自启 `autostart`（`--background` 托盘常驻）：macOS / Windows 用 Electron Login Item，Linux 写 XDG Autostart（`~/.config/autostart/opptrix.desktop`）；与已废除的 OS tick 无关。
 
 ### 关窗 = 托盘常驻（生产包）
 
 打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`，并隐藏 macOS Dock / Windows·Linux 任务栏图标，仅保留系统托盘）；从托盘「显示」时 `revealAppFromTray` / `ensureMainWindowVisible` 恢复 Dock 与任务栏。sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
+
+**Sidecar 守护（生产包，兜底）**：主进程在常驻启动成功后监督自有 sidecar（非开发、非 `reuse` 端口）。子进程意外退出时按指数退避（1s→2s→…→30s）自动拉起并重新做 health；另有约 20s 健康巡检，发现「进程在但端口无响应」或进程已消失时同样重启（与 exit 路径共用单飞锁，避免双启）。用户退出、更新安装或短命 tick 退出前会停止守护，并对 sidecar 给予 ≥8.5s 软关闭窗口（对齐 server 内原生 Duck/Lance/ONNX 关闭），再 SIGKILL，减轻 macOS「意外退出」类崩溃框。`before-quit`（含 Cmd+Q）在 sidecar 未就绪退出前会 `preventDefault` 并等待宽限关闭。
+
+> **说明**：历史上 sidecar `SIGTRAP` 根因是 LanceDB 文档向量库在新闻洪峰下 `delete+add` 从不 `optimize`，`_versions` 爆炸至近 u64 上限后原生崩溃。现架构：**资讯仅一处 FTS**（user-store，与统一搜索同源；**不再**双写 doc-library 切块、**不**写入 Lance）；统一搜索首次 `ensureIndexes` 按页灌入 FTS、不驻留全量文章对象。研报向量路径保留写串行、向量校验、定期 optimize、病理库安全重建；`upsert` 优先 `mergeInsert(on: chunk_id)`，不可用时回退 delete+add；**search 读优先**（可插队尚未开始的写/optimize，写仍互斥串行）；Lance pending 有界（超限丢弃最旧尚未开始的 write）；版本软顶 `OPPTRIX_LANCE_MAX_VERSIONS`（默认 64）在写路径与 retention 触发更积极 optimize。守护重启 **不能** 替代根治。已损坏的本机 `~/.opptrix/lancedb/doc_chunks` 会在下次 ensure/启动时检测并重建空表，随后**限速**调度 `embedPendingDocuments`（清非 news 的 `embedded_at` 后回填；`OPPTRIX_LANCE_BACKFILL_LIMIT` / `OPPTRIX_LANCE_BACKFILL_DELAY_MS` 可调；失败不阻断打开空表）。
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 
@@ -153,7 +169,7 @@ Electron 官方建议 Windows 用 **多尺寸 `.ico`**（至少含上表 small �
 | `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar；进程内 timer 工作；reconcile 仅 remove 遗留 OS tick + 同步登录项 |
 | `--schedule-tick` | **兼容**旧 LaunchAgent：短命 worker 在 sidecar ready 后 `POST /api/schedule/tick` 后退出；**新版本不再注册**此类 OS 任务 |
 
-**已废除**：系统级 OS tick（LaunchAgent / schtasks / systemd timer）、OpptrixSchedule Helper 冷启、headless-tick 作为主路径。适配器仍保留 `removeTickRegistration` / `probeTickRegistration`，供升级清理。`userData` 内旧 `os-schedule-tick-runner.*` 与 endpoint 冷启字段在 reconcile 时清除；`os-schedule-endpoint.json` 仅保留 loopback `host`/`port` 供 UI 复用 sidecar。
+**已废除**：系统级 OS tick（LaunchAgent / schtasks / systemd timer）、OpptrixSchedule Helper 冷启、headless-tick 冷启 sidecar。适配器仍保留 `removeTickRegistration` / `probeTickRegistration`，供升级清理。`userData` 内旧 `os-schedule-tick-runner.*` 与 endpoint 冷启字段在 reconcile 时清除；`os-schedule-endpoint.json` 仅保留 loopback `host`/`port` 供 UI 复用 sidecar。遗留 runner 若仍调用 `headless-tick.cjs`，仅 HTTP tick，失败即 exit≠0。
 
 Windows NSIS（`nsis/installer.nsh`）仍会在安装前移除 `OpptrixScheduleTick`，避免旧版定时拉起阻塞覆盖安装。
 
@@ -194,6 +210,12 @@ REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--sche
 | `OPPTRIX_RUNTIME_ARCH` | Sidecar native target arch (`arm64` / `x64`); CI macOS Intel 交叉构建时使用 |
 | `OPPTRIX_RUNTIME_PLATFORM` | Sidecar native target platform (`darwin` / `win32` / `linux`); 默认取当前 OS |
 | `OPPTRIX_PREBUILD_MIRROR` | `better-sqlite3` prebuild 镜像根 URL（默认 npmmirror CDN） |
+| `OPPTRIX_SQLITE_MEM_PROFILE` | SQLite 每连接内存档位：`low` / `medium` / `high`（未设则按机器总内存自动：&lt;6GB low，&lt;12GB medium，否则 high）；作用于 user-store / market-data / doc-library；`low` 时 Duck 读并发、boot warm、OCR 批并行亦按低配收敛 |
+| `OPPTRIX_DUCK_READ_CONCURRENCY` | Duck 只读并发（默认 3；低配自动 1）；写恒为 1 |
+| `OPPTRIX_HYDRATE_CONCURRENCY` | L1 `hydrateStocks` 跨标的并发（默认 2；低配 1；上限 3）；同码内股东→伙伴仍串行 |
+| `OPPTRIX_OCR_CONCURRENCY` | 文档内嵌图 OCR 批并行（默认 3；低配 / `OPPTRIX_SQLITE_MEM_PROFILE=low` 或 totalmem&lt;6GB → 2；上限 4）。语义 embedding 已加载时再降到 1（不强制卸载 embedding） |
+| `OPPTRIX_OCR_IDLE_MS` | RapidOCR（`ocr-l2`）空闲卸载超时（默认 12 分钟；`0` 关闭）；首次识别才加载，空闲后释放内存，再次 OCR 可重建 |
+| `OPPTRIX_DUCK_WARM_ON_BOOT` | 设为 `0` 跳过 MarketDataStore 启动时 `warmReadCaches`（首次查询仍会拉统计） |
 | `ELECTRON_MIRROR` / `npm_config_disturl` | Electron headers 下载镜像（本地网络受限时） |
 | `OPPTRIX_RUNTIME_STAGE` | Packaged sidecar root (`runtime-stage`); used to locate bundled sandbox tools |
 | `PLAYWRIGHT_BROWSERS_PATH` | Agent 浏览器 Chromium 目录；桌面生产包由 sidecar 指向 `runtime-stage/playwright-browsers` |
@@ -253,7 +275,7 @@ opptrix://chat?session={encodeURIComponent(sessionId)}
 | `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick`；权限为 denied 时返回 `false` |
 | `window-is-focused` | `windowIsFocused()` | 主窗口是否 focused（注意力判断） |
 | `open-local-directory` | `openLocalDirectory(dirPath)` | 用系统文件管理器打开目录；路径须在 `resolveUserDataRoot()/agent-workspace` 之下，不存在则递归创建后再打开 |
-| `chat-debug-open-log-dir` | `chatDebugOpenLogDir()` | 打开（必要时先创建）`~/.opptrix/logs/chat-debug`；设置 → 关于「对话调试日志」写入按会话拆分的 JSONL |
+| `chat-debug-open-log-dir` | `chatDebugOpenLogDir()` | 打开（必要时先创建）`~/.opptrix/logs/chat-debug`；设置 → 关于「对话调试日志」（默认关闭）按会话写 JSONL，单文件超限 rotate 为 `.1`，目录有会话数/总字节软顶并 prune 最旧 |
 
 协议事件仍为 `opptrix-protocol`（`onProtocolOpen`），与通知点击深链共用。
 
@@ -292,7 +314,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 ## Composer 语音输入（本机 ASR）
 
-聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。
+聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。主进程转写等待上限 **180s**（冷启 + 较长录音）；与 UI 本机重接口超时一致，全局快路径仍为 10s。
 
 **默认引擎**：SenseVoice。Composer 语音输入与新闻音视频转写均使用本机 SenseVoice 模型；安装包内置 q8 模型与 VAD，优先加载内置资源，其次用户目录，缺失时再下载。
 
@@ -307,9 +329,12 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | 运行时 | 优先内置 → 开发 `OPPTRIX_LLM_DIR` / `apps/server/llms` / `llms` → `~/.opptrix/llms/multilingual-e5-small/` → 旧 `~/.opptrix/models/…` → 按需下载（开发态） |
 | 覆盖 | `OPPTRIX_E5_BUNDLED_DIR`（测试 / sidecar 注入）；可选 `OPPTRIX_LLM_DIR` |
 | 卸载 | 设置页「卸下」仅清用户目录副本，不删安装包内置 |
-| 首启 | sidecar 启动后后台 `tryEnableDefaultBackend()`；内置齐全即就绪，设置页显示「应用自带」无需再装 |
+| 首启 | sidecar 启动后后台 `ensureBundledRagRuntime()` **仅探测磁盘**是否已安装语义模型，**不**把 E5 载入内存；首次语义检索 / 入库 embed / 安装模型后再 `tryEnable`，设置页显示「应用自带」无需再装 |
+| 空闲卸载 | 成功 embed 后若一段时间无再用，卸下内存中的语义模型（默认约 12 分钟，`OPPTRIX_EMBED_IDLE_MS` 可覆盖，`0` 关闭）；磁盘「已安装」保留，下次检索会再加载。`closeDocLibraryService` 退出时一并释放 |
 
 深度整理（OCR，`ocr-l2` / `@gutenye/ocr-node`）ONNX 与语义检索模型默认内置（`resources/llms/<id>/`，用户副本 `~/.opptrix/llms/<id>/`）。**不依赖** Python 侧车；`pdfplumber` L1 已从默认路径与设置页移除。
+
+Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 分页（游标）**，避免一次全表进内存；向量侧按页聚合 top-K，**news 仍不进 Lance**。
 
 | 项 | 说明 |
 |----|------|
@@ -318,6 +343,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | 打包 | `extraResources`：`resources/llms` → `llms`；`resources/engines` → `engines`（兼容旧探测） |
 | 运行时 | Node ONNX OCR；`OPPTRIX_RAG_ENGINES_BUNDLED_DIR` 由 `sidecar-launch.cjs`（`buildSidecarEnv`）注入 |
 | 首启 | 后台 `ensureBundledRagRuntime()`：启用 embedding；OCR 模型齐全则深度整理可用 |
+| 空闲卸载 | 首次 OCR 才 `Ocr.create`；成功识别后空闲默认约 12 分钟释放 singleton（`OPPTRIX_OCR_IDLE_MS`，`0` 关闭）；`closeDocLibraryService` / server shutdown 一并清理 |
 
 禁止默认路径纳入 PyMuPDF（AGPL）。研报入库支持 `.pdf` / `.txt` / `.md` / `.docx` / `.pptx` / 图片；`.pptx` 按幻灯片分 chunk。
 
@@ -343,6 +369,10 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `OPPTRIX_SPEECH_ENGINE` | `sensevoice` | Composer 语音引擎：`sensevoice` 或 `whisper` |
+| `OPPTRIX_EMBED_IDLE_MS` | `720000`（12 分钟） | 语义 embedding 模型空闲卸载超时；`0` 关闭空闲卸载 |
+| `OPPTRIX_OCR_IDLE_MS` | `720000`（12 分钟） | RapidOCR 空闲卸载超时；`0` 关闭；status/健康检查不创建实例 |
+| `OPPTRIX_TRANSLATION_IDLE_MS` | `720000`（12 分钟） | 本地翻译 GGUF 空闲卸载超时（真正 dispose）；`0` 关闭；句段 LRU 不随卸载清空 |
+| `OPPTRIX_EMBED_BATCH_SIZE` | `8` | transformers 真 batch 推理批大小（钳位 8～32）；失败时回退逐条 |
 | `OPPTRIX_SENSEVOICE_MODEL` | `q8` | SenseVoice 模型：`q8`（约 242MB）或 `f16`（约 448MB）；须用官方 FunAudioLLM GGUF |
 
 | `OPPTRIX_SENSEVOICE_BIN` | — | 可选，覆盖 SenseVoice CLI 路径 |
@@ -357,6 +387,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 - 用户目录：`~/.opptrix/sensevoice/`（`models/` 放 GGUF，`bin/` 放预编译 CLI）。
 - **安装包内置**：`resources/sensevoice/` → 打包后位于 `process.resourcesPath/sensevoice/`，含 `sensevoice-small-q8.gguf`（约 242MB）与 `fsmn-vad.gguf`（约 2MB）。
 - **加载优先级**：内置 → `~/.opptrix/sensevoice/models` → 按需下载到用户目录（不写内置路径）。
+- **ensure 异步**：`POST /api/news/multimodal/sensevoice/ensure` 立即返回 job，客户端轮询至 `ready`/`error`；设置页 bootstrap 与显式准备共用同一任务，不双开下载。
 - 构建时 `scripts/stage-sensevoice.mjs` 会优先从本地 `~/.opptrix/sensevoice/models` 拷贝，否则从 ModelScope 下载。
 - 模型源：ModelScope [`FunAudioLLM/SenseVoiceSmall-GGUF`](https://modelscope.cn/models/FunAudioLLM/SenseVoiceSmall-GGUF/files)；默认 `sensevoice-small-q8.gguf`。
 - 首次在无内置包环境（如 Web 自托管）转写时自动下载：预编译运行时（约 6MB）+ q8 模型 + VAD。
@@ -374,7 +405,7 @@ Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`opptrix_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
+智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`opptrix_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；浏览截图目录同样按保留天数与容量硬顶自动回收（默认约 7 天 / 512MiB，可用 `OPPTRIX_BROWSER_SCREENSHOT_MAX_AGE_MS` / `OPPTRIX_BROWSER_SCREENSHOT_MAX_BYTES` 调节，`0` 关闭对应维度；关闭浏览器会话不会立刻删图）。本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint，并在新库启用 `auto_vacuum=INCREMENTAL` 时跑 `incremental_vacuum` 还盘（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）；启动与周期维护会扫掉已无对应会话的孤儿目录。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。研报库会限速回收无文档引用的 blob/markdown，并清理用户数据根下过期的半成品下载临时文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
 
 **Windows 隔离强度（设置 → 沙盒环境）**：
 

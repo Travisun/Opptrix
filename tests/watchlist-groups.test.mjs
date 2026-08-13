@@ -60,6 +60,7 @@ describe('watchlist groups store isolation', () => {
       membership: { 'CN:SH.600519': ['g1'] },
     })
     watchlist.replace([{ code: '600519', name: '贵州茅台' }])
+    watchlist.flush()
 
     const rawWatchlist = getUserDataStore().getDocument('watchlist', 'default')
     const rawGroups = getUserDataStore().getDocument('preference', 'watchlist_groups')

@@ -7,8 +7,6 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import Database from 'better-sqlite3'
 import type { StockKline } from '@opptrix/shared'
 import { klineDuckDbPath, marketDbPath } from '../paths.js'
@@ -19,10 +17,22 @@ import {
   DUCK_READ_PRIORITY_BACKGROUND,
   DUCK_READ_PRIORITY_INTERACTIVE,
   getDuckCliPool,
+  isDuckLowMemProfile,
   resetDuckCliPools,
 } from './duck-cli-pool.js'
 import { getDuckNeoReader, resetDuckNeoReaders } from './duck-neo-reader.js'
+import { withCompactTempJsonAsync, withCompactTempJsonSync } from './duck-temp-json.js'
+import {
+  clampLatestBarsPageLimit,
+  resolveLatestBarsPageLimit,
+  stitchLatestBarsPages,
+  stitchLatestBarsPagesSync,
+  type LatestBarRow,
+  type LatestBarsPageOpts,
+} from './latest-bars-page.js'
 import { resetKlineDuckStore } from '../kline/duck-store.js'
+
+export type { LatestBarRow, LatestBarsPageOpts } from './latest-bars-page.js'
 
 export type AnalyticsSyncScope = 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all'
 
@@ -166,51 +176,48 @@ export class MarketDuckGateway {
 
   async applyBatchAsync(ops: DuckWriteOp[]): Promise<number> {
     if (!ops.length) return 0
-    const tmp = path.join(os.tmpdir(), `opptrix-duck-batch-${process.pid}-${Date.now()}.json`)
-    fs.writeFileSync(tmp, JSON.stringify(ops))
-    try {
+    return withCompactTempJsonAsync('batch', ops, async tmp => {
       const out = JSON.parse(
         await this.execCliWrite(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
       ) as { applied?: number }
       invalidateHasMarketDuckDataCache(this.duckDbPath)
       return out.applied ?? 0
-    } finally {
-      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-    }
+    })
   }
 
   /** 同步边界（测试 / 导出）— worker 池 + Atomics 等待，与 applyBatchAsync 同 duck-cli 路径 */
   applyBatchSync(ops: DuckWriteOp[]): number {
     if (!ops.length) return 0
-    const tmp = path.join(os.tmpdir(), `opptrix-duck-batch-${process.pid}-${Date.now()}.json`)
-    fs.writeFileSync(tmp, JSON.stringify(ops))
-    try {
+    return withCompactTempJsonSync('batch', ops, tmp => {
       const out = JSON.parse(
         this.execCliWriteSync(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
       ) as { applied?: number }
       invalidateHasMarketDuckDataCache(this.duckDbPath)
       return out.applied ?? 0
-    } finally {
-      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-    }
+    })
   }
 
   async upsertKlinesBatchAsync(rows: unknown[]): Promise<number> {
     if (!rows.length) return 0
-    const tmp = path.join(os.tmpdir(), `opptrix-kline-upsert-${process.pid}-${Date.now()}.json`)
-    fs.writeFileSync(tmp, JSON.stringify(rows))
-    try {
+    return withCompactTempJsonAsync('kline-upsert', rows, async tmp => {
       await this.execCliWrite([
         'upsert', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath, '--file', tmp,
       ], 256 * 1024 * 1024)
+      invalidateHasMarketDuckDataCache(this.duckDbPath)
       return rows.length
-    } finally {
-      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-    }
+    })
   }
 
+  /** 同步边界（测试 / 导入）— 与 upsertKlinesBatchAsync 同 duck-cli 批灌入路径 */
   upsertKlinesBatchSync(rows: unknown[]): number {
-    throw new Error('upsertKlinesBatchSync 已移除，请使用 await upsertKlinesBatchAsync')
+    if (!rows.length) return 0
+    return withCompactTempJsonSync('kline-upsert', rows, tmp => {
+      this.execCliWriteSync([
+        'upsert', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath, '--file', tmp,
+      ], 256 * 1024 * 1024)
+      invalidateHasMarketDuckDataCache(this.duckDbPath)
+      return rows.length
+    })
   }
 
   async migrateMarketDataAsync(force = false): Promise<Record<string, number>> {
@@ -357,15 +364,13 @@ export class MarketDuckGateway {
   /** 同步边界 — worker 池 duck-cli 读（测试 flush 后校验）；async 短读仍走 neo */
   queryAllSync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
     if (!this.duckExists()) return []
-    const tmp = path.join(os.tmpdir(), `opptrix-duck-query-${process.pid}-${Date.now()}.json`)
-    fs.writeFileSync(tmp, JSON.stringify({ sql, params }))
     try {
-      const raw = this.execCliReadSync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp])
-      return JSON.parse(raw || '[]') as T[]
+      return withCompactTempJsonSync('query', { sql, params }, tmp => {
+        const raw = this.execCliReadSync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp])
+        return JSON.parse(raw || '[]') as T[]
+      })
     } catch {
       return []
-    } finally {
-      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
     }
   }
 
@@ -457,14 +462,70 @@ export class MarketDuckGateway {
     return this.neoReader().codesWithMinKlines(minBars)
   }
 
+  /**
+   * 同步截面（兼容 / 缓存命中）；后台预热已改为分页拼回。
+   * 热路径请用 latestBarsAsync / latestBarsPageAsync，勿依赖一次无界全表。
+   */
   latestBarsSync(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
     if (!this.duckExists()) return []
     return this.neoReader().latestBarsSyncCached(tradeDate)
   }
 
+  /**
+   * 热路径全量截面：latestBarsPage* 循环拼回（默认 page 1000，低配更小）。
+   * 结果集 ≡ neoReader.latestBars / 无参全量 API；单次查询有界。
+   */
   async latestBarsAsync(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
     if (!this.duckExists()) return []
-    return this.neoReader().latestBars(tradeDate)
+    const limit = resolveLatestBarsPageLimit({ lowMem: isDuckLowMemProfile() })
+    return stitchLatestBarsPages(
+      opts => this.latestBarsPageAsync(opts),
+      { tradeDate, limit },
+    )
+  }
+
+  /** 分页截面 — Hub / API 优先；afterCode 游标 + limit */
+  async latestBarsPageAsync(opts: LatestBarsPageOpts = {}): Promise<LatestBarRow[]> {
+    if (!this.duckExists()) return []
+    return this.neoReader().latestBarsPage(opts)
+  }
+
+  /**
+   * 同步分页（测试 / 导出）；经 duck-cli `--limit` / `--after`。
+   * 热路径请用 latestBarsPageAsync。
+   */
+  latestBarsPageSync(opts: LatestBarsPageOpts = {}): LatestBarRow[] {
+    if (!this.duckExists()) return []
+    try {
+      const args = [
+        'latest-bars',
+        '--duckdb', this.duckDbPath,
+        '--limit', String(clampLatestBarsPageLimit(opts.limit)),
+      ]
+      if (opts.tradeDate) args.push('--date', String(opts.tradeDate).slice(0, 10))
+      const after = String(opts.afterCode ?? '').trim()
+      if (after) args.push('--after', after)
+      const raw = this.execCliReadSync(args)
+      return JSON.parse(raw || '[]') as LatestBarRow[]
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * 同步拼回全量（测试 / 导出）；经 latestBarsPageSync 循环。
+   * 生产热路径请用 latestBarsAsync。
+   */
+  latestBarsAllPagedSync(tradeDate?: string | null, pageLimit?: number): LatestBarRow[] {
+    if (!this.duckExists()) return []
+    const limit = resolveLatestBarsPageLimit({
+      limit: pageLimit,
+      lowMem: isDuckLowMemProfile(),
+    })
+    return stitchLatestBarsPagesSync(
+      opts => this.latestBarsPageSync(opts),
+      { tradeDate, limit },
+    )
   }
 
   analyticsStatsSync(): {

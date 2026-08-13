@@ -9,6 +9,11 @@ import { klineDuckDbPath } from '../paths.js'
 import { normalizeStockCode } from '../utils.js'
 import type { KlineUpsertRow } from '../store.js'
 import {
+  buildLatestBarsPageQuery,
+  type LatestBarRow,
+  type LatestBarsPageOpts,
+} from '../duck/latest-bars-page.js'
+import {
   closeDuck,
   connectDuck,
   duckAll,
@@ -17,6 +22,7 @@ import {
   openDuckDatabase,
   type DuckConnection,
 } from './duck-connection.js'
+import { upsertCnDailyBarsBatch } from './kline-batch-upsert.js'
 import type duckdb from 'duckdb'
 
 const CN_DAILY_TABLE = 'cn_daily_bars'
@@ -137,7 +143,7 @@ export class KlineDuckStore {
     }))
   }
 
-  /** 截面：指定日或全库最新交易日的 close/change_pct */
+  /** 全量截面（兼容 / 测试）；热路径请用 latestBarSnapshotPage + stitchLatestBarsPages */
   async latestBarSnapshot(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
     if (tradeDate) {
       return this.q(`
@@ -155,36 +161,16 @@ export class KlineDuckStore {
     `)
   }
 
+  /** 分页截面：afterCode 游标 + limit（默认 1000，顶 2000） */
+  async latestBarSnapshotPage(opts: LatestBarsPageOpts = {}): Promise<LatestBarRow[]> {
+    const { sql, params } = buildLatestBarsPageQuery(CN_DAILY_TABLE, opts)
+    return this.q<LatestBarRow>(sql, ...params)
+  }
+
   async upsertBatch(rows: KlineUpsertRow[], syncedAt: string): Promise<number> {
     if (!rows.length) return 0
     await this.ready
-    await duckRun(this.conn, 'BEGIN TRANSACTION')
-    try {
-      for (const r of rows) {
-        const code = normalizeStockCode(r.code)
-        await duckRun(this.conn, `
-          INSERT OR REPLACE INTO ${CN_DAILY_TABLE} (
-            trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        r.tradeDate,
-        code,
-        r.open ?? null,
-        r.high ?? null,
-        r.low ?? null,
-        r.close ?? null,
-        r.volume ?? null,
-        r.amount ?? null,
-        r.changePct ?? null,
-        syncedAt,
-        )
-      }
-      await duckRun(this.conn, 'COMMIT')
-    } catch (e) {
-      await duckRun(this.conn, 'ROLLBACK').catch(() => {})
-      throw e
-    }
-    return rows.length
+    return upsertCnDailyBarsBatch(this.conn, CN_DAILY_TABLE, rows, syncedAt)
   }
 }
 

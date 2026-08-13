@@ -240,5 +240,6 @@ export {
 } from './registry.js'
 export { ExternalMcpHealth } from './health.js'
 export { createSdkConnection, parseToolResult, toOpenAiTool, type SdkConnection } from './connection.js'
+export { mapPool, resolveMcpHydrateConcurrency } from './pool.js'
 export { SufficiencyChecker, TOOL_SUFFICIENCY_SPECS } from './sufficiency.js'
 export { mergeResults, extendResults, replaceResults } from './supplement.js'

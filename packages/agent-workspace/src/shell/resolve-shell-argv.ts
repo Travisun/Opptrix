@@ -64,7 +64,10 @@ async function resolvePythonShellArgv(
   if (!runtime.ready || !runtime.active_path) {
     const ensured = await ensurePythonReady()
     if (!ensured.ready) {
-      throw new WorkspaceError(ensured.message || 'Python 环境尚未就绪')
+      const hint = ensured.poll_hint
+        ? `${ensured.message} ${ensured.poll_hint}`
+        : (ensured.message || 'Python 环境尚未就绪')
+      throw new WorkspaceError(hint)
     }
     runtime = await resolvePythonRuntime()
     if (!runtime.ready || !runtime.active_path) {

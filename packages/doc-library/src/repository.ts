@@ -210,32 +210,39 @@ export class DocLibraryRepository {
       embedded_at: null,
     }))
 
+    const readyAt = new Date().toISOString()
+    const engineId = input.engineId ?? 'text-l0'
+    const engineVersion = input.engineVersion ?? '1'
     const tx = this.db.transaction(() => {
       deleteChunks.run(documentId)
       for (const row of chunkRows) {
         insertChunk.run(row.id, row.document_id, row.seq, row.page, row.offset, row.text, row.char_count)
       }
+      // ingestFromText 等路径可能尚未 upsertParsePending：必须 INSERT，否则 library FTS JOIN 无 artifact
       this.db.prepare(`
-        UPDATE parse_artifacts SET
+        INSERT INTO parse_artifacts(
+          document_id, engine_id, engine_version, status,
+          page_count, char_count, md_path, error, ready_at, parse_fingerprint
+        ) VALUES (?, ?, ?, 'ready', ?, ?, ?, NULL, ?, NULL)
+        ON CONFLICT(document_id) DO UPDATE SET
           status = 'ready',
-          engine_id = COALESCE(?, engine_id),
-          engine_version = COALESCE(?, engine_version),
-          page_count = ?,
-          char_count = ?,
-          md_path = ?,
+          engine_id = COALESCE(excluded.engine_id, parse_artifacts.engine_id),
+          engine_version = COALESCE(excluded.engine_version, parse_artifacts.engine_version),
+          page_count = excluded.page_count,
+          char_count = excluded.char_count,
+          md_path = excluded.md_path,
           error = NULL,
-          ready_at = ?
-        WHERE document_id = ?
+          ready_at = excluded.ready_at
       `).run(
-        input.engineId ?? null,
-        input.engineVersion ?? null,
+        documentId,
+        engineId,
+        engineVersion,
         input.pageCount,
         input.charCount,
         mdPath,
-        new Date().toISOString(),
-        documentId,
+        readyAt,
       )
-      this.db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), documentId)
+      this.db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(readyAt, documentId)
     })
     tx()
     replaceFtsForDocument(this.db, documentId, chunkRows)
@@ -356,6 +363,23 @@ export class DocLibraryRepository {
     `).run(documentId)
   }
 
+  /**
+   * Lance 病理重建后：清除可向量化文档的 embedded_at，
+   * 使 embedPendingDocuments 能重新回填（news 不触碰）。
+   */
+  clearEmbeddedAtForVectorEligible(): number {
+    const result = this.db.prepare(`
+      UPDATE chunks SET embedded_at = NULL
+      WHERE document_id IN (
+        SELECT d.id FROM documents d
+        JOIN parse_artifacts pa ON pa.document_id = d.id
+        WHERE pa.status = 'ready'
+          AND COALESCE(d.source_type, 'report') != 'news'
+      )
+    `).run()
+    return Number(result.changes ?? 0)
+  }
+
   readMarkdown(documentId: string): string | null {
     const artifact = this.getParseArtifact(documentId)
     if (!artifact?.md_path) return null
@@ -364,5 +388,46 @@ export class DocLibraryRepository {
     } catch {
       return null
     }
+  }
+
+  /**
+   * 删除文档行（FK 级联 chunks / parse_artifacts / session_documents）并 unlink 对应 md；
+   * blob 仅在无其他 documents 引用同一 content_sha256 时删除。
+   */
+  deleteDocument(documentId: string): boolean {
+    const doc = this.getDocument(documentId)
+    if (!doc) return false
+
+    const artifact = this.getParseArtifact(documentId)
+    const sha = doc.content_sha256
+    const blobPath = doc.blob_path || blobPathForSha(sha)
+    const mdPath = artifact?.md_path || markdownPathForDocument(documentId)
+
+    const otherRefs = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM documents WHERE content_sha256 = ? AND id != ?
+    `).get(sha, documentId) as { c: number }
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM fts_chunks WHERE document_id = ?').run(documentId)
+      this.db.prepare('DELETE FROM documents WHERE id = ?').run(documentId)
+    })
+    tx()
+
+    try {
+      if (mdPath && fs.existsSync(mdPath)) fs.unlinkSync(mdPath)
+    } catch {
+      /* ignore */
+    }
+
+    if (Number(otherRefs?.c ?? 0) === 0) {
+      try {
+        const target = blobPath || blobPathForSha(sha)
+        if (target && fs.existsSync(target)) fs.unlinkSync(target)
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return true
   }
 }
