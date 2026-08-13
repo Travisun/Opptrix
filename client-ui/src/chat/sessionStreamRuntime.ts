@@ -193,6 +193,16 @@ export function applyChatProgressEvent(
         }),
       }
     }
+    case 'steer_applied':
+      // 生成中补充说明：轻量提示，避免完全不可见（不打断工具/思考时间线）
+      return {
+        ...snapshot,
+        liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
+          phaseLabel: '已收到补充说明',
+          thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
+        }),
+      }
     case 'done':
     case 'error':
       return {

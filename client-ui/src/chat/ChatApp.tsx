@@ -35,7 +35,7 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, truncateSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
+  streamSessionChat, cancelSessionChat, steerSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession, listWorkspaceGrants,
@@ -1130,6 +1130,22 @@ export default function ChatApp() {
     }
 
     if (streamingSessionIdsRef.current.has(sessionId)) {
+      // 生成中：纯文本走 soft steer；带附件仍排队等本轮结束后发送
+      if (!ids.length && msg) {
+        try {
+          const result = await steerSessionChat(sessionId, msg)
+          if (!result.ok) {
+            if (result.reason === 'no_active_chat') {
+              setError('当前没有进行中的回复，请直接发送新问题')
+            } else {
+              setError('补充说明未能送出，请稍后重试')
+            }
+          }
+        } catch (e) {
+          setError(e instanceof Error ? e.message : '补充说明未能送出')
+        }
+        return
+      }
       const result = enqueueQueuedPrompt(sessionId, {
         text: msg,
         attachmentIds: ids,

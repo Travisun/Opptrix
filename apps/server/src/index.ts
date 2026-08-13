@@ -16,7 +16,7 @@ import {
 import { closeMarketDuckRuntime, getMarketDataService } from '@opptrix/market-data-store'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
-import { cancelSessionChat, clearSessionChat, registerSessionChat } from './session-chat-runs.js'
+import { cancelSessionChat, clearSessionChat, hasActiveSessionChat, registerSessionChat } from './session-chat-runs.js'
 import {
   deleteCustomDiscoverStrategy,
   listCustomDiscoverStrategies,
@@ -1304,8 +1304,27 @@ app.post<{ Params: { id: string } }>('/api/sessions/:id/chat/cancel', async (req
   const cancelled = cancelSessionChat(req.params.id)
   if (!cancelled) return reply.code(404).send({ error: 'no active chat' })
   agent.userPromptBridge.cancelSession(req.params.id)
+  agent.steerBridge.clear(req.params.id)
   return { cancelled: true }
 })
+
+app.post<{ Params: { id: string }; Body: { message?: string } }>(
+  '/api/sessions/:id/chat/steer',
+  async (req, reply) => {
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+    if (!message) {
+      return reply.code(200).send({ ok: false, reason: 'empty' })
+    }
+    if (!hasActiveSessionChat(req.params.id)) {
+      return reply.code(200).send({ ok: false, reason: 'no_active_chat' })
+    }
+    const result = agent.enqueueSteer(req.params.id, message)
+    if (!result.ok) {
+      return reply.code(200).send({ ok: false, reason: result.reason })
+    }
+    return { ok: true }
+  },
+)
 
 app.post<{
   Params: { id: string }

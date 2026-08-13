@@ -1712,6 +1712,18 @@ export async function cancelSessionChat(sessionId: string) {
   })
 }
 
+/** 生成中补充说明（soft steer，不取消当前回复） */
+export async function steerSessionChat(sessionId: string, message: string) {
+  return jsonFetch<{ ok: boolean; reason?: 'no_active_chat' | 'empty' }>(
+    `/sessions/${sessionId}/chat/steer`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    },
+  )
+}
+
 export async function submitUserPromptResponse(
   sessionId: string,
   promptId: string,

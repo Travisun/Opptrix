@@ -15,6 +15,10 @@ export function cancelSessionChat(sessionId: string): boolean {
   return true
 }
 
+export function hasActiveSessionChat(sessionId: string): boolean {
+  return running.has(sessionId)
+}
+
 export function clearSessionChat(sessionId: string, ac: AbortController) {
   if (running.get(sessionId) === ac) running.delete(sessionId)
 }

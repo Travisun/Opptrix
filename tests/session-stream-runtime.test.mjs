@@ -258,4 +258,19 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
     assert.equal(snap.liveTrace?.estimatedTokens, 50)
     assert.equal(snap.liveTrace?.thinkingLabel, '模型正在思考 · 约 50 tokens · 第 1 步…')
   })
+
+  it('ignores unknown event types; steer_applied updates live phase lightly', () => {
+    const base = createEmptyStreamSnapshot()
+    const withUnknown = applyChatProgressEvent(base, {
+      type: 'future_unknown_event',
+      payload: { x: 1 },
+    })
+    assert.deepEqual(withUnknown, base)
+
+    const withSteer = applyChatProgressEvent(base, {
+      type: 'steer_applied',
+      message: '（补充）关注现金流',
+    })
+    assert.equal(withSteer.liveTrace?.phaseLabel, '已收到补充说明')
+  })
 })

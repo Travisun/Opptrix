@@ -117,6 +117,13 @@ export type LlmChatDelta = {
   hasToolCalls?: boolean
 }
 
+/** OpenAI-compatible tool_choice；上游不支持时 provider 会降级为 auto / 省略 */
+export type LlmToolChoice =
+  | 'none'
+  | 'auto'
+  | 'required'
+  | { type: 'function'; function: { name: string } }
+
 export interface LlmChatOpts {
   sessionId?: string
   /** 传入时走 SSE 流式；文本增量与 tool_calls 发现会回调 */
@@ -127,6 +134,25 @@ export interface LlmChatOpts {
   maxTokens?: number
   /** 有值时写入 body.reasoning_effort */
   reasoningEffort?: 'low' | 'medium' | 'high'
+  /**
+   * 有 tools 时写入 body.tool_choice；默认 auto。
+   * 上游 400/422 时对该字段 fallback（改 auto 或去掉），勿整轮失败。
+   */
+  toolChoice?: LlmToolChoice
+}
+
+/** 供测试与 buildBody 共用：有 tools 时解析 tool_choice 字段 */
+export function resolveBodyToolChoice(
+  toolsLength: number,
+  toolChoice?: LlmToolChoice,
+): LlmToolChoice | undefined {
+  if (toolsLength <= 0) return undefined
+  return toolChoice ?? 'auto'
+}
+
+function toolChoiceNeedsFallback(toolChoice: LlmToolChoice | undefined): boolean {
+  if (toolChoice == null || toolChoice === 'auto') return false
+  return true
 }
 
 export interface LlmProvider {
@@ -524,6 +550,14 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       ...opts,
       maxTokens: requestedMaxTokens,
     }
+    let toolChoiceFallback: 'auto' | 'omit' | null = null
+    const effectiveToolChoice = (): LlmToolChoice | undefined => {
+      const resolved = resolveBodyToolChoice(tools?.length ?? 0, opts?.toolChoice)
+      if (toolChoiceFallback === 'omit') return undefined
+      if (toolChoiceFallback === 'auto') return 'auto'
+      return resolved
+    }
+
     const buildBody = (stream: boolean): Record<string, unknown> => {
       const body: Record<string, unknown> = {
         model: this.cfg.model,
@@ -541,7 +575,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       }
       if (tools?.length) {
         body.tools = tools
-        body.tool_choice = 'auto'
+        const tc = effectiveToolChoice()
+        if (tc !== undefined) body.tool_choice = tc
       }
       if (stream) body.stream = true
       return body
@@ -561,6 +596,30 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       body: JSON.stringify(buildBody(stream)),
       signal: requestSignal,
     })
+
+    /** 上游拒收 tool_choice 时：先改 auto，再省略该字段后重试 */
+    const postWithToolChoiceFallback = async (stream: boolean): Promise<Response> => {
+      const resp = await post(stream)
+      if (resp.ok) return resp
+      if (resp.status !== 400 && resp.status !== 422) return resp
+      if (!tools?.length || !toolChoiceNeedsFallback(opts?.toolChoice)) return resp
+      if (toolChoiceFallback == null) {
+        await resp.text().catch(() => '')
+        toolChoiceFallback = 'auto'
+        const retryAuto = await post(stream)
+        if (retryAuto.ok) return retryAuto
+        if (retryAuto.status !== 400 && retryAuto.status !== 422) return retryAuto
+        await retryAuto.text().catch(() => '')
+        toolChoiceFallback = 'omit'
+        return post(stream)
+      }
+      if (toolChoiceFallback === 'auto') {
+        await resp.text().catch(() => '')
+        toolChoiceFallback = 'omit'
+        return post(stream)
+      }
+      return resp
+    }
 
     const parseJsonTurn = async (resp: Response): Promise<LlmTurn> => {
       const data = await resp.json() as {
@@ -611,12 +670,12 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       if (opts?.onDelta) {
         let streamConsumeStarted = false
         try {
-          const streamResp = await post(true)
+          const streamResp = await postWithToolChoiceFallback(true)
           if (!streamResp.ok) {
             const text = (await streamResp.text()).slice(0, 300)
-            // 部分上游不支持 stream：回退非流式
+            // 部分上游不支持 stream：回退非流式（保留已生效的 tool_choice fallback）
             if (streamResp.status === 400 || streamResp.status === 422) {
-              const fallback = await post(false)
+              const fallback = await postWithToolChoiceFallback(false)
               if (!fallback.ok) {
                 const fbText = (await fallback.text()).slice(0, 300)
                 noteHttpError(fallback.status, fbText)
@@ -628,7 +687,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
             return httpErrorTurn(streamResp.status, text)
           }
           if (!streamResp.body) {
-            const fallback = await post(false)
+            const fallback = await postWithToolChoiceFallback(false)
             if (!fallback.ok) {
               const fbText = (await fallback.text()).slice(0, 300)
               noteHttpError(fallback.status, fbText)
@@ -646,7 +705,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           }
           // 尚未开始读流时回退非流式；中途失败不再重放整轮
           if (!streamConsumeStarted) {
-            const fallback = await post(false)
+            const fallback = await postWithToolChoiceFallback(false)
             if (!fallback.ok) {
               const fbText = (await fallback.text()).slice(0, 300)
               noteHttpError(fallback.status, fbText)
@@ -658,7 +717,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         }
       }
 
-      const resp = await post(false)
+      const resp = await postWithToolChoiceFallback(false)
       if (!resp.ok) {
         const text = (await resp.text()).slice(0, 300)
         noteHttpError(resp.status, text)

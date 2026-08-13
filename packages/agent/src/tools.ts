@@ -777,6 +777,40 @@ export class ToolRegistry {
         },
       },
       {
+        name: 'update_research_checklist',
+        category: '工作流技能',
+        description: '更新本会话研究步骤清单（替换或合并）；用于多步投研对照进度',
+        parameters: S({
+          mode: {
+            type: 'string',
+            description: 'replace=整体替换；merge=按 id 合并（默认）',
+          },
+          items: {
+            type: 'array',
+            description: '步骤列表：{ id?, title, status: pending|done|skipped }',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                title: { type: 'string' },
+                status: { type: 'string', enum: ['pending', 'done', 'skipped'] },
+              },
+            },
+          },
+        }, ['items']),
+        handler: async (a: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { error: 'update_research_checklist 需在聊天会话中调用' }
+          }
+          const { updateResearchChecklist } = await import('./loop/research-checklist.js')
+          return updateResearchChecklist(sessionId, {
+            mode: typeof a.mode === 'string' ? a.mode : undefined,
+            items: a.items,
+          })
+        },
+      },
+      {
         name: 'get_agent_skill',
         category: '工作流技能',
         description: '读取单个工作流技能的完整说明正文；也可用于预览后再 activate',
