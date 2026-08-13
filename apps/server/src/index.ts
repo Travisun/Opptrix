@@ -1635,6 +1635,7 @@ async function listenWithStaleCleanup(): Promise<void> {
 }
 
 async function bootstrap() {
+  // ── phaseA：listen 前只做网络 + 路由/静态/404，使 /api/health 与 GET / 尽早可通
   await initOutboundNetwork()
   console.log('  Outbound network → IPv4-first, v6 fallback on connect failure')
 
@@ -1654,6 +1655,29 @@ async function bootstrap() {
   registerSessionAttachmentRoutes(app, agent)
   ensureMediaTranscriptBridge()
   await registerSpeechRoutes(app)
+
+  serveUi = shouldServeUi()
+  if (serveUi) {
+    serveUi = await registerStaticUi(app)
+  }
+
+  app.setNotFoundHandler(async (req, reply) => {
+    if (serveUi && !isApiPath(req.url)) {
+      return reply.sendFile('index.html', resolveUiDist())
+    }
+    return reply.code(404).send({ error: 'not found' })
+  })
+
+  await listenWithStaleCleanup()
+  console.log(`\n  Opptrix API → http://${HOST}:${PORT}/api/health`)
+  if (serveUi) {
+    console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
+  } else {
+    console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
+  }
+
+  // ── phaseB：listen 之后再跑调度/预热等非路由重活。
+  // Fastify 5：listen 后路由树锁定，禁止再 app.register / app.get|post|… 注册新路由。
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
   startRetentionMaintenance({
@@ -1684,25 +1708,6 @@ async function bootstrap() {
       console.warn(`[boot] prune orphan chat-attachments / session-state failed: ${msg}`)
     }
   })
-  serveUi = shouldServeUi()
-  if (serveUi) {
-    serveUi = await registerStaticUi(app)
-  }
-
-  app.setNotFoundHandler(async (req, reply) => {
-    if (serveUi && !isApiPath(req.url)) {
-      return reply.sendFile('index.html', resolveUiDist())
-    }
-    return reply.code(404).send({ error: 'not found' })
-  })
-
-  await listenWithStaleCleanup()
-  console.log(`\n  Opptrix API → http://${HOST}:${PORT}/api/health`)
-  if (serveUi) {
-    console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
-  } else {
-    console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
-  }
 
   // 桌面/有内置资源时后台探测磁盘 runtime（不载入 E5）；OCR 尽量就绪（失败不崩）
   void import('@opptrix/doc-library')

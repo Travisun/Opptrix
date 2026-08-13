@@ -82,10 +82,10 @@ let API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 let WEB_DEV_PORT = process.env.WEB_PORT ?? '5173'
 /** @type {'use' | 'reuse' | 'bump'} */
 let apiPortMode = process.env.OPPTRIX_API_PORT_MODE ?? 'use'
-const MIN_SPLASH_MS = 2200
-  const SPLASH_HTML = path.join(__dirname, 'splash.html')
-  const SPLASH_CANVAS = '#FCFCFC'
-  const APP_ID = require('../package.json').build?.appId
+const MIN_SPLASH_MS = 1000
+const SPLASH_HTML = path.join(__dirname, 'splash.html')
+const SPLASH_CANVAS = '#FCFCFC'
+const APP_ID = require('../package.json').build?.appId
 
 app.setName(APP_NAME)
 /** @type {boolean} */
@@ -981,8 +981,11 @@ function showSplashInMainWindow(win) {
   })
 }
 
-async function loadAppInMainWindow(win, { enforceMinSplash = true } = {}) {
-  await ensureSidecarReady()
+async function loadAppInMainWindow(win, { enforceMinSplash = true, sidecarAlreadyReady = false } = {}) {
+  // bootstrapApp 已并行 ensureSidecarReady 时跳过，避免重复 spawn
+  if (!sidecarAlreadyReady) {
+    await ensureSidecarReady()
+  }
   await waitForAppUi()
   if (enforceMinSplash) await waitForSplashMinimum()
 
@@ -1052,7 +1055,15 @@ async function ensureSidecarReady() {
     await waitForHealth()
     return
   }
-  if (!serverProcess) spawnSidecar()
+  // Spawn 前先 probe：托盘二次唤起 / second-instance 等场景下健康窗可 reuse，避免双开
+  if (!serverProcess) {
+    const healthy = await probeSidecarHealth(2500)
+    if (healthy) {
+      apiPortMode = 'reuse'
+      return
+    }
+    spawnSidecar()
+  }
   await waitForHealth()
 }
 
@@ -1060,8 +1071,11 @@ async function bootstrapApp({ withSplash = true } = {}) {
   const win = await createMainWindow()
 
   if (withSplash) {
-    await showSplashInMainWindow(win)
-    await loadAppInMainWindow(win, { enforceMinSplash: true })
+    // splash ∥ 尽早 ensureSidecarReady（冷启 spawn 与 splash 重叠；reuse 仅短 probe/wait）
+    const splashPromise = showSplashInMainWindow(win)
+    const sidecarPromise = ensureSidecarReady()
+    await Promise.all([splashPromise, sidecarPromise])
+    await loadAppInMainWindow(win, { enforceMinSplash: true, sidecarAlreadyReady: true })
     return
   }
 
