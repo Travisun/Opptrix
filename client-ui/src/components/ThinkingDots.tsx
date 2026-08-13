@@ -4,9 +4,8 @@ import { mergeClasses } from '@fluentui/react-components'
  * Compact 3×3 "thinking" indicator.
  *
  * 9 dots arranged in a square grid. Each dot pulses independently with a
- * unique phase, producing a "twinkling" effect. At any moment roughly
- * 3–5 dots are visible at varying opacities, creating organic motion
- * rather than a rigid chase.
+ * unique phase. Dormant dots keep a soft floor opacity so the field stays
+ * dense; peaks overlap so roughly 6–8 dots read as lit at once.
  *
  * All animation / size styles live in global.css under
  * `.opptrix-thinking-dots` / `.opptrix-thinking-dots__dot`.
