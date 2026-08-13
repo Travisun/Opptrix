@@ -678,6 +678,32 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.3.3': {
+    welcomeTitle: 'ETF 组合盈亏，关窗任务不停',
+    welcomeSubtitle:
+      '这一版可跟踪 A 股 ETF 组合买卖盈亏；关闭主窗口后计划任务仍可后台执行；Windows 命令隔离强度也可按需选择。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '替你记账',
+        title: 'ETF 组合买卖盈亏一目了然',
+        desc: '记录 A 股 ETF 组合的买卖，随时查看持仓盈亏，少靠表格硬算。',
+        note: '组合表现，收在一处看。',
+      },
+      {
+        kicker: '更省心',
+        title: '关窗后，计划任务继续跑',
+        desc: '关闭主窗口后，到点分析仍可在后台执行，结果回来再看。',
+        note: '不必一直开着窗口守候。',
+      },
+      {
+        kicker: '更灵活',
+        title: '命令隔离强度可按需选',
+        desc: 'Windows 上可在完整与基础强度之间选择，兼顾安全与兼容。',
+        note: '按你的环境自行取舍。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
