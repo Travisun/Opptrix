@@ -330,6 +330,62 @@ console.log('audit-desktop-pack: start')
     }
   }
 
+  // NSIS installer/uninstaller icons (hand-aligned icons/nsis/ → prepare-icons)
+  {
+    const nsisPngs = [
+      'installer-16.png',
+      'installer-32.png',
+      'installer-48.png',
+      'installer-256.png',
+    ]
+    const nsisSrcDir = path.join(REPO_ROOT, 'icons/nsis')
+    const nsisSrcPresent = fs.existsSync(nsisSrcDir)
+      && nsisPngs.every((name) => fs.existsSync(path.join(nsisSrcDir, name)))
+    if (!nsisSrcPresent) {
+      fail('repo icons/nsis missing installer-{16,32,48,256}.png — restore before packaging')
+    } else {
+      ok('repo icons/nsis has installer PNGs')
+    }
+    const nsisIcos = ['installerIcon.ico', 'uninstallerIcon.ico']
+    const stagedNsisMissing = nsisIcos.some((name) => !exists(path.join('build/icons', name)))
+    if (nsisSrcPresent && stagedNsisMissing) {
+      console.log('  … running prepare-icons.mjs (staged NSIS icos missing)')
+      const prepare = spawnSync(process.execPath, [path.join(__dirname, 'prepare-icons.mjs')], {
+        cwd: DESKTOP_ROOT,
+        stdio: 'inherit',
+      })
+      if (prepare.status !== 0) {
+        fail('prepare-icons.mjs failed while staging NSIS icons')
+      } else {
+        ok('prepare-icons completed (NSIS)')
+      }
+    }
+    for (const name of nsisIcos) {
+      const rel = path.join('build/icons', name)
+      if (!exists(rel)) {
+        fail(`missing staged NSIS icon ${rel} — run node scripts/prepare-icons.mjs`)
+      } else {
+        ok(`present ${rel}`)
+      }
+    }
+    const nsisCfg = pkg.build?.nsis
+    if (
+      nsisCfg?.installerIcon !== 'build/icons/installerIcon.ico'
+      || nsisCfg?.uninstallerIcon !== 'build/icons/uninstallerIcon.ico'
+      || nsisCfg?.installerHeaderIcon !== 'build/icons/installerIcon.ico'
+    ) {
+      fail('build.nsis must point installer/uninstaller/header icons at build/icons/installerIcon.ico (+ uninstallerIcon.ico)')
+    } else {
+      ok('build.nsis installer/uninstaller icons wired')
+    }
+    const prepareIconsSrc = read('scripts/prepare-icons.mjs')
+    if (!prepareIconsSrc.includes('createNsisIcons') || !prepareIconsSrc.includes('installerIcon.ico')) {
+      fail('prepare-icons.mjs must generate installerIcon.ico / uninstallerIcon.ico from icons/nsis')
+    } else {
+      ok('prepare-icons.mjs stages NSIS icons')
+    }
+  }
+
   // Sidecar env is built in sidecar-launch.cjs (shared by main UI + headless OS tick).
   const sidecarLaunchSrc = read('electron/os-schedule/sidecar-launch.cjs')
   if (!sidecarLaunchSrc.includes('OPPTRIX_RAG_ENGINES_BUNDLED_DIR')) {
