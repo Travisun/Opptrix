@@ -28,6 +28,10 @@ import {
   parseShellRunConfirmChoice,
   summarizeShellArgv,
   mergeAllowedNetworkDomains,
+  hostPatternsFromHttpsUrls,
+  formatNetworkInstallConfirmPrompt,
+  networkDomainsForInstallAllowed,
+  bundledCaCertAllowReadPaths,
   detectNetworkEgressBlocked,
   buildNeedsNetworkEgressPayload,
   getConfiguredAllowedDomains,
@@ -81,6 +85,18 @@ test('buildSandboxConfigFromGrantPaths maps rw/ro and network sticky', async () 
     )
     assert.ok(allowed.network.allowedDomains.includes('pypi.org'))
     assert.ok(allowed.network.allowedDomains.includes('registry.npmjs.org'))
+    assert.ok(
+      allowed.network.allowedDomains.includes('mirrors.aliyun.com')
+        || allowed.network.allowedDomains.includes('pypi.tuna.tsinghua.edu.cn'),
+      'allowInstall must include default CN pip mirror hosts up-front',
+    )
+    const caPaths = bundledCaCertAllowReadPaths()
+    assert.ok(caPaths.length > 0, 'bundled CA paths must resolve')
+    const allowReadNorm = allowed.filesystem.allowRead.map(p => path.resolve(p))
+    assert.ok(
+      caPaths.some(p => allowReadNorm.includes(path.resolve(p))),
+      'allowRead must include bundled cacert path/dir',
+    )
   })
 })
 
@@ -447,6 +463,58 @@ test('mergeAllowedNetworkDomains merges configured, install, diagnostic, and ses
   assert.ok(domains.includes('baidu.com'))
   assert.ok(domains.includes('example.com'))
   assert.ok(domains.includes('api.example.com'))
+  assert.ok(
+    domains.includes('mirrors.aliyun.com') || domains.includes('pypi.tuna.tsinghua.edu.cn'),
+    'install allowlist includes default CN mirrors without waiting for egress',
+  )
+})
+
+test('hostPatternsFromHttpsUrls extracts host and parent wildcard', () => {
+  const patterns = hostPatternsFromHttpsUrls([
+    'https://mirrors.aliyun.com/pypi/simple',
+    'https://registry.npmmirror.com/',
+    'not-a-url',
+    '',
+  ])
+  assert.ok(patterns.includes('mirrors.aliyun.com'))
+  assert.ok(patterns.includes('*.aliyun.com'))
+  assert.ok(patterns.includes('registry.npmmirror.com'))
+})
+
+test('networkDomainsForInstallAllowed merges extra pip urls', () => {
+  const domains = networkDomainsForInstallAllowed([
+    'https://custom-mirror.example.com/simple',
+  ])
+  assert.ok(domains.includes('pypi.org'))
+  assert.ok(domains.includes('custom-mirror.example.com'))
+  assert.ok(domains.includes('registry.npmmirror.com'))
+})
+
+test('formatNetworkInstallConfirmPrompt lists domains for users', () => {
+  const prompt = formatNetworkInstallConfirmPrompt([
+    'mirrors.aliyun.com',
+    '*.aliyun.com',
+    'pypi.org',
+  ])
+  assert.ok(prompt.includes('mirrors.aliyun.com'))
+  assert.ok(prompt.includes('pypi.org'))
+  assert.ok(prompt.includes('等'))
+  assert.ok(!prompt.toLowerCase().includes('mcp'))
+})
+
+test('formatNetworkInstallConfirmPrompt prioritizes pipIndexUrls hosts before official', () => {
+  const pipUrls = [
+    'https://mirrors.aliyun.com/pypi/simple',
+    'https://pypi.tuna.tsinghua.edu.cn/simple',
+  ]
+  const preferred = hostPatternsFromHttpsUrls(pipUrls)
+  const domains = networkDomainsForInstallAllowed(pipUrls)
+  const prompt = formatNetworkInstallConfirmPrompt(domains, 8, preferred)
+  assert.ok(prompt.includes('mirrors.aliyun.com'), 'aliyun must appear in shown hosts')
+  const aliyunAt = prompt.indexOf('mirrors.aliyun.com')
+  const pypiAt = prompt.indexOf('pypi.org')
+  assert.ok(aliyunAt >= 0)
+  assert.ok(pypiAt < 0 || aliyunAt < pypiAt, 'pip mirror host should appear before official pypi.org')
 })
 
 test('mergeAllowedNetworkDomains adds diagnostic host without opening install registry', () => {

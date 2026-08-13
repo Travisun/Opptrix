@@ -36,7 +36,10 @@ import {
   type ShellPlatformStatus,
   type ShellRunParams,
   type ShellRunResult,
+  type NetworkInstallPreflightResult,
+  type NetworkEgressPreflightResult,
 } from './shell/index.js'
+import { normalizeWorkspaceTextContent } from './workspace-text.js'
 
 const EXT_MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -314,7 +317,8 @@ export class WorkspaceService {
   ): Promise<{ path: string; bytes: number }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertWritable(grant)
-    const buf = Buffer.from(content, 'utf8')
+    const normalized = normalizeWorkspaceTextContent(relPath, content)
+    const buf = Buffer.from(normalized, 'utf8')
     await this.quota.assertCanWrite(buf.length)
     let exists = false
     try {
@@ -415,6 +419,23 @@ export class WorkspaceService {
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
     return this.shell.install(params, confirm)
+  }
+
+  requestNetworkInstall(
+    sessionId: string,
+    confirm?: ConfirmHandler,
+    reason?: string,
+  ): Promise<NetworkInstallPreflightResult> {
+    return this.shell.requestNetworkInstall(sessionId, confirm, reason)
+  }
+
+  requestNetworkEgress(
+    sessionId: string,
+    hosts: string[],
+    confirm?: ConfirmHandler,
+    reason?: string,
+  ): Promise<NetworkEgressPreflightResult> {
+    return this.shell.requestNetworkEgress(sessionId, hosts, confirm, reason)
   }
 
   pythonEnvStatus() {

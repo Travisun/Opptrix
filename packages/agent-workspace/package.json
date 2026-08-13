@@ -13,10 +13,11 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "assets"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync})=>cpSync('templates','dist/templates',{recursive:true}))\""
+    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync})=>{cpSync('templates','dist/templates',{recursive:true});cpSync('assets','dist/assets',{recursive:true})})\""
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.67",

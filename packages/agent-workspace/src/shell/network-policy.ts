@@ -10,15 +10,52 @@
  * - 默认 allowedDomains=[]；按域名确认，本会话记住已 grant 的 host。
  * - OPPTRIX_SHELL_ALLOWED_DOMAINS ∪ 用户设置永久白名单（免确认）。
  * - 禁止 allow_all / 遇目标自动放行未知 host。
+ *
+ * 联网安装（边界先行）：
+ * - 用户确认联网安装后，立刻并入官方包源 + 国内默认镜像 + 当前 pip 镜像 host，
+ *   避免运行中才因 PIP_INDEX_URL 命中镜像而二次弹窗。
  */
 
-import { isPrivateOrLocalHostPattern } from '@opptrix/shared'
+import { DEFAULT_PIP_INDEX_URLS, isPrivateOrLocalHostPattern } from '@opptrix/shared'
 import { assertAllowedHost } from '../ssrf.js'
 import { getSandboxSettings } from '../sandbox-settings-store.js'
 import { isEffectiveLanAllowed } from './session-lan-access.js'
 
-/** 联网安装白名单 — PyPI / npm 及常见 CDN */
-export const PACKAGE_INSTALL_ALLOWED_DOMAINS: readonly string[] = [
+/** 从 https/http URL 提取 hostname，并在有意义时附加 `*.parent` */
+export function hostPatternsFromHttpsUrls(urls: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const add = (pattern: string): void => {
+    const normalized = pattern.trim().toLowerCase().replace(/\.$/, '')
+    if (!normalized || seen.has(normalized)) return
+    seen.add(normalized)
+    out.push(normalized)
+  }
+
+  for (const raw of urls) {
+    if (typeof raw !== 'string') continue
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    try {
+      const parsed = new URL(trimmed)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') continue
+      const host = parsed.hostname.trim().toLowerCase().replace(/\.$/, '')
+      if (!host) continue
+      add(host)
+      const labels = host.split('.').filter(Boolean)
+      // e.g. mirrors.aliyun.com → *.aliyun.com；避免 *.com / *.cn
+      if (labels.length >= 3) {
+        const parent = labels.slice(1).join('.')
+        if (parent.includes('.')) add(`*.${parent}`)
+      }
+    } catch {
+      // 非法 URL 跳过
+    }
+  }
+  return out
+}
+
+const OFFICIAL_PACKAGE_INSTALL_DOMAINS: readonly string[] = [
   'pypi.org',
   '*.pypi.org',
   'files.pythonhosted.org',
@@ -32,6 +69,14 @@ export const PACKAGE_INSTALL_ALLOWED_DOMAINS: readonly string[] = [
   'raw.githubusercontent.com',
   'objects.githubusercontent.com',
   'codeload.github.com',
+]
+
+/** 联网安装白名单 — 官方源 ∪ 国内默认 pip 镜像 ∪ npm 国内镜像 */
+export const PACKAGE_INSTALL_ALLOWED_DOMAINS: readonly string[] = [
+  ...OFFICIAL_PACKAGE_INSTALL_DOMAINS,
+  ...hostPatternsFromHttpsUrls(DEFAULT_PIP_INDEX_URLS),
+  'registry.npmmirror.com',
+  '*.npmmirror.com',
 ]
 
 /** SRT schema 不允许 allowedDomains 使用裸 `*` */
@@ -131,8 +176,46 @@ export async function getGrantableConfiguredAllowedDomains(): Promise<string[]> 
   return getGrantableMergedAllowedDomains()
 }
 
-export function networkDomainsForInstallAllowed(): string[] {
-  return [...PACKAGE_INSTALL_ALLOWED_DOMAINS]
+/**
+ * 联网安装放行域：基础名单 ∪ extraUrls（通常为当前 pip_index_urls）解析出的 host。
+ */
+export function networkDomainsForInstallAllowed(extraUrls?: readonly string[]): string[] {
+  return [...new Set([
+    ...PACKAGE_INSTALL_ALLOWED_DOMAINS,
+    ...hostPatternsFromHttpsUrls(extraUrls ?? []),
+  ])]
+}
+
+function normalizeExactHosts(domains: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of domains) {
+    const d = raw.trim().toLowerCase().replace(/\.$/, '')
+    if (!d || d.startsWith('*.') || seen.has(d)) continue
+    seen.add(d)
+    out.push(d)
+  }
+  return out
+}
+
+/**
+ * 用户可见联网安装确认文案。
+ * 展示顺序：preferredHosts（通常为当前 pipIndexUrls 解析 host）→ 其余 domains；最多 maxShow +「等」。
+ */
+export function formatNetworkInstallConfirmPrompt(
+  domains: readonly string[],
+  maxShow = 8,
+  preferredHosts?: readonly string[],
+): string {
+  const preferred = normalizeExactHosts(preferredHosts ?? [])
+  const rest = normalizeExactHosts(domains).filter(h => !preferred.includes(h))
+  const ordered = [...preferred, ...rest]
+  if (ordered.length === 0) {
+    return '安装依赖需要访问外部包源。是否允许本次联网安装？'
+  }
+  const shown = ordered.slice(0, Math.max(1, maxShow))
+  const list = shown.join('、')
+  return `安装依赖需要访问外部包源（含 ${list} 等）。是否允许本次联网安装？`
 }
 
 export function networkDomainsWhenDenied(): string[] {
@@ -157,10 +240,14 @@ export function mergeAllowedNetworkDomains(opts: {
   diagnosticTargets?: readonly string[]
   sessionHosts?: readonly string[]
   configuredDomains?: readonly string[]
+  /** 当前 pip 镜像 URL；allowInstall 时并入 install allowlist */
+  pipIndexUrls?: readonly string[]
 }): string[] {
   const out: string[] = []
   if (opts.configuredDomains?.length) out.push(...opts.configuredDomains)
-  if (opts.allowInstall) out.push(...networkDomainsForInstallAllowed())
+  if (opts.allowInstall) {
+    out.push(...networkDomainsForInstallAllowed(opts.pipIndexUrls))
+  }
   if (opts.diagnosticTargets?.length) {
     for (const target of opts.diagnosticTargets) {
       out.push(...networkDomainsForDiagnosticTarget(target))

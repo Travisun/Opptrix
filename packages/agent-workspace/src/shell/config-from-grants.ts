@@ -1,3 +1,4 @@
+import fsSync from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -8,6 +9,7 @@ import {
 import { resolveUserDataRoot, resolvePythonRuntimeRoot } from '@opptrix/shared'
 import { buildGlobalDenyPaths } from '../deny.js'
 import type { WorkspaceGrant } from '../grants.js'
+import { bundledCaCertAllowReadPaths } from './bundled-cacert.js'
 import {
   getGrantableMergedAllowedDomains,
   getGrantableMergedAllowedDomainsSync,
@@ -66,13 +68,25 @@ export function win32SystemReadAllowPaths(env: NodeJS.ProcessEnv = process.env):
 /** active Python 所在目录（及 Scripts/bin 旁父级）— 覆盖 conda 等非 Store 路径 */
 export function pythonActiveAllowReadPaths(activePath: string | null | undefined): string[] {
   if (!activePath?.trim()) return []
-  const dir = path.dirname(path.resolve(activePath.trim()))
+  let resolved = path.resolve(activePath.trim())
+  try {
+    resolved = fsSync.realpathSync(resolved)
+  } catch {
+    // 路径不存在时保留 resolve 结果（单测 / 未安装解释器）
+  }
+  const dir = path.dirname(resolved)
   const out = [dir]
   const base = path.basename(dir).toLowerCase()
   if (base === 'scripts' || base === 'bin') {
     out.push(path.dirname(dir))
   }
-  return out
+  // darwin：Homebrew 窄路径兜底（非整盘 / 非 homedir）；主 CA 仍走自带 pem
+  if (process.platform === 'darwin') {
+    if (resolved.includes('/Cellar/') || resolved.includes('/opt/homebrew/')) {
+      out.push('/opt/homebrew/etc', '/opt/homebrew/opt')
+    }
+  }
+  return uniquePaths(out)
 }
 
 async function resolvePythonActiveAllowReadPaths(): Promise<string[]> {
@@ -142,6 +156,8 @@ export interface BuildSandboxConfigOptions {
   onceEgressHosts?: readonly string[]
   /** 用于有效 LAN（全局 \|\| 会话） */
   sessionId?: string
+  /** 当前 pip 镜像 URL；联网安装时并入 allowlist（边界先行） */
+  pipIndexUrls?: readonly string[]
 }
 
 /** 从 session grants 构建 SandboxRuntimeConfig */
@@ -181,6 +197,7 @@ export async function buildSandboxConfigFromGrants(
     resolvePythonRuntimeRoot(),
     ...pythonActivePaths,
     ...nodeReadPaths,
+    ...bundledCaCertAllowReadPaths(),
   ]))
 
   const allowWrite = finalizeFilesystemPathsForPlatform(uniquePaths([
@@ -204,6 +221,7 @@ export async function buildSandboxConfigFromGrants(
     diagnosticTargets: opts.diagnosticTargetHosts,
     sessionHosts,
     configuredDomains,
+    pipIndexUrls: opts.pipIndexUrls,
   })
 
   return {
@@ -231,6 +249,7 @@ export async function buildSandboxConfigFromGrantPaths(
   diagnosticTargetHosts?: readonly string[],
   sessionEgress?: { hosts: readonly string[] },
   onceEgressHosts?: readonly string[],
+  pipIndexUrls?: readonly string[],
 ): Promise<SandboxRuntimeConfig> {
   const userData = path.resolve(resolveUserDataRoot())
   const homedir = os.homedir()
@@ -256,6 +275,7 @@ export async function buildSandboxConfigFromGrantPaths(
         diagnosticTargets: diagnosticTargetHosts,
         sessionHosts,
         configuredDomains,
+        pipIndexUrls,
       }),
       deniedDomains: [],
     },
@@ -267,6 +287,7 @@ export async function buildSandboxConfigFromGrantPaths(
         resolvePythonRuntimeRoot(),
         ...pythonActivePaths,
         ...nodeReadPaths,
+        ...bundledCaCertAllowReadPaths(),
       ])),
       allowWrite: finalizeFilesystemPathsForPlatform(uniquePaths([
         ...rwPaths,

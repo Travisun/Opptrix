@@ -17,6 +17,7 @@ export const SERIAL_TOOL_NAMES: ReadonlySet<string> = new Set([
   'opptrix_run',
   'shell_run',
   'shell_install',
+  'request_shell_network',
   'ensure_python',
   // Secret
   'request_secret',

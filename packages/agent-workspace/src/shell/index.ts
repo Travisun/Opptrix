@@ -39,6 +39,8 @@ export {
   networkDomainsForDiagnosticTarget,
   networkDomainsForSessionHost,
   networkDomainsWhenDenied,
+  hostPatternsFromHttpsUrls,
+  formatNetworkInstallConfirmPrompt,
   getConfiguredAllowedDomains,
   getGrantableMergedAllowedDomains,
   getGrantableMergedAllowedDomainsSync,
@@ -50,6 +52,11 @@ export {
   PACKAGE_INSTALL_ALLOWED_DOMAINS,
   SRT_SUPPORTS_ALLOW_ALL_IN_ALLOWED_DOMAINS,
 } from './network-policy.js'
+export {
+  resolveBundledCaCertPath,
+  applyBundledCaCertEnv,
+  bundledCaCertAllowReadPaths,
+} from './bundled-cacert.js'
 export {
   detectNetworkEgressBlocked,
   assertEgressHostGrantable,
@@ -65,6 +72,7 @@ export {
   SessionNetworkEgressStore,
   NETWORK_EGRESS_CONFIRM_OPTIONS,
   normalizeEgressHost,
+  hostFromNetworkInput,
   parseNetworkEgressChoice,
 } from './session-network-egress.js'
 export type { NetworkEgressConfirmChoice } from './session-network-egress.js'
@@ -137,3 +145,7 @@ export { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './reso
 export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './resolve-shell-argv.js'
 export type { ResolveShellArgvResult } from './resolve-shell-argv.js'
 export { ShellRunner, applyPythonRuntimeToChildEnv, type ShellRunnerDeps } from './runner.js'
+export type {
+  NetworkInstallPreflightResult,
+  NetworkEgressPreflightResult,
+} from './runner.js'
