@@ -260,6 +260,11 @@ test('buildSandboxConfigFromGrantPaths win32 allow lists exclude system ACL stam
       if (process.platform === 'darwin' || process.platform === 'linux') {
         assert.ok(cfg.filesystem.allowRead.some(p => path.resolve(p) === path.resolve('/usr/bin')))
       }
+      if (process.platform === 'darwin') {
+        assert.ok(cfg.filesystem.allowRead.some(p => path.resolve(p) === path.resolve('/opt/homebrew/etc')))
+        assert.ok(cfg.filesystem.allowRead.some(p => path.resolve(p) === path.resolve('/opt/homebrew/opt')))
+        assert.ok(cfg.filesystem.allowRead.some(p => path.resolve(p) === path.resolve('/usr/local/etc')))
+      }
     }
   })
 })

@@ -222,6 +222,36 @@ export function assertPackageInstallPolicy(
   return [...argv.slice(0, installIdx + 1), '--target', vendorDir, ...argv.slice(installIdx + 1)]
 }
 
+/**
+ * 对 pip / python -m pip install 注入 `--cert`（幂等：已有则不改）。
+ * 非 pip install 原样返回。
+ */
+export function injectPipCertArgv(argv: readonly string[], certPath: string): string[] {
+  const trimmed = certPath.trim()
+  if (!trimmed) return [...argv]
+  const copy = [...argv]
+  const bin = effectiveShellBinary(copy)
+  if (!isPipInstallArgv(copy, bin)) return copy
+
+  const lowerArgs = copy.map(a => a.toLowerCase())
+  const installIdx = lowerArgs.findIndex(a => a === 'install')
+  if (installIdx < 0) return copy
+
+  for (let i = 0; i < copy.length; i++) {
+    const a = copy[i]
+    if (a === '--cert' || a.toLowerCase().startsWith('--cert=')) {
+      return copy
+    }
+  }
+
+  return [
+    ...copy.slice(0, installIdx + 1),
+    '--cert',
+    trimmed,
+    ...copy.slice(installIdx + 1),
+  ]
+}
+
 export function buildPipInstallArgv(packages: readonly string[]): string[] {
   return ['pip3', 'install', '--target', '.opptrix-packages', ...packages]
 }

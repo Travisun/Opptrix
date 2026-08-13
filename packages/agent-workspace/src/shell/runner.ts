@@ -12,7 +12,7 @@ import {
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
 import type { ConfirmHandler } from '../service.js'
 import { buildSandboxConfigFromGrants } from './config-from-grants.js'
-import { applyBundledCaCertEnv } from './bundled-cacert.js'
+import { applyBundledCaCertEnv, materializeBundledCaCert } from './bundled-cacert.js'
 import { resolveShellArgv } from './resolve-shell-argv.js'
 import { usesElectronAsNodeArgv } from '../node/resolve-node.js'
 import { getPythonSettings } from '../python-settings-store.js'
@@ -49,6 +49,7 @@ import {
   buildNpmInstallArgv,
   buildPipInstallArgv,
   commandNeedsNetwork,
+  injectPipCertArgv,
   isNetworkDiagnosticCommand,
   parseDiagnosticTargetHost,
 } from './package-policy.js'
@@ -201,7 +202,8 @@ async function sanitizeChildEnv(
   } catch {
     /* Python 未就绪时仍允许非 python 命令 */
   }
-  applyBundledCaCertEnv(out)
+  const materialized = materializeBundledCaCert(grantRootAbs)
+  applyBundledCaCertEnv(out, materialized)
   return out
 }
 
@@ -948,6 +950,12 @@ export class ShellRunner {
         pipIndexUrls: getPythonSettings().pip_index_urls,
       })
 
+      // CA 物化到 grant 根后再注入 pip --cert（sanitize 在 spawn 时也会再物化一次，幂等）
+      const materializedCert = materializeBundledCaCert(grant.abs_path)
+      const execArgv = materializedCert
+        ? injectPipCertArgv(normalizedArgv, materializedCert)
+        : normalizedArgv
+
       const runOnceHosts = new Set<string>(
         [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
           .map(h => normalizeEgressHost(h))
@@ -971,7 +979,7 @@ export class ShellRunner {
       try {
         result = await executeSandboxOnce({
           sessionId: params.sessionId,
-          normalizedArgv,
+          normalizedArgv: execArgv,
           cwdRel,
           cwdAbs,
           grantRootAbs: grant.abs_path,
@@ -996,7 +1004,7 @@ export class ShellRunner {
       let stderr = truncateStream(stderrRaw, MAX_STREAM_BYTES)
       stderr = {
         ...stderr,
-        text: appendDiagnosticFallbackHint(normalizedArgv, result.exitCode, stdout.text, stderr.text),
+        text: appendDiagnosticFallbackHint(execArgv, result.exitCode, stdout.text, stderr.text),
       }
 
       const egressBlocked = detectNetworkEgressBlocked(result.exitCode, stdout.text, stderr.text)
@@ -1008,7 +1016,7 @@ export class ShellRunner {
         stdout_truncated: stdout.truncated,
         stderr_truncated: stderr.truncated,
         cwd: cwdRel || '.',
-        command: normalizedArgv,
+        command: execArgv,
         sandbox: true as const,
         platform: detectPlatformLabel(),
         duration_ms: Date.now() - started,
@@ -1020,7 +1028,7 @@ export class ShellRunner {
         shellResult.needs_network_egress = buildNeedsNetworkEgressPayload(suggested)
       }
 
-      if (shouldInvalidatePipMirrorCache(normalizedArgv, result.exitCode, stderr.text)) {
+      if (shouldInvalidatePipMirrorCache(execArgv, result.exitCode, stderr.text)) {
         invalidatePipMirrorCache()
         const pipUrls = getPythonSettings().pip_index_urls
         if (pipUrls.length > 1) {
