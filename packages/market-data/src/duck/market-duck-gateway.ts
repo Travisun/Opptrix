@@ -30,7 +30,6 @@ import {
   type LatestBarRow,
   type LatestBarsPageOpts,
 } from './latest-bars-page.js'
-import { resetKlineDuckStore } from '../kline/duck-store.js'
 
 export type { LatestBarRow, LatestBarsPageOpts } from './latest-bars-page.js'
 
@@ -653,7 +652,11 @@ export function resetMarketDuckGateways(): void {
 
 /**
  * Sidecar / process 退出前显式关闭 Duck 原生句柄与 worker。
- * 顺序：gateway 缓存 → neo reader（@duckdb/node-api）→ duck-cli pool → 遗留 KlineDuckStore。
+ * 顺序：gateway 缓存 → neo reader（@duckdb/node-api）→ duck-cli pool。
+ *
+ * 故意不 import / reset `kline/duck-store`：该模块静态 `import duckdb`（旧 native）。
+ * 同进程再 dlopen 第二套 duckdb.node 时，close 后 `__cxa_finalize` 易 SIGABRT。
+ * 旧 duckdb 仅 duck-cli 子进程与测试/工具直连；生产主读路径只用 neo + CLI spawn。
  */
 export async function closeMarketDuckRuntime(): Promise<void> {
   gateways.clear()
@@ -665,11 +668,6 @@ export async function closeMarketDuckRuntime(): Promise<void> {
   }
   try {
     await resetDuckCliPools()
-  } catch {
-    /* ignore */
-  }
-  try {
-    await resetKlineDuckStore()
   } catch {
     /* ignore */
   }

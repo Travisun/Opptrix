@@ -465,6 +465,8 @@ function stopSidecar() {
 /**
  * Wait for sidecar exit so native modules can close before SIGKILL.
  * Soft SIGKILL at ≥ SIDECAR_GRACEFUL_MS; hard finish = soft + SIDECAR_HARD_EXTRA_MS.
+ * Grace must stay ≥ server OPPTRIX_SIDECAR_FORCE_EXIT_MS (default 12s) so we do not
+ * SIGKILL while Duck/Lance/llama/user-store teardown is still running.
  * @param {number} [timeoutMs]
  * @returns {Promise<void>}
  */
