@@ -456,6 +456,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '仅当用户明确问「现在几点/星期几」或需二次核对时间时调用；日常「截至」时效请用 system【会话时钟】，勿每轮必调。',
     compliance: '只读；与会话时钟重复时优先会话时钟。',
   },
+  schedule_turn_wake: {
+    miningEligible: false,
+    usageGuide:
+      '异步任务（prepare_fuyao_dump / ensure_python 等返回 preparing）或需延后续跑时：挂起本轮并用本工具按 suggested_wake_seconds 到期同会话自动唤醒；任何场景可调用（core always-on）。',
+    compliance:
+      'seconds∈[5,1800]；prompt 必填；可多次挂（每会话上限 8）；到期注入含时间元数据的 user 消息并新开一轮（非 steer）；活跃对话中不打断；进程内存 timer，关应用丢失。优先于 tight-poll。',
+  },
   get_system_info: {
     miningEligible: false,
     usageGuide: '运行 opptrix_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
@@ -772,9 +779,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   ensure_python: {
     packId: 'workspace',
     usageGuide:
-      '运行 Python 脚本或 pip 安装前调用；未就绪时立即返回 preparing/installing+job_id，须再调 ensure_python({ job_id }) 轮询至 ready；成功后优先使用 Opptrix 托管解释器。',
+      '运行 Python 脚本或 pip 安装前调用；未就绪时立即返回 preparing/installing+job_id+suggested_wake_seconds；优先 schedule_turn_wake 到期后再查，勿 tight-poll。',
     compliance:
-      '勿在本轮死等安装；status=preparing|installing 时用返回的 job_id 轮询（反空转对进行中 status 豁免）；ready 后勿空转同参；ready 时 ready=true 且 prefer 托管；failed 时 ready=false，勿假装已安装。opptrix_run 在 python 未就绪时会快速失败并提示先 ensure_python。',
+      '勿在本轮死等安装；status=preparing|installing 时用 suggested_wake_seconds + schedule_turn_wake（prompt 含检查 ensure_python job_id），或必要时再调 ensure_python({ job_id })；反空转对进行中 status 豁免；ready 后勿空转同参；failed 勿假装已安装。',
   },
   list_local_data_apis: {
     packId: 'workspace',
@@ -788,9 +795,10 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   prepare_fuyao_dump: {
     packId: 'workspace',
-    usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL；冷下载可能先返回 preparing+job_id，须轮询。',
+    usageGuide:
+      '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或短时效 URL；冷下载可能 preparing+job_id+suggested_wake_seconds，优先 schedule_turn_wake 再查。',
     compliance:
-      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，用 job_id 再调本工具轮询（反空转对 preparing/installing 等进行中 status 豁免；ready 后勿空转同参）；full|incremental + local_path 就绪后自动写 offline-k-meta；adjustment_factors/presigned_url 不写 meta；成功用 root_id=shared + relative_path。',
+      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，用 suggested_wake_seconds + schedule_turn_wake（或必要时 job_id 再调本工具）；勿 tight-poll；full|incremental + local_path 就绪后自动写 offline-k-meta。',
   },
   request_session_lan_access: {
     packId: 'workspace',

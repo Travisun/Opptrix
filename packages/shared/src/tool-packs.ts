@@ -143,6 +143,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   batch_instrument_snapshots: 'core',
   ask_user: 'core',
   get_current_time: 'core',
+  schedule_turn_wake: 'core',
   get_system_info: 'core',
   get_app_settings: 'core',
   get_project_info: 'core',

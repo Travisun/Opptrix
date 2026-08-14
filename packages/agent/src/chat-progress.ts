@@ -164,6 +164,16 @@ export interface ChatProgressOptions {
 
 // ── 工具中文标签映射 ──
 
+/** 倒计时文案（工具结果 / 步骤标签；UI 动态倒计时复用同口径） */
+export function formatWakeSecondsLabel(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  if (s < 60) return `约 ${s} 秒后继续检查`
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  if (r === 0) return `约 ${m} 分后继续检查`
+  return `约 ${m} 分 ${r} 秒后继续检查`
+}
+
 const TOOL_LABELS: Record<string, string> = {
   get_market_regime: '分析宏观市场状态',
   get_market_dynamics: '获取市场动态全景',
@@ -209,6 +219,7 @@ const TOOL_LABELS: Record<string, string> = {
   import_agent_skill: '导入工作流技能',
   delete_agent_skill: '删除工作流技能',
   get_current_time: '获取当前时间',
+  schedule_turn_wake: '等待后继续',
   get_system_info: '读取运行环境信息',
   get_app_settings: '读取应用设置',
   get_project_info: '读取应用信息',
@@ -589,6 +600,16 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       if (!q) return base
       const short = q.length > 36 ? `${q.slice(0, 36)}…` : q
       return `等待你的确认：${short}`
+    }
+    case 'schedule_turn_wake': {
+      const fromResult = result && typeof result === 'object' && 'seconds' in result
+        ? Number((result as { seconds?: unknown }).seconds)
+        : NaN
+      const fromArgs = typeof args.seconds === 'number' ? args.seconds : Number(args.seconds)
+      const sec = Number.isFinite(fromResult) && fromResult > 0
+        ? Math.floor(fromResult)
+        : (Number.isFinite(fromArgs) && fromArgs > 0 ? Math.floor(fromArgs) : 0)
+      return sec > 0 ? formatWakeSecondsLabel(sec) : base
     }
     case 'opptrix_run':
     case 'shell_run': {
@@ -1024,6 +1045,16 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
         : []
       if (labels.length) return `已选择：${labels.join('、')}`
       return '已收到你的确认'
+    }
+    case 'schedule_turn_wake': {
+      if (!result || typeof result !== 'object') return null
+      const r = result as Record<string, unknown>
+      if (r.ok === false) {
+        return typeof r.error === 'string' ? r.error : '未能安排稍后继续'
+      }
+      const sec = typeof r.seconds === 'number' ? r.seconds : Number(r.seconds)
+      if (Number.isFinite(sec) && sec > 0) return formatWakeSecondsLabel(sec)
+      return '已安排稍后继续检查'
     }
     case 'opptrix_run':
     case 'shell_run':

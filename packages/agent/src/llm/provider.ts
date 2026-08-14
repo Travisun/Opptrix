@@ -20,6 +20,11 @@ import {
   LEGACY_DEFAULT_MAX_TOKENS,
   resolveRequestMaxTokens,
 } from './output-budget.js'
+import {
+  formatLlmHttpUserMessage,
+  logLlmHttpError,
+  type LlmErrorCfgHint,
+} from './llm-error-message.js'
 
 export {
   LEGACY_DEFAULT_MAX_TOKENS,
@@ -173,28 +178,6 @@ export function createProvider(cfg: LlmConfig): LlmProvider {
   return new OpenAiCompatibleProvider(cfg)
 }
 
-function isContextLengthHttpError(status: number, body: string): boolean {
-  const text = body.toLowerCase()
-  if (
-    text.includes('context_length_exceeded')
-    || text.includes('context length')
-    || text.includes('maximum context')
-    || text.includes('too many tokens')
-    || text.includes('prompt is too long')
-    || text.includes('token limit')
-    || (text.includes('context window') && text.includes('exceed'))
-  ) {
-    return true
-  }
-  // 部分网关用 400/413 表示超限
-  if ((status === 400 || status === 413) && (
-    text.includes('token') || text.includes('context') || text.includes('length')
-  )) {
-    return /exceed|too (?:long|large|many)|maximum|limit/i.test(text)
-  }
-  return false
-}
-
 function serializeMessageContent(content: ChatMessage['content']): string | ContentPart[] | null {
   if (content == null) return null
   if (typeof content === 'string') return content
@@ -218,20 +201,21 @@ function serializeMessage(m: ChatMessage): Record<string, unknown> {
   }
 }
 
-function httpErrorTurn(status: number, bodyText: string): LlmTurn {
-  const overflow = isContextLengthHttpError(status, bodyText)
-  const msg = status === 401
-    ? '⚠️ API Key 无效'
-    : status === 429
-      ? '⚠️ 请求过于频繁'
-      : overflow
-        ? '对话内容过多，正在整理后重试…'
-        : `⚠️ HTTP ${status}: ${bodyText}`
+function httpErrorTurn(
+  status: number,
+  bodyText: string,
+  cfg?: LlmErrorCfgHint,
+): LlmTurn {
+  const hint: LlmErrorCfgHint | undefined = cfg
+    ? { provider: cfg.provider, model: cfg.model }
+    : undefined
+  logLlmHttpError(status, bodyText, hint)
+  const { userMessage, contextOverflow } = formatLlmHttpUserMessage(status, bodyText, hint)
   return {
-    message: { role: 'assistant', content: msg },
+    message: { role: 'assistant', content: userMessage },
     finishReason: 'error',
-    error: overflow ? 'context_length_exceeded' : msg,
-    contextOverflow: overflow,
+    error: contextOverflow ? 'context_length_exceeded' : userMessage,
+    contextOverflow,
   }
 }
 
@@ -679,19 +663,19 @@ export class OpenAiCompatibleProvider implements LlmProvider {
               if (!fallback.ok) {
                 const fbText = (await fallback.text()).slice(0, 300)
                 noteHttpError(fallback.status, fbText)
-                return httpErrorTurn(fallback.status, fbText)
+                return httpErrorTurn(fallback.status, fbText, this.cfg)
               }
               return await parseJsonTurn(fallback)
             }
             noteHttpError(streamResp.status, text)
-            return httpErrorTurn(streamResp.status, text)
+            return httpErrorTurn(streamResp.status, text, this.cfg)
           }
           if (!streamResp.body) {
             const fallback = await postWithToolChoiceFallback(false)
             if (!fallback.ok) {
               const fbText = (await fallback.text()).slice(0, 300)
               noteHttpError(fallback.status, fbText)
-              return httpErrorTurn(fallback.status, fbText)
+              return httpErrorTurn(fallback.status, fbText, this.cfg)
             }
             return await parseJsonTurn(fallback)
           }
@@ -709,7 +693,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
             if (!fallback.ok) {
               const fbText = (await fallback.text()).slice(0, 300)
               noteHttpError(fallback.status, fbText)
-              return httpErrorTurn(fallback.status, fbText)
+              return httpErrorTurn(fallback.status, fbText, this.cfg)
             }
             return await parseJsonTurn(fallback)
           }
@@ -721,7 +705,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       if (!resp.ok) {
         const text = (await resp.text()).slice(0, 300)
         noteHttpError(resp.status, text)
-        return httpErrorTurn(resp.status, text)
+        return httpErrorTurn(resp.status, text, this.cfg)
       }
       return await parseJsonTurn(resp)
     } catch (e) {

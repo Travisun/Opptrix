@@ -40,6 +40,7 @@ import {
   buildTurnTailPrompt,
   parseNamespacedMcpTool,
 } from '@opptrix/shared'
+import { clearSessionTurnWakes } from './turn-wake.js'
 import {
   buildChecklistTurnTail,
   buildSpinGuardTurnTail,
@@ -904,6 +905,7 @@ export class AgentEngine {
     this.agentSkillSessions.clear(id)
     this.clearExpertPacksSeeded(id)
     this.workspaceService.clearSession(id)
+    clearSessionTurnWakes(id)
     void deleteSessionStateDirectory(id).catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[agent] 清理会话状态目录失败 (${id}): ${msg}`)

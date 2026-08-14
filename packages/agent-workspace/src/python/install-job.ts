@@ -31,6 +31,8 @@ export interface PythonInstallJobSnapshot {
   error: string | null
   /** 有进行中/已结束的安装任务时为 PYTHON_INSTALL_JOB_ID；idle 为 null */
   job_id: string | null
+  /** 任务开始时间（ms）；idle 为 null */
+  started_at_ms: number | null
 }
 
 export interface PythonInstallPipelineDeps {
@@ -72,6 +74,7 @@ function createIdleSnapshot(): PythonInstallJobSnapshot {
     steps: [...DEFAULT_STEPS],
     error: null,
     job_id: null,
+    started_at_ms: null,
   }
 }
 
@@ -247,6 +250,7 @@ export function startPythonInstallJob(): PythonInstallJobSnapshot {
     phase: 'prepare',
     percent: 1,
     job_id: PYTHON_INSTALL_JOB_ID,
+    started_at_ms: Date.now(),
   }
 
   activePromise = runInstallPipeline()

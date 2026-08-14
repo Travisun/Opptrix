@@ -27,6 +27,9 @@ export interface EnsurePythonResult {
   install?: PythonInstallJobSnapshot
   job_id?: string
   poll_hint?: string
+  eta_seconds?: number
+  suggested_wake_seconds?: number
+  async_hint?: string
 }
 
 export interface EnsurePythonDeps {
@@ -38,8 +41,8 @@ export interface EnsurePythonDeps {
   saveSettings: (input: Partial<PythonSettings>) => ValidatePythonSettingsResult
 }
 
-const POLL_HINT =
-  '托管 Python 安装进行中。请再次调用 ensure_python({ job_id }) 轮询，直至 status 为 ready 或 failed。勿在本轮阻塞等待。'
+const ASYNC_HINT =
+  '安装在后台进行。可结束本轮并用 schedule_turn_wake 按 suggested_wake_seconds 唤醒后续跑；勿 tight-poll。'
 
 const defaultDeps: EnsurePythonDeps = {
   getStatus: getPythonPlatformStatus,
@@ -66,20 +69,71 @@ function agentStatusFromJob(job: PythonInstallJobSnapshot): Exclude<EnsurePython
   return 'preparing'
 }
 
+function estimatePythonEtaSeconds(job: PythonInstallJobSnapshot): number {
+  const now = Date.now()
+  const started = job.started_at_ms
+  const elapsedSec =
+    started != null && started > 0 ? Math.max(1, (now - started) / 1000) : null
+
+  if (
+    elapsedSec != null
+    && job.bytes_total != null
+    && job.bytes_total > 0
+    && job.bytes_downloaded > 0
+    && job.bytes_downloaded < job.bytes_total
+  ) {
+    const rate = job.bytes_downloaded / elapsedSec
+    if (rate > 0) {
+      return Math.ceil(((job.bytes_total - job.bytes_downloaded) / rate) * 1.15)
+    }
+  }
+
+  const pct = job.percent
+  if (elapsedSec != null && pct >= 5 && pct < 99) {
+    return Math.ceil(elapsedSec * (100 - pct) / pct * 1.15)
+  }
+
+  // 托管安装启发式：下载+解压+pip 常需数分钟
+  return 180
+}
+
+function clampSuggestedWake(eta: number): number {
+  return Math.min(1800, Math.max(5, Math.ceil(eta)))
+}
+
 function inProgressResult(job: PythonInstallJobSnapshot): EnsurePythonResult {
   const status = agentStatusFromJob(job)
   const jobId = job.job_id ?? PYTHON_INSTALL_JOB_ID
+  if (status === 'failed') {
+    return {
+      ok: false,
+      ready: false,
+      status,
+      active_source: 'none',
+      active_version: null,
+      recommend_install: true,
+      message: job.message || '托管 Python 安装未完成',
+      install: job,
+      job_id: jobId,
+    }
+  }
+  const eta = estimatePythonEtaSeconds(job)
+  const suggested = clampSuggestedWake(eta)
   return {
-    ok: status !== 'failed',
+    ok: true,
     ready: false,
     status,
     active_source: 'none',
     active_version: null,
     recommend_install: true,
-    message: job.message || (status === 'failed' ? '托管 Python 安装未完成' : '正在准备托管 Python…'),
+    message: job.message || '正在准备托管 Python…',
     install: job,
     job_id: jobId,
-    poll_hint: status === 'failed' ? undefined : POLL_HINT,
+    eta_seconds: eta,
+    suggested_wake_seconds: suggested,
+    async_hint: ASYNC_HINT,
+    poll_hint:
+      `托管 Python 安装进行中（约 ${suggested}s）。优先 schedule_turn_wake({ seconds: ${suggested}, prompt: "检查 ensure_python job_id=${jobId} 是否就绪并继续", job_id: "${jobId}" })；必要时再调 ensure_python({ job_id })。勿 tight-poll。`,
   }
 }
 

@@ -22,6 +22,12 @@ export interface FuyaoDumpJobResult {
   status: FuyaoDumpJobState
   job_id?: string
   poll_hint?: string
+  /** 估算剩余秒数（下载进度或启发式） */
+  eta_seconds?: number
+  /** 建议 schedule_turn_wake 的 seconds */
+  suggested_wake_seconds?: number
+  /** 异步说明：可先干别的再醒 */
+  async_hint?: string
   path?: string
   url?: string
   url_expires_hint?: string
@@ -42,6 +48,7 @@ interface JobRecord {
   destDir: string
   percent: number
   message: string
+  startedAt: number
   result?: Awaited<ReturnType<typeof prepareFuyaoDump>>
   error?: string
   updatedAt: number
@@ -59,6 +66,29 @@ const DUMP_FILE_NAMES: Record<FuyaoDumpKind, string> = {
 
 const SANDBOX_HINT =
   '已在服务端完成鉴权下载；沙盒请用返回的 path（root_id=shared）或短时效 url，禁止注入 API Key。图表与诊断请用在线行情，勿引导跑 market sync / 主库日 K 导入。'
+
+const ASYNC_HINT =
+  '任务在后台进行。可结束本轮并用 schedule_turn_wake({ seconds: suggested_wake_seconds, prompt: "检查 prepare_fuyao_dump 是否就绪并继续", job_id }) 到期后同会话自动续跑；勿 tight-poll。'
+
+function heuristicDumpEtaSeconds(kind: FuyaoDumpKind): number {
+  if (kind === 'full') return 180
+  if (kind === 'incremental') return 60
+  return 45
+}
+
+function estimateDumpEtaSeconds(job: JobRecord): number {
+  const now = Date.now()
+  const elapsedSec = Math.max(1, (now - job.startedAt) / 1000)
+  const pct = Math.min(99, Math.max(0, job.percent))
+  if (pct >= 5 && pct < 99) {
+    return Math.ceil(elapsedSec * (100 - pct) / pct * 1.15)
+  }
+  return heuristicDumpEtaSeconds(job.dumpKind)
+}
+
+function clampSuggestedWake(eta: number): number {
+  return Math.min(1800, Math.max(5, Math.ceil(eta)))
+}
 
 function jobKey(kind: FuyaoDumpKind, destDir: string, forceRefresh: boolean): string {
   return `${kind}|${path.resolve(destDir)}|force=${forceRefresh ? 1 : 0}`
@@ -86,6 +116,8 @@ export function isFuyaoDumpLocalCacheReady(
 
 function recordToResult(job: JobRecord): FuyaoDumpJobResult {
   if (job.status === 'preparing') {
+    const eta = estimateDumpEtaSeconds(job)
+    const suggested = clampSuggestedWake(eta)
     return {
       ok: true,
       status: 'preparing',
@@ -94,8 +126,11 @@ function recordToResult(job: JobRecord): FuyaoDumpJobResult {
       sandbox_hint: SANDBOX_HINT,
       percent: job.percent,
       message: job.message,
+      eta_seconds: eta,
+      suggested_wake_seconds: suggested,
+      async_hint: ASYNC_HINT,
       poll_hint:
-        '冷下载进行中。请再次调用 prepare_fuyao_dump({ job_id }) 轮询；就绪后返回 path/url。勿重复 force_refresh 另起任务。',
+        `冷下载进行中（约 ${suggested}s）。优先 schedule_turn_wake({ seconds: ${suggested}, prompt: "检查 prepare_fuyao_dump job_id=${job.id} 是否就绪并继续", job_id: "${job.id}" })；必要时再调 prepare_fuyao_dump({ job_id })。勿 tight-poll、勿重复 force_refresh。`,
     }
   }
   if (job.status === 'failed' || !job.result?.ok) {
@@ -159,6 +194,7 @@ function startBackgroundJob(opts: {
     destDir: opts.destDir,
     percent: 5,
     message: '正在后台准备离线数据包…',
+    startedAt: Date.now(),
     updatedAt: Date.now(),
   }
   jobs.set(id, record)

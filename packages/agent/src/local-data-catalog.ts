@@ -237,8 +237,15 @@ const AGENT_TOOLS: Array<{
     id: 'tool.prepare_fuyao_dump',
     title: 'prepare_fuyao_dump',
     summary: '服务端取扶摇 dump 到 shared；冷下载异步 job；full/incr 就绪自动写 offline-k-meta',
-    how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })；若 status=preparing 则 prepare_fuyao_dump({ job_id }) 轮询',
+    how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })；若 status=preparing 则优先 schedule_turn_wake(suggested_wake_seconds) 再查，或 prepare_fuyao_dump({ job_id })',
     example: 'prepare_fuyao_dump({ dump_kind: "incremental", mode: "local_path" })',
+  },
+  {
+    id: 'tool.schedule_turn_wake',
+    title: 'schedule_turn_wake',
+    summary: '延后同会话自动续跑（异步 preparing 优先）',
+    how: 'Agent tool schedule_turn_wake({ seconds, prompt, reason?, job_id? })；seconds∈[5,1800]',
+    example: 'schedule_turn_wake({ seconds: 90, prompt: "检查 prepare_fuyao_dump 是否就绪并继续", job_id: "<id>" })',
   },
   {
     id: 'tool.request_session_lan_access',
@@ -323,7 +330,7 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
   access: 'shared',
   how_to_call:
     '初始化 shared 时自动落到 packages/cn-offline-daily-k（内置模板，不覆盖用户已改文件）。'
-    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump（冷下载可能 preparing+job_id，须 prepare_fuyao_dump({ job_id }) 轮询；full|incremental + local_path 就绪后自动写 data/cache/offline-k-meta.json）→ 计算全市场指标落盘 data/cache/indicators/ → query/screen；'
+    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump（冷下载可能 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查；full|incremental + local_path 就绪后自动写 data/cache/offline-k-meta.json）→ 计算全市场指标落盘 data/cache/indicators/ → query/screen；'
     + 'markUpdateSuccess 仅作手动补写保留',
   layer_entry: 'templates/cn-offline-daily-k → shared/packages/cn-offline-daily-k（auto-seed）',
   params: [
@@ -333,7 +340,7 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
   notes: [
     '禁止 market sync / importDailyKDump / 写 App 主行情库',
     '禁止 API Key 进沙盒；扶摇鉴权仅经 prepare_fuyao_dump',
-    '冷下载非同步：status=preparing 时用 job_id 再调 prepare_fuyao_dump 轮询，勿死等',
+    '冷下载非同步：status=preparing 时优先 schedule_turn_wake(suggested_wake_seconds)，勿 tight-poll',
     '元数据只写 shared/data/cache/offline-k-meta.json',
     '本地指标缓存约定：shared/data/cache/indicators/（按标的或指标族 Parquet/JSON；Agent 自行计算，非包内引擎）',
   ],
@@ -341,6 +348,7 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
     'get_local_data_catalog({ api_id: "shared.packages.cn-offline-daily-k" })',
     'prepare_fuyao_dump({ dump_kind: "full" })',
     'prepare_fuyao_dump({ job_id: "<from preparing>" })',
+    'schedule_turn_wake({ seconds: 90, prompt: "检查 dump 是否就绪并继续", job_id: "<from preparing>" })',
     'workspace_list({ root_id: "shared", path: "packages/cn-offline-daily-k" })',
   ],
 }
@@ -353,7 +361,7 @@ const FUYAO_DUMP: LocalDataApiDetail = {
   access: 'agent_tool',
   how_to_call:
     'prepare_fuyao_dump({ dump_kind: "full"|"incremental"|"adjustment_factors", mode: "local_path"|"presigned_url", force_refresh? })；'
-    + '冷下载立即 preparing+job_id，须再调 prepare_fuyao_dump({ job_id }) 轮询至 ready，勿死等',
+    + '冷下载立即 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查（勿 tight-poll）',
   params: [
     { name: 'dump_kind', type: 'string', required: true, description: 'full | incremental | adjustment_factors（轮询时可不传）' },
     { name: 'mode', type: 'string', description: 'local_path（默认）| presigned_url' },
@@ -363,13 +371,14 @@ const FUYAO_DUMP: LocalDataApiDetail = {
   layer_entry: 'shared/data/dumps via prepareFuyaoDumpForAgent',
   notes: [
     '禁止向沙盒注入 API Key；勿引导 market sync / dailyDump',
-    '缓存命中/presigned_url 可同步 ready；local_path 冷下载为异步 preparing，勿当旧同步语义死等',
+    '缓存命中/presigned_url 可同步 ready；local_path 冷下载为异步 preparing，优先 schedule_turn_wake，勿 tight-poll',
     '成功返回 root_id=shared + relative_path',
     'full|incremental + local_path 就绪后服务端自动写 shared/data/cache/offline-k-meta.json（meta_written）；adjustment_factors / presigned_url 不写',
   ],
   examples: [
     'prepare_fuyao_dump({ dump_kind: "incremental" })',
     'prepare_fuyao_dump({ job_id: "<from preparing>" })',
+    'schedule_turn_wake({ seconds: 120, prompt: "检查 prepare_fuyao_dump 是否就绪并继续" })',
     'prepare_fuyao_dump({ dump_kind: "full", mode: "presigned_url" })',
   ],
 }

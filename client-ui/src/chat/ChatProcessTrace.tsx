@@ -205,6 +205,10 @@ const useStyles = makeStyles({
       '0%, 100%': { opacity: 0.72 },
       '50%': { opacity: 1 },
     },
+    '@media (prefers-reduced-motion: reduce)': {
+      animationName: 'none',
+      opacity: 1,
+    },
   },
   stepLabelError: {
     color: opptrixCssVars.error,
