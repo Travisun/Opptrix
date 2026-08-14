@@ -210,7 +210,7 @@ Opptrix/
     - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `resolve_workspace_path_uri` / `shell_platform_status` / `opptrix_run`（兼容别名 `shell_run`） / `shell_install` / `request_shell_network` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` / `request_secret` / `list_vault_secrets` / `grant_session_secret` / `revoke_session_secret` / `delete_vault_secret`
     - **消息内文件引用**：聊天 Markdown 展示工作区图片/音视频/文件时，使用协议 `opptrix-ws://{root_id}/{相对路径}`（例：`opptrix-ws://shared/charts/a.png`）。可先调 `resolve_workspace_path_uri({ root_id, path })` 得到规范 `uri` 与 `exists` / `kind_hint`（合法且已授权即返回 uri，不返回本机绝对路径）。UI 将 URI 解析为 `GET /api/sessions/:id/workspace/file` 流。**禁止**消息中写 `file://` 或绝对路径。
     - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码/编程类处理）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → activate `workspace`，用 `opptrix_run` / `ensure_python` / `workspace_*` 沙盒编程实现（可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
-    - **Python 就绪（`ensure_python` / 轮询）**：`ensure_python` **不阻塞**整轮对话。已就绪时同步返回 `status: "ready"`（`ready=true`，`active_source=opptrix` 或系统）。未就绪时启动托管安装并**立即**返回 `status: "preparing"|"installing"`、`job_id`、`poll_hint`；Agent **必须**再次调用 `ensure_python({ job_id })` 轮询直至 `ready` 或 `failed`。成功后写入 `prefer_opptrix_python=true`。失败不假 ready。`opptrix_run` 解析 `python`/`pip` 时若尚未就绪会快速失败并提示先 `ensure_python` 轮询，**不会**在 tool 内死等 20 分钟；勿引导用户去设置页干等。设置页仍用 `/api/settings/python/install` 的 job+poll（行为不变）。系统 Python 探测：Windows 扫 PATH + `%LOCALAPPDATA%\Programs\Python\Python*`（任意 3.x，非写死 311/312）及可选 Program Files；mac/Linux 为 which + 常见路径（含 Homebrew / Framework）。
+    - **Python 就绪（`ensure_python` / 异步唤醒）**：`ensure_python` **不阻塞**整轮对话。已就绪时同步返回 `status: "ready"`。未就绪时启动托管安装并**立即**返回 `status: "preparing"|"installing"`、`job_id`、`eta_seconds` / `suggested_wake_seconds`、`async_hint` / `poll_hint`。**优先** `schedule_turn_wake({ seconds: suggested_wake_seconds, prompt, job_id })` 结束本轮、到期同会话自动续跑；必要时再调 `ensure_python({ job_id })`。**禁止 tight-poll**。成功后写入 `prefer_opptrix_python=true`。失败不假 ready。`opptrix_run` 解析 `python`/`pip` 时若尚未就绪会快速失败并提示先 `ensure_python`，**不会**在 tool 内死等。设置页仍用 `/api/settings/python/install` 的 job+poll（行为不变）。
     - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面与 Agent 摘要均称「**本对话工作区**」，**不**把 `~/.opptrix` 根目录或跨会话全局目录标为默认可写区。
     - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
     - **根目录布局**：容器根 `{userData}/agent-workspace/`（quota / 清理统计）；每会话默认 `root_id=default` → `agent-workspace/sessions/<sessionId>/`（读写，**会话隔离**）；**公共复用区** `root_id=shared` → `agent-workspace/shared/`（`packages/` / `data/dumps|exports|cache` / `docs/` + README；会话自动 grant rw；**`clearSession` 不删 shared**）；旧版全局根下散落文件幂等迁入 `_legacy/`。额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
@@ -279,12 +279,21 @@ Opptrix/
   - `job_id`（可选）：轮询用；上次返回 `status: "preparing"` 时带上，可省略 `dump_kind`
 - **返回（兼容说明）**：
   - **快速路径**（`presigned_url`，或 `local_path` 缓存命中）：`status: "ready"` + 原有字段（`url` 或 `relative_path` / `bytes` / `from_cache`）
-  - **冷下载**（`local_path` 且需联网下载）：**立即**返回 `ok: true`、`status: "preparing"`、`job_id`、`poll_hint`（不再阻塞 5–25 分钟）；Agent **必须**再次调用 `prepare_fuyao_dump({ job_id })` 轮询直至 `status: "ready"` 或 `failed`
+  - **冷下载**（`local_path` 且需联网下载）：**立即**返回 `ok: true`、`status: "preparing"`、`job_id`、`eta_seconds` / `suggested_wake_seconds`、`async_hint` / `poll_hint`（不再阻塞 5–25 分钟）；**优先** `schedule_turn_wake({ seconds: suggested_wake_seconds, prompt, job_id })` 到期后再查；必要时再调 `prepare_fuyao_dump({ job_id })`。**禁止 tight-poll**、勿重复 `force_refresh` 另起任务
   - 就绪后 `full` / `incremental` + `local_path`：**额外**自动写 `shared/data/cache/offline-k-meta.json`（`meta_written` / `meta_warning`）
   - `adjustment_factors` / `presigned_url`：**不**写 offline-k-meta
 - **沙盒侧**：用 `workspace_read` / `workspace_list` / `opptrix_run`（`root_id=shared` + `relative_path`）或下载 `url`；**禁止**向 shell 环境注入 `API_KEY` / `TOKEN` / 扶摇凭证。
 - **失败**：返回 `ok: false` + `status: "failed"` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
-- **旧 Agent**：若只认同步 `ok`+`path`/`url`、忽略 `status`，冷下载时看不到路径——须按 `poll_hint` 用 `job_id` 轮询。
+- **旧 Agent**：若只认同步 `ok`+`path`/`url`、忽略 `status`，冷下载时看不到路径——须按 `poll_hint` / `suggested_wake_seconds` 唤醒或用 `job_id` 再查。
+
+**`schedule_turn_wake`（core always-on）**
+
+- **用途**：任意场景延后续跑——结束本轮后按秒数在**同会话**自动注入含 callback `prompt` + 时间元数据的 user 消息，并**新开一轮** `agent.chat`（`unattended: false`；**不用** steer）。
+- **参数**：`seconds`∈[5, 1800]（超出钳制）；`prompt` 必填；可选 `reason` / `job_id`。每会话最多 8 个挂起 timer。
+- **返回**：`wake_id` / `fire_at` / `seconds` / `scheduled_at` 等。
+- **行为**：若到期时该会话仍有活跃 chat → **延期**再试，禁止 `registerSessionChat` 打断当前轮；会话删除取消全部 timer。
+- **限制**：timer 仅存**进程内存**；关闭应用/进程后丢失，需文档与 `note` 说明。
+- **与异步任务**：`prepare_fuyao_dump` / `ensure_python` 的 preparing 响应带 `suggested_wake_seconds` 时优先本工具，勿 tight-poll。
 
 **已废弃：Agent 侧 `market sync` / `dailyDump` 作为主取 dump 路径**
 
@@ -327,6 +336,7 @@ Opptrix/
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer：`usagePercent` / `compacted`，文案「上下文约 N%」+ 可选「已整理」；不下发 projection 全文）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`、`tests/session-projection-disk.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认/选择/填空时调用；SSE 推送 `user_prompt`。**confirm**：省略 `options`（或 `[]`）且未设 `mode=text`/`allow_custom=true` → 底部「拒绝/确认」（可用 `reject_label`/`confirm_label`；回传 id 固定 `reject`/`confirm`）。**choice**：预置选项 2–50。**text**：`mode:"text"` 或空 options + `allow_custom=true` → 仅开放填空，无授权双钮。禁止用 confirm 收集开放答案。`allow_custom`：confirm 默认关、choice 默认开。多选支持全选；prompt/label 勿用 emoji。作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
+- **`schedule_turn_wake`**（`core`）：延后同会话自动续跑；见上文「`schedule_turn_wake`（core always-on）」。异步 preparing 优先本工具 + `suggested_wake_seconds`，勿 tight-poll。
 - **行业 / 产业链**：激活工作流技能 `industry-chain`（读 `references/chain-knowledge.json`）→ 代表公司用 `get_sector_list` / `get_sector_constituents` / `search_instruments` + `get_instrument_*`
 - **早报 / 收盘**：激活 `morning-market-brief` / `closing-market-brief` → 用 `get_market_dynamics`、`get_limit_updown`、`get_watchlist` 等取数后按技能 Schema 输出 JSON
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack（提供事实表；开闭市叙事走工作流技能，非独立报告工具）

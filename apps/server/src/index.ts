@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
@@ -17,6 +17,7 @@ import { closeMarketDuckRuntime, getMarketDataService } from '@opptrix/market-da
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import { cancelSessionChat, clearSessionChat, hasActiveSessionChat, registerSessionChat } from './session-chat-runs.js'
+import { publishSessionProgress, subscribeSessionProgress } from './session-progress-bus.js'
 import {
   deleteCustomDiscoverStrategy,
   listCustomDiscoverStrategies,
@@ -109,6 +110,40 @@ agent = new AgentEngine(hub, {
   appContext: serverAppContext,
 })
 agent.setApiBaseUrl(`http://${HOST}:${PORT}/api`)
+
+configureTurnWakeRuntime({
+  isSessionAlive: (sessionId) => Boolean(agent.getSession(sessionId)),
+  isChatBusy: hasActiveSessionChat,
+})
+setTurnWakeResumeHandler(async (job, wakeMessage) => {
+  if (!agent.getSession(job.sessionId)) return
+  if (hasActiveSessionChat(job.sessionId)) {
+    // 竞态：到期瞬间用户又开了新轮 — 延期，禁止 registerSessionChat abort
+    scheduleTurnWake({
+      sessionId: job.sessionId,
+      prompt: job.prompt,
+      seconds: TURN_WAKE_BUSY_DEFER_SECONDS,
+      reason: job.reason,
+      jobId: job.jobId,
+      model: job.model,
+    })
+    return
+  }
+  const ac = registerSessionChat(job.sessionId)
+  const onProgress = (event: ChatProgressEvent) => {
+    publishSessionProgress(job.sessionId, event)
+  }
+  try {
+    onProgress({ type: 'thinking', round: 0, label: '正在继续' })
+    await agent.chat(job.sessionId, wakeMessage, job.model, {
+      signal: ac.signal,
+      unattended: false,
+      onProgress,
+    })
+  } finally {
+    clearSessionChat(job.sessionId, ac)
+  }
+})
 
 setSessionPersistHooks({
   onPersist: syncSessionSearchIndex,
@@ -1139,8 +1174,56 @@ app.patch<{
 
 app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  clearSessionTurnWakes(req.params.id)
   agent.deleteSession(req.params.id)
   return { status: 'deleted' }
+})
+
+app.get<{ Params: { id: string } }>('/api/sessions/:id/pending-wakes', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  return { wakes: listPendingTurnWakes(req.params.id) }
+})
+
+app.get<{ Params: { id: string } }>('/api/sessions/:id/live-progress', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+
+  reply.hijack()
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  })
+
+  const write = (event: ChatProgressEvent) => {
+    if (reply.raw.writableEnded) return
+    reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+  }
+
+  // 心跳：避免中间代理断开长连接
+  const heartbeat = setInterval(() => {
+    if (reply.raw.writableEnded) return
+    reply.raw.write(': ping\n\n')
+  }, 25_000)
+  if (typeof heartbeat === 'object' && heartbeat !== null && 'unref' in heartbeat) {
+    try {
+      ;(heartbeat as { unref: () => void }).unref()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const unsubscribe = subscribeSessionProgress(req.params.id, write)
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    clearInterval(heartbeat)
+    unsubscribe()
+    if (!reply.raw.writableEnded) reply.raw.end()
+  }
+  req.raw.on('aborted', cleanup)
+  reply.raw.on('close', cleanup)
 })
 
 app.get<{ Params: { id: string } }>('/api/sessions/:id/workspace/grants', async (req, reply) => {

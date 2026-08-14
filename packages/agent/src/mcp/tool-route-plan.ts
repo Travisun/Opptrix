@@ -448,7 +448,20 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
     avoidTools: ['get_system_info'],
     confidence: 'high',
-    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪立即 preparing|installing+job_id，须 ensure_python({ job_id }) 轮询至 ready，勿死等）',
+    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪返回 preparing|installing+suggested_wake_seconds，优先 schedule_turn_wake 再查，勿 tight-poll）',
+  },
+  {
+    intent: 'turn_wake',
+    priority: 86,
+    patterns: [
+      /定时唤醒|延后(?:检查|续跑|继续)|稍后(?:再|继续)|等一会儿|几分钟后再/i,
+      /schedule_turn_wake/i,
+      /等(?:下载|安装|准备).*(?:完|好|就绪)/,
+    ],
+    preferredTools: ['schedule_turn_wake', 'get_current_time'],
+    avoidTools: [],
+    confidence: 'high',
+    hint: '延后续跑/等异步任务 → schedule_turn_wake（seconds∈[5,1800]，prompt 必填）；优先于对 prepare_fuyao_dump/ensure_python 的 tight-poll',
   },
   {
     intent: 'workspace_network_latency',
@@ -536,7 +549,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['prepare_fuyao_dump', 'list_local_data_apis', 'workspace_list'],
     avoidTools: ['http_fetch', 'opptrix_run'],
     confidence: 'high',
-    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；冷下载 preparing+job_id，须 prepare_fuyao_dump({ job_id }) 轮询；禁止 Key 进沙盒，勿 sync/dailyDump',
+    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；冷下载 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查（勿 tight-poll）；禁止 Key 进沙盒，勿 sync/dailyDump',
   },
   {
     intent: 'session_lan',

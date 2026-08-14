@@ -2030,6 +2030,62 @@ export async function streamSessionChat(
   }
 }
 
+/** 订阅会话后台进度（turn-wake 续跑等）；连接保持到 signal abort。 */
+export async function subscribeSessionLiveProgress(
+  sessionId: string,
+  onEvent: (event: ChatProgressEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE}/sessions/${sessionId}/live-progress`, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream' },
+    signal,
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `订阅进度失败（${resp.status}）`)
+  }
+  if (!resp.body) throw new Error('流式响应不可用')
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const chunks = buffer.split('\n\n')
+    buffer = chunks.pop() ?? ''
+    for (const chunk of chunks) {
+      // 心跳行 `: ping`
+      if (chunk.startsWith(':')) continue
+      const line = chunk.split('\n').find(row => row.startsWith('data: '))
+      if (!line) continue
+      try {
+        onEvent(JSON.parse(line.slice(6)) as ChatProgressEvent)
+      } catch {
+        /* ignore malformed chunk */
+      }
+    }
+  }
+}
+
+export async function fetchSessionPendingWakes(sessionId: string): Promise<{
+  wakes: Array<{
+    wake_id: string
+    fire_at: string
+    reason?: string
+    seconds_left: number
+    seconds: number
+  }>
+}> {
+  return jsonFetch(`/sessions/${sessionId}/pending-wakes`)
+}
+
 // ─── News feed API ───
 
 export type SenseVoiceEnsurePhase =

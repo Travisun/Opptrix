@@ -762,7 +762,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'ensure_python',
       category: '工作区',
       description:
-        '确认 Python 是否可用；不可用时启动 Opptrix 托管安装并立即返回 preparing/installing+job_id，须用 job_id 轮询至 ready；已就绪则同步返回 ready',
+        '确认 Python 是否可用；不可用时启动 Opptrix 托管安装并立即返回 preparing/installing+job_id+suggested_wake_seconds，优先 schedule_turn_wake 再查；已就绪则同步返回 ready',
       parameters: S({
         job_id: {
           type: 'string',
@@ -825,7 +825,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'prepare_fuyao_dump',
       category: '工作区',
       description:
-        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；冷下载立即返回 preparing+job_id，需用 job_id 轮询；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
+        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；冷下载立即返回 preparing+job_id+suggested_wake_seconds，优先 schedule_turn_wake 再查；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
       parameters: S({
         dump_kind: {
           type: 'string',
@@ -859,6 +859,9 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
                 dump_kind: polled.dump_kind,
                 percent: polled.percent,
                 message: polled.message,
+                eta_seconds: polled.eta_seconds,
+                suggested_wake_seconds: polled.suggested_wake_seconds,
+                async_hint: polled.async_hint,
                 poll_hint: polled.poll_hint,
                 sandbox_hint: polled.sandbox_hint,
               }
@@ -901,6 +904,9 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
               dump_kind: result.dump_kind,
               percent: result.percent,
               message: result.message,
+              eta_seconds: result.eta_seconds,
+              suggested_wake_seconds: result.suggested_wake_seconds,
+              async_hint: result.async_hint,
               poll_hint: result.poll_hint,
               sandbox_hint: result.sandbox_hint,
             }

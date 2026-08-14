@@ -23,6 +23,13 @@ import {
   type QueuedPrompt,
 } from './sessionPromptQueue'
 import type { ChatProgressEvent } from '../types/chatProgress'
+import {
+  formatWakeCountdownLabel,
+  parsePendingWakesApi,
+  parseScheduleTurnWakeFromStep,
+  secondsLeftUntil,
+  type PendingWakeInfo,
+} from './turnWakeCountdown'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import ExpertMarketPage from '../pages/experts/ExpertMarketPage'
@@ -39,6 +46,7 @@ import {
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession, listWorkspaceGrants,
+  subscribeSessionLiveProgress, fetchSessionPendingWakes,
 } from '../api/client'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -374,6 +382,7 @@ export default function ChatApp() {
     setComposerDraft(prev => ({ revision: prev.revision + 1, text }))
   }, [])
   const [streamingSessionIds, setStreamingSessionIds] = useState<string[]>([])
+  const [wakeWaitingSessionIds, setWakeWaitingSessionIds] = useState<string[]>([])
   const streamUiRef = useRef<ChatStreamUiRef['current']>(null)
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
@@ -389,6 +398,10 @@ export default function ChatApp() {
   const sessionStreamGenRef = useRef(new Map<string, number>())
   const stoppingSessionsRef = useRef(new Set<string>())
   const streamingSessionIdsRef = useRef(new Set<string>())
+  const wakeWaitingSessionIdsRef = useRef(new Set<string>())
+  /** schedule_turn_wake 到期前本地倒计时 */
+  const pendingWakeRef = useRef(new Map<string, PendingWakeInfo>())
+  const wakeCountdownTimersRef = useRef(new Map<string, number>())
   /** 每会话 drain 意图：Stop=none；失败/成功=auto；打断指定项=runItem */
   const drainIntentRef = useRef(new Map<string, DrainIntent>())
   /** 当前会话排队提示（localStorage 镜像） */
@@ -406,12 +419,77 @@ export default function ChatApp() {
   const sessionsRef = useRef(sessions)
   const activeSessionMetaRef = useRef(activeSessionMeta)
   const loading = activeId ? streamingSessionIds.includes(activeId) : false
+  const wakeWaiting = activeId ? wakeWaitingSessionIds.includes(activeId) : false
   const markSessionStreaming = useCallback((sessionId: string, streaming: boolean) => {
     if (streaming) streamingSessionIdsRef.current.add(sessionId)
     else streamingSessionIdsRef.current.delete(sessionId)
     setStreamingSessionIds(Array.from(streamingSessionIdsRef.current))
   }, [])
+  const markSessionWakeWaiting = useCallback((sessionId: string, waiting: boolean) => {
+    if (waiting) wakeWaitingSessionIdsRef.current.add(sessionId)
+    else wakeWaitingSessionIdsRef.current.delete(sessionId)
+    setWakeWaitingSessionIds(Array.from(wakeWaitingSessionIdsRef.current))
+  }, [])
 
+  const stopWakeCountdown = useCallback((sessionId: string) => {
+    const timer = wakeCountdownTimersRef.current.get(sessionId)
+    if (timer != null) {
+      window.clearInterval(timer)
+      wakeCountdownTimersRef.current.delete(sessionId)
+    }
+  }, [])
+
+  const clearSessionWakeState = useCallback((sessionId: string) => {
+    pendingWakeRef.current.delete(sessionId)
+    stopWakeCountdown(sessionId)
+    markSessionWakeWaiting(sessionId, false)
+  }, [markSessionWakeWaiting, stopWakeCountdown])
+
+  const applyWakeCountdownSnapshot = useCallback((sessionId: string, fireAt: string) => {
+    const left = secondsLeftUntil(fireAt)
+    const phaseLabel = left > 0 ? formatWakeCountdownLabel(left) : '正在继续'
+    const prev = streamCacheRef.current.get(sessionId)
+    const next: SessionStreamSnapshot = {
+      liveTrace: {
+        steps: prev?.liveTrace?.steps ?? [],
+        phaseLabel,
+        thinkingLabel: `${phaseLabel}…`,
+      },
+      pendingUserPrompt: null,
+      userPromptSubmitting: false,
+      contextHint: prev?.contextHint ?? null,
+    }
+    streamCacheRef.current.set(sessionId, next)
+    if (activeIdRef.current === sessionId) {
+      syncStreamSnapshotToUi(next, streamUiRef.current)
+    }
+  }, [])
+
+  const startWakeCountdown = useCallback((sessionId: string, wake: PendingWakeInfo) => {
+    pendingWakeRef.current.set(sessionId, wake)
+    markSessionWakeWaiting(sessionId, true)
+    applyWakeCountdownSnapshot(sessionId, wake.fireAt)
+    stopWakeCountdown(sessionId)
+    const timer = window.setInterval(() => {
+      const current = pendingWakeRef.current.get(sessionId)
+      if (!current) {
+        stopWakeCountdown(sessionId)
+        return
+      }
+      applyWakeCountdownSnapshot(sessionId, current.fireAt)
+      if (secondsLeftUntil(current.fireAt) <= 0) {
+        void fetchSessionPendingWakes(sessionId).then((data) => {
+          const next = parsePendingWakesApi(data)[0]
+          if (!next) return
+          if (secondsLeftUntil(next.fireAt) > 0) {
+            pendingWakeRef.current.set(sessionId, next)
+            applyWakeCountdownSnapshot(sessionId, next.fireAt)
+          }
+        }).catch(() => { /* ignore */ })
+      }
+    }, 1000)
+    wakeCountdownTimersRef.current.set(sessionId, timer)
+  }, [applyWakeCountdownSnapshot, markSessionWakeWaiting, stopWakeCountdown])
   const resolveSessionTitle = useCallback((targetSessionId: string, eventTitle?: string) => {
     return eventTitle
       ?? (activeSessionMetaRef.current?.id === targetSessionId
@@ -489,6 +567,21 @@ export default function ChatApp() {
     const prev = streamCacheRef.current.get(targetSessionId) ?? createThinkingStreamSnapshot()
     const next = applyChatProgressEvent(prev, event)
     streamCacheRef.current.set(targetSessionId, next)
+
+    if (event.type === 'tool_done') {
+      const wake = parseScheduleTurnWakeFromStep(event.step)
+      if (wake) pendingWakeRef.current.set(targetSessionId, wake)
+    }
+    if (event.type === 'done' && Array.isArray(event.tool_steps)) {
+      for (const step of event.tool_steps) {
+        const wake = parseScheduleTurnWakeFromStep(step)
+        if (wake) {
+          pendingWakeRef.current.set(targetSessionId, wake)
+          break
+        }
+      }
+    }
+
     if (activeIdRef.current === targetSessionId) {
       syncStreamSnapshotToUi(next, streamUiRef.current)
       if (event.type === 'context_compact' && next.contextHint) {
@@ -535,10 +628,13 @@ export default function ChatApp() {
   }, [handleNotificationResult, maybeNotifyChatDone, resolveSessionTitle])
 
   const resolveStreamSnapshot = useCallback((id: string | null) => {
-    if (!id || !streamingSessionIdsRef.current.has(id)) return null
+    if (!id) return null
+    if (
+      !streamingSessionIdsRef.current.has(id)
+      && !wakeWaitingSessionIdsRef.current.has(id)
+    ) return null
     return streamCacheRef.current.get(id) ?? createThinkingStreamSnapshot()
-  }, [streamingSessionIds])
-
+  }, [streamingSessionIds, wakeWaitingSessionIds])
   const clearPendingUserPrompt = useCallback((sessionId: string | null) => {
     if (!sessionId || !streamingSessionIdsRef.current.has(sessionId)) return
     const prev = streamCacheRef.current.get(sessionId)
@@ -624,6 +720,112 @@ export default function ChatApp() {
     setSessions(list)
     return list
   }, [])
+
+  // 订阅 live-progress：wake 到期续跑的 thinking/tool/done 推到同一会话 UI
+  useEffect(() => {
+    if (!activeId) return
+    const sessionId = activeId
+    const ac = new AbortController()
+    let cancelled = false
+
+    const finishWakeResume = async (sid: string) => {
+      clearSessionWakeState(sid)
+      markSessionStreaming(sid, false)
+      streamCacheRef.current.delete(sid)
+      try {
+        const fresh = await getSession(sid)
+        if (cancelled || activeIdRef.current !== sid) return
+        setActiveSessionMeta(fresh.session)
+        setMessages(fresh.messages)
+        setContextRef(fresh.contextRef ?? null)
+        setSessionModelState(fresh.session.model)
+        setSessionLlmParamsState(fresh.session.llmParams)
+        setContextUsage(fresh.contextUsage ?? null)
+        await refreshSessions()
+      } catch {
+        /* keep current */
+      }
+      if (activeIdRef.current === sid && !streamingSessionIdsRef.current.has(sid)) {
+        window.setTimeout(() => {
+          if (activeIdRef.current !== sid) return
+          if (streamingSessionIdsRef.current.has(sid)) return
+          if (wakeWaitingSessionIdsRef.current.has(sid)) return
+          streamUiRef.current?.resetStreamUi()
+        }, 500)
+      }
+    }
+
+    const onLiveEvent = (event: ChatProgressEvent) => {
+      // 用户本轮已在 chat/stream 中：忽略 bus，避免双写
+      if (streamHandlesRef.current.has(sessionId)) return
+
+      const progressive =
+        event.type === 'thinking'
+        || event.type === 'tool_start'
+        || event.type === 'tool_done'
+        || event.type === 'reply'
+        || event.type === 'context_compact'
+        || event.type === 'user_prompt'
+        || event.type === 'steer_applied'
+
+      if (progressive && !streamingSessionIdsRef.current.has(sessionId)) {
+        clearSessionWakeState(sessionId)
+        const gen = (sessionStreamGenRef.current.get(sessionId) ?? 0) + 1
+        sessionStreamGenRef.current.set(sessionId, gen)
+        streamCacheRef.current.set(sessionId, createThinkingStreamSnapshot('正在继续…'))
+        markSessionStreaming(sessionId, true)
+      }
+
+      pushStreamEvent(sessionId, event)
+
+      if (event.type === 'done' || event.type === 'error') {
+        void finishWakeResume(sessionId)
+      }
+    }
+
+    void (async () => {
+      try {
+        const data = await fetchSessionPendingWakes(sessionId)
+        if (cancelled) return
+        const wake = parsePendingWakesApi(data)[0]
+        if (
+          wake
+          && secondsLeftUntil(wake.fireAt) > 0
+          && !streamingSessionIdsRef.current.has(sessionId)
+        ) {
+          startWakeCountdown(sessionId, wake)
+        }
+      } catch {
+        /* ignore */
+      }
+
+      while (!cancelled && !ac.signal.aborted) {
+        try {
+          await subscribeSessionLiveProgress(sessionId, onLiveEvent, ac.signal)
+          break
+        } catch (e) {
+          const aborted = (
+            (e instanceof DOMException && e.name === 'AbortError')
+            || (e instanceof Error && e.name === 'AbortError')
+          )
+          if (aborted || cancelled) break
+          await new Promise(r => setTimeout(r, 1500))
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
+  }, [
+    activeId,
+    clearSessionWakeState,
+    markSessionStreaming,
+    pushStreamEvent,
+    refreshSessions,
+    startWakeCountdown,
+  ])
 
   const refreshArchived = useCallback(async () => {
     const { groups } = await listArchivedSessions()
@@ -813,6 +1015,7 @@ export default function ChatApp() {
       if (streamingSessionIdsRef.current.has(id)) {
         await abortSessionStream(id)
       }
+      clearSessionWakeState(id)
       clearSessionPromptQueue(id)
       drainIntentRef.current.delete(id)
       syncPromptQueueUi(activeIdRef.current === id ? null : activeIdRef.current)
@@ -831,7 +1034,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }, [activeId, abortSessionStream, confirm, loadSession, refreshSessions])
+  }, [activeId, abortSessionStream, clearSessionWakeState, confirm, loadSession, refreshSessions])
 
   const handleSelectExpert = useCallback(async (expertId: string) => {
     restoreChatColumn()
@@ -1172,6 +1375,8 @@ export default function ChatApp() {
     }
     // 新一轮默认自动续跑下一条；Stop / runNow 会在本轮中途覆盖
     drainIntentRef.current.set(sessionId, { kind: 'auto' })
+    stopWakeCountdown(sessionId)
+    markSessionWakeWaiting(sessionId, false)
     const initialSnapshot = createThinkingStreamSnapshot()
     streamCacheRef.current.set(sessionId, initialSnapshot)
     markSessionStreaming(sessionId, true)
@@ -1257,19 +1462,27 @@ export default function ChatApp() {
       streamHandlesRef.current.delete(sessionId)
       stoppingSessionsRef.current.delete(sessionId)
       const hadPendingAsk = Boolean(streamCacheRef.current.get(sessionId)?.pendingUserPrompt)
-      streamCacheRef.current.delete(sessionId)
+      const pendingWake = pendingWakeRef.current.get(sessionId)
       markSessionStreaming(sessionId, false)
-      if (activeIdRef.current === sessionId) {
-        const prevTimer = streamResetTimersRef.current.get(sessionId)
-        if (prevTimer != null) window.clearTimeout(prevTimer)
-        const timer = window.setTimeout(() => {
-          streamResetTimersRef.current.delete(sessionId)
-          if (activeIdRef.current !== sessionId) return
-          if (streamGen !== (sessionStreamGenRef.current.get(sessionId) ?? 0)) return
-          if (streamingSessionIdsRef.current.has(sessionId)) return
-          streamUiRef.current?.resetStreamUi()
-        }, 500)
-        streamResetTimersRef.current.set(sessionId, timer)
+      if (pendingWake) {
+        // 保留过程条，进入秒级倒计时（已到期则显示「正在继续」）
+        startWakeCountdown(sessionId, pendingWake)
+      } else {
+        streamCacheRef.current.delete(sessionId)
+        clearSessionWakeState(sessionId)
+        if (activeIdRef.current === sessionId) {
+          const prevTimer = streamResetTimersRef.current.get(sessionId)
+          if (prevTimer != null) window.clearTimeout(prevTimer)
+          const timer = window.setTimeout(() => {
+            streamResetTimersRef.current.delete(sessionId)
+            if (activeIdRef.current !== sessionId) return
+            if (streamGen !== (sessionStreamGenRef.current.get(sessionId) ?? 0)) return
+            if (streamingSessionIdsRef.current.has(sessionId)) return
+            if (wakeWaitingSessionIdsRef.current.has(sessionId)) return
+            streamUiRef.current?.resetStreamUi()
+          }, 500)
+          streamResetTimersRef.current.set(sessionId, timer)
+        }
       }
       if (hadPendingAsk) {
         const intent = drainIntentRef.current.get(sessionId)
@@ -1968,6 +2181,7 @@ export default function ChatApp() {
                   contextRef={contextRef}
                   composerDraft={composerDraft}
                   loading={loading}
+                  wakeWaiting={wakeWaiting}
                   streamUiRef={streamUiRef}
                   error={error}
                   availableModels={availableModels}

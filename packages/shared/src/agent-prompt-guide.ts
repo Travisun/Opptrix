@@ -165,7 +165,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 运行 opptrix_run 前先 get_system_info（或 python_env_status 查 Python）；确认 node_ready / npm_ready / python_ready / python_priority 与 platform',
     '- opptrix_run / shell_install argv 只用字面量 python / python3 / pip（或 node/npm）；禁止手写系统或 Opptrix 托管绝对路径；运行时会静默改写到当前优先解释器',
     '- install 与 run 共用同一解释器；pip 依赖装进工作区 .opptrix-packages，运行时自动经 PYTHONPATH 可见',
-    '- 依赖安装用 shell_install(manager=pip|npm)；pip 镜像由设置注入；python 未就绪时先 ensure_python（未就绪立即 preparing|installing+job_id → 再调 ensure_python({ job_id }) 轮询，勿死等）',
+    '- 依赖安装用 shell_install(manager=pip|npm)；pip 镜像由设置注入；python 未就绪时先 ensure_python（未就绪立即 preparing|installing+suggested_wake_seconds → 优先 schedule_turn_wake 到期再查，勿 tight-poll）',
     '- python_env_status 只描述当前优先解释器；勿把「系统 / 托管」两套都当可执行选项',
     '',
     '【opptrix_run — 先识平台，再组 argv】',
@@ -206,7 +206,7 @@ export function buildLocalProgrammingPlaybook(): string {
     '2. 扫 shared/packages/*/README，能复用则复用（root_id=shared）',
     '3. 缺依赖：先 request_shell_network({ intent: "install" })，再 shell_install（npm/pip）；禁止 ask_user 冒充联网授权',
     '4. 最后自写；可复用产物写入 shared/packages/<name>/ + README；workspace_write 默认 LF，.bat/.cmd/.ps1 用平台换行；脚本用 pathlib/path，禁止硬编码本机用户路径',
-    '5. 离线大数据 → prepare_fuyao_dump（冷下载先 preparing+job_id 再轮询）；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
+    '5. 离线大数据 → prepare_fuyao_dump（冷下载先 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查）；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
     '6. 沙盒前：公网安装/已知外网域名 → request_shell_network；局域网 → request_session_lan_access / ask_user(allow_lan_session)；按 get_system_info.platform 选 ping -c/-n、tracert/traceroute',
     '7. 第三方密钥：list_vault_secrets → 已有 grant_session_secret / 没有 request_secret；opptrix_run 用 secret_refs 传名字',
     '8. 沙盒做计算/清洗/汇总；聊天展示图用 ```chart``` / ```opptrix-chart```（→ @opptrix/canvas Chart），禁止默认沙盒出图代替围栏',
@@ -303,6 +303,12 @@ export function buildUserInteractionPlaybook(): string {
     '  · text：开放式/需用户填内容 → mode:"text"（推荐），或空 options + allow_custom=true；仅文本输入，无拒绝/确认授权钮',
     '- 禁止用 confirm 收集开放答案；禁止用 ask_user 索要密钥（须用 request_secret）；禁止在已有明确用户指令时重复确认',
     '- prompt 与 options.label / 按钮文案均不要使用 emoji；收到 selected_ids / selected_labels / custom_text 后再继续；同一轮最多 1 次 ask_user',
+    '',
+    '【定时唤醒 — schedule_turn_wake】',
+    '- 异步准备（prepare_fuyao_dump / ensure_python 等返回 preparing）或需延后续跑：结束本轮并调用 schedule_turn_wake({ seconds, prompt })；seconds∈[5,1800]，优先用返回的 suggested_wake_seconds',
+    '- prompt 必填：写清到期后要检查什么、如何继续；可带 job_id / reason',
+    '- 到期后同会话自动注入含时间元数据的用户消息并新开一轮（非 steer）；有用户正在聊时会延期，不打断',
+    '- 禁止 tight-poll（短间隔反复轮询）；定时器仅存进程内存，关闭应用会丢失',
   ].join('\n')
 }
 

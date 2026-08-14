@@ -364,6 +364,28 @@ export {
   type LlmToolChoice,
 } from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'
+export {
+  scheduleTurnWake,
+  cancelTurnWake,
+  clearSessionTurnWakes,
+  listPendingTurnWakes,
+  configureTurnWakeRuntime,
+  setTurnWakeResumeHandler,
+  clampWakeSeconds,
+  clampSuggestedWakeSeconds,
+  estimateEtaFromProgress,
+  formatWakeMessage,
+  TURN_WAKE_MIN_SECONDS,
+  TURN_WAKE_MAX_SECONDS,
+  TURN_WAKE_MAX_PER_SESSION,
+  TURN_WAKE_BUSY_DEFER_SECONDS,
+  resetTurnWakeForTests,
+  listTurnWakeIdsForTests,
+  type TurnWakeJob,
+  type TurnWakeResumeHandler,
+  type TurnWakeRuntime,
+  type PendingTurnWakeInfo,
+} from './turn-wake.js'
 
 /** 注册 PDF → doc-library ingest hook */
 import './doc-library-bridge.js'

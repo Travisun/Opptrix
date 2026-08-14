@@ -364,6 +364,8 @@ interface ChatViewProps {
   contextRef?: SessionContextRef | null
   composerDraft?: { revision: number; text: string }
   loading: boolean
+  /** schedule_turn_wake 等待期：显示动态倒计时过程条，不占用「停止」态 */
+  wakeWaiting?: boolean
   streamUiRef?: ChatStreamUiRef
   error: string
   availableModels?: AvailableModel[]
@@ -409,7 +411,7 @@ interface ChatViewProps {
 }
 
 function ChatView({
-  title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, expertId = null, expertRefreshKey = 0, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
+  title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, expertId = null, expertRefreshKey = 0, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, wakeWaiting = false, streamUiRef, error,
   availableModels = [],
   sessionModel,
   sessionLlmParams,
@@ -525,7 +527,7 @@ function ChatView({
   const { selection, anchor, clearSelection } = useMessageSelection({
     rootRef: chatBoxRef,
     anchorRef: bodyShellRef,
-    enabled: Boolean(sessionId) && !loading,
+    enabled: Boolean(sessionId) && !loading && !wakeWaiting,
   })
 
   useEffect(() => {
@@ -593,7 +595,7 @@ function ChatView({
     return onEphemeralAsk(message, sel, priorTurns)
   }, [onEphemeralAsk])
 
-  const isEmpty = messages.length === 0 && !loading && !contextRef
+  const isEmpty = messages.length === 0 && !loading && !wakeWaiting && !contextRef
   const welcome = pickWelcomeVariant(welcomeEpoch)
   const isExpertSession = Boolean(expertId)
 
@@ -753,11 +755,11 @@ function ChatView({
   }, [])
 
   useEffect(() => {
-    if (loading || liveTrace) {
+    if (loading || wakeWaiting || liveTrace) {
       if (stickToBottomRef.current) {
         scrollToBottom(messages.length <= 1 ? 'auto' : 'smooth')
       }
-      prevLoadingRef.current = loading
+      prevLoadingRef.current = loading || wakeWaiting
       return
     }
 
@@ -776,16 +778,16 @@ function ChatView({
       }
     }
 
-    prevLoadingRef.current = loading
-  }, [messages, loading, liveTrace, scrollToBottom, scrollMessageStartToCenter])
+    prevLoadingRef.current = loading || wakeWaiting
+  }, [messages, loading, wakeWaiting, liveTrace, scrollToBottom, scrollMessageStartToCenter])
 
   useEffect(() => {
-    if (!chatScrollEpoch || !sessionId || loading || liveTrace || messages.length === 0) return
+    if (!chatScrollEpoch || !sessionId || loading || wakeWaiting || liveTrace || messages.length === 0) return
     const idx = messages.length - 1
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => scrollToMessageStart(idx, 'auto'))
     })
-  }, [chatScrollEpoch, sessionId, loading, liveTrace, messages.length, scrollToMessageStart])
+  }, [chatScrollEpoch, sessionId, loading, wakeWaiting, liveTrace, messages.length, scrollToMessageStart])
 
   const handleSubmit = (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => {
     stickToBottomRef.current = true
@@ -1000,7 +1002,7 @@ function ChatView({
                 />
               ))}
 
-              {loading && liveTrace && (
+              {((loading || wakeWaiting) && liveTrace) && (
                 <div className={s.loadingRow} data-message-role="assistant">
                   <ChatProcessTrace
                     steps={liveTrace.steps}

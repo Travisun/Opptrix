@@ -25,6 +25,7 @@ import { currentToolSessionId } from './mcp/tool-session-context.js'
 import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
 import { assembleSystemPrompt } from './experts/prompt-assembler.js'
+import { scheduleTurnWake } from './turn-wake.js'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -614,6 +615,43 @@ export class ToolRegistry {
         description: '获取当前时间（ISO、本地时区、Unix 毫秒、星期）',
         parameters: S({}),
         handler: async () => getCurrentTime(),
+      },
+      {
+        name: 'schedule_turn_wake',
+        category: '基础',
+        description:
+          '结束本轮后按秒数在同会话自动唤醒续跑（注入含 prompt 的用户消息并新开一轮）；用于异步准备（如 dump/Python）勿 tight-poll；seconds 5–1800',
+        parameters: S({
+          seconds: {
+            type: 'number',
+            description: '延迟秒数，闭区间 [5, 1800]（30 分钟）；超出将钳制',
+          },
+          prompt: {
+            type: 'string',
+            description: '到期后注入的续跑说明（必填）；应写清要检查什么、如何继续',
+          },
+          reason: {
+            type: 'string',
+            description: '可选：挂起原因（如 waiting_fuyao_dump / waiting_python）',
+          },
+          job_id: {
+            type: 'string',
+            description: '可选：关联异步任务 id（prepare_fuyao_dump / ensure_python 的 job_id）',
+          },
+        }, ['seconds', 'prompt']),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'schedule_turn_wake 须在聊天会话工具上下文中调用' }
+          }
+          return scheduleTurnWake({
+            sessionId,
+            seconds: args.seconds,
+            prompt: String(args.prompt ?? ''),
+            reason: args.reason != null ? String(args.reason) : undefined,
+            jobId: args.job_id != null ? String(args.job_id) : undefined,
+          })
+        },
       },
       {
         name: 'get_system_info', category: '基础',
