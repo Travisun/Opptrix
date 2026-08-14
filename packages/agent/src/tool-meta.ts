@@ -692,13 +692,22 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   workspace_read: {
     packId: 'workspace',
-    usageGuide: '读取工作区内文本文件（报告、CSV、JSON 等）；大文件自动截断。',
-    compliance: '只读；root_id + 相对 path；勿读二进制大文件进上下文。',
+    usageGuide:
+      '读取工作区内文本文件；可选 start_line/end_line 只取区间，numbered=true 带行号前缀，便于对接 workspace_replace_lines。',
+    compliance: '只读；root_id + 相对 path；勿读二进制大文件进上下文；默认不传区间则整文件无前缀。',
   },
   workspace_write: {
     packId: 'workspace',
-    usageGuide: '保存分析结果、导出报告到工作区；覆盖已有文件会触发用户确认。',
+    usageGuide:
+      '新建或整文件覆盖写出；小改动（修几行）请用 workspace_replace_lines，禁止为省事整文件 rewrite。',
     compliance: '须 rw 授权；覆盖/删除可走 sticky；工作区总配额 20GB。',
+  },
+  workspace_replace_lines: {
+    packId: 'workspace',
+    usageGuide:
+      '按 code_preflight diagnostics 的 L 行号批量定点替换；传入 edits[{start_line,end_line?,new_text,expect_text?}]；校验全过后原子写入。',
+    compliance:
+      '文件须已存在；≤40 条 edits；局部替换不走 overwrite 确认；任一条越界/重叠/expect mismatch 则整批失败且文件不变；修完再 code_preflight。',
   },
   workspace_mkdir: {
     packId: 'workspace',
@@ -745,9 +754,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   opptrix_run: {
     packId: 'workspace',
     usageGuide:
-      '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。',
+      '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。写自定义脚本后建议先 code_preflight。',
     compliance:
-      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；python 未就绪时先 ensure_python 并按 job_id 轮询至 ready，勿在 tool 内死等安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
+      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 opptrix_install(pip|npm)；python 未就绪时先 ensure_python 并按 job_id 轮询至 ready，勿在 tool 内死等安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
   },
   /** @deprecated 兼容别名 → opptrix_run */
   shell_run: {
@@ -755,12 +764,25 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '已弃用别名，请改用 opptrix_run（参数与行为相同）。',
     compliance: '兼容旧会话/旧提示；新调用一律用 opptrix_run。',
   },
-  shell_install: {
+  code_preflight: {
     packId: 'workspace',
     usageGuide:
-      '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；与 opptrix_run 共用同一 Python；比手写 pip/npm 更安全。预估需联网时先 request_shell_network({intent:"install"})。',
+      '写自定义 python/js/ts 脚本后、opptrix_run 前：一次返回全部 findings（diagnostics，尽量带 line；errors/warnings 含 L 前缀），按行号用 workspace_replace_lines 一轮修完再 preflight。软门禁，不硬拦 opptrix_run。',
+    compliance:
+      'path 必填（相对路径）；levels 默认 ["l0","l1"]；language 默认 auto；不执行业务代码；L1 无 ruff/biome 时 skip 不报错；优先读带 line 的 diagnostics，禁止小改动却整文件 workspace_write。',
+  },
+  opptrix_install: {
+    packId: 'workspace',
+    usageGuide:
+      '在授权工作区安装 pip 或 npm 依赖（.opptrix-packages 或 node_modules）；与 opptrix_run 共用同一解释器；比手写 pip/npm 更安全。预估需联网时先 request_shell_network({intent:"install"})。',
     compliance:
       'manager=pip|npm；pip 装进 .opptrix-packages，运行时经 PYTHONPATH 可见；python 未就绪用 ensure_python；联网安装需用户确认（可用 request_shell_network 预授权）。',
+  },
+  /** @deprecated 兼容别名 → opptrix_install */
+  shell_install: {
+    packId: 'workspace',
+    usageGuide: '已弃用别名，请改用 opptrix_install（参数与行为相同）。',
+    compliance: '兼容旧会话/旧提示；新调用一律用 opptrix_install。',
   },
   request_shell_network: {
     packId: 'workspace',

@@ -367,20 +367,32 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'workspace_read',
       category: '工作区',
-      description: '读取授权工作区内的文本文件（大文件自动截断）',
+      description:
+        '读取授权工作区内的文本文件；可选 start_line/end_line 只读区间，numbered=true 时内容带 NNNN| 行号前缀（省 token）',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id' },
         path: { type: 'string', description: '相对文件路径' },
         max_bytes: { type: 'number', description: '最大读取字节，默认 2000000' },
+        start_line: { type: 'number', description: '可选：1-based 起始行（含）' },
+        end_line: { type: 'number', description: '可选：1-based 结束行（含）' },
+        numbered: { type: 'boolean', description: '为 true 时每行前缀 NNNN| 行号；默认 false（整文件无前缀）' },
       }, ['path']),
       handler: async (args) => {
         try {
           const b = requireBridge()
+          const numbered = args.numbered === true || args.numbered === 'true'
+          const startLine = typeof args.start_line === 'number' ? args.start_line : undefined
+          const endLine = typeof args.end_line === 'number' ? args.end_line : undefined
           return await ws.readFile(
             b.sessionId,
             String(args.root_id ?? 'default'),
             String(args.path ?? ''),
             typeof args.max_bytes === 'number' ? args.max_bytes : undefined,
+            {
+              numbered: numbered || undefined,
+              start_line: startLine,
+              end_line: endLine,
+            },
           )
         } catch (err) {
           return toolError(err)
@@ -408,6 +420,56 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           )
         } catch (err) {
           if (err instanceof ConfirmationRequiredError) return formatConfirmationResult(err)
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'workspace_replace_lines',
+      category: '工作区',
+      description:
+        '按 1-based 闭区间行号批量替换（对接 code_preflight diagnostics 的 L 行号）；校验全部 edits 后原子写入；小改动优先用本工具，禁止整文件 workspace_write',
+      parameters: S({
+        root_id: { type: 'string', description: '工作区 root_id，默认 default' },
+        path: { type: 'string', description: '相对文件路径（文件须已存在）' },
+        edits: {
+          type: 'array',
+          description:
+            '替换列表（≤40）：start_line 必填；end_line 含尾默认=start_line；new_text 替换内容（"" 删除）；expect_text 可选防漂移',
+          items: {
+            type: 'object',
+            properties: {
+              start_line: { type: 'number', description: '1-based 起始行' },
+              end_line: { type: 'number', description: '1-based 结束行（含），默认=start_line' },
+              new_text: { type: 'string', description: '替换文本；空串删除该行段' },
+              expect_text: { type: 'string', description: '可选：当前行段原文，不一致则整批失败' },
+            },
+            required: ['start_line', 'new_text'],
+          },
+        },
+      }, ['path', 'edits']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const rawEdits = Array.isArray(args.edits) ? args.edits : []
+          const edits = rawEdits.map((item) => {
+            const row = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+            return {
+              start_line: typeof row.start_line === 'number' ? row.start_line : Number(row.start_line),
+              end_line: row.end_line == null
+                ? undefined
+                : (typeof row.end_line === 'number' ? row.end_line : Number(row.end_line)),
+              new_text: row.new_text == null ? '' : String(row.new_text),
+              expect_text: row.expect_text == null ? undefined : String(row.expect_text),
+            }
+          })
+          return await ws.replaceLines(
+            b.sessionId,
+            String(args.root_id ?? 'default'),
+            String(args.path ?? ''),
+            edits,
+          )
+        } catch (err) {
           return toolError(err)
         }
       },
@@ -708,10 +770,51 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       ]
     })(),
     {
-      name: 'shell_install',
+      name: 'code_preflight',
       category: '工作区',
-      description: '在授权工作区内安装 Python 或 Node 依赖（联网需用户确认；包装进工作区子目录）',
+      description:
+        '检查授权工作区内脚本并一次返回全部 findings（diagnostics，尽量带 line；errors/warnings 前缀 L{line}:）：默认 L0+L1。写自定义脚本后先调用；按行号用 workspace_replace_lines 定点修，再 preflight，通过后 opptrix_run',
       parameters: S({
+        root_id: { type: 'string', description: '工作区 root_id，默认 default' },
+        path: { type: 'string', description: '相对文件路径（必填）' },
+        language: {
+          type: 'string',
+          description: 'auto | python | javascript | typescript，默认 auto',
+        },
+        levels: {
+          type: 'array',
+          description: '检查级别：默认 ["l0","l1"]；可显式 ["l0"] 仅跑 L0',
+          items: { type: 'string' },
+        },
+      }, ['path']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const levelsRaw = Array.isArray(args.levels) ? args.levels.map(v => String(v)) : []
+          const levels = !levelsRaw.length
+            ? (['l0', 'l1'] as const)
+            : levelsRaw.includes('l1')
+              ? (['l0', 'l1'] as const)
+              : (['l0'] as const)
+          const langRaw = String(args.language ?? 'auto').toLowerCase()
+          const language = langRaw === 'python' || langRaw === 'javascript' || langRaw === 'typescript'
+            ? langRaw
+            : 'auto' as const
+          return await ws.codePreflight({
+            sessionId: b.sessionId,
+            rootId: String(args.root_id ?? 'default'),
+            path: String(args.path ?? ''),
+            language,
+            levels: [...levels],
+            signal: b.signal,
+          })
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    ...(() => {
+      const installParams = S({
         root_id: { type: 'string', description: '工作区 root_id' },
         cwd: { type: 'string', description: '相对工作目录' },
         manager: { type: 'string', description: 'pip 或 npm' },
@@ -720,8 +823,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           description: '包名列表；npm 可留空表示按 package.json 安装',
           items: { type: 'string' },
         },
-      }, ['manager']),
-      handler: async (args) => {
+      }, ['manager'])
+      const installHandler = async (args: Record<string, unknown>) => {
         try {
           const b = requireBridge()
           const managerRaw = String(args.manager ?? '').toLowerCase()
@@ -741,8 +844,24 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         } catch (err) {
           return handleShellError(err)
         }
-      },
-    },
+      }
+      return [
+        {
+          name: 'opptrix_install',
+          category: '工作区',
+          description: '在授权工作区内安装 pip 或 npm 依赖（联网需用户确认；包装进工作区子目录）',
+          parameters: installParams,
+          handler: installHandler,
+        },
+        {
+          name: 'shell_install',
+          category: '工作区',
+          description: 'opptrix_install 的兼容别名（参数与行为相同）；新调用请用 opptrix_install',
+          parameters: installParams,
+          handler: installHandler,
+        },
+      ]
+    })(),
     {
       name: 'python_env_status',
       category: '工作区',

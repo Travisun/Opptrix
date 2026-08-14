@@ -486,7 +486,7 @@ const INTENT_RULES: IntentRule[] = [
       /允许联网安装|联网安装授权|外网域名授权/,
       /预估需(?:要)?(?:pip|npm|联网|外网)/i,
     ],
-    preferredTools: ['request_shell_network', 'shell_install', 'opptrix_run'],
+    preferredTools: ['request_shell_network', 'opptrix_install', 'opptrix_run'],
     avoidTools: ['ask_user', 'request_session_lan_access'],
     confidence: 'high',
     hint: '预估需 pip/npm 或已知外网域名 → 先 request_shell_network（confirm，禁止 ask_user 冒充）；LAN 用 request_session_lan_access',
@@ -496,12 +496,36 @@ const INTENT_RULES: IntentRule[] = [
     priority: 90,
     patterns: [
       /pip\s+install|npm\s+install|npm\s+ci|安装(?:python|py|node|npm|pip)?(?:包|依赖)/i,
-      /shell_install/i,
+      /opptrix_install|shell_install/i,
     ],
-    preferredTools: ['request_shell_network', 'shell_install', 'opptrix_run', 'shell_platform_status'],
+    preferredTools: ['request_shell_network', 'opptrix_install', 'opptrix_run', 'shell_platform_status'],
     avoidTools: ['ask_user', 'workspace_write', 'http_fetch'],
     confidence: 'high',
-    hint: '安装依赖 → 先 request_shell_network({intent:install}) 再 shell_install；禁止 ask_user 冒充联网授权',
+    hint: '安装依赖 → 先 request_shell_network({intent:install}) 再 opptrix_install；禁止 ask_user 冒充联网授权',
+  },
+  {
+    intent: 'workspace_code_preflight',
+    priority: 90,
+    patterns: [
+      /检查(?:脚本|代码)?语法|语法检查|preflight|code_preflight/i,
+      /写完.*(?:先)?检查|跑之前.*检查/,
+    ],
+    preferredTools: ['code_preflight', 'workspace_replace_lines', 'workspace_write', 'opptrix_run', 'activate_tool_pack'],
+    avoidTools: ['ask_user'],
+    confidence: 'high',
+    hint: '检查脚本 → code_preflight（diagnostics 带 L 行号）→ workspace_replace_lines 定点修 → 再 preflight → opptrix_run',
+  },
+  {
+    intent: 'workspace_line_edit',
+    priority: 91,
+    patterns: [
+      /按行(?:号)?(?:替换|修改|编辑)|行号替换|workspace_replace_lines/i,
+      /定点(?:修改|替换)|局部替换(?:脚本|代码|文件)/,
+    ],
+    preferredTools: ['workspace_replace_lines', 'code_preflight', 'workspace_read', 'activate_tool_pack'],
+    avoidTools: ['workspace_write', 'ask_user'],
+    confidence: 'high',
+    hint: '按行修改 → workspace_replace_lines（勿整文件 workspace_write）；修完再 code_preflight',
   },
   {
     intent: 'workspace_shell',
@@ -518,10 +542,10 @@ const INTENT_RULES: IntentRule[] = [
       /opptrix_run|shell_run/i,
       /\bshell\b/i,
     ],
-    preferredTools: ['opptrix_run', 'http_fetch', 'shell_platform_status', 'activate_tool_pack'],
+    preferredTools: ['opptrix_run', 'code_preflight', 'workspace_replace_lines', 'http_fetch', 'shell_platform_status', 'activate_tool_pack'],
     avoidTools: ['workspace_write'],
     confidence: 'high',
-    hint: '运行命令 → opptrix_run（系统隔离）；先 get_system_info 再按平台组 argv（darwin/linux ping -c + traceroute；win32 ping -n + tracert）；测网站延迟优先 http_fetch',
+    hint: '运行命令 → 自定义脚本先 code_preflight；有 L 行号用 workspace_replace_lines 修；再 opptrix_run；先 get_system_info 再按平台组 argv；测网站延迟优先 http_fetch',
   },
   {
     intent: 'local_data_catalog',
@@ -1325,7 +1349,7 @@ export function buildRoundRoutePlaybook(
     lines.push('  1) list_tool_packs 查看是否有匹配的业务 pack')
     lines.push('  2) 有则 activate_tool_pack 加载对应 pack 后重试')
     lines.push(
-      '  3) 仍无匹配或激活后仍不够 → activate_tool_pack([\'workspace\'])，用 opptrix_run / ensure_python / workspace_* 编程完成（可与已有数据工具结合）；勿空转 activate 无关 pack，勿直接声称无法完成',
+      '  3) 仍无匹配或激活后仍不够 → activate_tool_pack([\'workspace\'])，用 opptrix_run / opptrix_install / code_preflight / ensure_python / workspace_* 编程完成（可与已有数据工具结合）；勿空转 activate 无关 pack，勿直接声称无法完成',
     )
   }
 

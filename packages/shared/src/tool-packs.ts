@@ -258,6 +258,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   workspace_list: 'workspace',
   workspace_read: 'workspace',
   workspace_write: 'workspace',
+  workspace_replace_lines: 'workspace',
   workspace_mkdir: 'workspace',
   workspace_delete: 'workspace',
   download_file: 'workspace',
@@ -270,6 +271,9 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   opptrix_run: 'workspace',
   /** @deprecated 兼容别名 → opptrix_run */
   shell_run: 'workspace',
+  code_preflight: 'workspace',
+  opptrix_install: 'workspace',
+  /** @deprecated 兼容别名 → opptrix_install */
   shell_install: 'workspace',
   request_shell_network: 'workspace',
   python_env_status: 'workspace',
@@ -353,7 +357,7 @@ export function buildToolPackCatalogPrompt(): string {
   lines.push('- A 股专用工具（机构评级、筹码等）勿用于非 A 股')
   lines.push('- 标准 API 可用时禁止用自定义 Provider 方法替代；标准工具能做的禁止先上沙盒瞎写')
   lines.push(
-    '- 缺能力：先判断是否有业务 pack 可 activate；若标准工具仍覆盖不了 → activate_tool_pack([\'workspace\'])，用 opptrix_run / ensure_python / workspace_* 编程实现，勿空转反复 activate 无关 pack，勿直接声称无法完成',
+    '- 缺能力：先判断是否有业务 pack 可 activate；若标准工具仍覆盖不了 → activate_tool_pack([\'workspace\'])，用 opptrix_run / opptrix_install / code_preflight / ensure_python / workspace_* 编程实现，勿空转反复 activate 无关 pack，勿直接声称无法完成',
   )
   lines.push(
     '- 可结合：先用标准投研工具取数，再在沙盒里计算/汇总；消息内图表用 ```chart```（→ @opptrix/canvas Chart），禁止沙盒出图代替围栏',

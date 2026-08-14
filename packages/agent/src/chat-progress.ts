@@ -276,6 +276,8 @@ const TOOL_LABELS: Record<string, string> = {
   browser_close: '关闭网页浏览',
   opptrix_run: 'Opptrix 运行',
   shell_run: 'Opptrix 运行',
+  code_preflight: '检查脚本',
+  opptrix_install: '安装依赖',
   shell_install: '安装依赖',
   request_shell_network: '申请沙盒联网',
   shell_platform_status: '检查运行环境是否就绪',
@@ -284,6 +286,7 @@ const TOOL_LABELS: Record<string, string> = {
   workspace_list: '浏览工作区文件',
   workspace_read: '读取工作区文件',
   workspace_write: '保存到工作区',
+  workspace_replace_lines: '按行替换',
   workspace_mkdir: '创建工作区文件夹',
   workspace_delete: '删除工作区内容',
   download_file: '下载文件到工作区',
@@ -620,6 +623,11 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const short = cmd.length > 48 ? `${cmd.slice(0, 48)}…` : cmd
       return short ? `${base} · ${short}` : base
     }
+    case 'code_preflight': {
+      const hint = workspacePathHint(args)
+      return hint ? `${base} · ${hint}` : base
+    }
+    case 'opptrix_install':
     case 'shell_install': {
       const mgr = typeof args.manager === 'string' ? args.manager : ''
       const pkgs = Array.isArray(args.packages) ? args.packages.filter((p): p is string => typeof p === 'string') : []
@@ -636,6 +644,7 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       return base
     case 'workspace_read':
     case 'workspace_write':
+    case 'workspace_replace_lines':
     case 'workspace_list':
     case 'workspace_mkdir':
     case 'workspace_delete': {
@@ -1058,11 +1067,23 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
     }
     case 'opptrix_run':
     case 'shell_run':
+    case 'opptrix_install':
     case 'shell_install':
     case 'shell_platform_status':
     case 'python_env_status':
     case 'ensure_python':
       return summarizeShellRunResult(result)
+    case 'code_preflight': {
+      if (!result || typeof result !== 'object') return null
+      const r = result as Record<string, unknown>
+      if (r.ok === true) return '脚本检查通过'
+      const errs = Array.isArray(r.errors) ? r.errors.filter((e): e is string => typeof e === 'string') : []
+      if (errs.length) {
+        const first = errs[0]
+        return first.length > 80 ? `${first.slice(0, 80)}…` : first
+      }
+      return '脚本检查未通过'
+    }
     case 'list_scheduled_jobs':
     case 'get_scheduled_job':
     case 'create_scheduled_job':
