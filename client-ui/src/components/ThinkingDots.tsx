@@ -1,14 +1,11 @@
 import { mergeClasses } from '@fluentui/react-components'
 
 /**
- * Compact 3×3 "thinking" indicator.
+ * Inline three-dot thinking spinner (horizontal row).
  *
- * 9 dots arranged in a square grid. Each dot pulses independently with a
- * unique phase. Dormant dots keep a soft floor opacity so the field stays
- * dense; peaks overlap so roughly 6–8 dots read as lit at once.
- *
- * All animation / size styles live in global.css under
- * `.opptrix-thinking-dots` / `.opptrix-thinking-dots__dot`.
+ * Canvas height tracks surrounding text (~1em). Classic staggered bounce;
+ * styles live in global.css under `.opptrix-thinking-dots` /
+ * `.opptrix-thinking-dots__dot`.
  */
 
 export interface ThinkingDotsProps {
@@ -25,12 +22,6 @@ export default function ThinkingDots({ className, label = '正在思考' }: Thin
       aria-label={label || undefined}
       aria-hidden={label ? undefined : true}
     >
-      <span className="opptrix-thinking-dots__dot" />
-      <span className="opptrix-thinking-dots__dot" />
-      <span className="opptrix-thinking-dots__dot" />
-      <span className="opptrix-thinking-dots__dot" />
-      <span className="opptrix-thinking-dots__dot" />
-      <span className="opptrix-thinking-dots__dot" />
       <span className="opptrix-thinking-dots__dot" />
       <span className="opptrix-thinking-dots__dot" />
       <span className="opptrix-thinking-dots__dot" />
