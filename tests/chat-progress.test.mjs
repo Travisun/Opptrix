@@ -82,6 +82,21 @@ test('shell tools have Chinese labels and result summaries', () => {
   assert.match(aliasLabel, /Opptrix 运行/)
   assert.match(aliasLabel, /node/)
 
+  const installLabel = formatToolLabel('opptrix_install', { manager: 'pip', packages: ['requests'] })
+  assert.match(installLabel, /安装依赖/)
+  assert.match(installLabel, /pip/)
+  const installAlias = formatToolLabel('shell_install', { manager: 'npm', packages: [] })
+  assert.match(installAlias, /安装依赖/)
+
+  const preflightLabel = formatToolLabel('code_preflight', { path: 'demo.py' })
+  assert.match(preflightLabel, /检查脚本/)
+  const { preview: preflightPreview } = formatResultPreview({
+    ok: true,
+    path: 'demo.py',
+    errors: [],
+  }, 'code_preflight')
+  assert.match(preflightPreview, /通过/)
+
   const { preview: statusPreview } = formatResultPreview({
     ready: true,
     supported: true,

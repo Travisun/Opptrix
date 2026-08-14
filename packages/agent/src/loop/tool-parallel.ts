@@ -9,6 +9,7 @@ export const SERIAL_TOOL_NAMES: ReadonlySet<string> = new Set([
   'ask_user',
   // Workspace 写/删/侧效
   'workspace_write',
+  'workspace_replace_lines',
   'workspace_mkdir',
   'workspace_delete',
   'download_file',
@@ -16,7 +17,9 @@ export const SERIAL_TOOL_NAMES: ReadonlySet<string> = new Set([
   // Shell
   'opptrix_run',
   'shell_run',
+  'opptrix_install',
   'shell_install',
+  'code_preflight',
   'request_shell_network',
   'ensure_python',
   // Secret

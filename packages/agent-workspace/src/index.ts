@@ -160,6 +160,24 @@ export {
   type WorkspaceServiceOptions,
 } from './service.js'
 export {
+  runCodePreflight,
+  runL0StaticOnly,
+  DEFAULT_PREFLIGHT_LEVELS,
+  detectLanguageFromPath,
+  checkEncoding,
+  checkNewlines,
+  checkPlatformPathRules,
+  parseRuffOutput,
+  parseBiomeOutput,
+  type CodePreflightResult,
+  type CodePreflightParams,
+  type PreflightCheck,
+  type PreflightDiagnostic,
+  type PreflightLanguage,
+  type PreflightLanguageOpt,
+  type PreflightLevel,
+} from './code-preflight/index.js'
+export {
   ShellRunner,
   applyPythonRuntimeToChildEnv,
   SessionNetworkEgressStore,
@@ -258,3 +276,15 @@ export {
   type NetworkEgressPreflightResult,
 } from './shell/index.js'
 export { normalizeWorkspaceTextContent } from './workspace-text.js'
+export {
+  applyLineEdits,
+  splitContentLines,
+  joinContentLines,
+  MAX_LINE_EDITS,
+  MAX_NUMBERED_SNIPPETS_CHARS,
+  type LineEditInput,
+  type LineEditStatus,
+  type LineEditResultItem,
+  type NumberedSnippet,
+  type ApplyLineEditsResult,
+} from './line-edit/index.js'

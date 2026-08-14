@@ -153,7 +153,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 禁止把 get_project_info 或 get_system_info 的路径/ cwd 说成可访问目录',
     '- 禁止向用户朗读 ~/.opptrix 应用数据根、sessions、watchlist、数据库、providers 等内部结构',
     '- 本对话工作区 root_id=default；公共复用区 root_id=shared（packages/data/docs，会话结束不删）；额外目录需界面授权或 request_folder_access',
-    '- 运行 python/node 脚本、pip/npm 安装依赖 → 必须经 opptrix_run / shell_install（系统隔离环境）；勿声称可读写未授权路径',
+    '- 运行 python/node 脚本、pip/npm 安装依赖 → 必须经 opptrix_run / opptrix_install（系统隔离环境）；写自定义脚本后先 code_preflight；勿声称可读写未授权路径',
     '',
     '【消息内引用工作区文件】',
     '- 聊天消息中展示图片/视频/音频/文件链接时，必须使用 opptrix-ws://{root_id}/{相对路径}（例：opptrix-ws://shared/charts/a.png、opptrix-ws://default/out/x.mp4）',
@@ -163,9 +163,9 @@ export function buildWorkspaceAccessPlaybook(): string {
     '【沙盒 node / python / npm — 先确认就绪】',
     '- 桌面端 node 由应用内嵌运行时提供（Electron-as-Node）；勿因 PATH 无 node 声称无法执行',
     '- 运行 opptrix_run 前先 get_system_info（或 python_env_status 查 Python）；确认 node_ready / npm_ready / python_ready / python_priority 与 platform',
-    '- opptrix_run / shell_install argv 只用字面量 python / python3 / pip（或 node/npm）；禁止手写系统或 Opptrix 托管绝对路径；运行时会静默改写到当前优先解释器',
+    '- opptrix_run / opptrix_install argv 只用字面量 python / python3 / pip（或 node/npm）；禁止手写系统或 Opptrix 托管绝对路径；运行时会静默改写到当前优先解释器',
     '- install 与 run 共用同一解释器；pip 依赖装进工作区 .opptrix-packages，运行时自动经 PYTHONPATH 可见',
-    '- 依赖安装用 shell_install(manager=pip|npm)；pip 镜像由设置注入；python 未就绪时先 ensure_python（未就绪立即 preparing|installing+suggested_wake_seconds → 优先 schedule_turn_wake 到期再查，勿 tight-poll）',
+    '- 依赖安装用 opptrix_install(manager=pip|npm)；pip 镜像由设置注入；python 未就绪时先 ensure_python（未就绪立即 preparing|installing+suggested_wake_seconds → 优先 schedule_turn_wake 到期再查，勿 tight-poll）',
     '- python_env_status 只描述当前优先解释器；勿把「系统 / 托管」两套都当可执行选项',
     '',
     '【opptrix_run — 先识平台，再组 argv】',
@@ -176,11 +176,12 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 测网站连通性或 HTTP 耗时 → 优先 http_fetch；用户明确要求 ICMP ping 时才用 opptrix_run',
     '- 默认禁止沙箱 TCP 出站；访问外网站点需用户按域名确认（仅此一次 / 本对话允许该域名）。可通过环境变量 OPPTRIX_SHELL_ALLOWED_DOMAINS 预置免确认域名（逗号分隔，支持 *.example.com）',
     '- 系统 DNS 解析可用，但解析到私网地址仍会被拒绝（除非本对话/全局已允许局域网）',
-    '- 预估需 pip/npm 安装 → 先 request_shell_network({ intent: "install" })，再 shell_install；走系统沙盒确认，禁止用 ask_user「允许联网」冒充（ask_user 不会写入沙盒授权）',
+    '- 预估需 pip/npm 安装 → 先 request_shell_network({ intent: "install" })，再 opptrix_install；走系统沙盒确认，禁止用 ask_user「允许联网」冒充（ask_user 不会写入沙盒授权）',
     '- 预估需访问已知外网域名（非安装白名单）→ request_shell_network({ intent: "egress", hosts: [...] })；禁止 ask_user 冒充出站授权',
     '- 局域网仍用 request_session_lan_access（可内部 ask_user）；与公网安装/出站不同；有效 LAN = 全局设置 || 本对话授权',
     '- workspace_write 文本默认 LF；.bat/.cmd/.ps1 用平台换行；脚本用 pathlib/path，禁止硬编码 /Users 或 C:\\\\Users\\\\某用户；按 get_system_info.platform 选 ping -c/-n、tracert/traceroute',
     '- python/node 等无明确目标时不弹全网确认；禁网运行，若因出站受限失败则返回需确认的域名',
+    '- 写自定义脚本：workspace_write（新建）→ code_preflight → 按 diagnostics 的 L 行号用 workspace_replace_lines 定点修 → 再 code_preflight → 通过后再 opptrix_run（软门禁，不硬拦）；禁止小改动却整文件 workspace_write',
     '- 本轮已加载 opptrix_run / workspace_* 时：须用这些工具完成本地命令与工作区文件操作；禁止再说「出于安全规范禁止执行 Shell」；标准 API 不够时主动用沙盒补齐计算/处理，勿推诿',
     '- 未加载 opptrix_run / workspace_* 时：勿声称已具备本地命令或工作区能力；需要时 activate_tool_pack([\'workspace\']) 后再用沙盒工具',
     '- 沙盒用于数值计算/清洗/汇总；消息内要展示图表 → 写 ```chart``` 围栏（→ @opptrix/canvas Chart），禁止默认用沙盒 matplotlib/seaborn/plotly 等「出图」当聊天插图（用户明确要求导出图像文件到工作区时除外）',
@@ -192,7 +193,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 禁止把密钥写入工作区文件、日志、README；禁止明文进沙盒；经保险箱 + secret_refs 注入 sentinel',
     '',
     '【能力不足时的沙盒兜底】',
-    '- 内置/已匹配工具无法完成、或没有匹配工具时：若尚未加载 workspace → activate_tool_pack([\'workspace\'])，再用 opptrix_run / ensure_python / workspace_write 等编程实现',
+    '- 内置/已匹配工具无法完成、或没有匹配工具时：若尚未加载 workspace → activate_tool_pack([\'workspace\'])，再用 workspace_write → code_preflight → workspace_replace_lines → code_preflight → opptrix_run / opptrix_install / ensure_python 等编程实现',
     '- 可先用标准投研工具取数，再在沙盒计算/汇总；算完把数字写入 ```chart``` 展示，禁止沙盒出图代替围栏；禁止空转反复 activate 无关 pack，禁止直接声称无法完成',
     '- 标准投研 API 已能覆盖的任务禁止先上沙盒；目标 pack / 首选工具已在本轮 tools 中时勿仪式化重复 activate',
   ].join('\n')
@@ -204,8 +205,8 @@ export function buildLocalProgrammingPlaybook(): string {
     '【本地编程协议】',
     '1. list_local_data_apis → get_local_data_catalog({ api_id }) 了解可用能力（system 仅索引，勿臆造详情）',
     '2. 扫 shared/packages/*/README，能复用则复用（root_id=shared）',
-    '3. 缺依赖：先 request_shell_network({ intent: "install" })，再 shell_install（npm/pip）；禁止 ask_user 冒充联网授权',
-    '4. 最后自写；可复用产物写入 shared/packages/<name>/ + README；workspace_write 默认 LF，.bat/.cmd/.ps1 用平台换行；脚本用 pathlib/path，禁止硬编码本机用户路径',
+    '3. 缺依赖：先 request_shell_network({ intent: "install" })，再 opptrix_install（npm/pip）；禁止 ask_user 冒充联网授权',
+    '4. 自写脚本：新建用 workspace_write；随后 code_preflight（尽量带 line / errors 前缀 L{n}:）→ workspace_replace_lines 按行号批量改 → 再 code_preflight → 通过后再 opptrix_run；禁止小改动却整文件 rewrite；可复用产物写入 shared/packages/<name>/ + README；workspace_write 默认 LF，.bat/.cmd/.ps1 用平台换行；脚本用 pathlib/path，禁止硬编码本机用户路径',
     '5. 离线大数据 → prepare_fuyao_dump（冷下载先 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查）；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
     '6. 沙盒前：公网安装/已知外网域名 → request_shell_network；局域网 → request_session_lan_access / ask_user(allow_lan_session)；按 get_system_info.platform 选 ping -c/-n、tracert/traceroute',
     '7. 第三方密钥：list_vault_secrets → 已有 grant_session_secret / 没有 request_secret；opptrix_run 用 secret_refs 传名字',
@@ -567,7 +568,8 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   )
 
   const hasShellTools = opts?.activeToolNames?.some(
-    name => name === 'opptrix_run' || name === 'shell_run' || name === 'shell_install'
+    name => name === 'opptrix_run' || name === 'shell_run' || name === 'opptrix_install' || name === 'shell_install' || name === 'code_preflight'
+      || name === 'workspace_replace_lines'
       || name === 'request_shell_network' || name.startsWith('workspace_'),
   )
   if (hasShellTools) {
@@ -575,17 +577,17 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
       '- 本轮已加载 opptrix_run / workspace_*：用户请求的运行本地命令、读写工作区、网络探测须用已加载工具完成；禁止声称「出于安全规范禁止执行 Shell」',
       '- 标准投研 API 不够时主动用沙盒编程补齐（计算/清洗/汇总），勿推诿；标准工具能做的禁止先上沙盒；消息内图表用 ```chart```（→ @opptrix/canvas Chart），禁止沙盒 matplotlib 等出图代替围栏（用户明确要求导出图像文件除外）',
       '- opptrix_run 前须 get_system_info（或本轮已有 platform）确认 node_ready/python_ready/python_priority；桌面端 node 由应用内嵌运行时提供',
-      '- opptrix_run argv 只用字面量 node/python/npm/pip；禁止手写系统/托管绝对路径；依赖：先 request_shell_network({intent:"install"}) 再 shell_install(pip|npm)；禁止 ask_user 冒充沙盒联网授权；install 与 run 同一解释器与 .opptrix-packages；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
+      '- opptrix_run argv 只用字面量 node/python/npm/pip；禁止手写系统/托管绝对路径；依赖：先 request_shell_network({intent:"install"}) 再 opptrix_install(pip|npm)；禁止 ask_user 冒充沙盒联网授权；install 与 run 同一解释器与 .opptrix-packages；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
       '- 预估需访问已知外网域名 → request_shell_network({intent:"egress", hosts:[...]})；局域网仍用 request_session_lan_access',
-      '- workspace_write 文本默认 LF；.bat/.cmd/.ps1 用平台换行；脚本用 pathlib/path，禁止硬编码本机用户路径',
+      '- workspace_write 文本默认 LF；.bat/.cmd/.ps1 用平台换行；脚本用 pathlib/path，禁止硬编码本机用户路径；写脚本后 code_preflight → workspace_replace_lines（按 L 行号）→ 再 code_preflight → opptrix_run；禁止小改动却整文件 rewrite',
       '- 测网站连通性或 HTTP 延迟优先 http_fetch；用户明确要求 ICMP ping 时用 opptrix_run',
       '- 沙箱默认禁 TCP 出站；访问外网需用户确认（系统沙盒弹窗）。系统 DNS 可用；私网/localhost 默认拒，需局域网时先 request_session_lan_access / ask_user(allow_lan_session)',
-      '- 编程：list_local_data_apis → get_local_data_catalog → 复用 shared/packages → request_shell_network(install) → shell_install → 自写回写；离线 dump 用 prepare_fuyao_dump',
+      '- 编程：list_local_data_apis → get_local_data_catalog → 复用 shared/packages → request_shell_network(install) → opptrix_install → workspace_write → code_preflight → workspace_replace_lines → code_preflight → opptrix_run；离线 dump 用 prepare_fuyao_dump',
       '- 【密钥保险箱】需要第三方密钥/口令时：禁止让用户在聊天正文粘贴；禁止 ask_user 普通选项收集密钥；必须 request_secret 写入保险箱。编程前 list_vault_secrets；已有则 grant_session_secret；没有则 request_secret。opptrix_run 只用 secret_refs 传名字；脚本读 process.env.NAME / os.environ["NAME"]（值为 sentinel）。禁止把密钥写入工作区文件、日志、README；禁止明文进沙盒',
     )
   } else {
     sections.push(
-      '- 未加载 opptrix_run / workspace_* 时：勿声称具备本地命令、工作区文件或未提供的工具能力；内置工具不够或无匹配时 → activate_tool_pack([\'workspace\'])，用 opptrix_run / ensure_python / workspace_* 沙盒编程实现（可先标准工具取数再沙盒计算），勿空转 activate 无关 pack，勿直接声称无法完成',
+      '- 未加载 opptrix_run / workspace_* 时：勿声称具备本地命令、工作区文件或未提供的工具能力；内置工具不够或无匹配时 → activate_tool_pack([\'workspace\'])，用 opptrix_run / opptrix_install / code_preflight / ensure_python / workspace_* 沙盒编程实现（可先标准工具取数再沙盒计算），勿空转 activate 无关 pack，勿直接声称无法完成',
     )
   }
 

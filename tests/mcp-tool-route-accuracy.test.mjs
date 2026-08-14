@@ -98,6 +98,8 @@ const PRIMARY_CASES = [
   { message: '测一下到百度的网络延迟', expectPrimary: 'http_fetch', intent: 'workspace_network_latency' },
   { message: 'pip install requests 装进工作区', expectPrimary: 'request_shell_network', intent: 'workspace_shell_install' },
   { message: '申请沙盒联网安装依赖', expectPrimary: 'request_shell_network', intent: 'workspace_shell_network' },
+  { message: '检查脚本语法', expectPrimary: 'code_preflight', intent: 'workspace_code_preflight' },
+  { message: '按行号替换脚本里的几行', expectPrimary: 'workspace_replace_lines', intent: 'workspace_line_edit' },
   { message: '检查一下 Python 环境', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: 'ensure_python 返回 preparing 后用 job_id 轮询', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: '等一会儿再检查下载是否完成然后继续', expectPrimary: 'schedule_turn_wake', intent: 'turn_wake' },

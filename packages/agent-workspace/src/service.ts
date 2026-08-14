@@ -2,6 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
   ConfirmationRequiredError,
+  DenyPathError,
+  PathEscapeError,
   QuotaExceededError,
   WorkspaceError,
 } from './errors.js'
@@ -40,6 +42,20 @@ import {
   type NetworkEgressPreflightResult,
 } from './shell/index.js'
 import { normalizeWorkspaceTextContent } from './workspace-text.js'
+import {
+  applyLineEdits,
+  MAX_LINE_EDITS,
+  splitContentLines,
+  type LineEditInput,
+  type ApplyLineEditsResult,
+} from './line-edit/index.js'
+import {
+  runCodePreflight,
+  type CodePreflightParams,
+  type CodePreflightResult,
+  type PreflightLanguageOpt,
+  type PreflightLevel,
+} from './code-preflight/index.js'
 
 const EXT_MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -242,21 +258,139 @@ export class WorkspaceService {
     return { entries, path: relPath || '.' }
   }
 
-  async readFile(sessionId: string, rootId: string, relPath: string, maxBytes = 2_000_000): Promise<{
+  async readFile(
+    sessionId: string,
+    rootId: string,
+    relPath: string,
+    maxBytes = 2_000_000,
+    opts?: {
+      start_line?: number
+      end_line?: number
+      numbered?: boolean
+    },
+  ): Promise<{
     content: string
     truncated: boolean
     size: number
+    start_line?: number
+    end_line?: number
+    line_count?: number
   }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertReadable(grant)
     const buf = await fs.readFile(abs)
     const truncated = buf.length > maxBytes
     const slice = truncated ? buf.subarray(0, maxBytes) : buf
+    let content = slice.toString('utf8')
+    const { lines } = splitContentLines(content)
+    const lineCount = lines.length
+
+    const hasRange =
+      (typeof opts?.start_line === 'number' && Number.isFinite(opts.start_line))
+      || (typeof opts?.end_line === 'number' && Number.isFinite(opts.end_line))
+    let startLine = 1
+    let endLine = lineCount
+    if (hasRange) {
+      startLine = typeof opts?.start_line === 'number' && Number.isFinite(opts.start_line)
+        ? Math.max(1, Math.trunc(opts.start_line))
+        : 1
+      endLine = typeof opts?.end_line === 'number' && Number.isFinite(opts.end_line)
+        ? Math.trunc(opts.end_line)
+        : lineCount
+      if (endLine < startLine) {
+        throw new WorkspaceError('end_line 须 ≥ start_line')
+      }
+      if (lineCount === 0) {
+        content = ''
+      } else {
+        const from = Math.min(startLine, lineCount)
+        const to = Math.min(endLine, lineCount)
+        const sliceLines = lines.slice(from - 1, to)
+        if (opts?.numbered) {
+          content = sliceLines
+            .map((line, i) => `${String(from + i).padStart(4, '0')}|${line}`)
+            .join('\n')
+          if (content.length) content += '\n'
+        } else {
+          content = sliceLines.join('\n')
+        }
+        startLine = from
+        endLine = to
+      }
+      return {
+        content,
+        truncated,
+        size: buf.length,
+        start_line: startLine,
+        end_line: endLine,
+        line_count: lineCount,
+      }
+    }
+
+    if (opts?.numbered && lineCount > 0) {
+      content = `${lines
+        .map((line, i) => `${String(i + 1).padStart(4, '0')}|${line}`)
+        .join('\n')}\n`
+    }
+
     return {
-      content: slice.toString('utf8'),
+      content,
       truncated,
       size: buf.length,
+      ...(opts?.numbered
+        ? { start_line: lineCount ? 1 : 0, end_line: lineCount, line_count: lineCount }
+        : {}),
     }
+  }
+
+  /**
+   * 按 1-based 闭区间行号批量替换；校验全部 edits 后原子写入。
+   * 局部替换不走整文件 overwrite 确认；文件必须已存在。
+   */
+  async replaceLines(
+    sessionId: string,
+    rootId: string,
+    relPath: string,
+    edits: LineEditInput[],
+    maxBytes = 2_000_000,
+  ): Promise<ApplyLineEditsResult & { path: string }> {
+    const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
+    assertWritable(grant)
+
+    let st
+    try {
+      st = await fs.stat(abs)
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+      if (code === 'ENOENT') {
+        throw new WorkspaceError('文件不存在，请先用 workspace_write 创建')
+      }
+      throw err
+    }
+    if (!st.isFile()) {
+      throw new WorkspaceError('路径不是文件')
+    }
+    if (st.size > maxBytes) {
+      throw new WorkspaceError(`文件超过大小上限（约 ${Math.round(maxBytes / 1_000_000)}MB），无法按行替换`)
+    }
+
+    const buf = await fs.readFile(abs)
+    if (buf.length > maxBytes) {
+      throw new WorkspaceError(`文件超过大小上限（约 ${Math.round(maxBytes / 1_000_000)}MB），无法按行替换`)
+    }
+    const original = buf.toString('utf8')
+    const applied = applyLineEdits(original, edits, { maxEdits: MAX_LINE_EDITS })
+    if (!applied.ok || applied.content == null) {
+      return { path: relPath, ...applied }
+    }
+
+    const normalized = normalizeWorkspaceTextContent(relPath, applied.content)
+    const outBuf = Buffer.from(normalized, 'utf8')
+    await this.quota.assertCanWrite(outBuf.length)
+    await fs.writeFile(abs, outBuf)
+
+    const { content: _written, ...rest } = applied
+    return { path: relPath, ...rest }
   }
 
   /**
@@ -419,6 +553,127 @@ export class WorkspaceService {
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
     return this.shell.install(params, confirm)
+  }
+
+  /** 对外 MCP 主名 opptrix_install；内部与 shellInstall 相同 */
+  opptrixInstall(
+    params: ShellInstallParams,
+    confirm?: ConfirmHandler,
+  ): Promise<ShellRunResult> {
+    return this.shellInstall(params, confirm)
+  }
+
+  /**
+   * 写脚本后软门禁：L0 语法+平台规则；L1 仅当 ruff/biome 可用。
+   * 不拦截 opptrix_run；不执行用户业务代码。
+   */
+  async codePreflight(params: CodePreflightParams): Promise<CodePreflightResult> {
+    const relPath = String(params.path ?? '').trim()
+    if (!relPath) {
+      const msg = '请提供相对文件路径'
+      return {
+        ok: false,
+        path: '',
+        language: null,
+        checks: [{
+          id: 'l0_exists',
+          level: 'l0',
+          status: 'fail',
+          message: msg,
+        }],
+        diagnostics: [{
+          id: 'l0_exists',
+          level: 'l0',
+          severity: 'error',
+          message: msg,
+        }],
+        errors: [msg],
+        warnings: [],
+        fix_hints: ['path 为授权工作区内的相对路径，如 scripts/demo.py'],
+        l1_available: {},
+      }
+    }
+
+    const rootId = params.rootId || 'default'
+    const language: PreflightLanguageOpt = params.language ?? 'auto'
+    const levels: PreflightLevel[] = params.levels?.length
+      ? [...params.levels]
+      : ['l0', 'l1']
+
+    let grant: WorkspaceGrant
+    let abs: string
+    try {
+      const gated = await this.gatePath(params.sessionId, rootId, relPath)
+      grant = gated.grant
+      abs = gated.abs
+      assertReadable(grant)
+    } catch (err) {
+      const denied = err instanceof PathEscapeError || err instanceof DenyPathError
+      const summary = denied
+        ? '路径不在授权工作区内'
+        : '文件不存在或不可读'
+      return {
+        ok: false,
+        path: relPath,
+        language: null,
+        checks: [{
+          id: 'l0_exists',
+          level: 'l0',
+          status: 'fail',
+          message: summary,
+        }],
+        diagnostics: [{
+          id: 'l0_exists',
+          level: 'l0',
+          severity: 'error',
+          message: summary,
+        }],
+        errors: [summary],
+        warnings: [],
+        fix_hints: denied
+          ? ['请确认相对路径未越出授权目录，必要时用 request_folder_access 或 list_workspace_grants']
+          : ['请确认文件已写出，且 root_id 与相对路径正确'],
+        l1_available: {},
+      }
+    }
+
+    let buf: Buffer
+    let fileOk = true
+    let notFile = false
+    try {
+      const st = await fs.stat(abs)
+      if (!st.isFile()) {
+        fileOk = false
+        notFile = true
+        buf = Buffer.alloc(0)
+      } else {
+        buf = await fs.readFile(abs)
+      }
+    } catch {
+      return runCodePreflight({
+        path: relPath,
+        absPath: abs,
+        grantRootAbs: grant.abs_path,
+        buf: Buffer.alloc(0),
+        language,
+        levels,
+        signal: params.signal,
+        fileOk: false,
+        missing: true,
+      })
+    }
+
+    return runCodePreflight({
+      path: relPath,
+      absPath: abs,
+      grantRootAbs: grant.abs_path,
+      buf,
+      language,
+      levels,
+      signal: params.signal,
+      fileOk,
+      notFile,
+    })
   }
 
   requestNetworkInstall(
