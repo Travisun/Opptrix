@@ -228,6 +228,14 @@ const useStyles = makeStyles({
     maxHeight: '180px',
     overflow: 'auto',
   },
+  /** 无内部滚动约束；历史思考由外层 scrollWrapper 限高，避免嵌套 overflow 在 0fr/1fr 下高度为 0 */
+  detailFlow: {
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textTertiary,
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+  },
   thinkingSnippet: {
     fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.45,
@@ -651,28 +659,37 @@ interface ReasoningTimelineProps {
   segments: ReasoningSegment[]
   /** live：展开并跟随末段滚动 */
   active: boolean
+  /**
+   * 是否用内部 maxHeight + overflow 约束滚动；默认 true。
+   * active=false 或显式 false 时不约束，避免嵌套 overflow 在手风琴折叠下高度算成 0。
+   */
+  constrained?: boolean
 }
 
 /** 思考竖轴 — 复用 step 视觉；多段显示「第 N 段思路」，单段省略段标题。
  * live 时不另起 spinner 行：状态由外层 ChatProcessTrace 状态头统一承载，避免双 spinner。 */
-function ReasoningTimeline({ segments, active }: ReasoningTimelineProps) {
+function ReasoningTimeline({ segments, active, constrained }: ReasoningTimelineProps) {
   const s = useStyles()
   const bodyScrollRef = useRef<HTMLDivElement>(null)
   const showLabels = segments.length > 1
   const lastLen = segments[segments.length - 1]?.content.length ?? 0
+  const scrollConstrained = active && (constrained ?? true)
 
   useEffect(() => {
-    if (!active) return
+    if (!active || !scrollConstrained) return
     const el = bodyScrollRef.current
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [active, segments.length, lastLen])
+  }, [active, scrollConstrained, segments.length, lastLen])
 
   return (
     <div className={s.stepRow}>
       <div
-        ref={bodyScrollRef}
-        className={mergeClasses(s.detailBlock, 'opptrix-scroll')}
+        ref={scrollConstrained ? bodyScrollRef : undefined}
+        className={mergeClasses(
+          scrollConstrained ? s.detailBlock : s.detailFlow,
+          scrollConstrained && 'opptrix-scroll',
+        )}
         aria-label={active ? '正在梳理思路' : undefined}
       >
         <div className={s.timeline}>
@@ -821,13 +838,13 @@ export default function ChatProcessTrace({
               {historySummary}
             </Text>
           </button>
-          <div className={mergeClasses(s.collapse, historySnippetExpanded && s.collapseOpen)}>
-            <div className={s.collapseInner}>
+          {historySnippetExpanded && (
+            <div className={mergeClasses(s.scrollWrapper, 'opptrix-scroll')}>
               <div className={s.stepBody}>
-                <ReasoningTimeline segments={segments} active={false} />
+                <ReasoningTimeline segments={segments} active={false} constrained={false} />
               </div>
             </div>
-          </div>
+          )}
         </>
       )}
 
