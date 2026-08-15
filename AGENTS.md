@@ -232,6 +232,7 @@ Storage Layer (user-store, market-data)
 
 - 聊天路径经 **Tool Pack Router**：pack 召回 + `resolveToolRoutePlan` 精排 + 本轮选型卡；禁止全量固定 Broker
 - **新增工具强制顺序**：`tools.ts` handler → `TOOL_META` → `TOOL_PACK_MEMBERSHIP` → `INTENT_RULES`（有用户说法时）→ 测试黄金用例 → `docs/AGENT-GUIDE.md`
+- **后台 Job**：`list_jobs` / `cancel_job`（`core`）；长任务终态续跑 + Composer 任务面板（stdout / 结束任务）；细则见 `docs/AGENT-GUIDE.md` §4.2、`docs/API.md` Sessions
 - 细则：`.cursor/rules/mcp-tool-pack-routing.mdc`；测试：`tests/mcp-tool-route-accuracy.test.mjs`
 
 ## client-ui（摘要）

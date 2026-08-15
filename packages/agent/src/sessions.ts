@@ -103,6 +103,9 @@ export interface CreateSessionOptions {
   model?: string
 }
 
+/** UI 展示来源；缺省 = 用户/助手正常气泡。模型侧仍按 role 进 LLM。 */
+export type TurnOrigin = 'wake_resume'
+
 export interface DisplayMessage {
   role: 'user' | 'assistant'
   content: string
@@ -116,6 +119,21 @@ export interface DisplayMessage {
   reasoningContent?: string
   /** 结构化思考分段（优先）；缺省时由 reasoningContent 按 SEP 降级 */
   reasoningSegments?: ReasoningSegment[]
+  /** 系统续跑/回调注入；UI 降展示为状态条，旧 turns 可能缺失 */
+  origin?: TurnOrigin
+}
+
+/** 是否应按「续跑状态条」而非用户气泡展示（含旧数据「系统续跑」启发） */
+export function isWakeResumeDisplayMessage(msg: {
+  origin?: string
+  role?: string
+  content?: string
+}): boolean {
+  if (msg.origin === 'wake_resume') return true
+  if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('系统续跑')) {
+    return true
+  }
+  return false
 }
 
 export interface SessionForkContextRef {
@@ -168,6 +186,8 @@ export interface SessionRecord extends SessionMeta {
     reasoningContent?: string
     /** 结构化思考分段；与 reasoningContent 双写（派生字符串兼容旧读） */
     reasoningSegments?: ReasoningSegment[]
+    /** 系统续跑/回调注入；旧 turns 可能缺失 */
+    origin?: TurnOrigin
   }[]
   contextRef?: SessionContextRef | null
   /**
@@ -553,6 +573,7 @@ export class SessionStore {
           attachments: t.attachments,
           reasoningContent,
           ...(segments ? { reasoningSegments: segments } : {}),
+          ...(t.origin ? { origin: t.origin } : {}),
         }
       })
     }

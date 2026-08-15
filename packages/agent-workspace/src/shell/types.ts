@@ -38,6 +38,9 @@ export interface ShellRunParams {
    * `OPPTRIX_SHELL_BG=0` 时拒绝。
    */
   background?: boolean
+  /** 可选任务标题（面板展示）；亦可用 name */
+  title?: string
+  name?: string
 }
 
 /** opptrix_run(background:true) 立即返回体（供 auto-watch） */

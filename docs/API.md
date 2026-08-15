@@ -954,12 +954,80 @@ Content-Type: application/json
 | POST | `/api/sessions/:id/chat/cancel` | 取消进行中的聊天；无活动流 → 404；同时清空 pending `ask_user`、soft steer、该会话 turn-wake / job waits·watches（**不** cancel 全局后台 Job） |
 | GET | `/api/sessions/:id/pending-wakes` | `{ wakes, job_watches? }`：未到期纯延时 timer + 挂起的 Job watch 摘要（Composer 条数；长任务依赖终态续跑，无 soft timer） |
 | GET | `/api/sessions/:id/pending-job-watches` | `{ watches }`：仅 Job watch 列表（无 fallback 倒计时字段） |
+| GET | `/api/sessions/:id/jobs` | 本会话相关后台任务列表（见下 **会话后台 Job**） |
+| POST | `/api/sessions/:id/jobs/:jobId/cancel` | 结束可取消的后台任务（见下） |
+| GET | `/api/sessions/:id/live-progress` | SSE：会话过程事件（含 `job_progress` / `job_watch` 等；见下） |
 | POST | `/api/sessions/:id/chat/steer` | Soft steer：生成中注入补充说明，**不** abort；body `{ message: string }` → `{ ok: true }` 或 `{ ok: false, reason: 'no_active_chat' \| 'empty' }`；下一 LLM 轮前以用户消息「（补充）…」写入会话；SSE 可发 `steer_applied` |
 | POST | `/api/sessions/:id/chat/user-prompt` | 回填 `ask_user` / 密钥问答；见下 |
 | POST | `/api/sessions/:id/fork` | 从助手气泡分叉新会话；body `{ message_index }`（display turn 索引，须为 assistant）→ `{ session, messages, contextRef }`；无效索引/角色 → 404 |
 | POST | `/api/sessions/:id/truncate` | 编辑重发前截断：从指定 **user** display turn 起删除该条及之后（同步 `turns` / `messages`，清空 `sessionMemory`）；body `{ message_index: number }`（整数 ≥0）→ `{ session, messages, contextRef }`；非 user 锚点或无效 → 404；校验失败 → 400 |
 | GET | `/api/speech/status` | 本机语音识别就绪状态：`{ ready, engine, modelName, modelsDir, language?, promptEnabled? }` |
 | POST | `/api/speech/transcribe` | 语音转写；raw body（`application/octet-stream`）+ `X-Speech-Mime`；响应 `{ text, engine, model, language?, empty? }` |
+
+**会话后台 Job（`list_jobs` / Composer 任务面板）**
+
+长任务（`opptrix_run({ background: true })`、`ensure_python` 安装、`prepare_fuyao_dump` 冷下载等）登记为全局 Job；有会话 watch 时推送进度，终态触发同会话自动续跑。Agent 工具 `list_jobs` / `cancel_job` 与下列 REST 语义对齐。**无** `wait_job` 工具或等价阻塞等待 API。
+
+**GET `/api/sessions/:id/jobs`**
+
+| Query | 类型 | 说明 |
+|-------|------|------|
+| `states` | string \| string[] | 可选；逗号分隔或数组。允许：`queued` / `accepted` / `preparing` / `running` / `completed` / `failed` / `cancelled` |
+| `kind` | string | 可选；`shell-command` \| `python-install` \| `fuyao-dump` |
+| `limit` | number | 可选；默认 20，钳制 1–50 |
+
+会话不存在 → 404。返回本会话相关 Job（`meta.session_id` 匹配 **或** 本会话已挂 watch），按 `updatedAtMs` 降序截断。
+
+```json
+{
+  "jobs": [
+    {
+      "job_id": "shell-…",
+      "kind": "shell-command",
+      "title": "下载依赖",
+      "label": "正在执行命令…",
+      "state": "running",
+      "percent": 42,
+      "cancelable": true,
+      "eta_seconds": 120,
+      "stdout_tail": "…",
+      "meta": { "command_summary": "pip install …", "exit_code": null }
+    }
+  ]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `title` | 展示标题；缺省时 shell 回退 `command_summary` |
+| `label` | 进度文案（`progress.message`） |
+| `cancelable` | shell-command 通常为 `true`；python-install / fuyao-dump 默认 `false` |
+| `stdout_tail` | 可选；已截断的 stdout 尾部 |
+| `meta` | 可选摘要：`command_summary` / `exit_code` / `dump_kind` 等 |
+
+**POST `/api/sessions/:id/jobs/:jobId/cancel`**
+
+取消可取消的全局 Job，并清除本会话对该 `jobId` 的 watch。成功：`{ ok: true, job_id, cancelled: true }`。不可取消 / 不存在 / 已终态等 → **400** `{ ok: false, job_id, cancelled: false, error }`。会话不存在 → 404；空 `jobId` → 400。
+
+**SSE `job_progress`（经 `GET /api/sessions/:id/live-progress`）**
+
+有会话 watch 时，Job 进度（节流）与终态（立即）推送：
+
+```json
+{
+  "type": "job_progress",
+  "job_id": "shell-…",
+  "kind": "shell-command",
+  "state": "running",
+  "label": "正在执行命令…",
+  "percent": 42,
+  "title": "下载依赖",
+  "cancelable": true,
+  "stdout_tail": "…"
+}
+```
+
+相对早期事件，扩展字段：`title`（可选）、`cancelable`（可选）、`stdout_tail`（可选，已截断；运行中节流刷新）。Composer 任务面板据此更新标题、输出区与「结束任务」可用性。
 
 **Composer 语音转写**
 

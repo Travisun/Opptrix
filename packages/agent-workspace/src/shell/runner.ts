@@ -571,6 +571,8 @@ interface SandboxExecContext {
   sessionRuntime: SessionShellRuntime
   /** 是否用 shell 包装 argv（元字符 / 未增强路径） */
   useShellWrap: boolean
+  /** 运行中 stdout/stderr 增量（后台 job 用） */
+  onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void
 }
 
 /**
@@ -725,7 +727,14 @@ async function executeSandboxOnceElevated(ctx: SandboxExecContext): Promise<{
   for (const [envName, sentinel] of Object.entries(sentinelEnv)) {
     childEnv[envName] = sentinel
   }
-  const result = await spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+  const result = await spawnSandboxed(
+    wrapped.argv,
+    childEnv,
+    ctx.cwdAbs,
+    ctx.timeoutMs,
+    ctx.signal,
+    ctx.onOutput,
+  )
   return { ...result, isolation: 'full' }
 }
 
@@ -840,6 +849,7 @@ async function executeUnsandboxedOnce(ctx: {
   grantRootAbs: string
   timeoutMs: number
   signal?: AbortSignal
+  onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void
 }): Promise<{ exitCode: number | null; stdout: string; stderr: string; isolation: ShellIsolation }> {
   const childEnv = await sanitizeChildEnv(
     { ...process.env },
@@ -850,7 +860,14 @@ async function executeUnsandboxedOnce(ctx: {
   const spawnArgv = ctx.useShellWrap
     ? shellWrapArgv(ctx.commandString)
     : ctx.normalizedArgv
-  const result = await spawnSandboxed(spawnArgv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+  const result = await spawnSandboxed(
+    spawnArgv,
+    childEnv,
+    ctx.cwdAbs,
+    ctx.timeoutMs,
+    ctx.signal,
+    ctx.onOutput,
+  )
   return { ...result, isolation: 'basic' }
 }
 
@@ -1045,11 +1062,17 @@ export class ShellRunner {
     const commandSummary = summarizeShellArgv(execArgv)
 
     if (wantBackground) {
+      const jobTitleRaw = typeof params.title === 'string'
+        ? params.title.trim()
+        : typeof params.name === 'string'
+          ? params.name.trim()
+          : ''
       const snap = startShellCommandJob({
         sessionId: params.sessionId,
         commandSummary,
+        title: jobTitleRaw || undefined,
         timeoutMs,
-        run: async (jobSignal) => {
+        run: async (jobSignal, reportOutput) => {
           const linked = new AbortController()
           const onParentAbort = () => linked.abort()
           const onJobAbort = () => linked.abort()
@@ -1057,6 +1080,9 @@ export class ShellRunner {
           else {
             params.signal?.addEventListener('abort', onParentAbort, { once: true })
             jobSignal.addEventListener('abort', onJobAbort, { once: true })
+          }
+          const onOutput = (stream: 'stdout' | 'stderr', chunk: string) => {
+            reportOutput(stream, redactSecretsInText(chunk, plainSecretsForRedact))
           }
           try {
             const sandboxAskCallback = egressGrants.runWithDeniedNetwork || escalate === 'unsandboxed'
@@ -1083,6 +1109,7 @@ export class ShellRunner {
                 grantRootAbs: grant.abs_path,
                 timeoutMs,
                 signal: linked.signal,
+                onOutput,
               })
             } else {
               result = await executeSandboxOnce({
@@ -1100,6 +1127,7 @@ export class ShellRunner {
                 requireFullNetworkIsolation: false,
                 sessionRuntime: this.sessionRuntime,
                 useShellWrap,
+                onOutput,
               })
             }
             return {
@@ -1291,6 +1319,7 @@ function spawnSandboxed(
   cwd: string,
   timeoutMs: number,
   signal?: AbortSignal,
+  onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
   return new Promise((resolve, reject) => {
     if (!argv.length) {
@@ -1318,8 +1347,16 @@ function spawnSandboxed(
       else signal.addEventListener('abort', onAbort, { once: true })
     }
 
-    child.stdout.on('data', chunk => { stdout += chunkToUtf8(chunk) })
-    child.stderr.on('data', chunk => { stderr += chunkToUtf8(chunk) })
+    child.stdout.on('data', chunk => {
+      const text = chunkToUtf8(chunk)
+      stdout += text
+      onOutput?.('stdout', text)
+    })
+    child.stderr.on('data', chunk => {
+      const text = chunkToUtf8(chunk)
+      stderr += text
+      onOutput?.('stderr', text)
+    })
     child.on('error', err => {
       clearTimeout(timer)
       if (signal) signal.removeEventListener('abort', onAbort)

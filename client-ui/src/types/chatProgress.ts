@@ -115,6 +115,9 @@ export type ChatProgressEvent =
     state: string
     label: string
     percent?: number
+    title?: string
+    cancelable?: boolean
+    stdout_tail?: string
   }
 
 export interface ChatLiveTrace {

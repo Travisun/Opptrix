@@ -500,8 +500,8 @@ interface ChatComposerProps {
   error: string
   isEmpty: boolean
   /**
-   * 为 true 时即使会话非空也展示 starters（专家对话快捷提问常驻）。
-   * 普通对话仍仅在空态展示。
+   * 为 true 时把 starters 挂到加号「快捷提问」次面板（专家对话）。
+   * 普通对话仍仅在空态展示欢迎 chips。
    */
   alwaysShowStarters?: boolean
   isMobile?: boolean
@@ -527,6 +527,7 @@ interface ChatComposerProps {
   onPromptQueueRunNow?: (id: string) => void
   /** 本会话未完成后台任务（位于 promptQueue 之上） */
   backgroundJobs?: SessionBackgroundJob[]
+  onCancelBackgroundJob?: (jobId: string) => Promise<{ ok: boolean; error?: string }>
   onOpenPreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
 }
 
@@ -563,6 +564,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   onPromptQueueRemove,
   onPromptQueueRunNow,
   backgroundJobs = [],
+  onCancelBackgroundJob,
   onOpenPreview,
 }, ref) {
   const s = useStyles()
@@ -808,7 +810,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   /** 仅 ask_user / 上传中锁定编辑；执行中仍可输入以补充或排队 */
   const composerLocked = Boolean(userPrompt) || uploading
   const showWelcomeStarters = starters.length > 0 && isEmpty && !alwaysShowStarters
-  const showExpertStarterBar = alwaysShowStarters && starters.length > 0
+  const plusMenuStarters = alwaysShowStarters && starters.length > 0 ? starters : []
 
   const handleAuthorizeFolders = useCallback(async () => {
     if (composerLocked) return
@@ -1046,7 +1048,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
             </div>
           )}
           {backgroundJobs.length > 0 && (
-            <ComposerBackgroundJobsBar jobs={backgroundJobs} />
+            <ComposerBackgroundJobsBar
+              jobs={backgroundJobs}
+              onCancelJob={onCancelBackgroundJob}
+            />
           )}
           {promptQueue.length > 0 && onPromptQueueRemove && onPromptQueueRunNow && (
             <ComposerPromptQueuePanel
@@ -1056,29 +1061,6 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
               onRunNow={onPromptQueueRunNow}
               onRemove={onPromptQueueRemove}
             />
-          )}
-          {showExpertStarterBar && (
-            <div
-              className={s.expertStarterBar}
-              role="region"
-              aria-label="快捷提问"
-              data-composer-section="starters"
-            >
-              <div className={mergeClasses(s.expertStarterTrack, 'opptrix-scroll-x')}>
-                {starters.map((st, index) => (
-                  <OpptrixButton
-                    key={listRowKey(index, st.label, st.text)}
-                    className={mergeClasses(s.starterChip, s.expertStarterChip)}
-                    variant="pill"
-                    size="small"
-                    disabled={Boolean(userPrompt) || uploading}
-                    onClick={() => onSubmit(st.text)}
-                  >
-                    {st.label}
-                  </OpptrixButton>
-                ))}
-              </div>
-            </div>
           )}
           <input
             ref={fileInputRef}
@@ -1148,6 +1130,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                   onAttach={openFilePicker}
                   onAuthorizeFolders={() => { void handleAuthorizeFolders() }}
                   onSelectSkill={(skill) => insertSkillChip(skill, false)}
+                  starters={plusMenuStarters}
+                  onSelectStarter={(text) => onSubmit(text)}
                 />
                 <ChatWorkspaceGrants
                   ref={grantsRef}

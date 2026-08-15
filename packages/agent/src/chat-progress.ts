@@ -48,7 +48,7 @@ export interface ChatToolStep {
   label: string
   /** 当前状态 */
   status: ChatToolStepStatus
-  /** 参数预览文本（JSON 序列化，截断至 240 字符），行内简要展示 */
+  /** 参数预览文本（人读短摘要，截断至 240 字符），行内简要展示 */
   argsPreview?: string
   /** 参数完整详情（pretty-print，截断至 4000 字符），点击查看详情时显示 */
   argsDetail?: string
@@ -169,6 +169,9 @@ export type ChatProgressEvent =
     state: string
     label: string
     percent?: number
+    title?: string
+    cancelable?: boolean
+    stdout_tail?: string
   }
 
 /**
@@ -251,6 +254,8 @@ const TOOL_LABELS: Record<string, string> = {
   delete_agent_skill: '删除工作流技能',
   get_current_time: '获取当前时间',
   schedule_turn_wake: '等待后继续',
+  cancel_job: '取消后台任务',
+  list_jobs: '查看后台任务',
   get_system_info: '读取运行环境信息',
   get_app_settings: '读取应用设置',
   get_project_info: '读取应用信息',
@@ -319,6 +324,7 @@ const TOOL_LABELS: Record<string, string> = {
   workspace_read: '读取工作区文件',
   workspace_write: '保存到工作区',
   workspace_replace_lines: '按行替换',
+  workspace_apply_patch: '应用补丁',
   workspace_delete: '删除工作区内容',
   download_file: '下载文件到工作区',
   http_fetch: '获取网页内容',
@@ -683,11 +689,32 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'workspace_read':
     case 'workspace_write':
     case 'workspace_replace_lines':
-    case 'workspace_glob':
-    case 'workspace_grep':
+    case 'workspace_apply_patch':
     case 'workspace_delete': {
       const hint = workspacePathHint(args)
       return hint ? `${base} · ${hint}` : base
+    }
+    case 'workspace_glob': {
+      const pattern = typeof args.pattern === 'string'
+        ? args.pattern.trim()
+        : typeof args.glob === 'string'
+          ? args.glob.trim()
+          : ''
+      const pathHint = workspacePathHint(args)
+      if (pattern && pathHint) return `${base} · ${truncateLabel(pattern, 28)} · ${pathHint}`
+      if (pattern) return `${base} · ${truncateLabel(pattern, 36)}`
+      return pathHint ? `${base} · ${pathHint}` : base
+    }
+    case 'workspace_grep': {
+      const pattern = typeof args.pattern === 'string'
+        ? args.pattern.trim()
+        : typeof args.query === 'string'
+          ? args.query.trim()
+          : ''
+      const pathHint = workspacePathHint(args)
+      if (pattern && pathHint) return `${base} · ${truncateLabel(pattern, 28)} · ${pathHint}`
+      if (pattern) return `${base} · ${truncateLabel(pattern, 36)}`
+      return pathHint ? `${base} · ${pathHint}` : base
     }
     case 'http_fetch':
     case 'download_file':
@@ -747,14 +774,100 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
 }
 
 /**
- * 格式化工具参数预览 — JSON 序列化后截断至 240 字符。
+ * 格式化工具参数预览 — 人读短摘要（非裸 JSON），截断至 240 字符。
  */
-export function formatArgsPreview(args: Record<string, unknown>): string {
+export function formatArgsPreview(args: Record<string, unknown>, tool?: string): string {
   try {
+    const human = tool ? humanArgsPreview(tool, args) : commonArgsPreview(args)
+    if (human) return human.length <= 240 ? human : `${human.slice(0, 240)}…`
     const s = JSON.stringify(args, null, 0)
     return s.length <= 240 ? s : `${s.slice(0, 240)}…`
   } catch {
     return ''
+  }
+}
+
+function strArg(args: Record<string, unknown>, key: string): string {
+  const v = args[key]
+  return typeof v === 'string' ? v.trim() : ''
+}
+
+function commonArgsPreview(args: Record<string, unknown>): string {
+  const bits: string[] = []
+  const command = strArg(args, 'command')
+  if (command) bits.push(truncateLabel(command, 72))
+  const pattern = strArg(args, 'pattern') || strArg(args, 'glob') || strArg(args, 'query')
+  if (pattern) bits.push(`模式 ${truncateLabel(pattern, 40)}`)
+  const pathHint = workspacePathHint(args)
+  if (pathHint) bits.push(pathHint)
+  const keyword = strArg(args, 'keyword')
+  if (keyword) bits.push(truncateLabel(keyword, 36))
+  const urlHost = urlHostnameHint(args)
+  if (urlHost) bits.push(urlHost)
+  return bits.join(' · ')
+}
+
+function humanArgsPreview(tool: string, args: Record<string, unknown>): string {
+  switch (tool) {
+    case 'opptrix_run':
+    case 'shell_run': {
+      const command = strArg(args, 'command')
+      const argv = Array.isArray(args.argv)
+        ? args.argv.filter((v): v is string => typeof v === 'string').slice(0, 6)
+        : []
+      const fromArgv = argv.length ? argv.join(' ') : ''
+      const title = strArg(args, 'title') || strArg(args, 'name')
+      const cmd = command || fromArgv
+      if (title && cmd) return `${truncateLabel(title, 24)} · ${truncateLabel(cmd, 56)}`
+      if (title) return truncateLabel(title, 72)
+      return cmd ? truncateLabel(cmd, 80) : ''
+    }
+    case 'workspace_glob': {
+      const pattern = strArg(args, 'pattern') || strArg(args, 'glob')
+      const pathHint = workspacePathHint(args)
+      if (pattern && pathHint) return `匹配 ${truncateLabel(pattern, 40)} · ${pathHint}`
+      if (pattern) return `匹配 ${truncateLabel(pattern, 56)}`
+      return pathHint
+    }
+    case 'workspace_grep': {
+      const pattern = strArg(args, 'pattern') || strArg(args, 'query')
+      const pathHint = workspacePathHint(args)
+      if (pattern && pathHint) return `搜索 ${truncateLabel(pattern, 40)} · ${pathHint}`
+      if (pattern) return `搜索 ${truncateLabel(pattern, 56)}`
+      return pathHint
+    }
+    case 'workspace_apply_patch': {
+      const pathHint = workspacePathHint(args)
+      const patch = strArg(args, 'patch') || strArg(args, 'diff')
+      if (pathHint && patch) return `${pathHint} · 补丁 ${Math.min(patch.length, 9999)} 字`
+      if (pathHint) return pathHint
+      return patch ? `补丁 ${Math.min(patch.length, 9999)} 字` : ''
+    }
+    case 'workspace_read':
+    case 'workspace_write':
+    case 'workspace_replace_lines':
+    case 'workspace_delete':
+      return workspacePathHint(args)
+    case 'http_fetch':
+    case 'download_file':
+    case 'browser_navigate':
+      return urlHostnameHint(args)
+    case 'code_preflight':
+      return workspacePathHint(args)
+    case 'cancel_job':
+    case 'list_jobs': {
+      const jobId = strArg(args, 'job_id')
+      const kind = strArg(args, 'kind')
+      if (jobId) return `任务 ${truncateLabel(jobId, 36)}`
+      if (kind) return `类型 ${kind}`
+      return ''
+    }
+    case 'search_instruments': {
+      const kw = strArg(args, 'keyword')
+      return kw ? truncateLabel(kw, 48) : ''
+    }
+    default:
+      return commonArgsPreview(args)
   }
 }
 

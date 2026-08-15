@@ -25,6 +25,7 @@ function toSnapshot(result: FuyaoDumpJobResult): BackgroundJobSnapshot | null {
     jobId,
     kind: 'fuyao-dump',
     state,
+    title: '准备离线数据包',
     progress: {
       percent: result.percent,
       message: result.message

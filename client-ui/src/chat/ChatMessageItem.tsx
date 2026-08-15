@@ -11,7 +11,7 @@ import MessageTokenLabel from './MessageTokenLabel'
 import { MessageAttachmentStrip } from './ComposerAttachmentStrip'
 import MediaPreviewBox from './MediaPreviewBox'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import type { ChatAttachmentMeta, ChatDisplayMessage } from '../types/chat'
+import { isWakeResumeDisplayMessage, type ChatAttachmentMeta, type ChatDisplayMessage } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { copyTextToClipboard } from '../platform/clipboard'
@@ -21,6 +21,8 @@ import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 const USER_BUBBLE_LINE_HEIGHT = 1.65
 const USER_BUBBLE_FONT_PX = 16
 const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 3)
+/** 续跑注入状态条文案（不展示完整 prompt） */
+const WAKE_RESUME_STATUS_LABEL = '后台任务已完成，正在继续分析'
 
 const useStyles = makeStyles({
   entry: {
@@ -70,6 +72,26 @@ const useStyles = makeStyles({
   },
   userBubbleMobile: {
     maxWidth: '100%',
+  },
+  wakeResumeBar: {
+    alignSelf: 'stretch',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    minHeight: '22px',
+    padding: '4px 8px',
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    color: opptrixCssVars.textTertiary,
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
+    boxSizing: 'border-box',
+    userSelect: 'none',
+  },
+  wakeResumeLabel: {
+    flex: 1,
+    minWidth: 0,
+    color: 'inherit',
   },
   editTextarea: {
     display: 'block',
@@ -227,8 +249,9 @@ function ChatMessageItem({
   const [draft, setDraft] = useState(message.content)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isUser = message.role === 'user'
+  const isWakeResume = isWakeResumeDisplayMessage(message)
   const timeLabel = formatFriendlyTime(message.at)
-  const canEdit = isUser && Boolean(onEditResend) && !editDisabled
+  const canEdit = isUser && !isWakeResume && Boolean(onEditResend) && !editDisabled
 
   useEffect(() => {
     if (!editing) setDraft(message.content)
@@ -337,7 +360,7 @@ function ChatMessageItem({
     <div className={mergeClasses(s.footer, isUser ? s.footerUser : s.footerAssistant)}>
       {isUser ? (
         <>
-          {copyButton}
+          {!isWakeResume && copyButton}
           {timeNode}
         </>
       ) : (
@@ -373,6 +396,23 @@ function ChatMessageItem({
       />
     </div>
   ) : null
+
+  if (isWakeResume) {
+    return (
+      <div
+        className={mergeClasses(s.entry, s.entryUser)}
+        data-message-index={index}
+        data-message-role={message.role}
+        data-message-origin="wake_resume"
+        style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
+      >
+        <div className={s.wakeResumeBar} role="status">
+          <span className={s.wakeResumeLabel}>{WAKE_RESUME_STATUS_LABEL}</span>
+          {timeNode}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

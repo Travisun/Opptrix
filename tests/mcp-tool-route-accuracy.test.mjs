@@ -110,6 +110,8 @@ const PRIMARY_CASES = [
   { message: 'ensure_python 返回 preparing 后用 job_id 轮询', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: '等一会儿再检查下载是否完成然后继续', expectPrimary: 'schedule_turn_wake', intent: 'turn_wake' },
   { message: 'schedule_turn_wake 延后续跑', expectPrimary: 'schedule_turn_wake', intent: 'turn_wake' },
+  { message: '有哪些后台任务在跑', expectPrimary: 'list_jobs', intent: 'list_jobs' },
+  { message: '取消后台命令任务', expectPrimary: 'cancel_job', intent: 'cancel_job' },
   { message: '今天涨跌榜和龙虎榜', expectPrimary: 'get_market_dynamics', intent: 'market_dynamics' },
   { message: '最近几个月 CPI 同比多少', expectPrimary: 'get_macro_series', intent: 'macro_series' },
   { message: '现在是牛市还是熊市', expectPrimary: 'get_market_regime', intent: 'market_regime' },

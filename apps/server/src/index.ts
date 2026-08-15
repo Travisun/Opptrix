@@ -195,6 +195,9 @@ sessionResumeBus.setHandler(async (req: ResumeRequest, wakeMessage: string) => {
     const sessions = watchRegistry.listSessionsForJob(snap.jobId)
     if (!sessions.length) return
     const label = userFacingJobLabel(snap.kind, snap.progress.message)
+    const stdoutTail = typeof snap.meta?.stdout_tail === 'string'
+      ? snap.meta.stdout_tail
+      : undefined
     for (const sessionId of sessions) {
       publishSessionProgress(sessionId, {
         type: 'job_progress',
@@ -203,6 +206,9 @@ sessionResumeBus.setHandler(async (req: ResumeRequest, wakeMessage: string) => {
         state: snap.state,
         label,
         percent: snap.progress.percent,
+        title: snap.title,
+        cancelable: snap.cancelable,
+        stdout_tail: stdoutTail || undefined,
       })
     }
   })
@@ -1269,6 +1275,85 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id/pending-job-watches', asy
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
   return { watches: listPendingJobWatches(req.params.id) }
 })
+
+app.get<{ Params: { id: string } }>('/api/sessions/:id/jobs', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  const sessionId = req.params.id
+  const q = req.query as Record<string, unknown>
+  const kindRaw = q.kind != null ? String(q.kind).trim() : ''
+  const kind = kindRaw === 'shell-command' || kindRaw === 'python-install' || kindRaw === 'fuyao-dump'
+    ? kindRaw
+    : undefined
+  const statesRaw = typeof q.states === 'string'
+    ? q.states.split(',').map(s => s.trim()).filter(Boolean)
+    : Array.isArray(q.states)
+      ? q.states.map(s => String(s).trim()).filter(Boolean)
+      : []
+  const allowedStates = new Set([
+    'queued', 'accepted', 'preparing', 'running', 'completed', 'failed', 'cancelled',
+  ])
+  const states = statesRaw.filter((s): s is 'queued' | 'accepted' | 'preparing' | 'running' | 'completed' | 'failed' | 'cancelled' =>
+    allowedStates.has(s))
+  const limitRaw = q.limit != null ? Number(q.limit) : 20
+  const limit = Number.isFinite(limitRaw) ? Math.min(50, Math.max(1, Math.floor(limitRaw))) : 20
+
+  const watched = new Set(watchRegistry.listSession(sessionId).map(w => w.jobId))
+  let snaps = jobRegistry.list({
+    kind,
+    states: states.length ? states : undefined,
+  }).filter((snap) => {
+    const sid = typeof snap.meta?.session_id === 'string' ? snap.meta.session_id : ''
+    if (sid && sid === sessionId) return true
+    if (watched.has(snap.jobId)) return true
+    return false
+  })
+  snaps = snaps.sort((a, b) => b.updatedAtMs - a.updatedAtMs).slice(0, limit)
+  return {
+    jobs: snaps.map((snap) => {
+      const stdoutTail = typeof snap.meta?.stdout_tail === 'string' ? snap.meta.stdout_tail : undefined
+      const metaSummary: Record<string, unknown> = {}
+      if (typeof snap.meta?.command_summary === 'string') {
+        metaSummary.command_summary = snap.meta.command_summary
+      }
+      if (snap.meta?.exit_code !== undefined) metaSummary.exit_code = snap.meta.exit_code
+      if (snap.meta?.dump_kind !== undefined) metaSummary.dump_kind = snap.meta.dump_kind
+      return {
+        job_id: snap.jobId,
+        kind: snap.kind,
+        title: snap.title
+          ?? (typeof snap.meta?.command_summary === 'string' ? snap.meta.command_summary : undefined),
+        label: snap.progress.message,
+        state: snap.state,
+        percent: snap.progress.percent,
+        cancelable: snap.cancelable,
+        eta_seconds: snap.progress.etaSeconds ?? undefined,
+        stdout_tail: stdoutTail || undefined,
+        meta: Object.keys(metaSummary).length ? metaSummary : undefined,
+      }
+    }),
+  }
+})
+
+app.post<{ Params: { id: string; jobId: string } }>(
+  '/api/sessions/:id/jobs/:jobId/cancel',
+  async (req, reply) => {
+    if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+    const jobId = String(req.params.jobId ?? '').trim()
+    if (!jobId) return reply.code(400).send({ ok: false, error: 'job_id 必填' })
+    const result = await jobRegistry.requestCancel(jobId)
+    if (result.ok) {
+      watchRegistry.clearByJob(req.params.id, jobId)
+      return { ok: true, job_id: jobId, cancelled: true }
+    }
+    return reply.code(400).send({
+      ok: false,
+      job_id: jobId,
+      cancelled: false,
+      error: result.error ?? '无法取消',
+    })
+  },
+)
+
 app.get<{ Params: { id: string } }>('/api/sessions/:id/live-progress', async (req, reply) => {
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
 

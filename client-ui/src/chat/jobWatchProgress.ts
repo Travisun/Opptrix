@@ -10,6 +10,9 @@ export type JobWatchUiInfo = {
   percent?: number
   etaSeconds?: number
   source: string
+  title?: string
+  stdoutTail?: string
+  cancelable?: boolean
 }
 
 /** Composer 上方状态条：本会话未完成的后台任务 */
@@ -19,6 +22,12 @@ export type SessionBackgroundJob = {
   percent?: number
   state: string
   kind?: string
+  /** 人读标题（优先于 label 展示） */
+  title?: string
+  /** 持续输出尾部（等宽区） */
+  stdoutTail?: string
+  /** false 时禁用「结束任务」并说明 */
+  cancelable?: boolean
 }
 
 /** 终态：条应立即消失（含 ready 等上游别名） */
@@ -67,6 +76,9 @@ export function jobWatchToBackgroundJob(info: JobWatchUiInfo, state = 'running')
     percent: info.percent,
     state,
     kind: info.kind || undefined,
+    title: info.title,
+    stdoutTail: info.stdoutTail,
+    cancelable: info.cancelable,
   }
 }
 
@@ -79,8 +91,20 @@ export function upsertSessionBackgroundJob(
   }
   const idx = list.findIndex((j) => j.jobId === job.jobId)
   if (idx < 0) return [...list, job]
+  const prev = list[idx]
   const next = list.slice()
-  next[idx] = { ...next[idx], ...job }
+  const merged: SessionBackgroundJob = {
+    ...prev,
+    jobId: job.jobId,
+    label: job.label,
+    state: job.state,
+  }
+  if (job.percent !== undefined) merged.percent = job.percent
+  if (job.kind !== undefined) merged.kind = job.kind
+  if (job.title !== undefined) merged.title = job.title
+  if (job.stdoutTail !== undefined) merged.stdoutTail = job.stdoutTail
+  if (job.cancelable !== undefined) merged.cancelable = job.cancelable
+  next[idx] = merged
   return next
 }
 
@@ -93,9 +117,20 @@ export function removeSessionBackgroundJob(
   return list.filter((j) => j.jobId !== id)
 }
 
+export type JobProgressUiPatch = {
+  jobId: string
+  label: string
+  percent?: number
+  state?: string
+  kind?: string
+  title?: string
+  stdoutTail?: string
+  cancelable?: boolean
+}
+
 export function applyJobProgressToBackgroundJobs(
   list: SessionBackgroundJob[],
-  progress: { jobId: string; label: string; percent?: number; state?: string; kind?: string },
+  progress: JobProgressUiPatch,
 ): SessionBackgroundJob[] {
   if (
     isTerminalBackgroundJobState(progress.state)
@@ -109,6 +144,9 @@ export function applyJobProgressToBackgroundJobs(
     percent: progress.percent,
     state: progress.state?.trim() || 'running',
     kind: progress.kind,
+    title: progress.title,
+    stdoutTail: progress.stdoutTail,
+    cancelable: progress.cancelable,
   })
 }
 
@@ -152,6 +190,14 @@ export function formatJobProgressLabel(info: {
   return base
 }
 
+/** 列表主标题：优先 title */
+export function backgroundJobDisplayTitle(job: SessionBackgroundJob): string {
+  const title = typeof job.title === 'string' ? job.title.trim() : ''
+  if (title) return title
+  const label = typeof job.label === 'string' ? job.label.trim() : ''
+  return label || '进行中的任务'
+}
+
 export function parseJobWatchEvent(event: {
   type: string
   action?: string
@@ -162,6 +208,9 @@ export function parseJobWatchEvent(event: {
   percent?: number
   eta_seconds?: number
   source?: string
+  title?: string
+  stdout_tail?: string
+  cancelable?: boolean
 }): JobWatchUiInfo | null {
   if (event.type !== 'job_watch') return null
   if (event.action !== 'attached' && event.action !== 'updated') return null
@@ -178,6 +227,9 @@ export function parseJobWatchEvent(event: {
     percent: typeof event.percent === 'number' ? event.percent : undefined,
     etaSeconds: typeof event.eta_seconds === 'number' ? event.eta_seconds : undefined,
     source: typeof event.source === 'string' ? event.source : 'auto',
+    title: typeof event.title === 'string' && event.title.trim() ? event.title.trim() : undefined,
+    stdoutTail: typeof event.stdout_tail === 'string' ? event.stdout_tail : undefined,
+    cancelable: typeof event.cancelable === 'boolean' ? event.cancelable : undefined,
   }
 }
 
@@ -188,7 +240,10 @@ export function parseJobProgressEvent(event: {
   state?: string
   label?: string
   percent?: number
-}): { jobId: string; label: string; percent?: number; state?: string; kind?: string } | null {
+  title?: string
+  stdout_tail?: string
+  cancelable?: boolean
+}): JobProgressUiPatch | null {
   if (event.type !== 'job_progress') return null
   const jobId = typeof event.job_id === 'string' ? event.job_id.trim() : ''
   if (!jobId) return null
@@ -200,6 +255,9 @@ export function parseJobProgressEvent(event: {
     percent: typeof event.percent === 'number' ? event.percent : undefined,
     state: typeof event.state === 'string' ? event.state : undefined,
     kind: typeof event.kind === 'string' ? event.kind : undefined,
+    title: typeof event.title === 'string' && event.title.trim() ? event.title.trim() : undefined,
+    stdoutTail: typeof event.stdout_tail === 'string' ? event.stdout_tail : undefined,
+    cancelable: typeof event.cancelable === 'boolean' ? event.cancelable : undefined,
   }
 }
 
@@ -234,6 +292,13 @@ export function parsePendingJobWatchesApi(payload: unknown): JobWatchUiInfo[] {
           ? item.seconds_left
           : undefined,
       source: typeof item.source === 'string' ? item.source : 'auto',
+      title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : undefined,
+      stdoutTail: typeof item.stdout_tail === 'string'
+        ? item.stdout_tail
+        : typeof item.stdoutTail === 'string'
+          ? item.stdoutTail
+          : undefined,
+      cancelable: typeof item.cancelable === 'boolean' ? item.cancelable : undefined,
     })
   }
   return out

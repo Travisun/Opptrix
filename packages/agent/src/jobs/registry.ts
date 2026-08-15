@@ -80,7 +80,7 @@ class InMemoryJobRegistry implements JobRegistry {
     jobId: string,
     patch: Partial<Pick<
       BackgroundJobSnapshot,
-      'state' | 'progress' | 'error' | 'meta' | 'suggestedWakeSeconds' | 'cancelable'
+      'state' | 'progress' | 'error' | 'meta' | 'suggestedWakeSeconds' | 'cancelable' | 'title'
     >>,
   ): BackgroundJobSnapshot | null {
     const id = String(jobId ?? '').trim()

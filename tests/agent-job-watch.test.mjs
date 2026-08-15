@@ -449,6 +449,7 @@ describe('shell-command job watch', () => {
     const snap = startShellCommandJob({
       sessionId: 's-cancel',
       commandSummary: 'sleep',
+      title: '休眠测试',
       timeoutMs: 60_000,
       run: async (signal) => {
         await new Promise((resolve, reject) => {
@@ -466,10 +467,91 @@ describe('shell-command job watch', () => {
     assert.ok(fromReg)
     assert.equal(fromReg.kind, 'shell-command')
     assert.equal(fromReg.cancelable, true)
+    assert.equal(fromReg.title, '休眠测试')
     const cancelled = await jobRegistry.requestCancel(snap.job_id)
     assert.equal(cancelled.ok, true)
     assert.equal(getShellCommandJob(snap.job_id)?.status, 'cancelled')
     assert.equal(cancelShellCommandJob(snap.job_id), false)
     resetShellCommandJobsForTests()
+  })
+})
+
+describe('shell live stdout_tail + title defaults', () => {
+  /** @type {typeof import('@opptrix/agent-workspace').resetShellCommandJobsForTests} */
+  let resetShellCommandJobsForTests
+  /** @type {typeof import('@opptrix/agent-workspace').startShellCommandJob} */
+  let startShellCommandJob
+  /** @type {typeof import('@opptrix/agent-workspace').getShellCommandJob} */
+  let getShellCommandJob
+
+  beforeEach(async () => {
+    resetJobsSubsystemForTests()
+    const ws = await import('@opptrix/agent-workspace')
+    resetShellCommandJobsForTests = ws.resetShellCommandJobsForTests
+    startShellCommandJob = ws.startShellCommandJob
+    getShellCommandJob = ws.getShellCommandJob
+    resetShellCommandJobsForTests()
+  })
+  afterEach(() => {
+    resetJobsSubsystemForTests()
+    resetShellCommandJobsForTests?.()
+  })
+
+  it('throttled progress updates stdout_tail while running', async () => {
+    const { registerDefaultJobAdapters } = await import('@opptrix/agent')
+    resetJobsSubsystemForTests()
+    registerDefaultJobAdapters()
+    const snap = startShellCommandJob({
+      sessionId: 's-tail',
+      commandSummary: 'echo-stream',
+      timeoutMs: 60_000,
+      run: async (_signal, reportOutput) => {
+        reportOutput('stdout', 'hello-live-1\n')
+        await new Promise((r) => setTimeout(r, 2100))
+        reportOutput('stdout', 'hello-live-2\n')
+        await new Promise((r) => setTimeout(r, 100))
+        return { exitCode: 0, stdout: 'hello-live-1\nhello-live-2\n', stderr: '' }
+      },
+    })
+    // wait past one progress tick
+    await new Promise((r) => setTimeout(r, 2300))
+    const mid = getShellCommandJob(snap.job_id)
+    assert.ok(mid)
+    assert.match(mid.stdout_tail ?? '', /hello-live/)
+    const fromReg = jobRegistry.get(snap.job_id)
+    assert.ok(fromReg)
+    assert.match(String(fromReg.meta?.stdout_tail ?? ''), /hello-live/)
+    assert.equal(fromReg.title, 'echo-stream')
+    // wait for terminal
+    await new Promise((r) => setTimeout(r, 500))
+  })
+
+  it('listPendingJobWatches exposes title cancelable stdout_tail', async () => {
+    const now = Date.now()
+    jobRegistry.upsert({
+      jobId: 'shell-list-1',
+      kind: 'shell-command',
+      state: 'running',
+      title: 'npm install',
+      progress: { message: '正在执行命令…', percent: 20 },
+      cancelable: true,
+      createdAtMs: now,
+      updatedAtMs: now,
+      startedAtMs: now,
+      meta: { session_id: 's-list', command_summary: 'npm install', stdout_tail: '…downloading' },
+    })
+    watchRegistry.attach({
+      sessionId: 's-list',
+      jobId: 'shell-list-1',
+      prompt: '检查后台命令',
+      source: 'auto',
+      kind: 'shell-command',
+    })
+    const { listPendingJobWatches } = await import('@opptrix/agent')
+    const rows = listPendingJobWatches('s-list')
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].title, 'npm install')
+    assert.equal(rows[0].cancelable, true)
+    assert.match(rows[0].stdout_tail ?? '', /downloading/)
   })
 })

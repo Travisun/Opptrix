@@ -75,10 +75,22 @@ function ensureRegistrySnapshot(
       ? result.message.trim()
       : userFacingJobLabel(kind)
 
+  const cmdSummary =
+    isRecord(result) && typeof result.command_summary === 'string'
+      ? result.command_summary.trim()
+      : ''
+  const defaultTitle =
+    kind === 'python-install'
+      ? '准备 Python 环境'
+      : kind === 'fuyao-dump'
+        ? '准备离线数据包'
+        : (cmdSummary || undefined)
+
   if (existing) {
     if (JOB_IN_FLIGHT_STATES.has(existing.state)) {
       jobRegistry.update(jobId, {
         state,
+        title: existing.title ?? defaultTitle,
         progress: {
           ...existing.progress,
           message,
@@ -95,6 +107,7 @@ function ensureRegistrySnapshot(
     jobId,
     kind,
     state,
+    title: defaultTitle,
     progress: {
       message,
       etaSeconds: eta,
@@ -104,6 +117,9 @@ function ensureRegistrySnapshot(
     updatedAtMs: now,
     startedAtMs: now,
     suggestedWakeSeconds: suggested,
+    meta: cmdSummary
+      ? { command_summary: cmdSummary }
+      : undefined,
   })
 }
 

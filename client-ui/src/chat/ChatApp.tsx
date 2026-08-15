@@ -55,7 +55,7 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, truncateSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  streamSessionChat, cancelSessionChat, steerSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
+  streamSessionChat, cancelSessionChat, cancelSessionJob, steerSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession, listWorkspaceGrants,
@@ -457,6 +457,19 @@ export default function ChatApp() {
       return rest
     })
   }, [])
+
+  const handleCancelBackgroundJob = useCallback(async (jobId: string) => {
+    const sid = activeId?.trim() ?? ''
+    const jid = jobId.trim()
+    if (!sid || !jid) {
+      return { ok: false, error: '暂时无法结束该任务，请稍后重试' }
+    }
+    const res = await cancelSessionJob(sid, jid)
+    if (res.ok) {
+      patchSessionBackgroundJobs(sid, (list) => removeSessionBackgroundJob(list, jid))
+    }
+    return res
+  }, [activeId, patchSessionBackgroundJobs])
   /** 流结束后延迟清除过程条的 timer（sessionId → timeout id） */
   const streamResetTimersRef = useRef(new Map<string, number>())
   /** 本轮生成期间曾失焦/不可见（sessionId → true） */
@@ -2368,6 +2381,7 @@ export default function ChatApp() {
                   onPromptQueueRemove={handlePromptQueueRemove}
                   onPromptQueueRunNow={handlePromptQueueRunNow}
                   backgroundJobs={sessionBackgroundJobs}
+                  onCancelBackgroundJob={handleCancelBackgroundJob}
                   onForkMessage={handleForkFromMessage}
                   onEditResend={handleEditResend}
                   onQuoteSelection={activeId ? handleQuoteSelection : undefined}

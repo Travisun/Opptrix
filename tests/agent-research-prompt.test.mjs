@@ -103,6 +103,17 @@ test('epistemic playbook treats inline chart as default data expression', () => 
   assert.ok(!text.includes('仅文字答复'))
 })
 
+test('epistemic playbook guides research canvas and mindmap timing', () => {
+  const text = buildResearchEpistemicPlaybook()
+  assert.match(text, /投研可视化制品|合适时机/)
+  assert.match(text, /create_canvas/)
+  assert.match(text, /create_mindmap/)
+  assert.match(text, /关系梳理|产业链|股东/)
+  assert.match(text, /简单一句问答|不要无脑/)
+  assert.match(text, /勿虚构|禁止虚构/)
+  assert.ok(!text.includes('create_knowledge_graph'))
+})
+
 test('output playbooks differ by research tier', () => {
   const l1 = buildResearchOutputPlaybook('L1')
   const l2 = buildResearchOutputPlaybook('L2')
@@ -123,6 +134,9 @@ test('L2/L3 output playbooks prefer inline chart; no ask_user report gate', () =
     assert.match(text, /禁止.*ask_user|禁止为此先 ask_user/)
     assert.match(text, /完整可视化报告/)
     assert.match(text, /自感应|明确点名/)
+    assert.match(text, /关系梳理/)
+    assert.match(text, /create_mindmap/)
+    assert.match(text, /禁止虚构.*知识图谱|禁止虚构独立知识图谱/)
     assert.ok(!text.includes('可视化报告确认'))
     assert.ok(!text.includes('跳过询问'))
     assert.ok(!text.includes('同意后'))

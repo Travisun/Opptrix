@@ -18,6 +18,8 @@ export interface BackgroundJobSnapshot {
   kind: BackgroundJobKind
   state: BackgroundJobState
   progress: BackgroundJobProgress
+  /** 面板/列表标题；缺省由 adapter 填（shell=command_summary；python/fuyao 中文短名） */
+  title?: string
   cancelable: boolean
   createdAtMs: number
   updatedAtMs: number
@@ -42,7 +44,7 @@ export interface JobRegistry {
     jobId: string,
     patch: Partial<Pick<
       BackgroundJobSnapshot,
-      'state' | 'progress' | 'error' | 'meta' | 'suggestedWakeSeconds' | 'cancelable'
+      'state' | 'progress' | 'error' | 'meta' | 'suggestedWakeSeconds' | 'cancelable' | 'title'
     >>,
   ): BackgroundJobSnapshot | null
   markTerminal(
@@ -165,4 +167,8 @@ export type JobWatchProgressEmitter = (event: {
   state: BackgroundJobState
   label: string
   percent?: number
+  title?: string
+  cancelable?: boolean
+  /** 已截断尾部；运行中节流刷新 */
+  stdout_tail?: string
 }) => void

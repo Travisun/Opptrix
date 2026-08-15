@@ -416,6 +416,9 @@ export function buildResearchEpistemicPlaybook(): string {
     '  ```',
     '- type 可选 bar|line|pie|heatmap（默认 bar）；data 1–60 项；可选 data[].series；涨跌色：data[].color 用红涨绿跌语义（如 #E5484D / #30A46C 或等价 rgba），勿编造花哨色',
     '- 完整机构调研报告（可视化报告/画布）才用 create_canvas（需 artifacts；画布内亦可 Chart）；插图 ≠ 报告；勿用 python 画报告图',
+    '【投研可视化制品 — 合适时机（UX 优先）】',
+    '- 下列投研场景优先用可点开预览的制品，少堆长 Markdown：多标的指标对比表、估值/行情走势图、持仓或财务结构化表、一页式结论报告 → create_canvas 或正文 ```chart；产业链/股东/主题等关系梳理、流程示意 → create_mindmap（勿虚构 knowledge-graph / 知识图谱工具名）',
+    '- 用户可点开制品查看；简单一句问答、只要口头结论 → 不要无脑开完整报告或脑图；完整多章节报告仍按下方 L2/L3「完整可视化报告」边界自感应',
   ].join('\n')
 }
 
@@ -444,8 +447,9 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
       '- 声称全面分析前：缺 fundamentals/market/news 等能力时先 activate_tool_pack，或明示缺口',
       '- 【正文插图（默认）】有可对比/趋势/占比/强弱矩阵等定量事实 → 在答复中灵活插入 ```chart / ```opptrix-chart（→ @opptrix/canvas Chart）；无需授权、无需 activate artifacts；禁止 shell/python（matplotlib 等）绘图代替围栏',
       '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：activate_tool_pack([\'artifacts\']) → create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
-      '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas',
-      '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas',
+      '- 【关系梳理】产业链/股东/主题/流程等关系结构 → activate_tool_pack([\'artifacts\']) → create_mindmap；禁止虚构独立知识图谱工具',
+      '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas / create_mindmap',
+      '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas；「关系/脑图/结构梳理」用 create_mindmap',
     ].join('\n')
   }
   return [
@@ -454,8 +458,9 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
     '- 工具：首选路径取证据后停止；用户未要求则不升维到 L3 全备忘录',
     '- 【正文插图（默认）】有可对比/趋势/占比/强弱矩阵等定量事实 → 在答复中灵活插入 ```chart / ```opptrix-chart（→ @opptrix/canvas Chart）；无需授权、无需 activate artifacts；禁止 shell/python（matplotlib 等）绘图代替围栏',
     '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：activate_tool_pack([\'artifacts\']) → create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
-    '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas',
-    '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas',
+    '- 【关系梳理】产业链/股东/主题/流程等关系结构 → activate_tool_pack([\'artifacts\']) → create_mindmap；禁止虚构独立知识图谱工具',
+    '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas / create_mindmap',
+    '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas；「关系/脑图/结构梳理」用 create_mindmap',
   ].join('\n')
 }
 
