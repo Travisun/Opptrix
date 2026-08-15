@@ -423,7 +423,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['create_canvas', 'update_canvas', 'read_canvas'],
     avoidTools: ['workspace_write', 'create_mindmap'],
     confidence: 'high',
-    hint: '画布/报告可视化 → create_canvas；勿用 workspace_write 代替；用户可在消息中点击预览',
+    hint: '画布/报告可视化 → create_canvas；勿用 workspace_write 代替；用户可在消息中点击预览；HTML 网页制品用 create_web',
   },
   {
     intent: 'create_mindmap',
@@ -439,6 +439,21 @@ const INTENT_RULES: IntentRule[] = [
     avoidTools: ['workspace_write', 'create_canvas'],
     confidence: 'high',
     hint: '脑图/思维导图/关系梳理 → create_mindmap；勿用 workspace_write 代替；禁止虚构 knowledge-graph 工具',
+  },
+  {
+    intent: 'create_web',
+    priority: 88,
+    patterns: [
+      /create_web|网页制品|HTML\s*页面|交互网页|离线网页/i,
+      /(?:做成|生成|创建|做个|做一份|做一).*(?:网页|HTML|html)/i,
+      /(?:网页|HTML).*(?:做成|生成|创建|预览|页面|看板)/i,
+      /用\s*(?:Chart\.?js|ECharts|echarts|D3).*(?:做|画|生成).*(?:页|图|看板|网页)/i,
+      /可交互的?\s*HTML/i,
+    ],
+    preferredTools: ['create_web', 'list_web_vendor', 'update_web', 'read_web'],
+    avoidTools: ['workspace_write'],
+    confidence: 'high',
+    hint: 'HTML/网页制品 → create_web；库用 /opptrix-vendor；勿 CDN；与 canvas 并存，报告型 TSX 画布仍用 create_canvas',
   },
   {
     intent: 'python_env',
@@ -1188,6 +1203,9 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   { prefer: 'create_scheduled_job', avoid: 'opptrix_run', when: '用户要定时重复执行而非一次性命令' },
   { prefer: 'search_library', avoid: 'search_document', when: '跨会话/跨研报检索 → search_library，勿用 search_document 单篇检索' },
   { prefer: 'search_library', avoid: 'list_session_documents', when: '问哪些研报提到某标的/跨研报主题 → search_library，非本会话附件列表' },
+  { prefer: 'create_web', avoid: 'workspace_write', when: '要可预览 HTML 网页制品而非写工作区文件' },
+  { prefer: 'create_web', avoid: 'create_canvas', when: '明确要 HTML/网页/Chart.js/ECharts 页面时用 create_web，而非 TSX 画布' },
+  { prefer: 'create_canvas', avoid: 'create_web', when: '投研可视化报告/画布排版用 create_canvas，而非 HTML 网页' },
 ]
 
 const CN_CODE_RE = /(?:^|[^\d])([036]\d{5})(?:[^\d]|$)/
@@ -1232,6 +1250,7 @@ const L1_INTENTS = new Set([
   'web_snapshot_only',
   'create_canvas',
   'create_mindmap',
+  'create_web',
 ])
 
 const L3_INTENTS = new Set([

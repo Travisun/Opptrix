@@ -1915,6 +1915,62 @@ export function sessionAttachmentUrl(sessionId: string, attachmentId: string): s
   return `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}`
 }
 
+/** 网页制品入口（index.html）；相对资源走同前缀下的路径 */
+export function sessionAttachmentWebUrl(
+  sessionId: string,
+  attachmentId: string,
+  relativePath = 'index.html',
+): string {
+  const rel = relativePath.replace(/^\/+/, '') || 'index.html'
+  return `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}/web/${rel}`
+}
+
+/** 网页制品根 URL（以 / 结尾，便于相对路径解析） */
+export function sessionAttachmentWebRootUrl(sessionId: string, attachmentId: string): string {
+  return `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}/web/`
+}
+
+export type WebAttachmentExportResult =
+  | { ok: true; blob: Blob }
+  | { ok: false; message: string }
+
+/**
+ * 服务端 Playwright fullPage 导出网页预览长图（PNG）。
+ * PDF 由客户端基于该 PNG 切页生成。
+ */
+export async function fetchWebAttachmentExportPng(
+  sessionId: string,
+  attachmentId: string,
+): Promise<WebAttachmentExportResult> {
+  const resp = await fetchWithTimeout(
+    `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}/web/export.png`,
+    { method: 'GET' },
+    LOCAL_HEAVY_TIMEOUT,
+  )
+
+  if (resp.ok) {
+    const blob = await resp.blob()
+    if (!blob.size) {
+      return { ok: false, message: '导出失败，请稍后重试' }
+    }
+    return { ok: true, blob }
+  }
+
+  let message = '导出失败，请稍后重试'
+  try {
+    const data = (await resp.json()) as { error?: string; message?: string }
+    const raw = (data.error || data.message || '').trim()
+    if (raw) message = raw
+  } catch {
+    if (resp.status === 503) {
+      message = '暂时无法导出。浏览组件未就绪，请重启应用后再试'
+    } else if (resp.status === 404) {
+      message = '找不到这份网页，请刷新后再试'
+    }
+  }
+  return { ok: false, message }
+}
+
 export async function fetchSessionAttachmentMeta(
   sessionId: string,
   attachmentId: string,

@@ -133,6 +133,9 @@ const PRIMARY_CASES = [
   { message: '画个脑图', expectPrimary: 'create_mindmap', intent: 'create_mindmap' },
   { message: '画个思维导图', expectPrimary: 'create_mindmap', intent: 'create_mindmap' },
   { message: '帮我做一份思维导图', expectPrimary: 'create_mindmap', intent: 'create_mindmap' },
+  { message: '做一个可交互的 HTML 网页', expectPrimary: 'create_web', intent: 'create_web' },
+  { message: '用 ECharts 做个网页看板', expectPrimary: 'create_web', intent: 'create_web' },
+  { message: '创建网页制品 create_web', expectPrimary: 'create_web', intent: 'create_web' },
 ]
 
 test('D1 primary tool precision across intent goldens', () => {

@@ -16,7 +16,7 @@
     "builtin"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync})=>cpSync('builtin','dist/builtin',{recursive:true}))\""
+    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync,rmSync,mkdirSync})=>{rmSync('dist/builtin',{recursive:true,force:true});mkdirSync('dist/builtin',{recursive:true});cpSync('builtin','dist/builtin',{recursive:true})})\""
   },
   "dependencies": {
     "@opptrix/shared": "*"

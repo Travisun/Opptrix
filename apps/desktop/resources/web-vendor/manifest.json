@@ -1,0 +1,248 @@
+{
+  "version": "1",
+  "generatedAt": "2026-08-15T07:42:46.787Z",
+  "libs": [
+    {
+      "id": "chart.js",
+      "version": "4.4.1",
+      "files": [
+        "chart.umd.min.js"
+      ],
+      "globals": [
+        "Chart"
+      ],
+      "description": "Canvas 图表",
+      "tags": [
+        "chart"
+      ]
+    },
+    {
+      "id": "echarts",
+      "version": "5.5.0",
+      "files": [
+        "echarts.min.js"
+      ],
+      "globals": [
+        "echarts"
+      ],
+      "description": "ECharts 可视化",
+      "tags": [
+        "chart"
+      ]
+    },
+    {
+      "id": "dayjs",
+      "version": "1.11.10",
+      "files": [
+        "dayjs.min.js"
+      ],
+      "globals": [
+        "dayjs"
+      ],
+      "description": "轻量日期库",
+      "tags": [
+        "util"
+      ]
+    },
+    {
+      "id": "lodash",
+      "version": "4.17.21",
+      "files": [
+        "lodash.min.js"
+      ],
+      "globals": [
+        "_"
+      ],
+      "description": "工具函数集",
+      "tags": [
+        "util"
+      ]
+    },
+    {
+      "id": "d3",
+      "version": "7.9.0",
+      "files": [
+        "d3.min.js"
+      ],
+      "globals": [
+        "d3"
+      ],
+      "description": "D3 数据可视化",
+      "tags": [
+        "chart",
+        "viz"
+      ]
+    },
+    {
+      "id": "papaparse",
+      "version": "5.4.1",
+      "files": [
+        "papaparse.min.js"
+      ],
+      "globals": [
+        "Papa"
+      ],
+      "description": "CSV 解析",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "id": "xlsx",
+      "version": "0.18.5",
+      "files": [
+        "xlsx.full.min.js"
+      ],
+      "globals": [
+        "XLSX"
+      ],
+      "description": "SheetJS Community Excel 读写",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "id": "marked",
+      "version": "12.0.1",
+      "files": [
+        "marked.min.js"
+      ],
+      "globals": [
+        "marked"
+      ],
+      "description": "Markdown 渲染",
+      "tags": [
+        "text"
+      ]
+    },
+    {
+      "id": "highlight.js",
+      "version": "11.9.0",
+      "files": [
+        "highlight.min.js",
+        "github.min.css"
+      ],
+      "globals": [
+        "hljs"
+      ],
+      "description": "代码高亮",
+      "tags": [
+        "text"
+      ]
+    },
+    {
+      "id": "alpinejs",
+      "version": "3.13.5",
+      "files": [
+        "cdn.min.js"
+      ],
+      "globals": [
+        "Alpine"
+      ],
+      "description": "轻量交互框架",
+      "tags": [
+        "ui"
+      ]
+    },
+    {
+      "id": "lucide",
+      "version": "0.363.0",
+      "files": [
+        "lucide.min.js"
+      ],
+      "globals": [
+        "lucide"
+      ],
+      "description": "图标（UMD createIcons）",
+      "tags": [
+        "icon"
+      ]
+    },
+    {
+      "id": "tailwindcss",
+      "version": "3.4.1-browser",
+      "files": [
+        "tailwindcss.min.js"
+      ],
+      "globals": [
+        "tailwind"
+      ],
+      "description": "Tailwind Play CDN 浏览器脚本（离线拷贝；运行时不访问外网）",
+      "tags": [
+        "css"
+      ]
+    },
+    {
+      "id": "plotly",
+      "version": "2.29.1",
+      "files": [
+        "plotly.min.js"
+      ],
+      "globals": [
+        "Plotly"
+      ],
+      "description": "Plotly.js 交互图",
+      "tags": [
+        "chart"
+      ]
+    },
+    {
+      "id": "three",
+      "version": "0.149.0",
+      "files": [
+        "three.min.js"
+      ],
+      "globals": [
+        "THREE"
+      ],
+      "description": "Three.js 3D（UMD min；新版无 browser UMD）",
+      "tags": [
+        "3d"
+      ]
+    },
+    {
+      "id": "katex",
+      "version": "0.16.9",
+      "files": [
+        "katex.min.js",
+        "katex.min.css"
+      ],
+      "globals": [
+        "katex"
+      ],
+      "description": "KaTeX 公式",
+      "tags": [
+        "math"
+      ]
+    },
+    {
+      "id": "animejs",
+      "version": "3.2.2",
+      "files": [
+        "anime.min.js"
+      ],
+      "globals": [
+        "anime"
+      ],
+      "description": "Anime.js 动画",
+      "tags": [
+        "motion"
+      ]
+    },
+    {
+      "id": "zod",
+      "version": "3.22.4",
+      "files": [
+        "zod.umd.js"
+      ],
+      "globals": [
+        "Zod"
+      ],
+      "description": "Zod 校验（UMD）",
+      "tags": [
+        "util"
+      ]
+    }
+  ],
+  "skipped": []
+}

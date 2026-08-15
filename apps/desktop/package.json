@@ -124,6 +124,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/web-vendor",
+        "to": "web-vendor",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {

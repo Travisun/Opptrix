@@ -10,6 +10,7 @@ import type {
   MediaKind,
   MindmapAttachmentMeta,
   ModelMediaCapabilities,
+  WebAttachmentMeta,
 } from './media-types.js'
 import {
   CANVAS_DATA_FILE,
@@ -24,6 +25,9 @@ import {
   MINDMAP_EXT,
   MINDMAP_MIME,
   resolveMediaMime,
+  WEB_DATA_FILE,
+  WEB_EXT,
+  WEB_MIME,
 } from './media-types.js'
 import { extractPdfToMarkdown, type PdfExtractChunk } from './pdf-extract.js'
 
@@ -50,10 +54,11 @@ export interface SaveAttachmentInput {
   width?: number
   height?: number
   duration?: number
-  /** 显式 kind 时跳过 MIME 推断（用于 canvas/mindmap 等） */
+  /** 显式 kind 时跳过 MIME 推断（用于 canvas/mindmap/web 等） */
   kind?: MediaKind
   canvas?: CanvasAttachmentMeta
   mindmap?: MindmapAttachmentMeta
+  web?: WebAttachmentMeta
 }
 
 export interface SaveCanvasAttachmentInput {
@@ -84,6 +89,29 @@ export interface UpdateMindmapAttachmentInput {
   tree: unknown
   mindmap?: MindmapAttachmentMeta
   name?: string
+}
+
+export interface WebExtraFile {
+  /** 相对附件目录的路径，如 styles.css / charts/app.js */
+  path: string
+  content: string
+}
+
+export interface SaveWebAttachmentInput {
+  sessionId: string
+  name: string
+  html: string
+  files?: WebExtraFile[]
+  web?: WebAttachmentMeta
+}
+
+export interface UpdateWebAttachmentInput {
+  sessionId: string
+  attachmentId: string
+  html: string
+  files?: WebExtraFile[]
+  name?: string
+  web?: WebAttachmentMeta
 }
 
 export type AttachmentValidationResult =
@@ -137,6 +165,7 @@ function dataFileBasename(name: string, kind?: MediaKind): string {
   const lower = name.toLowerCase()
   if (kind === 'canvas' || lower.endsWith(CANVAS_EXT)) return CANVAS_DATA_FILE
   if (kind === 'mindmap' || lower.endsWith(MINDMAP_EXT)) return MINDMAP_DATA_FILE
+  if (kind === 'web' || lower.endsWith(WEB_EXT)) return WEB_DATA_FILE
   const ext = path.extname(name) || ''
   return `data${ext}`
 }
@@ -162,6 +191,78 @@ function resolveSafeDataPath(sessionId: string, attachmentId: string, meta: Chat
   return expected
 }
 
+/**
+ * 安全解析网页制品目录下的相对路径（防穿越）。
+ * `relativePath` 空 / `.` / `/` → index.html
+ */
+export function resolveSafeWebRelativePath(
+  sessionId: string,
+  attachmentId: string,
+  relativePath?: string,
+): string {
+  const dir = path.resolve(attachmentDir(sessionId, attachmentId))
+  let rel = (relativePath ?? '').trim().replace(/\\/g, '/')
+  if (!rel || rel === '.' || rel === '/') rel = WEB_DATA_FILE
+  if (rel.startsWith('/')) rel = rel.slice(1)
+  if (
+    rel.includes('\0')
+    || rel.split('/').some(seg => seg === '..' || seg === '')
+    || path.isAbsolute(rel)
+  ) {
+    throw new Error('网页资源路径无效')
+  }
+  const expected = path.resolve(dir, rel)
+  if (!expected.startsWith(dir + path.sep) && expected !== dir) {
+    throw new Error('网页资源路径无效')
+  }
+  // 禁止读写 meta / extract 等内部文件名以外的敏感名；meta.json 仍可拒绝
+  const base = path.basename(expected)
+  if (base === META_FILENAME || base === EXTRACT_MD || base === EXTRACT_CHUNKS) {
+    throw new Error('网页资源路径无效')
+  }
+  return expected
+}
+
+function assertSafeWebExtraPath(relPath: string): string {
+  const rel = relPath.trim().replace(/\\/g, '/')
+  if (!rel || rel === WEB_DATA_FILE || rel === './' + WEB_DATA_FILE) {
+    throw new Error('额外文件路径不能覆盖入口 index.html')
+  }
+  if (
+    rel.startsWith('/')
+    || path.isAbsolute(rel)
+    || rel.includes('\0')
+    || rel.split('/').some(seg => seg === '..' || seg === '')
+  ) {
+    throw new Error(`额外文件路径无效：${relPath}`)
+  }
+  const base = path.basename(rel)
+  if (base === META_FILENAME || base === EXTRACT_MD || base === EXTRACT_CHUNKS) {
+    throw new Error(`额外文件路径无效：${relPath}`)
+  }
+  return rel
+}
+
+function writeWebExtraFiles(
+  sessionId: string,
+  attachmentId: string,
+  files: WebExtraFile[] | undefined,
+): string[] {
+  if (!files?.length) return []
+  const written: string[] = []
+  const dir = attachmentDir(sessionId, attachmentId)
+  for (const file of files) {
+    const rel = assertSafeWebExtraPath(String(file.path ?? ''))
+    ensureArtifactSourceLength(String(file.content ?? ''))
+    const abs = resolveSafeWebRelativePath(sessionId, attachmentId, rel)
+    fs.mkdirSync(path.dirname(abs), { recursive: true })
+    fs.writeFileSync(abs, String(file.content ?? ''), 'utf8')
+    written.push(rel)
+  }
+  void dir
+  return written
+}
+
 function ensureArtifactSourceLength(source: string): void {
   if (source.length > ARTIFACT_SOURCE_MAX_CHARS) {
     throw new Error(`内容过长（上限 ${ARTIFACT_SOURCE_MAX_CHARS} 字符）`)
@@ -176,6 +277,9 @@ function ensureDisplayName(raw: string, fallbackExt: string): string {
   }
   if (fallbackExt === MINDMAP_EXT && !base.toLowerCase().endsWith(MINDMAP_EXT)) {
     return `${base.replace(/\.json$/i, '')}${MINDMAP_EXT}`
+  }
+  if (fallbackExt === WEB_EXT && !base.toLowerCase().endsWith(WEB_EXT)) {
+    return `${base.replace(/\.(html|htm)$/i, '')}${WEB_EXT}`
   }
   return base
 }
@@ -363,6 +467,7 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
     ...(input.duration ? { duration: input.duration } : {}),
     ...(input.canvas ? { canvas: input.canvas } : {}),
     ...(input.mindmap ? { mindmap: input.mindmap } : {}),
+    ...(input.web ? { web: input.web } : {}),
     ...(libraryIngest
       ? { extract: { status: 'pending' as const } }
       : transcriptExtract
@@ -457,6 +562,101 @@ export function updateMindmapAttachment(input: UpdateMindmapAttachmentInput): Ch
   fs.writeFileSync(filePath, json, 'utf8')
   writeMeta(input.sessionId, next)
   return next
+}
+
+export function saveWebAttachment(input: SaveWebAttachmentInput): ChatAttachmentMeta {
+  ensureArtifactSourceLength(input.html)
+  const name = ensureDisplayName(input.name, WEB_EXT)
+  const attachmentId = randomUUID()
+  const dir = attachmentDir(input.sessionId, attachmentId)
+  fs.mkdirSync(dir, { recursive: true })
+
+  const indexPath = path.join(dir, WEB_DATA_FILE)
+  fs.writeFileSync(indexPath, input.html, 'utf8')
+  const extraFiles = writeWebExtraFiles(input.sessionId, attachmentId, input.files)
+
+  const web: WebAttachmentMeta = {
+    entry: WEB_DATA_FILE,
+    ...(extraFiles.length ? { files: extraFiles } : {}),
+    ...input.web,
+  }
+  if (!web.files?.length && extraFiles.length) web.files = extraFiles
+
+  let totalSize = Buffer.byteLength(input.html, 'utf8')
+  for (const rel of web.files ?? []) {
+    try {
+      totalSize += fs.statSync(path.join(dir, rel)).size
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const meta: ChatAttachmentMeta = {
+    id: attachmentId,
+    kind: 'web',
+    mime: WEB_MIME,
+    name,
+    size: totalSize,
+    createdAt: new Date().toISOString(),
+    web,
+  }
+  writeMeta(input.sessionId, meta)
+  return meta
+}
+
+export function updateWebAttachment(input: UpdateWebAttachmentInput): ChatAttachmentMeta | null {
+  const meta = readAttachmentMeta(input.sessionId, input.attachmentId)
+  if (!meta || meta.kind !== 'web') return null
+  ensureArtifactSourceLength(input.html)
+  const dir = attachmentDir(input.sessionId, input.attachmentId)
+  const indexPath = resolveSafeWebRelativePath(input.sessionId, input.attachmentId, WEB_DATA_FILE)
+  fs.writeFileSync(indexPath, input.html, 'utf8')
+  const extraFiles = writeWebExtraFiles(input.sessionId, input.attachmentId, input.files)
+  const prevFiles = meta.web?.files ?? []
+  const mergedFiles = extraFiles.length
+    ? [...new Set([...prevFiles, ...extraFiles])]
+    : prevFiles
+
+  let totalSize = Buffer.byteLength(input.html, 'utf8')
+  for (const rel of mergedFiles) {
+    try {
+      totalSize += fs.statSync(path.join(dir, rel)).size
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const next: ChatAttachmentMeta = {
+    ...meta,
+    name: input.name ? ensureDisplayName(input.name, WEB_EXT) : meta.name,
+    size: totalSize,
+    mime: WEB_MIME,
+    web: {
+      entry: WEB_DATA_FILE,
+      ...(mergedFiles.length ? { files: mergedFiles } : {}),
+      ...input.web,
+    },
+  }
+  writeMeta(input.sessionId, next)
+  return next
+}
+
+export function readWebIndexHtml(sessionId: string, attachmentId: string): string | null {
+  const meta = readAttachmentMeta(sessionId, attachmentId)
+  if (!meta || meta.kind !== 'web') return null
+  try {
+    const filePath = resolveSafeWebRelativePath(sessionId, attachmentId, WEB_DATA_FILE)
+    return fs.readFileSync(filePath, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+export function resolveWebAttachmentDir(sessionId: string, attachmentId: string): string | null {
+  const meta = readAttachmentMeta(sessionId, attachmentId)
+  if (!meta || meta.kind !== 'web') return null
+  const dir = attachmentDir(sessionId, attachmentId)
+  return fs.existsSync(dir) ? dir : null
 }
 
 export function readAttachmentText(sessionId: string, attachmentId: string): string | null {

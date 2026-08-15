@@ -21,16 +21,60 @@ describe('search and archive', { concurrency: false }, () => {
   })
 
   test('default session archive folders are seeded', async () => {
-  const { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS } = await import(
-    '../packages/agent/dist/archive-folders.js'
-  )
-  const store = new SessionArchiveFolderStore()
-  const folders = store.ensureDefaults()
-  assert.equal(folders.length, DEFAULT_SESSION_ARCHIVE_FOLDERS.length)
-  assert.ok(folders.some(f => f.id === 'research' && f.title === '投研精选'))
-})
+    const { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS } = await import(
+      '../packages/agent/dist/archive-folders.js'
+    )
+    const store = new SessionArchiveFolderStore()
+    const folders = store.ensureDefaults()
+    assert.equal(folders.length, DEFAULT_SESSION_ARCHIVE_FOLDERS.length)
+    assert.ok(folders.some(f => f.id === 'research' && f.title === '投研精选'))
+  })
 
-test('listActive hides archived sessions', async () => {
+  test('empty store listArchivedByFolderAll returns 4 default folders with empty sessions', async () => {
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+    const { DEFAULT_SESSION_ARCHIVE_FOLDERS, SessionArchiveFolderStore } = await import(
+      '../packages/agent/dist/archive-folders.js'
+    )
+    // 模拟全新空库：无 preference/session_archive_folders
+    getUserDataStore().deleteDocument('preference', 'session_archive_folders')
+    const sessions = new SessionStore()
+    const grouped = sessions.listArchivedByFolderAll()
+    assert.equal(grouped.length, DEFAULT_SESSION_ARCHIVE_FOLDERS.length)
+    const ids = grouped.map(g => g.folder.id).sort()
+    assert.deepEqual(ids, ['other', 'research', 'review', 'trades'])
+    for (const g of grouped) {
+      assert.equal(g.sessions.length, 0)
+      assert.equal(g.folder.isDefault, true)
+    }
+    // 已持久化到 user-store（经 OPPTRIX_DATA_DIR，非本机硬编码路径）
+    const persisted = new SessionArchiveFolderStore().list()
+    assert.equal(persisted.length, 4)
+    getUserDataStore().close()
+  })
+
+  test('ensureDefaults merges missing default folder ids without dropping custom', async () => {
+    const { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS } = await import(
+      '../packages/agent/dist/archive-folders.js'
+    )
+    const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+    const store = new SessionArchiveFolderStore()
+    store.save([
+      { id: 'research', title: '投研精选', sortOrder: 0, isDefault: true },
+      { id: 'custom-only', title: '我的文件夹', sortOrder: 10, isDefault: false },
+    ])
+    const merged = store.ensureDefaults()
+    assert.ok(merged.some(f => f.id === 'custom-only' && f.title === '我的文件夹'))
+    for (const def of DEFAULT_SESSION_ARCHIVE_FOLDERS) {
+      const hit = merged.find(f => f.id === def.id)
+      assert.ok(hit, `missing default id ${def.id}`)
+      assert.equal(hit.isDefault, true)
+    }
+    assert.ok(merged.length >= DEFAULT_SESSION_ARCHIVE_FOLDERS.length + 1)
+    getUserDataStore().close()
+  })
+
+  test('listActive hides archived sessions', async () => {
   const { SessionStore } = await import('../packages/agent/dist/sessions.js')
   const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
 

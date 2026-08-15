@@ -45,6 +45,7 @@ import {
   ATTACHMENT_UPLOAD_BODY_LIMIT,
   registerSessionAttachmentRoutes,
 } from './session-attachment-routes.js'
+import { registerOpptrixVendorRoutes } from './opptrix-vendor-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
 import { registerAgentSkillRoutes } from './agent-skill-routes.js'
 import { registerSpeechRoutes } from './speech-routes.js'
@@ -1928,6 +1929,7 @@ async function bootstrap() {
   await registerAgentSkillRoutes(app)
   registerSearchRoutes(app, hub, agent)
   registerSessionAttachmentRoutes(app, agent)
+  registerOpptrixVendorRoutes(app)
   ensureMediaTranscriptBridge()
   await registerSpeechRoutes(app)
 

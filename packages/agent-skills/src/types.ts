@@ -8,7 +8,11 @@ export interface AgentSkillFrontmatter {
   license?: string
   compatibility?: string
   metadata?: Record<string, string>
-  /** Experimental: space-separated tool allowlist */
+  /**
+   * Experimental: space-separated tool names.
+   * Used on activate to auto-load owning Tool Packs (via packIdForTool);
+   * not a hard runtime allowlist that blocks other tools.
+   */
   allowedTools?: string
   /** 技能内附加文件相对路径（references/、scripts/ 等），路径经 resolveConfinedPath 校验 */
   references?: string[]

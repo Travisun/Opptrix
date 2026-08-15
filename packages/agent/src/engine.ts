@@ -5,6 +5,7 @@ import {
   type ChatMessage,
   EMPTY_REPLY_REASONING_HINT,
 } from './llm/provider.js'
+import { stripDsmlToolMarkup } from './llm/dsml-tool-markup.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
@@ -18,6 +19,7 @@ import {
   toolNamesForPacks,
   unloadedToolHint,
 } from './mcp/tool-pack-session.js'
+import { resolvePackIdsFromSkill } from './mcp/skill-required-packs.js'
 import {
   AgentSkillSessionStore,
   MAX_ACTIVATED_AGENT_SKILLS,
@@ -330,6 +332,8 @@ export class AgentEngine {
     if (settings.providers?.length) {
       this.registry.setProviders(settings.providers, settings.defaultModel)
     }
+    // 启动即持久化默认归档文件夹（darwin/linux/win32 同逻辑；经 user-store，无本机路径）
+    this.sessions.listArchiveFolders()
   }
 
   get llmConfigured() { return this.registry.configured }
@@ -628,17 +632,39 @@ export class AgentEngine {
         if (activated.length) {
           seedChecklistOnSkillActivate(sessionId, activated)
         }
+
+        // 按技能 allowed-tools / required-packs 自动挂上对应 Tool Pack（非硬白名单）
+        const packIdSet = new Set<string>()
+        for (const name of activated) {
+          const skill = getSkill(name)
+          if (!skill) continue
+          for (const id of resolvePackIdsFromSkill(skill)) packIdSet.add(id)
+        }
+        let activatedPacks: import('@opptrix/shared').ToolPackId[] = []
+        let toolsHint: string | undefined
+        if (packIdSet.size > 0) {
+          const packResult = this.toolPackSessions.activate(sessionId, [...packIdSet])
+          activatedPacks = packResult.activated
+          this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
+          if (activatedPacks.length) {
+            toolsHint = `已挂上工具包：${activatedPacks.join(', ')}；本轮可直接调用包内工具，无需再 activate_tool_pack`
+          }
+        }
+
         const allSkipped = [...skipped, ...skippedUnknown]
         this.invalidateContextUsage(sessionId)
         const hintParts = [allSkipped.length
           ? `部分技能未激活：${allSkipped.join(', ')}（可能不存在或已达上限 ${MAX_ACTIVATED_AGENT_SKILLS}）`
           : '已激活；完整步骤已注入本会话']
         if (depNotes.length) hintParts.push(...depNotes)
+        if (toolsHint) hintParts.push(toolsHint)
         return {
           ok: true,
           activated,
           skipped: allSkipped,
           active_skills: active,
+          activated_packs: activatedPacks,
+          ...(toolsHint ? { tools_hint: toolsHint } : {}),
           max_activated: MAX_ACTIVATED_AGENT_SKILLS,
           dep_notes: depNotes,
           hint: hintParts.join('；'),
@@ -1773,8 +1799,11 @@ export class AgentEngine {
               result = { error: unloadedToolHint(fn) }
             } else {
               result = await runInToolSession(sessionId, () => broker.call(fn, args, { signal }))
+              // activate_agent_skill 会经 skill bridge 激活 required-packs / allowed-tools 对应 pack，
+              // 须与 activate_tool_pack 一样刷新本轮 activeNames/broker，否则同轮调用 pack 内工具会走 unloadedToolHint。
               if (
                 fn === 'activate_tool_pack'
+                || fn === 'activate_agent_skill'
                 || fn === 'enable_mcp_server'
                 || fn === 'disable_mcp_server'
                 || fn === 'edit_mcp_server'
@@ -1911,7 +1940,7 @@ export class AgentEngine {
         continue
       }
 
-      const replyRaw = turnContentText.trim()
+      const replyRaw = stripDsmlToolMarkup(turnContentText).trim()
       let reply = replyRaw
       if (!reply || reply === '（无回复内容）') {
         const hitBudget = turn.finishReason === 'length'

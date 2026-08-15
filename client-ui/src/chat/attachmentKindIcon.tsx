@@ -10,6 +10,7 @@ import {
   VideoRegular,
   DocumentOnePageRegular,
   DiagramRegular,
+  WindowRegular,
 } from '@fluentui/react-icons'
 import type { MediaKind } from '../types/chat'
 
@@ -54,6 +55,8 @@ export function attachmentKindIcon(
       return <DocumentOnePageRegular fontSize={fontSize} />
     case 'mindmap':
       return <DiagramRegular fontSize={fontSize} />
+    case 'web':
+      return <WindowRegular fontSize={fontSize} />
     case 'document':
     case 'text':
       return documentIconByExt(extOfFilename(name), fontSize)

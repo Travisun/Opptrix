@@ -77,6 +77,72 @@ function drawPngContainOnCurrentPage(
   pdf.addImage(dataUrl, 'PNG', x, y, drawW, drawH, undefined, 'FAST')
 }
 
+/**
+ * 长图多页切分计划（纯函数，便于单测）。
+ * 按页宽等比缩放后，纵向按可绘高度切片；返回源图像素坐标系下的切片。
+ */
+export function planLongImagePdfSlices(
+  widthPx: number,
+  heightPx: number,
+  opts?: { pageWidthMm?: number; pageHeightMm?: number; marginMm?: number },
+): { pageWidthMm: number; pageHeightMm: number; marginMm: number; slices: Array<{ y: number; height: number }> } {
+  const pageWidthMm = opts?.pageWidthMm ?? 210
+  const pageHeightMm = opts?.pageHeightMm ?? 297
+  const marginMm = opts?.marginMm ?? 8
+  const maxW = Math.max(pageWidthMm - marginMm * 2, 1)
+  const maxH = Math.max(pageHeightMm - marginMm * 2, 1)
+
+  if (widthPx <= 0 || heightPx <= 0) {
+    return { pageWidthMm, pageHeightMm, marginMm, slices: [] }
+  }
+
+  // 等比缩放到页宽后，一页可容纳的源图像素高度
+  const scale = maxW / widthPx
+  const pageContentHeightPx = Math.max(1, Math.floor(maxH / scale))
+
+  const slices: Array<{ y: number; height: number }> = []
+  let y = 0
+  while (y < heightPx) {
+    const h = Math.min(pageContentHeightPx, heightPx - y)
+    slices.push({ y, height: h })
+    y += h
+  }
+  return { pageWidthMm, pageHeightMm, marginMm, slices }
+}
+
+async function slicePngDataUrl(
+  dataUrl: string,
+  widthPx: number,
+  sliceY: number,
+  sliceHeight: number,
+): Promise<string> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => reject(new Error('Failed to load export image'))
+    el.src = dataUrl
+  })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.floor(widthPx))
+  canvas.height = Math.max(1, Math.floor(sliceHeight))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(
+    img,
+    0,
+    sliceY,
+    widthPx,
+    sliceHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  )
+  return canvas.toDataURL('image/png')
+}
+
 export async function exportElementPng(
   el: HTMLElement,
   filename: string,
@@ -146,8 +212,8 @@ export async function exportMindmapBoardPng(
 }
 
 /**
- * Place a PNG data URL onto a single A4 page with contain (aspect preserved + margin).
- * Orientation follows the image aspect ratio.
+ * Place a PNG data URL onto A4 PDF.
+ * 单页可容纳（contain）时一页；过长则按页宽等比缩放后纵向切多页。
  */
 export async function exportPngDataUrlToPdf(
   dataUrl: string,
@@ -158,9 +224,48 @@ export async function exportPngDataUrlToPdf(
     throw new Error('Invalid export image size')
   }
 
-  const orientation = width >= height ? 'landscape' : 'portrait'
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation })
-  drawPngContainOnCurrentPage(pdf, dataUrl, width, height)
+  const pageWidthMm = 210
+  const pageHeightMm = 297
+  const marginMm = 8
+  const maxW = pageWidthMm - marginMm * 2
+  const maxH = pageHeightMm - marginMm * 2
+
+  // 宽图：单页 landscape contain；否则 portrait，必要时长图切页
+  if (width >= height) {
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
+    drawPngContainOnCurrentPage(pdf, dataUrl, width, height)
+    pdf.save(`${baseName(filename)}.pdf`)
+    return
+  }
+
+  const fittedH = (height / width) * maxW
+  if (fittedH <= maxH) {
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+    drawPngContainOnCurrentPage(pdf, dataUrl, width, height)
+    pdf.save(`${baseName(filename)}.pdf`)
+    return
+  }
+
+  const { slices } = planLongImagePdfSlices(width, height, {
+    pageWidthMm,
+    pageHeightMm,
+    marginMm,
+  })
+  if (slices.length === 0) {
+    throw new Error('Invalid export image size')
+  }
+
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i]
+    if (i > 0) pdf.addPage('a4', 'portrait')
+    const sliceUrl = await slicePngDataUrl(dataUrl, width, slice.y, slice.height)
+    const drawW = maxW
+    const drawH = (slice.height / width) * maxW
+    const x = marginMm
+    const y = marginMm
+    pdf.addImage(sliceUrl, 'PNG', x, y, drawW, Math.min(drawH, maxH), undefined, 'FAST')
+  }
   pdf.save(`${baseName(filename)}.pdf`)
 }
 
@@ -171,5 +276,29 @@ export async function exportMindmapBoardPdf(
   backgroundColor: string,
 ): Promise<void> {
   const dataUrl = await captureMindmapBoardPngDataUrl(nodesEl, backgroundColor)
+  await exportPngDataUrlToPdf(dataUrl, filename)
+}
+
+/** Download a PNG blob (e.g. from server fullPage export). */
+export function downloadPngBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob)
+  try {
+    triggerDownload(href, `${baseName(filename)}.png`)
+  } finally {
+    URL.revokeObjectURL(href)
+  }
+}
+
+/** Convert PNG blob → multi-page PDF download. */
+export async function exportPngBlobToPdf(blob: Blob, filename: string): Promise<void> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result)
+      else reject(new Error('Failed to read export image'))
+    }
+    reader.onerror = () => reject(new Error('Failed to read export image'))
+    reader.readAsDataURL(blob)
+  })
   await exportPngDataUrlToPdf(dataUrl, filename)
 }

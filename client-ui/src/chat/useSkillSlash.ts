@@ -80,14 +80,14 @@ export function useSkillSlash() {
   const matches = useMemo(() => {
     if (!state.open) return []
     const q = state.query.trim().toLowerCase()
-    if (!q) return skills.slice(0, 12)
+    if (!q) return skills.slice(0, 30)
     return skills
       .filter(skill => {
         const name = skill.name.toLowerCase()
         const desc = (skill.description ?? '').toLowerCase()
         return name.includes(q) || desc.includes(q)
       })
-      .slice(0, 12)
+      .slice(0, 30)
   }, [skills, state.open, state.query])
 
   const moveActive = useCallback((delta: number) => {

@@ -107,6 +107,7 @@ function buildSidecarEnv(opts) {
       env.OPPTRIX_RAG_ENGINES_BUNDLED_DIR = path.join(resourcesPath, 'engines')
       env.OPPTRIX_PYTHON_BUNDLED_DIR = path.join(resourcesPath, 'python')
       env.OPPTRIX_SENSEVOICE_BUNDLED_DIR = path.join(resourcesPath, 'sensevoice')
+      env.OPPTRIX_WEB_VENDOR_DIR = path.join(resourcesPath, 'web-vendor')
     }
     let RUNTIME_DEPS_DIR = 'deps'
     try {
@@ -139,6 +140,7 @@ function buildSidecarEnv(opts) {
       'apps/desktop/resources/llms',
       'rapidocr-ppocrv4-mobile',
     )
+    env.OPPTRIX_WEB_VENDOR_DIR = path.join(root, 'apps/desktop/resources/web-vendor')
   }
 
   return env

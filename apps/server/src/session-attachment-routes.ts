@@ -11,6 +11,7 @@ import {
   readAttachmentBuffer,
   readExtractMarkdown,
   resolveAttachmentFilePath,
+  resolveSafeWebRelativePath,
   validateAttachmentAgainstCapabilities,
   isAttachmentReferenced,
   listSessionAttachmentMetas,
@@ -20,6 +21,11 @@ import {
   updateMindmapAttachment,
 } from '@opptrix/agent'
 import { decodeTextBuffer, isPlainTextDocument } from '@opptrix/doc-library'
+import { WEB_CSP, guessWebAssetMime } from './opptrix-vendor-routes.js'
+import {
+  buildLoopbackWebPreviewUrl,
+  captureWebPreviewFullPagePng,
+} from './web-preview-export.js'
 
 function sanitizeFilename(name: string): string {
   const base = path.basename(name.trim() || 'file')
@@ -257,6 +263,100 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
       }
 
       reply.header('Content-Length', String(size))
+      return reply.send(fs.createReadStream(filePath))
+    },
+  )
+
+  // 网页制品：同目录相对资源（默认入口 index.html）；路径穿越拒绝
+  app.get<{ Params: { id: string; attachmentId: string; '*': string } }>(
+    '/api/sessions/:id/attachments/:attachmentId/web',
+    async (req, reply) => {
+      return reply.redirect(
+        `/api/sessions/${encodeURIComponent(req.params.id)}/attachments/${encodeURIComponent(req.params.attachmentId)}/web/index.html`,
+      )
+    },
+  )
+
+  /**
+   * 网页预览导出长图（Playwright fullPage）。须注册在 web/* 通配符之前。
+   * 返回 image/png；失败时 JSON { error }。
+   */
+  app.get<{ Params: { id: string; attachmentId: string } }>(
+    '/api/sessions/:id/attachments/:attachmentId/web/export.png',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const meta = readAttachmentMeta(req.params.id, req.params.attachmentId)
+      if (!meta || meta.kind !== 'web') {
+        return reply.code(404).send({ error: 'attachment not found' })
+      }
+
+      let indexPath: string
+      try {
+        indexPath = resolveSafeWebRelativePath(req.params.id, req.params.attachmentId, 'index.html')
+      } catch {
+        return reply.code(404).send({ error: 'attachment not found' })
+      }
+      if (!fs.existsSync(indexPath) || !fs.statSync(indexPath).isFile()) {
+        return reply.code(404).send({ error: 'file not found' })
+      }
+
+      const addr = app.server.address()
+      if (!addr || typeof addr === 'string') {
+        return reply.code(503).send({
+          error: '暂时无法导出，请稍后重试',
+        })
+      }
+
+      const pageUrl = buildLoopbackWebPreviewUrl(
+        addr.address,
+        addr.port,
+        req.params.id,
+        req.params.attachmentId,
+      )
+      const result = await captureWebPreviewFullPagePng(pageUrl)
+      if (!result.ok) {
+        return reply.code(result.status).send({ error: result.message })
+      }
+
+      const base = path.basename(meta.name).replace(/\.[^.]+$/, '') || 'export'
+      reply.header('Content-Type', 'image/png')
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(`${base}.png`)}"`,
+      )
+      reply.header('Cache-Control', 'no-store')
+      return reply.send(result.png)
+    },
+  )
+
+  app.get<{ Params: { id: string; attachmentId: string; '*': string } }>(
+    '/api/sessions/:id/attachments/:attachmentId/web/*',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const meta = readAttachmentMeta(req.params.id, req.params.attachmentId)
+      if (!meta || meta.kind !== 'web') {
+        return reply.code(404).send({ error: 'attachment not found' })
+      }
+
+      const rel = String(req.params['*'] ?? '').trim() || 'index.html'
+      let filePath: string
+      try {
+        filePath = resolveSafeWebRelativePath(req.params.id, req.params.attachmentId, rel)
+      } catch {
+        return reply.code(400).send({ error: 'invalid web path' })
+      }
+      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        return reply.code(404).send({ error: 'file not found' })
+      }
+
+      reply.header('Content-Type', guessWebAssetMime(filePath))
+      reply.header('Content-Security-Policy', WEB_CSP)
+      reply.header('X-Content-Type-Options', 'nosniff')
+      reply.header('Cache-Control', 'no-store')
       return reply.send(fs.createReadStream(filePath))
     },
   )

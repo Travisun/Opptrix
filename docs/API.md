@@ -942,13 +942,18 @@ Content-Type: application/json
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
 | POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` / `X-Attachment-Mime` + `X-Attachment-Name`）；PDF 始终可走本地文本整理（不要求模型原生 `pdf` 能力）；响应 `{ attachment: ChatAttachmentMeta }`（PDF 含 `extract.status=pending`，后台异步整理） |
-| GET | `/api/sessions/:id/attachments` | 列出会话附件元数据（含 Agent 创建的 `canvas` / `mindmap`）；响应 `{ attachments: Array<ChatAttachmentMeta & { referenced: boolean }> }`（`referenced`：是否已被 turns 引用，与 DELETE 409 判定一致；按 `createdAt` 升序） |
-| GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；canvas/mindmap 用 `application/vnd.opptrix.*`；路径规范化防穿越） |
+| GET | `/api/sessions/:id/attachments` | 列出会话附件元数据（含 Agent 创建的 `canvas` / `mindmap` / `web`）；响应 `{ attachments: Array<ChatAttachmentMeta & { referenced: boolean }> }`（`referenced`：是否已被 turns 引用，与 DELETE 409 判定一致；按 `createdAt` 升序） |
+| GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；canvas/mindmap 用 `application/vnd.opptrix.*`；web 入口为 `index.html`；路径规范化防穿越） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/web` | 重定向到 `.../web/index.html` |
+| GET | `/api/sessions/:id/attachments/:attachmentId/web/export.png` | 服务端 Playwright **整页（fullPage）**截图导出长图 PNG；非 web kind → 404；浏览组件未就绪 → 503 + 可读错误文案；成功 `image/png` |
+| GET | `/api/sessions/:id/attachments/:attachmentId/web/*` | 安全服务网页制品目录下相对文件（默认 `index.html`）；拒绝路径穿越；响应带 CSP（`connect-src 'self'`，默认禁外网） |
 | PUT | `/api/sessions/:id/attachments/:attachmentId` | **仅** `kind=canvas` / `mindmap`：写回源码或节点树；其它 kind → 400。canvas：body 为 TSX 原文（`text/plain`）或 `{ source }`；mindmap：JSON 树（`{ rootId, nodes }` 或等价对象）。成功 `{ attachment: ChatAttachmentMeta }` |
-| GET | `/api/sessions/:id/attachments/:attachmentId/meta` | 返回最新 `{ attachment: ChatAttachmentMeta }`（含 PDF `extract` 整理状态与可选 `documentId`，以及 canvas/mindmap 元数据，供 UI 轮询） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/meta` | 返回最新 `{ attachment: ChatAttachmentMeta }`（含 PDF `extract` 整理状态与可选 `documentId`，以及 canvas/mindmap/web 元数据，供 UI 轮询） |
 | GET | `/api/sessions/:id/attachments/:attachmentId/extract` | 返回 `{ attachment_id, name, kind, extract }` 整理摘要（`extract` 同下表，含 `documentId?`） |
 | GET | `/api/sessions/:id/attachments/:attachmentId/extract/text` | 返回整理后的文本/Markdown（`text/markdown`）；整理中 202 `{ status: 'pending' }`；失败 422 `{ status: 'failed', message? }`；供右侧文件预览面板渲染 Word/PPT/Markdown/Txt |
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
+| GET | `/api/opptrix-vendor/manifest` | 离线网页库清单（钉版本）；同源别名 `/opptrix-vendor/manifest` |
+| GET | `/api/opptrix-vendor/*` | 离线网页库静态文件（如 `chart.js/chart.umd.min.js`）；同源别名 `/opptrix-vendor/*`；目录由 `OPPTRIX_WEB_VENDOR_DIR` 或桌面 `resources/web-vendor` 解析 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
 | POST | `/api/sessions/:id/chat/cancel` | 取消进行中的聊天；无活动流 → 404；同时清空 pending `ask_user`、soft steer、该会话 turn-wake / job waits·watches（**不** cancel 全局后台 Job） |
@@ -1074,7 +1079,7 @@ Content-Type: application/json
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 附件 id（落盘 `~/.opptrix/chat-attachments/{sessionId}/{id}/`） |
-| `kind` | `image` \| `pdf` \| `document` \| `video` \| `audio` \| `canvas` \| `mindmap` | 媒体种类；`document` = 文本 / Word / PPT；`canvas` / `mindmap` = Agent 制品（通常由 `create_canvas` / `create_mindmap` 写入，列表 API 自然包含） |
+| `kind` | `image` \| `pdf` \| `document` \| `video` \| `audio` \| `canvas` \| `mindmap` \| `web` | 媒体种类；`document` = 文本 / Word / PPT；`canvas` / `mindmap` / `web` = Agent 制品（通常由 `create_canvas` / `create_mindmap` / `create_web` 写入，列表 API 自然包含） |
 | `mime` / `name` / `size` / `createdAt` | — | MIME、原始文件名、字节数、ISO 时间；画布常用 `application/vnd.opptrix.canvas+tsx`，脑图常用 `application/vnd.opptrix.mindmap+json` |
 | `width` / `height` / `duration` | number | 可选元数据 |
 | `extract` | `AttachmentExtractMeta`（见下） | PDF / 文档 / 图片：本地文本整理（含 OCR）状态 |
@@ -1091,7 +1096,7 @@ Content-Type: application/json
 | `pageCount` / `charCount` | number | 可选；整理完成后的页数 / 字符数 |
 | `readyAt` | string | 可选；整理完成时间（ISO） |
 
-PDF / 文档 / 图片上传后经 Parse Router 异步整理（按格式选 `text-l0` / `office-l0` / `pdf-extract-l0`，弱文本或深度整理时升 `ocr-l2`；图片必经本地 OCR）→ **文档库 + legacy 双写**（`extract.md` / `extract-chunks.json` 仍落在附件目录）。`.pptx` / `.ppt` 尽量按幻灯片分 chunk（`page` = slide）；`.doc` 由产品侧抽取，无需用户先转。图片 `extract` ready 后 Agent 侧注入 OCR 目录文本（可辅以 vision）。Agent 按需阅读工具见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)（`list_session_documents` / `search_document` / `read_document`）。画布 / 脑图由 Agent `artifacts` pack 创建，经附件列表与右侧预览打开；写回用上文 `PUT .../attachments/:attachmentId`。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
+PDF / 文档 / 图片上传后经 Parse Router 异步整理（按格式选 `text-l0` / `office-l0` / `pdf-extract-l0`，弱文本或深度整理时升 `ocr-l2`；图片必经本地 OCR）→ **文档库 + legacy 双写**（`extract.md` / `extract-chunks.json` 仍落在附件目录）。`.pptx` / `.ppt` 尽量按幻灯片分 chunk（`page` = slide）；`.doc` 由产品侧抽取，无需用户先转。图片 `extract` ready 后 Agent 侧注入 OCR 目录文本（可辅以 vision）。Agent 按需阅读工具见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)（`list_session_documents` / `search_document` / `read_document`）。画布 / 脑图 / 网页由 Agent `artifacts` pack 创建，经附件列表与右侧预览打开；canvas/mindmap 写回用上文 `PUT .../attachments/:attachmentId`；网页相对资源用 `GET .../attachments/:aid/web/*`，离线库用 `/api/opptrix-vendor/*`；网页预览「下载长图」走 `GET .../web/export.png`（服务端整页截图，不向 iframe 开 `allow-same-origin`），PDF 由客户端基于长图切页。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
 
 **`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带上下文窗口（优先 models.dev 异步查询 + 模糊匹配，失败降级启发式；只读派生，无需用户配置）。
 

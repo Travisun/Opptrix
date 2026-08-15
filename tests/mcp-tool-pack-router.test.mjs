@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import {
   TOOL_PACK_MEMBERSHIP,
   TOOL_PACK_DEFS,
@@ -132,12 +133,33 @@ test('unloaded tool hint points to activate_tool_pack', () => {
   assert.match(hint, /instrument_analytics/)
 })
 
+test('unloaded tool hint for list_web_vendor names artifacts pack', () => {
+  assert.equal(packIdForTool('list_web_vendor'), 'artifacts')
+  const hint = unloadedToolHint('list_web_vendor')
+  assert.match(hint, /activate_tool_pack/)
+  assert.match(hint, /artifacts/)
+  assert.doesNotMatch(hint, /未知或不支持/)
+})
+
 test('unknown tool hint falls back to workspace sandbox', () => {
   const hint = unloadedToolHint('totally_fake_tool_xyz')
   assert.match(hint, /list_tool_packs/)
   assert.match(hint, /workspace/)
   assert.match(hint, /opptrix_run|ensure_python|workspace_/)
   assert.match(hint, /勿虚构/)
+})
+
+test('engine refreshes tools after activate_agent_skill (same as activate_tool_pack)', () => {
+  // 契约：技能激活会写入 session packs，须同轮 refreshTools，否则 list_web_vendor 等会误报未加载/未知
+  const engineSrc = fs.readFileSync(
+    new URL('../packages/agent/src/engine.ts', import.meta.url),
+    'utf8',
+  )
+  const refreshBlock = engineSrc.match(
+    /if\s*\(\s*fn === 'activate_tool_pack'[\s\S]*?\)\s*\{\s*refreshTools = true/,
+  )
+  assert.ok(refreshBlock, 'expected refreshTools condition block after pack/skill activate')
+  assert.match(refreshBlock[0], /fn === 'activate_agent_skill'/)
 })
 
 test('list_tool_packs payload marks loaded state', () => {

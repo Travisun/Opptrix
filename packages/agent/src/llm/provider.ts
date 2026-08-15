@@ -25,6 +25,11 @@ import {
   logLlmHttpError,
   type LlmErrorCfgHint,
 } from './llm-error-message.js'
+import {
+  contentLooksLikeDsmlToolMarkup,
+  stripDsmlToolMarkup,
+  tryParseDsmlToolCalls,
+} from './dsml-tool-markup.js'
 
 export {
   LEGACY_DEFAULT_MAX_TOKENS,
@@ -285,15 +290,19 @@ function turnFromAssistantMessage(
   },
 ): LlmTurn {
   const reasoning = (meta?.reasoningContent ?? extractReasoningContent(raw)).trim()
-  const finishReason = mapFinishReason(meta?.finishReason, Boolean(raw.tool_calls?.length))
   const requestedMaxTokens = meta?.requestedMaxTokens
+  const structuredCalls = raw.tool_calls?.length ? raw.tool_calls : undefined
 
-  if (raw.tool_calls?.length) {
+  if (structuredCalls) {
+    const rawContent = typeof raw.content === 'string' ? raw.content : null
+    const content = typeof rawContent === 'string' && contentLooksLikeDsmlToolMarkup(rawContent)
+      ? stripDsmlToolMarkup(rawContent) || null
+      : rawContent
     return {
       message: {
         role: 'assistant',
-        content: typeof raw.content === 'string' ? raw.content : null,
-        tool_calls: raw.tool_calls,
+        content,
+        tool_calls: structuredCalls,
       },
       finishReason: 'tool_calls',
       usage,
@@ -304,8 +313,24 @@ function turnFromAssistantMessage(
 
   if (sessionId && Array.isArray(raw.content)) {
     const parsed = parseAssistantResponseContent(sessionId, raw.content)
+    const fromDsml = tryParseDsmlToolCalls(parsed.text)
+    if (fromDsml.toolCalls.length) {
+      return {
+        message: {
+          role: 'assistant',
+          content: fromDsml.text || null,
+          tool_calls: fromDsml.toolCalls,
+        },
+        finishReason: 'tool_calls',
+        usage,
+        reasoningContent: reasoning || undefined,
+        requestedMaxTokens,
+        outputAttachments: parsed.attachments.length ? parsed.attachments : undefined,
+      }
+    }
+    const finishReason = mapFinishReason(meta?.finishReason, false)
     const content = emptyContentPlaceholder(
-      parsed.text,
+      fromDsml.text,
       reasoning,
       usage,
       finishReason === 'tool_calls' ? 'stop' : finishReason,
@@ -332,8 +357,24 @@ function turnFromAssistantMessage(
         .join('\n')
       : ''
 
+  const fromDsml = tryParseDsmlToolCalls(textContent ?? '')
+  if (fromDsml.toolCalls.length) {
+    return {
+      message: {
+        role: 'assistant',
+        content: fromDsml.text || null,
+        tool_calls: fromDsml.toolCalls,
+      },
+      finishReason: 'tool_calls',
+      usage,
+      reasoningContent: reasoning || undefined,
+      requestedMaxTokens,
+    }
+  }
+
+  const finishReason = mapFinishReason(meta?.finishReason, false)
   const content = emptyContentPlaceholder(
-    textContent ?? '',
+    fromDsml.text,
     reasoning,
     usage,
     finishReason === 'tool_calls' ? 'stop' : finishReason,
@@ -476,26 +517,17 @@ async function consumeChatCompletionSse(
     .map(([, tc]) => tc)
     .filter(tc => tc.id || tc.function.name)
 
-  if (toolCalls.length || finishReason === 'tool_calls') {
-    return {
-      message: {
-        role: 'assistant',
-        content: content || null,
-        tool_calls: toolCalls,
-      },
-      finishReason: 'tool_calls',
-      usage,
-      reasoningContent: reasoningContent || undefined,
-      requestedMaxTokens,
-    }
-  }
-
+  // 统一经 turnFromAssistantMessage：剥离 content 内 DSML，或无结构化 calls 时解析为 tool_calls
   return turnFromAssistantMessage(
-    { content, reasoning_content: reasoningContent },
+    {
+      content,
+      tool_calls: toolCalls.length ? toolCalls : undefined,
+      reasoning_content: reasoningContent,
+    },
     usage,
     opts?.sessionId,
     {
-      finishReason,
+      finishReason: toolCalls.length ? 'tool_calls' : finishReason,
       requestedMaxTokens,
       reasoningContent,
     },

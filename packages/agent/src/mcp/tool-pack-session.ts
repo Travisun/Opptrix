@@ -6,6 +6,7 @@ import {
   TOOL_PACK_DEFS,
   packIdForTool,
 } from '@opptrix/shared'
+import { TOOL_META } from '../tool-meta.js'
 import { resolveToolRoutePlan } from './tool-route-plan.js'
 import type { ToolPackResolveInput } from './tool-pack-resolver.js'
 
@@ -87,6 +88,10 @@ export function unloadedToolHint(toolName: string): string {
   const pack = packIdForTool(toolName)
   if (pack) {
     return `工具 ${toolName} 未加载（属于 pack「${pack}」）。请先调用 activate_tool_pack，参数 pack_ids: ["${pack}"]，再重试。`
+  }
+  // 运行时 shared 与 agent TOOL_META 偶发不同步时，勿误导去 workspace 沙盒兜底
+  if (Object.prototype.hasOwnProperty.call(TOOL_META, toolName)) {
+    return `工具 ${toolName} 已注册但未挂入可用 pack 映射（常见于 artifacts 等）。请先 activate_tool_pack 加载对应工具包，或更新应用后再试；勿改走 workspace 沙盒虚构实现。`
   }
   return `未知或不支持的工具：${toolName}。请先 list_tool_packs 查看可用工具包；若无合适 pack → activate_tool_pack，参数 pack_ids: ["workspace"]，用 opptrix_run / workspace_* 沙盒编程实现（ensure_python 仅失败兜底），勿虚构工具名。`
 }

@@ -135,9 +135,9 @@ const SEED_RULES: SeedRule[] = [
     pack: 'artifacts',
     weight: 1,
     patterns: [
-      /可视化报告|投研画布|思维导图|脑图|关系梳理|一页式(?:结论|报告)/,
-      /(?:做成|生成|创建).*(?:画布|脑图|关系图|结构图)/,
-      /create_canvas|create_mindmap/i,
+      /可视化报告|投研画布|思维导图|脑图|关系梳理|一页式(?:结论|报告)|网页制品|交互网页/i,
+      /(?:做成|生成|创建|做个).*(?:画布|脑图|关系图|结构图|网页|HTML)/i,
+      /create_canvas|create_mindmap|create_web/i,
     ],
   },
 ]

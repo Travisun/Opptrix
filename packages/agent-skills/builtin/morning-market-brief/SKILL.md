@@ -5,6 +5,7 @@ license: Apache-2.0
 metadata:
   author: opptrix
   version: "2.0"
+allowed-tools: get_market_dynamics get_market_session list_news_articles get_watchlist
 ---
 
 # 早报 / 开市简报

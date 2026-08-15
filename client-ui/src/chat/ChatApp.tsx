@@ -58,7 +58,7 @@ import {
   streamSessionChat, cancelSessionChat, cancelSessionJob, steerSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
-  clearSessionArchiveFolder, renameSession, listWorkspaceGrants,
+  clearSessionArchiveFolder, renameSession, listWorkspaceGrants, listSessionArchiveFolders,
   subscribeSessionLiveProgress, fetchSessionPendingWakes,
 } from '../api/client'
 import type {
@@ -1010,9 +1010,24 @@ export default function ChatApp() {
   ])
 
   const refreshArchived = useCallback(async () => {
-    const { groups } = await listArchivedSessions()
-    setArchivedGroups(groups)
-    return groups
+    try {
+      const { groups } = await listArchivedSessions()
+      if (groups.length) {
+        setArchivedGroups(groups)
+        return groups
+      }
+      // 兜底：归档分组为空时用文件夹列表合成空组，避免误报「还没有归档文件夹」
+      const { folders } = await listSessionArchiveFolders()
+      const synthesized: ArchiveFolderGroup[] = folders.map(folder => ({
+        folder,
+        sessions: [],
+      }))
+      setArchivedGroups(synthesized)
+      return synthesized
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '暂时无法加载归档')
+      return []
+    }
   }, [])
 
   const refreshContextUsage = useCallback(async (sessionId: string) => {

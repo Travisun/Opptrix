@@ -5,6 +5,7 @@ license: Apache-2.0
 metadata:
   author: opptrix
   version: "1.0"
+allowed-tools: get_market_dynamics get_limit_updown get_dragon_tiger get_market_sentiment
 ---
 
 # 收盘报告

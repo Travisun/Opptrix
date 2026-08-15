@@ -21,6 +21,7 @@ import { buildWorkspaceTools } from './mcp/workspace-tools.js'
 import { buildScheduleTools } from './mcp/schedule-tools.js'
 import { buildDocumentTools } from './document-tools.js'
 import { buildCanvasTools } from './canvas-tools.js'
+import { buildWebTools } from './web-tools.js'
 import { currentToolSessionId } from './mcp/tool-session-context.js'
 import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
@@ -143,6 +144,7 @@ export class ToolRegistry {
       ...this.buildMetaTools(),
       ...buildDocumentTools(),
       ...buildCanvasTools(),
+      ...buildWebTools(),
       ...buildBrowserTools(),
       ...buildWorkspaceTools(),
       ...buildScheduleTools(),
@@ -906,7 +908,7 @@ export class ToolRegistry {
       {
         name: 'activate_agent_skill',
         category: '工作流技能',
-        description: '激活一个或多个工作流技能，将完整步骤注入本会话（最多 3 个）；技能正文中的 `@skill:依赖` 会自动递归激活（带循环检测）',
+        description: '激活一个或多个工作流技能，将完整步骤注入本会话（最多 3 个）；技能正文中的 `@skill:依赖` 会自动递归激活；若技能声明了 allowed-tools / required-packs，会自动挂上对应工具包（本轮即可调用 create_canvas/create_web 等，无需再 activate_tool_pack）',
         parameters: S({
           skill_names: {
             type: 'array',

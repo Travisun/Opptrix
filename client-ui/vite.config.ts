@@ -55,6 +55,10 @@ export default defineConfig({
         target: API_TARGET,
         changeOrigin: true,
       },
+      '/opptrix-vendor': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
     },
   },
   preview: {
@@ -62,6 +66,10 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
+      '/opptrix-vendor': {
         target: API_TARGET,
         changeOrigin: true,
       },

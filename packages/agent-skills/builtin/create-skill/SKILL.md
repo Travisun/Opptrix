@@ -22,6 +22,8 @@ references:
 2. **命名**：`name` 须小写 `a-z0-9` 与连字符、1–64 字、不首尾连字符、无连续 `--`（如 `earnings-quick-read`）。
 3. **description**：1–1024 字，写清**何时使用**与能力边界；含用户可能说的触发词。
 4. **frontmatter**：至少 `name` + `description`；可选 `license`、`metadata`、`references`（附件路径列表）。
+   - 若步骤会调用非常驻工具（如画布/网页 `create_canvas`/`create_web`），务必写 `allowed-tools: create_canvas create_web`（空格分隔工具名）；激活技能时会**自动挂上**对应工具包，无需用户再手动激活。
+   - 也可在 `metadata` 写 `required-packs: artifacts`（空格/逗号分隔包 id）直接声明工具包。
 5. **正文**：Markdown 步骤说明——何时用、逐步做什么、输出 Schema/注意；可引用工具名（如 `get_instrument_snapshot`）。
 6. **附件（可选）**：知识库、模板、脚本说明放 `references/`、`scripts/`、`assets/`；见 `get_agent_skill_file(skill_name="create-skill", path="references/attachment-guide.md")`。
 7. **预览确认**：向用户展示 name、description、正文摘要、references/files 数量；`ask_user` 确认后再创建。

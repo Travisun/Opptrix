@@ -20,6 +20,7 @@ const KIND_LABEL: Record<MediaKind, string> = {
   audio: '音频',
   canvas: '画布',
   mindmap: '脑图',
+  web: '网页',
 }
 
 const useStyles = makeStyles({

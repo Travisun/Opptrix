@@ -10,6 +10,7 @@ import {
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import CanvasPreviewHost from './CanvasPreviewHost'
 import MindmapPreviewHost from './MindmapPreviewHost'
+import WebPreviewHost from './WebPreviewHost'
 import PdfPreviewViewer from './PdfPreviewViewer'
 
 const useStyles = makeStyles({
@@ -282,7 +283,7 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
 
   const url = sessionAttachmentUrl(sessionId, attachment.id)
   const isPdf = attachment.kind === 'pdf'
-  const isArtifact = attachment.kind === 'mindmap' || attachment.kind === 'canvas'
+  const isArtifact = attachment.kind === 'mindmap' || attachment.kind === 'canvas' || attachment.kind === 'web'
   const isDocument = attachment.kind === 'document' || attachment.kind === 'text'
 
   return (
@@ -326,6 +327,13 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
             />
           ) : attachment.kind === 'canvas' ? (
             <CanvasPreviewHost
+              sessionId={sessionId}
+              attachmentId={attachment.id}
+              name={attachment.name}
+              panelVisible={open}
+            />
+          ) : attachment.kind === 'web' ? (
+            <WebPreviewHost
               sessionId={sessionId}
               attachmentId={attachment.id}
               name={attachment.name}

@@ -1,4 +1,4 @@
-/** 媒体种类；text 不占附件配额；document = 文本/Office 研报入库；canvas/mindmap = Agent 制品 */
+/** 媒体种类；text 不占附件配额；document = 文本/Office 研报入库；canvas/mindmap/web = Agent 制品 */
 export type MediaKind =
   | 'text'
   | 'image'
@@ -8,6 +8,7 @@ export type MediaKind =
   | 'audio'
   | 'canvas'
   | 'mindmap'
+  | 'web'
 
 /** Agent 画布 MIME / 固定存盘名 */
 export const CANVAS_MIME = 'application/vnd.opptrix.canvas+tsx'
@@ -18,6 +19,11 @@ export const CANVAS_EXT = '.canvas.tsx'
 export const MINDMAP_MIME = 'application/vnd.opptrix.mindmap+json'
 export const MINDMAP_DATA_FILE = 'data.mindmap.json'
 export const MINDMAP_EXT = '.mindmap.json'
+
+/** Agent 网页制品 MIME / 固定入口文件名 */
+export const WEB_MIME = 'text/html'
+export const WEB_DATA_FILE = 'index.html'
+export const WEB_EXT = '.html'
 
 /** Optional print dimensions; ignored for fluid mode. Legacy preset may appear on old attachments. */
 export type CanvasPageSpec =
@@ -35,6 +41,14 @@ export interface CanvasAttachmentMeta {
 
 export interface MindmapAttachmentMeta {
   rootId: string
+}
+
+/** 网页制品元数据（kind=web）；入口固定 index.html，可含同目录相对资源 */
+export interface WebAttachmentMeta {
+  /** 入口相对路径，默认 index.html */
+  entry?: string
+  /** 额外相对路径文件列表（不含 index.html） */
+  files?: string[]
 }
 
 /** 附件文本整理状态（含 OCR） */
@@ -82,6 +96,8 @@ export interface ChatAttachmentMeta {
   canvas?: CanvasAttachmentMeta
   /** 脑图制品元数据（kind=mindmap） */
   mindmap?: MindmapAttachmentMeta
+  /** 网页制品元数据（kind=web） */
+  web?: WebAttachmentMeta
 }
 
 export interface AttachmentLimits {
@@ -130,6 +146,7 @@ const EXT_MIME: Record<string, string> = {
   '.aac': 'audio/aac',
   [CANVAS_EXT]: CANVAS_MIME,
   [MINDMAP_EXT]: MINDMAP_MIME,
+  [WEB_EXT]: WEB_MIME,
 }
 
 const DOCUMENT_MIME = new Set([
@@ -217,6 +234,7 @@ export function mediaKindLabel(kind: MediaKind): string {
     case 'audio': return '音频'
     case 'canvas': return '画布'
     case 'mindmap': return '脑图'
+    case 'web': return '网页'
     default: return '文件'
   }
 }

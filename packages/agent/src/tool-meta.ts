@@ -559,6 +559,29 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '读取已有脑图树后再 update_mindmap。',
     compliance: '只读；attachment_id 必填。',
   },
+  create_web: {
+    miningEligible: false,
+    usageGuide:
+      '用户要可交互 HTML 网页、仪表盘页、离线图表页、或明确「网页/HTML 制品」时创建；与 create_canvas（TSX 画布报告）并存——报告型多章节图文优先 canvas，需要浏览器 HTML+本地库（Chart.js/ECharts 等）时用本工具。单文件 index.html + 可选同目录相对 css/js；脚本/样式只许引用 /opptrix-vendor/...，禁止 CDN/外网脚本。可用 list_web_vendor 查看已钉版本库。返回 attachment 供消息内预览。',
+    compliance:
+      'title+html 必填；html≤200000 字符；可选 files=[{path,content}] 写相对路径资源；禁止外网 CDN（cdnjs/unpkg/jsdelivr 等）；库路径形如 /opptrix-vendor/chart.js/chart.umd.min.js；勿用 workspace_write 代替；与 canvas/mindmap 不互斥。',
+  },
+  update_web: {
+    miningEligible: false,
+    usageGuide: '修改已创建网页制品的 HTML/相对资源；约束同 create_web（仅 /opptrix-vendor，禁 CDN）。',
+    compliance:
+      'attachment_id+html 必填；仅更新本会话 web 附件；可选 files 覆盖/新增相对路径文件。',
+  },
+  read_web: {
+    miningEligible: false,
+    usageGuide: '读取已有网页 index.html 与元数据后再 update_web。',
+    compliance: '只读；attachment_id 必填。',
+  },
+  list_web_vendor: {
+    miningEligible: false,
+    usageGuide: '创建网页前查看本机离线库清单与引用路径前缀 /opptrix-vendor/<id>/。',
+    compliance: '只读；无参数；返回 manifest 摘要。',
+  },
   ask_user: {
     miningEligible: false,
     usageGuide:
@@ -601,8 +624,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   activate_agent_skill: {
     packId: 'meta',
-    usageGuide: '激活工作流技能，将完整步骤注入本会话 system；用户提到早报/收盘报告/产业链/财报速读/深度分析流程时使用。技能正文中的 `@skill:依赖` 会自动递归激活。',
-    compliance: 'skill_names 为字符串数组；同会话最多 3 个；无效名或超额进入 skipped；循环依赖会被检测并跳过。',
+    usageGuide: '激活工作流技能，将完整步骤注入本会话 system；用户提到早报/收盘报告/产业链/财报速读/深度分析流程时使用。技能正文中的 `@skill:依赖` 会自动递归激活；声明的 allowed-tools / required-packs 会自动挂上对应工具包。',
+    compliance: 'skill_names 为字符串数组；同会话最多 3 个；无效名或超额进入 skipped；循环依赖会被检测并跳过；返回 activated_packs / tools_hint。',
   },
   update_research_checklist: {
     packId: 'meta',

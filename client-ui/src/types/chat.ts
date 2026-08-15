@@ -127,7 +127,7 @@ export interface AttachmentLimits {
   maxTotalBytes: number
 }
 
-export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio' | 'canvas' | 'mindmap'
+export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio' | 'canvas' | 'mindmap' | 'web'
 
 /** Optional print dimensions; ignored for fluid mode. Legacy preset may appear on old attachments. */
 export type CanvasPageSpec =
@@ -145,6 +145,12 @@ export interface CanvasAttachmentMeta {
 
 export interface MindmapAttachmentMeta {
   rootId: string
+}
+
+/** 网页制品元数据（kind=web） */
+export interface WebAttachmentMeta {
+  entry?: string
+  files?: string[]
 }
 
 export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
@@ -183,6 +189,7 @@ export interface ChatAttachmentMeta {
   extract?: AttachmentExtractMeta
   canvas?: CanvasAttachmentMeta
   mindmap?: MindmapAttachmentMeta
+  web?: WebAttachmentMeta
   /** 前端乐观插入标记；服务端不会返回此字段 */
   optimistic?: boolean
   /** 前端上传进度 0–1；仅乐观项，服务端不会返回 */

@@ -13,6 +13,7 @@ import {
   sessionAttachmentUrl,
 } from '../api/client'
 import CanvasPreviewHost from './CanvasPreviewHost'
+import WebPreviewHost from './WebPreviewHost'
 import FilePreviewFileList from './FilePreviewFileList'
 import MarkdownMessage from './MarkdownMessage'
 import ImagePreviewViewer from './ImagePreviewViewer'
@@ -572,8 +573,9 @@ export default function FilePreviewPanel({
   const isImage = attachment?.kind === 'image'
   const isCanvas = attachment?.kind === 'canvas'
   const isMindmap = attachment?.kind === 'mindmap'
+  const isWeb = attachment?.kind === 'web'
   const isMedia = attachment?.kind === 'audio' || attachment?.kind === 'video'
-  const bodyFlush = Boolean(attachment && (isPdf || isImage || isCanvas || isMindmap))
+  const bodyFlush = Boolean(attachment && (isPdf || isImage || isCanvas || isMindmap || isWeb))
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
   /** Full-width panel: reserve global toolbar band as a dedicated drag zone. */
   const titleBarDragLeadWidth = electronChrome
@@ -594,6 +596,7 @@ export default function FilePreviewPanel({
     && !isImage
     && !isCanvas
     && !isMindmap
+    && !isWeb
     && !showCenterPicker
 
   return (
@@ -715,6 +718,15 @@ export default function FilePreviewPanel({
             ) : isMindmap ? (
               <div className={s.artifactHostFlush}>
                 <MindmapPreviewHost
+                  sessionId={sessionId}
+                  attachmentId={attachment.id}
+                  name={attachment.name}
+                  panelVisible={panelVisible}
+                />
+              </div>
+            ) : isWeb ? (
+              <div className={s.artifactHostFlush}>
+                <WebPreviewHost
                   sessionId={sessionId}
                   attachmentId={attachment.id}
                   name={attachment.name}

@@ -128,10 +128,10 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   },
   {
     id: 'artifacts',
-    title: '画布与脑图',
-    description: '创建/更新/读取可预览的投研画布与脑图制品',
+    title: '画布、脑图与网页',
+    description: '创建/更新/读取可预览的投研画布、脑图与 HTML 网页制品',
     whenToUse:
-      '可视化报告、画布排版、多标的对比表/走势图/一页式结论；脑图/思维导图/主题树；产业链/股东/主题等关系梳理或流程示意（关系类用 create_mindmap，勿虚构知识图谱工具）',
+      '可视化报告、画布排版、多标的对比表/走势图/一页式结论；脑图/思维导图/主题树；产业链/股东/主题等关系梳理或流程示意（关系类用 create_mindmap，勿虚构知识图谱工具）；可交互 HTML/离线图表页用 create_web（仅 /opptrix-vendor，禁 CDN）',
   },
 ] as const
 
@@ -314,6 +314,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   create_mindmap: 'artifacts',
   update_mindmap: 'artifacts',
   read_mindmap: 'artifacts',
+  create_web: 'artifacts',
+  update_web: 'artifacts',
+  read_web: 'artifacts',
+  list_web_vendor: 'artifacts',
 }
 
 export function isToolPackId(value: string): value is ToolPackId {

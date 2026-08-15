@@ -5,6 +5,7 @@ import type { ChatAttachmentMeta } from '../types/chat'
 import { attachmentKindIcon } from './attachmentKindIcon'
 import CanvasInlineCard from './CanvasInlineCard'
 import MindmapInlineCard from './MindmapInlineCard'
+import WebInlineCard from './WebInlineCard'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 
 const CHIP_WIDTH = 168
@@ -355,7 +356,7 @@ export function MessageAttachmentStrip({
   if (!items.length) return null
 
   const isArtifact = (item: ChatAttachmentMeta) =>
-    (item.kind === 'canvas' || item.kind === 'mindmap') && Boolean(sessionId)
+    (item.kind === 'canvas' || item.kind === 'mindmap' || item.kind === 'web') && Boolean(sessionId)
   const chips = items.filter(item => !isArtifact(item))
   const artifacts = items.filter(isArtifact)
 
@@ -395,6 +396,16 @@ export function MessageAttachmentStrip({
             if (item.kind === 'mindmap') {
               return (
                 <MindmapInlineCard
+                  key={item.id}
+                  sessionId={sessionId}
+                  attachment={item}
+                  onOpen={() => onOpen(item)}
+                />
+              )
+            }
+            if (item.kind === 'web') {
+              return (
+                <WebInlineCard
                   key={item.id}
                   sessionId={sessionId}
                   attachment={item}

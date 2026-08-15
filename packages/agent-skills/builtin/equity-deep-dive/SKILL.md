@@ -5,6 +5,7 @@ license: Apache-2.0
 metadata:
   author: opptrix
   version: "1.0"
+allowed-tools: create_canvas create_web get_instrument_profile get_instrument_financials get_instrument_money_flow get_instrument_chart
 ---
 
 # 个股深度分析
@@ -16,7 +17,7 @@ metadata:
 ## 步骤
 
 1. **确认标的**：用搜索工具定位 `instrument`；若有多候选，用选择题请用户确认。
-2. **加载能力**：如当前工具不足，先列出工具包，再激活「标的深度分析」「基本面」等相关包。
+2. **取数与制品**：激活本技能时已按 `allowed-tools` 挂上相关工具包（含画布/网页与基本面等）；本轮可直接调用，无需再手动激活工具包。若仍缺能力，再列出工具包并补充激活。
 3. **快照与行情**：拉取标的快照与最新行情，记下价格、涨跌与关键状态。
 4. **基本面**：视市场拉取概况、财务与关键披露；数据缺失时明确说明缺口。
 5. **补充维度（按需）**：资金流向、机构观点、近期公告/资讯摘要；勿编造未返回的数字。
@@ -24,6 +25,7 @@ metadata:
    - 事实摘要（带时效）
    - 推断与假设（分开写）
    - 风险与不确定性
+   - 适合时可用画布或网页交付多章节图文（`create_canvas` / `create_web`）；完整流程见 `` `@skill:create-canvas` `` / `` `@skill:create-web` ``
    - **不给出**买卖建议、目标价或仓位建议
 
 ## 注意

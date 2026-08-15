@@ -27,3 +27,10 @@ export {
   type PruneBrowserScreenshotsOptions,
   type PruneBrowserScreenshotsResult,
 } from './screenshot-prune.js'
+export {
+  PLAYWRIGHT_BROWSERS_DIR_NAME,
+  configurePlaywrightBrowsersPath,
+  ensureChromiumAvailable,
+  isChromiumAvailable,
+  resolvePackagedBrowsersPath,
+} from './chromium-install.js'

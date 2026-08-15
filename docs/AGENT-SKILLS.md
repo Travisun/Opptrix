@@ -12,7 +12,7 @@ UI 对用户称「**工作流技能**」，避免与专家「技能专长」（p
 |------|--------|------|
 | **工作流技能（Agent Skills）** | 步骤说明与附件：discovery → activate → 按需读附件 | 不是 Tool Pack，不是专家人设 |
 | **技能专长（persona）** | 专家角色语气与分析偏好 | 不提供逐步工作流正文 |
-| **Tool Pack** | 按意图加载的 MCP 工具子集 | 不替代流程说明；技能正文可指引 Agent 去 activate 对应 pack |
+| **Tool Pack** | 按意图加载的 MCP 工具子集 | 不替代流程说明；技能可经 `allowed-tools` / `required-packs` 在激活时**自动挂上**对应 pack |
 
 三者正交：对话可同时有角色 persona、已激活 Tool Pack、以及最多 3 个已激活工作流技能。
 
@@ -29,7 +29,18 @@ packages/agent-skills/builtin/<name>/SKILL.md   # 内置
 - `scripts/` — 辅助脚本
 - `assets/` — 其它附件
 
-`name` 必须与目录名一致，且符合规范：小写 `a-z0-9` 与连字符、1–64、不首尾连字符、无连续 `--`。
+`name` 必须与目录名一致，且符合规范：小写 `a-z0-9` 与连字符、1–64、不首尾连字符、无连续 `--`（**不能用下划线**）。
+
+技能名用**连字符**对齐工具名的**下划线**：例如技能 `create-web` ↔ 工具 `create_web`，技能 `create-canvas` ↔ 工具 `create_canvas`。description 中宜同时写上工具名与中文触发词，便于 `/create` 与中文检索。
+
+## Frontmatter：`allowed-tools` / `required-packs`
+
+| 字段 | 说明 |
+|------|------|
+| `allowed-tools` | 空格分隔的**工具名**（如 `create_canvas create_web`）。激活技能时经 `packIdForTool` 收集所属 pack 并 `toolPackSessions.activate`；未知工具名忽略；**不是**运行时硬白名单 |
+| `metadata.required-packs` 或 `requiredPacks` | 空格/逗号分隔的 **pack_id**（如 `artifacts strategy_extra`）；与上项合并去重 |
+
+激活副作用与 `activate_tool_pack` 一致：刷新本轮 active packs / context usage。`activate_agent_skill` 返回 `activated_packs` 与可选 `tools_hint`。
 
 ## Frontmatter：`references`
 
@@ -44,7 +55,7 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 ## 渐进披露
 
 1. **Discovery**：system 注入短目录（仅 name + description）
-2. **Activation**：`activate_agent_skill` → 会话 sticky（最多 **3** 个）→ 注入完整正文（约 20k 字截断保护）
+2. **Activation**：`activate_agent_skill` → 会话 sticky（最多 **3** 个）→ 注入完整正文（约 20k 字截断保护）→ 按声明自动挂 Tool Pack
 3. **Resources**：`get_agent_skill_file` 按需读 `references/` / `scripts/` / `assets/`（路径 confine 在技能根内）
 
 系统底线（Layer0）永远高于技能正文；技能不合并进 `rolePersona`。
@@ -60,18 +71,29 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 | **上限** | 同会话已激活总数 ≤ **3**（含依赖）；超限则跳过依赖并记入 `depNotes` |
 | **循环检测** | 访问栈检测环；遇到环跳过并记入 `depNotes`，不死循环 |
 
-返回字段含 `activated` / `skipped` / `active` / `depNotes`，便于 Agent 向用户说明未装上的依赖。
+返回字段含 `activated` / `skipped` / `active` / `depNotes` / `activated_packs`（及可选 `tools_hint`），便于 Agent 向用户说明未装上的依赖，并直接使用已挂上的工具。
 
 ## 内置技能目录
 
 | name | 用途 | 备注 |
 |------|------|------|
-| `equity-deep-dive` | 个股深度分析工作流 | 快照 → 基本面 → 资金/资讯 → 结构化结论 |
-| `morning-market-brief` | 早报 / 开市简报 | **v2** 结构化 JSON（`report_type: morning`） |
-| `closing-market-brief` | 收盘报告 | 结构化 JSON（`report_type: closing`） |
+| `equity-deep-dive` | 个股深度分析工作流 | 快照 → 基本面 → 资金/资讯 → 结构化结论；`allowed-tools` 含画布/网页与基本面相关工具；可交叉引用 `` `@skill:create-canvas` `` / `` `@skill:create-web` `` |
+| `create-canvas` | 投研画布 / 可视化报告 | 对齐工具 `create_canvas`；多章节图文；与消息内 chart 围栏区分；自动挂 `artifacts` |
+| `create-web` | HTML 网页 / 离线交互页 | 对齐工具 `create_web` + `/opptrix-vendor`；禁 CDN；自动挂 `artifacts` |
+| `create-mindmap` | 思维导图 / 结构图 | 对齐工具 `create_mindmap`；自动挂 `artifacts` |
+| `run-backtest` | 策略回测 | 对齐工具 `run_backtest`；自动挂 `strategy_extra` |
+| `strategy-report` | 策略报告 | 对齐工具 `strategy_report`；自动挂 `strategy_extra` |
+| `etf-research` | ETF 研究 | `get_etf_*`；自动挂 `etf` |
+| `portfolio-review` | 组合 / 关注列表复盘 | `get_watchlist` / `analyze_portfolio` 等；自动挂 `portfolio` |
+| `news-digest` | 资讯 / 公告摘要 | `list_news_articles` 等；自动挂 `news` |
+| `browser-browse` | 浏览器浏览取证 | `browser_navigate` 等；自动挂 `browser` |
+| `scheduled-jobs` | 定时任务管理 | `list_scheduled_jobs` / `create_scheduled_job` 等；自动挂 `automation` |
+| `instrument-signals` | 标的信号 / 指标 | `evaluate_instrument` 等；自动挂 `instrument_analytics` |
+| `morning-market-brief` | 早报 / 开市简报 | **v2** 结构化 JSON（`report_type: morning`）；自动挂 `market`/`news`/`portfolio` 等 |
+| `closing-market-brief` | 收盘报告 | 结构化 JSON（`report_type: closing`）；自动挂 `market` |
 | `industry-chain` | 产业链透视 | 读内置知识库 + 可选板块成分；输出 JSON + Mermaid |
 | `earnings-quick-read` | 财报速读 | 报告期确认 → 财务表 → 亮点/风险（无买卖建议） |
-| `create-skill` | 新建 / 定制工作流技能 | 引导命名、frontmatter、正文与附件；经确认后 `create_agent_skill` 写入 |
+| `create-skill` | 新建 / 定制工作流技能 | 引导命名、frontmatter（含 `allowed-tools`）、正文与附件；经确认后 `create_agent_skill` 写入 |
 
 ### `industry-chain` 与知识库
 
@@ -87,6 +109,17 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 | 收盘报告、尾盘复盘 | `closing-market-brief` | 已删除的 `get_closing_report` / Hub `market_report` |
 | 产业链、上下游、行业透视 | `industry-chain` | 已删除的 `industry_mining` / `industry_mermaid` |
 | 帮我建工作流技能、新建/定制技能 | `create-skill` → `create_agent_skill` | 勿跳过引导直接 import；勿与 Tool Pack 混淆 |
+| 画布、可视化报告、一页式报告、对比表报告、create_canvas | `create-canvas` → `create_canvas` | 勿用正文 chart 围栏冒充完整报告；勿用 `workspace_write` |
+| 网页、HTML、离线图表页、交互页面、create_web | `create-web` → `create_web` | 只许 `/opptrix-vendor`；禁 CDN；勿与画布混淆 |
+| 思维导图、脑图、mindmap、create_mindmap | `create-mindmap` → `create_mindmap` | 勿与画布报告混淆 |
+| 回测、run_backtest | `run-backtest` → `run_backtest` | 自动挂 `strategy_extra`；勿口头编造回测 |
+| 策略报告、strategy_report | `strategy-report` → `strategy_report` | 自动挂 `strategy_extra` |
+| ETF、场内基金、净值、持仓 | `etf-research` | 自动挂 `etf` |
+| 持仓、组合复盘、关注列表 | `portfolio-review` | 自动挂 `portfolio`；勿荐股调仓 |
+| 新闻、资讯、公告摘要 | `news-digest` | 自动挂 `news` |
+| 打开网页、浏览链接、截图 | `browser-browse` | 自动挂 `browser` |
+| 定时任务、预约任务 | `scheduled-jobs` | 自动挂 `automation`；写入前须确认 |
+| 技术指标、策略信号、evaluate_instrument | `instrument-signals` | 自动挂 `instrument_analytics`；信号≠荐股 |
 
 ### `create-skill` 与附件创建
 
@@ -101,7 +134,7 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 | 工具 | 说明 |
 |------|------|
 | `list_agent_skills` | 索引（name + description + source） |
-| `activate_agent_skill` | 会话激活；自动解析 `` `@skill:` `` 依赖；上限 3；返回 `depNotes` |
+| `activate_agent_skill` | 会话激活；自动解析 `` `@skill:` `` 依赖；按 `allowed-tools` / `required-packs` 自动挂 Tool Pack；上限 3；返回 `depNotes`、`activated_packs` |
 | `get_agent_skill` | 读完整步骤说明 |
 | `get_agent_skill_file` | 读附件（须 confine） |
 | `create_agent_skill` | 创建（须 `ask_user` + `confirmed=true`；可选 `references`、`files`） |

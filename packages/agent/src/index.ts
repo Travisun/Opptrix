@@ -149,6 +149,11 @@ export {
   unloadedToolHint,
 } from './mcp/tool-pack-session.js'
 export {
+  resolvePackIdsFromSkill,
+  splitSkillDeclarationTokens,
+  type SkillPackDeclaration,
+} from './mcp/skill-required-packs.js'
+export {
   resolveSeedPacks,
   ToolPackResolver,
   MAX_SEEDED_BUSINESS_PACKS,
@@ -212,15 +217,20 @@ export {
   saveAttachment,
   saveCanvasAttachment,
   saveMindmapAttachment,
+  saveWebAttachment,
   updateCanvasAttachment,
   updateMindmapAttachment,
+  updateWebAttachment,
   readAttachmentText,
+  readWebIndexHtml,
   readAttachmentMeta,
   readAttachmentBuffer,
   deleteAttachment,
   deleteSessionAttachments,
   pruneOrphanChatAttachments,
   resolveAttachmentFilePath,
+  resolveSafeWebRelativePath,
+  resolveWebAttachmentDir,
   validateAttachmentAgainstCapabilities,
   isAttachmentReferenced,
   summarizePinnedLimits,
@@ -258,6 +268,7 @@ export {
   type CanvasAttachmentMeta,
   type CanvasPageSpec,
   type MindmapAttachmentMeta,
+  type WebAttachmentMeta,
   type AttachmentExtractMeta,
   type AttachmentExtractStatus,
   type AttachmentExtractPhase,
@@ -276,7 +287,18 @@ export {
   MINDMAP_MIME,
   MINDMAP_EXT,
   MINDMAP_DATA_FILE,
+  WEB_MIME,
+  WEB_EXT,
+  WEB_DATA_FILE,
 } from './media-types.js'
+export {
+  resolveWebVendorRoot,
+  readWebVendorManifest,
+  summarizeWebVendorLibs,
+  resolveSafeVendorRelativePath,
+  type WebVendorManifest,
+  type WebVendorFileEntry,
+} from './web-vendor.js'
 export { resolveAttachmentLimits, LARGE_FILE_WARN_BYTES } from './attachment-limits.js'
 export {
   extractPdfToMarkdown,
