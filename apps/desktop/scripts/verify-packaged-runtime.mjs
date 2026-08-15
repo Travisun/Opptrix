@@ -67,8 +67,22 @@ function assertStage(stageDir) {
     [path.join(stageDir, 'node_modules'), path.join(stageDir, 'deps')],
     fail,
   )
+  // afterPack restores deps → node_modules; speech/media require bundled ffmpeg.
+  const ffmpegDir = path.join(stageDir, 'node_modules', 'ffmpeg-static')
+  const ffmpegCandidates = [
+    path.join(ffmpegDir, 'ffmpeg'),
+    path.join(ffmpegDir, 'ffmpeg.exe'),
+  ]
+  const ffmpegBin = ffmpegCandidates.find((p) => fs.existsSync(p))
+  if (!ffmpegBin) {
+    fail(
+      `missing ffmpeg binary under ${ffmpegDir} `
+        + '(need ffmpeg or ffmpeg.exe — stage must hard-fail if absent)',
+    )
+  }
   console.log(`verify-packaged-runtime: OK ${nmFastify}`)
   console.log(`verify-packaged-runtime: OK Chromium ${chromiumExe}`)
+  console.log(`verify-packaged-runtime: OK ffmpeg ${ffmpegBin}`)
 }
 
 const releaseDir = path.resolve(process.argv[2] || path.join(__dirname, '../release'))

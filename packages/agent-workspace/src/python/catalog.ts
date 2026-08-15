@@ -80,18 +80,29 @@ const ARTIFACTS: Record<string, PythonPlatformArtifact> = {
   },
 }
 
-export function detectPythonPlatformKey(): string | null {
-  const { platform, arch } = process
+/**
+ * 将 Node `process.platform` / `process.arch`（或打包目标）映射到 catalog key。
+ * 与 `OPPTRIX_RUNTIME_PLATFORM` / `OPPTRIX_RUNTIME_ARCH` 对齐；未知组合返回 null。
+ */
+export function pythonPlatformKeyFromTarget(
+  platform: string,
+  arch: string,
+): string | null {
+  const a = arch === 'amd64' || arch === 'x86_64' ? 'x64' : arch === 'aarch64' ? 'arm64' : arch
   if (platform === 'win32') {
-    return arch === 'arm64' ? 'win-arm64' : 'win-amd64'
+    return a === 'arm64' ? 'win-arm64' : 'win-amd64'
   }
   if (platform === 'darwin') {
-    return arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
+    return a === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
   }
   if (platform === 'linux') {
-    return arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
+    return a === 'arm64' ? 'linux-arm64' : 'linux-x64'
   }
   return null
+}
+
+export function detectPythonPlatformKey(): string | null {
+  return pythonPlatformKeyFromTarget(process.platform, process.arch)
 }
 
 export function resolvePythonPlatformArtifact(): PythonPlatformArtifact | null {

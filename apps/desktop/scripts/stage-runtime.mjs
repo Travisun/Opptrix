@@ -240,15 +240,65 @@ function ensureBetterSqlite3Prebuild() {
   return true
 }
 
+/**
+ * Packaged speech/media require a real ffmpeg binary under ffmpeg-static.
+ * Soft-warn-and-continue is forbidden — missing binary must abort stage.
+ * Also restore +x: npm/cp can leave the binary as 0644 (spawn EACCES).
+ */
+function assertFfmpegBinaryPresent(binaryPath, context) {
+  if (!fs.existsSync(binaryPath)) {
+    throw new Error(
+      `missing ffmpeg binary at ${binaryPath} (${context}) — `
+        + 'desktop packaging requires ffmpeg-static for speech/media',
+    )
+  }
+  try {
+    fs.chmodSync(binaryPath, 0o755)
+  } catch (err) {
+    throw new Error(
+      `ffmpeg binary chmod +x failed at ${binaryPath} (${context}): `
+        + (err instanceof Error ? err.message : String(err)),
+    )
+  }
+}
+
+function maybeRunFfmpegVersion(binaryPath) {
+  if (!hostMatchesTarget(target)) return
+  const ver = spawnSync(binaryPath, ['-version'], {
+    encoding: 'utf8',
+    timeout: 15_000,
+    windowsHide: true,
+  })
+  if (ver.error) {
+    throw new Error(
+      `ffmpeg -version spawn failed for ${binaryPath}: `
+        + (ver.error.message || String(ver.error)),
+    )
+  }
+  if (ver.status !== 0) {
+    throw new Error(
+      `ffmpeg -version failed for ${binaryPath} `
+        + `(exit ${ver.status ?? 'null'}): ${(ver.stderr || ver.stdout || '').trim().slice(0, 200)}`,
+    )
+  }
+  const firstLine = String(ver.stdout || '').split('\n')[0]?.trim()
+  console.log(`ffmpeg-static OK${firstLine ? `: ${firstLine}` : ` (${binaryPath})`}`)
+}
+
 function ensureFfmpegStatic() {
   const stageDir = path.join(STAGE, 'node_modules/ffmpeg-static')
   const stageBinary = ffmpegBinaryPath(stageDir, target.platform)
-  if (fs.existsSync(stageBinary)) return
+  if (fs.existsSync(stageBinary)) {
+    assertFfmpegBinaryPresent(stageBinary, 'existing stage binary')
+    maybeRunFfmpegVersion(stageBinary)
+    return
+  }
 
   const installJs = path.join(stageDir, 'install.js')
   if (!fs.existsSync(installJs)) {
-    console.warn('ffmpeg-static not installed in runtime-stage')
-    return
+    throw new Error(
+      `ffmpeg-static not installed in runtime-stage (missing ${installJs})`,
+    )
   }
 
   if (hostMatchesTarget(target)) {
@@ -257,15 +307,23 @@ function ensureFfmpegStatic() {
     if (fs.existsSync(rootBinary)) {
       console.log('Seeding ffmpeg-static from workspace (matching host arch)…')
       fs.cpSync(rootFfmpeg, stageDir, { recursive: true, force: true })
-      if (fs.existsSync(stageBinary)) return
+      if (fs.existsSync(stageBinary)) {
+        assertFfmpegBinaryPresent(stageBinary, 'after seed from workspace')
+        maybeRunFfmpegVersion(stageBinary)
+        return
+      }
     }
   }
 
   console.log(`Downloading ffmpeg-static for ${target.platform}-${target.arch}…`)
   const dl = runNodeScript(installJs, { cwd: stageDir, target })
   if (dl.status !== 0) {
-    console.error('ffmpeg-static install failed — sidecar audio/video features may be unavailable')
+    throw new Error(
+      `ffmpeg-static install failed (exit ${dl.status ?? 1}) — aborting stage`,
+    )
   }
+  assertFfmpegBinaryPresent(stageBinary, 'after ffmpeg-static install.js')
+  maybeRunFfmpegVersion(stageBinary)
 }
 
 function duckdbBindingNode() {
@@ -761,6 +819,11 @@ fs.renameSync(STAGE_NM, STAGE_DEPS)
 if (!fs.existsSync(path.join(STAGE_DEPS, 'fastify'))) {
   throw new Error(`missing ${path.join(STAGE_DEPS, 'fastify')} after rename — sidecar deps incomplete`)
 }
+const ffmpegAfterRename = ffmpegBinaryPath(
+  path.join(STAGE_DEPS, 'ffmpeg-static'),
+  target.platform,
+)
+assertFfmpegBinaryPresent(ffmpegAfterRename, `after rename to ${RUNTIME_DEPS_DIR}/`)
 console.log(`Sidecar deps renamed node_modules → ${RUNTIME_DEPS_DIR}/ (electron-builder safe)`)
 
 console.log(`Runtime staged at ${STAGE} [${target.platform}-${target.arch}]`)

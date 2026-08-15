@@ -92,7 +92,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // Python 环境
   { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },
-  { section: 'python', title: '优先使用 Opptrix 托管', desc: '托管 Python 优先于系统环境', keywords: ['托管', '系统'] },
+  { section: 'python', title: '优先使用 Opptrix 托管', desc: '随应用提供的托管 Python 优先于本机环境', keywords: ['托管', '本机', '系统', '随应用'] },
 
   // 研报库
   { section: 'doc_library', group: '研报检索', title: '语义检索', desc: '按含义查找研报与资讯；未就绪时可安装', keywords: ['语义检索', '研报检索', '语义', '安装', '研报'] },

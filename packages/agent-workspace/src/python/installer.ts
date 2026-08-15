@@ -38,17 +38,15 @@ async function fileExists(p: string): Promise<boolean> {
 
 async function extractArchive(archivePath: string, destDir: string): Promise<void> {
   await fs.mkdir(destDir, { recursive: true })
-  if (process.platform === 'win32') {
-    await execFileAsync(
-      'tar',
-      ['-xf', archivePath, '-C', destDir],
-      { timeout: 10 * 60 * 1000 },
-    )
-    return
-  }
+  const lower = archivePath.toLowerCase()
+  const isZip = lower.endsWith('.zip')
+  // zip：各平台均用 tar -xf（无 gzip）；.tar.gz 在非 win 用 -xzf
+  const args = isZip || process.platform === 'win32'
+    ? ['-xf', archivePath, '-C', destDir]
+    : ['-xzf', archivePath, '-C', destDir]
   await execFileAsync(
     'tar',
-    ['-xzf', archivePath, '-C', destDir],
+    args,
     { timeout: 10 * 60 * 1000 },
   )
 }
@@ -71,17 +69,22 @@ async function findRuntimeRoot(installDir: string, kind: PythonPlatformArtifact[
   return installDir
 }
 
-async function resolvePythonBinary(runtimeRoot: string): Promise<string | null> {
-  const candidates = process.platform === 'win32'
-    ? [
+/** 给定 runtime 根目录，按平台返回可能的解释器路径（不探测存在性） */
+export function pythonBinaryCandidates(runtimeRoot: string, platform = process.platform): string[] {
+  if (platform === 'win32') {
+    return [
       path.join(runtimeRoot, 'python.exe'),
       path.join(runtimeRoot, 'Scripts', 'python.exe'),
     ]
-    : [
-      path.join(runtimeRoot, 'bin', 'python3'),
-      path.join(runtimeRoot, 'bin', 'python'),
-    ]
-  for (const candidate of candidates) {
+  }
+  return [
+    path.join(runtimeRoot, 'bin', 'python3'),
+    path.join(runtimeRoot, 'bin', 'python'),
+  ]
+}
+
+export async function resolvePythonBinary(runtimeRoot: string): Promise<string | null> {
+  for (const candidate of pythonBinaryCandidates(runtimeRoot)) {
     if (await fileExists(candidate)) return candidate
   }
   return null
@@ -104,7 +107,7 @@ async function configureWindowsEmbed(runtimeRoot: string, version: string): Prom
   await fs.mkdir(path.join(runtimeRoot, 'Lib', 'site-packages'), { recursive: true })
 }
 
-async function linkCurrent(runtimeRoot: string, targetDir: string): Promise<void> {
+export async function linkPythonCurrent(runtimeRoot: string, targetDir: string): Promise<void> {
   const currentPath = path.join(runtimeRoot, 'current')
   await fs.rm(currentPath, { recursive: true, force: true })
   const linkType = process.platform === 'win32' ? 'junction' : 'dir'
@@ -148,12 +151,34 @@ export async function prepareCleanInstallDir(
   }
 }
 
-export async function installPythonArtifact(
+/**
+ * 将已下载的 artifact 物化到任意 installDir（不解/不写用户 runtime current）。
+ * 供在线安装与桌面 stage 共用。
+ */
+export async function materializePythonArtifact(
   artifact: PythonPlatformArtifact,
   archivePath: string,
-): Promise<PythonInstallResult> {
-  const { runtimeRoot, installDir } = resolveInstallPaths(artifact)
-  await prepareCleanInstallDir(runtimeRoot, installDir, artifact.kind)
+  installDir: string,
+  opts?: {
+    /** 物化前是否清空 installDir；miniconda 要求目标不存在时传 true */
+    clean?: boolean
+    /** 跳过 --version 探测（交叉 stage 时目标二进制无法在本机执行） */
+    skipVersionProbe?: boolean
+  },
+): Promise<{
+  runtimeRoot: string
+  pythonPath: string
+  pythonVersion: string | null
+}> {
+  const clean = opts?.clean !== false
+  if (clean) {
+    await fs.rm(installDir, { recursive: true, force: true })
+    if (artifact.kind !== 'miniconda') {
+      await fs.mkdir(installDir, { recursive: true })
+    }
+  } else if (artifact.kind !== 'miniconda') {
+    await fs.mkdir(installDir, { recursive: true })
+  }
 
   if (artifact.kind === 'miniconda') {
     await installMiniconda(archivePath, installDir)
@@ -171,21 +196,40 @@ export async function installPythonArtifact(
     throw new Error('安装完成后未找到 Python 可执行文件')
   }
 
-  const pythonVersion = await probePythonVersion(pythonPath)
-  if (!pythonVersion.includes(artifact.version.split('.')[0] ?? '3')) {
-    throw new Error('Python 版本与预期不符，请重试')
+  let pythonVersion: string | null = null
+  if (!opts?.skipVersionProbe) {
+    pythonVersion = await probePythonVersion(pythonPath)
+    if (!pythonVersion.includes(artifact.version.split('.')[0] ?? '3')) {
+      throw new Error('Python 版本与预期不符，请重试')
+    }
   }
 
-  await linkCurrent(runtimeRoot, effectiveRoot)
+  return { runtimeRoot: effectiveRoot, pythonPath, pythonVersion }
+}
 
+export async function installPythonArtifact(
+  artifact: PythonPlatformArtifact,
+  archivePath: string,
+): Promise<PythonInstallResult> {
+  const { runtimeRoot, installDir } = resolveInstallPaths(artifact)
+  await prepareCleanInstallDir(runtimeRoot, installDir, artifact.kind)
+
+  // prepareCleanInstallDir 已清理；materialize 勿再 rm（miniconda 目标已不存在）
+  const materialized = await materializePythonArtifact(artifact, archivePath, installDir, {
+    clean: false,
+  })
+
+  await linkPythonCurrent(runtimeRoot, materialized.runtimeRoot)
+
+  const pythonVersion = materialized.pythonVersion ?? `Python ${artifact.version}`
   const manifest: PythonInstallManifest = {
     version: artifact.version,
     platformKey: artifact.platformKey,
     kind: artifact.kind,
     installedAt: new Date().toISOString(),
     installDir,
-    runtimeRoot: effectiveRoot,
-    pythonPath,
+    runtimeRoot: materialized.runtimeRoot,
+    pythonPath: materialized.pythonPath,
     pythonVersion,
   }
 
@@ -198,8 +242,8 @@ export async function installPythonArtifact(
   return {
     manifest,
     installDir,
-    runtimeRoot: effectiveRoot,
-    pythonPath,
+    runtimeRoot: materialized.runtimeRoot,
+    pythonPath: materialized.pythonPath,
   }
 }
 

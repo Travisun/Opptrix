@@ -77,6 +77,7 @@ declare global {
         modelName: string
         modelsDir?: string
         engine?: string
+        error?: 'unreachable'
       }>
       signalShellReady?: () => void
       setThemeSource?: (source: 'system' | 'light' | 'dark') => void

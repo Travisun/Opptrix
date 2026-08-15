@@ -24,6 +24,10 @@ import SettingsRemoteModelSelector from './SettingsRemoteModelSelector'
 import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import {
+  speechEnsureSuccessToastMessage,
+  speechSettingsSenseVoicePresentation,
+} from '../../chat/speechReadinessCopy'
 
 const SETTINGS_SAVE_MS = 500
 
@@ -159,6 +163,7 @@ export default function MultimodalSettingsSection() {
         setSpeechEnsurePercent(ensure.percent || 0)
       }
     }
+    return status
   }, [])
 
   const load = useCallback(async () => {
@@ -206,8 +211,11 @@ export default function MultimodalSettingsSection() {
             setSpeechEnsuring(false)
             setSpeechEnsureMessage('')
             setSpeechEnsurePercent(0)
-            toast.showSuccess('语音识别已就绪')
-            void refreshStatus()
+            void refreshStatus().then((status) => {
+              toast.showSuccess(
+                speechEnsureSuccessToastMessage(Boolean(status?.runtime?.ffmpeg?.ready)),
+              )
+            })
           } else if (job.phase === 'error') {
             setSpeechEnsuring(false)
             setSpeechEnsureMessage('')
@@ -280,8 +288,10 @@ export default function MultimodalSettingsSection() {
           setSpeechEnsurePercent(job.percent || 0)
         },
       })
-      toast.showSuccess('语音识别已就绪')
-      await refreshStatus()
+      const status = await refreshStatus()
+      toast.showSuccess(
+        speechEnsureSuccessToastMessage(Boolean(status?.runtime?.ffmpeg?.ready)),
+      )
     } catch (e) {
       if (!ac.signal.aborted) {
         toast.showError(e instanceof Error ? e.message : '语音识别模型准备失败')
@@ -329,6 +339,16 @@ export default function MultimodalSettingsSection() {
   })()
 
   const visionBadge = mmStatus?.canEnrichImages ? '已配置' : '未配置'
+
+  const speechSenseVoicePresentation = runtime?.sensevoice
+    ? speechSettingsSenseVoicePresentation({
+      sensevoiceReady: runtime.sensevoice.ready,
+      ffmpegReady: Boolean(runtime.ffmpeg?.ready),
+      source: runtime.sensevoice.source,
+      ensuring: speechEnsuring,
+      ensureMessage: speechEnsureMessage,
+    })
+    : null
 
   if (loading) return <Spinner size="tiny" label="加载多模态设置…" />
 
@@ -574,18 +594,12 @@ export default function MultimodalSettingsSection() {
             <SettingsListRow
               title="本机语音识别"
               meta={
-                !runtime?.sensevoice
+                !runtime?.sensevoice || !speechSenseVoicePresentation
                   ? '转写能力暂时不可用，请重启应用后再试'
-                  : speechEnsuring
-                    ? (speechEnsureMessage || '正在准备语音识别…')
-                    : runtime.sensevoice.ready
-                      ? runtime.sensevoice.source === 'bundled'
-                        ? '已随应用安装，可直接转写'
-                        : '模型已就绪，可直接转写'
-                      : '开启媒体提取后会自动准备；也可点击立即准备'
+                  : speechSenseVoicePresentation.meta
               }
               trailing={
-                !runtime?.sensevoice ? (
+                !runtime?.sensevoice || !speechSenseVoicePresentation ? (
                   <span className={mergeClasses(s.statusBadge, s.statusWarn)}>暂不可用</span>
                 ) : speechEnsuring ? (
                   <span className={mergeClasses(s.statusBadge)}>
@@ -603,7 +617,13 @@ export default function MultimodalSettingsSection() {
                     立即准备
                   </OpptrixButton>
                 ) : (
-                  <span className={mergeClasses(s.statusBadge, s.statusReady)}>已就绪</span>
+                  <span className={mergeClasses(
+                    s.statusBadge,
+                    speechSenseVoicePresentation.badgeReady && s.statusReady,
+                    speechSenseVoicePresentation.badgeWarn && s.statusWarn,
+                  )}>
+                    {speechSenseVoicePresentation.badgeLabel}
+                  </span>
                 )
               }
             />

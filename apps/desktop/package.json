@@ -117,6 +117,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/python",
+        "to": "python",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {

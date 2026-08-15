@@ -185,5 +185,7 @@ describe('sensevoice ensure job', () => {
     assert.equal(job.phase, 'ready')
     assert.equal(job.ready, true)
     assert.equal(ensureCalls, 0)
+    assert.match(job.message, /识别模型已就绪/)
+    assert.ok(!job.message.includes('语音识别已就绪'))
   })
 })

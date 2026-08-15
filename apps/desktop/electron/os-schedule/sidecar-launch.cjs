@@ -97,6 +97,7 @@ function buildSidecarEnv(opts) {
     env.OPPTRIX_RUNTIME_STAGE = root
     const resourcesPath = opts.resourcesPath || null
     if (resourcesPath) {
+      env.OPPTRIX_RESOURCES_PATH = resourcesPath
       env.OPPTRIX_E5_BUNDLED_DIR = path.join(resourcesPath, 'llms', 'multilingual-e5-small')
       env.OPPTRIX_RAPIDOCR_BUNDLED_DIR = path.join(
         resourcesPath,
@@ -104,6 +105,7 @@ function buildSidecarEnv(opts) {
         'rapidocr-ppocrv4-mobile',
       )
       env.OPPTRIX_RAG_ENGINES_BUNDLED_DIR = path.join(resourcesPath, 'engines')
+      env.OPPTRIX_PYTHON_BUNDLED_DIR = path.join(resourcesPath, 'python')
     }
     let RUNTIME_DEPS_DIR = 'deps'
     try {
@@ -116,6 +118,14 @@ function buildSidecarEnv(opts) {
     const moduleRoot = fs.existsSync(nmDir) ? nmDir : depsDir
     if (fs.existsSync(moduleRoot)) {
       env.NODE_PATH = moduleRoot
+    }
+    // 显式注入，避免 require('ffmpeg-static') 解析到无二进制路径时误报 ffmpegReady=false
+    if (!env.FFMPEG_PATH) {
+      const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
+      const ffmpegCandidate = path.join(moduleRoot, 'ffmpeg-static', ffmpegName)
+      if (fs.existsSync(ffmpegCandidate)) {
+        env.FFMPEG_PATH = ffmpegCandidate
+      }
     }
     const browsersPath = path.join(root, 'playwright-browsers')
     if (fs.existsSync(browsersPath)) {

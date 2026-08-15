@@ -119,8 +119,8 @@ function textToMirrors(text: string): string[] {
 
 function sourceLabel(source: PythonRuntimeStatus['active_source']): string {
   switch (source) {
-    case 'system': return '系统 Python'
-    case 'opptrix': return 'Opptrix 托管'
+    case 'system': return '本机 Python'
+    case 'opptrix': return 'Opptrix 托管（随应用提供）'
     default: return '未就绪'
   }
 }
@@ -304,7 +304,7 @@ export default function PythonEnvironmentSettingsSection() {
       {tab === 'status' && (
         <>
           <Text className={s.tabHint} block>
-            查看当前可用的 Python，以及运行脚本时将采用哪一套环境。
+            查看当前可用的 Python。随应用提供的托管版本优先于本机 Python。
           </Text>
           <SettingsListPanel>
             <SettingsAddBar
@@ -336,7 +336,7 @@ export default function PythonEnvironmentSettingsSection() {
                   )}
                 />
                 <SettingsListRow
-                  title="系统 Python"
+                  title="本机 Python"
                   trailing={(
                     <Text>
                       {status.system_path ? formatVersion(status.system_version) : '未检测到'}
@@ -347,7 +347,9 @@ export default function PythonEnvironmentSettingsSection() {
                   title="Opptrix 托管"
                   trailing={(
                     <Text>
-                      {status.opptrix_path ? formatVersion(status.opptrix_version) : '未安装'}
+                      {status.opptrix_path
+                        ? `${formatVersion(status.opptrix_version)}${status.bundled_available ? ' · 随应用提供' : ''}`
+                        : '未安装'}
                     </Text>
                   )}
                 />
@@ -358,7 +360,7 @@ export default function PythonEnvironmentSettingsSection() {
             <SettingsGroup>
               <SettingsRow
                 title="安装托管 Python"
-                desc="一键安装 Opptrix 托管版本，无需单独配置系统 Python"
+                desc="一键安装 Opptrix 托管版本（随应用提供时通常已就绪），无需单独配置本机 Python"
                 control={(
                   <OpptrixButton
                     variant="primary"

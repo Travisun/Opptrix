@@ -2843,6 +2843,8 @@ export interface PythonRuntimeStatus {
   ready: boolean
   recommend_install: boolean
   message: string
+  /** 安装包内是否带有托管 Python */
+  bundled_available?: boolean
 }
 
 export interface PythonInstallJobSnapshot {
