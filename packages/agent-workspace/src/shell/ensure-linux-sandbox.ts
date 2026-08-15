@@ -56,7 +56,9 @@ function runPkexecInstall(profileTmpPath: string): Promise<{ ok: boolean; cancel
     })
 
     let stderr = ''
-    child.stderr.on('data', chunk => { stderr += String(chunk) })
+    child.stderr.on('data', chunk => {
+      stderr += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+    })
 
     child.on('error', () => {
       resolve({ ok: false, cancelled: false })

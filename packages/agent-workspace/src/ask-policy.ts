@@ -25,18 +25,26 @@ export class StickyPolicyStore {
   }
 }
 
+/** OpenCode once/always 风格用户向文案；id 与 sticky 语义不变 */
 export const CONFIRM_OPTIONS = {
   overwrite: [
-    { id: 'once', label: '仅此一次覆盖' },
-    { id: 'sticky', label: '本对话此目录一律允许覆盖' },
+    { id: 'once', label: '仅此一次' },
+    { id: 'sticky', label: '本对话同类操作都允许' },
     { id: 'cancel', label: '取消' },
   ],
   delete: [
-    { id: 'once', label: '仅此一次删除' },
-    { id: 'sticky', label: '本对话此目录一律允许删除' },
+    { id: 'once', label: '仅此一次' },
+    { id: 'sticky', label: '本对话同类操作都允许' },
     { id: 'cancel', label: '取消' },
   ],
 } as const
+
+/** 预留：doom_loop 确认文案（后端未接前勿挂交互） */
+export const DOOM_LOOP_CONFIRM_OPTIONS = [
+  { id: 'once', label: '仅此一次' },
+  { id: 'always', label: '本对话同类操作都允许' },
+  { id: 'cancel', label: '取消' },
+] as const
 
 export type ConfirmChoice = 'once' | 'sticky' | 'cancel'
 

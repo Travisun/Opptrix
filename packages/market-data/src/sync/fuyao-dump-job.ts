@@ -58,6 +58,31 @@ const JOB_TTL_MS = 2 * 60 * 60 * 1000
 const jobs = new Map<string, JobRecord>()
 const runningByKey = new Map<string, string>()
 
+type FuyaoDumpJobListener = (result: FuyaoDumpJobResult) => void
+const jobListeners = new Set<FuyaoDumpJobListener>()
+
+/** JobRegistry Adapter 薄桥：订阅 dump 进度（进程内） */
+export function subscribeFuyaoDumpJob(
+  listener: FuyaoDumpJobListener,
+): () => void {
+  jobListeners.add(listener)
+  return () => {
+    jobListeners.delete(listener)
+  }
+}
+
+function notifyJobListeners(job: JobRecord): void {
+  if (jobListeners.size === 0) return
+  const result = recordToResult(job)
+  for (const listener of [...jobListeners]) {
+    try {
+      listener(result)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 const DUMP_FILE_NAMES: Record<FuyaoDumpKind, string> = {
   full: 'cn-daily-k-full.parquet',
   incremental: 'cn-daily-k-incr.parquet',
@@ -68,7 +93,7 @@ const SANDBOX_HINT =
   '已在服务端完成鉴权下载；沙盒请用返回的 path（root_id=shared）或短时效 url，禁止注入 API Key。图表与诊断请用在线行情，勿引导跑 market sync / 主库日 K 导入。'
 
 const ASYNC_HINT =
-  '任务在后台进行。可结束本轮并用 schedule_turn_wake({ seconds: suggested_wake_seconds, prompt: "检查 prepare_fuyao_dump 是否就绪并继续", job_id }) 到期后同会话自动续跑；勿 tight-poll。'
+  '任务在后台进行。系统通常已自动挂起，完成后同会话通知续跑；无任务事件时可用 schedule_turn_wake（禁止传 job_id）；勿 poll/sleep 查进度。'
 
 function heuristicDumpEtaSeconds(kind: FuyaoDumpKind): number {
   if (kind === 'full') return 180
@@ -130,7 +155,7 @@ function recordToResult(job: JobRecord): FuyaoDumpJobResult {
       suggested_wake_seconds: suggested,
       async_hint: ASYNC_HINT,
       poll_hint:
-        `冷下载进行中（约 ${suggested}s）。优先 schedule_turn_wake({ seconds: ${suggested}, prompt: "检查 prepare_fuyao_dump job_id=${job.id} 是否就绪并继续", job_id: "${job.id}" })；必要时再调 prepare_fuyao_dump({ job_id })。勿 tight-poll、勿重复 force_refresh。`,
+        `冷下载进行中（约 ${suggested}s）。系统通常已自动挂起，完成后通知续跑；必要时再调 prepare_fuyao_dump({ job_id: "${job.id}" })。勿 poll/sleep、勿重复 force_refresh。`,
     }
   }
   if (job.status === 'failed' || !job.result?.ok) {
@@ -214,6 +239,7 @@ function startBackgroundJob(opts: {
             record.percent = Math.min(99, Math.max(5, percent))
             record.message = label
             record.updatedAt = Date.now()
+            notifyJobListeners(record)
             opts.hooks?.onPhase?.(label, percent)
           },
         },
@@ -224,16 +250,19 @@ function startBackgroundJob(opts: {
       record.percent = result.ok ? 100 : record.percent
       record.message = result.ok ? '已就绪' : (result.error ?? '准备失败')
       record.updatedAt = Date.now()
+      notifyJobListeners(record)
     } catch (e) {
       record.status = 'failed'
       record.error = e instanceof Error ? e.message : String(e)
       record.message = record.error
       record.updatedAt = Date.now()
+      notifyJobListeners(record)
     } finally {
       if (runningByKey.get(key) === id) runningByKey.delete(key)
     }
   })()
 
+  notifyJobListeners(record)
   return recordToResult(record)
 }
 
@@ -333,4 +362,5 @@ export async function prepareFuyaoDumpForAgentAsync(opts: {
 export function resetFuyaoDumpJobsForTests(): void {
   jobs.clear()
   runningByKey.clear()
+  jobListeners.clear()
 }

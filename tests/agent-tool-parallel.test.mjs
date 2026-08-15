@@ -15,7 +15,6 @@ test('isSerialTool covers Explorer serial set', () => {
     'ask_user',
     'workspace_write',
     'workspace_replace_lines',
-    'workspace_mkdir',
     'workspace_delete',
     'download_file',
     'request_folder_access',
@@ -53,6 +52,11 @@ test('isSerialTool covers Explorer serial set', () => {
   }
 })
 
+test('schedule_turn_wake registers async and is not serial', () => {
+  assert.equal(isSerialTool('schedule_turn_wake'), false)
+  assert.equal(SERIAL_TOOL_NAMES.has('schedule_turn_wake'), false)
+})
+
 test('namespaced external MCP tools are serial by default', () => {
   assert.equal(isSerialTool('my_server__get_quote'), true)
   assert.equal(isSerialTool('alpha__tool'), true)
@@ -62,7 +66,7 @@ test('read-only research tools are parallel-eligible', () => {
   for (const name of [
     'get_instrument_realtime',
     'search_instruments',
-    'workspace_list',
+    'workspace_glob',
     'workspace_read',
     'browser_snapshot',
     'http_fetch',

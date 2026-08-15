@@ -84,8 +84,8 @@ export class NetworkEgressConfirmationRequiredError extends WorkspaceError {
 
 export class ShellRunConfirmationRequiredError extends WorkspaceError {
   readonly confirmation: {
-    /** 主 kind；读侧仍兼容旧值 shell_run */
-    kind: 'opptrix_run' | 'shell_run'
+    /** 主 kind；读侧仍兼容旧值 shell_run；unsandboxed = 出围栏每次确认 */
+    kind: 'opptrix_run' | 'shell_run' | 'unsandboxed'
     title: string
     prompt: string
     command_summary: string
@@ -93,7 +93,11 @@ export class ShellRunConfirmationRequiredError extends WorkspaceError {
   }
 
   constructor(confirmation: ShellRunConfirmationRequiredError['confirmation']) {
-    super('需要用户确认运行命令')
+    super(
+      confirmation.kind === 'unsandboxed'
+        ? '需要用户确认在隔离外运行'
+        : '需要用户确认运行命令',
+    )
     this.name = 'ShellRunConfirmationRequiredError'
     this.confirmation = confirmation
   }

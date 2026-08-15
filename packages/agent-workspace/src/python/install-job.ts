@@ -62,6 +62,19 @@ let pipelineDeps: PythonInstallPipelineDeps = {
   bootstrapPip,
 }
 
+type PythonInstallJobListener = (snap: PythonInstallJobSnapshot) => void
+const jobListeners = new Set<PythonInstallJobListener>()
+
+/** JobRegistry Adapter 薄桥：订阅安装进度（进程内） */
+export function subscribePythonInstallJob(
+  listener: PythonInstallJobListener,
+): () => void {
+  jobListeners.add(listener)
+  return () => {
+    jobListeners.delete(listener)
+  }
+}
+
 function createIdleSnapshot(): PythonInstallJobSnapshot {
   return {
     state: 'idle',
@@ -78,8 +91,21 @@ function createIdleSnapshot(): PythonInstallJobSnapshot {
   }
 }
 
+function notifyJobListeners(): void {
+  if (jobListeners.size === 0) return
+  const snap = getPythonInstallJobStatus()
+  for (const listener of [...jobListeners]) {
+    try {
+      listener(snap)
+    } catch {
+      /* ignore listener errors */
+    }
+  }
+}
+
 function updateJob(patch: Partial<PythonInstallJobSnapshot>): void {
   lastJob = { ...lastJob, ...patch }
+  notifyJobListeners()
 }
 
 function phasePercent(phase: PythonInstallPhase, downloadRatio = 0): number {
@@ -215,6 +241,7 @@ function formatMb(bytes: number): string {
 export function resetPythonInstallJobForTests(): void {
   lastJob = createIdleSnapshot()
   activePromise = null
+  jobListeners.clear()
   pipelineDeps = {
     resolveArtifact: resolvePythonPlatformArtifact,
     downloadArtifact: downloadPythonArtifact,

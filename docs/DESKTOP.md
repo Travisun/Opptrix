@@ -407,7 +407,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`opptrix_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；浏览截图目录同样按保留天数与容量硬顶自动回收（默认约 7 天 / 512MiB，可用 `OPPTRIX_BROWSER_SCREENSHOT_MAX_AGE_MS` / `OPPTRIX_BROWSER_SCREENSHOT_MAX_BYTES` 调节，`0` 关闭对应维度；关闭浏览器会话不会立刻删图）。本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint，并在新库启用 `auto_vacuum=INCREMENTAL` 时跑 `incremental_vacuum` 还盘（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）；启动与周期维护会扫掉已无对应会话的孤儿目录。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。研报库会限速回收无文档引用的 blob/markdown，并清理用户数据根下过期的半成品下载临时文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
+智能助手在**本对话工作区**与已授权目录内运行命令时，使用系统级隔离环境（`opptrix_run`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；浏览截图目录同样按保留天数与容量硬顶自动回收（默认约 7 天 / 512MiB，可用 `OPPTRIX_BROWSER_SCREENSHOT_MAX_AGE_MS` / `OPPTRIX_BROWSER_SCREENSHOT_MAX_BYTES` 调节，`0` 关闭对应维度；关闭浏览器会话不会立刻删图）。本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint，并在新库启用 `auto_vacuum=INCREMENTAL` 时跑 `incremental_vacuum` 还盘（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）；启动与周期维护会扫掉已无对应会话的孤儿目录。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。研报库会限速回收无文档引用的 blob/markdown，并清理用户数据根下过期的半成品下载临时文件。命令在隔离环境中运行，仅限你已授权的文件夹；包安装源默认可访问，访问其它外网目标时会请你确认。出隔离环境运行时每次都需确认。
 
 **Windows 隔离强度（设置 → 沙盒环境）**：
 
@@ -418,13 +418,14 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 
 旧客户端未写该字段、或字段值非法时按基础隔离处理；已显式保存为完整隔离的配置保持不变。
 
-**出站与 DNS（默认禁网）**：
+**出站与 DNS**：
 
-- 沙箱内 **默认禁止 TCP 出站**；访问具体外网站点需你按域名确认（仅此一次 / 本对话允许该域名）。
+- 隔离环境中**包安装源（PyPI / npm 等）默认可访问**；访问其它外网站点需你按域名确认（仅此一次 / 本对话允许该域名）。
 - **永久白名单**：在 **设置 → 沙盒环境** 配置「访问白名单」与「允许局域网访问」；与部署变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）合并，命中后不再询问。未开启局域网访问时，不能保存本地或私网地址。
-- 运行命令时若隔离环境拦截出站连接，会即时弹出确认（与聊天侧外网访问确认同一套选项）。（架构：`sandboxAskCallback`）
-- **DNS**：命令仍可使用系统解析公网域名；沙盒内自行运行 `dig` / `nslookup` 等会被拦截（且不在允许命令列表）。解析到私网或本机地址的连接仍会被拒绝。
-- `ping` / 路由探测与运行命令**合并为一次确认**（展示命令与目标）。若仍失败，助手会提示改用网页连通性检测。
+- 运行命令时若隔离环境拦截未授权出站连接，会即时弹出确认。（架构：`sandboxAskCallback`）
+- **DNS**：命令仍可使用系统解析公网域名；沙盒内自行运行 `dig` / `nslookup` 等会被路径/围栏限制。解析到私网或本机地址的连接仍会被拒绝。
+- `ping` / 路由探测访问未授权目标时会请你确认。若仍失败，助手会提示改用网页连通性检测。
+- **基础隔离**（Windows 默认）路径保护较弱，结果会标明；**完整隔离**围栏更强。
 
 桌面安装包会尽量自带组件并自动就绪；**完整隔离仍可能需要你配合一次系统授权或系统策略调整**。
 
@@ -438,13 +439,13 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 
 **边界说明（可行性）**：
 
-- **Windows 完整隔离**（架构：`elevated` / `srt-win` + 网络过滤器）：机器级隔离凭据与网络策略需要**一次**系统授权；Opptrix 会在首次 `opptrix_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行安装命令。凭据类失败（Windows 错误 **1326 / 1312**）时最多 **force 刷新再执行一次**。
+- **Windows 完整隔离**（架构：`elevated` / `srt-win` + 网络过滤器）：机器级隔离凭据与网络策略需要**一次**系统授权；Opptrix 会在首次 `opptrix_run` 时自动尝试触发，**不会**要求你自行执行安装命令。凭据类失败（Windows 错误 **1326 / 1312**）时最多 **force 刷新再执行一次**。
 - **Windows 基础隔离**（架构：`unelevated` / RestrictedToken）：不初始化完整隔离凭据与网络过滤器；`ensureWindowsSandboxReady` 直接就绪。请求与完整隔离同等的完整网络隔离会硬拒绝；出站靠确认与白名单。
 - Windows 沙箱 `allowRead` **不会**对 `WINDIR` / Program Files / 盘符根做 ACL stamp（依赖系统默认读取权限）；请勿以「管理员运行 Opptrix」作为常规解决办法。
-- **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；访问外网或联网安装另有单独确认（`ping` 与运行命令合并为一次）。
+- **命令确认**：隔离环境内运行已授权文件夹中的命令通常无需额外确认；访问包源以外的外网目标、或出隔离环境运行时会请你确认。
 - Linux deb 通过 `Depends: bubblewrap, socat, ripgrep` 在系统包管理器层拉齐依赖。
 - AppImage 构建时会优先从可信源下载便携二进制到 `runtime-stage/sandbox-bins/{arch}/`（失败时回退构建机 `which`），sidecar 通过 `OPPTRIX_RUNTIME_STAGE` 注入 `bwrapPath` / `socatPath` / `ripgrep.command`。**deb 仍是最稳的安装路径**。
-- Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `opptrix_run` / `shell_install` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。
+- Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `opptrix_run` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。
 - Electron 主进程提供 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC，供 UI 在 sidecar 无法完成授权时重试（同样是一次系统授权；完整隔离路径）。
 - **设置页自检**：**设置 → 沙盒环境** 顶部状态卡经 `GET /api/settings/sandbox/status` 展示就绪状态与说明；未就绪且可自动完成时显示「完成设置」，触发上述 IPC（与首次运行命令时的自动请求等价，可提前在设置中完成）。
 

@@ -12,6 +12,7 @@ import { getExpert, submitUserPromptResponse } from '../api/client'
 import type { ChatStreamUiRef } from './chatStreamUiBridge'
 import type { SessionStreamSnapshot } from './sessionStreamRuntime'
 import type { QueuedPrompt } from './sessionPromptQueue'
+import type { SessionBackgroundJob } from './jobWatchProgress'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import type { ChatComposerHandle } from './ChatComposer'
@@ -39,7 +40,9 @@ import { pickWelcomeVariant } from './chatWelcomeVariants'
 import MessageOutlineRail, { buildOutlineEntries } from './MessageOutlineRail'
 
 /** 消息区底 padding 初始/下限（ResizeObserver 测 composerInner 后覆盖） */
-const CHAT_COMPOSER_BOTTOM_PAD = 100
+const CHAT_COMPOSER_BOTTOM_PAD = 120
+/** 消息底与 composer 浮层之间的额外留白 */
+const COMPOSER_MESSAGE_GAP_PX = 20
 /** Cursor `--agent-panel-scroll-fade-transparent-bottom-inset`：进入 composer 占位后的淡出带 */
 const COMPOSER_SCROLL_FADE_PX = 38
 
@@ -381,6 +384,8 @@ interface ChatViewProps {
   promptQueue?: QueuedPrompt[]
   onPromptQueueRemove?: (id: string) => void
   onPromptQueueRunNow?: (id: string) => void
+  /** 本会话未完成的后台任务（composer 上方状态条） */
+  backgroundJobs?: SessionBackgroundJob[]
   onForkMessage?: (messageIndex: number) => void
   onEditResend?: (messageIndex: number, text: string) => void
   ensureSession?: () => Promise<string>
@@ -419,7 +424,7 @@ function ChatView({
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
+  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
@@ -695,7 +700,7 @@ function ChatView({
   const syncComposerBottomPad = useCallback(() => {
     const el = composerInnerRef.current
     if (!el) return
-    const next = Math.max(CHAT_COMPOSER_BOTTOM_PAD, el.offsetHeight)
+    const next = Math.max(CHAT_COMPOSER_BOTTOM_PAD, el.offsetHeight + COMPOSER_MESSAGE_GAP_PX)
     setComposerBottomPad(prev => (prev === next ? prev : next))
   }, [])
 
@@ -1064,6 +1069,7 @@ function ChatView({
               promptQueue={promptQueue}
               onPromptQueueRemove={onPromptQueueRemove}
               onPromptQueueRunNow={onPromptQueueRunNow}
+              backgroundJobs={backgroundJobs}
               onOpenPreview={onOpenFilePreview}
             />
           </div>

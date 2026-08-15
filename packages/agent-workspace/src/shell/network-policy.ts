@@ -3,17 +3,14 @@
  *
  * DNS 策略（SRT）：
  * - 系统 getaddrinfo / 宿主代理解析不受 fence 限制，命令可正常解析公网域名。
- * - 沙盒内自行发起 UDP/53 的 dig/nslookup/host 等会被 fence；这些工具不在 ALLOWED_BINARIES。
+ * - 沙盒内自行发起 UDP/53 的 dig/nslookup/host 等会被 fence。
  * - 授权对象是连接目标，不是 DNS；私网/localhost 解析后 connect 仍拒绝（assertAllowedHost / SSRF）。
  *
- * 出站授权模型（Claude Code 对齐）：
- * - 默认 allowedDomains=[]；按域名确认，本会话记住已 grant 的 host。
+ * 出站授权模型：
+ * - 会话默认 allowedDomains 含 PACKAGE_INSTALL_ALLOWED_DOMAINS + 当前 pip 镜像（决策 2）。
+ * - 其它 host 按域名确认，本会话记住已 grant 的 host。
  * - OPPTRIX_SHELL_ALLOWED_DOMAINS ∪ 用户设置永久白名单（免确认）。
  * - 禁止 allow_all / 遇目标自动放行未知 host。
- *
- * 联网安装（边界先行）：
- * - 用户确认联网安装后，立刻并入官方包源 + 国内默认镜像 + 当前 pip 镜像 host，
- *   避免运行中才因 PIP_INDEX_URL 命中镜像而二次弹窗。
  */
 
 import { DEFAULT_PIP_INDEX_URLS, isPrivateOrLocalHostPattern } from '@opptrix/shared'
@@ -119,21 +116,41 @@ function filterLanPolicy(domains: readonly string[], allowLan: boolean): string[
   return domains.filter(d => !isPrivateOrLocalHostPattern(d))
 }
 
-/** host 是否匹配合并永久白名单（含通配符 *.example.com） */
-export function isHostInConfiguredAllowlist(host: string, sessionId?: string): boolean {
+/** host 是否匹配域名 pattern 列表（含通配符 *.example.com） */
+export function hostMatchesDomainPatterns(
+  host: string,
+  patterns: readonly string[],
+): boolean {
   const normalized = host.trim().toLowerCase().replace(/\.$/, '')
   if (!normalized) return false
-  const patterns = getGrantableMergedAllowedDomainsSync(sessionId)
   for (const pattern of patterns) {
-    if (pattern.startsWith('*.')) {
-      const base = pattern.slice(2)
-      const suffix = pattern.slice(1)
+    const p = pattern.trim().toLowerCase().replace(/\.$/, '')
+    if (!p) continue
+    if (p.startsWith('*.')) {
+      const base = p.slice(2)
+      const suffix = p.slice(1)
       if (normalized === base || normalized.endsWith(suffix)) return true
-    } else if (normalized === pattern) {
+    } else if (normalized === p) {
       return true
     }
   }
   return false
+}
+
+/** host 是否匹配合并永久白名单（含通配符 *.example.com） */
+export function isHostInConfiguredAllowlist(host: string, sessionId?: string): boolean {
+  return hostMatchesDomainPatterns(host, getGrantableMergedAllowedDomainsSync(sessionId))
+}
+
+/**
+ * 会话默认包源（pip/npm 官方与镜像）— 围栏内免 network_install / egress 确认。
+ * 不等于全网放行。
+ */
+export function isHostInPackageInstallAllowlist(
+  host: string,
+  pipIndexUrls?: readonly string[],
+): boolean {
+  return hostMatchesDomainPatterns(host, networkDomainsForInstallAllowed(pipIndexUrls))
 }
 
 /** 同步：合并名单经 LAN 策略与字面量私网过滤 */

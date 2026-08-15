@@ -237,15 +237,15 @@ const AGENT_TOOLS: Array<{
     id: 'tool.prepare_fuyao_dump',
     title: 'prepare_fuyao_dump',
     summary: '服务端取扶摇 dump 到 shared；冷下载异步 job；full/incr 就绪自动写 offline-k-meta',
-    how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })；若 status=preparing 则优先 schedule_turn_wake(suggested_wake_seconds) 再查，或 prepare_fuyao_dump({ job_id })',
+    how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })；若 status=preparing+job_id 则系统通常自动挂起并终态续跑；必要时 prepare_fuyao_dump({ job_id })；无 job 事件时才 schedule_turn_wake（禁止传 job_id）',
     example: 'prepare_fuyao_dump({ dump_kind: "incremental", mode: "local_path" })',
   },
   {
     id: 'tool.schedule_turn_wake',
     title: 'schedule_turn_wake',
-    summary: '延后同会话自动续跑（异步 preparing 优先）',
-    how: 'Agent tool schedule_turn_wake({ seconds, prompt, reason?, job_id? })；seconds∈[5,1800]',
-    example: 'schedule_turn_wake({ seconds: 90, prompt: "检查 prepare_fuyao_dump 是否就绪并继续", job_id: "<id>" })',
+    summary: '无 job 事件时的纯延时续跑',
+    how: 'Agent tool schedule_turn_wake({ seconds, prompt, reason? })；seconds∈[5,1800]；禁止 job_id；仅无可靠后台任务事件时使用；有 preparing+job_id 时依赖自动挂起与终态续跑',
+    example: 'schedule_turn_wake({ seconds: 90, prompt: "检查准备是否就绪并继续" })',
   },
   {
     id: 'tool.request_session_lan_access',
@@ -266,16 +266,16 @@ const AGENT_TOOLS: Array<{
     how: 'Agent tool http_fetch；需 LAN 时先 ask_user / request_session_lan_access',
   },
   {
-    id: 'tool.workspace_list',
-    title: 'workspace_list',
-    summary: '列授权目录文件',
-    how: 'Agent tool workspace_list({ root_id, path })；公共区 root_id=shared',
+    id: 'tool.workspace_glob',
+    title: 'workspace_glob',
+    summary: '按模式找文件/看树（亦可 opptrix_run ls/find）',
+    how: 'Agent tool workspace_glob({ root_id, glob_pattern, path? })；公共区 root_id=shared',
   },
   {
     id: 'tool.list_workspace_grants',
     title: 'list_workspace_grants',
-    summary: '本对话可访问目录清单',
-    how: 'Agent tool list_workspace_grants',
+    summary: '不知 root 时查本对话可访问目录（至多一次）',
+    how: 'Agent tool list_workspace_grants；已知 root 直接 glob/grep/run',
   },
 ]
 
@@ -309,14 +309,14 @@ const SHARED_PACKAGES: LocalDataApiDetail = {
   summary: '跨对话共享脚本/包（packages/<name>）',
   access: 'shared',
   how_to_call:
-    'workspace_list({ root_id: "shared", path: "packages" }) → 读 packages/<name>/README.md；可复用则 opptrix_run cwd 指向该包',
+    'workspace_glob({ root_id: "shared", glob_pattern: "packages/**/README.md" }) 或 opptrix_run(ls packages) → 读 packages/<name>/README.md；可复用则 opptrix_run cwd 指向该包',
   layer_entry: 'resolveSharedWorkspaceRoot()/packages',
   notes: [
     '写回新包须含 README（目的/入口/入参出参/依赖/示例）',
     '勿存 API Key',
   ],
   examples: [
-    'workspace_list({ root_id: "shared", path: "packages" })',
+    'workspace_glob({ root_id: "shared", glob_pattern: "packages/**/README.md" })',
     'workspace_read({ root_id: "shared", path: "packages/demo/README.md" })',
   ],
 }
@@ -330,7 +330,7 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
   access: 'shared',
   how_to_call:
     '初始化 shared 时自动落到 packages/cn-offline-daily-k（内置模板，不覆盖用户已改文件）。'
-    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump（冷下载可能 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查；full|incremental + local_path 就绪后自动写 data/cache/offline-k-meta.json）→ 计算全市场指标落盘 data/cache/indicators/ → query/screen；'
+    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump（冷下载可能 preparing+job_id，系统通常自动挂起并终态续跑；full|incremental + local_path 就绪后自动写 data/cache/offline-k-meta.json）→ 计算全市场指标落盘 data/cache/indicators/ → query/screen；'
     + 'markUpdateSuccess 仅作手动补写保留',
   layer_entry: 'templates/cn-offline-daily-k → shared/packages/cn-offline-daily-k（auto-seed）',
   params: [
@@ -340,7 +340,7 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
   notes: [
     '禁止 market sync / importDailyKDump / 写 App 主行情库',
     '禁止 API Key 进沙盒；扶摇鉴权仅经 prepare_fuyao_dump',
-    '冷下载非同步：status=preparing 时优先 schedule_turn_wake(suggested_wake_seconds)，勿 tight-poll',
+    '冷下载非同步：status=preparing+job_id 时依赖自动挂起与终态续跑；无 job 事件时才 schedule_turn_wake（禁止传 job_id）；勿 poll/sleep',
     '元数据只写 shared/data/cache/offline-k-meta.json',
     '本地指标缓存约定：shared/data/cache/indicators/（按标的或指标族 Parquet/JSON；Agent 自行计算，非包内引擎）',
   ],
@@ -348,8 +348,8 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
     'get_local_data_catalog({ api_id: "shared.packages.cn-offline-daily-k" })',
     'prepare_fuyao_dump({ dump_kind: "full" })',
     'prepare_fuyao_dump({ job_id: "<from preparing>" })',
-    'schedule_turn_wake({ seconds: 90, prompt: "检查 dump 是否就绪并继续", job_id: "<from preparing>" })',
-    'workspace_list({ root_id: "shared", path: "packages/cn-offline-daily-k" })',
+    'schedule_turn_wake({ seconds: 90, prompt: "无 job 事件时检查 dump 是否就绪并继续" })',
+    'workspace_glob({ root_id: "shared", glob_pattern: "packages/cn-offline-daily-k/**" })',
   ],
 }
 
@@ -361,7 +361,7 @@ const FUYAO_DUMP: LocalDataApiDetail = {
   access: 'agent_tool',
   how_to_call:
     'prepare_fuyao_dump({ dump_kind: "full"|"incremental"|"adjustment_factors", mode: "local_path"|"presigned_url", force_refresh? })；'
-    + '冷下载立即 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查（勿 tight-poll）',
+    + '冷下载立即 preparing+job_id，系统通常自动挂起并终态续跑；无 job 事件时才 schedule_turn_wake（禁止传 job_id；勿 poll/sleep）',
   params: [
     { name: 'dump_kind', type: 'string', required: true, description: 'full | incremental | adjustment_factors（轮询时可不传）' },
     { name: 'mode', type: 'string', description: 'local_path（默认）| presigned_url' },
@@ -371,14 +371,14 @@ const FUYAO_DUMP: LocalDataApiDetail = {
   layer_entry: 'shared/data/dumps via prepareFuyaoDumpForAgent',
   notes: [
     '禁止向沙盒注入 API Key；勿引导 market sync / dailyDump',
-    '缓存命中/presigned_url 可同步 ready；local_path 冷下载为异步 preparing，优先 schedule_turn_wake，勿 tight-poll',
+    '缓存命中/presigned_url 可同步 ready；local_path 冷下载为异步 preparing+job_id，依赖自动挂起与终态续跑；无 job 事件时才 schedule_turn_wake；勿 poll/sleep',
     '成功返回 root_id=shared + relative_path',
     'full|incremental + local_path 就绪后服务端自动写 shared/data/cache/offline-k-meta.json（meta_written）；adjustment_factors / presigned_url 不写',
   ],
   examples: [
     'prepare_fuyao_dump({ dump_kind: "incremental" })',
     'prepare_fuyao_dump({ job_id: "<from preparing>" })',
-    'schedule_turn_wake({ seconds: 120, prompt: "检查 prepare_fuyao_dump 是否就绪并继续" })',
+    'schedule_turn_wake({ seconds: 120, prompt: "无 job 事件时检查 prepare_fuyao_dump 是否就绪并继续" })',
     'prepare_fuyao_dump({ dump_kind: "full", mode: "presigned_url" })',
   ],
 }
@@ -405,7 +405,7 @@ const WORKSPACE_FS: LocalDataApiDetail[] = [
     notes: ['自动 grant rw', 'clearSession 不删 shared'],
     examples: [
       'list_workspace_grants()',
-      'workspace_list({ root_id: "shared", path: "data/dumps" })',
+      'workspace_glob({ root_id: "shared", glob_pattern: "data/dumps/**" })',
     ],
   },
 ]

@@ -221,6 +221,17 @@ export class JobRunner {
       timeoutMs: 120_000,
     }, scheduleShellConfirm)
 
+    // 防御：接线层若误传 background 或返回 bg 体，拒绝（计划任务仅同步）
+    if (
+      result == null
+      || typeof result !== 'object'
+      || !('exit_code' in result)
+      || typeof (result as { stdout?: unknown }).stdout !== 'string'
+      || typeof (result as { stderr?: unknown }).stderr !== 'string'
+    ) {
+      throw new Error('计划任务仅支持同步执行命令，不支持后台任务')
+    }
+
     if (!result.ok) {
       const detail = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
       throw new Error(detail || `命令退出码 ${result.exit_code ?? 'unknown'}`)

@@ -9,6 +9,9 @@ import path from 'node:path'
 import {
   assertAllowedShellArgv,
   assertPackageInstallPolicy,
+  argvToCommandString,
+  syncCommandStringFromManagedArgv,
+  injectPipCertArgv,
   buildSandboxConfigFromGrantPaths,
   buildSandboxConfigFromGrants,
   commandNeedsNetwork,
@@ -24,8 +27,6 @@ import {
   SessionNetworkEgressStore,
   parseNetworkEgressChoice,
   parseNetworkInstallChoice,
-  ShellRunStickyStore,
-  parseShellRunConfirmChoice,
   summarizeShellArgv,
   mergeAllowedNetworkDomains,
   hostPatternsFromHttpsUrls,
@@ -38,9 +39,22 @@ import {
   getGrantableConfiguredAllowedDomainsSync,
   isHostInConfiguredAllowlist,
   isEgressHostPreAuthorized,
+  isHostInPackageInstallAllowlist,
   resetConfiguredAllowedDomainsForTests,
   parseDiagnosticTargetHost,
   WorkspaceService,
+  parseCommandToArgv,
+  resolveShellCommandInput,
+  commandNeedsRealShell,
+  getSessionShellRuntime,
+  resetSessionShellRuntimeForTests,
+  hashSandboxConfig,
+  startShellCommandJob,
+  getShellCommandJob,
+  cancelShellCommandJob,
+  resetShellCommandJobsForTests,
+  isShellBgEnabled,
+  SHELL_BG_MAX_IN_FLIGHT_PER_SESSION,
 } from '../packages/agent-workspace/dist/index.js'
 
 async function withTmpDataDir(fn) {
@@ -311,12 +325,9 @@ test('assertAllowedShellArgv allows process.execPath after node rewrite', () => 
   assert.doesNotThrow(() => assertAllowedShellArgv([process.execPath, '-v']))
 })
 
-test('assertAllowedShellArgv validates original argv before electron rewrite', () => {
+test('assertAllowedShellArgv no longer blocks arbitrary argv0 (grant+SRT is boundary)', () => {
   assert.doesNotThrow(() => assertAllowedShellArgv(['node', '-v']))
-  assert.throws(
-    () => assertAllowedShellArgv(['Opptrix', '-v']),
-    /不允许运行|opptrix/i,
-  )
+  assert.doesNotThrow(() => assertAllowedShellArgv(['Opptrix', '-v']))
 })
 
 test('commandNeedsNetwork detects npm-cli.js install argv shape', () => {
@@ -411,30 +422,13 @@ test('package-policy rejects install target outside grant', () => {
   )
 })
 
-test('assertAllowedShellArgv blocks dig and nslookup (not in allowlist)', () => {
-  assert.throws(
-    () => assertAllowedShellArgv(['dig', 'example.com']),
-    /不允许运行|dig/,
-  )
-  assert.throws(
-    () => assertAllowedShellArgv(['nslookup', 'example.com']),
-    /不允许运行|nslookup/,
-  )
-})
-
-test('assertAllowedShellArgv blocks dangerous commands', () => {
-  assert.throws(
-    () => assertAllowedShellArgv(['rm', '-rf', '/']),
-    /不允许运行|安全风险/,
-  )
-  assert.throws(
-    () => assertAllowedShellArgv(['curl', 'http://x.com', '|', 'sh']),
-    /不允许运行|安全风险/,
-  )
-  assert.throws(
-    () => assertAllowedShellArgv(['bash', '-c', 'echo hi']),
-    /不允许运行/,
-  )
+test('assertAllowedShellArgv only requires non-empty (no binary allowlist)', () => {
+  assert.doesNotThrow(() => assertAllowedShellArgv(['dig', 'example.com']))
+  assert.doesNotThrow(() => assertAllowedShellArgv(['nslookup', 'example.com']))
+  assert.doesNotThrow(() => assertAllowedShellArgv(['bash', '-c', 'echo hi']))
+  assert.doesNotThrow(() => assertAllowedShellArgv(['rm', '-rf', '/tmp/x']))
+  assert.throws(() => assertAllowedShellArgv([]), /命令不能为空/)
+  assert.throws(() => assertAllowedShellArgv(['']), /命令不能为空/)
 })
 
 test('commandNeedsNetwork detects pip/npm install and ping', () => {
@@ -444,12 +438,9 @@ test('commandNeedsNetwork detects pip/npm install and ping', () => {
   assert.equal(commandNeedsNetwork(['ping', '-c', '4', 'baidu.com']), true)
 })
 
-test('assertAllowedShellArgv allows ping and blocks private diagnostic targets at runner', () => {
+test('assertAllowedShellArgv allows ping and arbitrary binaries', () => {
   assert.doesNotThrow(() => assertAllowedShellArgv(['ping', '-c', '4', 'baidu.com']))
-  assert.throws(
-    () => assertAllowedShellArgv(['bash', '-c', 'echo hi']),
-    /不允许运行/,
-  )
+  assert.doesNotThrow(() => assertAllowedShellArgv(['bash', '-c', 'echo hi']))
 })
 
 test('parseDiagnosticTargetHost extracts hostname from ping argv', () => {
@@ -602,6 +593,99 @@ test('isEgressHostPreAuthorized respects session grant and configured allowlist'
   else process.env.OPPTRIX_SHELL_ALLOWED_DOMAINS = prev
 })
 
+test('confirmation matrix: package install hosts pre-authorized; arbitrary host not', () => {
+  const store = new SessionNetworkEgressStore()
+  assert.equal(isHostInPackageInstallAllowlist('pypi.org'), true)
+  assert.equal(isHostInPackageInstallAllowlist('files.pythonhosted.org'), true)
+  assert.equal(isHostInPackageInstallAllowlist('registry.npmjs.org'), true)
+  assert.equal(isHostInPackageInstallAllowlist('registry.npmmirror.com'), true)
+  assert.equal(isEgressHostPreAuthorized('s-matrix', 'pypi.org', store), true)
+  assert.equal(isEgressHostPreAuthorized('s-matrix', 'registry.npmjs.org', store), true)
+  assert.equal(isEgressHostPreAuthorized('s-matrix', 'evil.example.com', store), false)
+  store.grantHost('s-matrix', 'evil.example.com')
+  assert.equal(isEgressHostPreAuthorized('s-matrix', 'evil.example.com', store), true)
+})
+
+test('confirmation matrix: unsandboxed always prompts (no session sticky)', async () => {
+  await withTmpDataDir(async () => {
+    const svc = new WorkspaceService()
+    const sessionId = 'unsandboxed-matrix'
+    await svc.ensureDefaultRoot(sessionId)
+    let confirms = 0
+    for (let i = 0; i < 2; i++) {
+      try {
+        await svc.shellRun({
+          sessionId,
+          rootId: 'default',
+          command: 'echo hello',
+          escalate: 'unsandboxed',
+        }, async (payload) => {
+          confirms++
+          assert.match(payload.title, /隔离外/)
+          return { selected_ids: ['allow_once'] }
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // 环境未就绪时仍应已弹出 unsandboxed 确认
+        if (!/隔离|就绪|platform|sandbox|取消/i.test(msg) && !/用户已取消/.test(msg)) {
+          throw err
+        }
+      }
+    }
+    assert.ok(confirms >= 2, 'unsandboxed 每次都须确认，无 session sticky')
+  })
+})
+
+test('shell-command bg job: start → cancel', async () => {
+  resetShellCommandJobsForTests()
+  assert.equal(isShellBgEnabled(), true)
+  const snap = startShellCommandJob({
+    sessionId: 'bg-s1',
+    commandSummary: 'sleep 30',
+    timeoutMs: 60_000,
+    run: async (signal) => {
+      await new Promise((resolve, reject) => {
+        const t = setTimeout(resolve, 30_000)
+        signal.addEventListener('abort', () => {
+          clearTimeout(t)
+          reject(new Error('aborted'))
+        }, { once: true })
+      })
+      return { exitCode: 0, stdout: '', stderr: '' }
+    },
+  })
+  assert.equal(snap.status, 'running')
+  assert.match(snap.job_id, /^shell-/)
+  assert.equal(getShellCommandJob(snap.job_id)?.status, 'running')
+  assert.equal(cancelShellCommandJob(snap.job_id), true)
+  assert.equal(getShellCommandJob(snap.job_id)?.status, 'cancelled')
+  resetShellCommandJobsForTests()
+})
+
+test('shell-command bg in-flight cap per session', () => {
+  resetShellCommandJobsForTests()
+  const mk = (i) => startShellCommandJob({
+    sessionId: 'cap-s',
+    commandSummary: `job-${i}`,
+    timeoutMs: 60_000,
+    run: async (signal) => {
+      await new Promise((resolve, reject) => {
+        const t = setTimeout(resolve, 60_000)
+        signal.addEventListener('abort', () => {
+          clearTimeout(t)
+          reject(new Error('aborted'))
+        }, { once: true })
+      })
+      return { exitCode: 0, stdout: '', stderr: '' }
+    },
+  })
+  mk(1)
+  mk(2)
+  assert.throws(() => mk(3), /上限/)
+  assert.equal(SHELL_BG_MAX_IN_FLIGHT_PER_SESSION, 2)
+  resetShellCommandJobsForTests()
+})
+
 test('detectNetworkEgressBlocked extracts host from proxy denial', () => {
   const blocked = detectNetworkEgressBlocked(
     1,
@@ -659,22 +743,15 @@ test('network install sticky store', () => {
   assert.equal(parseNetworkInstallChoice(['sticky']), 'sticky')
 })
 
-test('shell run sticky store and argv summary', () => {
-  const sticky = new ShellRunStickyStore()
-  assert.equal(sticky.has('s1'), false)
-  sticky.grant('s1')
-  assert.equal(sticky.has('s1'), true)
-  sticky.clearSession('s1')
-  assert.equal(parseShellRunConfirmChoice(['allow_session']), 'allow_session')
+test('summarizeShellArgv truncates long command', () => {
   const long = summarizeShellArgv(['python3', '-c', 'x'.repeat(200)])
   assert.ok(long.endsWith('…'))
+  assert.equal(summarizeShellArgv([]), '（空命令）')
 })
 
 test('opptrix_run runs interpreter without upfront egress confirm', async () => {
   await withTmpDataDir(async () => {
-    const shellSticky = new ShellRunStickyStore()
-    shellSticky.grant('interp-confirm')
-    const svc = new WorkspaceService({ shellRunSticky: shellSticky })
+    const svc = new WorkspaceService()
     const sessionId = 'interp-confirm'
     await svc.ensureDefaultRoot(sessionId)
     let confirmCalls = 0
@@ -696,22 +773,29 @@ test('opptrix_run runs interpreter without upfront egress confirm', async () => 
   })
 })
 
-test('opptrix_run skips run confirmation when session sticky granted', async () => {
+test('opptrix_run needs no shell-run sticky confirmation in fence', async () => {
   await withTmpDataDir(async () => {
-    const shellSticky = new ShellRunStickyStore()
-    shellSticky.grant('sticky-run')
-    const svc = new WorkspaceService({ shellRunSticky: shellSticky })
-    const sessionId = 'sticky-run'
+    const svc = new WorkspaceService()
+    const sessionId = 'no-run-sticky'
     await svc.ensureDefaultRoot(sessionId)
-    await assert.rejects(
-      () => svc.shellRun({
+    let confirmCalls = 0
+    try {
+      await svc.shellRun({
         sessionId,
         rootId: 'default',
-        argv: ['pip3', 'install', 'six'],
-        networkIntent: 'install',
-      }),
-      /确认|联网/,
-    )
+        command: 'python3 -c "print(1)"',
+      }, async () => {
+        confirmCalls++
+        return { selected_ids: ['cancel'] }
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      assert.doesNotMatch(msg, /需要用户确认运行命令/)
+      assert.notEqual(err?.name, 'ShellRunConfirmationRequiredError')
+      // 沙箱未就绪等环境错误可接受
+      if (!/隔离|就绪|platform|sandbox|Python/i.test(msg)) throw err
+    }
+    assert.equal(confirmCalls, 0, '围栏内不得弹「允许运行命令」')
   })
 })
 
@@ -948,20 +1032,29 @@ test('opptrix_run rejects ping to private address', async () => {
   })
 })
 
-test('opptrix_run requires network confirmation without sticky', async () => {
+test('opptrix_run defaults package-install domains without network_install confirm', async () => {
   await withTmpDataDir(async () => {
     const svc = new WorkspaceService()
-    const sessionId = 'net-confirm'
+    const sessionId = 'net-default-install'
     await svc.ensureDefaultRoot(sessionId)
-    await assert.rejects(
-      () => svc.shellRun({
+    let networkInstallConfirms = 0
+    try {
+      await svc.shellRun({
         sessionId,
         rootId: 'default',
-        argv: ['pip3', 'install', 'six'],
+        command: 'pip3 install six',
         networkIntent: 'install',
-      }),
-      /确认|联网/,
-    )
+      }, async (payload) => {
+        if (payload.title === '允许联网安装') networkInstallConfirms++
+        return { selected_ids: ['cancel'] }
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      assert.doesNotMatch(msg, /需要用户确认联网安装/)
+      assert.notEqual(err?.name, 'NetworkInstallConfirmationRequiredError')
+      if (!/隔离|就绪|platform|sandbox|Python|pip/i.test(msg)) throw err
+    }
+    assert.equal(networkInstallConfirms, 0, '包源默认已放行，不应弹联网安装确认')
   })
 })
 
@@ -983,16 +1076,100 @@ test('sandbox isolation blocks reading deny path', { skip: !INTEGRATION }, async
   })
 })
 
-test('sandbox allows write inside grant', { skip: !INTEGRATION }, async () => {
+test('parseCommandToArgv and resolveShellCommandInput', () => {
+  assert.deepEqual(parseCommandToArgv('python3 -c "print(1)"'), ['python3', '-c', 'print(1)'])
+  assert.equal(commandNeedsRealShell('echo hi | wc -l'), true)
+  assert.equal(commandNeedsRealShell('python3 -c print(1)'), false)
+  const fromCmd = resolveShellCommandInput({ command: 'ls -la' })
+  assert.equal(fromCmd.fromLegacyArgv, false)
+  assert.deepEqual(fromCmd.argv, ['ls', '-la'])
+  const fromArgv = resolveShellCommandInput({ argv: ['ping', '-c', '1', 'x'] })
+  assert.equal(fromArgv.fromLegacyArgv, true)
+  assert.match(fromArgv.command, /ping/)
+})
+
+test('real shell: managed --target/--cert rewrite syncs into commandString', () => {
+  assert.equal(commandNeedsRealShell('pip3 install requests && echo done'), true)
+  const argv = parseCommandToArgv('pip3 install requests && echo done')
+  const withTarget = assertPackageInstallPolicy(argv, '/ws', '/ws')
+  assert.ok(withTarget.includes('--target'))
+  assert.ok(withTarget.includes('.opptrix-packages'))
+  const withCert = injectPipCertArgv(withTarget, path.join('/ws', '.opptrix', 'cacert.pem'))
+  assert.ok(withCert.includes('--cert'))
+  const commandString = syncCommandStringFromManagedArgv(withCert)
+  assert.match(commandString, /--target/)
+  assert.match(commandString, /\.opptrix-packages/)
+  assert.match(commandString, /--cert/)
+  assert.match(commandString, /&&/)
+  assert.match(commandString, /echo/)
+  // 与 argv spawn 路径一致：最终应以 argv 派生字符串为准
+  assert.equal(commandString, argvToCommandString(withCert))
+})
+
+test('cwdRel missing or not a directory → structured WorkspaceError', async () => {
   await withTmpDataDir(async () => {
     const svc = new WorkspaceService()
-    const sessionId = 'iso-write'
+    const sessionId = 'cwd-missing'
     await svc.ensureDefaultRoot(sessionId)
-    const result = await svc.shellRun({
-      sessionId,
-      rootId: 'default',
-      argv: ['python3', '-c', 'open("sandbox-ok.txt","w").write("ok")'],
-    })
-    assert.equal(result.exit_code, 0, result.stderr)
+
+    await assert.rejects(
+      () => svc.shellRun({
+        sessionId,
+        rootId: 'default',
+        cwdRel: 'no-such-dir',
+        command: 'echo ok',
+      }),
+      (err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        assert.match(msg, /工作目录不存在/)
+        assert.match(msg, /mkdir|相对/)
+        return true
+      },
+    )
+
+    const root = (await svc.listGrants(sessionId)).find(g => g.root_id === 'default')
+    assert.ok(root)
+    const fileRel = 'not-a-dir.txt'
+    await fs.writeFile(path.join(root.abs_path, fileRel), 'x', 'utf8')
+
+    await assert.rejects(
+      () => svc.shellRun({
+        sessionId,
+        rootId: 'default',
+        cwdRel: fileRel,
+        command: 'echo ok',
+      }),
+      (err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        assert.match(msg, /不是目录/)
+        return true
+      },
+    )
   })
+})
+
+test('session shell runtime dispose clears session entry', async () => {
+  await resetSessionShellRuntimeForTests()
+  const rt = getSessionShellRuntime()
+  assert.equal(rt.hasSessionForTests('s-dispose'), false)
+  // acquire without real SRT init is hard offline; just verify dispose is idempotent
+  await rt.disposeSession('s-dispose')
+  await rt.disposeSession('s-dispose')
+  await resetSessionShellRuntimeForTests()
+})
+
+test('hashSandboxConfig is stable for same config shape', () => {
+  const a = hashSandboxConfig({
+    network: { allowedDomains: ['pypi.org'], deniedDomains: [] },
+    filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
+  })
+  const b = hashSandboxConfig({
+    network: { allowedDomains: ['pypi.org'], deniedDomains: [] },
+    filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
+  })
+  assert.equal(a, b)
+  assert.notEqual(a, hashSandboxConfig({
+    network: { allowedDomains: ['example.com'], deniedDomains: [] },
+    filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
+  }))
 })

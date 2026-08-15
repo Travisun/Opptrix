@@ -2,21 +2,23 @@
 export interface PythonSettings {
   /** pip 镜像候选源（运行时按延迟探测选用最快源） */
   pip_index_urls: string[]
-  /** 为 true 时优先使用 Opptrix 托管 Python（默认 false，不覆盖系统） */
+  /**
+   * 偏好展示 / 安装成功后写入 true。
+   * 运行时解析：只要托管 Python 存在即优先使用（见 resolvePythonRuntime），不因 false 回退系统。
+   */
   prefer_opptrix_python: boolean
 }
 
 export const DEFAULT_PIP_INDEX_URLS: readonly string[] = [
   'https://pypi.tuna.tsinghua.edu.cn/simple',
   'https://mirrors.aliyun.com/pypi/simple',
-  'https://pypi.douban.com/simple',
   'https://mirrors.cloud.tencent.com/pypi/simple',
   'https://pypi.mirrors.ustc.edu.cn/simple',
 ]
 
 export const DEFAULT_PYTHON_SETTINGS: PythonSettings = {
   pip_index_urls: [...DEFAULT_PIP_INDEX_URLS],
-  prefer_opptrix_python: false,
+  prefer_opptrix_python: true,
 }
 
 function normalizeMirrorUrl(raw: string): string {
@@ -42,7 +44,10 @@ export function normalizePythonSettings(
     : []
   return {
     pip_index_urls: urls.length > 0 ? [...new Set(urls)] : [...DEFAULT_PIP_INDEX_URLS],
-    prefer_opptrix_python: raw?.prefer_opptrix_python === true,
+    // 缺省 → true；仅显式 boolean false 保留（getPythonSettings 会一次性迁移写回 true）
+    prefer_opptrix_python: typeof raw?.prefer_opptrix_python === 'boolean'
+      ? raw.prefer_opptrix_python
+      : true,
   }
 }
 
@@ -88,7 +93,9 @@ export function validatePythonSettingsInput(
     pip_index_urls: normalized.length > 0
       ? [...new Set(normalized)]
       : [...DEFAULT_PIP_INDEX_URLS],
-    prefer_opptrix_python: input.prefer_opptrix_python === true,
+    prefer_opptrix_python: typeof input.prefer_opptrix_python === 'boolean'
+      ? input.prefer_opptrix_python
+      : true,
   }
 
   return { ok: true, settings }

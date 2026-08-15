@@ -9,15 +9,37 @@ function isUnderRoot(target: string, root: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
+/** 拒绝绝对路径 / ~ / file:// 时的可执行提示（给 Agent 改参重试） */
+export const RELATIVE_PATH_CONTRACT_HINT =
+  'path/cwd 必须相对当前 root_id（例 packages/foo/x.py）。禁止 /Users、C:\\\\、~、file:// 与 abs_path；改相对路径后用同一 root_id 重试，勿换 root 反复 list'
+
+function looksLikeForbiddenAbsOrUri(raw: string): boolean {
+  const s = raw.trim()
+  if (!s) return false
+  if (path.isAbsolute(s)) return true
+  if (/^[a-zA-Z]:[\\/]/.test(s) || s.startsWith('\\\\') || s.startsWith('//')) return true
+  if (s === '~' || s.startsWith('~/') || s.startsWith('~\\')) return true
+  if (/^file:/i.test(s)) return true
+  return false
+}
+
 function sanitizeRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '')
+  const raw = String(relativePath ?? '')
+  if (looksLikeForbiddenAbsOrUri(raw)) {
+    throw new PathEscapeError(`不允许使用绝对路径。${RELATIVE_PATH_CONTRACT_HINT}`)
+  }
+  const normalized = raw.replace(/\\/g, '/').replace(/^\/+/, '')
   if (!normalized || normalized === '.') return ''
-  if (path.isAbsolute(relativePath)) {
-    throw new PathEscapeError('不允许使用绝对路径')
+  // 再检一次 slash-normalize 后的形态（如误传 //Users/... 被剥前导斜杠前已拦）
+  if (looksLikeForbiddenAbsOrUri(normalized) || normalized.startsWith('/')) {
+    throw new PathEscapeError(`不允许使用绝对路径。${RELATIVE_PATH_CONTRACT_HINT}`)
   }
   const segments = normalized.split('/')
   for (const seg of segments) {
     if (seg === '..') throw new PathEscapeError('不允许使用 .. 穿越目录')
+    if (seg === '~') {
+      throw new PathEscapeError(`不允许使用绝对路径。${RELATIVE_PATH_CONTRACT_HINT}`)
+    }
   }
   return segments.filter(Boolean).join(path.sep)
 }

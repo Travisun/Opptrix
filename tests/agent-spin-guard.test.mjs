@@ -11,9 +11,18 @@ import {
   resetSpinGuardForTests,
   SPIN_GUARD_LIMITS,
   SPIN_POLL_TOOLS,
+  SPIN_WAKE_SUCCESS_PROGRESS_TOOLS,
   isSpinPollTool,
+  isSpinWakeSuccessProgressTool,
   isInProgressJobStatus,
-} from '../packages/agent/dist/loop/spin-guard.js'
+  resolveMaxSafetyRounds,
+  resolveSoftRemindRound,
+  resolveSafetyStopReply,
+  isAgentCursorSmoothEnabled,
+  SOFT_REMIND_TURN_TAIL,
+  SAFETY_STOP_REPLY_SMOOTH,
+  SAFETY_STOP_REPLY_LEGACY,
+} from '../packages/agent/dist/loop/index.js'
 
 test.beforeEach(() => {
   resetSpinGuardForTests()
@@ -31,7 +40,40 @@ test('fingerprint differs for different args', () => {
   assert.notEqual(a, b)
 })
 
-test('success repeat ≥3 blocks with spin_guard hint', () => {
+test('smooth defaults: success/failure/stale/poll limits', () => {
+  assert.equal(isAgentCursorSmoothEnabled(), true)
+  assert.equal(SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT, 5)
+  assert.equal(SPIN_GUARD_LIMITS.FAILURE_REPEAT_LIMIT, 3)
+  assert.equal(SPIN_GUARD_LIMITS.STALE_ROUNDS_WITHOUT_PROGRESS, 8)
+  assert.equal(SPIN_GUARD_LIMITS.POLL_IN_FLIGHT_HARD_LIMIT, 64)
+  assert.equal(resolveMaxSafetyRounds(), 550)
+  assert.equal(resolveSoftRemindRound(), 400)
+  assert.equal(resolveSafetyStopReply(), SAFETY_STOP_REPLY_SMOOTH)
+  assert.ok(!SOFT_REMIND_TURN_TAIL.includes('第'))
+  assert.ok(!SOFT_REMIND_TURN_TAIL.includes('步'))
+  assert.ok(!SAFETY_STOP_REPLY_SMOOTH.includes('轮次'))
+  assert.ok(!SAFETY_STOP_REPLY_SMOOTH.includes('第'))
+})
+
+test('OPPTRIX_AGENT_CURSOR_SMOOTH=0 falls back to legacy limits', () => {
+  const prev = process.env.OPPTRIX_AGENT_CURSOR_SMOOTH
+  process.env.OPPTRIX_AGENT_CURSOR_SMOOTH = '0'
+  try {
+    assert.equal(isAgentCursorSmoothEnabled(), false)
+    assert.equal(SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT, 3)
+    assert.equal(SPIN_GUARD_LIMITS.FAILURE_REPEAT_LIMIT, 2)
+    assert.equal(SPIN_GUARD_LIMITS.STALE_ROUNDS_WITHOUT_PROGRESS, 3)
+    assert.equal(SPIN_GUARD_LIMITS.POLL_IN_FLIGHT_HARD_LIMIT, 48)
+    assert.equal(resolveMaxSafetyRounds(), 50)
+    assert.equal(resolveSoftRemindRound(), null)
+    assert.equal(resolveSafetyStopReply(), SAFETY_STOP_REPLY_LEGACY)
+  } finally {
+    if (prev === undefined) delete process.env.OPPTRIX_AGENT_CURSOR_SMOOTH
+    else process.env.OPPTRIX_AGENT_CURSOR_SMOOTH = prev
+  }
+})
+
+test('success repeat ≥ SUCCESS_REPEAT_LIMIT blocks with spin_guard hint', () => {
   const sid = 's1'
   const args = { code: '600519' }
   for (let i = 0; i < SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT; i++) {
@@ -45,7 +87,7 @@ test('success repeat ≥3 blocks with spin_guard hint', () => {
   assert.match(buildSpinGuardTurnTail(sid), /路径提醒|重复/)
 })
 
-test('failure repeat ≥2 blocks', () => {
+test('failure repeat ≥ FAILURE_REPEAT_LIMIT blocks', () => {
   const sid = 's2'
   const args = { q: 'news' }
   for (let i = 0; i < SPIN_GUARD_LIMITS.FAILURE_REPEAT_LIMIT; i++) {
@@ -81,6 +123,13 @@ test('SPIN_POLL_TOOLS and isInProgressJobStatus helpers', () => {
   assert.equal(isInProgressJobStatus({ status: ' installing ' }), true)
   assert.equal(isInProgressJobStatus({ status: 'ready' }), false)
   assert.equal(isInProgressJobStatus({ ok: true }), false)
+})
+
+test('wake tools are classified', () => {
+  assert.equal(SPIN_WAKE_SUCCESS_PROGRESS_TOOLS.has('watch_job'), false)
+  assert.ok(SPIN_WAKE_SUCCESS_PROGRESS_TOOLS.has('schedule_turn_wake'))
+  assert.equal(isSpinWakeSuccessProgressTool('watch_job'), false)
+  assert.equal(isSpinWakeSuccessProgressTool('schedule_turn_wake'), true)
 })
 
 test('ensure_python preparing×5 same job_id does not block via SUCCESS_REPEAT', () => {
@@ -126,6 +175,43 @@ test('poll progress resets stale rounds (no force-close after preparing round)',
     noteRoundProgress(sid, { hadNewFingerprint: false, checklistProgressed: false }),
     true,
   )
+})
+
+test('schedule_turn_wake success do not trigger stale close', () => {
+  const sid = 'wake-progress'
+  for (let i = 0; i < SPIN_GUARD_LIMITS.STALE_ROUNDS_WITHOUT_PROGRESS - 1; i++) {
+    noteRoundProgress(sid, { hadNewFingerprint: false, checklistProgressed: false })
+  }
+  recordSpinOutcome(
+    sid,
+    'schedule_turn_wake',
+    { seconds: 30, prompt: 'continue' },
+    { ok: true, wake_id: 'w0' },
+  )
+  assert.equal(
+    noteRoundProgress(sid, { hadNewFingerprint: false, checklistProgressed: false }),
+    false,
+  )
+  for (let i = 0; i < SPIN_GUARD_LIMITS.STALE_ROUNDS_WITHOUT_PROGRESS - 1; i++) {
+    noteRoundProgress(sid, { hadNewFingerprint: false, checklistProgressed: false })
+  }
+  recordSpinOutcome(
+    sid,
+    'schedule_turn_wake',
+    { seconds: 30, prompt: 'continue' },
+    { ok: true, wake_id: 'w1' },
+  )
+  assert.equal(
+    noteRoundProgress(sid, { hadNewFingerprint: false, checklistProgressed: false }),
+    false,
+  )
+  // success repeat must not block wake tools
+  const wakeArgs = { seconds: 30, prompt: 'continue' }
+  for (let i = 0; i < SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT + 2; i++) {
+    assert.equal(checkSpinGuard(sid, 'schedule_turn_wake', wakeArgs), null)
+    recordSpinOutcome(sid, 'schedule_turn_wake', wakeArgs, { ok: true })
+  }
+  assert.equal(checkSpinGuard(sid, 'schedule_turn_wake', wakeArgs), null)
 })
 
 test('ensure_python ready success repeat ≥ SUCCESS_REPEAT_LIMIT still blocks', () => {

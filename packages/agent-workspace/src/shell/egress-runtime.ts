@@ -1,7 +1,11 @@
 import { assertAllowedHost } from '../ssrf.js'
 import { WorkspaceError } from '../errors.js'
+import { getPythonSettings } from '../python-settings-store.js'
 import { normalizeEgressHost, type SessionNetworkEgressStore } from './session-network-egress.js'
-import { isHostInConfiguredAllowlist } from './network-policy.js'
+import {
+  isHostInConfiguredAllowlist,
+  isHostInPackageInstallAllowlist,
+} from './network-policy.js'
 import { isEffectiveLanAllowed } from './session-lan-access.js'
 
 export function detectNetworkEgressBlocked(
@@ -33,13 +37,18 @@ export async function assertEgressHostGrantable(
   return trimmed
 }
 
-/** 会话已 grant 或配置白名单 → 免出站确认 */
+/**
+ * 免出站确认：会话 grant ∪ 永久配置白名单 ∪ 默认包源（决策 2）。
+ * 任意其它 host 仍须确认；禁止全网放行。
+ */
 export function isEgressHostPreAuthorized(
   sessionId: string,
   host: string,
   egress: SessionNetworkEgressStore,
 ): boolean {
-  return egress.hasHost(sessionId, host) || isHostInConfiguredAllowlist(host, sessionId)
+  if (egress.hasHost(sessionId, host)) return true
+  if (isHostInConfiguredAllowlist(host, sessionId)) return true
+  return isHostInPackageInstallAllowlist(host, getPythonSettings().pip_index_urls)
 }
 
 export function buildNeedsNetworkEgressPayload(

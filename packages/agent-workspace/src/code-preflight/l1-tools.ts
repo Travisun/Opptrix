@@ -135,7 +135,7 @@ export async function runL1Checks(
         status: 'skip',
         message: '未检测到 ruff，已跳过 L1',
       })
-      fixHints.push('可用 opptrix_install 安装 ruff（pip）后再开 levels 含 l1')
+      fixHints.push('可用 opptrix_run(command="pip install ruff") 安装 ruff 后再开 levels 含 l1')
     } else {
       const result = await runTool(avail.ruffPath, ['check', absPath], signal)
       if (result.exitCode === 0) {
@@ -164,7 +164,7 @@ export async function runL1Checks(
         status: 'skip',
         message: '未检测到 biome，已跳过 L1',
       })
-      fixHints.push('可用 opptrix_install 安装 @biomejs/biome（npm）后再开 levels 含 l1')
+      fixHints.push('可用 opptrix_run(command="npm install @biomejs/biome") 安装 biome 后再开 levels 含 l1')
     } else {
       const result = await runTool(avail.biomePath, ['check', absPath], signal)
       if (result.exitCode === 0) {

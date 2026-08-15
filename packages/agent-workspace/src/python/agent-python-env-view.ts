@@ -2,7 +2,7 @@ import { getPythonSettings } from '../python-settings-store.js'
 import type { PythonActiveSource, PythonRuntimeStatus } from './resolve-python.js'
 
 const ARGV_POLICY =
-  '只用 python/python3/pip；安装用 shell_install(pip)；与运行共用同一解释器与 .opptrix-packages'
+  'opptrix_run 的 command 用 python/python3/pip 字面量；安装用 opptrix_run(command="pip install …")；与运行共用同一解释器与 .opptrix-packages'
 
 /** Agent / MCP 可见的 Python 环境摘要 — 不并列两套可执行绝对路径 */
 export interface AgentPythonEnvView {

@@ -11,8 +11,10 @@ import ComposerStockMentionList from './ComposerStockMentionList'
 import ComposerSkillSlashList from './ComposerSkillSlashList'
 import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
 import ComposerPromptQueuePanel from './ComposerPromptQueuePanel'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
+import ComposerBackgroundJobsBar from './ComposerBackgroundJobsBar'
 import type { QueuedPrompt } from './sessionPromptQueue'
+import type { SessionBackgroundJob } from './jobWatchProgress'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
 import { findSlashTrigger, useSkillSlash } from './useSkillSlash'
@@ -523,6 +525,8 @@ interface ChatComposerProps {
   promptQueue?: QueuedPrompt[]
   onPromptQueueRemove?: (id: string) => void
   onPromptQueueRunNow?: (id: string) => void
+  /** 本会话未完成后台任务（位于 promptQueue 之上） */
+  backgroundJobs?: SessionBackgroundJob[]
   onOpenPreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
 }
 
@@ -558,6 +562,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   promptQueue = [],
   onPromptQueueRemove,
   onPromptQueueRunNow,
+  backgroundJobs = [],
   onOpenPreview,
 }, ref) {
   const s = useStyles()
@@ -1039,6 +1044,9 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                 onEnd={isRecording ? toggleSpeech : undefined}
               />
             </div>
+          )}
+          {backgroundJobs.length > 0 && (
+            <ComposerBackgroundJobsBar jobs={backgroundJobs} />
           )}
           {promptQueue.length > 0 && onPromptQueueRemove && onPromptQueueRunNow && (
             <ComposerPromptQueuePanel

@@ -98,8 +98,8 @@ export function hostFromNetworkInput(raw: string): string {
 }
 
 export const NETWORK_EGRESS_CONFIRM_OPTIONS = [
-  { id: 'allow_host_once', label: '仅此一次允许访问该目标' },
-  { id: 'allow_host_session', label: '本对话允许该目标' },
+  { id: 'allow_host_once', label: '仅此一次' },
+  { id: 'allow_host_session', label: '本对话同类操作都允许' },
   { id: 'cancel', label: '取消' },
 ] as const
 

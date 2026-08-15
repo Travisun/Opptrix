@@ -416,6 +416,7 @@ export {
   getFuyaoDumpJob,
   isFuyaoDumpLocalCacheReady,
   resetFuyaoDumpJobsForTests,
+  subscribeFuyaoDumpJob,
   type FuyaoDumpJobResult,
   type FuyaoDumpJobState,
 } from './sync/fuyao-dump-job.js'

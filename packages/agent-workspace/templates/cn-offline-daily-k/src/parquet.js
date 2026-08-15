@@ -87,7 +87,7 @@ export async function loadBarsFromParquet(parquetPath) {
     hyparquet = await import('hyparquet')
   } catch {
     throw new Error(
-      '未安装 hyparquet：请先 shell_install({ manager: "npm", packages: ["hyparquet"] })，或改用已解析行数组 + normalizeBarRows',
+      '未安装 hyparquet：请先 opptrix_run({ command: "npm install hyparquet" })，或改用已解析行数组 + normalizeBarRows',
     )
   }
   const { asyncBufferFromFile, parquetReadObjects } = hyparquet

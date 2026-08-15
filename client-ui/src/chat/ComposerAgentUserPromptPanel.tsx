@@ -4,6 +4,7 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixInput from '../components/opptrix/OpptrixInput'
 import type { ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import { OPPTRIX_GLASS_PANEL_CLASS } from '../theme/mixins'
+import { displayPermissionConfirmLabel } from './toolResultTruncation'
 
 interface ComposerAgentUserPromptPanelProps {
   prompt: ChatUserPromptPayload
@@ -49,10 +50,11 @@ export default function ComposerAgentUserPromptPanel({
 
   const submitOption = useCallback((id: string, label: string) => {
     if (submitting) return
+    const displayLabel = displayPermissionConfirmLabel(id, label)
     onSubmit({
       kind: 'option',
       selected_ids: [id],
-      selected_labels: [label],
+      selected_labels: [displayLabel],
     })
   }, [onSubmit, submitting])
 
@@ -95,7 +97,7 @@ export default function ComposerAgentUserPromptPanel({
     if (submitting || !selectedIds.length) return
     const labels = prompt.options
       .filter(opt => selectedIds.includes(opt.id))
-      .map(opt => opt.label)
+      .map(opt => displayPermissionConfirmLabel(opt.id, opt.label))
     onSubmit({
       kind: 'option',
       selected_ids: selectedIds,
@@ -252,7 +254,7 @@ export default function ComposerAgentUserPromptPanel({
                 submitOption(opt.id, opt.label)
               }}
             >
-              {opt.label}
+              {displayPermissionConfirmLabel(opt.id, opt.label)}
             </button>
           ))}
         </div>

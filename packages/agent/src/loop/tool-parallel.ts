@@ -5,12 +5,14 @@ import { parseNamespacedMcpTool } from '@opptrix/shared'
  * 外部命名空间 MCP（serverId__tool）默认串行。
  */
 export const SERIAL_TOOL_NAMES: ReadonlySet<string> = new Set([
-  // 人机
+  // 人机确认
   'ask_user',
+  // Job 取消（调度变更）
+  'cancel_job',
   // Workspace 写/删/侧效
   'workspace_write',
   'workspace_replace_lines',
-  'workspace_mkdir',
+  'workspace_apply_patch',
   'workspace_delete',
   'download_file',
   'request_folder_access',

@@ -79,8 +79,12 @@ const PRIMARY_CASES = [
   { message: '新建一个资讯分组叫美股要闻', expectPrimary: 'create_news_group', intent: 'news_group_create' },
   { message: '把订阅移到另一个分组', expectPrimary: 'move_news_source', intent: 'news_source_move' },
   { message: '打开 https://example.com 看看内容', expectPrimary: 'browser_navigate', intent: 'web_browse' },
-  { message: '把工作区文件列表列出来', expectPrimary: 'workspace_list', intent: 'workspace_files' },
-  { message: '下载这个 PDF 保存到工作区', expectPrimary: 'workspace_list', intent: 'workspace_files' },
+  { message: '把工作区文件列表列出来', expectPrimary: 'workspace_glob', intent: 'workspace_files' },
+  { message: '下载这个 PDF 保存到工作区', expectPrimary: 'workspace_glob', intent: 'workspace_files' },
+  { message: '在工作区搜索关键词 TODO', expectPrimary: 'workspace_grep', intent: 'workspace_grep' },
+  { message: 'workspace_grep 找代码里的函数名', expectPrimary: 'workspace_grep', intent: 'workspace_grep' },
+  { message: '找出工作区所有 .py 文件', expectPrimary: 'workspace_glob', intent: 'workspace_glob' },
+  { message: 'workspace_glob **/*.ts', expectPrimary: 'workspace_glob', intent: 'workspace_glob' },
   { message: '在消息里引用工作区图片', expectPrimary: 'resolve_workspace_path_uri', intent: 'workspace_message_uri' },
   { message: '有哪些本地数据 API', expectPrimary: 'list_local_data_apis', intent: 'local_data_catalog' },
   { message: 'list_local_data_apis 看下目录', expectPrimary: 'list_local_data_apis', intent: 'local_data_catalog' },
@@ -96,10 +100,12 @@ const PRIMARY_CASES = [
   { message: '运行这段 python 脚本', expectPrimary: 'opptrix_run', intent: 'workspace_shell' },
   { message: 'ping 一下 baidu.com', expectPrimary: 'opptrix_run', intent: 'workspace_shell' },
   { message: '测一下到百度的网络延迟', expectPrimary: 'http_fetch', intent: 'workspace_network_latency' },
-  { message: 'pip install requests 装进工作区', expectPrimary: 'request_shell_network', intent: 'workspace_shell_install' },
-  { message: '申请沙盒联网安装依赖', expectPrimary: 'request_shell_network', intent: 'workspace_shell_network' },
+  { message: 'pip install requests 装进工作区', expectPrimary: 'opptrix_run', intent: 'workspace_shell_install' },
+  { message: '申请沙盒联网安装依赖', expectPrimary: 'opptrix_run', intent: 'workspace_shell_network' },
   { message: '检查脚本语法', expectPrimary: 'code_preflight', intent: 'workspace_code_preflight' },
   { message: '按行号替换脚本里的几行', expectPrimary: 'workspace_replace_lines', intent: 'workspace_line_edit' },
+  { message: '写一个 python 脚本算一下收益率', expectPrimary: 'workspace_glob', intent: 'workspace_coding' },
+  { message: '帮我改一下工作区里的脚本', expectPrimary: 'workspace_glob', intent: 'workspace_coding' },
   { message: '检查一下 Python 环境', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: 'ensure_python 返回 preparing 后用 job_id 轮询', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: '等一会儿再检查下载是否完成然后继续', expectPrimary: 'schedule_turn_wake', intent: 'turn_wake' },
@@ -235,7 +241,7 @@ test('D4 route playbook only names loaded tools', () => {
   const noPreferredCard = buildRoundRoutePlaybook(cold, [])
   assert.match(noPreferredCard, /list_tool_packs/)
   assert.match(noPreferredCard, /workspace/)
-  assert.match(noPreferredCard, /opptrix_run|shell_run|ensure_python|workspace_/)
+  assert.match(noPreferredCard, /opptrix_run|ensure_python|workspace_/)
   assert.match(noPreferredCard, /勿直接声称无法完成|勿空转/)
 })
 
@@ -389,8 +395,10 @@ test('system rules include workspace access guardrails', () => {
 test('system rules require opptrix_run when loaded', () => {
   const rules = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'workspace'],
-    activeToolNames: ['opptrix_run', 'http_fetch', 'workspace_list'],
+    activeToolNames: ['opptrix_run', 'http_fetch', 'workspace_glob'],
   })
   assert.match(rules, /禁止声称「出于安全规范禁止执行 Shell」/)
   assert.match(rules, /http_fetch/)
+  assert.match(rules, /方案 1|Cursor 式|工具收敛/)
+  assert.match(rules, /background/)
 })

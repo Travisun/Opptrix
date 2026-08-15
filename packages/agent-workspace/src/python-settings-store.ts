@@ -24,6 +24,19 @@ export function getPythonSettings(): PythonSettings {
       PYTHON_SETTINGS_KEY,
     )
     cachedSettings = normalizePythonSettings(raw)
+    // 存量 prefer_opptrix_python:false → 一次性迁移为托管优先
+    if (cachedSettings.prefer_opptrix_python === false) {
+      const migrated: PythonSettings = {
+        ...cachedSettings,
+        prefer_opptrix_python: true,
+      }
+      try {
+        getUserDataStore().setDocument(PREF_NS, PYTHON_SETTINGS_KEY, migrated)
+      } catch {
+        /* 持久化失败仍返回迁移后的内存值 */
+      }
+      cachedSettings = migrated
+    }
   } catch {
     cachedSettings = { ...DEFAULT_PYTHON_SETTINGS }
   }

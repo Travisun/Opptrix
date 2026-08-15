@@ -459,15 +459,22 @@ export const TOOL_META: Record<string, ToolMeta> = {
   schedule_turn_wake: {
     miningEligible: false,
     usageGuide:
-      '异步任务（prepare_fuyao_dump / ensure_python 等返回 preparing）或需延后续跑时：挂起本轮并用本工具按 suggested_wake_seconds 到期同会话自动唤醒；任何场景可调用（core always-on）。',
+      '无后台任务事件时的纯延时续跑；有 preparing/accepted/installing+job_id 时系统自动挂起并终态续跑，禁止对本工具传 job_id，禁止 poll/sleep 查进度。',
     compliance:
-      'seconds∈[5,1800]；prompt 必填；可多次挂（每会话上限 8）；到期注入含时间元数据的 user 消息并新开一轮（非 steer）；活跃对话中不打断；进程内存 timer，关应用丢失。优先于 tight-poll。',
+      'seconds∈[5,1800]；prompt 必填；禁止 job_id；可多次挂（每会话上限 8）；到期注入续跑消息并同会话 chat；用户新消息会取消 pending。',
+  },
+  cancel_job: {
+    miningEligible: false,
+    usageGuide:
+      '仅当任务明确可取消时调用；多数安装/下载不支持取消，只需结束等待请发新消息或 Stop。',
+    compliance:
+      'job_id 必填；cancelable=false 时返回明确错误；不自动 cancel 全局任务。',
   },
   get_system_info: {
     miningEligible: false,
     usageGuide: '运行 opptrix_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
     compliance:
-      '只读；看 python_priority / python_source / sandbox_python_version 与 python_argv_hint；只用 argv「python|pip」，禁止手写系统/托管绝对路径；不含密钥与内部绝对路径。',
+      '只读；看 python_priority / python_source / sandbox_python_version 与 python_argv_hint；opptrix_run 的 command 用「python」「pip」字面量，禁止手写系统/托管绝对路径；不含密钥与内部绝对路径。',
   },
   get_app_settings: {
     miningEligible: false,
@@ -685,44 +692,57 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '外部网页任务结束或切换站点前关闭浏览器，释放资源。',
     compliance: '无参数；关闭后再次浏览须 browser_navigate 重新打开。',
   },
-  workspace_list: {
+  workspace_glob: {
     packId: 'workspace',
-    usageGuide: '查看工作区或授权文件夹内的文件列表；先 list_workspace_grants 确认 root_id。',
-    compliance: '只读；path 为相对路径；禁止 .. 穿越。',
+    usageGuide:
+      '找文件/看树首选（优先于 shell ls/find）：不知 root 时先 list_workspace_grants（至多一次）；已知 root 后按文件名模式递归查找（如 **/*.py、src/**/*.ts）；再 workspace_read(numbered) / workspace_replace_lines；opptrix_run(ls/find) 仅管道/复杂场景后备且 cwd 相对 root；勿虚构已移除的列目录工具；勿先 ensure_python。',
+    compliance:
+      '只读；glob_pattern 必填；path 相对 root_id（禁绝对/~ /file:// /abs_path）；可选 max_results（默认 200，上限 500）；禁止越权与 .. 穿越；优先于 opptrix_run(ls/find)；探树勿把 abs_path 抄进 path。',
+  },
+  workspace_grep: {
+    packId: 'workspace',
+    usageGuide:
+      '搜文本首选（优先于 shell rg/grep）：keywords 空格分词 + match_mode=and|or（默认 and），或 pattern 正则；返回 path/line/content，再 read(numbered) 定点改；shell 仅管道/复杂场景后备；勿虚构已移除的列目录工具；勿先 ensure_python。',
+    compliance:
+      '只读；keywords 与 pattern 二选一；path 相对 root_id（禁绝对/~ /file:// /abs_path）；可选 glob 限文件、max_hits≤100、context_lines 0–2；跳过二进制与过大文件；禁止越权；优先于 opptrix_run(rg/grep)。',
   },
   workspace_read: {
     packId: 'workspace',
     usageGuide:
-      '读取工作区内文本文件；可选 start_line/end_line 只取区间，numbered=true 带行号前缀，便于对接 workspace_replace_lines。',
-    compliance: '只读；root_id + 相对 path；勿读二进制大文件进上下文；默认不传区间则整文件无前缀。',
+      '读工作区文本首选（优先于 shell cat/head/tail）；改脚本前必读；大文本必须 start_line/end_line 分段，numbered=true 带行号前缀，便于对接 workspace_replace_lines；勿先 ensure_python。',
+    compliance:
+      '只读；root_id + 相对 path（禁绝对/~ /file:// /abs_path）；勿把 grants.abs_path 抄进 path；勿读二进制/超大文件进上下文；大文本用行区间分块，禁止整文件灌对话；UTF-8 无 BOM；默认不传区间则整文件无前缀；禁止用 opptrix_run 读文件内容。',
   },
   workspace_write: {
     packId: 'workspace',
     usageGuide:
-      '新建或整文件覆盖写出；小改动（修几行）请用 workspace_replace_lines，禁止为省事整文件 rewrite。',
-    compliance: '须 rw 授权；覆盖/删除可走 sticky；工作区总配额 20GB。',
+      '新建或整文件覆盖首选（优先于 shell 重定向/heredoc）；小改动（修几行）请用 workspace_replace_lines，禁止为省事整文件 rewrite；禁止用 echo>/tee 写文件。勿先 ensure_python。',
+    compliance:
+      '须 rw 授权；path 相对 root_id（禁绝对/~ /file:// /abs_path）；覆盖/删除可走 sticky；工作区总配额 20GB；写完再 code_preflight / opptrix_run。',
   },
   workspace_replace_lines: {
     packId: 'workspace',
     usageGuide:
-      '按 code_preflight diagnostics 的 L 行号批量定点替换；传入 edits[{start_line,end_line?,new_text,expect_text?}]；校验全过后原子写入。',
+      '改已有脚本的首选（优先于 shell sed/awk）：① edits 按 code_preflight L 行号批量定点替换；② old_string/new_string/replace_all 精确字符串替换。勿用行情工具或 opptrix_run 改文件；勿先 ensure_python。多文件结构化改动可用 workspace_apply_patch。',
     compliance:
-      '文件须已存在；≤40 条 edits；局部替换不走 overwrite 确认；任一条越界/重叠/expect mismatch 则整批失败且文件不变；修完再 code_preflight。',
+      '文件须已存在；path 相对 root_id（禁绝对/~ /file:// /abs_path）；edits 与 old_string 二选一；≤40 条 edits；精确替换默认要求唯一匹配；局部替换不走 overwrite 确认；任一条失败则文件不变；修完再 code_preflight。',
   },
-  workspace_mkdir: {
+  workspace_apply_patch: {
     packId: 'workspace',
-    usageGuide: '在工作区内创建子目录，组织输出文件。',
-    compliance: '须 rw 授权；path 相对 root_id。',
+    usageGuide:
+      '多文件或结构化补丁首选（优先于 shell 批量改文件）：传入 OpenCode *** Begin Patch 文本（Add/Update/Delete）；路径相对授权 root；Update 靠上下文 hunk 匹配。单处小改优先 workspace_replace_lines。',
+    compliance:
+      '须 rw 授权；补丁内路径相对 root（禁绝对/~ /file:// /abs_path）；越权/穿越失败；Add 不可覆盖已存在文件；Delete 需用户确认；勿用行情工具或 shell 代替补丁。',
   },
   workspace_delete: {
     packId: 'workspace',
     usageGuide: '删除工作区内文件或目录；会触发用户确认。',
-    compliance: '须 rw 授权；删除不可恢复；可走 sticky。',
+    compliance: '须 rw 授权；path 相对 root_id（禁绝对/~ /file:// /abs_path）；删除不可恢复；可走 sticky。',
   },
   download_file: {
     packId: 'workspace',
     usageGuide: '从 http(s) URL 流式下载大文件到工作区（公告 PDF、数据集等）。',
-    compliance: '禁止内网/本地 URL；覆盖已有文件需确认；更新工作区配额。',
+    compliance: '禁止内网/本地 URL；保存 path 相对 root_id（禁绝对/~ /file:// /abs_path）；覆盖已有文件需确认；更新工作区配额。',
   },
   http_fetch: {
     packId: 'workspace',
@@ -732,19 +752,21 @@ export const TOOL_META: Record<string, ToolMeta> = {
   request_folder_access: {
     packId: 'workspace',
     usageGuide: '需要访问工作区外的文件夹时，提示用户在界面授权（ro/rw）。',
-    compliance: '工具本身不弹窗；用户授权后 list_workspace_grants 获取 root_id。',
+    compliance: '工具本身不弹窗；用户授权后 list_workspace_grants 获取 root_id（成功后勿反复 list）。',
   },
   list_workspace_grants: {
     packId: 'workspace',
-    usageGuide: '用户问可访问哪些目录、本对话有哪些授权工作区、能读哪些文件夹时首选。',
-    compliance: '只读；返回 root_id/label/mode 与公共工作区摘要；勿用 get_project_info 代替；额外目录需 request_folder_access 或界面授权。',
+    usageGuide:
+      '仅当不知 root_id、或用户问可访问哪些目录/本对话授权工作区时调用（至多一次）；已知 root 直接 workspace_glob / workspace_grep / opptrix_run。',
+    compliance:
+      '只读；返回 root_id/label/mode；若含 abs_path 则 do_not_use_as_tool_path=true，禁止抄进 path/cwd；同一授权集至多一次，成功后勿反复 list；勿用 get_project_info 代替；额外目录需 request_folder_access 或界面授权。',
   },
   resolve_workspace_path_uri: {
     packId: 'workspace',
     usageGuide:
       '消息内要引用工作区图片/视频/音频/文件时，生成 opptrix-ws:// URI；也可在写出文件后校验 exists。',
     compliance:
-      'root_id + 相对 path；仅授权 root；返回 uri/exists/kind_hint，禁止返回本机绝对路径；消息引用须用 uri，禁止 file://。',
+      'root_id + 相对 path（禁绝对/~ /file:// /abs_path）；仅授权 root；返回 uri/exists/kind_hint，禁止返回本机绝对路径；消息引用须用 uri，禁止 file://。',
   },
   shell_platform_status: {
     packId: 'workspace',
@@ -754,56 +776,35 @@ export const TOOL_META: Record<string, ToolMeta> = {
   opptrix_run: {
     packId: 'workspace',
     usageGuide:
-      '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。写自定义脚本后建议先 code_preflight。',
+      '命令主路径的真 Shell：跑脚本/本地命令/pip·npm 安装首选；找搜优先 workspace_glob/grep，本工具 ls/find/rg 仅管道/复杂场景后备（cwd 相对 root）。主参数 command；短命令前台同步；预计较长（下载/安装/重计算/大数据处理）必须 background:true（job_id + 自动挂起，依赖终态续跑；禁止 poll/sleep）。大数据优先脚本内分块/流式，结果写工作区再 workspace_read 区间；勿把巨量 stdout 当上下文。包源默认已放行；其它域名运行时确认或 suggested_escalate；出隔离 escalate=unsandboxed（每次确认）。python/pip 直接写进 command（运行时解析）；勿先 ensure_python。硬禁：勿用 cat/head/tail/sed/awk/echo>/heredoc 读或改文件内容（改用 workspace_read/write/replace_lines/apply_patch）；勿代替行情工具。',
     compliance:
-      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 opptrix_install(pip|npm)；python 未就绪时先 ensure_python 并按 job_id 轮询至 ready，勿在 tool 内死等安装；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
-  },
-  /** @deprecated 兼容别名 → opptrix_run */
-  shell_run: {
-    packId: 'workspace',
-    usageGuide: '已弃用别名，请改用 opptrix_run（参数与行为相同）。',
-    compliance: '兼容旧会话/旧提示；新调用一律用 opptrix_run。',
+      '可先 get_system_info 确认 platform/就绪；cwd 与 command/脚本内路径相对 root_id（禁绝对/~ /file:// /abs_path）；'
+      + '子进程 HOME=grant 根（非 cwd；~ ≠ cwd，勿用 ~/ 当相对 cwd）；workspace_* 与 shell 对照：读改写走 workspace_*，跑命令走本工具；'
+      + '传 command（勿用已移除工具）；python/node/npm/pip 字面量会改写到当前运行时（含真 shell 管道/&&）；依赖直接 opptrix_run("pip/npm install …")；'
+      + '硬禁勿用 shell 创建/覆盖/就地改文本文件内容（cat/head/tail/sed/awk/echo>/heredoc）；找树/搜内容优先 workspace_glob/grep；'
+      + '编程前估内存，大数据分块处理；预计较长必须 background:true，依赖终态自动续跑，禁止 poll/sleep/反复等进度；'
+      + 'secret_refs 须已授权；行情/财务勿用本工具爬取；ensure_python 仅失败兜底；连续同类失败须改策略或向用户说明，勿同模式空转。',
   },
   code_preflight: {
     packId: 'workspace',
     usageGuide:
       '写自定义 python/js/ts 脚本后、opptrix_run 前：一次返回全部 findings（diagnostics，尽量带 line；errors/warnings 含 L 前缀），按行号用 workspace_replace_lines 一轮修完再 preflight。软门禁，不硬拦 opptrix_run。',
     compliance:
-      'path 必填（相对路径）；levels 默认 ["l0","l1"]；language 默认 auto；不执行业务代码；L1 无 ruff/biome 时 skip 不报错；优先读带 line 的 diagnostics，禁止小改动却整文件 workspace_write。',
-  },
-  opptrix_install: {
-    packId: 'workspace',
-    usageGuide:
-      '在授权工作区安装 pip 或 npm 依赖（.opptrix-packages 或 node_modules）；与 opptrix_run 共用同一解释器；比手写 pip/npm 更安全。预估需联网时先 request_shell_network({intent:"install"})。',
-    compliance:
-      'manager=pip|npm；pip 装进 .opptrix-packages，运行时经 PYTHONPATH 可见；python 未就绪用 ensure_python；联网安装需用户确认（可用 request_shell_network 预授权）。',
-  },
-  /** @deprecated 兼容别名 → opptrix_install */
-  shell_install: {
-    packId: 'workspace',
-    usageGuide: '已弃用别名，请改用 opptrix_install（参数与行为相同）。',
-    compliance: '兼容旧会话/旧提示；新调用一律用 opptrix_install。',
-  },
-  request_shell_network: {
-    packId: 'workspace',
-    usageGuide:
-      '预估需 pip/npm 安装或访问已知外网域名时，先唤起真实沙盒联网授权；走系统确认弹窗写入 sticky/preflight，禁止用 ask_user「允许联网」冒充。',
-    compliance:
-      'intent=install|egress 必填；egress 须 hosts；用 confirm 非 ask_user；局域网仍用 request_session_lan_access。',
+      'path 必填且相对 root_id（禁绝对/~ /file:// /abs_path）；levels 默认 ["l0","l1"]；language 默认 auto；不执行业务代码；L1 无 ruff/biome 时 skip 不报错；优先读带 line 的 diagnostics，禁止小改动却整文件 workspace_write。',
   },
   python_env_status: {
     packId: 'workspace',
     usageGuide:
-      '用户问 Python 环境、版本、是否可用时首选；只看当前优先解释器（priority / active_source），勿把两套路径都当可执行选项。',
+      '用户问 Python 环境、版本、是否可用时首选；只看当前优先解释器（priority / active_source），勿把两套路径都当可执行选项。编程主路径勿先调本工具再写代码。',
     compliance:
-      '只读；返回 ready/active_source/priority/argv_policy 与诊断布尔；不含 system_path/opptrix_path；shell 只用 python/pip 字面量 argv。',
+      '只读；返回 ready/active_source/priority 与诊断布尔；不含 system_path/opptrix_path；opptrix_run 的 command 用 python/pip 字面量。',
   },
   ensure_python: {
     packId: 'workspace',
     usageGuide:
-      '运行 Python 脚本或 pip 安装前调用；未就绪时立即返回 preparing/installing+job_id+suggested_wake_seconds；优先 schedule_turn_wake 到期后再查，勿 tight-poll。',
+      '失败兜底：仅当用户明确要安装/修复 Python，或 opptrix_run(python/pip) 因未就绪失败时再调用；禁止作为编程第一步或改文件前仪式。未就绪立即 preparing/installing+job_id；系统通常自动挂起并终态续跑；勿 poll/sleep 查进度。',
     compliance:
-      '勿在本轮死等安装；status=preparing|installing 时用 suggested_wake_seconds + schedule_turn_wake（prompt 含检查 ensure_python job_id），或必要时再调 ensure_python({ job_id })；反空转对进行中 status 豁免；ready 后勿空转同参；failed 勿假装已安装。',
+      '勿在本工具内死等；status=preparing|installing 时依赖自动挂起与终态续跑；必要时可 ensure_python({ job_id }) 查状态，无 job 事件才 schedule_turn_wake（禁止传 job_id）；反空转对进行中 status 豁免；ready 后勿空转同参；failed 勿假装已安装；编程默认直接 opptrix_run。',
   },
   list_local_data_apis: {
     packId: 'workspace',
@@ -818,9 +819,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   prepare_fuyao_dump: {
     packId: 'workspace',
     usageGuide:
-      '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或短时效 URL；冷下载可能 preparing+job_id+suggested_wake_seconds，优先 schedule_turn_wake 再查。',
+      '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或短时效 URL；冷下载可能 preparing+job_id，系统通常自动挂起并就绪后续跑。',
     compliance:
-      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，用 suggested_wake_seconds + schedule_turn_wake（或必要时 job_id 再调本工具）；勿 tight-poll；full|incremental + local_path 就绪后自动写 offline-k-meta。',
+      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；缓存命中/presigned_url 同步 ready；local_path 冷下载立即 preparing，依赖自动挂起与终态续跑；勿 poll/sleep；full|incremental + local_path 就绪后自动写 offline-k-meta。',
   },
   request_session_lan_access: {
     packId: 'workspace',

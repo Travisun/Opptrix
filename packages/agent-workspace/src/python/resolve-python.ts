@@ -267,9 +267,13 @@ function buildStatusMessage(
   return '已检测到系统 Python，可直接运行脚本与安装依赖。'
 }
 
-/** 探测系统与 Opptrix 托管 Python，按设置选择 active 源 */
+/**
+ * 探测系统与 Opptrix 托管 Python。
+ * 一律托管优先：有托管则 active=opptrix，否则 system（忽略 prefer_opptrix_python=false）。
+ */
 export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
-  const settings = getPythonSettings()
+  // 触发存量 prefer=false → true 迁移（设置开关语义为展示/安装后写入）
+  getPythonSettings()
   const [system, opptrix] = await Promise.all([
     probeSystemPython(),
     probeOpptrixPython(),
@@ -279,7 +283,7 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   let active_path: string | null = null
   let active_version: string | null = null
 
-  if (settings.prefer_opptrix_python && opptrix) {
+  if (opptrix) {
     active_source = 'opptrix'
     active_path = opptrix.path
     active_version = opptrix.version
@@ -287,10 +291,6 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
     active_source = 'system'
     active_path = system.path
     active_version = system.version
-  } else if (opptrix) {
-    active_source = 'opptrix'
-    active_path = opptrix.path
-    active_version = opptrix.version
   }
 
   const ready = active_path != null

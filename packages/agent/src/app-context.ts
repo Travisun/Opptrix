@@ -107,7 +107,7 @@ export async function getSystemInfo() {
       ? 'none'
       : pythonRuntime.active_source,
     python_argv_hint:
-      'opptrix_run/shell_install 只用 argv「python」或「pip」；运行时会改写到当前优先解释器。禁止手写系统/托管绝对路径。',
+      'opptrix_run 的 command 请用「python」或「pip」字面量；运行时会改写到当前优先解释器。禁止手写系统/托管绝对路径。',
     at: now.toISOString(),
   }
 }

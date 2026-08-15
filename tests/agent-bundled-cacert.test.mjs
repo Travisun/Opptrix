@@ -10,6 +10,7 @@ import {
   resolveBundledCaCertPath,
   materializeBundledCaCert,
   applyBundledCaCertEnv,
+  clearBundledCaCertEnv,
   bundledCaCertAllowReadPaths,
   injectPipCertArgv,
 } from '../packages/agent-workspace/dist/index.js'
@@ -45,6 +46,68 @@ test('applyBundledCaCertEnv uses explicit certPath when provided', () => {
     assert.equal(env.SSL_CERT_FILE, path.resolve(fake))
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('applyBundledCaCertEnv with explicit null does not fall back to package path', () => {
+  const env = {
+    SSL_CERT_FILE: '/outside/homedir/cacert.pem',
+    REQUESTS_CA_BUNDLE: '/outside/homedir/cacert.pem',
+    CURL_CA_BUNDLE: '/outside/homedir/cacert.pem',
+    NODE_EXTRA_CA_CERTS: '/outside/homedir/cacert.pem',
+    PIP_CERT: '/outside/homedir/cacert.pem',
+    CERT_PATH: '/outside/homedir/cacert.pem',
+  }
+  const applied = applyBundledCaCertEnv(env, null)
+  assert.equal(applied, null)
+  // 不改写、不回退注入包内路径
+  assert.equal(env.SSL_CERT_FILE, '/outside/homedir/cacert.pem')
+  assert.equal(env.PIP_CERT, '/outside/homedir/cacert.pem')
+})
+
+test('clearBundledCaCertEnv removes inherited CA keys (materialize-failure path)', () => {
+  const env = {
+    SSL_CERT_FILE: '/outside/homedir/cacert.pem',
+    REQUESTS_CA_BUNDLE: '/outside/homedir/cacert.pem',
+    CURL_CA_BUNDLE: '/outside/homedir/cacert.pem',
+    NODE_EXTRA_CA_CERTS: '/outside/homedir/cacert.pem',
+    PIP_CERT: '/outside/homedir/cacert.pem',
+    CERT_PATH: '/outside/homedir/cacert.pem',
+    PATH: '/usr/bin',
+  }
+  clearBundledCaCertEnv(env)
+  assert.equal(env.SSL_CERT_FILE, undefined)
+  assert.equal(env.REQUESTS_CA_BUNDLE, undefined)
+  assert.equal(env.CURL_CA_BUNDLE, undefined)
+  assert.equal(env.NODE_EXTRA_CA_CERTS, undefined)
+  assert.equal(env.PIP_CERT, undefined)
+  assert.equal(env.CERT_PATH, undefined)
+  assert.equal(env.PATH, '/usr/bin')
+
+  // sanitizeChildEnv 失败路径：clear + apply(null) 不得再指回包内
+  const applied = applyBundledCaCertEnv(env, null)
+  assert.equal(applied, null)
+  assert.equal(env.SSL_CERT_FILE, undefined)
+  assert.equal(env.PIP_CERT, undefined)
+})
+
+test('materialize success path only points env at grant .opptrix/cacert.pem', () => {
+  const grantRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-grant-cacert-safe-'))
+  try {
+    const dest = materializeBundledCaCert(grantRoot)
+    assert.ok(dest)
+    assert.ok(dest.startsWith(grantRoot))
+    const env = {
+      SSL_CERT_FILE: '/outside/package/assets/cacert.pem',
+      PIP_CERT: '/outside/package/assets/cacert.pem',
+    }
+    const applied = applyBundledCaCertEnv(env, dest)
+    assert.equal(applied, dest)
+    assert.equal(env.SSL_CERT_FILE, dest)
+    assert.equal(env.PIP_CERT, dest)
+    assert.ok(!env.SSL_CERT_FILE.includes(`${path.sep}assets${path.sep}`))
+  } finally {
+    fs.rmSync(grantRoot, { recursive: true, force: true })
   }
 })
 

@@ -277,6 +277,7 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 | SQLite / 数据库 | `schema-migration` | `.cursor/rules/backward-compatibility.mdc` |
 | 行情 / Hub / 研究 API | `data-layer` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
 | Agent / MCP 工具接入 | —（读规则） | `.cursor/rules/mcp-tool-pack-routing.mdc`、`docs/AGENT-GUIDE.md` |
+| Agent 命令隔离 / 会话级 SRT | —（读规则） | `.cursor/rules/agent-shell-sandbox.mdc`、`docs/AGENT-GUIDE.md`、`docs/DESKTOP.md` |
 | Provider 实现 | `provider-docs` | `docs/PROVIDER-STANDARD-API.md` |
 | 架构设计 | `architecture` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 质量保证 / 审计 | `quality-assurance` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |

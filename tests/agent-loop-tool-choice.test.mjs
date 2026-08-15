@@ -113,3 +113,19 @@ test('isBusinessToolName excludes meta/interactive', () => {
   assert.equal(isBusinessToolName('activate_tool_pack'), false)
   assert.equal(isBusinessToolName('update_research_checklist'), false)
 })
+
+test('isLastSafetyRound pairs with none tool choice on last step', async () => {
+  const { isLastSafetyRound, LAST_STEP_TURN_TAIL } = await import(
+    '../packages/agent/dist/loop/budget.js'
+  )
+  const { resolveBodyToolChoice } = await import(
+    '../packages/agent/dist/llm/provider.js'
+  )
+  const max = 50
+  const last = max - 1
+  assert.equal(isLastSafetyRound(last, max), true)
+  // 末轮：空 tools → body 不写 tool_choice；有 tools 时显式 none
+  assert.equal(resolveBodyToolChoice(0, 'none'), undefined)
+  assert.equal(resolveBodyToolChoice(2, 'none'), 'none')
+  assert.ok(LAST_STEP_TURN_TAIL.includes('禁止再调用'))
+})

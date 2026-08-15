@@ -88,5 +88,5 @@ export function unloadedToolHint(toolName: string): string {
   if (pack) {
     return `工具 ${toolName} 未加载（属于 pack「${pack}」）。请先调用 activate_tool_pack，参数 pack_ids: ["${pack}"]，再重试。`
   }
-  return `未知或不支持的工具：${toolName}。请先 list_tool_packs 查看可用工具包；若无合适 pack → activate_tool_pack，参数 pack_ids: ["workspace"]，用 opptrix_run / ensure_python / workspace_* 沙盒编程实现，勿虚构工具名。`
+  return `未知或不支持的工具：${toolName}。请先 list_tool_packs 查看可用工具包；若无合适 pack → activate_tool_pack，参数 pack_ids: ["workspace"]，用 opptrix_run / workspace_* 沙盒编程实现（ensure_python 仅失败兜底），勿虚构工具名。`
 }

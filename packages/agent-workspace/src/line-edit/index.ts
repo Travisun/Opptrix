@@ -10,3 +10,8 @@ export {
   type NumberedSnippet,
   type ApplyLineEditsResult,
 } from './apply-line-edits.js'
+export {
+  applyExactReplace,
+  assertExactReplaceOk,
+  type ExactReplaceResult,
+} from './exact-replace.js'

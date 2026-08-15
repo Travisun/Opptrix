@@ -105,7 +105,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     description:
       '读写本地工作区与公共复用区、本地数据目录、扶摇 dump、受控 HTTP、文件夹授权、隔离环境运行代码；内置/已匹配工具不够或无匹配能力时，可在沙盒写脚本完成计算与处理，并可与其它 pack 取数结合',
     whenToUse:
-      '保存/读取报告与数据文件、公共包复用、离线 Parquet、下载附件、调用开放 API、访问用户授权的文件夹、运行 python/node 脚本或安装依赖；标准投研工具覆盖不了的计算/清洗/自定义处理时作沙盒兜底（可先取数再沙盒计算）',
+      '保存/读取报告与数据文件、公共包复用、离线 Parquet、下载附件、调用开放 API、访问用户授权的文件夹、运行 python/node 脚本或安装依赖；找文件/看树优先 workspace_glob（shell ls/find 仅后备）；搜内容优先 workspace_grep（shell rg 仅管道/复杂场景后备）；读/改/写文本只用 workspace_*，禁止 opptrix_run 用 cat/sed/echo>/heredoc 等读或改文件内容；建目录用 opptrix_run(mkdir -p) 或 workspace_write；不知 root 时 list_workspace_grants 至多一次；标准投研工具覆盖不了的计算/清洗/自定义处理时作沙盒兜底（可先取数再沙盒计算）。path/cwd 永远相对 root_id；连续同类失败须改策略勿空转',
+    alwaysOn: true,
   },
   {
     id: 'strategy_extra',
@@ -144,6 +145,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   ask_user: 'core',
   get_current_time: 'core',
   schedule_turn_wake: 'core',
+  cancel_job: 'core',
   get_system_info: 'core',
   get_app_settings: 'core',
   get_project_info: 'core',
@@ -255,11 +257,12 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   browser_close: 'browser',
 
   // workspace
-  workspace_list: 'workspace',
+  workspace_glob: 'workspace',
+  workspace_grep: 'workspace',
   workspace_read: 'workspace',
   workspace_write: 'workspace',
   workspace_replace_lines: 'workspace',
-  workspace_mkdir: 'workspace',
+  workspace_apply_patch: 'workspace',
   workspace_delete: 'workspace',
   download_file: 'workspace',
   http_fetch: 'workspace',
@@ -269,13 +272,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
 
   shell_platform_status: 'workspace',
   opptrix_run: 'workspace',
-  /** @deprecated 兼容别名 → opptrix_run */
-  shell_run: 'workspace',
   code_preflight: 'workspace',
-  opptrix_install: 'workspace',
-  /** @deprecated 兼容别名 → opptrix_install */
-  shell_install: 'workspace',
-  request_shell_network: 'workspace',
   python_env_status: 'workspace',
   ensure_python: 'workspace',
   list_local_data_apis: 'workspace',
@@ -339,7 +336,7 @@ export function alwaysOnPackIds(): ToolPackId[] {
 export function buildToolPackCatalogPrompt(): string {
   const lines = [
     '## 工具包目录（按需加载）',
-    '每轮默认仅加载 core + meta；其它包由意图播种或 activate_tool_pack 激活。',
+    '每轮默认加载 core + meta + workspace；其它包由意图播种或 activate_tool_pack 激活。',
     '需要未加载能力时：先 list_tool_packs，再 activate_tool_pack({ pack_ids: [...] })。',
     '',
     '| pack_id | 标题 | 何时激活 |',
@@ -357,7 +354,10 @@ export function buildToolPackCatalogPrompt(): string {
   lines.push('- A 股专用工具（机构评级、筹码等）勿用于非 A 股')
   lines.push('- 标准 API 可用时禁止用自定义 Provider 方法替代；标准工具能做的禁止先上沙盒瞎写')
   lines.push(
-    '- 缺能力：先判断是否有业务 pack 可 activate；若标准工具仍覆盖不了 → activate_tool_pack([\'workspace\'])，用 opptrix_run / opptrix_install / code_preflight / ensure_python / workspace_* 编程实现，勿空转反复 activate 无关 pack，勿直接声称无法完成',
+    '- 编程意图：读/改/写文件用专用 workspace_*（勿用 opptrix_run 改或读文件内容）；跑命令/装依赖用 opptrix_run；找搜优先 workspace_glob/grep，shell 仅后备；可与投研工具并用；禁止用行情、财务、评估工具代替读写文件；多文件改动可用 workspace_apply_patch',
+  )
+  lines.push(
+    '- 缺能力：先判断是否有业务 pack 可 activate；若标准工具仍覆盖不了 → 本轮已默认加载 workspace，直接用 workspace_* 改文件 + opptrix_run / code_preflight 跑命令（ensure_python 仅失败兜底），勿空转反复 activate 无关 pack，勿直接声称无法完成',
   )
   lines.push(
     '- 可结合：先用标准投研工具取数，再在沙盒里计算/汇总；消息内图表用 ```chart```（→ @opptrix/canvas Chart），禁止沙盒出图代替围栏',

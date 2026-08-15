@@ -46,17 +46,18 @@ describe('turn-wake', () => {
       scheduledAt: '2026-08-14T00:00:00.000Z',
       fireAt: '2026-08-14T00:01:30.000Z',
       reason: 'waiting_fuyao_dump',
-      jobId: 'job-abc',
     }, '2026-08-14T00:01:31.000Z')
-    assert.match(msg, /【定时唤醒】/)
+    assert.match(msg, /系统续跑/)
+    assert.doesNotMatch(msg, /【定时唤醒】/)
     assert.match(msg, /检查 dump 是否就绪并继续离线分析/)
+    assert.match(msg, /勿 poll/)
     assert.match(msg, /wake_id: wake-1/)
     assert.match(msg, /scheduled_at: 2026-08-14T00:00:00\.000Z/)
     assert.match(msg, /fire_at: 2026-08-14T00:01:30\.000Z/)
     assert.match(msg, /delay_s: 90/)
     assert.match(msg, /fired_at: 2026-08-14T00:01:31\.000Z/)
     assert.match(msg, /reason: waiting_fuyao_dump/)
-    assert.match(msg, /job_id: job-abc/)
+    assert.doesNotMatch(msg, /job_id:/)
   })
 
   it('scheduleTurnWake returns wake_id/fire_at/seconds and fires resume', async () => {
@@ -91,7 +92,6 @@ describe('turn-wake', () => {
       seconds: 3, // clamp → 5
       prompt: '续跑检查',
       reason: 'test',
-      jobId: 'j1',
     })
     assert.equal(r.ok, true)
     if (!r.ok) return
@@ -111,6 +111,23 @@ describe('turn-wake', () => {
     assert.equal(tw.listTurnWakeIdsForTests('sess-a').length, 0)
 
     for (const t of timers) clearTimeout(t)
+  })
+
+  it('rejects job_id', async () => {
+    tw = await loadTurnWake()
+    tw.configureTurnWakeRuntime({
+      isSessionAlive: () => true,
+      isChatBusy: () => false,
+    })
+    const r = tw.scheduleTurnWake({
+      sessionId: 'sess-job',
+      seconds: 30,
+      prompt: '不应挂 job',
+      jobId: 'j1',
+    })
+    assert.equal(r.ok, false)
+    if (r.ok) return
+    assert.match(r.error, /不接受 job_id/)
   })
 
   it('defers when chat is busy instead of calling resume', async () => {

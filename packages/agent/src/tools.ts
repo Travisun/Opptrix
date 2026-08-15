@@ -26,6 +26,10 @@ import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
 import { assembleSystemPrompt } from './experts/prompt-assembler.js'
 import { scheduleTurnWake } from './turn-wake.js'
+import {
+  jobRegistry,
+  watchRegistry,
+} from './jobs/index.js'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -620,7 +624,7 @@ export class ToolRegistry {
         name: 'schedule_turn_wake',
         category: '基础',
         description:
-          '结束本轮后按秒数在同会话自动唤醒续跑（注入含 prompt 的用户消息并新开一轮）；用于异步准备（如 dump/Python）勿 tight-poll；seconds 5–1800',
+          '无后台任务事件时的纯延时续跑：登记 timer 后结束本轮，到期同会话自动续跑；有 job_id 的异步任务依赖终态自动通知，禁止传 job_id；勿 poll/sleep 查进度；seconds 5–1800；新消息会取消 pending',
         parameters: S({
           seconds: {
             type: 'number',
@@ -628,15 +632,11 @@ export class ToolRegistry {
           },
           prompt: {
             type: 'string',
-            description: '到期后注入的续跑说明（必填）；应写清要检查什么、如何继续',
+            description: '到期后注入的续跑说明（必填）；应写清如何继续',
           },
           reason: {
             type: 'string',
-            description: '可选：挂起原因（如 waiting_fuyao_dump / waiting_python）',
-          },
-          job_id: {
-            type: 'string',
-            description: '可选：关联异步任务 id（prepare_fuyao_dump / ensure_python 的 job_id）',
+            description: '可选：挂起原因（如 waiting_user_action）',
           },
         }, ['seconds', 'prompt']),
         handler: async (args: Record<string, unknown>) => {
@@ -644,13 +644,46 @@ export class ToolRegistry {
           if (!sessionId) {
             return { ok: false, error: 'schedule_turn_wake 须在聊天会话工具上下文中调用' }
           }
+          if (args.job_id != null && String(args.job_id).trim()) {
+            return {
+              ok: false,
+              error:
+                'schedule_turn_wake 不接受 job_id：有后台任务时依赖终态自动续跑；本工具仅用于无任务事件的纯延时',
+            }
+          }
           return scheduleTurnWake({
             sessionId,
             seconds: args.seconds,
             prompt: String(args.prompt ?? ''),
             reason: args.reason != null ? String(args.reason) : undefined,
-            jobId: args.job_id != null ? String(args.job_id) : undefined,
           })
+        },
+      },
+      {
+        name: 'cancel_job',
+        category: '基础',
+        description:
+          '显式取消可取消的后台任务；多数安装/下载任务不支持取消，仅结束本轮等待请发新消息或 Stop',
+        parameters: S({
+          job_id: { type: 'string', description: '后台任务 id（必填）' },
+        }, ['job_id']),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          const jobId = String(args.job_id ?? '').trim()
+          if (!jobId) return { ok: false, error: 'job_id 必填' }
+          if (sessionId) {
+            watchRegistry.clearByJob(sessionId, jobId)
+          }
+          const result = await jobRegistry.requestCancel(jobId)
+          return {
+            ok: result.ok,
+            job_id: jobId,
+            cancelled: result.ok,
+            error: result.error,
+            note: result.ok
+              ? '已取消任务'
+              : (result.error ?? '无法取消'),
+          }
         },
       },
       {

@@ -1,5 +1,8 @@
 export type {
+  ShellBackgroundStartResult,
+  ShellEscalate,
   ShellInstallParams,
+  ShellIsolation,
   ShellNetworkIntent,
   ShellPlatformStatus,
   ShellPythonRuntimeInfo,
@@ -32,8 +35,25 @@ export {
   commandMayNeedEgressConfirmation,
   injectPipCertArgv,
   isNetworkDiagnosticCommand,
+  isShellBinaryAllowlisted,
   parseDiagnosticTargetHost,
+  shellCommandMatchesDangerousPattern,
+  syncCommandStringFromManagedArgv,
 } from './package-policy.js'
+export {
+  parseCommandToArgv,
+  commandNeedsRealShell,
+  resolveShellCommandInput,
+  shellWrapArgv,
+} from './parse-command.js'
+export { resolvePosixShellPath, SPAWN_ENOENT_HINT } from './resolve-shell-bin.js'
+export {
+  SessionShellRuntime,
+  getSessionShellRuntime,
+  hashSandboxConfig,
+  resetSessionShellRuntimeForTests,
+} from './session-runtime.js'
+export type { SessionSrtAcquireResult } from './session-runtime.js'
 export {
   mergeAllowedNetworkDomains,
   networkDomainsForInstallAllowed,
@@ -52,11 +72,14 @@ export {
   resetConfiguredAllowedDomainsForTests,
   PACKAGE_INSTALL_ALLOWED_DOMAINS,
   SRT_SUPPORTS_ALLOW_ALL_IN_ALLOWED_DOMAINS,
+  hostMatchesDomainPatterns,
+  isHostInPackageInstallAllowlist,
 } from './network-policy.js'
 export {
   resolveBundledCaCertPath,
   materializeBundledCaCert,
   applyBundledCaCertEnv,
+  clearBundledCaCertEnv,
   bundledCaCertAllowReadPaths,
 } from './bundled-cacert.js'
 export {
@@ -95,9 +118,6 @@ export {
 } from './session-secret-access.js'
 export { redactSecretsInText, redactSecretsInUnknown } from './secret-redact.js'
 export {
-  ShellRunStickyStore,
-  SHELL_RUN_CONFIRM_OPTIONS,
-  parseShellRunConfirmChoice,
   summarizeShellArgv,
 } from './sticky-shell-run.js'
 export { getShellPlatformStatus } from './platform.js'
@@ -146,8 +166,24 @@ export {
 export { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './resolve-shell-argv.js'
 export type { ResolveShellArgvResult } from './resolve-shell-argv.js'
-export { ShellRunner, applyPythonRuntimeToChildEnv, type ShellRunnerDeps } from './runner.js'
+export { ShellRunner, applyPythonRuntimeToChildEnv, applyUtf8ChildEnv, type ShellRunnerDeps } from './runner.js'
 export type {
   NetworkInstallPreflightResult,
   NetworkEgressPreflightResult,
 } from './runner.js'
+export {
+  startShellCommandJob,
+  getShellCommandJob,
+  subscribeShellCommandJob,
+  cancelShellCommandJob,
+  clearSessionShellCommandJobs,
+  resetShellCommandJobsForTests,
+  isShellBgEnabled,
+  clampShellBgTimeoutMs,
+  countInFlightShellBgForSession,
+  shellCommandJobAsyncHint,
+  SHELL_BG_DEFAULT_TIMEOUT_MS,
+  SHELL_BG_MAX_IN_FLIGHT_PER_SESSION,
+  type ShellCommandJobSnapshot,
+  type ShellCommandJobState,
+} from './shell-command-job.js'

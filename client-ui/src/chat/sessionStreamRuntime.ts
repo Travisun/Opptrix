@@ -203,6 +203,39 @@ export function applyChatProgressEvent(
           thinkingSegments: snapshot.liveTrace?.thinkingSegments,
         }),
       }
+    case 'job_watch': {
+      if (event.action === 'deduped' || event.action === 'cleared') {
+        return snapshot
+      }
+      const label = event.label?.trim() || '后台任务进行中'
+      const pct = typeof event.percent === 'number' ? event.percent : undefined
+      const phaseLabel = pct != null && pct > 0 && pct < 100
+        ? `${label}（${Math.floor(pct)}%）`
+        : label
+      return {
+        ...snapshot,
+        liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
+          phaseLabel,
+          thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
+        }),
+      }
+    }
+    case 'job_progress': {
+      const label = event.label?.trim() || '后台任务进行中'
+      const pct = typeof event.percent === 'number' ? event.percent : undefined
+      const phaseLabel = pct != null && pct > 0 && pct < 100
+        ? `${label}（${Math.floor(pct)}%）`
+        : label
+      return {
+        ...snapshot,
+        liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
+          phaseLabel,
+          thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
+        }),
+      }
+    }
     case 'done':
     case 'error':
       return {
