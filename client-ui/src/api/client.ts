@@ -1756,6 +1756,76 @@ export async function cancelSessionJob(
   }
 }
 
+/** 本会话协作任务列表（父委派） */
+export type SessionCollaborationTaskDto = {
+  run_id: string
+  label: string
+  status: string
+  summary?: string
+  child_session_id?: string
+  mode?: string
+  updated_at?: string
+}
+
+export async function listSessionSubagents(
+  sessionId: string,
+): Promise<{ runs: SessionCollaborationTaskDto[] }> {
+  const sid = sessionId.trim()
+  if (!sid) return { runs: [] }
+  try {
+    const res = await jsonFetch<{ runs?: SessionCollaborationTaskDto[] }>(
+      `/sessions/${encodeURIComponent(sid)}/subagents`,
+    )
+    return { runs: Array.isArray(res.runs) ? res.runs : [] }
+  } catch {
+    return { runs: [] }
+  }
+}
+
+/** 结束本会话某条协作任务 */
+export async function cancelSessionSubagent(
+  sessionId: string,
+  runId: string,
+): Promise<{ ok: boolean; status?: string; cancelled?: boolean; error?: string; summary?: string }> {
+  const sid = sessionId.trim()
+  const rid = runId.trim()
+  if (!sid || !rid) {
+    return { ok: false, error: '暂时无法结束该协作任务，请稍后重试' }
+  }
+  try {
+    const res = await jsonFetch<{
+      ok?: boolean
+      status?: string
+      cancelled?: boolean
+      error?: string
+      summary?: string
+    }>(
+      `/sessions/${encodeURIComponent(sid)}/subagents/${encodeURIComponent(rid)}/cancel`,
+      { method: 'POST' },
+    )
+    if (res.ok === false) {
+      const err = typeof res.error === 'string' ? res.error.trim() : ''
+      return {
+        ok: false,
+        status: res.status,
+        error: err || '暂时无法结束该协作任务，请稍后重试',
+      }
+    }
+    return {
+      ok: true,
+      status: res.status,
+      cancelled: res.cancelled ?? res.status === 'cancelled',
+      summary: res.summary,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/404|not found|API error: 404/i.test(msg)) {
+      return { ok: false, error: '协作任务不存在或已结束' }
+    }
+    return { ok: false, error: '暂时无法结束该协作任务，请稍后重试' }
+  }
+}
+
 /** 生成中补充说明（soft steer，不取消当前回复） */
 export async function steerSessionChat(sessionId: string, message: string) {
   return jsonFetch<{ ok: boolean; reason?: 'no_active_chat' | 'empty' }>(

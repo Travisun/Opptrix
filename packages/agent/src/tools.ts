@@ -31,6 +31,14 @@ import {
   jobRegistry,
   watchRegistry,
 } from './jobs/index.js'
+import {
+  hostCancelSubagent,
+  hostGetSubagent,
+  hostListSubagents,
+  hostReclaimSubagent,
+  hostRunSubagent,
+  isSubagentSessionId,
+} from './subagents/index.js'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -837,6 +845,152 @@ export class ToolRegistry {
           },
         }, ['prompt']),
         handler: async () => ({ error: 'ask_user 由 Agent 引擎直接处理' }),
+      },
+      {
+        name: 'run_subagent',
+        category: '委派',
+        description:
+          '委派子 Agent：role{name,instructions,model?,temperature?,max_rounds?} + task + result_schema(object)；可选 context/label；mode=foreground|background。子不可再委派，亦无人机确认类工具',
+        parameters: S({
+          role: {
+            type: 'object',
+            description: '子角色：name、instructions 必填；可选 model/temperature/max_rounds',
+          },
+          task: { type: 'string', description: '子任务目标（必填）' },
+          context: { type: 'string', description: '可选上下文摘要' },
+          result_schema: {
+            type: 'object',
+            description: '终态 JSON Schema（type:object），子输出须通过校验',
+          },
+          mode: {
+            type: 'string',
+            description: 'foreground（默认，阻塞）| background（立即返回 run_id）',
+          },
+          label: { type: 'string', description: '可选展示标签' },
+        }, ['role', 'task', 'result_schema']),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'run_subagent 须在聊天会话工具上下文中调用' }
+          }
+          if (isSubagentSessionId(sessionId)) {
+            return { ok: false, error: '子任务不能再委派' }
+          }
+          const roleRaw = args.role
+          if (!roleRaw || typeof roleRaw !== 'object' || Array.isArray(roleRaw)) {
+            return { ok: false, error: 'role 须为对象' }
+          }
+          const roleObj = roleRaw as Record<string, unknown>
+          const name = String(roleObj.name ?? '').trim()
+          const instructions = String(roleObj.instructions ?? '').trim()
+          if (!name || !instructions) {
+            return { ok: false, error: 'role.name 与 role.instructions 必填' }
+          }
+          const task = String(args.task ?? '').trim()
+          if (!task) return { ok: false, error: 'task 必填' }
+          const schemaRaw = args.result_schema
+          if (!schemaRaw || typeof schemaRaw !== 'object' || Array.isArray(schemaRaw)) {
+            return { ok: false, error: 'result_schema 须为 object' }
+          }
+          const resultSchema = schemaRaw as Record<string, unknown>
+          if (resultSchema.type !== 'object') {
+            return { ok: false, error: 'result_schema.type 须为 "object"' }
+          }
+          const modeRaw = String(args.mode ?? 'foreground').trim()
+          const mode = modeRaw === 'background' ? 'background' as const : 'foreground' as const
+          const temperature = typeof roleObj.temperature === 'number' ? roleObj.temperature : undefined
+          const maxRounds = typeof roleObj.max_rounds === 'number' ? roleObj.max_rounds : undefined
+          return hostRunSubagent(sessionId, {
+            role: {
+              name,
+              instructions,
+              model: roleObj.model != null ? String(roleObj.model) : undefined,
+              temperature,
+              max_rounds: maxRounds,
+            },
+            task,
+            context: args.context != null ? String(args.context) : undefined,
+            result_schema: resultSchema as import('./subagents/types.js').SubagentResultSchema,
+            mode,
+            label: args.label != null ? String(args.label) : undefined,
+          })
+        },
+      },
+      {
+        name: 'list_subagents',
+        category: '委派',
+        description: '列出本父会话下的子任务运行记录',
+        parameters: S({}),
+        handler: async () => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'list_subagents 须在聊天会话工具上下文中调用', runs: [] }
+          }
+          if (isSubagentSessionId(sessionId)) {
+            return { ok: false, error: '子任务不能使用委派工具', runs: [] }
+          }
+          return hostListSubagents(sessionId)
+        },
+      },
+      {
+        name: 'cancel_subagent',
+        category: '委派',
+        description: '取消指定 run_id 的子任务',
+        parameters: S({
+          run_id: { type: 'string', description: '子任务 run_id（必填）' },
+        }, ['run_id']),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'cancel_subagent 须在聊天会话工具上下文中调用' }
+          }
+          if (isSubagentSessionId(sessionId)) {
+            return { ok: false, error: '子任务不能使用委派工具' }
+          }
+          const runId = String(args.run_id ?? '').trim()
+          if (!runId) return { ok: false, error: 'run_id 必填' }
+          return hostCancelSubagent(sessionId, runId)
+        },
+      },
+      {
+        name: 'get_subagent',
+        category: '委派',
+        description: '查询子任务状态与结果',
+        parameters: S({
+          run_id: { type: 'string', description: '子任务 run_id（必填）' },
+        }, ['run_id']),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'get_subagent 须在聊天会话工具上下文中调用' }
+          }
+          if (isSubagentSessionId(sessionId)) {
+            return { ok: false, error: '子任务不能使用委派工具' }
+          }
+          const runId = String(args.run_id ?? '').trim()
+          if (!runId) return { ok: false, error: 'run_id 必填' }
+          return hostGetSubagent(runId, sessionId)
+        },
+      },
+      {
+        name: 'reclaim_subagent',
+        category: '委派',
+        description: '回收已结束的子任务（运行中须先 cancel）',
+        parameters: S({
+          run_id: { type: 'string', description: '子任务 run_id（必填）' },
+        }, ['run_id']),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'reclaim_subagent 须在聊天会话工具上下文中调用' }
+          }
+          if (isSubagentSessionId(sessionId)) {
+            return { ok: false, error: '子任务不能使用委派工具' }
+          }
+          const runId = String(args.run_id ?? '').trim()
+          if (!runId) return { ok: false, error: 'run_id 必填' }
+          return hostReclaimSubagent(runId, sessionId)
+        },
       },
     ].map(t => ({ ...t, meta: TOOL_META[t.name] }))
   }

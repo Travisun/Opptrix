@@ -589,6 +589,33 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance:
       'prompt 必填、面向投资者且勿用 emoji；mode（或别名 interaction）为 confirm|choice|text；空 options 默认 confirm（兼容），空 options+allow_custom=true 或 mode=text 为开放输入；choice 须 2–50 项且 id 唯一；confirm 回传 reject|confirm；同一轮最多 1 次；禁止索要密钥。',
   },
+  run_subagent: {
+    miningEligible: false,
+    usageGuide:
+      '将可独立完成的子任务委派给子 Agent：传入可定制 role（name/instructions）、task、result_schema；可选 context/label；mode=foreground 阻塞等待结构化结果，background 立即返回 run_id。',
+    compliance:
+      '仅父会话可调用；子不可嵌套委派。role/task/result_schema(object) 必填。子与父同权但无 ask_user/request_secret/LAN/grant 及委派工具；缺权经 needs_parent_action 交父。终态须通过 result_schema。',
+  },
+  list_subagents: {
+    miningEligible: false,
+    usageGuide: '列出当前父会话下的子任务运行记录（状态/摘要/run_id）。',
+    compliance: '只读；无参数；仅父会话上下文。',
+  },
+  cancel_subagent: {
+    miningEligible: false,
+    usageGuide: '取消仍在运行的子任务（run_id）。',
+    compliance: 'run_id 必填；终态幂等返回。',
+  },
+  get_subagent: {
+    miningEligible: false,
+    usageGuide: '查询单个子任务状态与结构化结果。',
+    compliance: 'run_id 必填；只读。',
+  },
+  reclaim_subagent: {
+    miningEligible: false,
+    usageGuide: '回收已结束的子任务记录（运行中须先 cancel）。',
+    compliance: 'run_id 必填；running/queued 拒绝。',
+  },
   list_enabled_providers: {
     hubFeature: 'provider_list',
     miningEligible: false,

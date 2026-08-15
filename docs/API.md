@@ -961,7 +961,9 @@ Content-Type: application/json
 | GET | `/api/sessions/:id/pending-job-watches` | `{ watches }`：仅 Job watch 列表（无 fallback 倒计时字段） |
 | GET | `/api/sessions/:id/jobs` | 本会话相关后台任务列表（见下 **会话后台 Job**） |
 | POST | `/api/sessions/:id/jobs/:jobId/cancel` | 结束可取消的后台任务（见下） |
-| GET | `/api/sessions/:id/live-progress` | SSE：会话过程事件（含 `job_progress` / `job_watch` 等；见下） |
+| GET | `/api/sessions/:id/subagents` | 本会话协作任务列表（父委派 runs：`run_id` / `label` / `status` / `summary?`） |
+| POST | `/api/sessions/:id/subagents/:runId/cancel` | 结束进行中的协作任务 → `{ ok, run_id, status, cancelled }` |
+| GET | `/api/sessions/:id/live-progress` | SSE：会话过程事件（含 `job_progress` / `job_watch` / `subagent_*` 等；见下） |
 | POST | `/api/sessions/:id/chat/steer` | Soft steer：生成中注入补充说明，**不** abort；body `{ message: string }` → `{ ok: true }` 或 `{ ok: false, reason: 'no_active_chat' \| 'empty' }`；下一 LLM 轮前以用户消息「（补充）…」写入会话；SSE 可发 `steer_applied` |
 | POST | `/api/sessions/:id/chat/user-prompt` | 回填 `ask_user` / 密钥问答；见下 |
 | POST | `/api/sessions/:id/fork` | 从助手气泡分叉新会话；body `{ message_index }`（display turn 索引，须为 assistant）→ `{ session, messages, contextRef }`；无效索引/角色 → 404 |

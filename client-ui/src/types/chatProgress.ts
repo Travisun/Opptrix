@@ -119,6 +119,32 @@ export type ChatProgressEvent =
     cancelable?: boolean
     stdout_tail?: string
   }
+  | {
+    type: 'subagent_started'
+    run_id: string
+    label: string
+    status: string
+    child_session_id?: string
+    mode?: string
+  }
+  | {
+    type: 'subagent_progress'
+    run_id: string
+    label: string
+    status: string
+    child_session_id?: string
+    mode?: string
+    summary?: string
+  }
+  | {
+    type: 'subagent_done'
+    run_id: string
+    label: string
+    status: string
+    child_session_id?: string
+    mode?: string
+    summary?: string
+  }
 
 export interface ChatLiveTrace {
   /** 展示用完整状态行（由 phaseLabel / tokens / 步数拼装） */

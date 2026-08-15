@@ -61,6 +61,19 @@ interface IntentRule {
  */
 const INTENT_RULES: IntentRule[] = [
   {
+    intent: 'run_subagent',
+    priority: 72,
+    patterns: [
+      /委派.*(?:子任务|子代理|subagent)/i,
+      /(?:并行|分开).*(?:调研|分析).*(?:子任务|子代理)/,
+      /run_subagent/i,
+    ],
+    preferredTools: ['run_subagent', 'list_subagents', 'get_subagent'],
+    avoidTools: ['ask_user'],
+    confidence: 'medium',
+    hint: '可独立完成的子任务 → run_subagent（role+task+result_schema）；查进度 list/get_subagent；勿让子再委派',
+  },
+  {
     intent: 'session_documents',
     priority: 97,
     patterns: [

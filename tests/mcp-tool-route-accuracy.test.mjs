@@ -136,6 +136,7 @@ const PRIMARY_CASES = [
   { message: '做一个可交互的 HTML 网页', expectPrimary: 'create_web', intent: 'create_web' },
   { message: '用 ECharts 做个网页看板', expectPrimary: 'create_web', intent: 'create_web' },
   { message: '创建网页制品 create_web', expectPrimary: 'create_web', intent: 'create_web' },
+  { message: '委派子任务做并行调研', expectPrimary: 'run_subagent', intent: 'run_subagent' },
 ]
 
 test('D1 primary tool precision across intent goldens', () => {

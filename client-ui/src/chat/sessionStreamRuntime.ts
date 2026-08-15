@@ -236,6 +236,117 @@ export function applyChatProgressEvent(
         }),
       }
     }
+    case 'subagent_started':
+    case 'subagent_progress':
+    case 'subagent_done': {
+      const label = event.label?.trim() || '协作任务'
+      const runId = event.run_id?.trim() || ''
+      const stepId = runId ? `collab:${runId}` : `collab:${label}`
+      const prevSteps = snapshot.liveTrace?.steps ?? []
+      const nowIso = new Date().toISOString()
+      let steps = prevSteps
+
+      if (event.type === 'subagent_started') {
+        const existing = prevSteps.find(st => st.id === stepId)
+        if (!existing) {
+          steps = [
+            ...prevSteps,
+            {
+              id: stepId,
+              tool: 'collaboration_task',
+              label: `协作任务：${label}`,
+              status: 'running' as const,
+              startedAt: nowIso,
+            },
+          ]
+        } else {
+          steps = prevSteps.map(st =>
+            st.id === stepId
+              ? { ...st, label: `协作任务：${label}`, status: 'running' as const }
+              : st,
+          )
+        }
+      } else if (event.type === 'subagent_progress') {
+        const summary = event.summary?.trim()
+        steps = prevSteps.map(st =>
+          st.id === stepId
+            ? {
+                ...st,
+                label: `协作任务：${label}`,
+                status: 'running' as const,
+                resultPreview: summary || st.resultPreview,
+              }
+            : st,
+        )
+        if (!prevSteps.some(st => st.id === stepId)) {
+          steps = [
+            ...prevSteps,
+            {
+              id: stepId,
+              tool: 'collaboration_task',
+              label: `协作任务：${label}`,
+              status: 'running' as const,
+              startedAt: nowIso,
+              resultPreview: summary,
+            },
+          ]
+        }
+      } else {
+        // subagent_done
+        const stLower = (event.status || '').trim().toLowerCase()
+        const failed = stLower === 'failed' || stLower === 'cancelled'
+        const summary = event.summary?.trim()
+        steps = prevSteps.map(st =>
+          st.id === stepId
+            ? {
+                ...st,
+                label: `协作任务：${label}`,
+                status: failed ? ('error' as const) : ('done' as const),
+                finishedAt: nowIso,
+                resultPreview: summary
+                  || (stLower === 'cancelled' ? '已结束' : failed ? '未完成' : '已完成'),
+              }
+            : st,
+        )
+        if (!prevSteps.some(st => st.id === stepId)) {
+          steps = [
+            ...prevSteps,
+            {
+              id: stepId,
+              tool: 'collaboration_task',
+              label: `协作任务：${label}`,
+              status: failed ? ('error' as const) : ('done' as const),
+              startedAt: nowIso,
+              finishedAt: nowIso,
+              resultPreview: summary
+                || (stLower === 'cancelled' ? '已结束' : failed ? '未完成' : '已完成'),
+            },
+          ]
+        }
+      }
+
+      const phaseLabel = event.type === 'subagent_started'
+        ? `协作任务进行中：${label}`
+        : event.type === 'subagent_done'
+          ? (
+            (event.status || '').trim().toLowerCase() === 'failed'
+              ? `协作任务未完成：${label}`
+              : (event.status || '').trim().toLowerCase() === 'cancelled'
+                ? `协作任务已结束：${label}`
+                : `协作任务已完成：${label}`
+          )
+          : (event.summary?.trim() || `协作任务进行中：${label}`)
+
+      return {
+        ...snapshot,
+        liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
+          phaseLabel,
+          steps,
+          thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
+        }),
+      }
+    }
     case 'done':
     case 'error':
       return {

@@ -30,7 +30,9 @@ export function formatJobResumeMessage(req: ResumeRequest, firedAtIso?: string):
   const causeLabel =
     req.cause === 'job_terminal'
       ? '后台任务已结束'
-      : '手动续跑'
+      : req.cause === 'subagent_terminal'
+        ? '协作任务已结束'
+        : '手动续跑'
 
   const lines = [
     `系统续跑：${causeLabel}，请按下列说明继续（接上原计划；勿 poll / sleep / 反复查进度）。`,

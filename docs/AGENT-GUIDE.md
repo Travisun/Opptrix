@@ -139,7 +139,15 @@ Opptrix/
          ToolRegistry / External MCP Client → ResearchHub / MarketDataService
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `document-tools.ts`（会话研报库：`list_session_documents` / `search_document` / `read_document` / `search_library`，属 `core`；支持 PDF / 文本 / Word / PPT / 图片 OCR 文本；**跨会话/全库**检索主路径 `search_library`（研报 FTS⊕向量；资讯 `source_type=news` 走 user-store 资讯 FTS，与统一搜索同源）→ 研报再 `read_document` 多跳精读——意图 `library_search`：跨研报/全库问句首选 `search_library`，勿与本会话 `search_document` 混淆）+ `canvas-tools.ts`（画布/脑图制品，属 `artifacts` pack）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / 工具包元工具 / 外部 MCP 运维工具
+  - 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `document-tools.ts`（会话研报库：`list_session_documents` / `search_document` / `read_document` / `search_library`，属 `core`；支持 PDF / 文本 / Word / PPT / 图片 OCR 文本；**跨会话/全库**检索主路径 `search_library`（研报 FTS⊕向量；资讯 `source_type=news` 走 user-store 资讯 FTS，与统一搜索同源）→ 研报再 `read_document` 多跳精读——意图 `library_search`：跨研报/全库问句首选 `search_library`，勿与本会话 `search_document` 混淆）+ `canvas-tools.ts`（画布/脑图制品，属 `artifacts` pack）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / **会话 Subagents**（`run_subagent` 等，属 `core`）/ 工具包元工具 / 外部 MCP 运维工具
+- **会话 Subagents（父委派子任务）**：
+  - **产品**：仅父会话创建/管理/回收；子无独立侧栏入口（`SessionStore.listActive` 过滤 `kind=subagent`）。父每次传入可定制 `role`（name/instructions/model?/…）+ `task` + `result_schema`（object），可选 `context` / `label` / `mode`。
+  - **同权与禁区**：子与父同权使用已加载工具，但**禁止**委派工具（`run_subagent` / `list_subagents` / `cancel_subagent` / `get_subagent` / `reclaim_subagent`）与人机确认类（`ask_user` / `request_secret` / `request_session_lan_access` / `grant_session_secret`）。子缺权时经契约错误或 `needs_parent_action` 交父处理（工具结果含 `needs_parent_action`，对应 run 标为 `needs_parent_action`；background 经 ResumeBus 提醒父）；**禁止嵌套委派**。外部 REST 不可对协作任务会话 `chat` / `steer` / `user-prompt`（403）；父 Stop 会取消仍在跑的 background 子。
+  - **共享 root**：父已授 LAN/密钥/工作区 grant 挂在 **root**；子 ALS 仍用 childId（spin-guard 隔离），workspace/secret/lan **lookup 用 `resolveAuthSessionId` → root**。删父先 cancel 再级联删子 runs 与 child session。
+  - **终态契约**：子输出须通过 `result_schema`；失败自动再要一轮 JSON，仍失败 → `failed`。
+  - **进度**：父 SSE 映射 `subagent_started` / `subagent_progress` / `subagent_done`（含 `run_id` / `label` / `status` / `child_session_id` / `mode`）。UI 过程条展示「协作任务」阶段与步骤；Composer 上方有协作任务条（可取消 / 终态「知道了」）。REST：`GET /api/sessions/:id/subagents`（DTO 含 `mode`、`child_session_id`）、`POST /api/sessions/:id/subagents/:runId/cancel`（`AgentEngine.listSubagents` / `cancelSubagent`）。
+  - **后台终态续跑**：`mode=background` 且 `completed`/`failed`/`needs_parent_action` 时经 `SessionResumeBus`（`cause: subagent_terminal`）在父会话空闲时自动续跑通知父决定如何处理结果（可用 `get_subagent`；勿 poll）；`cancelled` 与 `foreground`（工具结果已回父）不 enqueue。父忙则沿用 bus 的 busy-defer。
+  - **实现**：`packages/agent/src/subagents/`；单测 `tests/subagent-*.test.mjs`
 - 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
 - **工具包路由（Tool Pack Router）**：
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）

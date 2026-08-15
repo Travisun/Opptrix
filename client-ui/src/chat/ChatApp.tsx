@@ -43,6 +43,15 @@ import {
   upsertSessionBackgroundJob,
   type SessionBackgroundJob,
 } from './jobWatchProgress'
+import {
+  applySubagentProgressToTasks,
+  dismissCollaborationTask,
+  isActiveCollaborationStatus,
+  mergeCollaborationTasksFromApi,
+  shouldShowCollaborationTask,
+  type SessionCollaborationTask,
+} from './sessionCollaborationTasks'
+import type { CollaborationViewTab } from './SessionCollaborationTabs'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import ExpertMarketPage from '../pages/experts/ExpertMarketPage'
@@ -55,7 +64,7 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, truncateSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  streamSessionChat, cancelSessionChat, cancelSessionJob, steerSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
+  streamSessionChat, cancelSessionChat, cancelSessionJob, cancelSessionSubagent, listSessionSubagents, steerSessionChat, getHealth, listAvailableModels, setSessionModel, setSessionLlmParams,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession, listWorkspaceGrants, listSessionArchiveFolders,
@@ -468,6 +477,131 @@ export default function ChatApp() {
   >({})
   const sessionBackgroundJobs = activeId ? (backgroundJobsBySession[activeId] ?? []) : []
 
+  const [collaborationTasksBySession, setCollaborationTasksBySession] = useState<
+    Record<string, SessionCollaborationTask[]>
+  >({})
+  const sessionCollaborationTasks = activeId
+    ? (collaborationTasksBySession[activeId] ?? [])
+    : []
+  const visibleCollaborationTasks = useMemo(
+    () => sessionCollaborationTasks.filter(shouldShowCollaborationTask),
+    [sessionCollaborationTasks],
+  )
+
+  const [collaborationViewTab, setCollaborationViewTab] = useState<CollaborationViewTab>('main')
+  const [collaborationChildMessages, setCollaborationChildMessages] = useState<ChatDisplayMessage[]>([])
+  const [collaborationChildLoading, setCollaborationChildLoading] = useState(false)
+  const [collaborationChildError, setCollaborationChildError] = useState('')
+  const [collaborationChildReloadNonce, setCollaborationChildReloadNonce] = useState(0)
+
+  const selectedCollaborationTask = useMemo(() => {
+    if (collaborationViewTab === 'main') return null
+    return visibleCollaborationTasks.find((t) => t.runId === collaborationViewTab) ?? null
+  }, [collaborationViewTab, visibleCollaborationTasks])
+
+  const collaborationChildSessionId = selectedCollaborationTask?.childSessionId?.trim() ?? ''
+  const collaborationChildRefreshKey = selectedCollaborationTask?.updatedAt ?? ''
+
+  const handleSelectCollaborationRun = useCallback((runId: string) => {
+    const id = runId.trim()
+    if (!id) return
+    const task = visibleCollaborationTasks.find((t) => t.runId === id)
+    const status = task?.status?.trim().toLowerCase() ?? ''
+    if (status === 'needs_parent_action') {
+      setCollaborationViewTab('main')
+      return
+    }
+    setCollaborationViewTab(id)
+  }, [visibleCollaborationTasks])
+
+  const handleCollaborationViewTabChange = useCallback((tab: CollaborationViewTab) => {
+    if (tab === 'main') {
+      setCollaborationViewTab('main')
+      return
+    }
+    handleSelectCollaborationRun(tab)
+  }, [handleSelectCollaborationRun])
+
+  const handleReloadCollaborationChild = useCallback(() => {
+    setCollaborationChildError('')
+    setCollaborationChildReloadNonce((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    setCollaborationViewTab('main')
+    setCollaborationChildMessages([])
+    setCollaborationChildError('')
+    setCollaborationChildLoading(false)
+  }, [activeId])
+
+  useEffect(() => {
+    if (collaborationViewTab === 'main') return
+    if (!visibleCollaborationTasks.some((t) => t.runId === collaborationViewTab)) {
+      setCollaborationViewTab('main')
+      return
+    }
+    const task = visibleCollaborationTasks.find((t) => t.runId === collaborationViewTab)
+    if (task?.status?.trim().toLowerCase() === 'needs_parent_action') {
+      setCollaborationViewTab('main')
+    }
+  }, [collaborationViewTab, visibleCollaborationTasks])
+
+  useEffect(() => {
+    if (collaborationViewTab === 'main') {
+      setCollaborationChildMessages([])
+      setCollaborationChildError('')
+      setCollaborationChildLoading(false)
+      return
+    }
+
+    if (!collaborationChildSessionId) {
+      setCollaborationChildMessages([])
+      setCollaborationChildLoading(false)
+      setCollaborationChildError('此协作任务进展暂不可查看，请稍后再试')
+      return
+    }
+
+    let cancelled = false
+    let first = true
+
+    const loadChild = async () => {
+      if (first) setCollaborationChildLoading(true)
+      try {
+        const data = await getSession(collaborationChildSessionId)
+        if (cancelled) return
+        setCollaborationChildMessages(data.messages)
+        setCollaborationChildError('')
+      } catch {
+        if (cancelled) return
+        setCollaborationChildError('暂时无法查看此协作任务进展，请稍后重试')
+      } finally {
+        if (!cancelled && first) {
+          setCollaborationChildLoading(false)
+          first = false
+        }
+      }
+    }
+
+    void loadChild()
+    const active = selectedCollaborationTask
+      ? isActiveCollaborationStatus(selectedCollaborationTask.status)
+      : false
+    const timer = active
+      ? window.setInterval(() => { void loadChild() }, 3000)
+      : undefined
+
+    return () => {
+      cancelled = true
+      if (timer != null) window.clearInterval(timer)
+    }
+  }, [
+    collaborationViewTab,
+    collaborationChildSessionId,
+    collaborationChildRefreshKey,
+    collaborationChildReloadNonce,
+    selectedCollaborationTask?.status,
+  ])
+
   const patchSessionBackgroundJobs = useCallback((
     sessionId: string,
     updater: (prev: SessionBackgroundJob[]) => SessionBackgroundJob[],
@@ -495,6 +629,33 @@ export default function ChatApp() {
     })
   }, [])
 
+  const patchSessionCollaborationTasks = useCallback((
+    sessionId: string,
+    updater: (prev: SessionCollaborationTask[]) => SessionCollaborationTask[],
+  ) => {
+    const sid = String(sessionId ?? '').trim()
+    if (!sid) return
+    setCollaborationTasksBySession((prev) => {
+      const nextList = updater(prev[sid] ?? [])
+      if (nextList.length === 0) {
+        if (!(sid in prev)) return prev
+        const { [sid]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [sid]: nextList }
+    })
+  }, [])
+
+  const clearSessionCollaborationTasks = useCallback((sessionId: string) => {
+    const sid = String(sessionId ?? '').trim()
+    if (!sid) return
+    setCollaborationTasksBySession((prev) => {
+      if (!(sid in prev)) return prev
+      const { [sid]: _removed, ...rest } = prev
+      return rest
+    })
+  }, [])
+
   const handleCancelBackgroundJob = useCallback(async (jobId: string) => {
     const sid = activeId?.trim() ?? ''
     const jid = jobId.trim()
@@ -507,6 +668,37 @@ export default function ChatApp() {
     }
     return res
   }, [activeId, patchSessionBackgroundJobs])
+
+  const handleCancelCollaborationTask = useCallback(async (runId: string) => {
+    const sid = activeId?.trim() ?? ''
+    const rid = runId.trim()
+    if (!sid || !rid) {
+      return { ok: false, error: '暂时无法结束该协作任务，请稍后重试' }
+    }
+    const res = await cancelSessionSubagent(sid, rid)
+    if (res.ok) {
+      patchSessionCollaborationTasks(sid, (list) => {
+        const prev = list.find((t) => t.runId === rid)
+        return applySubagentProgressToTasks(list, {
+          type: 'subagent_done',
+          run_id: rid,
+          label: prev?.label ?? '协作任务',
+          status: res.status ?? 'cancelled',
+          summary: res.summary,
+          child_session_id: prev?.childSessionId,
+          mode: prev?.mode,
+        })
+      })
+    }
+    return res
+  }, [activeId, patchSessionCollaborationTasks])
+
+  const handleDismissCollaborationTask = useCallback((runId: string) => {
+    const sid = activeId?.trim() ?? ''
+    const rid = runId.trim()
+    if (!sid || !rid) return
+    patchSessionCollaborationTasks(sid, (list) => dismissCollaborationTask(list, rid))
+  }, [activeId, patchSessionCollaborationTasks])
   /** 流结束后延迟清除过程条的 timer（sessionId → timeout id） */
   const streamResetTimersRef = useRef(new Map<string, number>())
   /** 本轮生成期间曾失焦/不可见（sessionId → true） */
@@ -771,6 +963,15 @@ export default function ChatApp() {
     if (event.type === 'job_watch' || event.type === 'job_progress') {
       applyBackgroundJobProgressEvent(targetSessionId, event)
     }
+    if (
+      event.type === 'subagent_started'
+      || event.type === 'subagent_progress'
+      || event.type === 'subagent_done'
+    ) {
+      patchSessionCollaborationTasks(targetSessionId, (list) =>
+        applySubagentProgressToTasks(list, event),
+      )
+    }
     if (event.type === 'done' && Array.isArray(event.tool_steps)) {
       for (const step of event.tool_steps) {
         const wake = parseScheduleTurnWakeFromStep(step)
@@ -828,6 +1029,7 @@ export default function ChatApp() {
     applyBackgroundJobProgressEvent,
     handleNotificationResult,
     maybeNotifyChatDone,
+    patchSessionCollaborationTasks,
     resolveSessionTitle,
   ])
 
@@ -1004,6 +1206,16 @@ export default function ChatApp() {
         if (cancelled) return
         const watches = parsePendingJobWatchesApi(data)
         patchSessionBackgroundJobs(sessionId, () => hydrateBackgroundJobsFromWatches(watches))
+        try {
+          const sub = await listSessionSubagents(sessionId)
+          if (!cancelled) {
+            patchSessionCollaborationTasks(sessionId, (prev) =>
+              mergeCollaborationTasksFromApi(prev, sub.runs),
+            )
+          }
+        } catch {
+          /* ignore */
+        }
         const wake = parsePendingWakesApi(data)[0]
         if (
           wake
@@ -1041,6 +1253,7 @@ export default function ChatApp() {
     clearSessionWakeState,
     markSessionStreaming,
     patchSessionBackgroundJobs,
+    patchSessionCollaborationTasks,
     pushStreamEvent,
     refreshSessions,
     startWakeCountdown,
@@ -1240,7 +1453,7 @@ export default function ChatApp() {
   const handleDelete = useCallback(async (id: string) => {
     const ok = await confirm({
       title: '确定删除此对话？',
-      message: '删除后无法恢复。',
+      message: '删除后无法恢复，进行中的协作任务也会一并结束。',
       confirmLabel: '删除',
       confirmTone: 'danger',
     })
@@ -1251,6 +1464,7 @@ export default function ChatApp() {
       }
       clearSessionWakeState(id)
       clearSessionBackgroundJobs(id)
+      clearSessionCollaborationTasks(id)
       clearSessionPromptQueue(id)
       drainIntentRef.current.delete(id)
       syncPromptQueueUi(activeIdRef.current === id ? null : activeIdRef.current)
@@ -1269,7 +1483,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }, [activeId, abortSessionStream, clearSessionBackgroundJobs, clearSessionWakeState, confirm, loadSession, refreshSessions])
+  }, [activeId, abortSessionStream, clearSessionBackgroundJobs, clearSessionCollaborationTasks, clearSessionWakeState, confirm, loadSession, refreshSessions])
 
   const handleSelectExpert = useCallback(async (expertId: string) => {
     restoreChatColumn()
@@ -2413,13 +2627,13 @@ export default function ChatApp() {
                   expertRefreshKey={expertRefreshKey}
                   welcomeEpoch={welcomeEpoch}
                   chatScrollEpoch={chatScrollEpoch}
-                  messages={messages}
-                  contextRef={contextRef}
+                  messages={collaborationViewTab === 'main' ? messages : collaborationChildMessages}
+                  contextRef={collaborationViewTab === 'main' ? contextRef : null}
                   composerDraft={composerDraft}
-                  loading={loading}
-                  wakeWaiting={wakeWaiting}
+                  loading={collaborationViewTab === 'main' ? loading : false}
+                  wakeWaiting={collaborationViewTab === 'main' ? wakeWaiting : false}
                   streamUiRef={streamUiRef}
-                  error={error}
+                  error={collaborationViewTab === 'main' ? error : ''}
                   availableModels={availableModels}
                   sessionModel={resolvedSessionModel}
                   sessionLlmParams={sessionLlmParams}
@@ -2435,11 +2649,20 @@ export default function ChatApp() {
                   onPromptQueueRunNow={handlePromptQueueRunNow}
                   backgroundJobs={sessionBackgroundJobs}
                   onCancelBackgroundJob={handleCancelBackgroundJob}
+                  collaborationTasks={sessionCollaborationTasks}
+                  onCancelCollaborationTask={handleCancelCollaborationTask}
+                  onDismissCollaborationTask={handleDismissCollaborationTask}
+                  onSelectCollaborationRun={handleSelectCollaborationRun}
+                  collaborationViewTab={collaborationViewTab}
+                  onCollaborationViewTabChange={handleCollaborationViewTabChange}
+                  collaborationChildLoading={collaborationChildLoading}
+                  collaborationChildError={collaborationChildError}
+                  onReloadCollaborationChild={handleReloadCollaborationChild}
                   onForkMessage={handleForkFromMessage}
                   onEditResend={handleEditResend}
-                  onQuoteSelection={activeId ? handleQuoteSelection : undefined}
-                  onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}
-                  onClearContextRef={contextRef ? handleClearContextRef : undefined}
+                  onQuoteSelection={activeId && collaborationViewTab === 'main' ? handleQuoteSelection : undefined}
+                  onEphemeralAsk={activeId && collaborationViewTab === 'main' ? handleEphemeralAsk : undefined}
+                  onClearContextRef={contextRef && collaborationViewTab === 'main' ? handleClearContextRef : undefined}
                   onModelChange={availableModels.length ? handleModelChange : undefined}
                   onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
                   onOpenSidebar={openDrawer}

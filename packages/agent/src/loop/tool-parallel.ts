@@ -7,6 +7,10 @@ import { parseNamespacedMcpTool } from '@opptrix/shared'
 export const SERIAL_TOOL_NAMES: ReadonlySet<string> = new Set([
   // 人机确认
   'ask_user',
+  // Subagent 委派
+  'run_subagent',
+  'cancel_subagent',
+  'reclaim_subagent',
   // Job 取消（调度变更）
   'cancel_job',
   // Workspace 写/删/侧效

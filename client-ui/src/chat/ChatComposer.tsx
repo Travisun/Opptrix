@@ -12,8 +12,13 @@ import ComposerSkillSlashList from './ComposerSkillSlashList'
 import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
 import ComposerPromptQueuePanel from './ComposerPromptQueuePanel'
 import ComposerBackgroundJobsBar from './ComposerBackgroundJobsBar'
+import ComposerCollaborationTasksBar from './ComposerCollaborationTasksBar'
 import type { QueuedPrompt } from './sessionPromptQueue'
 import type { SessionBackgroundJob } from './jobWatchProgress'
+import {
+  isActiveCollaborationStatus,
+  type SessionCollaborationTask,
+} from './sessionCollaborationTasks'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
@@ -529,7 +534,18 @@ interface ChatComposerProps {
   /** 本会话未完成后台任务（位于 promptQueue 之上） */
   backgroundJobs?: SessionBackgroundJob[]
   onCancelBackgroundJob?: (jobId: string) => Promise<{ ok: boolean; error?: string }>
+  /** 本会话协作任务（与 backgroundJobs 并列） */
+  collaborationTasks?: SessionCollaborationTask[]
+  onCancelCollaborationTask?: (runId: string) => Promise<{ ok: boolean; error?: string }>
+  onDismissCollaborationTask?: (runId: string) => void
+  /** 点协作任务条某项 → 切到对应协作 Tab */
+  onSelectCollaborationRun?: (runId: string) => void
   onOpenPreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
+  /**
+   * 生成中且有协作任务时，placeholder 改为「发送补充说明」
+   *（仍走 soft steer，不开启新对话）
+   */
+  collaborationSteerHint?: boolean
 }
 
 /** 供 ChatView 在消息区 drop 时调用，避免重复 pin 状态 */
@@ -566,7 +582,12 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   onPromptQueueRunNow,
   backgroundJobs = [],
   onCancelBackgroundJob,
+  collaborationTasks = [],
+  onCancelCollaborationTask,
+  onDismissCollaborationTask,
+  onSelectCollaborationRun,
   onOpenPreview,
+  collaborationSteerHint = false,
 }, ref) {
   const s = useStyles()
   const editorRef = useRef<HTMLDivElement>(null)
@@ -860,6 +881,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
 
   /** 右侧：loading 时 stop + 可发补充；非 loading 时 mic / send */
   const showStop = loading
+  const hasActiveCollaboration = collaborationTasks.some((t) => isActiveCollaborationStatus(t.status))
+  const stopAriaLabel = hasActiveCollaboration
+    ? '停止生成。停止后进行中的协作任务也会结束'
+    : '停止生成'
   const showMic = !loading && speechAvailable
   const showSend = canSend
   /** 空态仅麦 → primary 实心底；与发送并排 → ghost 透明图标 */
@@ -1054,6 +1079,14 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
               onCancelJob={onCancelBackgroundJob}
             />
           )}
+          {collaborationTasks.length > 0 && (
+            <ComposerCollaborationTasksBar
+              tasks={collaborationTasks}
+              onCancelTask={onCancelCollaborationTask}
+              onDismissTask={onDismissCollaborationTask}
+              onSelectRun={onSelectCollaborationRun}
+            />
+          )}
           {promptQueue.length > 0 && onPromptQueueRemove && onPromptQueueRunNow && (
             <ComposerPromptQueuePanel
               items={promptQueue}
@@ -1105,7 +1138,9 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                 aria-label="输入问题，@ 选择股票，/ 引用技能"
                 data-placeholder={
                   loading
-                    ? (isMobile ? '继续输入，可补充说明…' : '继续输入，发送后作为补充说明…')
+                    ? (collaborationSteerHint
+                      ? '发送补充说明…'
+                      : (isMobile ? '继续输入，可补充说明…' : '继续输入，发送后作为补充说明…'))
                     : (isMobile
                       ? '输入问题，@ 股票，/ 技能…'
                       : '输入问题，@ 选择股票，/ 引用技能，Enter 发送…')
@@ -1165,7 +1200,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                     icon={<PauseFilled fontSize={14} />}
                     disabled={!onStop}
                     onClick={() => onStop?.()}
-                    aria-label="停止生成"
+                    title={stopAriaLabel}
+                    aria-label={stopAriaLabel}
                   />
                 )}
                 {showMic && (

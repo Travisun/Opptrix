@@ -173,6 +173,32 @@ export type ChatProgressEvent =
     cancelable?: boolean
     stdout_tail?: string
   }
+  | {
+    type: 'subagent_started'
+    run_id: string
+    label: string
+    status: string
+    child_session_id: string
+    mode: string
+  }
+  | {
+    type: 'subagent_progress'
+    run_id: string
+    label: string
+    status: string
+    child_session_id: string
+    mode: string
+    summary?: string
+  }
+  | {
+    type: 'subagent_done'
+    run_id: string
+    label: string
+    status: string
+    child_session_id: string
+    mode: string
+    summary?: string
+  }
 
 /**
  * 聊天进度回调选项 — 配置进度推送回调和中断信号。
@@ -275,6 +301,11 @@ const TOOL_LABELS: Record<string, string> = {
   read_web: '读取网页',
   list_web_vendor: '查看网页库',
   ask_user: '向你确认问题',
+  run_subagent: '委派协作任务',
+  list_subagents: '查看协作任务',
+  cancel_subagent: '取消协作任务',
+  get_subagent: '查询协作任务',
+  reclaim_subagent: '回收协作任务',
   get_instrument_capabilities: '查询标的能力',
   get_instrument_snapshot: '获取标的快照',
   get_instrument_profile: '读取公司概况',

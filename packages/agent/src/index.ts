@@ -167,7 +167,7 @@ export {
   type ToolRoutePlan,
   type RouteConfidence,
 } from './mcp/tool-route-plan.js'
-export { SessionStore, setSessionPersistHooks, sessionToMeta, isWakeResumeDisplayMessage, type SessionMeta, type SessionRecord, type DisplayMessage, type TurnOrigin, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef, type CreateSessionOptions, type SessionLlmParams, type ReasoningEffort, DEFAULT_SESSION_TEMPERATURE, DEFAULT_SESSION_MAX_TOKENS } from './sessions.js'
+export { SessionStore, setSessionPersistHooks, sessionToMeta, isWakeResumeDisplayMessage, isSidebarSession, type SessionMeta, type SessionRecord, type SessionKind, type DisplayMessage, type TurnOrigin, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef, type CreateSessionOptions, type SessionLlmParams, type ReasoningEffort, DEFAULT_SESSION_TEMPERATURE, DEFAULT_SESSION_MAX_TOKENS } from './sessions.js'
 export {
   getExpertCatalogService,
   ExpertCatalogService,
@@ -470,6 +470,33 @@ export {
   type JobWatch,
   type AttachWatchResult,
 } from './jobs/index.js'
+
+export {
+  filterToolNamesForSubagent,
+  filterToolsForSubagent,
+  isSubagentBlockedTool,
+  validateAgainstSchema,
+  validateSubagentResult,
+  resolveAuthSessionId,
+  isSubagentSessionId,
+  cascadeDeleteSubagents,
+  cancelRunningSubagentsForParent,
+  cancelSubagentRun,
+  getSubagentRunRegistry,
+  getSubagentRunResult,
+  listSubagentRunsForParent,
+  markRunNeedsParentAction,
+  reclaimSubagentRun,
+  resetSubagentRunRegistryForTests,
+  SubagentRunRegistry,
+  runSubagent,
+  subagentBlockedToolError,
+  type SubagentRun,
+  type SubagentRole,
+  type SubagentResultSchema,
+  type SubagentToolResult,
+  type SubagentRunStatus,
+} from './subagents/index.js'
 
 /** 注册 PDF → doc-library ingest hook */
 import './doc-library-bridge.js'
