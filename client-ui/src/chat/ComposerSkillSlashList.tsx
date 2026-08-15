@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from 'react'
 import { listRowKey } from '../utils/listRowKey'
 import type { PublicAgentSkill } from '../api/client'
+import { skillDisplaySummary, skillDisplayTitle } from './skillDisplay'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
@@ -20,7 +21,7 @@ interface Props {
 }
 
 /**
- * `/` 技能快捷列表面板：无厚标题，紧凑列表；本地筛选 name/description。
+ * `/` 技能快捷列表面板：无厚标题，紧凑列表；展示中文短标题 + 摘要。
  */
 export default function ComposerSkillSlashList({
   open,
@@ -52,21 +53,25 @@ export default function ComposerSkillSlashList({
       </div>
     )
   } else {
-    body = items.map((skill, index) => (
-      <ComposerTooltipMenuItem
-        key={listRowKey(index, skill.name, skill.source)}
-        active={index === activeIndex}
-        onMouseEnter={() => onHover(index)}
-        onClick={() => onSelect(skill)}
-      >
-        <span className="opptrix-composer-plus-menu__label">
-          <span className="opptrix-composer-plus-menu__title">{skill.name}</span>
-          {skill.description ? (
-            <span className="opptrix-composer-plus-menu__hint">{skill.description}</span>
-          ) : null}
-        </span>
-      </ComposerTooltipMenuItem>
-    ))
+    body = items.map((skill, index) => {
+      const title = skillDisplayTitle(skill)
+      const summary = skillDisplaySummary(skill)
+      return (
+        <ComposerTooltipMenuItem
+          key={listRowKey(index, skill.name, skill.source)}
+          active={index === activeIndex}
+          onMouseEnter={() => onHover(index)}
+          onClick={() => onSelect(skill)}
+        >
+          <span className="opptrix-composer-plus-menu__label">
+            <span className="opptrix-composer-plus-menu__title">{title}</span>
+            {summary ? (
+              <span className="opptrix-composer-plus-menu__hint">{summary}</span>
+            ) : null}
+          </span>
+        </ComposerTooltipMenuItem>
+      )
+    })
   }
 
   return (
@@ -75,7 +80,7 @@ export default function ComposerSkillSlashList({
       anchorRef={anchorRef}
       align="start"
       width={COMPOSER_MENU_WIDTH.quickTasks}
-      maxHeight={280}
+      maxHeight={360}
       ariaLabel="选择技能"
       onClose={onClose}
     >

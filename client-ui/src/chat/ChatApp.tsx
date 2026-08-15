@@ -116,6 +116,27 @@ const WAKE_COUNTDOWN_TICK_MS = 1000
 /** 到期后若仍无 live progress，再查一次 pending-wakes 的安全窗 */
 const WAKE_EXPIRY_SAFETY_MS = 45_000
 
+/** 会话产物：网页 / 画布 / 脑图（与消息产物条、右侧预览一致） */
+function isSessionArtifactAttachment(item: ChatAttachmentMeta): boolean {
+  return item.kind === 'web' || item.kind === 'canvas' || item.kind === 'mindmap'
+}
+
+/** 按消息时间顺序取第一个可预览产物 */
+function findFirstSessionArtifact(
+  messages: ChatDisplayMessage[],
+): ChatAttachmentMeta | null {
+  for (const msg of messages) {
+    const atts = msg.attachments
+    if (!atts?.length) continue
+    for (const att of atts) {
+      if (!isSessionArtifactAttachment(att)) continue
+      if (att.optimistic || att.id.startsWith('local-')) continue
+      return att
+    }
+  }
+  return null
+}
+
 const useStyles = makeStyles({
   root: {
     display: 'flex',
@@ -262,6 +283,8 @@ export default function ChatApp() {
     : WORKSPACE_CHAT_MIN_WIDTH
 
   const [preview, setPreview] = useState<{ sessionId: string; attachment: ChatAttachmentMeta } | null>(null)
+  /** 本会话停留期间用户主动关闭预览后，不再自动打开 */
+  const previewAutoOpenDismissedRef = useRef(false)
 
   useEffect(() => {
     if (mode === 'market' && !rightPanelVisible) {
@@ -275,6 +298,7 @@ export default function ChatApp() {
   }, [openPreview])
 
   const handleClosePreview = useCallback(() => {
+    previewAutoOpenDismissedRef.current = true
     openMarket()
   }, [openMarket])
 
@@ -384,6 +408,7 @@ export default function ChatApp() {
 
   /** 切换对话时丢弃旧会话的预览附件，保留 preview 模式以便显示新会话列表/空态 */
   useEffect(() => {
+    previewAutoOpenDismissedRef.current = false
     setPreview((prev) => {
       if (!prev) return null
       if (!activeId || prev.sessionId !== activeId) return null
@@ -394,6 +419,18 @@ export default function ChatApp() {
   const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
   const [expertRefreshKey, setExpertRefreshKey] = useState(0)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
+
+  /** 桌面分栏：进入/停留本会话且有产物时，默认打开第一个产物预览（用户关闭后本 visit 不再自动开） */
+  useEffect(() => {
+    if (!splitEnabled || !activeId) return
+    if (previewAutoOpenDismissedRef.current) return
+    if (preview) return
+    const first = findFirstSessionArtifact(messages)
+    if (!first) return
+    setPreview({ sessionId: activeId, attachment: first })
+    openPreview()
+  }, [splitEnabled, activeId, messages, preview, openPreview])
+
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
   const [composerDraft, setComposerDraft] = useState({ revision: 0, text: '' })
   const pushComposerDraft = useCallback((text: string) => {

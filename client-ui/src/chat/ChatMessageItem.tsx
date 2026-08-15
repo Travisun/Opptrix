@@ -9,6 +9,7 @@ import MarkdownMessage from './MarkdownMessage'
 import ChatProcessTrace from './ChatProcessTrace'
 import MessageTokenLabel from './MessageTokenLabel'
 import { MessageAttachmentStrip } from './ComposerAttachmentStrip'
+import MessageInlineRefs from './MessageInlineRefs'
 import MediaPreviewBox from './MediaPreviewBox'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { isWakeResumeDisplayMessage, type ChatAttachmentMeta, type ChatDisplayMessage } from '../types/chat'
@@ -152,7 +153,7 @@ const useStyles = makeStyles({
     gap: '4px',
     marginTop: '4px',
   },
-  /** 用户附件条：气泡外、footer 之上 */
+  /** 附件/产物条：用户在气泡外 footer 上；助手在正文后 meta 上 */
   attachmentBelow: {
     marginTop: '6px',
     maxWidth: '100%',
@@ -443,7 +444,6 @@ function ChatMessageItem({
         role={canEdit && !editing ? 'button' : undefined}
         aria-label={canEdit && !editing ? '点击编辑这条消息' : undefined}
       >
-        {!isUser && attachmentStrip}
         {isUser ? (
           editing ? (
             <>
@@ -472,8 +472,9 @@ function ChatMessageItem({
               </div>
             </>
           ) : (
-            toOneLinePreview(message.content)
-            || (message.attachments?.length ? '（附件）' : '')
+            message.content.trim()
+              ? <MessageInlineRefs text={toOneLinePreview(message.content)} />
+              : (message.attachments?.length ? '（附件）' : '')
           )
         ) : (
           <>
@@ -498,6 +499,11 @@ function ChatMessageItem({
             ))}
           </div>
         )}
+        {!isUser && attachmentStrip ? (
+          <div className={s.attachmentBelow}>
+            {attachmentStrip}
+          </div>
+        ) : null}
         {!isUser && metaFooter}
       </div>
       {isUser && attachmentStrip ? (

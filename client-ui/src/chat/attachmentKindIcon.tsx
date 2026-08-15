@@ -10,7 +10,7 @@ import {
   VideoRegular,
   DocumentOnePageRegular,
   DiagramRegular,
-  WindowRegular,
+  GlobeRegular,
 } from '@fluentui/react-icons'
 import type { MediaKind } from '../types/chat'
 
@@ -36,7 +36,32 @@ function documentIconByExt(ext: string, fontSize: number): ReactElement {
   return <DocumentRegular fontSize={fontSize} />
 }
 
-/** 附件 kind + 文件名 → Fluent 图标（消息条 / 输入条 / 预览头共用） */
+/** 附件种类短标签（用户可见；默认「文件」） */
+export function attachmentKindLabel(kind: MediaKind): string {
+  switch (kind) {
+    case 'image':
+      return '图片'
+    case 'pdf':
+      return 'PDF'
+    case 'document':
+    case 'text':
+      return '文档'
+    case 'video':
+      return '视频'
+    case 'audio':
+      return '音频'
+    case 'canvas':
+      return '画布'
+    case 'mindmap':
+      return '脑图'
+    case 'web':
+      return '网页'
+    default:
+      return '文件'
+  }
+}
+
+/** 附件 kind + 文件名 → Fluent 图标（消息条 / 输入条 / 预览头共用）；未知 kind 用默认文档图标 */
 export function attachmentKindIcon(
   kind: MediaKind,
   name: string,
@@ -56,7 +81,7 @@ export function attachmentKindIcon(
     case 'mindmap':
       return <DiagramRegular fontSize={fontSize} />
     case 'web':
-      return <WindowRegular fontSize={fontSize} />
+      return <GlobeRegular fontSize={fontSize} />
     case 'document':
     case 'text':
       return documentIconByExt(extOfFilename(name), fontSize)

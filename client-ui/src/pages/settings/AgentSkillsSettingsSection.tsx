@@ -22,6 +22,7 @@ import {
   deleteAgentSkill,
   type PublicAgentSkill,
 } from '../../api/client'
+import { invalidateAgentSkillsCatalog } from '../../chat/agentSkillsCatalog'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import AgentSkillEditor from './AgentSkillEditor'
@@ -29,6 +30,7 @@ import AgentSkillPreview from './AgentSkillPreview'
 import {
   SettingsEmptyState,
   SettingsGroup,
+  SettingsListScroll,
   SettingsPanelHeader,
   SettingsRow,
 } from './SettingsPrimitives'
@@ -56,6 +58,10 @@ const useStyles = makeStyles({
     padding: '24px 0',
     display: 'flex',
     justifyContent: 'center',
+  },
+  /** 技能较多时固定可视高度，内部滚动，避免撑满整页 */
+  listScroll: {
+    maxHeight: 'min(52vh, 360px)',
   },
   rowActions: {
     display: 'flex',
@@ -116,6 +122,11 @@ export default function AgentSkillsSettingsSection() {
     }
   }, [showToast])
 
+  const refreshAfterMutation = useCallback(async () => {
+    invalidateAgentSkillsCatalog()
+    await load()
+  }, [load])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -159,7 +170,7 @@ export default function AgentSkillsSettingsSection() {
       await deleteAgentSkill(skill.name)
       showToast(`已删除「${skill.name}」`, 'success')
       if (activeName === skill.name) closeDialog()
-      await load()
+      await refreshAfterMutation()
     } catch (e) {
       showToast(
         mapSkillError(e instanceof Error ? e.message : '', '删除失败，请稍后重试'),
@@ -203,34 +214,36 @@ export default function AgentSkillsSettingsSection() {
             desc="内置技能或助手创建的技能会显示在这里"
           />
         ) : (
-          skills.map((skill, index) => {
-            const editable = isEditableSource(skill.source)
-            return (
-              <SettingsRow
-                key={skill.name}
-                title={skill.name}
-                last={index === skills.length - 1}
-                control={(
-                  <div className={s.rowActions}>
-                    <OpptrixButton
-                      variant="icon"
-                      icon={editable ? <EditRegular /> : <EyeRegular />}
-                      aria-label={editable ? `编辑 ${skill.name}` : `查看 ${skill.name}`}
-                      onClick={() => void openSkillDialog(skill)}
-                    />
-                    {editable ? (
+          <SettingsListScroll className={s.listScroll}>
+            {skills.map((skill, index) => {
+              const editable = isEditableSource(skill.source)
+              return (
+                <SettingsRow
+                  key={skill.name}
+                  title={skill.name}
+                  last={index === skills.length - 1}
+                  control={(
+                    <div className={s.rowActions}>
                       <OpptrixButton
                         variant="icon"
-                        icon={<DeleteRegular />}
-                        aria-label={`删除 ${skill.name}`}
-                        onClick={() => void onDelete(skill)}
+                        icon={editable ? <EditRegular /> : <EyeRegular />}
+                        aria-label={editable ? `编辑 ${skill.name}` : `查看 ${skill.name}`}
+                        onClick={() => void openSkillDialog(skill)}
                       />
-                    ) : null}
-                  </div>
-                )}
-              />
-            )
-          })
+                      {editable ? (
+                        <OpptrixButton
+                          variant="icon"
+                          icon={<DeleteRegular />}
+                          aria-label={`删除 ${skill.name}`}
+                          onClick={() => void onDelete(skill)}
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                />
+              )
+            })}
+          </SettingsListScroll>
         )}
       </SettingsGroup>
 
@@ -259,7 +272,7 @@ export default function AgentSkillsSettingsSection() {
                   skill={dialogSkill}
                   onSaved={updated => {
                     setDetail(updated)
-                    void load()
+                    void refreshAfterMutation()
                   }}
                   onError={msg => showToast(msg, 'error')}
                   onSuccess={msg => showToast(msg, 'success')}

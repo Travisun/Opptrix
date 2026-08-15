@@ -1,10 +1,16 @@
 /**
- * 网页预览导出：长图 PDF 切页计划 + loopback URL 构建
+ * 网页预览导出：长图 PDF 切页计划 + loopback URL 构建 + 导出分辨率常量
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { planLongImagePdfSlices } from '../client-ui/src/chat/previewExport.ts'
-import { buildLoopbackWebPreviewUrl, htmlFileUrl } from '../apps/server/dist/web-preview-export.js'
+import {
+  buildLoopbackWebPreviewUrl,
+  htmlFileUrl,
+  EXPORT_VIEWPORT_WIDTH,
+  EXPORT_VIEWPORT_HEIGHT,
+  EXPORT_DEVICE_SCALE_FACTOR,
+} from '../apps/server/dist/web-preview-export.js'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -49,5 +55,15 @@ describe('buildLoopbackWebPreviewUrl', () => {
   it('htmlFileUrl uses pathToFileURL (cross-platform)', () => {
     const abs = path.join('/tmp', 'opptrix-web', 'index.html')
     assert.equal(htmlFileUrl(abs), pathToFileURL(abs).href)
+  })
+})
+
+describe('web preview export resolution constants', () => {
+  it('uses fixed viewport and 3x clear export scale, independent of client window', () => {
+    assert.equal(EXPORT_VIEWPORT_WIDTH, 1280)
+    assert.equal(EXPORT_VIEWPORT_HEIGHT, 720)
+    assert.ok(EXPORT_DEVICE_SCALE_FACTOR >= 3)
+    // PNG 逻辑像素宽 ≈ viewportWidth × deviceScaleFactor
+    assert.equal(EXPORT_VIEWPORT_WIDTH * EXPORT_DEVICE_SCALE_FACTOR, 3840)
   })
 })

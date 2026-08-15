@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listAgentSkills, type PublicAgentSkill } from '../api/client'
+import { useCallback, useMemo, useState } from 'react'
+import { useAgentSkillsCatalog } from './agentSkillsCatalog'
+import { skillMatchesSlashQuery } from './skillDisplay'
 
 export interface SkillSlashState {
   open: boolean
@@ -30,32 +31,7 @@ export function findSlashTrigger(text: string, cursor: number) {
 
 export function useSkillSlash() {
   const [state, setState] = useState<SkillSlashState>(CLOSED)
-  const [skills, setSkills] = useState<PublicAgentSkill[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const loadGen = useRef(0)
-
-  const loadSkills = useCallback(async () => {
-    const gen = ++loadGen.current
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const resp = await listAgentSkills()
-      if (gen !== loadGen.current) return
-      setSkills(resp.skills.slice().sort((a, b) => a.name.localeCompare(b.name)))
-    } catch {
-      if (gen !== loadGen.current) return
-      setSkills([])
-      setLoadError('暂时无法加载技能列表，请稍后重试')
-    } finally {
-      if (gen === loadGen.current) setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!state.open) return
-    void loadSkills()
-  }, [loadSkills, state.open])
+  const { skills, loading, error: loadError, reload } = useAgentSkillsCatalog(state.open)
 
   const syncFromInput = useCallback((text: string, cursor: number) => {
     const trigger = findSlashTrigger(text, cursor)
@@ -79,15 +55,10 @@ export function useSkillSlash() {
 
   const matches = useMemo(() => {
     if (!state.open) return []
-    const q = state.query.trim().toLowerCase()
-    if (!q) return skills.slice(0, 30)
-    return skills
-      .filter(skill => {
-        const name = skill.name.toLowerCase()
-        const desc = (skill.description ?? '').toLowerCase()
-        return name.includes(q) || desc.includes(q)
-      })
-      .slice(0, 30)
+    const q = state.query.trim()
+    // skills 已按 slash-rank → title 排好；不过滤条数上限（面板内滚动）
+    if (!q) return skills
+    return skills.filter(skill => skillMatchesSlashQuery(skill, q))
   }, [skills, state.open, state.query])
 
   const moveActive = useCallback((delta: number) => {
@@ -123,6 +94,6 @@ export function useSkillSlash() {
     moveActive,
     clampActiveIndex,
     setActiveIndex,
-    reload: loadSkills,
+    reload: () => reload(true),
   }
 }

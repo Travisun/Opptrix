@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState, useRef, type MouseEvent } from 'react'
 import { makeStyles, mergeClasses, Spinner } from '@fluentui/react-components'
-import { DismissRegular } from '@fluentui/react-icons'
+import { DismissRegular, OpenRegular } from '@fluentui/react-icons'
 import type { ChatAttachmentMeta } from '../types/chat'
-import { attachmentKindIcon } from './attachmentKindIcon'
-import CanvasInlineCard from './CanvasInlineCard'
-import MindmapInlineCard from './MindmapInlineCard'
-import WebInlineCard from './WebInlineCard'
+import { attachmentKindIcon, attachmentKindLabel } from './attachmentKindIcon'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 
 const CHIP_WIDTH = 168
 const NAME_MAX_CHARS = 16
@@ -39,6 +37,88 @@ const useStyles = makeStyles({
     gap: '8px',
     width: '100%',
     marginBottom: '5px',
+  },
+  /** 生成物矮行：约 2 行文字高，全宽；左大图标区分种类 */
+  artifactRow: {
+    ...ghostInteractive,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    height: '44px',
+    minHeight: '44px',
+    maxHeight: '44px',
+    boxSizing: 'border-box',
+    margin: 0,
+    padding: '0 12px',
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixCssVars.border}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    textAlign: 'left',
+    color: opptrixCssVars.textPrimary,
+    font: 'inherit',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    transitionProperty: 'border-color, background-color',
+    transitionDuration: '0.15s',
+    transitionTimingFunction: 'ease',
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+    },
+    ':active': {
+      opacity: 1,
+      backgroundColor: opptrixCssVars.canvasMuted,
+    },
+    ':focus': { outline: 'none' },
+    ':focus-visible': {
+      outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: opptrixTokens.focusRingOffset,
+    },
+  },
+  artifactIconWell: {
+    width: '28px',
+    height: '28px',
+    borderRadius: opptrixTokens.radiusSm,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    color: opptrixCssVars.textSecondary,
+    backgroundColor: opptrixCssVars.surface,
+  },
+  artifactMeta: {
+    flex: '1 1 auto',
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: '1px',
+  },
+  artifactName: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    lineHeight: '18px',
+    color: opptrixCssVars.textPrimary,
+  },
+  artifactKind: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: '16px',
+    color: opptrixCssVars.textTertiary,
+  },
+  artifactOpenIcon: {
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    color: opptrixCssVars.textTertiary,
   },
   chip: {
     display: 'inline-flex',
@@ -323,6 +403,54 @@ export default function ComposerAttachmentStrip({
   )
 }
 
+function ArtifactOpenRow({
+  item,
+  onOpen,
+  rowClass,
+  iconWellClass,
+  metaClass,
+  nameClass,
+  kindClass,
+  openIconClass,
+}: {
+  item: ChatAttachmentMeta
+  onOpen: () => void
+  rowClass: string
+  iconWellClass: string
+  metaClass: string
+  nameClass: string
+  kindClass: string
+  openIconClass: string
+}) {
+  const kindLabel = attachmentKindLabel(item.kind)
+  const openLabel = `打开${kindLabel} ${item.name}`
+  return (
+    <button
+      type="button"
+      className={rowClass}
+      onClick={(e) => {
+        e.stopPropagation()
+        onOpen()
+      }}
+      title={openLabel}
+      aria-label={openLabel}
+    >
+      <span className={iconWellClass} aria-hidden>
+        {attachmentKindIcon(item.kind, item.name, 24)}
+      </span>
+      <span className={metaClass}>
+        <span className={nameClass} title={item.name}>
+          {item.name}
+        </span>
+        <span className={kindClass}>{kindLabel}</span>
+      </span>
+      <span className={openIconClass} aria-hidden>
+        <OpenRegular fontSize={18} />
+      </span>
+    </button>
+  )
+}
+
 export function MessageAttachmentStrip({
   items,
   sessionId,
@@ -392,36 +520,19 @@ export function MessageAttachmentStrip({
       ) : null}
       {artifacts.length > 0 && sessionId ? (
         <div className={s.artifactStack}>
-          {artifacts.map(item => {
-            if (item.kind === 'mindmap') {
-              return (
-                <MindmapInlineCard
-                  key={item.id}
-                  sessionId={sessionId}
-                  attachment={item}
-                  onOpen={() => onOpen(item)}
-                />
-              )
-            }
-            if (item.kind === 'web') {
-              return (
-                <WebInlineCard
-                  key={item.id}
-                  sessionId={sessionId}
-                  attachment={item}
-                  onOpen={() => onOpen(item)}
-                />
-              )
-            }
-            return (
-              <CanvasInlineCard
-                key={item.id}
-                sessionId={sessionId}
-                attachment={item}
-                onOpen={() => onOpen(item)}
-              />
-            )
-          })}
+          {artifacts.map(item => (
+            <ArtifactOpenRow
+              key={item.id}
+              item={item}
+              onOpen={() => onOpen(item)}
+              rowClass={s.artifactRow}
+              iconWellClass={s.artifactIconWell}
+              metaClass={s.artifactMeta}
+              nameClass={s.artifactName}
+              kindClass={s.artifactKind}
+              openIconClass={s.artifactOpenIcon}
+            />
+          ))}
         </div>
       ) : null}
     </div>

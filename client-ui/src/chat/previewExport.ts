@@ -40,7 +40,7 @@ async function captureElementPngDataUrl(el: HTMLElement): Promise<string> {
   const height = Math.max(el.scrollHeight, el.offsetHeight, 1)
   return toPng(el, {
     cacheBust: true,
-    pixelRatio: Math.min(2, window.devicePixelRatio || 1),
+    pixelRatio: Math.min(3, Math.max(2, window.devicePixelRatio || 1)),
     backgroundColor: '#ffffff',
     width,
     height,
@@ -74,7 +74,7 @@ function drawPngContainOnCurrentPage(
 
   const x = (pageW - drawW) / 2
   const y = (pageH - drawH) / 2
-  pdf.addImage(dataUrl, 'PNG', x, y, drawW, drawH, undefined, 'FAST')
+  pdf.addImage(dataUrl, 'PNG', x, y, drawW, drawH, undefined, 'NONE')
 }
 
 /**
@@ -194,7 +194,7 @@ export async function captureMindmapBoardPngDataUrl(
   const height = Math.max(nodesEl.scrollHeight, nodesEl.offsetHeight, 1)
   return toPng(nodesEl, {
     cacheBust: true,
-    pixelRatio: 2,
+    pixelRatio: 3,
     backgroundColor,
     width,
     height,
@@ -264,7 +264,7 @@ export async function exportPngDataUrlToPdf(
     const drawH = (slice.height / width) * maxW
     const x = marginMm
     const y = marginMm
-    pdf.addImage(sliceUrl, 'PNG', x, y, drawW, Math.min(drawH, maxH), undefined, 'FAST')
+    pdf.addImage(sliceUrl, 'PNG', x, y, drawW, Math.min(drawH, maxH), undefined, 'NONE')
   }
   pdf.save(`${baseName(filename)}.pdf`)
 }
