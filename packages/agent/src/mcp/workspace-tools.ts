@@ -90,10 +90,18 @@ const bridgesBySession = new Map<string, BoundWorkspaceBridge>()
 /**
  * 绑定会话级 workspace bridge，返回 generation。
  * 解绑须带同一 gen，避免同会话打断重发时旧 chat finally 清掉新 bridge。
+ *
+ * @param bindAsSessionId 可选查找键（默认 next.sessionId）。
+ *   子 Agent：ALS 用 childId，但 bridge.sessionId=rootId 做授权/工作区 lookup；
+ *   此时须 `bindAsSessionId=childId`，避免覆盖父会话 bridge。
  */
-export function bindWorkspaceToolBridge(next: WorkspaceToolBridge): number {
+export function bindWorkspaceToolBridge(
+  next: WorkspaceToolBridge,
+  bindAsSessionId?: string,
+): number {
   const gen = ++bridgeGenSeq
-  bridgesBySession.set(next.sessionId, { bridge: next, gen })
+  const key = (bindAsSessionId ?? next.sessionId).trim() || next.sessionId
+  bridgesBySession.set(key, { bridge: next, gen })
   return gen
 }
 

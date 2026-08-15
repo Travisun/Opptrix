@@ -22,8 +22,17 @@ import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 const USER_BUBBLE_LINE_HEIGHT = 1.65
 const USER_BUBBLE_FONT_PX = 16
 const USER_BUBBLE_MAX_HEIGHT = Math.round(USER_BUBBLE_FONT_PX * USER_BUBBLE_LINE_HEIGHT * 3)
-/** 续跑注入状态条文案（不展示完整 prompt） */
-const WAKE_RESUME_STATUS_LABEL = '后台任务已完成，正在继续分析'
+/** 续跑注入状态条文案（不展示完整 prompt；按 cause 区分协作 / 后台） */
+function wakeResumeStatusLabel(content: string | undefined): string {
+  const c = typeof content === 'string' ? content : ''
+  if (
+    /resume_cause:\s*subagent_terminal/i.test(c)
+    || c.includes('协作任务已结束')
+  ) {
+    return '协作任务已完成，正在汇总结果'
+  }
+  return '后台任务已完成，正在继续分析'
+}
 
 const useStyles = makeStyles({
   entry: {
@@ -408,7 +417,7 @@ function ChatMessageItem({
         style={{ animationDelay: `${Math.min(index * 40, 200)}ms` }}
       >
         <div className={s.wakeResumeBar} role="status">
-          <span className={s.wakeResumeLabel}>{WAKE_RESUME_STATUS_LABEL}</span>
+          <span className={s.wakeResumeLabel}>{wakeResumeStatusLabel(message.content)}</span>
           {timeNode}
         </div>
       </div>
@@ -478,10 +487,16 @@ function ChatMessageItem({
           )
         ) : (
           <>
+            <MarkdownMessage content={message.content} sessionId={sessionId} />
+            {attachmentStrip ? (
+              <div className={s.attachmentBelow}>
+                {attachmentStrip}
+              </div>
+            ) : null}
             {(message.reasoningContent?.trim()
               || (message.reasoningSegments && message.reasoningSegments.length > 0)
               || (message.toolSteps && message.toolSteps.length > 0)) && (
-              <div style={{ marginBottom: message.content ? 8 : 0 }}>
+              <div style={{ marginTop: message.content || attachmentStrip ? 8 : 0 }}>
                 <ChatProcessTrace
                   steps={message.toolSteps ?? []}
                   thinkingSnippet={message.reasoningContent?.trim() || undefined}
@@ -489,7 +504,6 @@ function ChatMessageItem({
                 />
               </div>
             )}
-            <MarkdownMessage content={message.content} sessionId={sessionId} />
           </>
         )}
         {!message.toolSteps?.length && message.toolsUsed && message.toolsUsed.length > 0 && (
@@ -499,11 +513,6 @@ function ChatMessageItem({
             ))}
           </div>
         )}
-        {!isUser && attachmentStrip ? (
-          <div className={s.attachmentBelow}>
-            {attachmentStrip}
-          </div>
-        ) : null}
         {!isUser && metaFooter}
       </div>
       {isUser && attachmentStrip ? (

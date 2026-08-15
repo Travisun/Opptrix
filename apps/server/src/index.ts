@@ -112,6 +112,15 @@ agent = new AgentEngine(hub, {
 })
 agent.setApiBaseUrl(`http://${HOST}:${PORT}/api`)
 
+/** 协作任务会话只读：禁止外部 REST 打断（Runner 仍可直调 engine.chat） */
+function isReadonlyCollaborationSession(sessionId: string): boolean {
+  const s = agent.getSession(sessionId)
+  if (!s) return false
+  return s.kind === 'subagent' || Boolean(s.parentSessionId)
+}
+
+const COLLAB_SESSION_READONLY_ERROR = '该会话由系统代为推进，请在主对话中继续操作'
+
 configureTurnWakeRuntime({
   isSessionAlive: (sessionId) => Boolean(agent.getSession(sessionId)),
   isChatBusy: hasActiveSessionChat,
@@ -1355,6 +1364,60 @@ app.post<{ Params: { id: string; jobId: string } }>(
   },
 )
 
+/** 本会话协作任务（父会话 Subagent runs） */
+app.get<{ Params: { id: string } }>('/api/sessions/:id/subagents', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  const runs = agent.listSubagents(req.params.id)
+  return {
+    runs: runs.map((r) => ({
+      run_id: r.run_id,
+      label: r.label,
+      status: r.status,
+      summary: r.summary,
+      child_session_id: r.child_session_id,
+      mode: r.mode,
+      updated_at: r.updated_at,
+    })),
+  }
+})
+
+app.post<{ Params: { id: string; runId: string } }>(
+  '/api/sessions/:id/subagents/:runId/cancel',
+  async (req, reply) => {
+    if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+    const runId = String(req.params.runId ?? '').trim()
+    if (!runId) return reply.code(400).send({ ok: false, error: 'run_id 必填' })
+    const result = await agent.cancelSubagent(req.params.id, runId)
+    const err = typeof result.error === 'string' ? result.error : ''
+    if (err.includes('缺少')) {
+      return reply.code(400).send({
+        ok: false,
+        run_id: result.run_id,
+        status: result.status,
+        cancelled: false,
+        error: err,
+      })
+    }
+    if (err.includes('不存在') || err.includes('不属于')) {
+      return reply.code(404).send({
+        ok: false,
+        run_id: result.run_id,
+        status: result.status,
+        cancelled: false,
+        error: err,
+      })
+    }
+    return {
+      ok: true,
+      run_id: result.run_id,
+      status: result.status,
+      cancelled: result.status === 'cancelled',
+      summary: result.summary,
+      error: result.error,
+    }
+  },
+)
+
 app.get<{ Params: { id: string } }>('/api/sessions/:id/live-progress', async (req, reply) => {
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
 
@@ -1555,19 +1618,29 @@ app.post<{ Params: { id: string }; Body: { message: string; selected_text: strin
 )
 
 app.post<{ Params: { id: string } }>('/api/sessions/:id/chat/cancel', async (req, reply) => {
-  // Stop：无论是否有活跃 chat，都取消挂起 wake / waits / watches（空闲倒计时亦须打断）；不清全局 Job
+  // Stop：无论是否有活跃 chat，都取消挂起 wake / waits / watches；并取消 background 协作任务
   clearSessionTurnWakes(req.params.id)
   clearSessionJobWaitsAndWatches(req.params.id)
+  const cancelledChildren = agent.cancelRunningSubagents(req.params.id)
   const cancelled = cancelSessionChat(req.params.id)
-  if (!cancelled) return reply.code(404).send({ error: 'no active chat' })
   agent.userPromptBridge.cancelSession(req.params.id)
   agent.steerBridge.clear(req.params.id)
-  return { cancelled: true }
+  if (!cancelled && cancelledChildren === 0) {
+    return { cancelled: true, chat_active: false, children_cancelled: 0 }
+  }
+  return {
+    cancelled: true,
+    chat_active: Boolean(cancelled),
+    children_cancelled: cancelledChildren,
+  }
 })
 
 app.post<{ Params: { id: string }; Body: { message?: string } }>(
   '/api/sessions/:id/chat/steer',
   async (req, reply) => {
+    if (isReadonlyCollaborationSession(req.params.id)) {
+      return reply.code(403).send({ error: COLLAB_SESSION_READONLY_ERROR })
+    }
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : ''
     if (!message) {
       return reply.code(200).send({ ok: false, reason: 'empty' })
@@ -1577,6 +1650,9 @@ app.post<{ Params: { id: string }; Body: { message?: string } }>(
     }
     const result = agent.enqueueSteer(req.params.id, message)
     if (!result.ok) {
+      if (result.reason === 'readonly') {
+        return reply.code(403).send({ error: COLLAB_SESSION_READONLY_ERROR })
+      }
       return reply.code(200).send({ ok: false, reason: result.reason })
     }
     return { ok: true }
@@ -1598,6 +1674,9 @@ app.post<{
 }>(
   '/api/sessions/:id/chat/user-prompt',
   async (req, reply) => {
+    if (isReadonlyCollaborationSession(req.params.id)) {
+      return reply.code(403).send({ error: COLLAB_SESSION_READONLY_ERROR })
+    }
     const promptId = req.body?.prompt_id?.trim()
     if (!promptId) return reply.code(400).send({ error: 'prompt_id required' })
 
@@ -1686,6 +1765,9 @@ app.post<{
 app.post<{ Params: { id: string }; Body: { message: string; model?: string; attachments?: string[] } }>(
   '/api/sessions/:id/chat/stream',
   async (req, reply) => {
+    if (isReadonlyCollaborationSession(req.params.id)) {
+      return reply.code(403).send({ error: COLLAB_SESSION_READONLY_ERROR })
+    }
     const hasAttachments = Array.isArray(req.body?.attachments) && req.body.attachments.length > 0
     if (!req.body?.message?.trim() && !hasAttachments) {
       return reply.code(400).send({ error: 'message required' })
@@ -1741,6 +1823,9 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string; atta
 app.post<{ Params: { id: string }; Body: { message: string; model?: string; attachments?: string[] } }>(
   '/api/sessions/:id/chat',
   async (req, reply) => {
+    if (isReadonlyCollaborationSession(req.params.id)) {
+      return reply.code(403).send({ error: COLLAB_SESSION_READONLY_ERROR })
+    }
     const hasAttachments = Array.isArray(req.body?.attachments) && req.body.attachments.length > 0
     if (!req.body?.message?.trim() && !hasAttachments) {
       return reply.code(400).send({ error: 'message required' })

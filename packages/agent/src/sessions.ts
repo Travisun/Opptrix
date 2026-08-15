@@ -76,6 +76,8 @@ export function mergeSessionLlmParams(
   return normalizeSessionLlmParams(next)
 }
 
+export type SessionKind = 'user' | 'subagent'
+
 export interface SessionMeta {
   id: string
   title: string
@@ -91,6 +93,14 @@ export interface SessionMeta {
   expertIcon?: ExpertIcon | null
   /** 会话累计用量（列表 meta 可含） */
   usageTotals?: TokenUsage
+  /**
+   * 会话种类：缺省 / user = 用户侧栏会话；subagent = 父委派子会话（不进侧栏）。
+   */
+  kind?: SessionKind
+  /** 子会话的直接父会话 id */
+  parentSessionId?: string | null
+  /** 授权/工作区根会话 id（子继承；用户会话通常等于自身） */
+  rootSessionId?: string | null
 }
 
 export interface CreateSessionOptions {
@@ -101,6 +111,9 @@ export interface CreateSessionOptions {
   rolePersona?: string | null
   /** providerId:modelName；省略时可由 AgentEngine 填入当前 defaultModel */
   model?: string
+  kind?: SessionKind
+  parentSessionId?: string | null
+  rootSessionId?: string | null
 }
 
 /** UI 展示来源；缺省 = 用户/助手正常气泡。模型侧仍按 role 进 LLM。 */
@@ -280,6 +293,10 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     sessionMemory: raw.sessionMemory ?? null,
     contextProjection: projection,
     llmParams,
+    kind: raw.kind === 'subagent' ? 'subagent' : (raw.kind ?? 'user'),
+    parentSessionId: raw.parentSessionId ?? null,
+    rootSessionId: raw.rootSessionId
+      ?? (raw.kind === 'subagent' && raw.parentSessionId ? raw.parentSessionId : raw.id),
   }
   return backfillTurnReasoning(migrateTurns(record))
 }
@@ -355,7 +372,18 @@ function toMeta(raw: SessionRecord): SessionMeta {
     expertId: raw.expertId ?? null,
     expertIcon: raw.expertIcon ?? null,
     usageTotals: raw.usageTotals,
+    kind: raw.kind ?? 'user',
+    parentSessionId: raw.parentSessionId ?? null,
+    rootSessionId: raw.rootSessionId ?? null,
   }
+}
+
+/** 侧栏可见：非归档且非子会话 */
+export function isSidebarSession(meta: Pick<SessionMeta, 'kind' | 'parentSessionId' | 'archivedAt'>): boolean {
+  if (meta.archivedAt) return false
+  if (meta.kind === 'subagent') return false
+  if (meta.parentSessionId) return false
+  return true
 }
 
 export function sessionToMeta(raw: SessionRecord): SessionMeta {
@@ -373,9 +401,9 @@ export class SessionStore {
     return this.folderStore.ensureDefaults()
   }
 
-  /** Active (non-archived) sessions for sidebar */
+  /** Active (non-archived) sessions for sidebar — 隐藏 kind=subagent */
   listActive(): SessionMeta[] {
-    return this.listAll().filter(s => !s.archivedAt)
+    return this.listAll().filter(s => isSidebarSession(s))
   }
 
   /** @deprecated Use listActive — kept for compatibility */
@@ -473,8 +501,13 @@ export class SessionStore {
     const title = normalized.title?.trim() || '新对话'
     const now = new Date().toISOString()
     const model = normalized.model?.trim() || undefined
+    const id = randomUUID()
+    const kind = normalized.kind === 'subagent' ? 'subagent' as const : 'user' as const
+    const parentSessionId = normalized.parentSessionId?.trim() || null
+    const rootSessionId = normalized.rootSessionId?.trim()
+      || (kind === 'subagent' && parentSessionId ? parentSessionId : id)
     const record: SessionRecord = {
-      id: randomUUID(),
+      id,
       title,
       createdAt: now,
       updatedAt: now,
@@ -484,6 +517,9 @@ export class SessionStore {
       expertId: normalized.expertId ?? null,
       expertIcon: normalized.expertIcon ?? null,
       rolePersona: normalized.rolePersona ?? null,
+      kind,
+      parentSessionId,
+      rootSessionId,
       ...(model ? { model } : {}),
     }
     writeRecord(record)

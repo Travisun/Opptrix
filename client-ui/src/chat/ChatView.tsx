@@ -13,11 +13,15 @@ import type { ChatStreamUiRef } from './chatStreamUiBridge'
 import type { SessionStreamSnapshot } from './sessionStreamRuntime'
 import type { QueuedPrompt } from './sessionPromptQueue'
 import type { SessionBackgroundJob } from './jobWatchProgress'
+import type { SessionCollaborationTask } from './sessionCollaborationTasks'
+import { shouldShowCollaborationTask } from './sessionCollaborationTasks'
+import SessionCollaborationTabs, { type CollaborationViewTab } from './SessionCollaborationTabs'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import type { ChatComposerHandle } from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
 import ChatProcessTrace from './ChatProcessTrace'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
 import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMessageSelection'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -167,6 +171,56 @@ const useStyles = makeStyles({
     minHeight: '100%',
     justifyContent: 'center',
     paddingTop: 0,
+  },
+  collaborationTabsSlot: {
+    flexShrink: 0,
+    width: '100%',
+    maxWidth: opptrixTokens.chatThreadMaxWidth,
+    marginInline: 'auto',
+    paddingLeft: opptrixTokens.chatThreadPaddingX,
+    paddingRight: opptrixTokens.chatThreadPaddingX,
+    boxSizing: 'border-box',
+  },
+  collaborationTabsSlotMobile: {
+    maxWidth: 'none',
+    paddingLeft: opptrixTokens.chatThreadPaddingXMobile,
+    paddingRight: opptrixTokens.chatThreadPaddingXMobile,
+  },
+  collaborationReadonlyBar: {
+    flexShrink: 0,
+    width: '100%',
+    maxWidth: opptrixTokens.chatThreadMaxWidth,
+    marginInline: 'auto',
+    padding: '10px 16px 14px',
+    boxSizing: 'border-box',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textTertiary,
+    textAlign: 'center',
+  },
+  collaborationReadonlyBarMobile: {
+    maxWidth: 'none',
+    paddingLeft: opptrixTokens.chatThreadPaddingXMobile,
+    paddingRight: opptrixTokens.chatThreadPaddingXMobile,
+  },
+  collaborationChildStatus: {
+    alignSelf: 'stretch',
+    padding: '12px 0',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textSecondary,
+    textAlign: 'center',
+  },
+  collaborationChildError: {
+    color: opptrixCssVars.error,
+  },
+  collaborationChildErrorActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px',
+    alignSelf: 'stretch',
+    padding: '12px 0',
   },
   /** 浮层 dock：透明底盘（与主区同色/透底）；消息淡出靠 scroll mask；输入卡 panel 实色 */
   composerDock: {
@@ -387,6 +441,20 @@ interface ChatViewProps {
   /** 本会话未完成的后台任务（composer 上方状态条） */
   backgroundJobs?: SessionBackgroundJob[]
   onCancelBackgroundJob?: (jobId: string) => Promise<{ ok: boolean; error?: string }>
+  /** 本会话协作任务（composer 上方，与后台任务并列） */
+  collaborationTasks?: SessionCollaborationTask[]
+  onCancelCollaborationTask?: (runId: string) => Promise<{ ok: boolean; error?: string }>
+  onDismissCollaborationTask?: (runId: string) => void
+  /** 点协作任务条 → 切 Tab */
+  onSelectCollaborationRun?: (runId: string) => void
+  /** 协作 Tabs：主对话 | 各任务 runId；无可见任务时由父组件保持 'main' */
+  collaborationViewTab?: CollaborationViewTab
+  onCollaborationViewTabChange?: (tab: CollaborationViewTab) => void
+  /** 协作任务 Tab：只读消息（getSession(child)） */
+  collaborationChildLoading?: boolean
+  collaborationChildError?: string
+  /** 子窗加载失败时重新加载 */
+  onReloadCollaborationChild?: () => void
   onForkMessage?: (messageIndex: number) => void
   onEditResend?: (messageIndex: number, text: string) => void
   ensureSession?: () => Promise<string>
@@ -425,7 +493,14 @@ function ChatView({
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onCancelBackgroundJob, onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
+  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onCancelBackgroundJob, collaborationTasks = [], onCancelCollaborationTask, onDismissCollaborationTask,
+  onSelectCollaborationRun,
+  collaborationViewTab = 'main',
+  onCollaborationViewTabChange,
+  collaborationChildLoading = false,
+  collaborationChildError = '',
+  onReloadCollaborationChild,
+  onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
@@ -525,6 +600,12 @@ function ChatView({
   } | null>(null)
   const [toolbarExpanded, setToolbarExpanded] = useState(false)
   const toolbarExpandedRef = useRef(false)
+  const collaborationReadonly = collaborationViewTab !== 'main'
+  const hasVisibleCollaborationTasks = useMemo(
+    () => collaborationTasks.some(shouldShowCollaborationTask),
+    [collaborationTasks],
+  )
+  const collaborationSteerHint = loading && hasVisibleCollaborationTasks
 
   useEffect(() => {
     toolbarExpandedRef.current = toolbarExpanded
@@ -533,7 +614,7 @@ function ChatView({
   const { selection, anchor, clearSelection } = useMessageSelection({
     rootRef: chatBoxRef,
     anchorRef: bodyShellRef,
-    enabled: Boolean(sessionId) && !loading && !wakeWaiting,
+    enabled: Boolean(sessionId) && !loading && !wakeWaiting && !collaborationReadonly,
   })
 
   useEffect(() => {
@@ -602,6 +683,7 @@ function ChatView({
   }, [onEphemeralAsk])
 
   const isEmpty = messages.length === 0 && !loading && !wakeWaiting && !contextRef
+    && !collaborationReadonly && !collaborationChildLoading
   const welcome = pickWelcomeVariant(welcomeEpoch)
   const isExpertSession = Boolean(expertId)
 
@@ -899,13 +981,23 @@ function ChatView({
         </div>
       ) : null}
 
+      {hasVisibleCollaborationTasks && onCollaborationViewTabChange ? (
+        <div className={mergeClasses(s.collaborationTabsSlot, isMobile && s.collaborationTabsSlotMobile)}>
+          <SessionCollaborationTabs
+            tasks={collaborationTasks}
+            activeTab={collaborationViewTab}
+            onChange={onCollaborationViewTabChange}
+          />
+        </div>
+      ) : null}
+
       <div
-        className={mergeClasses(s.bodyShell, isDraggingFiles && s.bodyShellDragging)}
+        className={mergeClasses(s.bodyShell, isDraggingFiles && !collaborationReadonly && s.bodyShellDragging)}
         ref={bodyShellRef}
-        onDragEnter={handleBodyDragEnter}
-        onDragLeave={handleBodyDragLeave}
-        onDragOver={handleBodyDragOver}
-        onDrop={handleBodyDrop}
+        onDragEnter={collaborationReadonly ? undefined : handleBodyDragEnter}
+        onDragLeave={collaborationReadonly ? undefined : handleBodyDragLeave}
+        onDragOver={collaborationReadonly ? undefined : handleBodyDragOver}
+        onDrop={collaborationReadonly ? undefined : handleBodyDrop}
       >
         {overlaySlot}
         {pinnedToolbar && onQuoteSelection && onEphemeralAsk && (
@@ -924,7 +1016,7 @@ function ChatView({
         )}
 
         <div className={s.mainStack}>
-        {showOutlineRail ? (
+        {showOutlineRail && !collaborationReadonly ? (
           <MessageOutlineRail
             messages={messages}
             scrollContainerRef={chatBoxRef}
@@ -994,6 +1086,38 @@ function ChatView({
                 </div>
               )}
 
+              {collaborationReadonly && collaborationChildError ? (
+                <div className={s.collaborationChildErrorActions} role="alert">
+                  <Text
+                    className={mergeClasses(s.collaborationChildStatus, s.collaborationChildError)}
+                    block
+                  >
+                    {collaborationChildError}
+                  </Text>
+                  {onReloadCollaborationChild ? (
+                    <OpptrixButton
+                      variant="secondary"
+                      size="small"
+                      onClick={onReloadCollaborationChild}
+                    >
+                      重新加载
+                    </OpptrixButton>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {collaborationReadonly && collaborationChildLoading && messages.length === 0 && !collaborationChildError ? (
+                <Text className={s.collaborationChildStatus} block role="status">
+                  正在加载协作任务进展…
+                </Text>
+              ) : null}
+
+              {collaborationReadonly && !collaborationChildLoading && messages.length === 0 && !collaborationChildError ? (
+                <Text className={s.collaborationChildStatus} block role="status">
+                  此协作任务还没有可查看的进展
+                </Text>
+              ) : null}
+
               {messages.map((m, i) => (
                 <ChatMessageItem
                   key={listRowKey(i, m.at, m.role)}
@@ -1001,14 +1125,14 @@ function ChatView({
                   index={i}
                   sessionId={sessionId}
                   isMobile={isMobile}
-                  editDisabled={loading}
-                  onFork={onForkMessage ? () => onForkMessage(i) : undefined}
-                  onEditResend={onEditResend}
+                  editDisabled={loading || collaborationReadonly}
+                  onFork={!collaborationReadonly && onForkMessage ? () => onForkMessage(i) : undefined}
+                  onEditResend={collaborationReadonly ? undefined : onEditResend}
                   onOpenPreview={onOpenFilePreview}
                 />
               ))}
 
-              {((loading || wakeWaiting) && liveTrace) && (
+              {!collaborationReadonly && ((loading || wakeWaiting) && liveTrace) && (
                 <div className={s.loadingRow} data-message-role="assistant">
                   <ChatProcessTrace
                     steps={liveTrace.steps}
@@ -1021,7 +1145,7 @@ function ChatView({
                   />
                 </div>
               )}
-              {loading && !liveTrace && (
+              {!collaborationReadonly && loading && !liveTrace && (
                 <div className={s.loadingRow}>
                   <ChatProcessTrace
                     steps={[]}
@@ -1042,6 +1166,14 @@ function ChatView({
               ? { transform: `translateX(-${scrollbarHalfOffset}px)` }
               : undefined}
           >
+            {collaborationReadonly ? (
+              <div
+                className={mergeClasses(s.collaborationReadonlyBar, isMobile && s.collaborationReadonlyBarMobile)}
+                role="status"
+              >
+                此协作任务仅供查看进展
+              </div>
+            ) : (
             <ChatComposer
               ref={composerRef}
               sessionId={sessionId}
@@ -1072,8 +1204,14 @@ function ChatView({
               onPromptQueueRunNow={onPromptQueueRunNow}
               backgroundJobs={backgroundJobs}
               onCancelBackgroundJob={onCancelBackgroundJob}
+              collaborationTasks={collaborationTasks}
+              onCancelCollaborationTask={onCancelCollaborationTask}
+              onDismissCollaborationTask={onDismissCollaborationTask}
+              onSelectCollaborationRun={onSelectCollaborationRun}
               onOpenPreview={onOpenFilePreview}
+              collaborationSteerHint={collaborationSteerHint}
             />
+            )}
           </div>
         </div>
         </div>

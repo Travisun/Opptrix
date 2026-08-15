@@ -105,7 +105,7 @@ export interface WatchRegistry {
   resetForTests(): void
 }
 
-export type ResumeCause = 'job_terminal' | 'manual'
+export type ResumeCause = 'job_terminal' | 'subagent_terminal' | 'manual'
 
 export interface ResumeRequest {
   sessionId: string

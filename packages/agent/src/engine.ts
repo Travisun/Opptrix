@@ -98,6 +98,22 @@ import {
   formatToolLabel,
 } from './chat-progress.js'
 import {
+  bindSubagentHost,
+  unbindSubagentHost,
+  cascadeDeleteSubagents,
+  cancelRunningSubagentsForParent,
+  cancelSubagentRun,
+  filterToolNamesForSubagent,
+  getSubagentRunRegistry,
+  listSubagentRunsForParent,
+  markRunNeedsParentAction,
+  resolveAuthSessionId,
+  isSubagentSessionId,
+  subagentBlockedToolError,
+  type SubagentRunnerHost,
+  type SubagentToolResult,
+} from './subagents/index.js'
+import {
   appendReasoningSegment,
   beginReasoningSegment,
   joinReasoningSegments,
@@ -293,6 +309,8 @@ export class AgentEngine {
   private readonly contextUsageCache = new Map<string, SessionContextUsage>()
   /** 附件 GET 与 content parts 本地 URL 前缀 */
   private apiBaseUrl = 'http://127.0.0.1:8711/api'
+  /** 进行中 chat 的 AbortController（cancel_subagent / Stop 父用） */
+  private readonly chatAbortBySession = new Map<string, AbortController>()
 
   /** 按 sessionId 前缀清理专家 pack 播种标记（delete / archive 对齐 pack/skill 清旁路） */
   private clearExpertPacksSeeded(sessionId: string): void {
@@ -437,9 +455,16 @@ export class AgentEngine {
   }
 
   /** Soft steer：仅由 API 在有进行中 chat 时调用；写入 pending，下一 LLM 轮前注入 */
-  enqueueSteer(sessionId: string, message: string): { ok: true } | { ok: false; reason: 'empty' } {
+  enqueueSteer(
+    sessionId: string,
+    message: string,
+  ): { ok: true } | { ok: false; reason: 'empty' | 'readonly' } {
     const text = message.trim()
     if (!text) return { ok: false, reason: 'empty' }
+    const record = this.sessions.get(sessionId)
+    if (record && (record.kind === 'subagent' || Boolean(record.parentSessionId))) {
+      return { ok: false, reason: 'readonly' }
+    }
     this.steerBridge.enqueue(sessionId, text)
     return { ok: true }
   }
@@ -489,8 +514,34 @@ export class AgentEngine {
     signal?: AbortSignal,
     unattended = false,
   ): number {
+    const authSessionId = resolveAuthSessionId(sessionId, id => {
+      const s = this.sessions.get(id)
+      if (!s) return null
+      return {
+        kind: s.kind,
+        rootSessionId: s.rootSessionId,
+        parentSessionId: s.parentSessionId,
+      }
+    })
+    const isSub = isSubagentSessionId(sessionId, id => {
+      const s = this.sessions.get(id)
+      if (!s) return null
+      return {
+        kind: s.kind,
+        rootSessionId: s.rootSessionId,
+        parentSessionId: s.parentSessionId,
+      }
+    })
+    const parentSessionId = this.sessions.get(sessionId)?.parentSessionId ?? undefined
+    const markNeedsParent = (
+      kind: 'confirm' | 'secret' | 'lan' | 'other',
+      message: string,
+    ) => {
+      if (!isSub) return
+      markRunNeedsParentAction(sessionId, { kind, message }, { parentSessionId: parentSessionId ?? undefined })
+    }
     const bridge: WorkspaceToolBridge = {
-      sessionId,
+      sessionId: authSessionId,
       signal,
       confirm: async (payload: {
         title: string
@@ -500,8 +551,15 @@ export class AgentEngine {
         root_id: string
         path: string
       }) => {
-        // Unattended schedule jobs: auto-allow like scheduleShellConfirm (never waitForAnswer)
+        // 无人值守：自动放行覆盖/删除；子会话禁止自动放行，须父确认
         if (unattended) return pickUnattendedConfirmIds(payload.options)
+        if (isSub) {
+          const blocked = subagentBlockedToolError(
+            payload.operation === 'delete' ? 'workspace_delete' : 'workspace_write',
+          )
+          markNeedsParent('confirm', blocked.needs_parent_action.message)
+          return { selected_ids: ['cancel'] }
+        }
         const promptId = createUserPromptId()
         emit({
           type: 'user_prompt',
@@ -523,6 +581,17 @@ export class AgentEngine {
             selected_labels: [] as string[],
             cancelled: true,
             custom_text: UNATTENDED_ASK_USER_RESULT.error,
+          }
+        }
+        if (isSub) {
+          const blocked = subagentBlockedToolError('ask_user')
+          markNeedsParent('confirm', blocked.needs_parent_action.message)
+          return {
+            kind: 'option' as const,
+            selected_ids: [] as string[],
+            selected_labels: [] as string[],
+            cancelled: true,
+            custom_text: blocked.error,
           }
         }
         const promptId = createUserPromptId()
@@ -552,6 +621,20 @@ export class AgentEngine {
             custom_text: UNATTENDED_SECRET_RESULT.error,
           }
         }
+        if (isSub) {
+          const blocked = subagentBlockedToolError('request_secret')
+          markNeedsParent('secret', blocked.needs_parent_action.message)
+          return {
+            kind: 'secret' as const,
+            selected_ids: [] as string[],
+            selected_labels: [] as string[],
+            name: payload.name,
+            saved: false,
+            session_granted: false,
+            cancelled: true,
+            custom_text: blocked.error,
+          }
+        }
         const promptId = createUserPromptId()
         emit({
           type: 'user_prompt',
@@ -568,7 +651,75 @@ export class AgentEngine {
         return this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
       },
     }
-    return bindWorkspaceToolBridge(bridge)
+    // ALS 仍用 sessionId（含 child）；grant lookup 用 bridge.sessionId=root
+    return bindWorkspaceToolBridge(bridge, sessionId)
+  }
+
+  /** 供 run_subagent 嵌套调用：保存/恢复父 round 状态，避免污染 lastRoundPackIds */
+  private createSubagentRunnerHost(): SubagentRunnerHost {
+    return {
+      createSession: (opts) => this.sessions.create(opts),
+      getSession: (id) => this.sessions.get(id),
+      abortSessionChat: (id) => {
+        this.chatAbortBySession.get(id)?.abort()
+      },
+      chat: async (childId, message, progress, modelRef) => {
+        const prevPackIds = this.lastRoundPackIds
+        const prevSeed = this.lastChatSeedMessage
+        const prevRoute = this.lastRoutePlan
+        try {
+          const result = await this.chat(childId, message, modelRef, progress)
+          return { reply: result.reply, sessionId: result.sessionId }
+        } finally {
+          this.lastRoundPackIds = prevPackIds
+          this.lastChatSeedMessage = prevSeed
+          this.lastRoutePlan = prevRoute
+        }
+      },
+    }
+  }
+
+  abortSessionChat(sessionId: string): void {
+    this.chatAbortBySession.get(sessionId)?.abort()
+  }
+
+  /** Stop 父：取消仍在 running/queued 的协作任务（不依赖活跃 chat） */
+  cancelRunningSubagents(parentSessionId: string): number {
+    const id = parentSessionId.trim()
+    if (!id) return 0
+    return cancelRunningSubagentsForParent(id, {
+      cancelChildChat: (childId) => {
+        this.chatAbortBySession.get(childId)?.abort()
+        this.userPromptBridge.cancelSession(childId)
+      },
+    })
+  }
+
+  /** 父会话协作任务列表（REST / 工具共用） */
+  listSubagents(parentSessionId: string) {
+    const id = parentSessionId.trim()
+    if (!id || !this.sessions.get(id)) return []
+    return listSubagentRunsForParent(id)
+  }
+
+  /** 取消父会话下某条协作任务（不依赖当前 chat 绑定） */
+  async cancelSubagent(
+    parentSessionId: string,
+    runId: string,
+  ): Promise<SubagentToolResult> {
+    const parentId = parentSessionId.trim()
+    const rid = runId.trim()
+    if (!parentId || !rid) {
+      return { ok: false, run_id: rid || '', status: 'failed', error: '缺少会话或任务' }
+    }
+    if (!this.sessions.get(parentId)) {
+      return { ok: false, run_id: rid, status: 'failed', error: '父会话不存在' }
+    }
+    const run = getSubagentRunRegistry().get(rid)
+    if (!run || run.parentSessionId !== parentId) {
+      return { ok: false, run_id: rid, status: 'failed', error: '任务不存在或不属于该会话' }
+    }
+    return cancelSubagentRun(rid, this.createSubagentRunnerHost())
   }
 
   listWorkspaceGrants(sessionId: string) {
@@ -990,6 +1141,33 @@ export class AgentEngine {
   }
 
   deleteSession(id: string) {
+    cascadeDeleteSubagents(id, {
+      cancelChildChat: (childId) => {
+        this.chatAbortBySession.get(childId)?.abort()
+        this.userPromptBridge.cancelSession(childId)
+      },
+      deleteChildSession: (childId) => {
+        // 避免子再 cascade 回父：直接清旁路后删记录
+        this.userPromptBridge.cancelSession(childId)
+        this.clearLoopSessionState(childId)
+        this.toolPackSessions.clear(childId)
+        this.agentSkillSessions.clear(childId)
+        this.clearExpertPacksSeeded(childId)
+        this.workspaceService.clearSession(childId)
+        clearSessionTurnWakes(childId)
+        clearSessionJobWaitsAndWatches(childId)
+        void deleteSessionStateDirectory(childId).catch(() => {})
+        try {
+          deleteSessionAttachments(childId)
+        } catch {
+          /* ignore */
+        }
+        this.sessions.delete(childId)
+        this.invalidateContextUsage(childId)
+        this.chatAbortBySession.delete(childId)
+      },
+    })
+    this.chatAbortBySession.get(id)?.abort()
     this.userPromptBridge.cancelSession(id)
     this.clearLoopSessionState(id)
     this.toolPackSessions.clear(id)
@@ -1010,6 +1188,7 @@ export class AgentEngine {
     }
     this.sessions.delete(id)
     this.invalidateContextUsage(id)
+    this.chatAbortBySession.delete(id)
   }
 
   renameSession(id: string, title: string) {
@@ -1289,8 +1468,21 @@ export class AgentEngine {
       progress?.onProgress?.(event)
     }
 
-    const signal = progress?.signal
+    // 同 session 新 chat：先 abort 旧 AbortController，避免并行挂起
+    const prevAbort = this.chatAbortBySession.get(sessionId)
+    if (prevAbort) prevAbort.abort()
+
+    const localAbort = new AbortController()
+    this.chatAbortBySession.set(sessionId, localAbort)
+    if (progress?.signal) {
+      if (progress.signal.aborted) localAbort.abort()
+      else {
+        progress.signal.addEventListener('abort', () => localAbort.abort(), { once: true })
+      }
+    }
+    const signal = localAbort.signal
     const unattended = progress?.unattended === true
+    const isSubSession = record.kind === 'subagent' || Boolean(record.parentSessionId)
 
     const toolsUsed: string[] = []
     const toolSteps: ChatToolStep[] = []
@@ -1362,6 +1554,12 @@ export class AgentEngine {
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
       logChatDebugAbort(sessionId, { reason: 'cancelled' })
+      cancelRunningSubagentsForParent(sessionId, {
+        cancelChildChat: (childId) => {
+          this.chatAbortBySession.get(childId)?.abort()
+          this.userPromptBridge.cancelSession(childId)
+        },
+      })
       this.userPromptBridge.cancelSession(sessionId)
       this.steerBridge.clear(sessionId)
       clearSessionTurnWakes(sessionId)
@@ -1408,9 +1606,18 @@ export class AgentEngine {
     const packBridgeGen = this.bindPackBridge(sessionId)
     const skillBridgeGen = this.bindSkillBridge(sessionId)
     const workspaceBridgeGen = this.bindWorkspaceBridge(sessionId, emit, signal, unattended)
+    const subagentHostGen = isSubSession
+      ? 0
+      : bindSubagentHost({
+        parentSessionId: sessionId,
+        runnerHost: this.createSubagentRunnerHost(),
+        emit,
+        signal,
+      })
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
     let activeNames = toolNamesForPacks(this.lastRoundPackIds)
     if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
+    if (isSubSession) activeNames = filterToolNamesForSubagent(activeNames)
     let { broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended)
 
     try {
@@ -1772,7 +1979,15 @@ export class AgentEngine {
             if (blocked) {
               result = blocked
             } else if (fn === 'ask_user') {
-              if (unattended) {
+              if (isSubSession) {
+                const blocked = subagentBlockedToolError('ask_user')
+                markRunNeedsParentAction(
+                  sessionId,
+                  blocked.needs_parent_action,
+                  { parentSessionId: record.parentSessionId ?? undefined },
+                )
+                result = blocked
+              } else if (unattended) {
                 result = { ...UNATTENDED_ASK_USER_RESULT }
               } else {
                 const parsed = parseAskUserArgs(args)
@@ -1907,6 +2122,7 @@ export class AgentEngine {
           this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
           activeNames = toolNamesForPacks(this.lastRoundPackIds)
           if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
+          if (isSubSession) activeNames = filterToolNamesForSubagent(activeNames)
           ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended))
         }
         continue
@@ -2027,6 +2243,10 @@ export class AgentEngine {
       this.tools.clearPackSession(sessionId, packBridgeGen)
       this.tools.clearSkillSession(sessionId, skillBridgeGen)
       unbindWorkspaceToolBridge(sessionId, workspaceBridgeGen)
+      if (subagentHostGen) unbindSubagentHost(sessionId, subagentHostGen)
+      if (this.chatAbortBySession.get(sessionId) === localAbort) {
+        this.chatAbortBySession.delete(sessionId)
+      }
     }
     } catch (e) {
       if (
