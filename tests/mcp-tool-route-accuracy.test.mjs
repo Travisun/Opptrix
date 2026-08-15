@@ -124,6 +124,11 @@ const PRIMARY_CASES = [
   { message: '搜一下浪潮信息代码', expectPrimary: 'search_instruments', intent: 'search' },
   { message: '开盘早报', expectPrimary: 'activate_agent_skill', intent: 'morning_brief' },
   { message: '收盘报告', expectPrimary: 'activate_agent_skill', intent: 'closing_report' },
+  {
+    message: '对贵州茅台做多角色研讨/多空辩论',
+    expectPrimary: 'activate_agent_skill',
+    intent: 'multi_role_research',
+  },
   { message: '帮我创建一个每天收盘后分析大盘的计划任务', expectPrimary: 'create_scheduled_job', intent: 'schedule_create' },
   { message: '列出我的计划任务', expectPrimary: 'list_scheduled_jobs', intent: 'schedule_manage' },
   { message: '立刻执行一次计划任务', expectPrimary: 'run_scheduled_job_now', intent: 'schedule_run_now' },

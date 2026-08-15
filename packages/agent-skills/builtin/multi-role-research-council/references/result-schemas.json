@@ -1,0 +1,213 @@
+{
+  "analyst": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "role_id",
+      "symbol",
+      "as_of",
+      "facts",
+      "inferences",
+      "gaps",
+      "confidence"
+    ],
+    "properties": {
+      "role_id": {
+        "type": "string",
+        "enum": [
+          "market_structure",
+          "fundamentals",
+          "news_disclosure",
+          "flow_sentiment"
+        ]
+      },
+      "symbol": { "type": "string" },
+      "as_of": { "type": "string", "description": "ISO-8601 or local market date string" },
+      "facts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "source_hint"],
+          "properties": {
+            "text": { "type": "string" },
+            "source_hint": { "type": "string" }
+          }
+        }
+      },
+      "inferences": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "gaps": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "confidence": {
+        "type": "string",
+        "enum": ["high", "medium", "low"]
+      }
+    }
+  },
+  "debate": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "side",
+      "round",
+      "claims",
+      "rebuttals",
+      "concessions",
+      "open_questions"
+    ],
+    "properties": {
+      "side": { "type": "string", "enum": ["bull", "bear"] },
+      "round": { "type": "integer", "minimum": 1, "maximum": 5 },
+      "claims": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "evidence_ref"],
+          "properties": {
+            "text": { "type": "string" },
+            "evidence_ref": { "type": "string" }
+          }
+        }
+      },
+      "rebuttals": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "concessions": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "open_questions": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  },
+  "chair_stop": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "round",
+      "should_stop",
+      "reason_code",
+      "reason_text",
+      "convergence_notes"
+    ],
+    "properties": {
+      "round": { "type": "integer", "minimum": 1, "maximum": 5 },
+      "should_stop": { "type": "boolean" },
+      "reason_code": {
+        "type": "string",
+        "enum": [
+          "min_rounds_not_met",
+          "converged",
+          "diminishing_returns",
+          "evidence_exhausted",
+          "max_rounds",
+          "continue"
+        ]
+      },
+      "reason_text": { "type": "string" },
+      "convergence_notes": { "type": "string" }
+    }
+  },
+  "research_chair": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "symbol",
+      "stance",
+      "stance_label_zh",
+      "supporting",
+      "opposing",
+      "unresolved",
+      "data_gaps",
+      "disclaimer_ack"
+    ],
+    "properties": {
+      "symbol": { "type": "string" },
+      "stance": {
+        "type": "string",
+        "enum": [
+          "bullish",
+          "bearish",
+          "balanced",
+          "insufficient_evidence"
+        ]
+      },
+      "stance_label_zh": {
+        "type": "string",
+        "enum": ["看多倾向", "看空倾向", "均衡", "证据不足"]
+      },
+      "supporting": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "opposing": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "unresolved": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "data_gaps": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "confidence": {
+        "type": "string",
+        "enum": ["high", "medium", "low"]
+      },
+      "disclaimer_ack": {
+        "type": "boolean",
+        "description": "Must be true: stance is not a trade instruction"
+      }
+    }
+  },
+  "risk": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "persona",
+      "phase",
+      "key_risks",
+      "falsifiers",
+      "watch_items",
+      "peer_notes"
+    ],
+    "properties": {
+      "persona": {
+        "type": "string",
+        "enum": ["aggressive", "neutral", "conservative"]
+      },
+      "phase": {
+        "type": "string",
+        "enum": ["independent", "peer_review"]
+      },
+      "key_risks": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "falsifiers": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "watch_items": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "peer_notes": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Empty in independent phase; peer critique in peer_review"
+      }
+    }
+  }
+}
