@@ -318,7 +318,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。主进程转写等待上限 **180s**（冷启 + 较长录音）；与 UI 本机重接口超时一致，全局快路径仍为 10s。
 
-**打包不变量**：桌面 `stage-runtime` **必须**把 `ffmpeg-static` 平台二进制打进 sidecar（`runtime-stage` → 安装包内 `node_modules/ffmpeg-static/ffmpeg[.exe]`）；缺失则 stage / `verify-packaged-runtime` **硬失败**，禁止 warn 后继续。sidecar 经 `FFMPEG_PATH` 指向该二进制。Stage 断言后会 `chmod +x` 并用 `ffmpeg -version` 冒烟（host 与目标平台一致时）；运行时若二进制无执行位也会尝试修复，避免开发机 `ffmpeg-static` 偶发 0644 导致 `spawn EACCES`。
+**打包不变量**：桌面 `stage-runtime` **必须**把 `ffmpeg-static` 平台二进制打进 sidecar（`runtime-stage` → 安装包内 `node_modules/ffmpeg-static/ffmpeg[.exe]`）；缺失则 stage / `verify-packaged-runtime` **硬失败**，禁止 warn 后继续。打包后校验除存在性外还要求 **可执行**（posix `X_OK`；Windows 以 `.exe` 存在为准），host 与目标平台一致时再跑 `ffmpeg -version` 冒烟。sidecar 经 `FFMPEG_PATH` 指向该二进制。Stage 断言后会 `chmod +x` 并用 `ffmpeg -version` 冒烟（host 与目标平台一致时）；运行时若二进制无执行位也会尝试修复，避免开发机 `ffmpeg-static` 偶发 0644 导致 `spawn EACCES`。
 
 ### 托管 Python（安装包内置）
 
@@ -332,10 +332,13 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 | 首次运行 | 若 `~/.opptrix/runtimes/python/current` 尚无可用解释器，从包内树**种子复制**到用户目录（不覆盖已有托管） |
 | 解析优先序 | `OPPTRIX_PYTHON_PATH` → 用户托管 `current` → 包内 `python/` → 本机 PATH/常见安装路径 |
 | `active_source` | 托管与包内均标 `opptrix`（随应用提供） |
+| CI / release | **先** `npm run build:packages` → `stage-python` → `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` 再跑 `audit-desktop-pack`；`prebuild` 同序。打包后 `verify-packaged-runtime` 校验安装包内 `python/bundle-manifest.json` 的 `platformKey` 与解释器 |
 
 **体积与取舍**：Windows 使用官方 **embed** 包（体积小、可重定位）。macOS / Linux 与现网安装路径一致，使用 **Miniconda py312**（安装包约数十 MB，展开后约数百 MB）。catalog 虽声明 `standalone` 种类，当前无独立 standalone artifact；若未来要压安装包体积，可再引入可重定位 standalone 并保留 Miniconda 作为在线安装回退。
 
-下载失败或物化后缺少解释器 → **硬失败**（与 SenseVoice / ffmpeg stage 同级）。本地可设 `OPPTRIX_SKIP_STAGE_PYTHON=1` 跳过（仅开发；打包禁止）。
+下载失败或物化后缺少解释器 → **硬失败**（与 SenseVoice / ffmpeg stage 同级）。本地可设 `OPPTRIX_SKIP_STAGE_PYTHON=1` 跳过（仅开发；打包禁止）。静态 `audit:desktop-pack` 未设 `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON` 时，缺 python 树仅 **warn**；CI / release / prebuild 必须设 `=1` 硬失败。
+
+**不打进安装包**：本地**翻译**用的 GGUF 仍为用户按需下载（设置页 / 首次翻译），不随桌面包分发。
 
 **默认引擎**：SenseVoice。Composer 语音输入与新闻音视频转写均使用本机 SenseVoice 模型；安装包内置 q8 模型与 VAD，优先加载内置资源，其次用户目录，缺失时再下载。
 

@@ -77,6 +77,8 @@ describe('rag engines bundled paths', () => {
       'utf8',
     )
     assert.match(sidecarLaunch, /OPPTRIX_RAG_ENGINES_BUNDLED_DIR/)
+    assert.match(sidecarLaunch, /OPPTRIX_SENSEVOICE_BUNDLED_DIR/)
+    assert.match(sidecarLaunch, /OPPTRIX_PYTHON_BUNDLED_DIR/)
   })
 
   it('server bootstrap does not force-load E5 or embedPending at boot', () => {

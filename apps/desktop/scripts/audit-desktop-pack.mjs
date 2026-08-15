@@ -14,6 +14,8 @@
  *   node apps/desktop/scripts/audit-desktop-pack.mjs
  *   OPPTRIX_AUDIT_STAGE_UPDATER=1 node …   # also run stage-updater-deps.mjs
  *   OPPTRIX_AUDIT_REQUIRE_SIGN_SECRETS=1 … # fail if Opptrix/Win CSC env empty
+ *   OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1 … # fail if resources/python not staged
+ *     (CI/release/prebuild: build:packages → stage-python → audit with this set)
  */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -429,6 +431,9 @@ console.log('audit-desktop-pack: start')
   if (!sidecarLaunchSrc.includes('OPPTRIX_RAG_ENGINES_BUNDLED_DIR')) {
     fail('sidecar-launch.cjs must inject OPPTRIX_RAG_ENGINES_BUNDLED_DIR for sidecar')
   } else ok('sidecar-launch.cjs injects OPPTRIX_RAG_ENGINES_BUNDLED_DIR')
+  if (!sidecarLaunchSrc.includes('OPPTRIX_SENSEVOICE_BUNDLED_DIR')) {
+    fail('sidecar-launch.cjs must inject OPPTRIX_SENSEVOICE_BUNDLED_DIR for sidecar')
+  } else ok('sidecar-launch.cjs injects OPPTRIX_SENSEVOICE_BUNDLED_DIR')
 
   if (!pkg.scripts?.['build']?.includes('prebuild.mjs')) {
     warn('desktop build script should run prebuild.mjs (includes stage-sensevoice / stage-e5 / stage-rapidocr / stage-rag-engines)')
@@ -440,6 +445,7 @@ console.log('audit-desktop-pack: start')
     'stage-e5.mjs',
     'stage-rapidocr.mjs',
     'stage-rag-engines.mjs',
+    'stage-python.mjs',
     'audit-desktop-pack.mjs',
   ]
   let lastIdx = -1
@@ -448,7 +454,7 @@ console.log('audit-desktop-pack: start')
     if (idx < 0) {
       fail(`prebuild.mjs must run ${name} before packaging`)
     } else if (idx < lastIdx) {
-      fail(`prebuild.mjs must run ${name} after prior Hybrid RAG stage steps`)
+      fail(`prebuild.mjs must run ${name} after prior Hybrid RAG / python stage steps`)
     } else {
       lastIdx = idx
       ok(`prebuild runs ${name}`)
@@ -521,6 +527,21 @@ console.log('audit-desktop-pack: start')
   ) {
     fail('verify-packaged-runtime.mjs must hard-fail when packaged ffmpeg-static binary is missing')
   } else ok('verify-packaged-runtime hard-fails on missing ffmpeg')
+  if (
+    !verifyPackSrc.includes('bundle-manifest.json')
+    || !verifyPackSrc.includes('assertPythonBundle')
+  ) {
+    fail('verify-packaged-runtime.mjs must assert packaged python/bundle-manifest.json + interpreter')
+  } else ok('verify-packaged-runtime asserts packaged python bundle')
+  if (
+    !verifyPackSrc.includes('X_OK')
+    && !verifyPackSrc.includes('constants.X_OK')
+  ) {
+    fail('verify-packaged-runtime.mjs must check ffmpeg executable bit (X_OK) on non-Windows')
+  } else ok('verify-packaged-runtime checks ffmpeg X_OK')
+  if (!verifyPackSrc.includes('-version')) {
+    fail('verify-packaged-runtime.mjs must smoke ffmpeg -version when host matches target')
+  } else ok('verify-packaged-runtime smokes ffmpeg -version on host match')
 
   const mainSrc = read('electron/main.cjs')
   if (!mainSrc.includes('RUNTIME_DEPS_DIR') || !mainSrc.includes('NODE_PATH')) {
@@ -653,6 +674,8 @@ console.log('audit-desktop-pack: start')
     'verify-packaged-updater.mjs',
     'verify-packaged-runtime.mjs',
     'audit-desktop-pack.mjs',
+    'stage-python.mjs',
+    'OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON',
     'OPPTRIX_CODE_SIGNING_P12',
     'verify-release-metadata-policy.mjs',
   ]) {
@@ -664,12 +687,24 @@ console.log('audit-desktop-pack: start')
   if (!ciWf.includes('audit-desktop-pack.mjs')) {
     fail('ci.yml must run audit-desktop-pack.mjs before build/test')
   } else ok('ci.yml runs audit-desktop-pack')
+  if (!ciWf.includes('stage-python.mjs')) {
+    fail('ci.yml must run stage-python.mjs before audit (after build:packages)')
+  } else ok('ci.yml runs stage-python')
+  if (!ciWf.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON')) {
+    fail('ci.yml must set OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1 for audit')
+  } else ok('ci.yml requires staged python for audit')
+  if (!ciWf.includes('build:packages')) {
+    fail('ci.yml must run build:packages before stage-python')
+  } else ok('ci.yml builds packages before stage-python')
   if (!ciWf.includes('prepare:fonts') && !ciWf.includes('prepare-ui-fonts')) {
     fail('ci.yml must run prepare:fonts before UI build')
   } else ok('ci.yml runs prepare:fonts')
   if (!releaseWf.includes('prepare:fonts') && !releaseWf.includes('prepare-ui-fonts')) {
     fail('release-desktop.yml must run prepare:fonts before desktop/UI build')
   } else ok('release-desktop.yml runs prepare:fonts')
+  if (!releaseWf.includes('build:packages')) {
+    fail('release-desktop.yml must run build:packages before stage-python / audit')
+  } else ok('release-desktop.yml builds packages before stage-python')
   for (const [label, wf] of [
     ['ci.yml', ciWf],
     ['release-desktop.yml', releaseWf],
@@ -680,8 +715,10 @@ console.log('audit-desktop-pack: start')
       fail(`${label} must run stage-rag-engines.mjs`)
     } else if (!wf.includes('stage-e5.mjs') || !wf.includes('stage-rapidocr.mjs')) {
       fail(`${label} must stage e5 + RapidOCR before audit`)
+    } else if (!wf.includes('stage-python.mjs')) {
+      fail(`${label} must stage-python before audit`)
     } else {
-      ok(`${label} Hybrid RAG stage order (e5 / RapidOCR / engines MANIFEST)`)
+      ok(`${label} Hybrid RAG + python stage order (e5 / RapidOCR / engines MANIFEST / python)`)
     }
   }
 

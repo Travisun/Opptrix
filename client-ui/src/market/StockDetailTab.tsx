@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, Spinner, Tab, TabList, Text, Badge, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
@@ -25,7 +25,11 @@ import {
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { openExternalUrl } from '../platform/openUrl'
 import TradingViewChart from './TradingViewChart'
-import { resolveWatchlistInstrument } from './instrument'
+import {
+  normalizeWatchlistItem,
+  resolveWatchlistInstrument,
+  watchlistItemKey,
+} from './instrument'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
 import StockTrendTab from './StockTrendTab'
 import { listRowKey } from '../utils/listRowKey'
@@ -709,7 +713,7 @@ function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
   )
 }
 
-export default function StockDetailTab({
+function StockDetailTab({
   stock,
   isHolding = false,
   holding,
@@ -722,9 +726,29 @@ export default function StockDetailTab({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [detailReload, setDetailReload] = useState(0)
+  const stockRef = useRef(stock)
+  stockRef.current = stock
+  /** 同标的对象引用抖动时不重置 / 不重拉；仅切换标的才 loading */
+  const stockKey = useMemo(
+    () => (stock ? watchlistItemKey(normalizeWatchlistItem(stock)) : null),
+    [stock],
+  )
+  /** 传给 TradingViewChart 的 instrument：按 stockKey 稳定，避免同标的重渲染新建对象 */
+  const chartInstrument = useMemo(
+    () => (stock ? resolveWatchlistInstrument(stock) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by stockKey
+    [stockKey],
+  )
 
   useEffect(() => {
-    if (!stock) {
+    if (!stockKey) {
+      setDetail(null)
+      setError('')
+      return undefined
+    }
+
+    const current = stockRef.current
+    if (!current) {
       setDetail(null)
       setError('')
       return undefined
@@ -735,7 +759,7 @@ export default function StockDetailTab({
     setLoading(true)
     setError('')
 
-    const ref = resolveWatchlistInstrument(stock)
+    const ref = resolveWatchlistInstrument(current)
     research.stockDetail(ref)
       .then(resp => {
         if (cancelled) return
@@ -757,7 +781,7 @@ export default function StockDetailTab({
       })
 
     return () => { cancelled = true }
-  }, [stock, detailReload])
+  }, [stockKey, detailReload])
 
   if (!stock) {
     return <div className={s.center}>请在「关注」中选择一只股票</div>
@@ -891,7 +915,7 @@ export default function StockDetailTab({
           <div className={s.chartPanel}>
             <TradingViewChart
               code={detail.code}
-              instrument={resolveWatchlistInstrument(stock)}
+              instrument={chartInstrument}
               expanded
               active={detailTab === 'chart'}
             />
@@ -1141,3 +1165,5 @@ export default function StockDetailTab({
     </div>
   )
 }
+
+export default memo(StockDetailTab)

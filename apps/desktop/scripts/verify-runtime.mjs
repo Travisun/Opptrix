@@ -251,22 +251,51 @@ async function waitForHealth(timeoutMs = 45_000) {
 
 console.log(`verify-runtime: starting sidecar on port ${PORT}…`)
 
-  const child = spawn(electronBin, [entry], {
-    cwd: STAGE,
-    env: {
-      ...process.env,
-      SERVE_UI: '1',
-      OPPTRIX_DESKTOP: '1',
-      STOCK_RESEARCH_HOST: '127.0.0.1',
-      STOCK_RESEARCH_PORT: PORT,
-      UI_DIST_PATH: path.join(STAGE, 'client-ui/dist'),
-      ELECTRON_RUN_AS_NODE: '1',
-      PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsers,
-      // Prefer staged deps; STAGE/node_modules symlink handles parent-walk resolution.
-      NODE_PATH: [depsRoot, path.join(STAGE, 'node_modules')].filter((p, i, a) => a.indexOf(p) === i).join(path.delimiter),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+/** Live smoke env：与 sidecar-launch 对齐；目录/二进制存在才注入。 */
+function buildLiveSmokeEnv() {
+  const env = {
+    ...process.env,
+    SERVE_UI: '1',
+    OPPTRIX_DESKTOP: '1',
+    STOCK_RESEARCH_HOST: '127.0.0.1',
+    STOCK_RESEARCH_PORT: PORT,
+    UI_DIST_PATH: path.join(STAGE, 'client-ui/dist'),
+    ELECTRON_RUN_AS_NODE: '1',
+    PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsers,
+    // Prefer staged deps; STAGE/node_modules symlink handles parent-walk resolution.
+    NODE_PATH: [depsRoot, path.join(STAGE, 'node_modules')]
+      .filter((p, i, a) => a.indexOf(p) === i)
+      .join(path.delimiter),
+  }
+
+  const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
+  const ffmpegCandidate = path.join(depsRoot, 'ffmpeg-static', ffmpegName)
+  if (fs.existsSync(ffmpegCandidate)) {
+    env.FFMPEG_PATH = ffmpegCandidate
+  }
+
+  const resourcesRoot = path.join(DESKTOP_ROOT, 'resources')
+  const sensevoiceDir = path.join(resourcesRoot, 'sensevoice')
+  const pythonDir = path.join(resourcesRoot, 'python')
+  const e5Dir = path.join(resourcesRoot, 'llms', 'multilingual-e5-small')
+  if (fs.existsSync(sensevoiceDir)) {
+    env.OPPTRIX_SENSEVOICE_BUNDLED_DIR = sensevoiceDir
+  }
+  if (fs.existsSync(pythonDir)) {
+    env.OPPTRIX_PYTHON_BUNDLED_DIR = pythonDir
+  }
+  if (fs.existsSync(e5Dir)) {
+    env.OPPTRIX_E5_BUNDLED_DIR = e5Dir
+  }
+
+  return env
+}
+
+const child = spawn(electronBin, [entry], {
+  cwd: STAGE,
+  env: buildLiveSmokeEnv(),
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
 
 let stderr = ''
 child.stderr?.on('data', (chunk) => {

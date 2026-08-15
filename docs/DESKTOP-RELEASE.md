@@ -97,7 +97,7 @@ CI 会校验：`desktop-v*` 标签去掉前缀后，必须与 `package.json` 的
 **升级准备（兼容性深化）**：相对上一 `desktop-v*` 的打包编排、原生依赖、数据库/用户数据、更新链与门禁，见独立清单 **[DESKTOP-UPGRADE-PREP.md](./DESKTOP-UPGRADE-PREP.md)**（本文件 Phase A–D 仍是打标签与发布的权威流程；**未 bump `version` 不得打新 `desktop-v*`**）。
 
 - [ ] 已在 `main`（或约定发布分支）合并待发布代码
-- [ ] **打包预检（硬性）**：`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop` 退出码 0（与 `ci.yml` / `release-desktop.yml` 同脚本；捕获 updater/`fs-extra`、sidecar `deps/`、证书与自定义验签、workflow 门禁等）
+- [ ] **打包预检（硬性）**：`build:packages` → `stage-python` → `OPPTRIX_AUDIT_STAGE_UPDATER=1 OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1 npm run audit:desktop-pack -w @opptrix/desktop` 退出码 0（与 `ci.yml` / `release-desktop.yml` 同序；捕获 updater/`fs-extra`、sidecar `deps/`、托管 Python、证书与自定义验签、workflow 门禁等）
 - [ ] 已执行 `npm run build:packages` 与 `npm run build -w opptrix-client` 无错误（CI 会重新构建，本地可先冒烟）
 - [ ] 已更新 `apps/desktop/package.json` 的 `version`
 - [ ] 已按 `.cursor/rules/onboarding.mdc` 配置引导激活：`ONBOARDING_RELEASE_BY_VERSION` 新版本亮点；若改版引导或协议则 bump `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION`（`shared` 与 `client-ui/.../constants.ts` 同步）
@@ -206,10 +206,11 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
 | **Sidecar 依赖** | `stage-runtime.mjs` 安装后把 `runtime-stage/node_modules` **改名为** `runtime-stage/deps/`；主进程 `NODE_PATH` 指向 `deps` | 同理：`extraResources` 复制时相对路径恰为 `node_modules` 会被跳过，安装包会缺 Fastify 等；CI 用 `verify-packaged-runtime.mjs` 校验 |
-| **Sidecar ffmpeg** | `ensureFfmpegStatic` 下载/种子 `ffmpeg-static` 二进制；断言后 `chmod +x` + host 匹配时 `-version` 冒烟；rename 后与 `verify-packaged-runtime` **硬断言**存在 | 语音/媒体转写依赖；缺失/无执行位不得 warn 后继续；`audit-desktop-pack` 防软失败回归 |
+| **Sidecar ffmpeg** | `ensureFfmpegStatic` 下载/种子 `ffmpeg-static` 二进制；断言后 `chmod +x` + host 匹配时 `-version` 冒烟；rename 后与 `verify-packaged-runtime` **硬断言**存在且可执行（posix `X_OK`；Windows `.exe`） | 语音/媒体转写依赖；缺失/无执行位不得 warn 后继续；`audit-desktop-pack` 防软失败回归 |
+| **托管 Python** | `build:packages` → `stage-python.mjs` → `resources/python/`；`extraResources` → 安装包 `python/`；`OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` 审计硬门禁 | CI / release 在 audit 前显式 stage；打包后 `verify-packaged-runtime` 校验 `bundle-manifest.json` + 解释器。**翻译 GGUF 不打进包**（用户按需下载） |
 | **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD` / `_KEY_PEM`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
 | **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml + Linux `*.opptrix-cms` | 旧客户端靠 semver 比较版本，不靠多通道 |
-| **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` 与 `release-desktop.yml` 在构建前必跑；本地打标签前 `OPPTRIX_AUDIT_STAGE_UPDATER=1` |
+| **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` / `release-desktop.yml`：`build:packages` → `stage-python` → `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` + `OPPTRIX_AUDIT_STAGE_UPDATER=1`；本地打标签前至少 `OPPTRIX_AUDIT_STAGE_UPDATER=1`（无 python tree 时 warn；设 REQUIRE 则须先 stage） |
 
 **版本升级语义（electron-updater）**
 
@@ -221,13 +222,18 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 **本地/CI 自检**
 
 ```bash
-# 发版 / 推 main 前：静态策略 + 实际 stage updater（含嵌套 fs-extra）
+# 发版 / 推 main 前：packages → stage-python → 静态策略 + stage updater（含嵌套 fs-extra）
+npm run build:packages
+node apps/desktop/scripts/stage-python.mjs
+OPPTRIX_AUDIT_STAGE_UPDATER=1 OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1 npm run audit:desktop-pack -w @opptrix/desktop
+
+# 仅静态预检（无 python tree 时对 staged python 为 warn，不硬失败）
 OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop
 
 npm run verify:release-metadata-policy -w @opptrix/desktop   # 策略常量（改命名/通道后必跑）
 node apps/desktop/scripts/verify-release-artifacts.mjs apps/desktop/release  # 构建后 yml ↔ 本地文件
 node apps/desktop/scripts/verify-packaged-updater.mjs apps/desktop/release   # 构建后须含 electron-updater
-node apps/desktop/scripts/verify-packaged-runtime.mjs apps/desktop/release   # 构建后 sidecar 为 deps/ + Fastify
+node apps/desktop/scripts/verify-packaged-runtime.mjs apps/desktop/release   # sidecar + ffmpeg 可执行 + python bundle
 node apps/desktop/scripts/verify-release-coherence.mjs desktop-vX.Y.Z /path/to/release-assets  # 与 tag 一致
 ```
 

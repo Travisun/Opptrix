@@ -53,11 +53,22 @@ jobs:
       - name: Stage desktop icons / tray
         run: node apps/desktop/scripts/prepare-icons.mjs
 
-      - name: Audit desktop packaging preflight
-        run: OPPTRIX_AUDIT_STAGE_UPDATER=1 node apps/desktop/scripts/audit-desktop-pack.mjs
+      # stage-python imports packages/agent-workspace/dist — build packages before staging.
+      - name: Build packages
+        run: npm run build:packages
 
-      - name: Build packages and client UI
-        run: npm run build
+      - name: Stage bundled Python runtime
+        run: node apps/desktop/scripts/stage-python.mjs
+
+      - name: Audit desktop packaging preflight
+        env:
+          OPPTRIX_AUDIT_STAGE_UPDATER: '1'
+          OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON: '1'
+        run: node apps/desktop/scripts/audit-desktop-pack.mjs
+
+      # packages already built above; fonts prepared earlier — build client UI only.
+      - name: Build client UI
+        run: npm run build -w opptrix-client
 
       # run-tests.mjs runs all tests/*.test.mjs — includes document-library, e5-bundled-paths,
       # rapidocr-bundled-paths, rag-engines-bundled, parse-router, mcp-tool-route-accuracy.

@@ -106,6 +106,7 @@ function buildSidecarEnv(opts) {
       )
       env.OPPTRIX_RAG_ENGINES_BUNDLED_DIR = path.join(resourcesPath, 'engines')
       env.OPPTRIX_PYTHON_BUNDLED_DIR = path.join(resourcesPath, 'python')
+      env.OPPTRIX_SENSEVOICE_BUNDLED_DIR = path.join(resourcesPath, 'sensevoice')
     }
     let RUNTIME_DEPS_DIR = 'deps'
     try {

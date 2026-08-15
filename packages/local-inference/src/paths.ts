@@ -36,6 +36,12 @@ export function getBundledSenseVoiceDir(repoRoot?: string): string | null {
     return path.join(resourcesPath, 'sensevoice')
   }
 
+  // ELECTRON_RUN_AS_NODE 时常无 process.resourcesPath；sidecar 会注入 OPPTRIX_RESOURCES_PATH
+  const fromResourcesEnv = process.env.OPPTRIX_RESOURCES_PATH?.trim()
+  if (fromResourcesEnv) {
+    return path.join(path.resolve(fromResourcesEnv), 'sensevoice')
+  }
+
   if (repoRoot) {
     const dev = path.join(repoRoot, 'apps/desktop/resources/sensevoice')
     if (fs.existsSync(dev)) return dev

@@ -20,6 +20,7 @@ run('node', ['scripts/stage-sensevoice.mjs'], DESKTOP_ROOT)
 run('node', ['scripts/stage-e5.mjs'], DESKTOP_ROOT)
 run('node', ['scripts/stage-rapidocr.mjs'], DESKTOP_ROOT)
 run('node', ['scripts/stage-rag-engines.mjs'], DESKTOP_ROOT)
+// Bundled managed Python (after build:packages above). CI/release also stage before audit.
 run('node', ['scripts/stage-python.mjs'], DESKTOP_ROOT)
 process.env.OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON = '1'
 process.env.OPPTRIX_AUDIT_STAGE_UPDATER = '1'

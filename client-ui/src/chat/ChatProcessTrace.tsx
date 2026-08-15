@@ -174,7 +174,7 @@ scrollWrapper: {
     marginRight: 0,
   },
   stepLabel: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
     fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.35,
@@ -206,10 +206,14 @@ scrollWrapper: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
-    flexDirection: 'column',
-    gap: '1px',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: '6px',
+    overflow: 'hidden',
   },
   stepTruncHint: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.3,
     color: opptrixCssVars.textTertiary,
@@ -601,6 +605,9 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
   const running = live && step.status === 'running'
 
   const truncated = isToolStepResultTruncated(step)
+  const argsPreview = step.argsPreview?.trim() || ''
+  const truncHint = !running && truncated ? TOOL_RESULT_TRUNCATED_STEP_HINT : ''
+  const secondaryLine = [argsPreview, truncHint].filter(Boolean).join(' · ')
   const head = (
     <>
       <StepLead running={running} expandable={expandable} expanded={expanded} />
@@ -612,18 +619,14 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
             step.status === 'error' && s.stepLabelError,
           )}
           block
+          title={step.label}
         >
           {step.label}
           {running ? '…' : ''}
         </Text>
-        {step.argsPreview?.trim() ? (
-          <Text className={s.stepTruncHint} block title={step.argsPreview}>
-            {step.argsPreview.trim()}
-          </Text>
-        ) : null}
-        {!running && truncated ? (
-          <Text className={s.stepTruncHint} block>
-            {TOOL_RESULT_TRUNCATED_STEP_HINT}
+        {secondaryLine ? (
+          <Text className={s.stepTruncHint} block title={secondaryLine}>
+            {secondaryLine}
           </Text>
         ) : null}
       </div>

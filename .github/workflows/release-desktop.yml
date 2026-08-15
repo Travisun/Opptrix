@@ -119,10 +119,22 @@ jobs:
       - name: Stage desktop icons / tray
         run: node apps/desktop/scripts/prepare-icons.mjs
 
+      # Fail early on Python download/materialize before signing / electron-builder.
+      # stage-python needs agent-workspace dist; prebuild also stages again (idempotent reuse).
+      - name: Build packages
+        run: npm run build:packages
+
+      - name: Stage bundled Python runtime
+        run: node apps/desktop/scripts/stage-python.mjs
+        env:
+          OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
+
       - name: Audit desktop packaging preflight
         shell: bash
         env:
           OPPTRIX_AUDIT_STAGE_UPDATER: '1'
+          OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON: '1'
+          OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
           # Tag releases always require Opptrix or commercial Win CSC;
           # workflow_dispatch + skip_signing=true may ship unsigned.
           OPPTRIX_AUDIT_REQUIRE_SIGN_SECRETS: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_signing == true && '0' || '1' }}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, memo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
@@ -9,6 +9,7 @@ import CrossMarketDetailTab from './CrossMarketDetailTab'
 import type { StockDiscussPayload } from './StockDecisionCard'
 import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
+import { useMarketPanelUi, type MarketPanelTab } from './MarketPanelUiContext'
 import { useWatchlistGroups } from './WatchlistGroupsContext'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
@@ -41,7 +42,7 @@ import {
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 
-type MarketTab = 'watchlist' | 'portfolio' | 'detail'
+type MarketTab = MarketPanelTab
 
 const MARKET_TITLE_TABS: Array<{ value: MarketTab; label: string }> = [
   { value: 'watchlist', label: '关注' },
@@ -217,7 +218,7 @@ function RightMarketPanel({
   const s = useStyles()
   const { items, addItem, updateItem, removeItem } = useWatchlist()
   const { removeItemMembership } = useWatchlistGroups()
-  const [tab, setTab] = useState<MarketTab>('watchlist')
+  const { tab, setTab, selected, setSelected, selectDetail } = useMarketPanelUi()
   const {
     holdingsByCode,
     loadTrades,
@@ -228,7 +229,6 @@ function RightMarketPanel({
   } = useFollowPortfolio({
     enabled: panelVisible && (tab === 'watchlist' || tab === 'portfolio'),
   })
-  const [selected, setSelected] = useState<WatchlistItem | null>(null)
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
   const [dialogPrice, setDialogPrice] = useState<number | null>(null)
   const [localIndexed, setLocalIndexed] = useState<boolean | null>(null)
@@ -237,10 +237,7 @@ function RightMarketPanel({
   const selectedCode = selected?.code ?? null
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
 
-  const handleSelect = useCallback((item: WatchlistItem) => {
-    setSelected(item)
-    setTab('detail')
-  }, [])
+  const handleSelect = selectDetail
 
   const handleAdd = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
     addItem(item, opts)
@@ -277,19 +274,32 @@ function RightMarketPanel({
     return detailPanelKind(resolveWatchlistInstrument(detailStock))
   }, [detailStock])
 
+  const detailStockKey = useMemo(
+    () => (detailStock ? watchlistItemKey(normalizeWatchlistItem(detailStock)) : null),
+    [detailStock],
+  )
+  const detailStockRef = useRef(detailStock)
+  detailStockRef.current = detailStock
+
   useEffect(() => {
-    if (!detailStock || detailKind === 'cn-equity' || detailKind === 'cn-etf') {
+    if (!detailStockKey || detailKind === 'cn-equity' || detailKind === 'cn-etf') {
+      setLocalIndexed(null)
+      setLocalIndexLoading(false)
+      return
+    }
+    const current = detailStockRef.current
+    if (!current) {
       setLocalIndexed(null)
       setLocalIndexLoading(false)
       return
     }
     let cancelled = false
     setLocalIndexLoading(true)
-    void research.searchInstruments(detailStock.code, 5)
+    void research.searchInstruments(current.code, 5)
       .then(resp => {
         if (cancelled) return
         const hits = resp.data?.items ?? []
-        setLocalIndexed(hits.some(h => h.code.toUpperCase() === detailStock.code.toUpperCase()))
+        setLocalIndexed(hits.some(h => h.code.toUpperCase() === current.code.toUpperCase()))
       })
       .catch(() => {
         if (!cancelled) setLocalIndexed(null)
@@ -298,7 +308,7 @@ function RightMarketPanel({
         if (!cancelled) setLocalIndexLoading(false)
       })
     return () => { cancelled = true }
-  }, [detailStock, detailKind])
+  }, [detailStockKey, detailKind])
 
   const handlePortfolioSelect = useCallback((code: string, market?: string) => {
     const fromList = items.find(item => {
@@ -335,6 +345,12 @@ function RightMarketPanel({
   const detailHoldingKey = detailStock && detailRef
     ? portfolioHoldingsKey(detailStock.code, detailRef.market)
     : ''
+
+  const handleDetailManage = useCallback(() => {
+    const current = detailStockRef.current
+    if (!current) return
+    void handleManage(current)
+  }, [handleManage])
 
   const handleSelectPeer = useCallback((item: WatchlistItem) => {
     handleSelect(normalizeWatchlistItem(item))
@@ -501,14 +517,14 @@ function RightMarketPanel({
             stock={detailStock}
             localIndexed={localIndexed}
             loading={localIndexLoading}
-            onManage={() => { void handleManage(detailStock) }}
+            onManage={handleDetailManage}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cross-market' ? (
           <CrossMarketDetailTab
             stock={detailStock}
             localIndexed={localIndexed}
             loading={localIndexLoading}
-            onManage={() => { void handleManage(detailStock) }}
+            onManage={handleDetailManage}
             onSelectPeer={handleSelectPeer}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cn-equity' ? (
@@ -516,7 +532,7 @@ function RightMarketPanel({
             stock={detailStock}
             isHolding={detailHoldingKey ? (holdingsByCode[detailHoldingKey]?.shares ?? 0) > 0 : false}
             holding={detailHoldingKey ? holdingsByCode[detailHoldingKey] ?? null : null}
-            onManage={detailStock ? () => { void handleManage(detailStock) } : undefined}
+            onManage={handleDetailManage}
             onDiscussInChat={onDiscussInChat}
           />
         ) : null}

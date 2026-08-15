@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
-import { parseInstrumentInput } from './instrument'
+import { instrumentKey, parseInstrumentInput } from './instrument'
 import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
@@ -296,9 +296,23 @@ interface Props {
 
 export default function TradingViewChart({ code, instrument, expanded = false, active = true }: Props) {
   const s = useStyles()
+  /** 按标的身份稳定，避免父组件每次 render 新建 instrument 对象导致 loadChart abort */
+  const instrumentIdentity = useMemo(
+    () => (instrument ? instrumentKey(instrument) : code),
+    [
+      code,
+      instrument?.market,
+      instrument?.assetClass,
+      instrument?.symbol,
+      instrument?.exchange,
+      instrument?.quote,
+    ],
+  )
   const instrumentRef = useMemo(
     () => instrument ?? parseInstrumentInput(code),
-    [code, instrument],
+    // identity 不变时保留同一对象引用
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by instrumentIdentity
+    [instrumentIdentity],
   )
   const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
     && hasApplicationCapability(instrumentRef, 'chart_daily')
@@ -483,6 +497,9 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     })
   }, [loadChart])
 
+  const handleNeedHistoryRef = useRef(handleNeedHistory)
+  handleNeedHistoryRef.current = handleNeedHistory
+
   useEffect(() => {
     setPeriod('daily')
     setData(null)
@@ -566,7 +583,8 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
           chartTimeZone: data.chartTimeZone,
           preserveRange,
           addedBars,
-          onNeedHistory: handleNeedHistory,
+          // 经 ref 取最新回调，避免 handleNeedHistory 身份变化时 destroy/remount
+          onNeedHistory: () => { handleNeedHistoryRef.current() },
         },
       )
       setError(prev => (prev.startsWith('K线') || prev.includes('渲染') || prev.includes('时间轴') ? '' : prev))
@@ -576,7 +594,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     }
 
     return () => { workspace.destroy() }
-  }, [data, handleNeedHistory, resolvedScheme])
+  }, [data, resolvedScheme])
 
   useEffect(() => {
     if (!active || !data) return undefined

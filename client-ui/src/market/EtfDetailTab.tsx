@@ -16,7 +16,7 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
-import { resolveWatchlistInstrument } from './instrument'
+import { resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
 import TradingViewChart from './TradingViewChart'
 import EtfDecisionCard from './EtfDecisionCard'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -311,6 +311,16 @@ export default function EtfDetailTab({ stock }: Props) {
   const [scorecardError, setScorecardError] = useState('')
 
   const stockCode = stock?.code ?? null
+  const stockKey = useMemo(
+    () => (stock ? watchlistItemKey(normalizeWatchlistItem(stock)) : null),
+    [stock],
+  )
+  /** 传给 TradingViewChart：按 stockKey 稳定，避免同标的重渲染新建 instrument */
+  const chartInstrument = useMemo(
+    () => (stock ? resolveWatchlistInstrument(stock) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by stockKey
+    [stockKey],
+  )
 
   const loadScorecard = (code: string, signal?: { cancelled: boolean }) => {
     setScorecardLoading(true)
@@ -524,7 +534,7 @@ export default function EtfDetailTab({ stock }: Props) {
         <div className={s.chartWrap}>
           <TradingViewChart
             code={stock.code}
-            instrument={resolveWatchlistInstrument(stock)}
+            instrument={chartInstrument}
             active={tab === 'chart'}
           />
         </div>

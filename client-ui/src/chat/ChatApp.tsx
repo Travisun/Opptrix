@@ -1840,7 +1840,8 @@ export default function ChatApp() {
 
   const handleStockDiscuss = useCallback(async (payload: StockDiscussPayload) => {
     restoreChatColumn()
-    if (!activeId) {
+    const sessionId = activeIdRef.current
+    if (!sessionId) {
       setError('请先新建或选择一个对话')
       return
     }
@@ -1859,15 +1860,15 @@ export default function ChatApp() {
           at,
         }],
       }
-      const data = await setSessionContext(activeId, nextRef)
+      const data = await setSessionContext(sessionId, nextRef)
       setContextRef(data.contextRef ?? nextRef)
       pushComposerDraft(payload.prompt)
       setError('')
-      await refreshContextUsage(activeId)
+      await refreshContextUsage(sessionId)
     } catch (e) {
       setError(e instanceof Error ? e.message : '无法开始讨论，请稍后重试')
     }
-  }, [activeId, pushComposerDraft, refreshContextUsage, restoreChatColumn])
+  }, [pushComposerDraft, refreshContextUsage, restoreChatColumn])
 
   const handleDiscussArticle = useCallback(async (article: FeedArticle) => {
     restoreChatColumn()

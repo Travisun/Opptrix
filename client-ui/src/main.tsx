@@ -4,6 +4,7 @@ import { FluentProvider } from '@fluentui/react-components'
 import App from './App'
 import { OpptrixDialogAlertProvider } from './components/opptrix/OpptrixDialogAlert'
 import { AppUpdateProvider } from './desktop/AppUpdateProvider'
+import { MarketPanelUiProvider } from './market/MarketPanelUiContext'
 import { WatchlistProvider } from './market/WatchlistContext'
 import { WatchlistGroupsProvider } from './market/WatchlistGroupsContext'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
@@ -52,7 +53,9 @@ function ThemedApp() {
         <AppUpdateProvider>
           <WatchlistProvider>
             <WatchlistGroupsProvider>
-              <App />
+              <MarketPanelUiProvider>
+                <App />
+              </MarketPanelUiProvider>
             </WatchlistGroupsProvider>
           </WatchlistProvider>
         </AppUpdateProvider>
