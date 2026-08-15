@@ -73,7 +73,7 @@ packages/agent-skills/builtin/<name>/SKILL.md   # 内置
 
 | 簇 | category 示例 | 说明 |
 |----|---------------|------|
-| **估值 / 决策** | `valuation` / `decision` | DCF、可比、球场图、备忘录等；显式假设，禁止假装卖方共识 |
+| **估值 / 决策** | `valuation` / `decision` | DCF、可比、球场图、备忘录等；显式假设，禁止假装卖方共识。含 `multi-role-research-council`（多角色研讨 / 多空辩论 → 研究立场，非买卖指令） |
 | **量化** | `quant` | 因子暴露/研究、稳健性、配对价差、股票池筛选 |
 | **宏观** | `macro` | 宏观简报、风格轮动、跨资产、流动性地图 |
 | **A 股专题** | `cn-market` | 催化日历、北向、主题政策、涨跌停归因、AH 对照 |
@@ -140,6 +140,7 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 | `closing-market-brief` | 收盘 | web | `market` + `artifacts` |
 | `news-digest` | 资讯摘要 | web | `news` + `artifacts` |
 | `equity-deep-dive` | 个股尽调 | web | `fundamentals`/`market`/`instrument_analytics` + `artifacts` |
+| `multi-role-research-council` | 多角色研讨 | web | 分析师→多空辩论→主席→风险互评；`run_subagent`；`fundamentals`/`market`/`news`/`instrument_analytics` + `artifacts` |
 | `earnings-quick-read` | 财报速读 | web | `fundamentals` + `artifacts` |
 | `instrument-signals` | 标的信号 | web | `instrument_analytics` + `artifacts` |
 | `industry-chain` | 产业链 | web | 知识库 + `industry` + `artifacts` |
@@ -187,6 +188,7 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 |------------------|--------------|----------------------|
 | 早报、开市简报、盘前速览 | `morning-market-brief` | 已删除的 `get_morning_brief` / Hub `market_report` |
 | 收盘报告、尾盘复盘 | `closing-market-brief` | 已删除的 `get_closing_report` / Hub `market_report` |
+| 多角色研讨、多空辩论、研究委员会、研讨链、TradingAgents | `multi-role-research-council` | 勿用 `evaluate_instrument` 评分卡代替；勿仅刷资讯 |
 | 产业链、上下游、行业透视 | `industry-chain` | 已删除的 `industry_mining` / `industry_mermaid` |
 | 帮我建工作流技能、新建/定制技能 | `create-skill` → `create_agent_skill` | 勿跳过引导直接 import；勿与 Tool Pack 混淆 |
 | 画布、可视化报告、一页式报告、对比表报告、create_canvas | `create-canvas` → `create_canvas` | 投研默认用网页；勿用正文 chart 围栏冒充完整报告；勿用 `workspace_write` |

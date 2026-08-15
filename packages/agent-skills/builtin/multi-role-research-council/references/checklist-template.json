@@ -1,0 +1,69 @@
+{
+  "items": [
+    {
+      "id": "s0_scope",
+      "title": "确认标的与研讨范围",
+      "status": "pending"
+    },
+    {
+      "id": "s1_market_structure",
+      "title": "行情结构分析师取证",
+      "status": "pending"
+    },
+    {
+      "id": "s1_fundamentals",
+      "title": "基本面分析师取证",
+      "status": "pending"
+    },
+    {
+      "id": "s1_news_disclosure",
+      "title": "资讯披露分析师取证",
+      "status": "pending"
+    },
+    {
+      "id": "s1_flow_sentiment",
+      "title": "资金情绪分析师取证",
+      "status": "pending"
+    },
+    {
+      "id": "s1_reclaim_analysts",
+      "title": "回收分析师协作任务",
+      "status": "pending"
+    },
+    {
+      "id": "s2_debate",
+      "title": "多空辩论（2–5 轮自适应）",
+      "status": "pending"
+    },
+    {
+      "id": "s3_research_chair",
+      "title": "研究主席综合立场",
+      "status": "pending"
+    },
+    {
+      "id": "s4_risk_independent",
+      "title": "风险三人独立评估",
+      "status": "pending"
+    },
+    {
+      "id": "s4_risk_peer_review",
+      "title": "风险三人交叉互评",
+      "status": "pending"
+    },
+    {
+      "id": "s5_synthesize",
+      "title": "汇总事实、推断与缺口",
+      "status": "pending"
+    },
+    {
+      "id": "s6_create_web",
+      "title": "交付综合研究报告网页",
+      "status": "pending"
+    },
+    {
+      "id": "s7_cleanup",
+      "title": "清理协作任务并完成清单",
+      "status": "pending"
+    }
+  ]
+}
