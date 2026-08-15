@@ -130,6 +130,16 @@ const SEED_RULES: SeedRule[] = [
     weight: 1,
     patterns: [/自定义方法|provider|数据源扩展|akshare|baostock|zzshare|eastmoney|东方财富/i],
   },
+  {
+    // 轻度：明确制品意图才播种，避免研究话术过猛抢预算
+    pack: 'artifacts',
+    weight: 1,
+    patterns: [
+      /可视化报告|投研画布|思维导图|脑图|关系梳理|一页式(?:结论|报告)/,
+      /(?:做成|生成|创建).*(?:画布|脑图|关系图|结构图)/,
+      /create_canvas|create_mindmap/i,
+    ],
+  },
 ]
 
 /** A 股 6 位码 / 命名空间标的 → 倾向加载深度分析 */

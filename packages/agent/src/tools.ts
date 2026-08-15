@@ -671,10 +671,10 @@ export class ToolRegistry {
           const sessionId = currentToolSessionId()
           const jobId = String(args.job_id ?? '').trim()
           if (!jobId) return { ok: false, error: 'job_id 必填' }
-          if (sessionId) {
+          const result = await jobRegistry.requestCancel(jobId)
+          if (result.ok && sessionId) {
             watchRegistry.clearByJob(sessionId, jobId)
           }
-          const result = await jobRegistry.requestCancel(jobId)
           return {
             ok: result.ok,
             job_id: jobId,
@@ -684,6 +684,87 @@ export class ToolRegistry {
               ? '已取消任务'
               : (result.error ?? '无法取消'),
           }
+        },
+      },
+      {
+        name: 'list_jobs',
+        category: '基础',
+        description:
+          '列出本对话相关的后台任务（标题、状态、进度、是否可取消）；可按 states/kind/limit 筛选',
+        parameters: S({
+          states: {
+            type: 'array',
+            description: '可选状态过滤：queued/accepted/preparing/running/completed/failed/cancelled',
+            items: { type: 'string' },
+          },
+          kind: {
+            type: 'string',
+            description: '可选类型：shell-command | python-install | fuyao-dump',
+          },
+          limit: {
+            type: 'number',
+            description: '最多返回条数，默认 20，上限 50',
+          },
+        }),
+        handler: async (args: Record<string, unknown>) => {
+          const sessionId = currentToolSessionId()
+          if (!sessionId) {
+            return { ok: false, error: 'list_jobs 须在聊天会话工具上下文中调用' }
+          }
+          const kindRaw = args.kind != null ? String(args.kind).trim() : ''
+          const kind = kindRaw === 'shell-command' || kindRaw === 'python-install' || kindRaw === 'fuyao-dump'
+            ? kindRaw
+            : undefined
+          const statesRaw = Array.isArray(args.states) ? args.states : []
+          const states = statesRaw
+            .map(s => String(s).trim())
+            .filter((s): s is 'queued' | 'accepted' | 'preparing' | 'running' | 'completed' | 'failed' | 'cancelled' =>
+              ['queued', 'accepted', 'preparing', 'running', 'completed', 'failed', 'cancelled'].includes(s))
+          const limitRaw = typeof args.limit === 'number' ? args.limit : Number(args.limit)
+          const limit = Number.isFinite(limitRaw)
+            ? Math.min(50, Math.max(1, Math.floor(limitRaw)))
+            : 20
+
+          const watched = new Set(watchRegistry.listSession(sessionId).map(w => w.jobId))
+          let snaps = jobRegistry.list({
+            kind,
+            states: states.length ? states : undefined,
+          }).filter((snap) => {
+            const sid = typeof snap.meta?.session_id === 'string' ? snap.meta.session_id : ''
+            if (sid && sid === sessionId) return true
+            if (watched.has(snap.jobId)) return true
+            return false
+          })
+          snaps = snaps
+            .sort((a, b) => b.updatedAtMs - a.updatedAtMs)
+            .slice(0, limit)
+
+          const jobs = snaps.map((snap) => {
+            const stdoutTail = typeof snap.meta?.stdout_tail === 'string'
+              ? snap.meta.stdout_tail
+              : undefined
+            const metaSummary: Record<string, unknown> = {}
+            if (typeof snap.meta?.command_summary === 'string') {
+              metaSummary.command_summary = snap.meta.command_summary
+            }
+            if (snap.meta?.exit_code !== undefined) metaSummary.exit_code = snap.meta.exit_code
+            if (snap.meta?.dump_kind !== undefined) metaSummary.dump_kind = snap.meta.dump_kind
+            return {
+              job_id: snap.jobId,
+              kind: snap.kind,
+              title: snap.title
+                ?? (typeof snap.meta?.command_summary === 'string' ? snap.meta.command_summary : undefined)
+                ?? undefined,
+              label: snap.progress.message,
+              state: snap.state,
+              percent: snap.progress.percent,
+              cancelable: snap.cancelable,
+              eta_seconds: snap.progress.etaSeconds ?? undefined,
+              stdout_tail: stdoutTail || undefined,
+              meta: Object.keys(metaSummary).length ? metaSummary : undefined,
+            }
+          })
+          return { ok: true, jobs, count: jobs.length }
         },
       },
       {

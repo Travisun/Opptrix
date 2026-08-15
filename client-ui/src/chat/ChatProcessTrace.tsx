@@ -616,6 +616,11 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
           {step.label}
           {running ? '…' : ''}
         </Text>
+        {step.argsPreview?.trim() ? (
+          <Text className={s.stepTruncHint} block title={step.argsPreview}>
+            {step.argsPreview.trim()}
+          </Text>
+        ) : null}
         {!running && truncated ? (
           <Text className={s.stepTruncHint} block>
             {TOOL_RESULT_TRUNCATED_STEP_HINT}
@@ -787,8 +792,8 @@ export default function ChatProcessTrace({
 }: Props) {
   const s = useStyles()
   const scrollRef = useRef<HTMLDivElement>(null)
-  // 默认展开全部步骤；收起时仅保留摘要条
-  const [stepsExpanded, setStepsExpanded] = useState(true)
+  // live 默认展开；历史默认收起（思考区仍默认收起）
+  const [stepsExpanded, setStepsExpanded] = useState(() => Boolean(live))
   const [historySnippetExpanded, setHistorySnippetExpanded] = useState(false)
   const segments = resolveReasoningSegments(thinkingSegments, thinkingSnippet)
   const runningStep = live ? steps.find(st => st.status === 'running') : null

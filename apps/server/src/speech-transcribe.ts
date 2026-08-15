@@ -10,9 +10,12 @@ import {
   ffmpegRuntime,
   getSenseVoiceModelsDir,
   getWhisperModelsDir,
+  isFfmpegAvailable,
   isSenseVoiceReady,
   isWhisperModelInstalled,
+  mediaTranscriptUserFacingError,
   senseVoiceRuntime,
+  speechUserFacingError,
   whisperRuntime,
 } from '@opptrix/local-inference'
 
@@ -25,6 +28,8 @@ export type TranscribeMediaResult = {
   empty: boolean
   language?: string
 }
+
+export { speechUserFacingError, mediaTranscriptUserFacingError }
 
 export function resolveSpeechEngine(): SpeechEngine {
   const fromEnv = process.env.OPPTRIX_SPEECH_ENGINE?.trim().toLowerCase()
@@ -73,56 +78,17 @@ export function extForMime(mime: string): string {
   return '.webm'
 }
 
-export function speechUserFacingError(err: unknown, engine: SpeechEngine): string {
-  const message = err instanceof Error ? err.message : String(err)
-  if (/当前平台暂不支持 SenseVoice/i.test(message)) {
-    return '当前设备暂不支持本机语音识别，请稍后再试'
-  }
-  if (/SenseVoice|llama-funasr|GGUF|fsmn-vad|embed\.weight/i.test(message)) {
-    if (/下载/i.test(message)) {
-      return '语音识别模型未就绪，请确认网络后重试'
-    }
-    if (/embed\.weight/i.test(message)) {
-      return '语音模型格式不兼容，请删除旧模型后重试'
-    }
-    return '语音识别尚未就绪，请稍后重试'
-  }
-  if (/未安装语音转写|nodejs-whisper|whisper-cli|CMake|编译/i.test(message)) {
-    return '语音识别尚未就绪。请确认环境后重启应用再试'
-  }
-  if (/ffmpeg|未找到 ffmpeg/i.test(message)) {
-    return '暂时无法处理该文件，请稍后重试'
-  }
-  if (/模型|下载/i.test(message)) {
-    return engine === 'sensevoice'
-      ? '语音识别模型未就绪，请确认网络后重试'
-      : '语音模型未就绪，请确认本机已准备好识别模型'
-  }
-  return '语音识别暂时不可用，请稍后重试'
-}
-
-/** 附件转写：用户可见错误（避免引擎/工具名） */
-export function mediaTranscriptUserFacingError(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err)
-  if (/没有可用的声音|无音轨|hasAudio/i.test(message)) {
-    return '该文件没有可用的声音，无法转写'
-  }
-  if (/ffmpeg|未找到 ffmpeg/i.test(message)) {
-    return '暂时无法处理该文件，请稍后重试'
-  }
-  if (/模型|下载|未就绪|SenseVoice|whisper|CMake|编译/i.test(message)) {
-    return '语音识别尚未就绪，请稍后重试'
-  }
-  return '暂时无法完成转写，请稍后重试'
-}
-
 export function getSpeechStatusPayload() {
   const engine = resolveSpeechEngine()
   const modelName = resolveSpeechModel(engine)
+  const ffmpegReady = isFfmpegAvailable()
 
   if (engine === 'sensevoice') {
+    const modelReady = isSenseVoiceReady(modelName)
     return {
-      ready: isSenseVoiceReady(modelName),
+      ready: modelReady && ffmpegReady,
+      modelReady,
+      ffmpegReady,
       engine,
       modelName,
       modelsDir: getSenseVoiceModelsDir(),
@@ -130,8 +96,11 @@ export function getSpeechStatusPayload() {
   }
 
   const prompt = resolveSpeechPrompt()
+  const modelReady = isWhisperModelInstalled(modelName)
   return {
-    ready: isWhisperModelInstalled(modelName),
+    ready: modelReady && ffmpegReady,
+    modelReady,
+    ffmpegReady,
     engine,
     modelName,
     modelsDir: getWhisperModelsDir(),

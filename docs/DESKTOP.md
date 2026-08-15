@@ -407,7 +407,7 @@ Library hybrid 预筛与资讯 retention 的文档/文章 id 列举改为 **SQL 
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行命令时，使用系统级隔离环境（`opptrix_run`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；浏览截图目录同样按保留天数与容量硬顶自动回收（默认约 7 天 / 512MiB，可用 `OPPTRIX_BROWSER_SCREENSHOT_MAX_AGE_MS` / `OPPTRIX_BROWSER_SCREENSHOT_MAX_BYTES` 调节，`0` 关闭对应维度；关闭浏览器会话不会立刻删图）。本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint，并在新库启用 `auto_vacuum=INCREMENTAL` 时跑 `incremental_vacuum` 还盘（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）；启动与周期维护会扫掉已无对应会话的孤儿目录。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。研报库会限速回收无文档引用的 blob/markdown，并清理用户数据根下过期的半成品下载临时文件。命令在隔离环境中运行，仅限你已授权的文件夹；包安装源默认可访问，访问其它外网目标时会请你确认。出隔离环境运行时每次都需确认。
+智能助手在**本对话工作区**与已授权目录内运行命令时，使用系统级隔离环境（`opptrix_run`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。公共复用区 `agent-workspace/shared` 会按闲置时间与容量软清理旧文件（不删会话目录、不删内置包）；浏览截图目录同样按保留天数与容量硬顶自动回收（默认约 7 天 / 512MiB，可用 `OPPTRIX_BROWSER_SCREENSHOT_MAX_AGE_MS` / `OPPTRIX_BROWSER_SCREENSHOT_MAX_BYTES` 调节，`0` 关闭对应维度；关闭浏览器会话不会立刻删图）。本地 `opptrix.db` / `market.db` 则低频做 WAL checkpoint，并在新库启用 `auto_vacuum=INCREMENTAL` 时跑 `incremental_vacuum` 还盘（全库 VACUUM 默认关闭，可用 `OPPTRIX_SQLITE_VACUUM=1` 开启）。会话上下文投影另存于私有 `~/.opptrix/session-state/<会话ID>/`（与工作区平级，工具不可读）；启动与周期维护会扫掉已无对应会话的孤儿目录。聊天附件落盘于 `~/.opptrix/chat-attachments/<会话ID>/`；删除会话时会级联清理该目录，启动时也会扫掉已无对应会话的孤儿附件目录。研报库会限速回收无文档引用的 blob/markdown，并清理用户数据根下过期的半成品下载临时文件。命令在隔离环境中运行，仅限你已授权的文件夹；包安装源默认可访问，访问其它外网目标时会请你确认。出隔离环境运行时每次都需确认。较长后台命令（`background: true`）会在 Composer 任务面板显示进度与输出尾部，可结束可取消任务（见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
 
 **Windows 隔离强度（设置 → 沙盒环境）**：
 

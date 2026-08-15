@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module'
 import {
   getSenseVoiceModelsDir,
   type SenseVoiceAssetSource,
@@ -8,8 +7,7 @@ import {
   isSenseVoiceReady,
 } from './sensevoice/sensevoice-runtime.js'
 import { isSupportedSenseVoiceModel } from './sensevoice/sensevoice-download.js'
-
-const require = createRequire(import.meta.url)
+import { isFfmpegAvailable, resolveFfmpegBinaryPath } from './media/ffmpeg-runtime.js'
 
 export type MultimodalRuntimeStatus = {
   platform: string
@@ -29,17 +27,11 @@ export function getMultimodalRuntimeStatus(
   repoRoot?: string,
   speechModel = 'q8',
 ): MultimodalRuntimeStatus {
-  let ffmpegPath: string | null = null
-  try {
-    ffmpegPath = require('ffmpeg-static') as string | null
-  } catch {
-    ffmpegPath = process.env.FFMPEG_PATH ?? null
-  }
-
+  const ffmpegPath = resolveFfmpegBinaryPath()
   const normalizedModel = speechModel.trim().toLowerCase() || 'q8'
   const modelName = isSupportedSenseVoiceModel(normalizedModel) ? normalizedModel : 'q8'
   const readyInfo = getSenseVoiceReadyInfo(modelName, repoRoot)
-  const ffmpegReady = Boolean(ffmpegPath)
+  const ffmpegReady = isFfmpegAvailable()
 
   return {
     platform: process.platform,

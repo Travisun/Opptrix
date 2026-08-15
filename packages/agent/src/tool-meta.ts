@@ -470,6 +470,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance:
       'job_id 必填；cancelable=false 时返回明确错误；不自动 cancel 全局任务。',
   },
+  list_jobs: {
+    miningEligible: false,
+    usageGuide:
+      '查看本对话后台任务列表（标题、进度、是否可取消）；取消用 cancel_job，勿 tight-poll。',
+    compliance:
+      '默认本会话；可选 states/kind/limit；只读。',
+  },
   get_system_info: {
     miningEligible: false,
     usageGuide: '运行 opptrix_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
@@ -537,9 +544,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   create_mindmap: {
     miningEligible: false,
     usageGuide:
-      '用户要脑图、思维导图、结构化主题树时创建；nodes 含 id/parentId/label；节点 label/note 禁止 emoji；返回 attachment 供预览。',
+      '用户要脑图、思维导图、结构化主题树，或产业链/股东/主题等关系梳理、流程示意、关系图谱式结构时创建（对齐 create_mindmap，禁止虚构 knowledge-graph 等独立工具名）；nodes 含 id/parentId/label；节点 label/note 禁止 emoji；返回 attachment 供预览。',
     compliance:
-      'title+rootId+nodes 必填；rootId 须在 nodes 中；节点 label/note 禁止 emoji/表情符号/装饰性符号图标；勿用 workspace_write 代替。',
+      'title+rootId+nodes 必填；rootId 须在 nodes 中；节点 label/note 禁止 emoji/表情符号/装饰性符号图标；勿用 workspace_write 代替；勿捏造未注册的图谱工具。',
   },
   update_mindmap: {
     miningEligible: false,

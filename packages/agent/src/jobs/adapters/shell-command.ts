@@ -20,10 +20,12 @@ function mapShellState(status: ShellCommandJobSnapshot['status']): BackgroundJob
 
 function toSnapshot(snap: ShellCommandJobSnapshot): BackgroundJobSnapshot {
   const state = mapShellState(snap.status)
+  const title = (snap.title?.trim() || snap.command_summary || '').trim() || undefined
   return {
     jobId: snap.job_id,
     kind: 'shell-command',
     state,
+    title,
     progress: {
       percent: snap.percent,
       message: snap.message,

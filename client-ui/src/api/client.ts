@@ -1712,6 +1712,50 @@ export async function cancelSessionChat(sessionId: string) {
   })
 }
 
+/**
+ * 结束会话后台任务（A1）。
+ * 后端未就绪时返回 ok:false，不抛错，便于 UI 友好提示。
+ */
+export async function cancelSessionJob(
+  sessionId: string,
+  jobId: string,
+): Promise<{ ok: boolean; cancelled?: boolean; error?: string }> {
+  const sid = sessionId.trim()
+  const jid = jobId.trim()
+  if (!sid || !jid) {
+    return { ok: false, error: '暂时无法结束该任务，请稍后重试' }
+  }
+  try {
+    const res = await jsonFetch<{ ok?: boolean; cancelled?: boolean; error?: string }>(
+      `/sessions/${encodeURIComponent(sid)}/jobs/${encodeURIComponent(jid)}/cancel`,
+      { method: 'POST' },
+    )
+    if (res.ok === false) {
+      const err = typeof res.error === 'string' ? res.error.trim() : ''
+      if (/not.?cancel|不可取消|不支持/i.test(err)) {
+        return { ok: false, error: '此任务暂不支持手动结束' }
+      }
+      return {
+        ok: false,
+        error: err || '暂时无法结束该任务，请稍后重试',
+      }
+    }
+    return {
+      ok: true,
+      cancelled: res.cancelled ?? true,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/404|not found|API error: 404/i.test(msg)) {
+      return { ok: false, error: '结束任务功能即将可用，请稍后再试' }
+    }
+    if (/not.?cancel|不可取消|不支持/i.test(msg)) {
+      return { ok: false, error: '此任务暂不支持手动结束' }
+    }
+    return { ok: false, error: '暂时无法结束该任务，请稍后重试' }
+  }
+}
+
 /** 生成中补充说明（soft steer，不取消当前回复） */
 export async function steerSessionChat(sessionId: string, message: string) {
   return jsonFetch<{ ok: boolean; reason?: 'no_active_chat' | 'empty' }>(

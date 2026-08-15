@@ -70,7 +70,14 @@ declare global {
         data: ArrayBuffer
         mime?: string
       }) => Promise<{ ok: true; text: string; model: string } | { ok: false; error: string }>
-      speechGetStatus?: () => Promise<{ ready: boolean; modelName: string; modelsDir?: string }>
+      speechGetStatus?: () => Promise<{
+        ready: boolean
+        modelReady?: boolean
+        ffmpegReady?: boolean
+        modelName: string
+        modelsDir?: string
+        engine?: string
+      }>
       signalShellReady?: () => void
       setThemeSource?: (source: 'system' | 'light' | 'dark') => void
       shellInstallWindowsSandbox?: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>

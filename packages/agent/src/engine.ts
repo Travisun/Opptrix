@@ -1245,9 +1245,14 @@ export class AgentEngine {
       content: text || '（附件）',
       attachments: resolvedAttachments.length ? resolvedAttachments : undefined,
       at: new Date().toISOString(),
+      ...(progress?.wakeResume ? { origin: 'wake_resume' as const } : {}),
     })
     const messagesBeforeAssistant = record.messages.length
-    if (record.title === '新对话' || record.messages.filter(m => m.role === 'user').length === 1) {
+    // 续跑注入不当作用户开场，避免把系统提示写进会话标题
+    if (
+      !progress?.wakeResume
+      && (record.title === '新对话' || record.messages.filter(m => m.role === 'user').length === 1)
+    ) {
       const titleSeed = text || resolvedAttachments[0]?.name || '新对话'
       record.title = titleSeed.slice(0, 28) + (titleSeed.length > 28 ? '…' : '')
     }
@@ -1722,7 +1727,7 @@ export class AgentEngine {
             tool: fn,
             label: formatToolLabel(fn, args),
             status: 'running',
-            argsPreview: formatArgsPreview(args),
+            argsPreview: formatArgsPreview(args, fn),
             argsDetail: formatArgsDetail(args),
             thinking: stepThinking,
             startedAt: new Date().toISOString(),

@@ -109,7 +109,14 @@ async function speechTranscribe(payload) {
 }
 
 /**
- * @returns {Promise<{ ready: boolean, modelName: string, modelsDir?: string }>}
+ * @returns {Promise<{
+ *   ready: boolean,
+ *   modelReady?: boolean,
+ *   ffmpegReady?: boolean,
+ *   modelName: string,
+ *   modelsDir?: string,
+ *   engine?: string,
+ * }>}
  */
 async function speechGetStatus() {
   try {
@@ -123,8 +130,11 @@ async function speechGetStatus() {
     const json = await resp.json()
     return {
       ready: Boolean(json?.ready),
+      modelReady: json?.modelReady != null ? Boolean(json.modelReady) : undefined,
+      ffmpegReady: json?.ffmpegReady != null ? Boolean(json.ffmpegReady) : undefined,
       modelName: String(json?.modelName ?? 'tiny'),
       modelsDir: typeof json?.modelsDir === 'string' ? json.modelsDir : undefined,
+      engine: typeof json?.engine === 'string' ? json.engine : undefined,
     }
   } catch {
     return { ready: false, modelName: 'tiny' }

@@ -30,6 +30,7 @@ function toSnapshot(snap: PythonInstallJobSnapshot): BackgroundJobSnapshot | nul
     jobId,
     kind: 'python-install',
     state,
+    title: '准备 Python 环境',
     progress: {
       percent: snap.percent,
       phase: snap.phase,

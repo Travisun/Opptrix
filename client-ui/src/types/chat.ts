@@ -215,6 +215,9 @@ export interface AvailableModel {
   media?: ModelMediaCapabilities
 }
 
+/** UI 展示来源；缺省 = 正常气泡。模型侧仍按 role 进上下文。 */
+export type ChatTurnOrigin = 'wake_resume'
+
 export interface ChatDisplayMessage {
   role: 'user' | 'assistant'
   content: string
@@ -228,6 +231,21 @@ export interface ChatDisplayMessage {
   reasoningContent?: string
   /** 结构化思考分段（竖轴时间线） */
   reasoningSegments?: ReasoningSegment[]
+  /** 系统续跑/回调注入；UI 降展示；旧 turns 可能缺失 */
+  origin?: ChatTurnOrigin
+}
+
+/** 续跑注入：状态条而非用户气泡（含旧数据「系统续跑」启发） */
+export function isWakeResumeDisplayMessage(msg: {
+  origin?: string
+  role?: string
+  content?: string
+}): boolean {
+  if (msg.origin === 'wake_resume') return true
+  if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('系统续跑')) {
+    return true
+  }
+  return false
 }
 
 export interface SessionForkContextRef {

@@ -109,6 +109,9 @@ export function toSenseVoiceEnsureUserError(err: unknown): string {
     .trim()
   if (!cleaned) return '语音识别模型准备失败，请稍后重试'
   if (/超时|timeout/i.test(cleaned)) return '下载超时，请确认网络后重试'
+  if (/SPEECH_COMPONENT_MISSING|未找到.*可执行|语音处理组件/i.test(cleaned)) {
+    return '语音识别组件尚未就绪，请稍后再试或到设置中完成准备'
+  }
   if (/网络|下载|失败|无法|仍未找到/.test(cleaned)) {
     return cleaned.includes('请') ? cleaned : '暂时无法准备语音识别模型，请稍后重试'
   }

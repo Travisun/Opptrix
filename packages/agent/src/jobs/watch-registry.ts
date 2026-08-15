@@ -271,21 +271,30 @@ export function listPendingJobWatches(sessionId: string): Array<{
   kind: BackgroundJobKind
   source: JobWatchSource
   label: string
+  title?: string
   percent?: number
   eta_seconds?: number | null
   state?: string
+  cancelable?: boolean
+  stdout_tail?: string
 }> {
   return watchRegistry.listSession(sessionId).map((w) => {
     const snap = jobRegistry.get(w.jobId)
+    const stdoutTail = typeof snap?.meta?.stdout_tail === 'string'
+      ? snap.meta.stdout_tail
+      : undefined
     return {
       watch_id: w.watchId,
       job_id: w.jobId,
       kind: w.kind,
       source: w.source,
       label: userFacingJobLabel(w.kind, snap?.progress.message),
+      title: snap?.title,
       percent: snap?.progress.percent,
       eta_seconds: snap?.progress.etaSeconds ?? undefined,
       state: snap?.state,
+      cancelable: snap?.cancelable,
+      stdout_tail: stdoutTail || undefined,
     }
   })
 }

@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   formatResultPreview,
   formatToolLabel,
+  formatArgsPreview,
   enrichStepFromResult,
 } from '../packages/agent/dist/chat-progress.js'
 
@@ -271,4 +272,29 @@ test('schedule tools have Chinese labels and result summaries', () => {
   }, 'run_scheduled_job_now')
   assert.match(runPreview, /已完成/)
   assert.match(runPreview, /大盘震荡/)
+})
+
+test('formatArgsPreview is human-readable not raw JSON', () => {
+  const runPreview = formatArgsPreview({
+    command: 'python train.py --epochs 3',
+    title: '训练脚本',
+  }, 'opptrix_run')
+  assert.match(runPreview, /训练脚本|train\.py/)
+  assert.doesNotMatch(runPreview, /^\{/)
+
+  const globPreview = formatArgsPreview({ pattern: '**/*.ts', path: 'src' }, 'workspace_glob')
+  assert.match(globPreview, /\*\*\/\*\.ts|匹配/)
+  assert.doesNotMatch(globPreview, /^\{/)
+
+  const grepPreview = formatArgsPreview({ pattern: 'formatToolLabel', path: 'packages' }, 'workspace_grep')
+  assert.match(grepPreview, /formatToolLabel|搜索/)
+
+  const patchPreview = formatArgsPreview({ path: 'a.ts', patch: '@@ -1 +1 @@\n+x' }, 'workspace_apply_patch')
+  assert.match(patchPreview, /a\.ts|补丁/)
+})
+
+test('workspace_apply_patch has Chinese label', () => {
+  const label = formatToolLabel('workspace_apply_patch', { path: 'src/app.ts' })
+  assert.match(label, /应用补丁/)
+  assert.match(label, /app\.ts/)
 })

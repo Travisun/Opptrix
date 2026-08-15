@@ -11,6 +11,8 @@ export interface ShellCommandJobSnapshot {
   status: ShellCommandJobState
   message: string
   command_summary: string
+  /** 可选展示标题（来自工具 title/name）；缺省用 command_summary */
+  title?: string
   percent: number
   exit_code: number | null
   stdout_tail: string
@@ -22,12 +24,20 @@ export interface ShellCommandJobSnapshot {
   suggested_wake_seconds: number | null
 }
 
+/** 运行中增量输出回调（节流写入 snapshot 由 progressTimer 负责） */
+export type ShellJobOutputReporter = (stream: 'stdout' | 'stderr', chunk: string) => void
+
 export interface ShellCommandJobStartInput {
   sessionId: string
   commandSummary: string
+  /** 可选人读标题 */
+  title?: string
   /** 墙钟上限 ms */
   timeoutMs: number
-  run: (signal: AbortSignal) => Promise<{
+  run: (
+    signal: AbortSignal,
+    reportOutput: ShellJobOutputReporter,
+  ) => Promise<{
     exitCode: number | null
     stdout: string
     stderr: string
@@ -40,6 +50,10 @@ export const SHELL_BG_MAX_IN_FLIGHT_PER_SESSION = 2
 /** 默认墙钟 30min */
 export const SHELL_BG_DEFAULT_TIMEOUT_MS = 30 * 60 * 1000
 export const SHELL_BG_MAX_TIMEOUT_MS = 30 * 60 * 1000
+/** 与终态 tail 一致 */
+const TAIL_MAX = 4000
+/** 运行中累计缓冲上限，避免长输出撑爆内存 */
+const LIVE_BUF_MAX = 64_000
 
 const ASYNC_HINT =
   '命令在后台执行。系统通常已自动挂起，结束后同会话通知续跑；'
@@ -50,14 +64,21 @@ type Listener = (snap: ShellCommandJobSnapshot) => void
 interface JobRecord {
   snap: ShellCommandJobSnapshot
   abort: AbortController
+  liveStdout: string
+  liveStderr: string
 }
 
 const jobs = new Map<string, JobRecord>()
 const listeners = new Set<Listener>()
 
-function tail(text: string, max = 4000): string {
+function tail(text: string, max = TAIL_MAX): string {
   if (text.length <= max) return text
   return text.slice(text.length - max)
+}
+
+function clipLive(text: string): string {
+  if (text.length <= LIVE_BUF_MAX) return text
+  return text.slice(text.length - LIVE_BUF_MAX)
 }
 
 function pruneJobs(): void {
@@ -136,6 +157,8 @@ export function cancelShellCommandJob(jobId: string): boolean {
     message: '已取消命令',
     error: 'cancelled',
     percent: rec.snap.percent,
+    stdout_tail: tail(rec.liveStdout),
+    stderr_tail: tail(rec.liveStderr),
   })
   return true
 }
@@ -150,6 +173,8 @@ export function clearSessionShellCommandJobs(sessionId: string): number {
         status: 'cancelled',
         message: '会话已结束，命令已取消',
         error: 'session_cleared',
+        stdout_tail: tail(rec.liveStdout),
+        stderr_tail: tail(rec.liveStderr),
       })
       n++
     }
@@ -180,12 +205,15 @@ export function startShellCommandJob(input: ShellCommandJobStartInput): ShellCom
   const timeoutMs = clampShellBgTimeoutMs(input.timeoutMs)
   const eta = estimateEta(now, timeoutMs)
   const abort = new AbortController()
+  const titleRaw = typeof input.title === 'string' ? input.title.trim() : ''
+  const commandSummary = input.commandSummary.slice(0, 200)
   const snap: ShellCommandJobSnapshot = {
     job_id: jobId,
     session_id: sessionId,
     status: 'running',
     message: '正在执行命令…',
-    command_summary: input.commandSummary.slice(0, 200),
+    command_summary: commandSummary,
+    title: titleRaw || undefined,
     percent: 5,
     exit_code: null,
     stdout_tail: '',
@@ -196,8 +224,17 @@ export function startShellCommandJob(input: ShellCommandJobStartInput): ShellCom
     eta_seconds: eta,
     suggested_wake_seconds: Math.min(1800, Math.max(5, eta)),
   }
-  jobs.set(jobId, { snap, abort })
+  const rec: JobRecord = { snap, abort, liveStdout: '', liveStderr: '' }
+  jobs.set(jobId, rec)
   notify(snap)
+
+  const reportOutput: ShellJobOutputReporter = (stream, chunk) => {
+    const cur = jobs.get(jobId)
+    if (!cur || cur.snap.status !== 'running') return
+    if (!chunk) return
+    if (stream === 'stdout') cur.liveStdout = clipLive(cur.liveStdout + chunk)
+    else cur.liveStderr = clipLive(cur.liveStderr + chunk)
+  }
 
   const progressTimer = setInterval(() => {
     const cur = jobs.get(jobId)
@@ -212,6 +249,8 @@ export function startShellCommandJob(input: ShellCommandJobStartInput): ShellCom
       message: '正在执行命令…',
       eta_seconds: nextEta,
       suggested_wake_seconds: Math.min(1800, Math.max(5, nextEta)),
+      stdout_tail: tail(cur.liveStdout),
+      stderr_tail: tail(cur.liveStderr),
     })
   }, 2_000)
   if (typeof progressTimer === 'object' && progressTimer !== null && 'unref' in progressTimer) {
@@ -220,19 +259,24 @@ export function startShellCommandJob(input: ShellCommandJobStartInput): ShellCom
 
   void (async () => {
     try {
-      const result = await input.run(abort.signal)
+      const result = await input.run(abort.signal, reportOutput)
       clearInterval(progressTimer)
       const cur = jobs.get(jobId)
       if (!cur || cur.snap.status === 'cancelled') return
+      // 终态优先用完整结果；若 run 未回填则用 live 缓冲
+      const stdout = result.stdout || cur.liveStdout
+      const stderr = result.stderr || cur.liveStderr
+      cur.liveStdout = stdout
+      cur.liveStderr = stderr
       const ok = result.exitCode === 0
       patchJob(jobId, {
         status: ok ? 'completed' : 'failed',
         percent: 100,
         exit_code: result.exitCode,
-        stdout_tail: tail(result.stdout),
-        stderr_tail: tail(result.stderr),
+        stdout_tail: tail(stdout),
+        stderr_tail: tail(stderr),
         message: ok ? '命令已完成' : `命令未成功（退出码 ${result.exitCode ?? 'unknown'}）`,
-        error: ok ? null : (tail(result.stderr) || `exit ${result.exitCode}`),
+        error: ok ? null : (tail(stderr) || `exit ${result.exitCode}`),
         eta_seconds: 0,
         suggested_wake_seconds: null,
       })
@@ -247,6 +291,8 @@ export function startShellCommandJob(input: ShellCommandJobStartInput): ShellCom
         percent: aborted ? cur.snap.percent : 100,
         message: aborted ? '已取消命令' : message,
         error: aborted ? 'cancelled' : message,
+        stdout_tail: tail(cur.liveStdout),
+        stderr_tail: tail(cur.liveStderr),
         eta_seconds: 0,
         suggested_wake_seconds: null,
       })

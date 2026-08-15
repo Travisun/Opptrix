@@ -386,6 +386,7 @@ interface ChatViewProps {
   onPromptQueueRunNow?: (id: string) => void
   /** 本会话未完成的后台任务（composer 上方状态条） */
   backgroundJobs?: SessionBackgroundJob[]
+  onCancelBackgroundJob?: (jobId: string) => Promise<{ ok: boolean; error?: string }>
   onForkMessage?: (messageIndex: number) => void
   onEditResend?: (messageIndex: number, text: string) => void
   ensureSession?: () => Promise<string>
@@ -424,7 +425,7 @@ function ChatView({
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
+  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onCancelBackgroundJob, onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
@@ -1070,6 +1071,7 @@ function ChatView({
               onPromptQueueRemove={onPromptQueueRemove}
               onPromptQueueRunNow={onPromptQueueRunNow}
               backgroundJobs={backgroundJobs}
+              onCancelBackgroundJob={onCancelBackgroundJob}
               onOpenPreview={onOpenFilePreview}
             />
           </div>

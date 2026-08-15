@@ -868,6 +868,14 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           description:
             'true：后台执行并立即返回 job_id（不堵对话）；长命令推荐；系统自动挂起并结束后续跑',
         },
+        title: {
+          type: 'string',
+          description: '可选任务标题（后台面板展示）；亦可用 name',
+        },
+        name: {
+          type: 'string',
+          description: '可选任务名称（同 title）',
+        },
         network_intent: { type: 'string', description: 'none | install（可选提示）；包源网络默认已放行' },
         escalate: {
           type: 'string',
@@ -900,6 +908,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           const escalateRaw = String(args.escalate ?? 'none').toLowerCase()
           const escalate = escalateRaw === 'unsandboxed' ? 'unsandboxed' as const : 'none' as const
           const background = args.background === true || args.background === 'true'
+          const title = args.title != null ? String(args.title) : undefined
+          const name = args.name != null ? String(args.name) : undefined
           return await ws.shellRun({
             sessionId: b.sessionId,
             rootId: String(args.root_id ?? 'default'),
@@ -910,6 +920,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             networkIntent,
             escalate,
             background,
+            title,
+            name,
             signal: b.signal,
             secret_refs: parseSecretRefs(args.secret_refs),
           }, b.confirm)

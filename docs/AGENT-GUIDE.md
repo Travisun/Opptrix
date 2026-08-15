@@ -173,9 +173,9 @@ Opptrix/
     4. **Soft steer**：`POST /api/sessions/:id/chat/steer`；仅有进行中 chat 时接受；不 abort；下一 `runLlmRound` 前写入可见 user「（补充）…」；cancel 清 pending；无人值守忽略
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
   - **消息正文插图（无需 pack，日常默认）**：L2/L3 有对比/趋势/占比/强弱矩阵等定量数据时，助手回复 Markdown 可用 ` ```chart ` / ` ```opptrix-chart ` 围栏（内容为 JSON，非 TSX）直接渲染 `@opptrix/canvas` 的 `Chart`（与画布同源），无需授权、无需 `artifacts`。「画个图」用围栏，勿误当成完整报告；**禁止**用 `opptrix_run` + Python（matplotlib/seaborn/plotly 等）出图再当聊天插图（用户明确要求导出图像文件到工作区时除外）。多折线/分组柱须 `data[].series`；单折线勿用每点不同 `color` 冒充多指标；类目密时建议 `showValues:false`、`showTooltip:true`。见 `buildResearchEpistemicPlaybook`。
-  - **画布与脑图（`artifacts` pack）**：实现 `packages/agent/src/canvas-tools.ts`；非 always-on，意图播种（可视化报告/画布/脑图/思维导图）或 `activate_tool_pack({ pack_ids: ["artifacts"] })`
+  - **画布与脑图（`artifacts` pack）**：实现 `packages/agent/src/canvas-tools.ts`；非 always-on，意图播种（可视化报告/画布/脑图/思维导图/关系梳理）或 `activate_tool_pack({ pack_ids: ["artifacts"] })`
     - **工具**：`create_canvas` / `update_canvas` / `read_canvas` / `create_mindmap` / `update_mindmap` / `read_mindmap`
-    - **何时用**：完整可视化报告仅当用户明确点名报告/画布/可视化报告/机构调研报告版式，或 Agent 自感应本轮值得交付完整多章节图文报告时：加载 `artifacts` 并以 `create_canvas` 为主交付；**禁止**先 `ask_user` 询问是否出报告。日常定量表达优先正文 `chart` 围栏。用户要脑图/思维导图/结构化主题树 → `create_mindmap`；更新先 `read_*` 再 `update_*`。插图 ≠ 报告：「画个图」用围栏，不必 `create_canvas`
+    - **何时用**：投研合适时机（对比表、走势图、结构化表、一页式结论 → `create_canvas` / 正文 chart；产业链/股东/主题关系梳理、流程示意 → `create_mindmap`，**禁止**虚构独立 knowledge-graph 工具）。完整可视化报告仅当用户明确点名报告/画布，或 Agent 自感应值得交付完整多章节图文报告时以 `create_canvas` 为主交付；**禁止**先 `ask_user` 询问是否出报告。简单一句问答不必开 canvas/mindmap。日常定量表达优先正文 `chart` 围栏。更新先 `read_*` 再 `update_*`。插图 ≠ 报告：「画个图」用围栏，不必 `create_canvas`
     - **画布源码约束**：`source` 为 TSX 字符串。**UI**：使用 `@opptrix/canvas` curated 组件（`Surface` / `Stack` / `H1`–`H3` / `Text` / `Stat` / `Table` / `Chart` / `Callout` / `Quote` 等）；颜色用 `useCanvasTheme` 或组件默认；禁止渐变、大阴影、装饰 emoji。**语义配色**：文字层级用 `Text` tone（primary/secondary/tertiary）；涨跌默认红涨绿跌（`danger`/`success`）；tips/风险用 `Callout`（tone + 可选 variant）；原文/口径摘录用 `Quote`（`cite` 写来源），勿用 Callout 冒充引用；行内 `Pill` / `Code` / `Link`。**版面**：默认流体宽度 `Surface`；**默认机构调研报告版式**（H1→导语→H2 分章 + 正文与图表穿插；定量对比/变化/构成/强弱矩阵优先 `Chart`（`bar`/`line`/`pie`/`heatmap`）+ 主题配色，heatmap 用 `{ label, row, col, value }`，多折线/分组柱用 `{ label, value, series }`；`Table`/`Stat` 作明细与 KPI；**Chart 勿拉满全宽**（随内容宽自适应：稀疏≈紧凑 320/230/380，密集可增至父容器上限；勿写 `width:'100%'`；图注用 `Chart caption` 与图居中对齐；Chart 已含轴/网格/数值标注，勿手写假坐标）；章节靠标题与 Stack 间距，**避免 Divider**（勿用手写 hr/边框冒充），仅用户明确要求时例外；须含介绍/说明文字；勿用 Card 墙做面板分割；仅用户明确要面板/仪表盘时例外）。**仅允许** `import … from 'react'` 与 `import { … } from '@opptrix/canvas'`（公开导出）；禁止其它依赖（含 echarts）。返回 `attachment`（`kind=canvas`）供消息内点击预览。playbook：`buildArtifactsPlaybook()`
     - **脑图**：`rootId` + `nodes[{id,parentId,label,note?}]`；返回 `kind=mindmap` 附件
     - **意图精排**：`create_canvas` → 首选 `create_canvas`；`create_mindmap` → 首选 `create_mindmap`；勿用 `workspace_write` 代替制品工具
@@ -294,11 +294,15 @@ Opptrix/
 - **失败**：返回 `ok: false` + `status: "failed"` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
 - **旧 Agent**：若只认同步 `ok`+`path`/`url`、忽略 `status`，冷下载时看不到路径——须按 `poll_hint` / `suggested_wake_seconds` 唤醒或用 `job_id` 再查。
 
-**Job 驱动续跑（自动挂起 / `cancel_job`）与 `schedule_turn_wake`**
+**Job 驱动续跑（自动挂起 / `list_jobs` / `cancel_job`）与 `schedule_turn_wake`**
 
-- **主路径（OpenCode 对齐）**：业务工具返回 `preparing`/`accepted`/`installing` + `job_id`，或 `opptrix_run({ background: true })` 时，Engine 在 `tool_done` 后**自动挂 watch**（仅登记，session×job 去重）；Composer 显示进行中条数 + spinner。Job **终态** → `SessionResumeBus` → 同会话 `resumeSessionChat`；**无 soft timer**，长任务仅依赖终态事件。**预计较长（下载/安装/重计算）必须 `background: true`**。
-- **禁止**：`watch_job` 工具已移除；禁止短同步等待 / poll / watch / sleep / 短间隔反复查进度；有 Job 时禁止对 `schedule_turn_wake` 传 `job_id`。
-- **`cancel_job`**：仅 `cancelable===true` 时取消全局 Job；python-install / fuyao-dump 默认不可取消。用户新消息 / Stop / 删会话只清该会话 watches/timer，**不** cancel 全局 Job。
+- **主路径（OpenCode 对齐）**：业务工具返回 `preparing`/`accepted`/`installing` + `job_id`，或 `opptrix_run({ background: true })` 时，Engine 在 `tool_done` 后**自动挂 watch**（仅登记，session×job 去重）；Composer 上方显示「N 个任务进行中」并可展开任务面板。Job **终态** → `SessionResumeBus` → 同会话 `resumeSessionChat`；**无 soft timer**，长任务仅依赖终态事件。**预计较长（下载/安装/重计算）必须 `background: true`**。
+- **Job `title`**：面板/列表展示标题。shell-command：工具入参 `title`/`name`，缺省回退 `command_summary`；python-install：「准备 Python 环境」；fuyao-dump：「准备离线数据包」。
+- **Composer 任务面板**（`ComposerBackgroundJobsBar`）：展开后可看各任务 `title`、进度文案、`stdout_tail`（等宽输出尾部，运行中随 `job_progress` 节流刷新）；`cancelable===true` 时可点「结束任务」（`POST /api/sessions/:id/jobs/:jobId/cancel`）。不可取消时禁用按钮并提示「此任务暂不支持手动结束」。终态后条立即消失。
+- **禁止**：`watch_job` / `wait_job` 工具已移除（勿回潮）；禁止短同步等待 / poll / watch / sleep / 短间隔反复查进度；有 Job 时禁止对 `schedule_turn_wake` 传 `job_id`。
+- **`list_jobs`**（`core`）：列出本对话相关后台任务（`title`、状态、进度、`cancelable`、可选 `stdout_tail`）；可选 `states` / `kind`（`shell-command` \| `python-install` \| `fuyao-dump`）/ `limit`（默认 20，上限 50）；只读，勿 tight-poll。筛选范围：本会话 `meta.session_id` 或本会话已挂 watch 的 Job。
+- **`cancel_job`**（`core`）：仅 `cancelable===true` 时取消全局 Job；python-install / fuyao-dump 默认不可取消。用户新消息 / Stop / 删会话只清该会话 watches/timer，**不** cancel 全局 Job。REST 等价见 [API.md · Sessions](./API.md#sessions会话)。
+- **工具步骤人读摘要**：过程轨迹（`ChatProcessTrace`）经 `formatToolLabel` + `formatArgsPreview`（`packages/agent/src/chat-progress.ts`）展示中文标签与参数短摘要（非裸 JSON）；含 `list_jobs` / `cancel_job` / `opptrix_run` 等。
 - **Feature flag**：`OPPTRIX_JOB_WATCH=0` 关闭自动 watch（默认 on）。循环预算默认 `MAX_SAFETY_ROUNDS=550`（≥400 轮软提醒一次 turn-tail；停机中性文案；对齐 Cursor maxSteps≈512）；`OPPTRIX_AGENT_CURSOR_SMOOTH=0` 回退旧阈值（50 轮等）。
 
 **`schedule_turn_wake`（core always-on，纯延时）**
@@ -352,7 +356,8 @@ Opptrix/
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认/选择/填空时调用；SSE 推送 `user_prompt`。**confirm**：省略 `options`（或 `[]`）且未设 `mode=text`/`allow_custom=true` → 底部「拒绝/确认」（可用 `reject_label`/`confirm_label`；回传 id 固定 `reject`/`confirm`）。**choice**：预置选项 2–50。**text**：`mode:"text"` 或空 options + `allow_custom=true` → 仅开放填空，无授权双钮。禁止用 confirm 收集开放答案。`allow_custom`：confirm 默认关、choice 默认开。多选支持全选；prompt/label 勿用 emoji。作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
 - **`schedule_turn_wake`**（`core`）：无 Job 事件时的纯延时续跑；见上文。异步 preparing+job_id 通常自动挂起并终态续跑；禁止传 `job_id`；勿 poll/sleep。
-- **`cancel_job`**（`core`）：显式取消（仅 cancelable）。
+- **`list_jobs`**（`core`）：查看本对话后台任务（标题/进度/是否可取消）；见上文。
+- **`cancel_job`**（`core`）：显式取消（仅 cancelable）；见上文。勿使用已移除的 `wait_job`。
 - **行业 / 产业链**：激活工作流技能 `industry-chain`（读 `references/chain-knowledge.json`）→ 代表公司用 `get_sector_list` / `get_sector_constituents` / `search_instruments` + `get_instrument_*`
 - **早报 / 收盘**：激活 `morning-market-brief` / `closing-market-brief` → 用 `get_market_dynamics`、`get_limit_updown`、`get_watchlist` 等取数后按技能 Schema 输出 JSON
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack（提供事实表；开闭市叙事走工作流技能，非独立报告工具）
@@ -386,10 +391,11 @@ Opptrix/
 | 会话侧栏 | `chat/SessionSidebar.tsx` |
 | 消息列表与流式 | `chat/ChatView.tsx`, `chat/ChatMessageItem.tsx` |
 | 输入框 | `chat/ChatComposer.tsx`（工具栏：左 `+` 菜单附件/授权文件夹/引用技能；右空态麦克风 / 有内容发送 / 生成中停止） |
+| 后台任务面板 | `chat/ComposerBackgroundJobsBar.tsx` + `chat/jobWatchProgress.ts`（进行中条数；展开可看 stdout 尾部 / 「结束任务」） |
 | 快捷任务 | `chat/quickTaskCatalog.ts`, `chat/ComposerQuickTasks.tsx`（**已弃用入口**：组件与存储仍保留，Composer 默认不再挂载；加号菜单见 `ComposerPlusMenu`） |
 | 选模与参数 | `chat/ModelSelector.tsx`（Composer `showParams`：列表可滚 + footer 固定参数区；设置页 `showParams={false}`） |
 | @ 股票引用 | `chat/useStockMention.ts`, `chat/ComposerStockRefTag.tsx` |
-| 工具执行轨迹 | `chat/ChatProcessTrace.tsx` |
+| 工具执行轨迹 | `chat/ChatProcessTrace.tsx`（人读标签 + 参数短摘要，非裸 JSON） |
 | Markdown 渲染 | `chat/MarkdownMessage.tsx`, `chat/markdownSanitize.ts` |
 | 右侧投研面板 | `chat/RightPanel.tsx` → `market/*Tab.tsx` |
 | 设置 | `pages/SettingsPage.tsx` |

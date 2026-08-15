@@ -46,7 +46,19 @@ export {
   type LlamaHeldHandles,
 } from './llama/llama-runtime.js'
 export * from './llama/prompts.js'
-export { FfmpegRuntime, ffmpegRuntime } from './media/ffmpeg-runtime.js'
+export {
+  FfmpegRuntime,
+  ffmpegRuntime,
+  isFfmpegAvailable,
+  resolveFfmpegBinaryPath,
+  FFMPEG_MISSING_MARKER,
+  FFMPEG_FILE_ERROR_MARKER,
+} from './media/ffmpeg-runtime.js'
+export {
+  speechUserFacingError,
+  mediaTranscriptUserFacingError,
+  type SpeechEngineHint,
+} from './media/speech-user-errors.js'
 export {
   WhisperRuntime,
   whisperRuntime,

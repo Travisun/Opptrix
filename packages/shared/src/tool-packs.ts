@@ -130,7 +130,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     id: 'artifacts',
     title: '画布与脑图',
     description: '创建/更新/读取可预览的投研画布与脑图制品',
-    whenToUse: '可视化报告、画布排版、脑图/思维导图、结构化主题树',
+    whenToUse:
+      '可视化报告、画布排版、多标的对比表/走势图/一页式结论；脑图/思维导图/主题树；产业链/股东/主题等关系梳理或流程示意（关系类用 create_mindmap，勿虚构知识图谱工具）',
   },
 ] as const
 
@@ -146,6 +147,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_current_time: 'core',
   schedule_turn_wake: 'core',
   cancel_job: 'core',
+  list_jobs: 'core',
   get_system_info: 'core',
   get_app_settings: 'core',
   get_project_info: 'core',

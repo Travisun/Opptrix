@@ -162,7 +162,7 @@ export {
   type ToolRoutePlan,
   type RouteConfidence,
 } from './mcp/tool-route-plan.js'
-export { SessionStore, setSessionPersistHooks, sessionToMeta, type SessionMeta, type SessionRecord, type DisplayMessage, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef, type CreateSessionOptions, type SessionLlmParams, type ReasoningEffort, DEFAULT_SESSION_TEMPERATURE, DEFAULT_SESSION_MAX_TOKENS } from './sessions.js'
+export { SessionStore, setSessionPersistHooks, sessionToMeta, isWakeResumeDisplayMessage, type SessionMeta, type SessionRecord, type DisplayMessage, type TurnOrigin, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef, type CreateSessionOptions, type SessionLlmParams, type ReasoningEffort, DEFAULT_SESSION_TEMPERATURE, DEFAULT_SESSION_MAX_TOKENS } from './sessions.js'
 export {
   getExpertCatalogService,
   ExpertCatalogService,

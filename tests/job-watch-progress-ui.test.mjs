@@ -2,9 +2,11 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   applyJobProgressToBackgroundJobs,
+  backgroundJobDisplayTitle,
   hydrateBackgroundJobsFromWatches,
   isReadyLabelTerminal,
   isTerminalBackgroundJobState,
+  parseJobProgressEvent,
   parsePendingJobWatchesApi,
   shouldShowBackgroundJob,
   upsertSessionBackgroundJob,
@@ -78,5 +80,77 @@ describe('jobWatchProgress terminal / ready', () => {
     assert.equal(shouldShowBackgroundJob({ label: '已就绪', state: 'running' }), false)
     assert.equal(shouldShowBackgroundJob({ label: '正在准备…', state: 'ready' }), false)
     assert.equal(shouldShowBackgroundJob({ label: '失败', state: 'failed' }), false)
+  })
+})
+
+describe('jobWatchProgress title / stdout / cancelable', () => {
+  it('parseJobProgressEvent maps title stdout_tail cancelable', () => {
+    const parsed = parseJobProgressEvent({
+      type: 'job_progress',
+      job_id: 'shell-1',
+      kind: 'shell-command',
+      state: 'running',
+      label: '正在执行命令…',
+      percent: 40,
+      title: '安装依赖',
+      stdout_tail: 'npm install\n…',
+      cancelable: true,
+    })
+    assert.ok(parsed)
+    assert.equal(parsed.title, '安装依赖')
+    assert.equal(parsed.stdoutTail, 'npm install\n…')
+    assert.equal(parsed.cancelable, true)
+  })
+
+  it('applyJobProgress merges stdout without clearing title', () => {
+    const list = [{
+      jobId: 'j1',
+      label: '正在执行命令…',
+      state: 'running',
+      title: '下载数据',
+      cancelable: true,
+      stdoutTail: 'start\n',
+    }]
+    const next = applyJobProgressToBackgroundJobs(list, {
+      jobId: 'j1',
+      label: '正在执行命令…',
+      state: 'running',
+      percent: 55,
+      stdoutTail: 'start\nok\n',
+    })
+    assert.equal(next.length, 1)
+    assert.equal(next[0].title, '下载数据')
+    assert.equal(next[0].stdoutTail, 'start\nok\n')
+    assert.equal(next[0].percent, 55)
+    assert.equal(next[0].cancelable, true)
+  })
+
+  it('backgroundJobDisplayTitle prefers title', () => {
+    assert.equal(
+      backgroundJobDisplayTitle({ jobId: '1', label: '正在执行…', state: 'running', title: '编译项目' }),
+      '编译项目',
+    )
+    assert.equal(
+      backgroundJobDisplayTitle({ jobId: '1', label: '正在执行…', state: 'running' }),
+      '正在执行…',
+    )
+  })
+
+  it('parsePending hydrates title stdout cancelable', () => {
+    const parsed = parsePendingJobWatchesApi({
+      job_watches: [{
+        watch_id: 'w1',
+        job_id: 'j1',
+        label: '正在执行命令…',
+        state: 'running',
+        title: '后台命令',
+        stdout_tail: 'hello',
+        cancelable: false,
+      }],
+    })
+    assert.equal(parsed.length, 1)
+    assert.equal(parsed[0].title, '后台命令')
+    assert.equal(parsed[0].stdoutTail, 'hello')
+    assert.equal(parsed[0].cancelable, false)
   })
 })
