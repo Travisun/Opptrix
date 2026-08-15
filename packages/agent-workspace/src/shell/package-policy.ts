@@ -84,21 +84,27 @@ function effectiveShellBinary(argv: string[]): string {
   return basenameOfArgv0(argv)
 }
 
+/**
+ * 命令非空校验。围栏内任意命令以 grant + SRT 为准，不再以二进制白名单为主限制。
+ * @deprecated 名称保留供旧测试/调用；请用非空校验语义理解
+ */
 export function assertAllowedShellArgv(argv: string[]): void {
   if (!argv.length || !argv[0]?.trim()) {
     throw new WorkspaceError('命令不能为空')
   }
-  if (!isAllowedArgv0(argv[0])) {
-    const bin = basenameOfArgv0(argv)
-    throw new WorkspaceError(`不允许运行「${bin || argv[0]}」；仅支持 ${ALLOWED_BINARY_LABEL}`)
-  }
-  const joined = argv.join(' ')
-  for (const re of DANGEROUS_PATTERNS) {
-    if (re.test(joined)) {
-      throw new WorkspaceError('该命令存在安全风险，已被拒绝')
-    }
-  }
 }
+
+/** @deprecated 决策 6：不再作为主路径限制；导出供诊断/文档对照 */
+export function isShellBinaryAllowlisted(argv0: string): boolean {
+  return isAllowedArgv0(argv0)
+}
+
+/** @deprecated 软黑名单不再作为主策略；保留导出避免断代 */
+export function shellCommandMatchesDangerousPattern(joined: string): boolean {
+  return DANGEROUS_PATTERNS.some(re => re.test(joined))
+}
+
+export { ALLOWED_BINARY_LABEL }
 
 export function isNetworkDiagnosticCommand(argv: string[]): boolean {
   return DIAGNOSTIC_BINARIES.has(basenameOfArgv0(argv))
@@ -275,4 +281,13 @@ export function escapeShellArg(arg: string): string {
 
 export function argvToCommandString(argv: readonly string[]): string {
   return argv.map(escapeShellArg).join(' ')
+}
+
+/**
+ * 将策略改写后的 argv 同步为真 shell 的 command 字符串。
+ * 管道/`&&` 等经 parseCommandToArgv 拆出的 token 保持字面量，供 shellWrap 执行。
+ * 真 shell 与 argv spawn 均须用此结果，避免只改 argv 而 commandString 仍是原文。
+ */
+export function syncCommandStringFromManagedArgv(argv: readonly string[]): string {
+  return argvToCommandString(argv)
 }

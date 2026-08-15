@@ -42,6 +42,10 @@ import {
 } from '@opptrix/shared'
 import { clearSessionTurnWakes } from './turn-wake.js'
 import {
+  clearSessionJobWaitsAndWatches,
+  maybeAutoWatchFromToolResult,
+} from './jobs/index.js'
+import {
   buildChecklistTurnTail,
   buildSpinGuardTurnTail,
   beginSpinRound,
@@ -55,11 +59,19 @@ import {
   partitionToolCallsForExecution,
   recordSpinOutcome,
   resolveGatherToolChoice,
+  resolveMaxSafetyRounds,
+  resolveSafetyStopReply,
+  resolveSoftRemindRound,
   resolveVerifyToolChoice,
   roundHadNewFingerprint,
   seedChecklistOnSkillActivate,
   resolveEffectiveResearchTier,
   shouldEnterVerifyPhase,
+  isLastSafetyRound,
+  SOFT_REMIND_TURN_TAIL,
+  LAST_STEP_TURN_TAIL,
+  truncateToolOutputForModel,
+  pruneToolOutputDir,
   SteerBridge,
   VERIFY_TURN_TAIL,
 } from './loop/index.js'
@@ -182,10 +194,63 @@ export interface ChatResult {
   title?: string
 }
 
-// No hard limit on rounds — let the LLM naturally converge to a text response.
-// Safety: if 50 rounds reached without convergence, force stop.
-const MAX_SAFETY_ROUNDS = 50
-const TRUNCATE = 32_768
+// Safety cap：默认 550（OPPTRIX_AGENT_CURSOR_SMOOTH=0 时回退 50）；见 loop/budget.ts
+// 大工具输出改走 truncateToolOutputForModel（~2000 行 / 50KB 落盘），不再裸截 32KB
+let toolOutputPrunedOnce = false
+
+function ensureToolOutputPruned(): void {
+  if (toolOutputPrunedOnce) return
+  toolOutputPrunedOnce = true
+  try {
+    pruneToolOutputDir()
+  } catch {
+    /* 启动清理失败忽略 */
+  }
+}
+
+/**
+ * 落盘/截断后，构造给 enrichStepFromResult / SSE 的结果对象。
+ * 保留原结果供摘要与标签；补上 truncated / saved_rel_path（兼容 relative_path）。
+ */
+function enrichInputAfterToolOutputTruncate(
+  result: unknown,
+  trunc: { truncated: boolean; content: string; relative_path?: string },
+): unknown {
+  if (!trunc.truncated) return result
+  const rel =
+    typeof trunc.relative_path === 'string' && trunc.relative_path.trim()
+      ? trunc.relative_path.replace(/\\/g, '/').trim()
+      : ''
+  const flags: Record<string, unknown> = {
+    truncated: true,
+    resultTruncated: true,
+  }
+  if (rel) {
+    flags.relative_path = rel
+    flags.saved_rel_path = rel
+  }
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return { ...(result as Record<string, unknown>), ...flags }
+  }
+  try {
+    const parsed = JSON.parse(trunc.content) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const p = parsed as Record<string, unknown>
+      const fromPayload =
+        typeof p.relative_path === 'string' && p.relative_path.trim()
+          ? p.relative_path.replace(/\\/g, '/').trim()
+          : ''
+      if (!rel && fromPayload) {
+        flags.relative_path = fromPayload
+        flags.saved_rel_path = fromPayload
+      }
+      return { ...p, ...flags }
+    }
+  } catch {
+    /* soft truncate：content 可能是裸字符串 */
+  }
+  return { ...flags, preview: trunc.content }
+}
 
 function providerIdFromModelRef(modelRef?: string): string | undefined {
   if (!modelRef) return undefined
@@ -906,6 +971,7 @@ export class AgentEngine {
     this.clearExpertPacksSeeded(id)
     this.workspaceService.clearSession(id)
     clearSessionTurnWakes(id)
+    clearSessionJobWaitsAndWatches(id)
     void deleteSessionStateDirectory(id).catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[agent] 清理会话状态目录失败 (${id}): ${msg}`)
@@ -1061,6 +1127,12 @@ export class AgentEngine {
 
     if (!text && !attachmentMetas.length) {
       return { reply: '请输入问题。', toolsUsed: [], sessionId }
+    }
+
+    // 用户主动开聊：取消该会话挂起的定时唤醒 / waits / watches；wake resume 自身不清
+    if (!progress?.wakeResume) {
+      clearSessionTurnWakes(sessionId)
+      clearSessionJobWaitsAndWatches(sessionId)
     }
 
     const activeModel = modelRef?.trim() || record.model
@@ -1261,6 +1333,8 @@ export class AgentEngine {
       logChatDebugAbort(sessionId, { reason: 'cancelled' })
       this.userPromptBridge.cancelSession(sessionId)
       this.steerBridge.clear(sessionId)
+      clearSessionTurnWakes(sessionId)
+      clearSessionJobWaitsAndWatches(sessionId)
       record!.messages = record!.messages.slice(0, messagesBeforeAssistant)
       if (record!.turns) {
         record!.turns = record!.turns.slice(0, turnsBeforeAssistant + 1)
@@ -1298,6 +1372,7 @@ export class AgentEngine {
       message: text,
       contextRef: record.contextRef,
     })
+    ensureToolOutputPruned()
     this.seedExpertDefaultPacks(sessionId, record)
     const packBridgeGen = this.bindPackBridge(sessionId)
     const skillBridgeGen = this.bindSkillBridge(sessionId)
@@ -1313,9 +1388,32 @@ export class AgentEngine {
     let checklistNoneTried = false
     let forceToolChoice: import('./llm/provider.js').LlmToolChoice | undefined
     let ephemeralTurnTailExtra = ''
+    let softRemindInjected = false
+    const maxSafetyRounds = resolveMaxSafetyRounds()
+    const softRemindRound = resolveSoftRemindRound()
 
-    for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
+    for (let round = 0; round < maxSafetyRounds; round++) {
       throwIfAborted(signal)
+
+      // 软提醒：仅 turn-tail 一次；禁止用户 UI「第 N 步」
+      if (
+        !softRemindInjected
+        && softRemindRound != null
+        && round + 1 >= softRemindRound
+      ) {
+        softRemindInjected = true
+        ephemeralTurnTailExtra = [SOFT_REMIND_TURN_TAIL, ephemeralTurnTailExtra]
+          .filter(Boolean)
+          .join('\n\n')
+      }
+
+      // 末轮：禁工具 + 收束提示（对齐 OpenCode last-step）
+      const lastSafety = isLastSafetyRound(round, maxSafetyRounds)
+      if (lastSafety) {
+        ephemeralTurnTailExtra = [LAST_STEP_TURN_TAIL, ephemeralTurnTailExtra]
+          .filter(Boolean)
+          .join('\n\n')
+      }
 
       // Soft steer：下一 LLM 轮前注入可见 user 消息（unattended 忽略并清空）
       if (unattended) {
@@ -1361,12 +1459,15 @@ export class AgentEngine {
 
       let overflowRetried = false
       let lastRoundEstimatedTokens: number | undefined
-      const roundToolChoice = forceToolChoice
-        ?? resolveGatherToolChoice(sessionId, {
-          preferNoneAfterChecklistDone: true,
-          checklistNoneAlreadyTried: checklistNoneTried,
-        })
-      if (roundToolChoice === 'none' && !forceToolChoice) {
+      const roundTools = lastSafety ? [] : openAiTools
+      const roundToolChoice = lastSafety
+        ? 'none' as const
+        : (forceToolChoice
+          ?? resolveGatherToolChoice(sessionId, {
+            preferNoneAfterChecklistDone: true,
+            checklistNoneAlreadyTried: checklistNoneTried,
+          }))
+      if (roundToolChoice === 'none' && !forceToolChoice && !lastSafety) {
         checklistNoneTried = true
       }
       forceToolChoice = undefined
@@ -1376,7 +1477,7 @@ export class AgentEngine {
           modelId,
           providerId,
           systemPrompt,
-          tools: openAiTools,
+          tools: roundTools,
           llm,
           emit,
           aggressive,
@@ -1403,7 +1504,7 @@ export class AgentEngine {
           pendingTokens = null
           emit({ type: 'reply', estimatedTokens: n })
         }
-        const turn = await llm.chat(modelView, openAiTools, signal, {
+        const turn = await llm.chat(modelView, roundTools, signal, {
           sessionId,
           temperature: record.llmParams?.temperature,
           maxTokens: record.llmParams?.maxTokens,
@@ -1705,15 +1806,37 @@ export class AgentEngine {
             }
           }
 
-          const doneStep = enrichStepFromResult(runningStep, result)
+          // 先 spill/truncate，再 enrich + tool_done，使 SSE step 带上 truncated 元数据
+          const trunc = truncateToolOutputForModel(result, {
+            toolName: fn,
+            sessionId,
+          })
+          const doneStep = enrichStepFromResult(
+            runningStep,
+            enrichInputAfterToolOutputTruncate(result, trunc),
+          )
           const stepIdx = toolSteps.findIndex(s => s.id === tc.id)
           if (stepIdx >= 0) toolSteps[stepIdx] = doneStep
           emit({ type: 'tool_done', step: doneStep })
-          return { tc, fn, result }
+          maybeAutoWatchFromToolResult({
+            sessionId,
+            toolName: fn,
+            result,
+            model: activeModel,
+            emit: (ev) => {
+              emit(ev as ChatProgressEvent)
+            },
+          })
+          return { tc, fn, result, toolContent: trunc.content }
         }
 
         const batches = partitionToolCallsForExecution(turn.message.tool_calls)
-        const orderedResults: Array<{ tc: (typeof turn.message.tool_calls)[number]; fn: string; result: unknown }> = []
+        const orderedResults: Array<{
+          tc: (typeof turn.message.tool_calls)[number]
+          fn: string
+          result: unknown
+          toolContent: string
+        }> = []
 
         for (const batch of batches) {
           if (batch.mode === 'parallel' && batch.calls.length > 1) {
@@ -1728,12 +1851,12 @@ export class AgentEngine {
           }
         }
 
-        for (const { tc, fn, result } of orderedResults) {
+        for (const { tc, fn, toolContent } of orderedResults) {
           record.messages.push({
             role: 'tool',
             tool_call_id: tc.id,
             name: fn,
-            content: truncateJson(result),
+            content: toolContent,
           })
         }
         this.sessions.save(record)
@@ -1854,7 +1977,7 @@ export class AgentEngine {
       return { reply, toolsUsed, sessionId, title: record.title }
     }
 
-    const reply = '⚠️ 分析轮次过多，请简化问题或明确分析方向后重试。'
+    const reply = resolveSafetyStopReply()
     pushAssistant(
       reply,
       toolsUsed,
@@ -1930,12 +2053,6 @@ export class AgentEngine {
     this.sessions.save(record)
     this.invalidateContextUsage(record.id)
   }
-}
-
-function truncateJson(value: unknown): string {
-  const s = JSON.stringify(value, null, 0)
-  if (s.length <= TRUNCATE) return s
-  return s.slice(0, TRUNCATE) + '…[truncated]'
 }
 
 function contextRefToChatMessages(ref: SessionContextRef | null | undefined): ChatMessage[] {

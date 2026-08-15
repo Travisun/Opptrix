@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { SandboxManager, type Platform, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime'
 
@@ -12,7 +13,7 @@ import {
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
 import type { ConfirmHandler } from '../service.js'
 import { buildSandboxConfigFromGrants } from './config-from-grants.js'
-import { applyBundledCaCertEnv, materializeBundledCaCert } from './bundled-cacert.js'
+import { applyBundledCaCertEnv, clearBundledCaCertEnv, materializeBundledCaCert } from './bundled-cacert.js'
 import { resolveShellArgv } from './resolve-shell-argv.js'
 import { usesElectronAsNodeArgv } from '../node/resolve-node.js'
 import { getPythonSettings } from '../python-settings-store.js'
@@ -44,15 +45,25 @@ import {
 } from './windows-unelevated/index.js'
 import {
   argvToCommandString,
-  assertAllowedShellArgv,
   assertPackageInstallPolicy,
   buildNpmInstallArgv,
   buildPipInstallArgv,
-  commandNeedsNetwork,
   injectPipCertArgv,
   isNetworkDiagnosticCommand,
   parseDiagnosticTargetHost,
+  syncCommandStringFromManagedArgv,
 } from './package-policy.js'
+import {
+  commandNeedsRealShell,
+  resolveShellCommandInput,
+  shellWrapArgv,
+} from './parse-command.js'
+import { resolvePosixShellPath, SPAWN_ENOENT_HINT } from './resolve-shell-bin.js'
+import {
+  getSessionShellRuntime,
+  type SessionShellRuntime,
+  type ShellIsolation,
+} from './session-runtime.js'
 import {
   SessionNetworkEgressStore,
   NETWORK_EGRESS_CONFIRM_OPTIONS,
@@ -73,12 +84,10 @@ import {
   parseNetworkInstallChoice,
 } from './sticky-network.js'
 import {
-  ShellRunStickyStore,
-  SHELL_RUN_CONFIRM_OPTIONS,
-  parseShellRunConfirmChoice,
   summarizeShellArgv,
 } from './sticky-shell-run.js'
 import type {
+  ShellBackgroundStartResult,
   ShellInstallParams,
   ShellPlatformStatus,
   ShellPythonRuntimeInfo,
@@ -86,10 +95,22 @@ import type {
   ShellRunResult,
   ShellSecretRef,
 } from './types.js'
+import {
+  clampShellBgTimeoutMs,
+  clearSessionShellCommandJobs,
+  isShellBgEnabled,
+  shellCommandJobAsyncHint,
+  startShellCommandJob,
+} from './shell-command-job.js'
 import { getUserDataStore } from '@opptrix/user-store'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_STREAM_BYTES = 200_000
+
+const UNSANDBOXED_CONFIRM_OPTIONS = [
+  { id: 'allow_once', label: '仅此一次' },
+  { id: 'cancel', label: '取消' },
+] as const
 
 const SENSITIVE_ENV_KEYS = [
   /^OPPTRIX_/i,
@@ -102,14 +123,6 @@ const SENSITIVE_ENV_KEYS = [
   /PASSWORD/i,
   /API_KEY/i,
 ]
-
-let sandboxChain: Promise<unknown> = Promise.resolve()
-
-function withSandboxMutex<T>(fn: () => Promise<T>): Promise<T> {
-  const run = sandboxChain.then(fn, fn)
-  sandboxChain = run.then(() => undefined, () => undefined)
-  return run
-}
 
 function truncateStream(text: string, maxBytes: number): { text: string; truncated: boolean } {
   const buf = Buffer.from(text, 'utf8')
@@ -161,6 +174,52 @@ export function applyPythonRuntimeToChildEnv(
   env.PYTHONNOUSERSITE = '1'
 }
 
+/**
+ * 强制子进程 UTF-8 相关环境（Python + 合理 LANG 兜底）。
+ * 导出供单测；不削弱 SRT / 不改沙盒策略。
+ */
+export function applyUtf8ChildEnv(env: NodeJS.ProcessEnv): void {
+  env.PYTHONIOENCODING = 'utf-8'
+  env.PYTHONUTF8 = '1'
+  const lang = env.LANG ?? ''
+  const lcAll = env.LC_ALL ?? ''
+  const hasUtf8 = /utf-?8/i.test(lang) || /utf-?8/i.test(lcAll)
+  if (!hasUtf8) {
+    if (!lcAll) env.LC_ALL = 'C.UTF-8'
+    if (!lang) env.LANG = 'C.UTF-8'
+  }
+}
+
+function chunkToUtf8(chunk: Buffer | string): string {
+  if (typeof chunk === 'string') return chunk
+  return Buffer.isBuffer(chunk) ? chunk.toString('utf8') : Buffer.from(chunk).toString('utf8')
+}
+
+/** spawn 前确认 cwd 为已存在目录；结构化错误，避免裸 ENOENT */
+function assertCwdDirectoryExists(cwdAbs: string, cwdRel: string): void {
+  const label = cwdRel.trim() || '.'
+  let st: fs.Stats
+  try {
+    st = fs.statSync(cwdAbs)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      throw new WorkspaceError(
+        `工作目录不存在（cwd=${label}）。请先相对 root 创建目录（如 mkdir -p …），或改用已有相对路径；勿使用绝对路径或 ~。`,
+      )
+    }
+    throw err
+  }
+  if (!st.isDirectory()) {
+    throw new WorkspaceError(
+      `工作目录不是目录（cwd=${label}）。请指向相对 root 的已有目录，或先 mkdir 创建。`,
+    )
+  }
+}
+
+const SHELL_PATH_NOTE =
+  'HOME=grant 根；cwd=cwdRel（相对 root）；~ ≠ cwd；脚本勿用 ~/ 当相对 cwd。'
+
 async function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
   cwdAbs: string,
@@ -191,6 +250,7 @@ async function sanitizeChildEnv(
   if (electronRunAsNode) {
     out.ELECTRON_RUN_AS_NODE = '1'
   }
+  applyUtf8ChildEnv(out)
   try {
     const runtime = await resolvePythonRuntime()
     if (runtime.ready && runtime.active_path) {
@@ -203,7 +263,13 @@ async function sanitizeChildEnv(
     /* Python 未就绪时仍允许非 python 命令 */
   }
   const materialized = materializeBundledCaCert(grantRootAbs)
-  applyBundledCaCertEnv(out, materialized)
+  if (materialized) {
+    applyBundledCaCertEnv(out, materialized)
+  } else {
+    // 禁止回退包内路径（常在 denyRead(homedir) 外）→ CERTIFICATE_VERIFY_FAILED
+    clearBundledCaCertEnv(out)
+    applyBundledCaCertEnv(out, null)
+  }
   return out
 }
 
@@ -265,68 +331,19 @@ export type NetworkEgressPreflightResult = {
 async function confirmNetworkInstallPreflight(
   sessionId: string,
   sticky: NetworkInstallStickyStore,
-  confirm?: ConfirmHandler,
-  reason?: string,
+  _confirm?: ConfirmHandler,
+  _reason?: string,
 ): Promise<NetworkInstallPreflightResult> {
   const pipIndexUrls = getPythonSettings().pip_index_urls
-  const preferredHosts = hostPatternsFromHttpsUrls(pipIndexUrls)
   const installDomains = networkDomainsForInstallAllowed(pipIndexUrls)
-  if (sticky.has(sessionId)) {
-    return {
-      ok: true,
-      already_granted: true,
-      sticky: true,
-      domains: installDomains,
-      message: '本对话已允许联网安装，无需再次确认',
-    }
-  }
-  if (sticky.hasPreflight(sessionId)) {
-    return {
-      ok: true,
-      already_granted: true,
-      once_confirmed: true,
-      domains: installDomains,
-      message: '本对话已有一次联网安装预授权，随后 shell_install 将跳过重复确认',
-    }
-  }
-  const basePrompt = formatNetworkInstallConfirmPrompt(installDomains, 8, preferredHosts)
-  const prompt = reason?.trim()
-    ? `${reason.trim()}\n\n${basePrompt}`
-    : basePrompt
-  const payload = {
-    kind: 'network_install' as const,
-    title: '允许联网安装',
-    prompt,
-    options: [...NETWORK_INSTALL_CONFIRM_OPTIONS],
-  }
-  if (!confirm) {
-    throw new NetworkInstallConfirmationRequiredError(payload)
-  }
-  const answer = await confirm({
-    title: payload.title,
-    prompt: payload.prompt,
-    options: payload.options,
-    operation: 'overwrite',
-    root_id: 'default',
-    path: '',
-  })
-  const choice = parseNetworkInstallChoice(answer.selected_ids)
-  if (choice === 'cancel') throw new WorkspaceError('用户已取消联网安装')
-  if (choice === 'sticky') {
-    sticky.grant(sessionId)
-    return {
-      ok: true,
-      sticky: true,
-      domains: installDomains,
-      message: '本对话已一律允许联网安装；随后 shell_install 将跳过联网确认',
-    }
-  }
-  sticky.grantPreflight(sessionId)
+  // 决策 2/C：包源默认已进会话 allowlist → 零确认（兼容 sticky 仍可写）
+  if (!sticky.has(sessionId)) sticky.grant(sessionId)
   return {
     ok: true,
-    once_confirmed: true,
+    already_granted: true,
+    sticky: true,
     domains: installDomains,
-    message: '已预授权一次联网安装；紧接着的 shell_install 将跳过联网确认',
+    message: '包源已默认放行，无需确认联网安装',
   }
 }
 
@@ -419,20 +436,22 @@ function appendDiagnosticFallbackHint(
   return stderr.includes('http_fetch') ? stderr : `${stderr}${hint}`
 }
 
-async function requireShellRunConfirmation(
-  sessionId: string,
+async function requireUnsandboxedConfirmation(
   argv: readonly string[],
-  sticky: ShellRunStickyStore,
   confirm?: ConfirmHandler,
 ): Promise<void> {
-  if (sticky.has(sessionId)) return
   const commandSummary = summarizeShellArgv(argv)
   const payload = {
-    kind: 'opptrix_run' as const,
-    title: '允许运行命令',
-    prompt: `将在隔离环境中运行：\n${commandSummary}\n\n仅限本对话工作区与已授权目录；系统隔离执行。`,
+    kind: 'unsandboxed' as const,
+    title: '允许在隔离外运行',
+    prompt: [
+      '将在隔离环境之外运行命令（保护较弱）：',
+      commandSummary,
+      '',
+      '仅限你已授权的文件夹；每次都需要确认，不会对本对话一律放行。',
+    ].join('\n'),
     command_summary: commandSummary,
-    options: [...SHELL_RUN_CONFIRM_OPTIONS],
+    options: [...UNSANDBOXED_CONFIRM_OPTIONS],
   }
   if (!confirm) {
     throw new ShellRunConfirmationRequiredError(payload)
@@ -445,16 +464,16 @@ async function requireShellRunConfirmation(
     root_id: 'default',
     path: '',
   })
-  const choice = parseShellRunConfirmChoice(answer.selected_ids)
-  if (choice === 'cancel') throw new WorkspaceError('用户已取消运行命令')
-  if (choice === 'allow_session') sticky.grant(sessionId)
+  const id = answer.selected_ids[0] ?? 'cancel'
+  if (id !== 'allow_once') {
+    throw new WorkspaceError('用户已取消在隔离外运行')
+  }
 }
 
 async function requireDiagnosticMergedConfirmation(
   sessionId: string,
   argv: readonly string[],
   targetHost: string,
-  shellSticky: ShellRunStickyStore,
   egress: SessionNetworkEgressStore,
   confirm?: ConfirmHandler,
 ): Promise<EgressRunGrants> {
@@ -469,9 +488,9 @@ async function requireDiagnosticMergedConfirmation(
   const commandSummary = summarizeShellArgv(argv)
   const payload = {
     kind: 'network_egress' as const,
-    title: '允许运行命令',
+    title: '允许访问外部目标',
     prompt: [
-      `将在隔离环境中运行：`,
+      '将在隔离环境中运行（仅限已授权文件夹）：',
       commandSummary,
       '',
       `测连通性需要访问外部网络（目标：${normalizedTarget}）。是否允许？`,
@@ -491,14 +510,13 @@ async function requireDiagnosticMergedConfirmation(
     root_id: 'default',
     path: '',
   })
-  return applyEgressChoice(sessionId, normalizedTarget, answer.selected_ids, shellSticky, egress)
+  return applyEgressChoice(sessionId, normalizedTarget, answer.selected_ids, egress)
 }
 
 function applyEgressChoice(
   sessionId: string,
   targetHost: string | undefined,
   selectedIds: readonly string[],
-  shellSticky?: ShellRunStickyStore,
   egress?: SessionNetworkEgressStore,
 ): EgressRunGrants {
   const choice = parseNetworkEgressChoice(selectedIds)
@@ -508,7 +526,6 @@ function applyEgressChoice(
   }
   if (choice === 'allow_host_session') {
     egress?.grantHost(sessionId, targetHost)
-    shellSticky?.grant(sessionId)
     return { onceHosts: [], runWithDeniedNetwork: false }
   }
   if (choice === 'allow_host_once') {
@@ -534,6 +551,9 @@ interface ResolvedSecretInjection {
 
 interface SandboxExecContext {
   sessionId: string
+  /** 交给 SRT wrap 的命令字符串（可含管道等真 shell 语义） */
+  commandString: string
+  /** 解析/增强后的 argv（供策略与 unelevated spawn） */
   normalizedArgv: string[]
   cwdRel: string
   cwdAbs: string
@@ -548,6 +568,9 @@ interface SandboxExecContext {
    * unelevated 下若为 true → 硬拒绝（用户向文案）。
    */
   requireFullNetworkIsolation?: boolean
+  sessionRuntime: SessionShellRuntime
+  /** 是否用 shell 包装 argv（元字符 / 未增强路径） */
+  useShellWrap: boolean
 }
 
 /**
@@ -601,7 +624,6 @@ function createSandboxAskCallback(opts: {
   sessionId: string
   confirm?: ConfirmHandler
   sessionEgress: SessionNetworkEgressStore
-  shellSticky: ShellRunStickyStore
   signal?: AbortSignal
   runOnceHosts: Set<string>
 }): SandboxAskCallback {
@@ -645,7 +667,6 @@ function createSandboxAskCallback(opts: {
         opts.sessionId,
         normalized,
         answer.selected_ids,
-        opts.shellSticky,
         opts.sessionEgress,
       )
       if (grants.onceHosts.length > 0) {
@@ -659,15 +680,19 @@ function createSandboxAskCallback(opts: {
 }
 
 /**
- * elevated：SandboxManager.initialize + wrap（SRT LogonW 路径）。
+ * elevated：会话级 SRT 复用 + wrap（SRT LogonW 路径）。不在此 reset。
  */
 async function executeSandboxOnceElevated(ctx: SandboxExecContext): Promise<{
   exitCode: number | null
   stdout: string
   stderr: string
+  isolation: ShellIsolation
 }> {
-  const command = argvToCommandString(ctx.normalizedArgv)
-  await SandboxManager.initialize(ctx.config, ctx.sandboxAskCallback)
+  await ctx.sessionRuntime.acquireFullSrt(
+    ctx.sessionId,
+    ctx.config,
+    ctx.sandboxAskCallback,
+  )
 
   // Prefer getSentinelRegistry().register over credentials.envVars：
   // 明文不进 process.env / child env，仅 registry + sentinel 字符串。
@@ -681,9 +706,11 @@ async function executeSandboxOnceElevated(ctx: SandboxExecContext): Promise<{
     sentinelEnv[inj.envName] = sentinel
   }
 
+  const posixShell =
+    process.platform === 'win32' ? undefined : resolvePosixShellPath()
   const wrapped = await SandboxManager.wrapWithSandboxArgv(
-    command,
-    undefined,
+    ctx.commandString,
+    posixShell,
     undefined,
     ctx.signal,
     ctx.cwdAbs,
@@ -698,7 +725,8 @@ async function executeSandboxOnceElevated(ctx: SandboxExecContext): Promise<{
   for (const [envName, sentinel] of Object.entries(sentinelEnv)) {
     childEnv[envName] = sentinel
   }
-  return spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+  const result = await spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+  return { ...result, isolation: 'full' }
 }
 
 /**
@@ -708,6 +736,7 @@ async function executeSandboxOnceUnelevated(ctx: SandboxExecContext): Promise<{
   exitCode: number | null
   stdout: string
   stderr: string
+  isolation: ShellIsolation
 }> {
   // 硬拒绝「完整网络隔离」围栏路径（与 elevated 同等的 SRT 网络围栏）
   assertUnelevatedRejectsFullNetworkIsolation(ctx.requireFullNetworkIsolation === true)
@@ -723,13 +752,18 @@ async function executeSandboxOnceUnelevated(ctx: SandboxExecContext): Promise<{
     throw new WorkspaceError('基础隔离暂不支持密钥注入，请改用完整隔离')
   }
 
-  return spawnUnelevatedRestricted({
-    argv: ctx.normalizedArgv,
+  const spawnArgv = ctx.useShellWrap
+    ? shellWrapArgv(ctx.commandString)
+    : ctx.normalizedArgv
+
+  const result = await spawnUnelevatedRestricted({
+    argv: spawnArgv,
     env: childEnv,
     cwd: ctx.cwdAbs,
     timeoutMs: ctx.timeoutMs,
     signal: ctx.signal,
   })
+  return { ...result, isolation: 'basic' }
 }
 
 async function refreshElevatedWindowsCredentials(): Promise<void> {
@@ -747,16 +781,18 @@ async function refreshElevatedWindowsCredentials(): Promise<void> {
 /** elevated：凭据 1326/1312 最多 force install/rotate 一次再执行 */
 async function executeSandboxOnceElevatedWithCredRetry(
   ctx: SandboxExecContext,
-): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+): Promise<{ exitCode: number | null; stdout: string; stderr: string; isolation: ShellIsolation }> {
   let refreshed = false
   const refreshOnce = async (): Promise<boolean> => {
     if (refreshed) return false
     refreshed = true
     await refreshElevatedWindowsCredentials()
+    // 凭据刷新会 reset SRT；清会话 runtime 全局态后由下次 acquire 重建
+    await ctx.sessionRuntime.disposeAll()
     return true
   }
 
-  let first: { exitCode: number | null; stdout: string; stderr: string }
+  let first: { exitCode: number | null; stdout: string; stderr: string; isolation: ShellIsolation }
   try {
     first = await executeSandboxOnceElevated(ctx)
   } catch (err) {
@@ -779,6 +815,7 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
   exitCode: number | null
   stdout: string
   stderr: string
+  isolation: ShellIsolation
 }> {
   const winMode = process.platform === 'win32'
     ? getSandboxSettings().windows_isolation_mode
@@ -795,6 +832,28 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
   return executeSandboxOnceElevatedWithCredRetry(ctx)
 }
 
+async function executeUnsandboxedOnce(ctx: {
+  commandString: string
+  normalizedArgv: string[]
+  useShellWrap: boolean
+  cwdAbs: string
+  grantRootAbs: string
+  timeoutMs: number
+  signal?: AbortSignal
+}): Promise<{ exitCode: number | null; stdout: string; stderr: string; isolation: ShellIsolation }> {
+  const childEnv = await sanitizeChildEnv(
+    { ...process.env },
+    ctx.cwdAbs,
+    ctx.grantRootAbs,
+    usesElectronAsNodeArgv(ctx.normalizedArgv),
+  )
+  const spawnArgv = ctx.useShellWrap
+    ? shellWrapArgv(ctx.commandString)
+    : ctx.normalizedArgv
+  const result = await spawnSandboxed(spawnArgv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+  return { ...result, isolation: 'basic' }
+}
+
 export interface ShellRunnerDeps {
   listGrants: (sessionId: string) => Promise<WorkspaceGrant[]>
   gatePath: (sessionId: string, rootId: string, relPath: string) => Promise<{
@@ -803,11 +862,14 @@ export interface ShellRunnerDeps {
   }>
   stickyNetwork: NetworkInstallStickyStore
   sessionEgress: SessionNetworkEgressStore
-  stickyShellRun: ShellRunStickyStore
 }
 
 export class ShellRunner {
-  constructor(private readonly deps: ShellRunnerDeps) {}
+  private readonly sessionRuntime: SessionShellRuntime
+
+  constructor(private readonly deps: ShellRunnerDeps) {
+    this.sessionRuntime = getSessionShellRuntime()
+  }
 
   async platformStatus(): Promise<ShellPlatformStatus> {
     return getShellPlatformStatus()
@@ -836,11 +898,34 @@ export class ShellRunner {
   async run(
     params: ShellRunParams,
     confirm?: ConfirmHandler,
-  ): Promise<ShellRunResult> {
-    assertAllowedShellArgv(params.argv)
-    const resolved = await resolveShellArgv(params.argv)
-    const resolvedArgv = resolved.argv
-    const pythonRewritten = resolved.python_rewritten
+  ): Promise<ShellRunResult | ShellBackgroundStartResult> {
+    const wantBackground = params.background === true
+    if (wantBackground && !isShellBgEnabled()) {
+      throw new WorkspaceError('后台命令已关闭。请去掉 background，或改用同步 opptrix_run。')
+    }
+
+    const resolvedInput = resolveShellCommandInput({
+      command: params.command,
+      argv: params.argv,
+    })
+    if (resolvedInput.fromLegacyArgv) {
+      console.warn(
+        '[agent-workspace] opptrix_run: argv 已弃用，请改用 command；本期已自动拼接兼容',
+      )
+    }
+
+    const needsRealShell = commandNeedsRealShell(resolvedInput.command)
+    let workingArgv = resolvedInput.argv
+    const useShellWrap = needsRealShell
+    let pythonRewritten = false
+
+    // python / node / npm 能力增强（非白名单门槛）
+    // 真 shell 亦须改写 argv，并最终同步到 commandString（shellWrap 执行的是字符串）
+    {
+      const resolved = await resolveShellArgv(workingArgv)
+      workingArgv = resolved.argv
+      pythonRewritten = resolved.python_rewritten
+    }
 
     let pythonRuntimeInfo: ShellPythonRuntimeInfo | undefined
     try {
@@ -865,8 +950,9 @@ export class ShellRunner {
       cwdRel,
     )
     assertReadable(grant)
+    assertCwdDirectoryExists(cwdAbs, cwdRel)
 
-    const normalizedArgv = assertPackageInstallPolicy(resolvedArgv, cwdAbs, grant.abs_path)
+    const normalizedArgv = assertPackageInstallPolicy(workingArgv, cwdAbs, grant.abs_path)
 
     const diagnostic = isNetworkDiagnosticCommand(normalizedArgv)
     let diagnosticTargetHost: string | undefined
@@ -876,43 +962,35 @@ export class ShellRunner {
       diagnosticTargetHost = await assertDiagnosticTargetAllowed(rawHost, params.sessionId)
     }
 
-    const needsInstallNetwork = !diagnostic && (
-      params.networkIntent === 'install' || commandNeedsNetwork(normalizedArgv)
-    )
+    const escalate = params.escalate === 'unsandboxed' ? 'unsandboxed' as const : 'none' as const
+    if (escalate === 'unsandboxed') {
+      await requireUnsandboxedConfirmation(normalizedArgv, confirm)
+    }
 
     let egressGrants: EgressRunGrants = { onceHosts: [], runWithDeniedNetwork: false }
 
-    if (diagnostic && diagnosticTargetHost) {
+    if (escalate !== 'unsandboxed' && diagnostic && diagnosticTargetHost) {
       egressGrants = await requireDiagnosticMergedConfirmation(
         params.sessionId,
         normalizedArgv,
         diagnosticTargetHost,
-        this.deps.stickyShellRun,
-        this.deps.sessionEgress,
-        confirm,
-      )
-    } else {
-      await requireShellRunConfirmation(
-        params.sessionId,
-        normalizedArgv,
-        this.deps.stickyShellRun,
-        confirm,
-      )
-    }
-
-    if (needsInstallNetwork) {
-      await requireNetworkInstallConfirmation(
-        params.sessionId,
-        this.deps.stickyNetwork,
         this.deps.sessionEgress,
         confirm,
       )
     }
+    // 围栏内：无「首次运行命令」总确认；包源网络默认已含（决策 2/3）
 
-    const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const timeoutMs = wantBackground
+      ? clampShellBgTimeoutMs(params.timeoutMs)
+      : (params.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     const started = Date.now()
 
-    const secretInjections = resolveSecretInjections(params.sessionId, params.secret_refs)
+    const secretInjections = escalate === 'unsandboxed'
+      ? []
+      : resolveSecretInjections(params.sessionId, params.secret_refs)
+    if (escalate === 'unsandboxed' && params.secret_refs?.length) {
+      throw new WorkspaceError('隔离外运行不支持密钥注入，请在隔离环境中使用 secret_refs')
+    }
     const secretInjectHosts = [
       ...new Set(secretInjections.flatMap(s => s.injectHosts.map(h => normalizeEgressHost(h)).filter(Boolean))),
     ]
@@ -920,124 +998,236 @@ export class ShellRunner {
 
     await resolvePreferredPipIndexUrl(getPythonSettings().pip_index_urls)
 
-    await this.assertShellReady(true)
+    if (escalate !== 'unsandboxed') {
+      await this.assertShellReady(true)
+    }
 
-    return withSandboxMutex(async () => {
-      const grants = await this.deps.listGrants(params.sessionId)
-      const allowNetworkInstall = !egressGrants.runWithDeniedNetwork && (
-        needsInstallNetwork || this.deps.stickyNetwork.has(params.sessionId)
-      )
-      const diagnosticTargetHosts = diagnosticTargetHost && !egressGrants.runWithDeniedNetwork
-        ? [diagnosticTargetHost]
-        : undefined
-      const sessionEgress = egressGrants.runWithDeniedNetwork
-        ? undefined
-        : this.deps.sessionEgress.snapshot(params.sessionId)
-      const preflightEgress = egressGrants.runWithDeniedNetwork
-        ? []
-        : this.deps.sessionEgress.consumeAllPreflight(params.sessionId)
-      const onceEgressHosts = egressGrants.runWithDeniedNetwork
-        ? undefined
-        : [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
+    const grants = await this.deps.listGrants(params.sessionId)
+    // 决策 2：会话默认即含安装源；其它 host 仍审批
+    const allowNetworkInstall = !egressGrants.runWithDeniedNetwork
+    const diagnosticTargetHosts = diagnosticTargetHost && !egressGrants.runWithDeniedNetwork
+      ? [diagnosticTargetHost]
+      : undefined
+    const sessionEgress = egressGrants.runWithDeniedNetwork
+      ? undefined
+      : this.deps.sessionEgress.snapshot(params.sessionId)
+    const preflightEgress = egressGrants.runWithDeniedNetwork
+      ? []
+      : this.deps.sessionEgress.consumeAllPreflight(params.sessionId)
+    const onceEgressHosts = egressGrants.runWithDeniedNetwork
+      ? undefined
+      : [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
 
-      const config = await buildSandboxConfigFromGrants({
-        grants,
-        allowNetworkInstall,
-        diagnosticTargetHosts,
-        sessionEgress,
-        onceEgressHosts,
+    const config = await buildSandboxConfigFromGrants({
+      grants,
+      allowNetworkInstall,
+      diagnosticTargetHosts,
+      sessionEgress,
+      onceEgressHosts,
+      sessionId: params.sessionId,
+      pipIndexUrls: getPythonSettings().pip_index_urls,
+    })
+
+    const materializedCert = materializeBundledCaCert(grant.abs_path)
+    // 有物化证书时始终注入 argv --cert（真 shell 亦然；env 由 sanitizeChildEnv 指向 grant 内路径）
+    const execArgv = materializedCert
+      ? injectPipCertArgv(normalizedArgv, materializedCert)
+      : normalizedArgv
+    // 真 shell 与 argv spawn：托管 python / --target / --cert 等策略改写必须反映到实际 commandString
+    const execCommandString = syncCommandStringFromManagedArgv(execArgv)
+
+    const runOnceHosts = new Set<string>(
+      [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
+        .map(h => normalizeEgressHost(h))
+        .filter(Boolean),
+    )
+
+    const commandSummary = summarizeShellArgv(execArgv)
+
+    if (wantBackground) {
+      const snap = startShellCommandJob({
         sessionId: params.sessionId,
-        pipIndexUrls: getPythonSettings().pip_index_urls,
+        commandSummary,
+        timeoutMs,
+        run: async (jobSignal) => {
+          const linked = new AbortController()
+          const onParentAbort = () => linked.abort()
+          const onJobAbort = () => linked.abort()
+          if (params.signal?.aborted || jobSignal.aborted) linked.abort()
+          else {
+            params.signal?.addEventListener('abort', onParentAbort, { once: true })
+            jobSignal.addEventListener('abort', onJobAbort, { once: true })
+          }
+          try {
+            const sandboxAskCallback = egressGrants.runWithDeniedNetwork || escalate === 'unsandboxed'
+              ? undefined
+              : createSandboxAskCallback({
+                sessionId: params.sessionId,
+                confirm,
+                sessionEgress: this.deps.sessionEgress,
+                signal: linked.signal,
+                runOnceHosts,
+              })
+            let result: {
+              exitCode: number | null
+              stdout: string
+              stderr: string
+              isolation: ShellIsolation
+            }
+            if (escalate === 'unsandboxed') {
+              result = await executeUnsandboxedOnce({
+                commandString: execCommandString,
+                normalizedArgv: execArgv,
+                useShellWrap,
+                cwdAbs,
+                grantRootAbs: grant.abs_path,
+                timeoutMs,
+                signal: linked.signal,
+              })
+            } else {
+              result = await executeSandboxOnce({
+                sessionId: params.sessionId,
+                commandString: execCommandString,
+                normalizedArgv: execArgv,
+                cwdRel,
+                cwdAbs,
+                grantRootAbs: grant.abs_path,
+                config,
+                timeoutMs,
+                signal: linked.signal,
+                sandboxAskCallback,
+                secretInjections,
+                requireFullNetworkIsolation: false,
+                sessionRuntime: this.sessionRuntime,
+                useShellWrap,
+              })
+            }
+            return {
+              exitCode: result.exitCode,
+              stdout: redactSecretsInText(result.stdout, plainSecretsForRedact),
+              stderr: redactSecretsInText(result.stderr, plainSecretsForRedact),
+            }
+          } finally {
+            params.signal?.removeEventListener('abort', onParentAbort)
+            jobSignal.removeEventListener('abort', onJobAbort)
+          }
+        },
       })
 
-      // CA 物化到 grant 根后再注入 pip --cert（sanitize 在 spawn 时也会再物化一次，幂等）
-      const materializedCert = materializeBundledCaCert(grant.abs_path)
-      const execArgv = materializedCert
-        ? injectPipCertArgv(normalizedArgv, materializedCert)
-        : normalizedArgv
-
-      const runOnceHosts = new Set<string>(
-        [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
-          .map(h => normalizeEgressHost(h))
-          .filter(Boolean),
-      )
-      const sandboxAskCallback = egressGrants.runWithDeniedNetwork
-        ? undefined
-        : createSandboxAskCallback({
-          sessionId: params.sessionId,
-          confirm,
-          sessionEgress: this.deps.sessionEgress,
-          shellSticky: this.deps.stickyShellRun,
-          signal: params.signal,
-          runOnceHosts,
-        })
-
-      let result: { exitCode: number | null; stdout: string; stderr: string }
-      const winMode = process.platform === 'win32'
-        ? getSandboxSettings().windows_isolation_mode
-        : 'elevated'
-      try {
-        result = await executeSandboxOnce({
-          sessionId: params.sessionId,
-          normalizedArgv: execArgv,
-          cwdRel,
-          cwdAbs,
-          grantRootAbs: grant.abs_path,
-          config,
-          timeoutMs,
-          signal: params.signal,
-          sandboxAskCallback,
-          secretInjections,
-          // unelevated 主路径不要求完整网络围栏（软策略：确认/白名单）
-          requireFullNetworkIsolation: false,
-        })
-      } finally {
-        // unelevated 未 initialize SRT；reset 仍安全
-        if (winMode !== 'unelevated') {
-          await SandboxManager.reset()
-        }
+      const eta = snap.eta_seconds ?? undefined
+      const suggested = snap.suggested_wake_seconds ?? undefined
+      return {
+        ok: true,
+        status: 'running',
+        job_id: snap.job_id,
+        kind: 'shell-command',
+        message: snap.message,
+        command_summary: snap.command_summary,
+        eta_seconds: eta ?? undefined,
+        suggested_wake_seconds: suggested ?? undefined,
+        async_hint: shellCommandJobAsyncHint(),
+        poll_hint:
+          `命令后台执行中（约 ${suggested ?? eta ?? 60}s）。系统通常已自动挂起，结束后通知续跑。勿 poll/sleep 查进度。`,
+        isolation: escalate === 'unsandboxed' ? 'basic' : 'full',
+        sandbox: escalate !== 'unsandboxed',
       }
+    }
 
-      const stdoutRaw = redactSecretsInText(result.stdout, plainSecretsForRedact)
-      const stderrRaw = redactSecretsInText(result.stderr, plainSecretsForRedact)
-      const stdout = truncateStream(stdoutRaw, MAX_STREAM_BYTES)
-      let stderr = truncateStream(stderrRaw, MAX_STREAM_BYTES)
-      stderr = {
-        ...stderr,
-        text: appendDiagnosticFallbackHint(execArgv, result.exitCode, stdout.text, stderr.text),
+    const sandboxAskCallback = egressGrants.runWithDeniedNetwork || escalate === 'unsandboxed'
+      ? undefined
+      : createSandboxAskCallback({
+        sessionId: params.sessionId,
+        confirm,
+        sessionEgress: this.deps.sessionEgress,
+        signal: params.signal,
+        runOnceHosts,
+      })
+
+    let result: {
+      exitCode: number | null
+      stdout: string
+      stderr: string
+      isolation: ShellIsolation
+    }
+
+    if (escalate === 'unsandboxed') {
+      result = await executeUnsandboxedOnce({
+        commandString: execCommandString,
+        normalizedArgv: execArgv,
+        useShellWrap,
+        cwdAbs,
+        grantRootAbs: grant.abs_path,
+        timeoutMs,
+        signal: params.signal,
+      })
+    } else {
+      // spawn 不进全局大锁；仅 acquireFullSrt 内 initialize/reset 串行
+      result = await executeSandboxOnce({
+        sessionId: params.sessionId,
+        commandString: execCommandString,
+        normalizedArgv: execArgv,
+        cwdRel,
+        cwdAbs,
+        grantRootAbs: grant.abs_path,
+        config,
+        timeoutMs,
+        signal: params.signal,
+        sandboxAskCallback,
+        secretInjections,
+        requireFullNetworkIsolation: false,
+        sessionRuntime: this.sessionRuntime,
+        useShellWrap,
+      })
+    }
+
+    const stdoutRaw = redactSecretsInText(result.stdout, plainSecretsForRedact)
+    const stderrRaw = redactSecretsInText(result.stderr, plainSecretsForRedact)
+    const stdout = truncateStream(stdoutRaw, MAX_STREAM_BYTES)
+    let stderr = truncateStream(stderrRaw, MAX_STREAM_BYTES)
+    stderr = {
+      ...stderr,
+      text: appendDiagnosticFallbackHint(execArgv, result.exitCode, stdout.text, stderr.text),
+    }
+
+    const egressBlocked = detectNetworkEgressBlocked(result.exitCode, stdout.text, stderr.text)
+    const shellResult: ShellRunResult = {
+      ok: result.exitCode === 0,
+      exit_code: result.exitCode,
+      stdout: stdout.text,
+      stderr: stderr.text,
+      stdout_truncated: stdout.truncated,
+      stderr_truncated: stderr.truncated,
+      cwd: cwdRel || '.',
+      command: execArgv,
+      command_string: execCommandString,
+      home_is_grant_root: true,
+      path_note: SHELL_PATH_NOTE,
+      isolation: result.isolation,
+      escalated: escalate === 'unsandboxed' || undefined,
+      sandbox: escalate !== 'unsandboxed',
+      platform: detectPlatformLabel(),
+      duration_ms: Date.now() - started,
+      python_runtime: pythonRuntimeInfo,
+    }
+
+    if (egressBlocked.blocked) {
+      const suggested = egressBlocked.suggestedHost ?? diagnosticTargetHost
+      shellResult.needs_network_egress = buildNeedsNetworkEgressPayload(suggested)
+      shellResult.suggested_escalate = 'network'
+      shellResult.blocked_by = suggested
+        ? `network:${suggested}`
+        : 'network'
+    }
+
+    if (shouldInvalidatePipMirrorCache(execArgv, result.exitCode, stderr.text)) {
+      invalidatePipMirrorCache()
+      const pipUrls = getPythonSettings().pip_index_urls
+      if (pipUrls.length > 1) {
+        rotatePreferredPipMirror(pipUrls)
       }
+    }
 
-      const egressBlocked = detectNetworkEgressBlocked(result.exitCode, stdout.text, stderr.text)
-      const shellResult: ShellRunResult = {
-        ok: result.exitCode === 0,
-        exit_code: result.exitCode,
-        stdout: stdout.text,
-        stderr: stderr.text,
-        stdout_truncated: stdout.truncated,
-        stderr_truncated: stderr.truncated,
-        cwd: cwdRel || '.',
-        command: execArgv,
-        sandbox: true as const,
-        platform: detectPlatformLabel(),
-        duration_ms: Date.now() - started,
-        python_runtime: pythonRuntimeInfo,
-      }
-
-      if (egressBlocked.blocked) {
-        const suggested = egressBlocked.suggestedHost ?? diagnosticTargetHost
-        shellResult.needs_network_egress = buildNeedsNetworkEgressPayload(suggested)
-      }
-
-      if (shouldInvalidatePipMirrorCache(execArgv, result.exitCode, stderr.text)) {
-        invalidatePipMirrorCache()
-        const pipUrls = getPythonSettings().pip_index_urls
-        if (pipUrls.length > 1) {
-          rotatePreferredPipMirror(pipUrls)
-        }
-      }
-
-      return shellResult
-    })
+    return shellResult
   }
 
   async install(
@@ -1051,13 +1241,15 @@ export class ShellRunner {
       sessionId: params.sessionId,
       rootId: params.rootId,
       cwdRel: params.cwdRel,
+      command: argvToCommandString(argv),
       argv,
       networkIntent: 'install',
       signal: params.signal,
-    }, confirm)
+      background: false,
+    }, confirm) as Promise<ShellRunResult>
   }
 
-  /** 按预需提前唤起联网安装授权（ConfirmHandler / sticky|preflight once） */
+  /** 按预需提前唤起联网安装授权（兼容；默认已含包源，确认后写 sticky） */
   requestNetworkInstall(
     sessionId: string,
     confirm?: ConfirmHandler,
@@ -1085,7 +1277,11 @@ export class ShellRunner {
   clearSession(sessionId: string): void {
     this.deps.stickyNetwork.clearSession(sessionId)
     this.deps.sessionEgress.clearSession(sessionId)
-    this.deps.stickyShellRun.clearSession(sessionId)
+    clearSessionShellCommandJobs(sessionId)
+    void this.sessionRuntime.disposeSession(sessionId).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[agent-workspace] dispose session SRT failed (${sessionId}): ${msg}`)
+    })
   }
 }
 
@@ -1122,10 +1318,21 @@ function spawnSandboxed(
       else signal.addEventListener('abort', onAbort, { once: true })
     }
 
-    child.stdout.on('data', chunk => { stdout += String(chunk) })
-    child.stderr.on('data', chunk => { stderr += String(chunk) })
+    child.stdout.on('data', chunk => { stdout += chunkToUtf8(chunk) })
+    child.stderr.on('data', chunk => { stderr += chunkToUtf8(chunk) })
     child.on('error', err => {
       clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onAbort)
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        const bin = argv[0] ?? ''
+        reject(
+          new WorkspaceError(
+            `无法启动命令「${bin}」：找不到可执行文件。${SPAWN_ENOENT_HINT}`,
+          ),
+        )
+        return
+      }
       reject(err)
     })
     child.on('close', code => {

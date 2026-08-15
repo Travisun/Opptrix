@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
@@ -115,36 +115,98 @@ configureTurnWakeRuntime({
   isSessionAlive: (sessionId) => Boolean(agent.getSession(sessionId)),
   isChatBusy: hasActiveSessionChat,
 })
-setTurnWakeResumeHandler(async (job, wakeMessage) => {
-  if (!agent.getSession(job.sessionId)) return
-  if (hasActiveSessionChat(job.sessionId)) {
-    // 竞态：到期瞬间用户又开了新轮 — 延期，禁止 registerSessionChat abort
+
+registerDefaultJobAdapters()
+
+async function resumeSessionChat(opts: {
+  sessionId: string
+  wakeMessage: string
+  model?: string
+  reason?: string
+  prompt: string
+}): Promise<void> {
+  if (!agent.getSession(opts.sessionId)) return
+  if (hasActiveSessionChat(opts.sessionId)) {
+    // 纯延时 busy-defer；有 Job 依赖时由 ResumeBus 自有 defer，勿传 job_id
     scheduleTurnWake({
-      sessionId: job.sessionId,
-      prompt: job.prompt,
+      sessionId: opts.sessionId,
+      prompt: opts.prompt,
       seconds: TURN_WAKE_BUSY_DEFER_SECONDS,
-      reason: job.reason,
-      jobId: job.jobId,
-      model: job.model,
+      reason: opts.reason,
+      model: opts.model,
     })
     return
   }
-  const ac = registerSessionChat(job.sessionId)
+  const ac = registerSessionChat(opts.sessionId)
   const onProgress = (event: ChatProgressEvent) => {
-    publishSessionProgress(job.sessionId, event)
+    publishSessionProgress(opts.sessionId, event)
   }
   try {
     onProgress({ type: 'thinking', round: 0, label: '正在继续' })
-    await agent.chat(job.sessionId, wakeMessage, job.model, {
+    await agent.chat(opts.sessionId, opts.wakeMessage, opts.model, {
       signal: ac.signal,
       unattended: false,
+      wakeResume: true,
       onProgress,
     })
   } finally {
-    clearSessionChat(job.sessionId, ac)
+    clearSessionChat(opts.sessionId, ac)
   }
+}
+
+setTurnWakeResumeHandler(async (job, wakeMessage) => {
+  await resumeSessionChat({
+    sessionId: job.sessionId,
+    wakeMessage,
+    model: job.model,
+    reason: job.reason,
+    prompt: job.prompt,
+  })
 })
 
+sessionResumeBus.configureRuntime({
+  isSessionAlive: (sessionId) => Boolean(agent.getSession(sessionId)),
+  isChatBusy: hasActiveSessionChat,
+})
+sessionResumeBus.setHandler(async (req: ResumeRequest, wakeMessage: string) => {
+  await resumeSessionChat({
+    sessionId: req.sessionId,
+    wakeMessage,
+    model: req.model,
+    reason: req.cause,
+    prompt: req.prompt,
+  })
+})
+
+/** 有会话 watch 时把 Job 进度/终态推到 live-progress（进度节流；终态立即推） */
+{
+  const lastProgressAt = new Map<string, number>()
+  jobRegistry.subscribe((event) => {
+    if (event.type !== 'progress' && event.type !== 'upsert' && event.type !== 'terminal') return
+    const snap = event.snapshot
+    if (event.type === 'terminal') {
+      lastProgressAt.delete(snap.jobId)
+    } else {
+      const now = Date.now()
+      const last = lastProgressAt.get(snap.jobId) ?? 0
+      if (now - last < JOB_PROGRESS_THROTTLE_MS) return
+      lastProgressAt.set(snap.jobId, now)
+    }
+    const sessions = watchRegistry.listSessionsForJob(snap.jobId)
+    if (!sessions.length) return
+    const label = userFacingJobLabel(snap.kind, snap.progress.message)
+    for (const sessionId of sessions) {
+      publishSessionProgress(sessionId, {
+        type: 'job_progress',
+        job_id: snap.jobId,
+        kind: snap.kind,
+        state: snap.state,
+        label,
+        percent: snap.progress.percent,
+      })
+    }
+  })
+}
 setSessionPersistHooks({
   onPersist: syncSessionSearchIndex,
   onDelete: removeSessionSearchIndex,
@@ -183,7 +245,22 @@ scheduleService.setExecutor(createJobExecutor({
     llmConfigured: agent.llmConfigured,
   },
   shell: {
-    run: (params, confirm) => workspaceService.shellRun(params, confirm),
+    // 计划任务必须同步前台 run；禁止 background / bg 返回体
+    run: async (params, confirm) => {
+      const result = await workspaceService.shellRun(
+        { ...params, background: false },
+        confirm,
+      )
+      if (!('exit_code' in result)) {
+        throw new Error('计划任务仅支持同步执行命令，不支持后台任务')
+      }
+      return {
+        ok: result.ok,
+        exit_code: result.exit_code,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      }
+    },
   },
   getSettings: () => scheduleService.getSettings(),
   assertShellArgv: assertAllowedShellArgv,
@@ -1175,15 +1252,23 @@ app.patch<{
 app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
   clearSessionTurnWakes(req.params.id)
+  clearSessionJobWaitsAndWatches(req.params.id)
   agent.deleteSession(req.params.id)
   return { status: 'deleted' }
 })
 
 app.get<{ Params: { id: string } }>('/api/sessions/:id/pending-wakes', async (req, reply) => {
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
-  return { wakes: listPendingTurnWakes(req.params.id) }
+  return {
+    wakes: listPendingTurnWakes(req.params.id),
+    job_watches: listPendingJobWatches(req.params.id),
+  }
 })
 
+app.get<{ Params: { id: string } }>('/api/sessions/:id/pending-job-watches', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  return { watches: listPendingJobWatches(req.params.id) }
+})
 app.get<{ Params: { id: string } }>('/api/sessions/:id/live-progress', async (req, reply) => {
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
 
@@ -1384,6 +1469,9 @@ app.post<{ Params: { id: string }; Body: { message: string; selected_text: strin
 )
 
 app.post<{ Params: { id: string } }>('/api/sessions/:id/chat/cancel', async (req, reply) => {
+  // Stop：无论是否有活跃 chat，都取消挂起 wake / waits / watches（空闲倒计时亦须打断）；不清全局 Job
+  clearSessionTurnWakes(req.params.id)
+  clearSessionJobWaitsAndWatches(req.params.id)
   const cancelled = cancelSessionChat(req.params.id)
   if (!cancelled) return reply.code(404).send({ error: 'no active chat' })
   agent.userPromptBridge.cancelSession(req.params.id)

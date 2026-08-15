@@ -9,7 +9,6 @@ import path from 'node:path'
 import {
   NetworkInstallStickyStore,
   SessionNetworkEgressStore,
-  ShellRunStickyStore,
   WorkspaceService,
   normalizeWorkspaceTextContent,
   hostFromNetworkInput,
@@ -49,27 +48,25 @@ test('requestNetworkInstall sticky → sticky.has', async () => {
       return { selected_ids: ['sticky'] }
     }, '需要装 pip 包')
     assert.equal(result.ok, true)
+    assert.equal(result.already_granted, true)
     assert.equal(result.sticky, true)
     assert.equal(networkSticky.has(sessionId), true)
-    assert.equal(confirms, 1)
+    assert.equal(confirms, 0, '包源默认已放行，预批零确认')
 
     const again = await svc.requestNetworkInstall(sessionId, async () => {
       confirms++
       return { selected_ids: ['cancel'] }
     })
     assert.equal(again.already_granted, true)
-    assert.equal(confirms, 1)
+    assert.equal(confirms, 0)
   })
 })
 
-test('requestNetworkInstall once preflight → shell install 路径不再二次弹联网确认', async () => {
+test('requestNetworkInstall once preflight → shell install 路径不再弹联网确认', async () => {
   await withTmpDataDir(async () => {
     const networkSticky = new NetworkInstallStickyStore()
-    const shellSticky = new ShellRunStickyStore()
-    shellSticky.grant('preflight-once')
     const svc = new WorkspaceService({
       networkInstallSticky: networkSticky,
-      shellRunSticky: shellSticky,
     })
     const sessionId = 'preflight-once'
     await svc.ensureDefaultRoot(sessionId)
@@ -80,16 +77,15 @@ test('requestNetworkInstall once preflight → shell install 路径不再二次�
       assert.equal(payload.title, '允许联网安装')
       return { selected_ids: ['once'] }
     })
-    assert.equal(networkConfirms, 1)
-    assert.equal(networkSticky.hasPreflight(sessionId), true)
-    assert.equal(networkSticky.has(sessionId), false)
+    assert.equal(networkConfirms, 0, '包源默认已放行，预批零确认')
+    assert.equal(networkSticky.has(sessionId), true)
 
     let runNetworkConfirms = 0
     try {
       await svc.shellRun({
         sessionId,
         rootId: 'default',
-        argv: ['pip3', 'install', 'six'],
+        command: 'pip3 install six',
         networkIntent: 'install',
       }, async (payload) => {
         if (payload.title === '允许联网安装') runNetworkConfirms++
@@ -100,9 +96,7 @@ test('requestNetworkInstall once preflight → shell install 路径不再二次�
       assert.doesNotMatch(msg, /需要用户确认联网安装/)
       assert.notEqual(err?.name, 'NetworkInstallConfirmationRequiredError')
     }
-    assert.equal(runNetworkConfirms, 0, 'preflight once 应跳过二次联网弹窗')
-    assert.equal(networkSticky.hasPreflight(sessionId), false)
-    assert.equal(networkConfirms, 1)
+    assert.equal(runNetworkConfirms, 0, '主路径默认含包源，不应弹联网安装确认')
   })
 })
 
@@ -178,6 +172,39 @@ test('normalizeWorkspaceTextContent LF and windows script EOL', () => {
   }
 })
 
+test('decodeWorkspaceText strips BOM and detects CRLF', async () => {
+  const {
+    decodeWorkspaceText,
+    encodeWorkspaceText,
+    WorkspaceTextEncodingError,
+  } = await import('../packages/agent-workspace/dist/workspace-text.js')
+  const bomCrlf = Buffer.concat([
+    Buffer.from([0xef, 0xbb, 0xbf]),
+    Buffer.from('你好\r\n世界\r\n', 'utf8'),
+  ])
+  const decoded = decodeWorkspaceText(bomCrlf)
+  assert.equal(decoded.hadBom, true)
+  assert.equal(decoded.eol, 'crlf')
+  assert.equal(decoded.text, '你好\n世界\n')
+  const encoded = encodeWorkspaceText(decoded.text, { relPath: 'a.py', eol: decoded.eol })
+  assert.equal(encoded.equals(Buffer.from('你好\r\n世界\r\n', 'utf8')), true)
+  assert.equal(encoded[0] === 0xef, false)
+})
+
+test('decodeWorkspaceText rejects illegal utf8 with hint', async () => {
+  const {
+    decodeWorkspaceText,
+    WorkspaceTextEncodingError,
+    WORKSPACE_TEXT_ENCODING_HINT,
+  } = await import('../packages/agent-workspace/dist/workspace-text.js')
+  assert.throws(
+    () => decodeWorkspaceText(Buffer.from([0xff, 0xfe, 0x41])),
+    (err) => err instanceof WorkspaceTextEncodingError
+      && err.hint.includes('UTF-8')
+      && WORKSPACE_TEXT_ENCODING_HINT.includes('UTF-8'),
+  )
+})
+
 test('workspace_write applies newline normalization', async () => {
   await withTmpDataDir(async () => {
     const svc = new WorkspaceService()
@@ -189,16 +216,58 @@ test('workspace_write applies newline normalization', async () => {
   })
 })
 
-test('request_shell_network tool uses confirm not askUser', async () => {
-  // buildWorkspaceTools 在 agent 包；此处用源码字符串断言 + 动态 import agent dist 若可用
+test('workspace replaceLines preserves CRLF on disk', async () => {
+  await withTmpDataDir(async () => {
+    const svc = new WorkspaceService()
+    const sessionId = 'crlf-preserve'
+    await svc.ensureDefaultRoot(sessionId)
+    const root = (await svc.listGrants(sessionId)).find(g => g.root_id === 'default')
+    assert.ok(root)
+    const abs = path.join(root.abs_path, 'crlf.py')
+    await fs.writeFile(abs, Buffer.from('a\r\nb\r\nc\r\n', 'utf8'))
+    const r = await svc.replaceLines(sessionId, 'default', 'crlf.py', [
+      { start_line: 2, new_text: 'B' },
+    ])
+    assert.equal(r.ok, true)
+    const raw = await fs.readFile(abs)
+    assert.equal(raw.toString('binary'), 'a\r\nB\r\nc\r\n')
+    const read = await svc.readFile(sessionId, 'default', 'crlf.py')
+    assert.equal(read.content, 'a\nB\nc\n')
+  })
+})
+
+test('workspace_read strips BOM for logic text', async () => {
+  await withTmpDataDir(async () => {
+    const svc = new WorkspaceService()
+    const sessionId = 'bom-read'
+    await svc.ensureDefaultRoot(sessionId)
+    const root = (await svc.listGrants(sessionId)).find(g => g.root_id === 'default')
+    assert.ok(root)
+    const abs = path.join(root.abs_path, 'bom.txt')
+    await fs.writeFile(abs, Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('中文\n', 'utf8'),
+    ]))
+    const read = await svc.readFile(sessionId, 'default', 'bom.txt')
+    assert.equal(read.content.startsWith('\uFEFF'), false)
+    assert.equal(read.content, '中文\n')
+  })
+})
+
+test('deprecated shell tools are not exposed in chat tools list', async () => {
   const toolsPath = path.resolve('packages/agent/src/mcp/workspace-tools.ts')
   const src = await fs.readFile(toolsPath, 'utf8')
-  const block = src.slice(
-    src.indexOf("name: 'request_shell_network'"),
-    src.indexOf("name: 'request_session_lan_access'"),
-  )
-  assert.ok(block.includes('requestNetworkInstall') || block.includes('requestNetworkEgress'))
-  assert.ok(block.includes('b.confirm'))
-  assert.doesNotMatch(block, /\baskUser\b/)
-  assert.match(block, /禁止用 ask_user/)
+  assert.doesNotMatch(src, /name:\s*'request_shell_network'/)
+  assert.doesNotMatch(src, /name:\s*'opptrix_install'/)
+  assert.doesNotMatch(src, /name:\s*'shell_install'/)
+  assert.doesNotMatch(src, /name:\s*'shell_run'/)
+  assert.match(src, /name:\s*'opptrix_run'/)
+})
+
+test('network install/egress preflight still uses ConfirmHandler not askUser', async () => {
+  const runnerPath = path.resolve('packages/agent-workspace/src/shell/runner.ts')
+  const src = await fs.readFile(runnerPath, 'utf8')
+  assert.match(src, /requestNetworkInstall/)
+  assert.match(src, /requestNetworkEgress/)
+  assert.match(src, /confirmNetworkInstallPreflight|confirmNetworkEgressPreflight/)
 })

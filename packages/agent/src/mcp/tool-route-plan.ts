@@ -448,7 +448,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
     avoidTools: ['get_system_info'],
     confidence: 'high',
-    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python（未就绪返回 preparing|installing+suggested_wake_seconds，优先 schedule_turn_wake 再查，勿 tight-poll）',
+    hint: '问 Python 环境/版本 → python_env_status；仅用户明确要装/修 Python，或 opptrix_run(python/pip) 失败未就绪时再 ensure_python（preparing|installing+job_id，自动挂起并终态续跑，勿 poll/sleep）；编程默认直接 opptrix_run',
   },
   {
     intent: 'turn_wake',
@@ -461,7 +461,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['schedule_turn_wake', 'get_current_time'],
     avoidTools: [],
     confidence: 'high',
-    hint: '延后续跑/等异步任务 → schedule_turn_wake（seconds∈[5,1800]，prompt 必填）；优先于对 prepare_fuyao_dump/ensure_python 的 tight-poll',
+    hint: '延后续跑：无任务事件用 schedule_turn_wake（禁止传 job_id）；有 job_id 依赖自动挂起与终态续跑；勿 poll/sleep 查进度',
   },
   {
     intent: 'workspace_network_latency',
@@ -476,32 +476,56 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['http_fetch', 'opptrix_run', 'shell_platform_status', 'activate_tool_pack'],
     avoidTools: ['workspace_write', 'get_instrument_quotes'],
     confidence: 'high',
-    hint: '测网站延迟/连通性 → 优先 http_fetch 测 HTTP 耗时；用户明确要求 ICMP 时用 opptrix_run + ping；先 get_system_info 再按平台组 argv',
+    hint: '测网站延迟/连通性 → 优先 http_fetch 测 HTTP 耗时；用户明确要求 ICMP 时用 opptrix_run + ping；先 get_system_info 再按平台组 command',
   },
   {
     intent: 'workspace_shell_network',
     priority: 91,
     patterns: [
-      /申请(?:沙盒)?联网|提前(?:授权|确认)联网|request_shell_network/i,
+      /申请(?:沙盒)?联网|提前(?:授权|确认)联网/i,
       /允许联网安装|联网安装授权|外网域名授权/,
       /预估需(?:要)?(?:pip|npm|联网|外网)/i,
     ],
-    preferredTools: ['request_shell_network', 'opptrix_install', 'opptrix_run'],
+    preferredTools: ['opptrix_run', 'shell_platform_status'],
     avoidTools: ['ask_user', 'request_session_lan_access'],
     confidence: 'high',
-    hint: '预估需 pip/npm 或已知外网域名 → 先 request_shell_network（confirm，禁止 ask_user 冒充）；LAN 用 request_session_lan_access',
+    hint: '包源网络默认可用 → 直接 opptrix_run；其它域名跑命令时会确认；禁止 ask_user 冒充联网授权',
   },
   {
     intent: 'workspace_shell_install',
     priority: 90,
     patterns: [
       /pip\s+install|npm\s+install|npm\s+ci|安装(?:python|py|node|npm|pip)?(?:包|依赖)/i,
-      /opptrix_install|shell_install/i,
     ],
-    preferredTools: ['request_shell_network', 'opptrix_install', 'opptrix_run', 'shell_platform_status'],
-    avoidTools: ['ask_user', 'workspace_write', 'http_fetch'],
+    preferredTools: ['opptrix_run', 'shell_platform_status'],
+    avoidTools: ['ask_user', 'workspace_write', 'http_fetch', 'ensure_python'],
     confidence: 'high',
-    hint: '安装依赖 → 先 request_shell_network({intent:install}) 再 opptrix_install；禁止 ask_user 冒充联网授权',
+    hint: '安装依赖 → 直接 opptrix_run(command="pip install …" 或 npm)；包源默认已放行；勿先申请联网；勿先 ensure_python（仅失败再兜底）',
+  },
+  {
+    intent: 'workspace_coding',
+    priority: 91,
+    patterns: [
+      /(?:写|新建|创建).*(?:一段|个)?(?:python|py|node|js|ts)?\s*(?:脚本|程序|代码)/i,
+      /(?:脚本|程序|代码).*(?:写|新建|创建|改|修改)/,
+      /帮我.*(?:写|改).*(?:\.py|\.ts|\.js|脚本|代码)/i,
+      /本地编程|沙盒编程|Cursor\s*式|OpenCode/i,
+      /改一下.*(?:工作区|仓库).*(?:文件|脚本|代码)/,
+      /apply_patch|workspace_apply_patch/i,
+    ],
+    preferredTools: [
+      'workspace_glob',
+      'workspace_read',
+      'workspace_replace_lines',
+      'workspace_apply_patch',
+      'workspace_write',
+      'opptrix_run',
+      'code_preflight',
+      'activate_tool_pack',
+    ],
+    avoidTools: ['ensure_python', 'ask_user'],
+    confidence: 'high',
+    hint: '编程/写改脚本 → 优先 workspace_* + opptrix_run（+ 可选 code_preflight / apply_patch）；可与投研工具并用，勿用行情/财务代替文件操作；勿先 ensure_python',
   },
   {
     intent: 'workspace_code_preflight',
@@ -513,7 +537,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['code_preflight', 'workspace_replace_lines', 'workspace_write', 'opptrix_run', 'activate_tool_pack'],
     avoidTools: ['ask_user'],
     confidence: 'high',
-    hint: '检查脚本 → code_preflight（diagnostics 带 L 行号）→ workspace_replace_lines 定点修 → 再 preflight → opptrix_run',
+    hint: '检查脚本 → code_preflight（diagnostics 带 L 行号）→ workspace_replace_lines 定点修 → 再 preflight → opptrix_run；可与投研工具并用，勿用行情代替读文件',
   },
   {
     intent: 'workspace_line_edit',
@@ -521,11 +545,12 @@ const INTENT_RULES: IntentRule[] = [
     patterns: [
       /按行(?:号)?(?:替换|修改|编辑)|行号替换|workspace_replace_lines/i,
       /定点(?:修改|替换)|局部替换(?:脚本|代码|文件)/,
+      /old_string|精确替换|replace_all/i,
     ],
-    preferredTools: ['workspace_replace_lines', 'code_preflight', 'workspace_read', 'activate_tool_pack'],
+    preferredTools: ['workspace_replace_lines', 'workspace_apply_patch', 'code_preflight', 'workspace_read', 'activate_tool_pack'],
     avoidTools: ['workspace_write', 'ask_user'],
     confidence: 'high',
-    hint: '按行修改 → workspace_replace_lines（勿整文件 workspace_write）；修完再 code_preflight',
+    hint: '按行或精确替换 → workspace_replace_lines（edits 或 old_string）；多文件用 workspace_apply_patch；勿整文件 workspace_write；修完再 code_preflight；可与投研工具并用',
   },
   {
     intent: 'workspace_shell',
@@ -539,13 +564,13 @@ const INTENT_RULES: IntentRule[] = [
       /运行命令/,
       /(?:python|py).*(?:跑|执行)/i,
       /npm\s+install|pip\s+install/i,
-      /opptrix_run|shell_run/i,
+      /opptrix_run/i,
       /\bshell\b/i,
     ],
     preferredTools: ['opptrix_run', 'code_preflight', 'workspace_replace_lines', 'http_fetch', 'shell_platform_status', 'activate_tool_pack'],
-    avoidTools: ['workspace_write'],
+    avoidTools: ['workspace_write', 'ensure_python', 'ask_user'],
     confidence: 'high',
-    hint: '运行命令 → 自定义脚本先 code_preflight；有 L 行号用 workspace_replace_lines 修；再 opptrix_run；先 get_system_info 再按平台组 argv；测网站延迟优先 http_fetch',
+    hint: '运行命令 → 一次性命令直接 opptrix_run(command=…)；自写脚本先 code_preflight，有 L 行号用 workspace_replace_lines 修，再 preflight → run；可先 get_system_info；测网站延迟优先 http_fetch；可与投研工具并用，勿先 ensure_python',
   },
   {
     intent: 'local_data_catalog',
@@ -570,10 +595,10 @@ const INTENT_RULES: IntentRule[] = [
       /prepare_fuyao_dump|adjustment_factors|复权因子.*(?:包|dump)/i,
       /下载.*(?:parquet|离线(?:行情|K线))/i,
     ],
-    preferredTools: ['prepare_fuyao_dump', 'list_local_data_apis', 'workspace_list'],
+    preferredTools: ['prepare_fuyao_dump', 'list_local_data_apis', 'workspace_glob'],
     avoidTools: ['http_fetch', 'opptrix_run'],
     confidence: 'high',
-    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；冷下载 preparing+suggested_wake_seconds，优先 schedule_turn_wake 再查（勿 tight-poll）；禁止 Key 进沙盒，勿 sync/dailyDump',
+    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；冷下载 preparing+job_id，系统通常自动挂起并终态续跑（勿 poll/sleep）；禁止 Key 进沙盒，勿 sync/dailyDump',
   },
   {
     intent: 'session_lan',
@@ -603,6 +628,35 @@ const INTENT_RULES: IntentRule[] = [
     hint: '第三方密钥 → request_secret 写入保险箱；已有则 list_vault_secrets + grant_session_secret；禁止 ask_user 收密钥',
   },
   {
+    intent: 'workspace_grep',
+    priority: 93,
+    patterns: [
+      /(?:在|从)?(?:工作区|授权|本地).*(?:搜|搜索|查找|找).*(?:内容|文本|代码|字符串|关键词)/,
+      /(?:搜|搜索|查找).*(?:工作区|文件).*(?:内容|文本|代码)/,
+      /文件(?:里|中).*(?:有没有|包含|出现)|代码里.*(?:搜|找)/,
+      /workspace_grep|\bgrep\b/i,
+    ],
+    preferredTools: ['workspace_grep', 'opptrix_run', 'workspace_read', 'workspace_replace_lines', 'activate_tool_pack'],
+    avoidTools: ['search_library', 'search_document'],
+    confidence: 'high',
+    hint: '搜工作区内容 → workspace_grep（keywords+match_mode 或 pattern）或 opptrix_run(rg/grep)；再 workspace_read(numbered) → workspace_replace_lines；勿虚构已移除工具、勿用 list 递归翻目录',
+  },
+  {
+    intent: 'workspace_glob',
+    priority: 92,
+    patterns: [
+      /(?:找|列出|搜索).*(?:所有|全部)?.*\.(?:py|ts|tsx|js|jsx|json|md|csv)(?:\s|$|文件)/i,
+      /按(?:扩展名|文件名|模式).*(?:找|列|搜).*文件/,
+      /(?:哪些|所有).*(?:\.py|\.ts|\.js).*文件/,
+      /workspace_glob|\bglob\b/i,
+      /\*\*\/\*\.\w+/,
+    ],
+    preferredTools: ['workspace_glob', 'opptrix_run', 'workspace_read', 'activate_tool_pack'],
+    avoidTools: ['search_library'],
+    confidence: 'high',
+    hint: '按文件名模式找文件 → workspace_glob 或 opptrix_run(ls/find)；再 read / replace_lines；勿虚构已移除工具、勿递归翻目录',
+  },
+  {
     intent: 'workspace_files',
     priority: 88,
     patterns: [
@@ -610,10 +664,10 @@ const INTENT_RULES: IntentRule[] = [
       /列出(?:目录|文件夹|文件)|创建文件夹|删除(?:文件|目录)/,
       /下载(?:到|保存).*(?:文件|pdf|附件)|download/i,
     ],
-    preferredTools: ['workspace_list', 'workspace_write', 'download_file'],
+    preferredTools: ['workspace_glob', 'workspace_grep', 'opptrix_run', 'workspace_write', 'download_file'],
     avoidTools: ['browser_navigate'],
     confidence: 'high',
-    hint: '本地工作区读写/下载 → workspace_* / download_file；先 activate workspace pack',
+    hint: '本地工作区：找文件/看树 → workspace_glob 或 opptrix_run(ls/find)；搜内容 → workspace_grep 或 opptrix_run(rg)；建目录 → opptrix_run(mkdir -p) 或 workspace_write；不知 root 时 list_workspace_grants 至多一次',
   },
   {
     intent: 'workspace_message_uri',
@@ -623,7 +677,7 @@ const INTENT_RULES: IntentRule[] = [
       /(?:引用|展示).*(?:工作区).*(?:图片|文件|视频|音频)|opptrix-ws:\/\//i,
       /resolve_workspace_path_uri/i,
     ],
-    preferredTools: ['resolve_workspace_path_uri', 'workspace_list', 'list_workspace_grants'],
+    preferredTools: ['resolve_workspace_path_uri', 'workspace_glob', 'list_workspace_grants'],
     avoidTools: ['browser_navigate', 'create_canvas'],
     confidence: 'high',
     hint: '消息内引用工作区文件 → resolve_workspace_path_uri 得到 opptrix-ws://；禁止 file:// 与绝对路径',
@@ -655,7 +709,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['list_workspace_grants', 'request_folder_access'],
     avoidTools: ['get_project_info', 'get_system_info', 'workspace_write'],
     confidence: 'high',
-    hint: '问可访问目录 → 首选 list_workspace_grants；勿用 get_project_info 的 paths；需要额外目录再 request_folder_access',
+    hint: '不知 root_id / 问可访问目录 → list_workspace_grants（至多一次）；已知 root 直接 glob/grep/run；勿用 get_project_info 的 paths；需额外目录再 request_folder_access',
   },
   {
     intent: 'market_regime',
@@ -1186,6 +1240,41 @@ function packsForTools(tools: string[]): ToolPackId[] {
   return [...packs]
 }
 
+  /** 编程能力意图：强制补种 workspace（不剔除投研/行情 pack） */
+  const CODING_INTENTS = new Set([
+    'workspace_coding',
+    'workspace_line_edit',
+    'workspace_code_preflight',
+    'workspace_shell',
+    'workspace_shell_install',
+    'workspace_shell_network',
+    'workspace_grep',
+    'workspace_glob',
+    'workspace_files',
+  ])
+
+  export function isCodingIntent(intent: string): boolean {
+    return CODING_INTENTS.has(intent)
+  }
+
+  /**
+   * 编程意图下：强制含 workspace；保留已有投研/行情 pack（可并用）。
+   */
+  export function forceCodingSeedPacks(
+    packs: readonly ToolPackId[],
+  ): ToolPackId[] {
+    const out: ToolPackId[] = []
+    const seen = new Set<ToolPackId>()
+    const push = (id: ToolPackId) => {
+      if (seen.has(id)) return
+      seen.add(id)
+      out.push(id)
+    }
+    push('workspace')
+    for (const p of packs) push(p)
+    return out
+  }
+
 function matchIntent(message: string): IntentRule | null {
   const text = message.trim()
   if (!text) return null
@@ -1285,7 +1374,15 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
   if (tierPreview === 'L3' && L3_UPGRADE_RE.test(message) && !requiredPacks.includes('market')) {
     requiredPacks = mergePackBudget([...requiredPacks, 'market'], seeded, packBudget)
   }
-  const seedPacks = mergePackBudget(requiredPacks, seeded, packBudget)
+  let seedPacks = mergePackBudget(requiredPacks, seeded, packBudget)
+
+  // 编程意图：强制补种 workspace；不剔除行情/投研 pack（投研为主 + Coding 能力）
+  if (isCodingIntent(matched.intent)) {
+    seedPacks = forceCodingSeedPacks(seedPacks)
+    requiredPacks = forceCodingSeedPacks(
+      requiredPacks.includes('workspace') ? requiredPacks : ['workspace', ...requiredPacks],
+    )
+  }
 
   return finish({
     preferredTools,
@@ -1349,7 +1446,7 @@ export function buildRoundRoutePlaybook(
     lines.push('  1) list_tool_packs 查看是否有匹配的业务 pack')
     lines.push('  2) 有则 activate_tool_pack 加载对应 pack 后重试')
     lines.push(
-      '  3) 仍无匹配或激活后仍不够 → activate_tool_pack([\'workspace\'])，用 opptrix_run / opptrix_install / code_preflight / ensure_python / workspace_* 编程完成（可与已有数据工具结合）；勿空转 activate 无关 pack，勿直接声称无法完成',
+      '  3) 仍无匹配或激活后仍不够 → activate_tool_pack([\'workspace\'])，用 opptrix_run / code_preflight / workspace_* 编程完成（ensure_python 仅失败兜底；可与已有数据工具结合）；勿空转 activate 无关 pack，勿直接声称无法完成',
     )
   }
 

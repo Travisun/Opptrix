@@ -31,23 +31,30 @@ import {
   ShellRunner,
   NetworkInstallStickyStore,
   SessionNetworkEgressStore,
-  ShellRunStickyStore,
   getSessionLanAccessStore,
   getSessionSecretAccessStore,
   type ShellInstallParams,
   type ShellPlatformStatus,
   type ShellRunParams,
   type ShellRunResult,
+  type ShellBackgroundStartResult,
   type NetworkInstallPreflightResult,
   type NetworkEgressPreflightResult,
 } from './shell/index.js'
-import { normalizeWorkspaceTextContent } from './workspace-text.js'
+import {
+  decodeWorkspaceText,
+  encodeWorkspaceText,
+  WorkspaceTextEncodingError,
+  type WorkspaceEol,
+} from './workspace-text.js'
 import {
   applyLineEdits,
+  applyExactReplace,
   MAX_LINE_EDITS,
   splitContentLines,
   type LineEditInput,
   type ApplyLineEditsResult,
+  type ExactReplaceResult,
 } from './line-edit/index.js'
 import {
   runCodePreflight,
@@ -56,6 +63,16 @@ import {
   type PreflightLanguageOpt,
   type PreflightLevel,
 } from './code-preflight/index.js'
+import {
+  clampGlobMaxResults,
+  globWithinRoot,
+  type WorkspaceGlobResult,
+} from './workspace-glob.js'
+import {
+  grepWithinRoot,
+  type WorkspaceGrepParams,
+  type WorkspaceGrepResult,
+} from './workspace-grep.js'
 
 const EXT_MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -105,7 +122,6 @@ export interface WorkspaceServiceOptions {
   stickyStore?: StickyPolicyStore
   networkInstallSticky?: NetworkInstallStickyStore
   sessionNetworkEgress?: SessionNetworkEgressStore
-  shellRunSticky?: ShellRunStickyStore
   shellRunner?: ShellRunner
 }
 
@@ -131,7 +147,6 @@ export class WorkspaceService {
       gatePath: (sessionId, rootId, relPath) => this.gatePath(sessionId, rootId, relPath),
       stickyNetwork: this.networkSticky,
       sessionEgress: this.sessionEgress,
-      stickyShellRun: opts.shellRunSticky ?? new ShellRunStickyStore(),
     })
   }
 
@@ -258,6 +273,45 @@ export class WorkspaceService {
     return { entries, path: relPath || '.' }
   }
 
+  /**
+   * 在授权根内按 glob 递归找文件；返回相对 root 的路径列表。
+   */
+  async globFiles(
+    sessionId: string,
+    rootId: string,
+    globPattern: string,
+    opts?: { path?: string; max_results?: number },
+  ): Promise<WorkspaceGlobResult> {
+    const rel = opts?.path != null ? String(opts.path) : ''
+    const { grant, abs } = await this.gatePath(sessionId, rootId, rel)
+    assertReadable(grant)
+    const maxResults = clampGlobMaxResults(opts?.max_results)
+    return globWithinRoot(grant.abs_path, abs, String(globPattern ?? ''), maxResults)
+  }
+
+  /**
+   * 在授权根内搜索文本（keywords AND/OR 或正则）；仅文本文件。
+   */
+  async grepFiles(
+    sessionId: string,
+    rootId: string,
+    params: WorkspaceGrepParams & { path?: string },
+  ): Promise<WorkspaceGrepResult> {
+    const rel = params.path != null ? String(params.path) : ''
+    const { grant, abs } = await this.gatePath(sessionId, rootId, rel)
+    assertReadable(grant)
+    return grepWithinRoot(grant.abs_path, abs, {
+      keywords: params.keywords,
+      matchMode: params.matchMode,
+      pattern: params.pattern,
+      caseInsensitive: params.caseInsensitive,
+      glob: params.glob,
+      maxHits: params.maxHits,
+      contextLines: params.contextLines,
+      maxFileBytes: params.maxFileBytes,
+    })
+  }
+
   async readFile(
     sessionId: string,
     rootId: string,
@@ -281,7 +335,7 @@ export class WorkspaceService {
     const buf = await fs.readFile(abs)
     const truncated = buf.length > maxBytes
     const slice = truncated ? buf.subarray(0, maxBytes) : buf
-    let content = slice.toString('utf8')
+    let content = decodeWorkspaceText(slice).text
     const { lines } = splitContentLines(content)
     const lineCount = lines.length
 
@@ -378,19 +432,110 @@ export class WorkspaceService {
     if (buf.length > maxBytes) {
       throw new WorkspaceError(`文件超过大小上限（约 ${Math.round(maxBytes / 1_000_000)}MB），无法按行替换`)
     }
-    const original = buf.toString('utf8')
-    const applied = applyLineEdits(original, edits, { maxEdits: MAX_LINE_EDITS })
+    const decoded = decodeWorkspaceText(buf)
+    const applied = applyLineEdits(decoded.text, edits, { maxEdits: MAX_LINE_EDITS })
     if (!applied.ok || applied.content == null) {
       return { path: relPath, ...applied }
     }
 
-    const normalized = normalizeWorkspaceTextContent(relPath, applied.content)
-    const outBuf = Buffer.from(normalized, 'utf8')
+    const outBuf = encodeWorkspaceText(applied.content, { relPath, eol: decoded.eol })
     await this.quota.assertCanWrite(outBuf.length)
     await fs.writeFile(abs, outBuf)
 
     const { content: _written, ...rest } = applied
     return { path: relPath, ...rest }
+  }
+
+  /**
+   * 精确字符串替换（old_string / new_string / replace_all）；文件须已存在。
+   */
+  async replaceExact(
+    sessionId: string,
+    rootId: string,
+    relPath: string,
+    oldString: string,
+    newString: string,
+    opts?: { replace_all?: boolean; maxBytes?: number },
+  ): Promise<ExactReplaceResult & { path: string }> {
+    const maxBytes = opts?.maxBytes ?? 2_000_000
+    const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
+    assertWritable(grant)
+
+    let st
+    try {
+      st = await fs.stat(abs)
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+      if (code === 'ENOENT') {
+        throw new WorkspaceError('文件不存在，请先用 workspace_write 创建')
+      }
+      throw err
+    }
+    if (!st.isFile()) {
+      throw new WorkspaceError('路径不是文件')
+    }
+    if (st.size > maxBytes) {
+      throw new WorkspaceError(`文件超过大小上限（约 ${Math.round(maxBytes / 1_000_000)}MB），无法精确替换`)
+    }
+
+    const buf = await fs.readFile(abs)
+    const decoded = decodeWorkspaceText(buf)
+    const applied = applyExactReplace(decoded.text, oldString, newString, {
+      replace_all: opts?.replace_all,
+    })
+    if (!applied.ok || applied.content == null) {
+      return { path: relPath, ...applied }
+    }
+
+    const outBuf = encodeWorkspaceText(applied.content, { relPath, eol: decoded.eol })
+    await this.quota.assertCanWrite(outBuf.length)
+    await fs.writeFile(abs, outBuf)
+    return { path: relPath, ok: true, replacements: applied.replacements }
+  }
+
+  /**
+   * 应用 OpenCode `*** Begin Patch`（Add/Update/Delete）；全部经 gatePath。
+   * Update/Add 写入不走整文件 overwrite 确认（与 replaceLines 一致）；Delete 仍需确认。
+   */
+  async applyPatch(
+    sessionId: string,
+    rootId: string,
+    patchText: string,
+    confirm?: ConfirmHandler,
+  ): Promise<import('./apply-patch.js').ApplyPatchResult> {
+    const { applyOpenCodePatchText } = await import('./apply-patch.js')
+    const eolByPath = new Map<string, WorkspaceEol>()
+    return applyOpenCodePatchText(patchText, {
+      fileExists: async (relPath) => {
+        const { abs } = await this.gatePath(sessionId, rootId, relPath)
+        try {
+          const st = await fs.stat(abs)
+          return st.isFile()
+        } catch {
+          return false
+        }
+      },
+      readFile: async (relPath) => {
+        const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
+        assertReadable(grant)
+        const buf = await fs.readFile(abs)
+        const decoded = decodeWorkspaceText(buf)
+        eolByPath.set(relPath, decoded.eol)
+        return decoded.text
+      },
+      writeFile: async (relPath, content) => {
+        const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
+        assertWritable(grant)
+        const eol = eolByPath.get(relPath)
+        const outBuf = encodeWorkspaceText(content, { relPath, eol })
+        await this.quota.assertCanWrite(outBuf.length)
+        await fs.mkdir(path.dirname(abs), { recursive: true })
+        await fs.writeFile(abs, outBuf)
+      },
+      deletePath: async (relPath) => {
+        await this.deletePath(sessionId, rootId, relPath, confirm)
+      },
+    })
   }
 
   /**
@@ -451,14 +596,21 @@ export class WorkspaceService {
   ): Promise<{ path: string; bytes: number }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertWritable(grant)
-    const normalized = normalizeWorkspaceTextContent(relPath, content)
-    const buf = Buffer.from(normalized, 'utf8')
-    await this.quota.assertCanWrite(buf.length)
     let exists = false
+    let existingEol: WorkspaceEol | undefined
     try {
       await fs.access(abs)
       exists = true
+      try {
+        const prev = await fs.readFile(abs)
+        existingEol = decodeWorkspaceText(prev).eol
+      } catch (err) {
+        // 覆盖写入：原文件非法 UTF-8 时无法保留 eol，按新建语义（LF / 脚本平台 EOL）
+        if (!(err instanceof WorkspaceTextEncodingError)) throw err
+      }
     } catch { /* new file */ }
+    const buf = encodeWorkspaceText(content, { relPath, eol: existingEol })
+    await this.quota.assertCanWrite(buf.length)
     if (exists) {
       await this.requireConfirmation(sessionId, rootId, relPath, 'overwrite', confirm)
     }
@@ -544,7 +696,7 @@ export class WorkspaceService {
   shellRun(
     params: ShellRunParams,
     confirm?: ConfirmHandler,
-  ): Promise<ShellRunResult> {
+  ): Promise<ShellRunResult | ShellBackgroundStartResult> {
     return this.shell.run(params, confirm)
   }
 
@@ -555,7 +707,7 @@ export class WorkspaceService {
     return this.shell.install(params, confirm)
   }
 
-  /** 对外 MCP 主名 opptrix_install；内部与 shellInstall 相同 */
+  /** 兼容内部 API：等价于 pip/npm install → opptrix_run */
   opptrixInstall(
     params: ShellInstallParams,
     confirm?: ConfirmHandler,

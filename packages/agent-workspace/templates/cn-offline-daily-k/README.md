@@ -47,11 +47,11 @@ Agent 侧典型流程：
 ## 依赖
 
 - Node ≥ 18（ESM）
-- 读 Parquet：可选 `hyparquet`（`shell_install` 安装到沙盒）；未安装时可用已解析的行数组走 query/screen
+- 读 Parquet：可选 `hyparquet`（`opptrix_run(command="npm install hyparquet")` 安装到沙盒）；未安装时可用已解析的行数组走 query/screen
 
 ```bash
 # 沙盒示例
-shell_install({ manager: "npm", packages: ["hyparquet"] })
+opptrix_run({ command: "npm install hyparquet" })
 ```
 
 ## 最小示例

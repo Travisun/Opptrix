@@ -18,6 +18,9 @@ const SLOW_TOOLS = new Set([
   'evaluate_instrument',
   'browser_navigate',
   'browser_screenshot',
+  'opptrix_run',
+  'ensure_python',
+  'prepare_fuyao_dump',
 ])
 
 export interface McpToolCallOptions {

@@ -108,7 +108,7 @@ describe('resolvePythonRuntime / resolveShellArgv', () => {
     assert.equal(out.python_rewritten, false)
   })
 
-  it('prefers system python when available and prefer_opptrix_python is false', async (t) => {
+  it('prefers opptrix python when available even if prefer_opptrix_python was false', async (t) => {
     const systemPython = await detectSystemPython()
     if (!systemPython) {
       t.skip('no system python on PATH')
@@ -116,25 +116,77 @@ describe('resolvePythonRuntime / resolveShellArgv', () => {
     }
 
     const { resolvePythonRuntime, resolveShellArgv } = await importResolvePython()
-    const { resetPythonSettingsStoreForTests, savePythonSettings } = await importPythonSettingsStore()
+    const { resetPythonSettingsStoreForTests, savePythonSettings, getPythonSettings } =
+      await importPythonSettingsStore()
 
     resetPythonSettingsStoreForTests()
+    // 模拟存量 false；get/resolve 应迁移并托管优先
     savePythonSettings({
       prefer_opptrix_python: false,
       pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
     })
+    resetPythonSettingsStoreForTests()
 
     const status = await resolvePythonRuntime()
-    assert.equal(status.active_source, 'system')
     assert.equal(status.ready, true)
     assert.equal(status.recommend_install, false)
     assert.ok(status.active_path)
 
+    // 有托管 → opptrix；仅有系统 → system
+    if (status.opptrix_path) {
+      assert.equal(status.active_source, 'opptrix')
+      assert.equal(status.active_path, status.opptrix_path)
+    } else {
+      assert.equal(status.active_source, 'system')
+      assert.equal(status.system_path != null, true)
+    }
+
+    // 存量 false 已迁移
+    const settings = getPythonSettings()
+    assert.equal(settings.prefer_opptrix_python, true)
+
     const rewritten = await resolveShellArgv(['python3', '-c', 'print(1)'])
     assert.ok(path.isAbsolute(rewritten.argv[0]))
-    assert.equal(path.basename(rewritten.argv[0]), path.basename(systemPython))
+    assert.equal(rewritten.argv[0], status.active_path)
     assert.equal(rewritten.argv[1], '-c')
     assert.equal(rewritten.python_rewritten, true)
+  })
+
+  it('uses system when only system python is available', async (t) => {
+    const systemPython = await detectSystemPython()
+    if (!systemPython) {
+      t.skip('no system python on PATH')
+      return
+    }
+
+    const { resolvePythonRuntime } = await importResolvePython()
+    const { resetPythonSettingsStoreForTests } = await importPythonSettingsStore()
+    resetPythonSettingsStoreForTests()
+
+    const status = await resolvePythonRuntime()
+    if (status.opptrix_path) {
+      t.skip('opptrix python present — covered by hosted-prefer test')
+      return
+    }
+    assert.equal(status.active_source, 'system')
+    assert.equal(status.ready, true)
+    assert.ok(status.active_path)
+  })
+
+  it('uses opptrix when only opptrix python is available', async (t) => {
+    const { resolvePythonRuntime } = await importResolvePython()
+    const { resetPythonSettingsStoreForTests } = await importPythonSettingsStore()
+    resetPythonSettingsStoreForTests()
+
+    const status = await resolvePythonRuntime()
+    if (!status.opptrix_path) {
+      t.skip('no opptrix python installed')
+      return
+    }
+    // 即使也有系统 Python，托管优先
+    assert.equal(status.active_source, 'opptrix')
+    assert.equal(status.active_path, status.opptrix_path)
+    assert.equal(status.ready, true)
   })
 
   it('rewrites python3.12 basename to active interpreter', async (t) => {
@@ -147,7 +199,7 @@ describe('resolvePythonRuntime / resolveShellArgv', () => {
     const { resolvePythonRuntime, resolveShellArgv } = await importResolvePython()
     const { resetPythonSettingsStoreForTests, savePythonSettings } = await importPythonSettingsStore()
     resetPythonSettingsStoreForTests()
-    savePythonSettings({ prefer_opptrix_python: false, pip_index_urls: [] })
+    savePythonSettings({ prefer_opptrix_python: true, pip_index_urls: [] })
 
     const status = await resolvePythonRuntime()
     assert.ok(status.active_path)
@@ -168,7 +220,7 @@ describe('resolvePythonRuntime / resolveShellArgv', () => {
     const { resolvePythonRuntime, resolveShellArgv } = await importResolvePython()
     const { resetPythonSettingsStoreForTests, savePythonSettings } = await importPythonSettingsStore()
     resetPythonSettingsStoreForTests()
-    savePythonSettings({ prefer_opptrix_python: false, pip_index_urls: [] })
+    savePythonSettings({ prefer_opptrix_python: true, pip_index_urls: [] })
 
     const status = await resolvePythonRuntime()
     assert.ok(status.active_path)
@@ -234,6 +286,27 @@ describe('applyPythonRuntimeToChildEnv', () => {
   })
 })
 
+describe('applyUtf8ChildEnv', () => {
+  it('sets PYTHONUTF8 and LANG fallback when missing', async () => {
+    const { applyUtf8ChildEnv } = await importRunner()
+    const env = {}
+    applyUtf8ChildEnv(env)
+    assert.equal(env.PYTHONIOENCODING, 'utf-8')
+    assert.equal(env.PYTHONUTF8, '1')
+    assert.equal(env.LANG, 'C.UTF-8')
+    assert.equal(env.LC_ALL, 'C.UTF-8')
+  })
+
+  it('keeps existing utf-8 locale', async () => {
+    const { applyUtf8ChildEnv } = await importRunner()
+    const env = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' }
+    applyUtf8ChildEnv(env)
+    assert.equal(env.PYTHONUTF8, '1')
+    assert.equal(env.LANG, 'en_US.UTF-8')
+    assert.equal(env.LC_ALL, 'en_US.UTF-8')
+  })
+})
+
 describe('toAgentPythonEnvView', () => {
   it('omits executable paths and exposes priority', async () => {
     const { toAgentPythonEnvView } = await importAgentPythonEnvView()
@@ -256,6 +329,8 @@ describe('toAgentPythonEnvView', () => {
     assert.equal(view.opptrix_installed, true)
     assert.equal(view.system_detected, true)
     assert.ok(view.argv_policy.includes('python'))
+    assert.ok(view.argv_policy.includes('opptrix_run'))
+    assert.ok(!view.argv_policy.includes('shell_install'))
     assert.equal('system_path' in view, false)
     assert.equal('opptrix_path' in view, false)
     assert.equal('active_path' in view, false)
@@ -263,13 +338,33 @@ describe('toAgentPythonEnvView', () => {
 })
 
 describe('python settings validation', () => {
+  it('defaults prefer_opptrix_python to true when omitted', async () => {
+    const { validatePythonSettingsInput, normalizePythonSettings, DEFAULT_PYTHON_SETTINGS } =
+      await import(path.join(repoRoot, 'packages/shared/dist/python-settings.js'))
+    assert.equal(DEFAULT_PYTHON_SETTINGS.prefer_opptrix_python, true)
+    assert.equal(normalizePythonSettings({}).prefer_opptrix_python, true)
+    assert.equal(normalizePythonSettings(null).prefer_opptrix_python, true)
+    const result = validatePythonSettingsInput({
+      pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
+    })
+    assert.equal(result.ok, true)
+    if (result.ok) {
+      assert.equal(result.settings.prefer_opptrix_python, true)
+      assert.ok(result.settings.pip_index_urls[0]?.includes('tuna'))
+      assert.equal(
+        result.settings.pip_index_urls.some(u => u.includes('douban')),
+        false,
+      )
+    }
+  })
+
   it('accepts China mirror URLs', async () => {
     const { validatePythonSettingsInput } = await import(
       path.join(repoRoot, 'packages/shared/dist/python-settings.js')
     )
     const result = validatePythonSettingsInput({
       pip_index_urls: ['https://pypi.tuna.tsinghua.edu.cn/simple'],
-      prefer_opptrix_python: false,
+      prefer_opptrix_python: true,
     })
     assert.equal(result.ok, true)
     if (result.ok) {

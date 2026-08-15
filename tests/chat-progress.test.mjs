@@ -64,10 +64,72 @@ test('enrichStepFromResult marks failed hub responses as error', () => {
   assert.match(step.resultPreview ?? '', /instruments 或 codes 必填/)
 })
 
+test('enrichStepFromResult maps truncated spill meta for SSE / UI banner', () => {
+  const step = enrichStepFromResult({
+    id: 't1',
+    tool: 'workspace_read',
+    label: '读取工作区文件',
+    status: 'running',
+    startedAt: new Date().toISOString(),
+  }, {
+    truncated: true,
+    preview: 'line-0\nline-1',
+    relative_path: 'tool-output/abc123.json',
+    bytes: 120_000,
+    lines: 3000,
+    hint: '完整输出已落盘…',
+  })
+
+  assert.equal(step.status, 'done')
+  assert.equal(step.truncated, true)
+  assert.equal(step.saved_rel_path, 'tool-output/abc123.json')
+  assert.equal(step.ui_hint, undefined)
+})
+
+test('enrichStepFromResult keeps summary when truncation flags merge onto original result', () => {
+  const step = enrichStepFromResult({
+    id: 't2',
+    tool: 'opptrix_run',
+    label: 'Opptrix 运行',
+    status: 'running',
+    startedAt: new Date().toISOString(),
+  }, {
+    ok: true,
+    exit_code: 0,
+    stdout: 'hello from long run\n',
+    truncated: true,
+    resultTruncated: true,
+    saved_rel_path: 'tool-output/run9.json',
+    relative_path: 'tool-output/run9.json',
+  })
+
+  assert.equal(step.status, 'done')
+  assert.equal(step.truncated, true)
+  assert.equal(step.resultTruncated, true)
+  assert.equal(step.saved_rel_path, 'tool-output/run9.json')
+  assert.match(step.resultPreview ?? '', /退出码 0/)
+  assert.match(step.resultPreview ?? '', /hello/)
+})
+
 test('shell tools have Chinese labels and result summaries', () => {
+  // 优先 args.command
+  const commandLabel = formatToolLabel('opptrix_run', {
+    command: 'python3 demo.py --verbose',
+    argv: ['should-not-appear'],
+  })
+  assert.match(commandLabel, /Opptrix 运行/)
+  assert.match(commandLabel, /python3 demo\.py --verbose/)
+  assert.doesNotMatch(commandLabel, /should-not-appear/)
+
+  // 仅 argv 旧路径仍可用
   const runLabel = formatToolLabel('opptrix_run', { argv: ['python3', '-c', 'print(1)'] })
   assert.match(runLabel, /Opptrix 运行/)
   assert.match(runLabel, /python3/)
+
+  // 无 command/argv 时回退结果 command_summary
+  const summaryLabel = formatToolLabel('opptrix_run', {}, { command_summary: 'npm test' })
+  assert.match(summaryLabel, /Opptrix 运行/)
+  assert.match(summaryLabel, /npm test/)
 
   const { preview: runPreview } = formatResultPreview({
     ok: true,
@@ -81,6 +143,9 @@ test('shell tools have Chinese labels and result summaries', () => {
   const aliasLabel = formatToolLabel('shell_run', { argv: ['node', '-e', '1'] })
   assert.match(aliasLabel, /Opptrix 运行/)
   assert.match(aliasLabel, /node/)
+  const aliasCommand = formatToolLabel('shell_run', { command: 'ls -la' })
+  assert.match(aliasCommand, /Opptrix 运行/)
+  assert.match(aliasCommand, /ls -la/)
 
   const installLabel = formatToolLabel('opptrix_install', { manager: 'pip', packages: ['requests'] })
   assert.match(installLabel, /安装依赖/)

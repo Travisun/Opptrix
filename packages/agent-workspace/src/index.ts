@@ -57,7 +57,11 @@ export {
   ShellRunConfirmationRequiredError,
 } from './errors.js'
 export { buildGlobalDenyPaths, isPathDenied, isWorkspaceRootPath } from './deny.js'
-export { resolveSafePath, ensureDirectory } from './path-gate.js'
+export {
+  resolveSafePath,
+  ensureDirectory,
+  RELATIVE_PATH_CONTRACT_HINT,
+} from './path-gate.js'
 export { assertAllowedUrl, assertAllowedHost } from './ssrf.js'
 export {
   GrantStore,
@@ -69,6 +73,7 @@ export {
 export {
   StickyPolicyStore,
   CONFIRM_OPTIONS,
+  DOOM_LOOP_CONFIRM_OPTIONS,
   parseConfirmChoice,
   type StickyOperation,
   type ConfirmChoice,
@@ -103,6 +108,12 @@ export {
 } from './node/resolve-node.js'
 export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './shell/resolve-shell-argv.js'
 export type { ResolveShellArgvResult } from './shell/resolve-shell-argv.js'
+export { resolvePosixShellPath, SPAWN_ENOENT_HINT } from './shell/resolve-shell-bin.js'
+export {
+  FILE_ENOENT_HINT,
+  resolveEnoentToolHint,
+  appendRelativePathNudge,
+} from './enoent-hints.js'
 export {
   resolvePythonRuntime,
   parsePythonVersionParts,
@@ -138,6 +149,7 @@ export {
   waitForPythonInstallJob,
   resetPythonInstallJobForTests,
   setPythonInstallPipelineDepsForTests,
+  subscribePythonInstallJob,
   PYTHON_INSTALL_JOB_ID,
   type PythonInstallJobSnapshot,
   type PythonInstallJobState,
@@ -159,6 +171,26 @@ export {
   type ConfirmHandler,
   type WorkspaceServiceOptions,
 } from './service.js'
+export {
+  clampGlobMaxResults,
+  globPatternToRegExp,
+  globWithinRoot,
+  DEFAULT_GLOB_MAX_RESULTS,
+  MAX_GLOB_MAX_RESULTS,
+  type WorkspaceGlobResult,
+} from './workspace-glob.js'
+export {
+  clampGrepMaxHits,
+  clampContextLines,
+  grepWithinRoot,
+  DEFAULT_GREP_MAX_HITS,
+  MAX_GREP_MAX_HITS,
+  DEFAULT_GREP_MAX_FILE_BYTES,
+  type GrepMatchMode,
+  type WorkspaceGrepHit,
+  type WorkspaceGrepParams,
+  type WorkspaceGrepResult,
+} from './workspace-grep.js'
 export {
   runCodePreflight,
   runL0StaticOnly,
@@ -201,9 +233,6 @@ export {
   parseNetworkInstallChoice,
   hostFromNetworkInput,
   normalizeEgressHost,
-  ShellRunStickyStore,
-  SHELL_RUN_CONFIRM_OPTIONS,
-  parseShellRunConfirmChoice,
   summarizeShellArgv,
   buildSandboxConfigFromGrants,
   buildSandboxConfigFromGrantPaths,
@@ -217,10 +246,20 @@ export {
   assertAllowedShellArgv,
   assertPackageInstallPolicy,
   injectPipCertArgv,
+  argvToCommandString,
+  syncCommandStringFromManagedArgv,
   commandNeedsNetwork,
   commandMayNeedEgressConfirmation,
   isNetworkDiagnosticCommand,
   parseDiagnosticTargetHost,
+  parseCommandToArgv,
+  resolveShellCommandInput,
+  commandNeedsRealShell,
+  shellWrapArgv,
+  getSessionShellRuntime,
+  resetSessionShellRuntimeForTests,
+  hashSandboxConfig,
+  SessionShellRuntime,
   mergeAllowedNetworkDomains,
   networkDomainsForInstallAllowed,
   networkDomainsForDiagnosticTarget,
@@ -242,6 +281,7 @@ export {
   resolveBundledCaCertPath,
   materializeBundledCaCert,
   applyBundledCaCertEnv,
+  clearBundledCaCertEnv,
   bundledCaCertAllowReadPaths,
   detectNetworkEgressBlocked,
   buildNeedsNetworkEgressPayload,
@@ -268,16 +308,45 @@ export {
   resetWindowsSandboxAutoInstallAttempt,
   type ShellRunParams,
   type ShellRunResult,
+  type ShellBackgroundStartResult,
   type ShellInstallParams,
   type ShellPlatformStatus,
   type ShellPythonRuntimeInfo,
   type ShellSecretRef,
+  type ShellIsolation,
+  type ShellEscalate,
   type NetworkInstallPreflightResult,
   type NetworkEgressPreflightResult,
+  startShellCommandJob,
+  getShellCommandJob,
+  subscribeShellCommandJob,
+  cancelShellCommandJob,
+  clearSessionShellCommandJobs,
+  resetShellCommandJobsForTests,
+  isShellBgEnabled,
+  clampShellBgTimeoutMs,
+  countInFlightShellBgForSession,
+  SHELL_BG_DEFAULT_TIMEOUT_MS,
+  SHELL_BG_MAX_IN_FLIGHT_PER_SESSION,
+  type ShellCommandJobSnapshot,
+  type ShellCommandJobState,
+  isHostInPackageInstallAllowlist,
+  hostMatchesDomainPatterns,
 } from './shell/index.js'
-export { normalizeWorkspaceTextContent } from './workspace-text.js'
+export {
+  normalizeWorkspaceTextContent,
+  decodeWorkspaceText,
+  encodeWorkspaceText,
+  detectWorkspaceEol,
+  WORKSPACE_TEXT_ENCODING_HINT,
+  WorkspaceTextEncodingError,
+  type WorkspaceEol,
+  type DecodedWorkspaceText,
+} from './workspace-text.js'
 export {
   applyLineEdits,
+  applyExactReplace,
+  assertExactReplaceOk,
   splitContentLines,
   joinContentLines,
   MAX_LINE_EDITS,
@@ -287,4 +356,17 @@ export {
   type LineEditResultItem,
   type NumberedSnippet,
   type ApplyLineEditsResult,
+  type ExactReplaceResult,
 } from './line-edit/index.js'
+export {
+  parseOpenCodePatch,
+  applyUpdateHunks,
+  applyParsedPatch,
+  applyOpenCodePatchText,
+  type PatchFileOp,
+  type PatchHunk,
+  type ParsedPatch,
+  type ApplyPatchFileResult,
+  type ApplyPatchResult,
+  type ApplyPatchIo,
+} from './apply-patch.js'

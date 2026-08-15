@@ -2082,6 +2082,16 @@ export async function fetchSessionPendingWakes(sessionId: string): Promise<{
     seconds_left: number
     seconds: number
   }>
+  job_watches?: Array<{
+    watch_id: string
+    job_id: string
+    kind?: string
+    label?: string
+    percent?: number
+    seconds_left?: number
+    source?: string
+    state?: string
+  }>
 }> {
   return jsonFetch(`/sessions/${sessionId}/pending-wakes`)
 }

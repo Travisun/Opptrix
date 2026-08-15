@@ -4,6 +4,7 @@ import {
   NetworkInstallConfirmationRequiredError,
   NetworkEgressConfirmationRequiredError,
   ShellRunConfirmationRequiredError,
+  PathEscapeError,
   SHARED_ROOT_ID,
   SESSION_LAN_ASK_OPTIONS,
   applySessionLanAskChoice,
@@ -13,6 +14,12 @@ import {
   getWorkspaceService,
   sharedDumpsDir,
   tryRecordOfflineKDumpSuccess,
+  RELATIVE_PATH_CONTRACT_HINT,
+  FILE_ENOENT_HINT,
+  resolveEnoentToolHint,
+  appendRelativePathNudge,
+  WORKSPACE_TEXT_ENCODING_HINT,
+  WorkspaceTextEncodingError,
   type ConfirmHandler,
   type WorkspaceGrant,
   type ShellSecretRef,
@@ -105,8 +112,41 @@ export function clearWorkspaceToolBridge(): void {
 const S = (properties: JsonSchema['properties'], required?: string[]): JsonSchema =>
   ({ type: 'object', properties, required })
 
-function toolError(err: unknown): { error: string } {
+/** path / cwd 参数说明 — 强制相对 root_id */
+const PATH_REL_PARAM_DESC =
+  '相对当前 root_id 的路径（例 packages/foo/x.py）。禁止绝对路径、~、file://、把 abs_path/系统 cwd 填入；正例配合 root_id'
+
+function toolError(err: unknown): { error: string; hint?: string } {
   const message = err instanceof Error ? err.message : String(err)
+  if (err instanceof PathEscapeError || message.includes('不允许使用绝对路径')) {
+    return {
+      error: message,
+      hint: RELATIVE_PATH_CONTRACT_HINT,
+    }
+  }
+  if (
+    err instanceof WorkspaceTextEncodingError
+    || /不是合法 UTF-8|非法.*utf-?8|UTF-8 无 BOM/i.test(message)
+  ) {
+    return {
+      error: message,
+      hint: err instanceof WorkspaceTextEncodingError
+        ? err.hint
+        : WORKSPACE_TEXT_ENCODING_HINT,
+    }
+  }
+  const errno =
+    err && typeof err === 'object' && 'code' in err
+      ? String((err as { code?: unknown }).code ?? '')
+      : ''
+  const enoentHint = resolveEnoentToolHint(message, errno || undefined)
+  if (enoentHint) {
+    const error =
+      enoentHint === FILE_ENOENT_HINT
+        ? appendRelativePathNudge(message)
+        : message
+    return { error, hint: enoentHint }
+  }
   return { error: message }
 }
 
@@ -143,7 +183,7 @@ async function formatReadyFuyaoDumpResult(result: FuyaoDumpJobResult): Promise<R
     bytes: result.bytes,
     from_cache: result.from_cache,
     sandbox_hint: result.sandbox_hint,
-    note: '用 workspace_list/read 或 opptrix_run，root_id=shared + relative_path；勿注入 API Key',
+    note: '用 workspace_glob / workspace_read 或 opptrix_run，root_id=shared + relative_path；勿注入 API Key',
   }
   const metaResult = await tryRecordOfflineKDumpSuccess({
     dumpKind: result.dump_kind,
@@ -287,7 +327,7 @@ function isUnderUserDataRoot(absPath: string): boolean {
   return target === userData || target.startsWith(`${userData}${path.sep}`)
 }
 
-  /** Agent 可见 grant 摘要 — 默认工作区不暴露 ~/.opptrix 绝对路径 */
+  /** Agent 可见 grant 摘要 — 默认工作区不暴露 ~/.opptrix 绝对路径；abs_path 不可抄进工具 path */
 function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
   const label = grant.label ?? (grant.is_default ? '本对话工作区' : '授权文件夹')
   const base = {
@@ -304,14 +344,14 @@ function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
   if (grant.is_default) {
     return {
       ...base,
-      path_hint: '本对话专属读写目录；使用 root_id=default 调用 workspace_* 工具',
+      path_hint: '本对话专属读写目录；使用 root_id=default + 相对 path 调用 workspace_* / opptrix_run',
     }
   }
   if (grant.root_id === SHARED_ROOT_ID) {
     return {
       ...base,
       path_hint:
-        '跨对话公共区（packages/data/docs）；使用 root_id=shared；会话结束不清理；dumps 经 prepare_fuyao_dump',
+        '跨对话公共区（packages/data/docs）；使用 root_id=shared + 相对 path；会话结束不清理；dumps 经 prepare_fuyao_dump',
     }
   }
   if (isUnderUserDataRoot(grant.abs_path)) {
@@ -322,8 +362,11 @@ function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
   }
   return {
     ...base,
+    // 仅供识别授权文件夹；禁止抄进 workspace_* / opptrix_run 的 path 或 cwd
     abs_path: grant.abs_path,
+    do_not_use_as_tool_path: true,
     path_hint: path.basename(grant.abs_path),
+    note: 'abs_path 不可填入 path/cwd；须用本条 root_id + 相对路径（例 packages/foo/x.py）',
   }
 }
 
@@ -336,7 +379,9 @@ function summarizeWorkspaceGrants(grants: WorkspaceGrant[]): Record<string, unkn
   return {
     summary: `当前对话可访问：${parts.join(' + ')}`,
     grants: grants.map(formatGrantForAgent),
-    note: '使用 root_id 调用 workspace_list/read/write 等；公共包/dump 用 shared；需要更多目录请 request_folder_access 或请用户在界面授权',
+    note:
+      '使用 root_id + 相对 path/cwd 调用 workspace_glob/read/write、opptrix_run；禁止把 abs_path 当工具路径；'
+      + '成功后勿反复 list 同一授权集；公共包/dump 用 shared；需要更多目录请 request_folder_access 或请用户在界面授权',
   }
 }
 
@@ -344,20 +389,67 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
   const ws = getWorkspaceService()
   const tools: WorkspaceToolDef[] = [
     {
-      name: 'workspace_list',
+      name: 'workspace_glob',
       category: '工作区',
-      description: '列出授权工作区目录下的文件与子目录',
+      description:
+        '找文件/看树首选（优先于 shell ls/find）：在已授权文件夹内按文件名模式递归查找（如 **/*.py）；返回相对路径列表，再 read / replace_lines',
+      parameters: S({
+        glob_pattern: { type: 'string', description: '文件名模式，如 **/*.ts 或 *.py' },
+        root_id: { type: 'string', description: '工作区 root_id，默认 default' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC + '；可选起点目录或文件' },
+        max_results: { type: 'number', description: '最多返回条数，默认 200，上限 500' },
+      }, ['glob_pattern']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          return await ws.globFiles(
+            b.sessionId,
+            String(args.root_id ?? 'default'),
+            String(args.glob_pattern ?? ''),
+            {
+              path: args.path != null ? String(args.path) : undefined,
+              max_results: typeof args.max_results === 'number' ? args.max_results : undefined,
+            },
+          )
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'workspace_grep',
+      category: '工作区',
+      description:
+        '搜文本首选（优先于 shell rg/grep）：keywords 空格分词 + match_mode(and|or，默认 and)，或 pattern 正则；返回行号与摘录，再 read(numbered) / replace_lines',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id，默认 default' },
-        path: { type: 'string', description: '相对路径，默认根目录' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC + '；可选文件或目录起点' },
+        keywords: { type: 'string', description: '空格分词关键词（与 pattern 二选一）' },
+        match_mode: { type: 'string', description: 'and | or，默认 and（仅 keywords）' },
+        pattern: { type: 'string', description: '正则（与 keywords 二选一）' },
+        case_insensitive: { type: 'boolean', description: '正则/关键词是否忽略大小写，默认 false' },
+        glob: { type: 'string', description: '可选：限制文件名模式，如 **/*.ts' },
+        max_hits: { type: 'number', description: '最多命中条数，默认 50，上限 100' },
+        context_lines: { type: 'number', description: '上下文章节行数 0–2，默认 0' },
       }),
       handler: async (args) => {
         try {
           const b = requireBridge()
-          return await ws.listDir(
+          const matchModeRaw = String(args.match_mode ?? 'and').toLowerCase()
+          const matchMode = matchModeRaw === 'or' ? 'or' as const : 'and' as const
+          return await ws.grepFiles(
             b.sessionId,
             String(args.root_id ?? 'default'),
-            args.path != null ? String(args.path) : '',
+            {
+              path: args.path != null ? String(args.path) : undefined,
+              keywords: args.keywords != null ? String(args.keywords) : undefined,
+              matchMode,
+              pattern: args.pattern != null ? String(args.pattern) : undefined,
+              caseInsensitive: args.case_insensitive === true || args.case_insensitive === 'true',
+              glob: args.glob != null ? String(args.glob) : undefined,
+              maxHits: typeof args.max_hits === 'number' ? args.max_hits : undefined,
+              contextLines: typeof args.context_lines === 'number' ? args.context_lines : undefined,
+            },
           )
         } catch (err) {
           return toolError(err)
@@ -368,10 +460,10 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'workspace_read',
       category: '工作区',
       description:
-        '读取授权工作区内的文本文件；可选 start_line/end_line 只读区间，numbered=true 时内容带 NNNN| 行号前缀（省 token）',
+        '读文件内容首选（优先于 cat/head/tail）：读取授权工作区内文本；可选 start_line/end_line 只读区间，numbered=true 时内容带 NNNN| 行号前缀',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id' },
-        path: { type: 'string', description: '相对文件路径' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC },
         max_bytes: { type: 'number', description: '最大读取字节，默认 2000000' },
         start_line: { type: 'number', description: '可选：1-based 起始行（含）' },
         end_line: { type: 'number', description: '可选：1-based 结束行（含）' },
@@ -402,10 +494,10 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'workspace_write',
       category: '工作区',
-      description: '写入或覆盖授权工作区内的文本文件；覆盖前需用户确认（可设 sticky）',
+      description: '新建/覆盖文本首选（优先于 shell 重定向/heredoc）；覆盖前需用户确认（可设 sticky）；小改动请用 workspace_replace_lines',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id' },
-        path: { type: 'string', description: '相对文件路径' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC },
         content: { type: 'string', description: 'UTF-8 文本内容' },
       }, ['path', 'content']),
       handler: async (args) => {
@@ -428,14 +520,14 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'workspace_replace_lines',
       category: '工作区',
       description:
-        '按 1-based 闭区间行号批量替换（对接 code_preflight diagnostics 的 L 行号）；校验全部 edits 后原子写入；小改动优先用本工具，禁止整文件 workspace_write',
+        '改已有文件首选（优先于 sed/awk）：① 按 1-based 行号批量替换（edits，对接 code_preflight L 行号）；② 或精确字符串替换（old_string/new_string/replace_all）。二者择一；校验通过后原子写入；禁止整文件 workspace_write，禁止用 shell 改文件',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id，默认 default' },
-        path: { type: 'string', description: '相对文件路径（文件须已存在）' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC + '；文件须已存在' },
         edits: {
           type: 'array',
           description:
-            '替换列表（≤40）：start_line 必填；end_line 含尾默认=start_line；new_text 替换内容（"" 删除）；expect_text 可选防漂移',
+            '行号替换列表（≤40）：start_line 必填；end_line 含尾默认=start_line；new_text 替换内容（"" 删除）；expect_text 可选防漂移。与 old_string 二选一',
           items: {
             type: 'object',
             properties: {
@@ -447,11 +539,44 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             required: ['start_line', 'new_text'],
           },
         },
-      }, ['path', 'edits']),
+        old_string: {
+          type: 'string',
+          description: '精确替换：在文件中定位的原文片段（须唯一，除非 replace_all=true）',
+        },
+        new_string: {
+          type: 'string',
+          description: '精确替换：替换为的新文本（可与 old_string 同用；缺省视为空串）',
+        },
+        replace_all: {
+          type: 'boolean',
+          description: '精确替换：为 true 时替换全部匹配；默认 false 且要求恰好一处',
+          default: false,
+        },
+      }, ['path']),
       handler: async (args) => {
         try {
           const b = requireBridge()
+          const rootId = String(args.root_id ?? 'default')
+          const relPath = String(args.path ?? '')
+          const oldString = args.old_string == null ? undefined : String(args.old_string)
+          if (oldString != null && oldString.length > 0) {
+            return await ws.replaceExact(
+              b.sessionId,
+              rootId,
+              relPath,
+              oldString,
+              args.new_string == null ? '' : String(args.new_string),
+              {
+                replace_all: args.replace_all === true || args.replace_all === 'true',
+              },
+            )
+          }
           const rawEdits = Array.isArray(args.edits) ? args.edits : []
+          if (!rawEdits.length) {
+            return {
+              error: '请提供 edits（行号替换）或 old_string（精确替换）',
+            }
+          }
           const edits = rawEdits.map((item) => {
             const row = item && typeof item === 'object' ? item as Record<string, unknown> : {}
             return {
@@ -465,8 +590,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           })
           return await ws.replaceLines(
             b.sessionId,
-            String(args.root_id ?? 'default'),
-            String(args.path ?? ''),
+            rootId,
+            relPath,
             edits,
           )
         } catch (err) {
@@ -475,22 +600,29 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       },
     },
     {
-      name: 'workspace_mkdir',
+      name: 'workspace_apply_patch',
       category: '工作区',
-      description: '在授权工作区内创建目录（含中间目录）',
+      description:
+        '多文件补丁首选（优先于 shell 批量改文件）：应用 OpenCode 风格统一补丁（*** Begin Patch … *** End Patch）；支持 Add/Update/Delete；路径须在授权 root 内；Update 按上下文 hunk 匹配',
       parameters: S({
-        root_id: { type: 'string', description: '工作区 root_id' },
-        path: { type: 'string', description: '相对目录路径' },
-      }, ['path']),
+        root_id: { type: 'string', description: '工作区 root_id，默认 default' },
+        patch: {
+          type: 'string',
+          description:
+            '补丁全文，含 *** Begin Patch / *** Add File:|*** Update File:|*** Delete File: / *** End Patch',
+        },
+      }, ['patch']),
       handler: async (args) => {
         try {
           const b = requireBridge()
-          return await ws.mkdir(
+          return await ws.applyPatch(
             b.sessionId,
             String(args.root_id ?? 'default'),
-            String(args.path ?? ''),
+            String(args.patch ?? ''),
+            b.confirm,
           )
         } catch (err) {
+          if (err instanceof ConfirmationRequiredError) return formatConfirmationResult(err)
           return toolError(err)
         }
       },
@@ -501,7 +633,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       description: '删除授权工作区内的文件或目录；删除前需用户确认（可设 sticky）',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id' },
-        path: { type: 'string', description: '相对路径' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC },
       }, ['path']),
       handler: async (args) => {
         try {
@@ -525,7 +657,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       parameters: S({
         url: { type: 'string', description: 'http 或 https URL' },
         root_id: { type: 'string', description: '目标工作区 root_id' },
-        path: { type: 'string', description: '保存相对路径' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC + '；保存位置' },
         method: { type: 'string', description: 'HTTP 方法，默认 GET' },
         headers: { type: 'object', description: '可选请求头' },
         timeout_ms: { type: 'number', description: '超时毫秒，默认 120000' },
@@ -627,7 +759,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'list_workspace_grants',
       category: '工作区',
-      description: '列出当前对话已授权的工作区（本对话工作区 + 额外授权）；用户问可访问哪些目录时首选',
+      description:
+        '列出当前对话已授权的工作区（本对话工作区 + 额外授权）；用户问可访问哪些目录时首选。成功后勿反复调用；用返回的 root_id + 相对 path（勿抄 abs_path）',
       parameters: S({}),
       handler: async () => {
         try {
@@ -646,7 +779,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         '将已授权工作区内的相对路径解析为消息可用的 opptrix-ws:// URI（图片/视频/音频/文件引用）；不返回本机绝对路径',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id（default / shared / grant_*）' },
-        path: { type: 'string', description: '相对文件路径' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC },
       }, ['root_id', 'path']),
       handler: async (args) => {
         try {
@@ -708,14 +841,38 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     ...(() => {
       const opptrixRunParams = S({
         root_id: { type: 'string', description: '工作区 root_id，默认 default' },
-        cwd: { type: 'string', description: '相对工作目录，默认根目录' },
+        cwd: {
+          type: 'string',
+          description:
+            PATH_REL_PARAM_DESC
+            + '；工作目录，默认该 root 根目录（勿填 abs_path）。'
+            + '注意：子进程 HOME=grant 根，cwd=本字段；~ ≠ cwd，脚本勿用 ~/ 当相对 cwd',
+        },
+        command: {
+          type: 'string',
+          description:
+            '要运行的命令字符串（真 shell）；在隔离环境中执行，仅限已授权文件夹。'
+            + '路径相对 cwd/grant；禁硬编码宿主绝对路径。python/node/npm/pip 会自动改写到当前运行时（含管道/&&）',
+        },
         argv: {
           type: 'array',
-          description: '命令参数数组，如 ["python3","-c","print(1)"]；禁止 shell 管道与 sudo',
+          description: '已弃用：无 command 时自动拼接为 command；请改用 command',
           items: { type: 'string' },
         },
-        timeout_ms: { type: 'number', description: '超时毫秒，默认 120000' },
-        network_intent: { type: 'string', description: 'none | install；pip/npm 安装时填 install' },
+        timeout_ms: {
+          type: 'number',
+          description: '超时毫秒；同步默认 120000；background 时为墙钟上限（默认/最大约 30 分钟）',
+        },
+        background: {
+          type: 'boolean',
+          description:
+            'true：后台执行并立即返回 job_id（不堵对话）；长命令推荐；系统自动挂起并结束后续跑',
+        },
+        network_intent: { type: 'string', description: 'none | install（可选提示）；包源网络默认已放行' },
+        escalate: {
+          type: 'string',
+          description: 'none | unsandboxed；出隔离环境运行须每次确认，不会对本对话一律放行',
+        },
         secret_refs: {
           type: 'array',
           description:
@@ -729,20 +886,30 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             },
           },
         },
-      }, ['argv'])
+      }, [])
       const opptrixRunHandler = async (args: Record<string, unknown>) => {
         try {
           const b = requireBridge()
+          const commandRaw = args.command != null ? String(args.command) : ''
           const argv = parseArgv(args.argv)
+          if (!commandRaw.trim() && !argv.length) {
+            return { error: '请提供 command（推荐），或兼容传入 argv' }
+          }
           const intentRaw = String(args.network_intent ?? 'none')
           const networkIntent = intentRaw === 'install' ? 'install' as const : 'none' as const
+          const escalateRaw = String(args.escalate ?? 'none').toLowerCase()
+          const escalate = escalateRaw === 'unsandboxed' ? 'unsandboxed' as const : 'none' as const
+          const background = args.background === true || args.background === 'true'
           return await ws.shellRun({
             sessionId: b.sessionId,
             rootId: String(args.root_id ?? 'default'),
             cwdRel: args.cwd != null ? String(args.cwd) : '',
-            argv,
+            command: commandRaw.trim() || undefined,
+            argv: argv.length ? argv : undefined,
             timeoutMs: typeof args.timeout_ms === 'number' ? args.timeout_ms : undefined,
             networkIntent,
+            escalate,
+            background,
             signal: b.signal,
             secret_refs: parseSecretRefs(args.secret_refs),
           }, b.confirm)
@@ -750,20 +917,16 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           return handleShellError(err)
         }
       }
+      // 主路径仅暴露 opptrix_run；shell_run / opptrix_install / request_shell_network 不再进入聊天 tools
       return [
         {
           name: 'opptrix_run',
           category: '工作区',
           description:
-            '在系统隔离环境中运行允许的命令（python/node/npm/pip/ping 等）；测网站延迟优先 http_fetch；只能访问已授权工作区',
-          parameters: opptrixRunParams,
-          handler: opptrixRunHandler,
-        },
-        {
-          name: 'shell_run',
-          category: '工作区',
-          description:
-            'opptrix_run 的兼容别名（参数与行为相同）；新调用请用 opptrix_run',
+            '在隔离环境中运行任意命令（command 字符串；仅限已授权文件夹；会话级隔离复用）。'
+            + 'HOME=grant 根、cwd=cwdRel；路径相对 cwd/grant，禁宿主绝对路径与用 ~/ 当相对 cwd。'
+            + '包源默认已放行；其它域名运行时确认或看 suggested_escalate。短命令直接调用；长命令传 background=true 立即返回 job_id。'
+            + '硬禁：勿用 cat/head/tail/sed/awk/echo>/heredoc 读或改文件内容（改用 workspace_*）；找搜优先 workspace_glob/grep。测网站延迟优先 http_fetch',
           parameters: opptrixRunParams,
           handler: opptrixRunHandler,
         },
@@ -776,7 +939,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         '检查授权工作区内脚本并一次返回全部 findings（diagnostics，尽量带 line；errors/warnings 前缀 L{line}:）：默认 L0+L1。写自定义脚本后先调用；按行号用 workspace_replace_lines 定点修，再 preflight，通过后 opptrix_run',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id，默认 default' },
-        path: { type: 'string', description: '相对文件路径（必填）' },
+        path: { type: 'string', description: PATH_REL_PARAM_DESC + '（必填）' },
         language: {
           type: 'string',
           description: 'auto | python | javascript | typescript，默认 auto',
@@ -813,60 +976,11 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         }
       },
     },
-    ...(() => {
-      const installParams = S({
-        root_id: { type: 'string', description: '工作区 root_id' },
-        cwd: { type: 'string', description: '相对工作目录' },
-        manager: { type: 'string', description: 'pip 或 npm' },
-        packages: {
-          type: 'array',
-          description: '包名列表；npm 可留空表示按 package.json 安装',
-          items: { type: 'string' },
-        },
-      }, ['manager'])
-      const installHandler = async (args: Record<string, unknown>) => {
-        try {
-          const b = requireBridge()
-          const managerRaw = String(args.manager ?? '').toLowerCase()
-          const manager = managerRaw === 'npm' ? 'npm' as const : managerRaw === 'pip' ? 'pip' as const : null
-          if (!manager) {
-            return { error: 'manager 须为 pip 或 npm' }
-          }
-          const packages = parseArgv(args.packages)
-          return await ws.shellInstall({
-            sessionId: b.sessionId,
-            rootId: String(args.root_id ?? 'default'),
-            cwdRel: args.cwd != null ? String(args.cwd) : '',
-            manager,
-            packages,
-            signal: b.signal,
-          }, b.confirm)
-        } catch (err) {
-          return handleShellError(err)
-        }
-      }
-      return [
-        {
-          name: 'opptrix_install',
-          category: '工作区',
-          description: '在授权工作区内安装 pip 或 npm 依赖（联网需用户确认；包装进工作区子目录）',
-          parameters: installParams,
-          handler: installHandler,
-        },
-        {
-          name: 'shell_install',
-          category: '工作区',
-          description: 'opptrix_install 的兼容别名（参数与行为相同）；新调用请用 opptrix_install',
-          parameters: installParams,
-          handler: installHandler,
-        },
-      ]
-    })(),
     {
       name: 'python_env_status',
       category: '工作区',
       description:
-        '查看当前优先 Python（系统或 Opptrix 托管之一）是否就绪；shell 只用 python/pip 字面量 argv，勿手写绝对路径',
+        '查看当前优先 Python（系统或 Opptrix 托管之一）是否就绪；opptrix_run 的 command 请用 python/pip 字面量，勿手写绝对路径',
       parameters: S({}),
       handler: async () => {
         try {
@@ -881,7 +995,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'ensure_python',
       category: '工作区',
       description:
-        '确认 Python 是否可用；不可用时启动 Opptrix 托管安装并立即返回 preparing/installing+job_id+suggested_wake_seconds，优先 schedule_turn_wake 再查；已就绪则同步返回 ready',
+        '失败/装修兜底：仅当用户明确要装/修 Python，或 opptrix_run(python/pip) 因未就绪失败时再调用；禁止作为编程第一步。未就绪立即 preparing/installing+job_id（通常自动挂起并终态续跑）；已就绪同步返回 ready',
       parameters: S({
         job_id: {
           type: 'string',
@@ -944,7 +1058,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'prepare_fuyao_dump',
       category: '工作区',
       description:
-        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；冷下载立即返回 preparing+job_id+suggested_wake_seconds，优先 schedule_turn_wake 再查；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
+        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；冷下载立即返回 preparing+job_id，系统通常自动挂起并终态续跑；无 job 事件时才 schedule_turn_wake（禁止传 job_id）；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
       parameters: S({
         dump_kind: {
           type: 'string',
@@ -1042,49 +1156,6 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           return formatReadyFuyaoDumpResult(result)
         } catch (err) {
           return toolError(err)
-        }
-      },
-    },
-    {
-      name: 'request_shell_network',
-      category: '工作区',
-      description:
-        '按预需提前唤起沙盒联网授权（安装包源 / 指定域名出站）。走系统确认弹窗并写入沙盒授权；禁止用 ask_user「允许联网」冒充（ask_user 不会写入沙盒授权）',
-      parameters: S({
-        intent: {
-          type: 'string',
-          description: 'install = 联网安装包源；egress = 指定域名出站',
-        },
-        hosts: {
-          type: 'array',
-          description: 'intent=egress 时必填：域名或 URL 列表',
-          items: { type: 'string' },
-        },
-        reason: {
-          type: 'string',
-          description: '向用户说明为何需要联网（可选，拼进确认文案）',
-        },
-      }, ['intent']),
-      handler: async (args) => {
-        try {
-          const b = requireBridge()
-          const intent = String(args.intent ?? '').trim().toLowerCase()
-          const reason = args.reason != null ? String(args.reason) : undefined
-          if (intent === 'install') {
-            return await ws.requestNetworkInstall(b.sessionId, b.confirm, reason)
-          }
-          if (intent === 'egress') {
-            const hosts = Array.isArray(args.hosts)
-              ? args.hosts.map(h => String(h ?? '').trim()).filter(Boolean)
-              : []
-            if (!hosts.length) {
-              return { error: 'intent=egress 时 hosts 必填且至少一项' }
-            }
-            return await ws.requestNetworkEgress(b.sessionId, hosts, b.confirm, reason)
-          }
-          return { error: 'intent 须为 install 或 egress' }
-        } catch (err) {
-          return handleShellError(err)
         }
       },
     },

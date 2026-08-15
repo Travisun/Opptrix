@@ -37,8 +37,8 @@ export class NetworkInstallStickyStore {
 }
 
 export const NETWORK_INSTALL_CONFIRM_OPTIONS = [
-  { id: 'once', label: '仅此一次允许联网安装' },
-  { id: 'sticky', label: '本对话一律允许联网安装' },
+  { id: 'once', label: '仅此一次' },
+  { id: 'sticky', label: '本对话同类操作都允许' },
   { id: 'cancel', label: '取消' },
 ] as const
 

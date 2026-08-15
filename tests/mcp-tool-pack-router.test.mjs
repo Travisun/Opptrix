@@ -31,10 +31,13 @@ test('every registered chat tool has exactly one pack membership', () => {
   }
 })
 
-test('always-on packs are core + meta', () => {
-  assert.deepEqual(alwaysOnPackIds().sort(), ['core', 'meta'])
+test('always-on packs are core + meta + workspace', () => {
+  assert.deepEqual(alwaysOnPackIds().sort(), ['core', 'meta', 'workspace'])
   assert.ok(toolsInPack('core').includes('search_instruments'))
   assert.ok(toolsInPack('meta').includes('activate_tool_pack'))
+  assert.ok(toolsInPack('workspace').includes('opptrix_run'))
+  assert.ok(!toolsInPack('workspace').includes('workspace_list'))
+  assert.ok(!toolsInPack('workspace').includes('workspace_mkdir'))
 })
 
 test('resolver seeds instrument_analytics for analysis + CN code', () => {
@@ -98,9 +101,10 @@ test('activate expands active tool names across session', () => {
   const store = new ToolPackSessionStore()
   const sessionId = 'test-session'
   const before = resolveActivePackIds(store, sessionId, { message: '你好' })
-  assert.deepEqual([...before].sort(), ['core', 'meta'])
+  assert.deepEqual([...before].sort(), ['core', 'meta', 'workspace'])
   const namesBefore = toolNamesForPacks(before)
   assert.ok(namesBefore.includes('search_instruments'))
+  assert.ok(namesBefore.includes('opptrix_run'))
   assert.ok(!namesBefore.includes('list_news_articles'))
 
   store.activate(sessionId, ['news'])
@@ -109,6 +113,17 @@ test('activate expands active tool names across session', () => {
   const namesAfter = toolNamesForPacks(after)
   assert.ok(namesAfter.includes('list_news_articles'))
   assert.ok(namesAfter.length > namesBefore.length)
+})
+
+test('cold start always includes workspace pack tools', () => {
+  const store = new ToolPackSessionStore()
+  const packs = resolveActivePackIds(store, 'ws-always', { message: '随便问问' })
+  assert.ok(packs.includes('workspace'))
+  const names = toolNamesForPacks(packs)
+  assert.ok(names.includes('workspace_glob'))
+  assert.ok(names.includes('opptrix_run'))
+  assert.ok(!names.includes('workspace_list'))
+  assert.ok(!names.includes('workspace_mkdir'))
 })
 
 test('unloaded tool hint points to activate_tool_pack', () => {
@@ -121,7 +136,7 @@ test('unknown tool hint falls back to workspace sandbox', () => {
   const hint = unloadedToolHint('totally_fake_tool_xyz')
   assert.match(hint, /list_tool_packs/)
   assert.match(hint, /workspace/)
-  assert.match(hint, /opptrix_run|shell_run|ensure_python|workspace_/)
+  assert.match(hint, /opptrix_run|ensure_python|workspace_/)
   assert.match(hint, /勿虚构/)
 })
 
@@ -139,7 +154,8 @@ test('pack catalog prompt is slim vs legacy routing tables', () => {
   assert.match(prompt, /activate_tool_pack/)
   assert.match(prompt, /调用纪律/)
   assert.match(prompt, /workspace/)
-  assert.match(prompt, /opptrix_run|shell_run|沙盒|编程实现/)
+  assert.match(prompt, /core \+ meta \+ workspace|默认加载 core \+ meta \+ workspace/)
+  assert.match(prompt, /opptrix_run|沙盒|编程实现/)
   assert.match(prompt, /禁止仅为「开工」再 activate|勿仪式化|已加载/)
   assert.ok(prompt.length < 5000, 'catalog should stay compact')
   assert.ok(!prompt.includes('Tier 1'))
@@ -157,14 +173,19 @@ test('cold start exposed tools << full registry', () => {
   const exposed = toolNamesForPacks(packs)
   const full = new ToolRegistry(new ResearchHub()).list().length
   assert.ok(exposed.length < full)
-  assert.ok(exposed.length <= toolsInPack('core').length + toolsInPack('meta').length)
+  const alwaysOnMax =
+    toolsInPack('core').length + toolsInPack('meta').length + toolsInPack('workspace').length
+  assert.ok(exposed.length <= alwaysOnMax)
 })
 
 test('analysis seed keeps tools under full set', () => {
   const store = new ToolPackSessionStore()
   const packs = resolveActivePackIds(store, 's2', { message: '分析 600519' })
   assert.ok(packs.includes('instrument_analytics'))
-  assert.ok(packs.filter(p => p !== 'core' && p !== 'meta').length <= MAX_SEEDED_BUSINESS_PACKS)
+  assert.ok(
+    packs.filter(p => p !== 'core' && p !== 'meta' && p !== 'workspace').length
+      <= MAX_SEEDED_BUSINESS_PACKS,
+  )
   const exposed = toolNamesForPacks(packs)
   const full = new ToolRegistry(new ResearchHub()).list().length
   assert.ok(exposed.length < full)

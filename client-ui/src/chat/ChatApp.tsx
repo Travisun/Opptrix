@@ -24,12 +24,25 @@ import {
 } from './sessionPromptQueue'
 import type { ChatProgressEvent } from '../types/chatProgress'
 import {
+  decideAfterWakeExpiryFetch,
   formatWakeCountdownLabel,
   parsePendingWakesApi,
   parseScheduleTurnWakeFromStep,
   secondsLeftUntil,
   type PendingWakeInfo,
 } from './turnWakeCountdown'
+import {
+  applyJobProgressToBackgroundJobs,
+  hydrateBackgroundJobsFromWatches,
+  jobWatchToBackgroundJob,
+  parseJobProgressEvent,
+  parseJobWatchEvent,
+  parsePendingJobWatchesApi,
+  removeSessionBackgroundJob,
+  shouldShowBackgroundJob,
+  upsertSessionBackgroundJob,
+  type SessionBackgroundJob,
+} from './jobWatchProgress'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import ExpertMarketPage from '../pages/experts/ExpertMarketPage'
@@ -97,6 +110,11 @@ import {
   WORKSPACE_CHAT_MIN_WIDTH,
   WORKSPACE_CHAT_RIGHT_MIN_WIDTH,
 } from '../desktop/constants'
+
+/** schedule_turn_wake 空闲等待倒计时刷新间隔 */
+const WAKE_COUNTDOWN_TICK_MS = 1000
+/** 到期后若仍无 live progress，再查一次 pending-wakes 的安全窗 */
+const WAKE_EXPIRY_SAFETY_MS = 45_000
 
 const useStyles = makeStyles({
   root: {
@@ -402,10 +420,43 @@ export default function ChatApp() {
   /** schedule_turn_wake 到期前本地倒计时 */
   const pendingWakeRef = useRef(new Map<string, PendingWakeInfo>())
   const wakeCountdownTimersRef = useRef(new Map<string, number>())
+  const wakeExpirySafetyTimersRef = useRef(new Map<string, number>())
   /** 每会话 drain 意图：Stop=none；失败/成功=auto；打断指定项=runItem */
   const drainIntentRef = useRef(new Map<string, DrainIntent>())
   /** 当前会话排队提示（localStorage 镜像） */
   const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>([])
+  /** 每会话未完成后台 Job（composer 上方状态条） */
+  const [backgroundJobsBySession, setBackgroundJobsBySession] = useState<
+    Record<string, SessionBackgroundJob[]>
+  >({})
+  const sessionBackgroundJobs = activeId ? (backgroundJobsBySession[activeId] ?? []) : []
+
+  const patchSessionBackgroundJobs = useCallback((
+    sessionId: string,
+    updater: (prev: SessionBackgroundJob[]) => SessionBackgroundJob[],
+  ) => {
+    const sid = String(sessionId ?? '').trim()
+    if (!sid) return
+    setBackgroundJobsBySession((prev) => {
+      const nextList = updater(prev[sid] ?? [])
+      if (nextList.length === 0) {
+        if (!(sid in prev)) return prev
+        const { [sid]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [sid]: nextList }
+    })
+  }, [])
+
+  const clearSessionBackgroundJobs = useCallback((sessionId: string) => {
+    const sid = String(sessionId ?? '').trim()
+    if (!sid) return
+    setBackgroundJobsBySession((prev) => {
+      if (!(sid in prev)) return prev
+      const { [sid]: _removed, ...rest } = prev
+      return rest
+    })
+  }, [])
   /** 流结束后延迟清除过程条的 timer（sessionId → timeout id） */
   const streamResetTimersRef = useRef(new Map<string, number>())
   /** 本轮生成期间曾失焦/不可见（sessionId → true） */
@@ -439,11 +490,20 @@ export default function ChatApp() {
     }
   }, [])
 
+  const clearWakeExpirySafety = useCallback((sessionId: string) => {
+    const t = wakeExpirySafetyTimersRef.current.get(sessionId)
+    if (t != null) {
+      window.clearTimeout(t)
+      wakeExpirySafetyTimersRef.current.delete(sessionId)
+    }
+  }, [])
+
   const clearSessionWakeState = useCallback((sessionId: string) => {
     pendingWakeRef.current.delete(sessionId)
     stopWakeCountdown(sessionId)
+    clearWakeExpirySafety(sessionId)
     markSessionWakeWaiting(sessionId, false)
-  }, [markSessionWakeWaiting, stopWakeCountdown])
+  }, [clearWakeExpirySafety, markSessionWakeWaiting, stopWakeCountdown])
 
   const applyWakeCountdownSnapshot = useCallback((sessionId: string, fireAt: string) => {
     const left = secondsLeftUntil(fireAt)
@@ -470,6 +530,36 @@ export default function ChatApp() {
     markSessionWakeWaiting(sessionId, true)
     applyWakeCountdownSnapshot(sessionId, wake.fireAt)
     stopWakeCountdown(sessionId)
+    clearWakeExpirySafety(sessionId)
+
+    const handleExpiry = () => {
+      stopWakeCountdown(sessionId)
+      applyWakeCountdownSnapshot(sessionId, wake.fireAt)
+      void fetchSessionPendingWakes(sessionId).then((data) => {
+        const decision = decideAfterWakeExpiryFetch(parsePendingWakesApi(data))
+        if (decision.kind === 'restart') {
+          startWakeCountdown(sessionId, decision.wake)
+          return
+        }
+        // 等 live-progress；45s 后再查一次 pending
+        const safety = window.setTimeout(() => {
+          wakeExpirySafetyTimersRef.current.delete(sessionId)
+          if (streamingSessionIdsRef.current.has(sessionId)) return
+          if (!wakeWaitingSessionIdsRef.current.has(sessionId)) return
+          void fetchSessionPendingWakes(sessionId).then((again) => {
+            const next = decideAfterWakeExpiryFetch(parsePendingWakesApi(again))
+            if (next.kind === 'restart') startWakeCountdown(sessionId, next.wake)
+          }).catch(() => { /* ignore */ })
+        }, WAKE_EXPIRY_SAFETY_MS)
+        wakeExpirySafetyTimersRef.current.set(sessionId, safety)
+      }).catch(() => { /* ignore */ })
+    }
+
+    if (secondsLeftUntil(wake.fireAt) <= 0) {
+      handleExpiry()
+      return
+    }
+
     const timer = window.setInterval(() => {
       const current = pendingWakeRef.current.get(sessionId)
       if (!current) {
@@ -478,18 +568,16 @@ export default function ChatApp() {
       }
       applyWakeCountdownSnapshot(sessionId, current.fireAt)
       if (secondsLeftUntil(current.fireAt) <= 0) {
-        void fetchSessionPendingWakes(sessionId).then((data) => {
-          const next = parsePendingWakesApi(data)[0]
-          if (!next) return
-          if (secondsLeftUntil(next.fireAt) > 0) {
-            pendingWakeRef.current.set(sessionId, next)
-            applyWakeCountdownSnapshot(sessionId, next.fireAt)
-          }
-        }).catch(() => { /* ignore */ })
+        handleExpiry()
       }
-    }, 1000)
+    }, WAKE_COUNTDOWN_TICK_MS)
     wakeCountdownTimersRef.current.set(sessionId, timer)
-  }, [applyWakeCountdownSnapshot, markSessionWakeWaiting, stopWakeCountdown])
+  }, [
+    applyWakeCountdownSnapshot,
+    clearWakeExpirySafety,
+    markSessionWakeWaiting,
+    stopWakeCountdown,
+  ])
   const resolveSessionTitle = useCallback((targetSessionId: string, eventTitle?: string) => {
     return eventTitle
       ?? (activeSessionMetaRef.current?.id === targetSessionId
@@ -563,6 +651,64 @@ export default function ChatApp() {
     }
   }, [markStreamingSessionsAwayIfNeeded])
 
+  const applyBackgroundJobProgressEvent = useCallback((
+    targetSessionId: string,
+    event: ChatProgressEvent,
+  ) => {
+    if (event.type === 'job_watch') {
+      if (event.action === 'attached' || event.action === 'updated') {
+        const info = parseJobWatchEvent(event)
+        if (info) {
+          const job = jobWatchToBackgroundJob(info)
+          if (shouldShowBackgroundJob(job)) {
+            markSessionWakeWaiting(targetSessionId, true)
+            patchSessionBackgroundJobs(targetSessionId, (list) =>
+              upsertSessionBackgroundJob(list, job),
+            )
+          } else {
+            patchSessionBackgroundJobs(targetSessionId, (list) =>
+              removeSessionBackgroundJob(list, job.jobId),
+            )
+          }
+        }
+        return
+      }
+      if (event.action === 'cleared') {
+        const jobId = typeof event.job_id === 'string' ? event.job_id.trim() : ''
+        if (jobId) {
+          patchSessionBackgroundJobs(targetSessionId, (list) =>
+            removeSessionBackgroundJob(list, jobId),
+          )
+        } else {
+          clearSessionBackgroundJobs(targetSessionId)
+        }
+        return
+      }
+      if (event.action === 'resuming') {
+        markSessionWakeWaiting(targetSessionId, false)
+        const jobId = typeof event.job_id === 'string' ? event.job_id.trim() : ''
+        if (jobId) {
+          patchSessionBackgroundJobs(targetSessionId, (list) =>
+            removeSessionBackgroundJob(list, jobId),
+          )
+        }
+      }
+      return
+    }
+    if (event.type === 'job_progress') {
+      const progress = parseJobProgressEvent(event)
+      if (progress) {
+        patchSessionBackgroundJobs(targetSessionId, (list) =>
+          applyJobProgressToBackgroundJobs(list, progress),
+        )
+      }
+    }
+  }, [
+    clearSessionBackgroundJobs,
+    markSessionWakeWaiting,
+    patchSessionBackgroundJobs,
+  ])
+
   const pushStreamEvent = useCallback((targetSessionId: string, event: ChatProgressEvent) => {
     const prev = streamCacheRef.current.get(targetSessionId) ?? createThinkingStreamSnapshot()
     const next = applyChatProgressEvent(prev, event)
@@ -571,6 +717,9 @@ export default function ChatApp() {
     if (event.type === 'tool_done') {
       const wake = parseScheduleTurnWakeFromStep(event.step)
       if (wake) pendingWakeRef.current.set(targetSessionId, wake)
+    }
+    if (event.type === 'job_watch' || event.type === 'job_progress') {
+      applyBackgroundJobProgressEvent(targetSessionId, event)
     }
     if (event.type === 'done' && Array.isArray(event.tool_steps)) {
       for (const step of event.tool_steps) {
@@ -625,7 +774,12 @@ export default function ChatApp() {
         handleNotificationResult(result)
       })()
     }
-  }, [handleNotificationResult, maybeNotifyChatDone, resolveSessionTitle])
+  }, [
+    applyBackgroundJobProgressEvent,
+    handleNotificationResult,
+    maybeNotifyChatDone,
+    resolveSessionTitle,
+  ])
 
   const resolveStreamSnapshot = useCallback((id: string | null) => {
     if (!id) return null
@@ -666,13 +820,14 @@ export default function ChatApp() {
       (sessionStreamGenRef.current.get(sessionId) ?? 0) + 1,
     )
     stoppingSessionsRef.current.add(sessionId)
+    clearSessionWakeState(sessionId)
     streamHandlesRef.current.get(sessionId)?.abortController.abort()
     try {
       await cancelSessionChat(sessionId)
     } catch {
       /* stream may have already ended */
     }
-  }, [])
+  }, [clearSessionWakeState])
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -729,9 +884,14 @@ export default function ChatApp() {
     let cancelled = false
 
     const finishWakeResume = async (sid: string) => {
-      clearSessionWakeState(sid)
+      const pendingWake = pendingWakeRef.current.get(sid)
       markSessionStreaming(sid, false)
-      streamCacheRef.current.delete(sid)
+      if (pendingWake) {
+        startWakeCountdown(sid, pendingWake)
+      } else {
+        clearSessionWakeState(sid)
+        streamCacheRef.current.delete(sid)
+      }
       try {
         const fresh = await getSession(sid)
         if (cancelled || activeIdRef.current !== sid) return
@@ -756,8 +916,13 @@ export default function ChatApp() {
     }
 
     const onLiveEvent = (event: ChatProgressEvent) => {
-      // 用户本轮已在 chat/stream 中：忽略 bus，避免双写
-      if (streamHandlesRef.current.has(sessionId)) return
+      // 用户本轮已在 chat/stream 中：过程条由 stream 接管；Job 状态条仍吃 bus，避免丢进度
+      if (streamHandlesRef.current.has(sessionId)) {
+        if (event.type === 'job_watch' || event.type === 'job_progress') {
+          applyBackgroundJobProgressEvent(sessionId, event)
+        }
+        return
+      }
 
       const progressive =
         event.type === 'thinking'
@@ -787,6 +952,8 @@ export default function ChatApp() {
       try {
         const data = await fetchSessionPendingWakes(sessionId)
         if (cancelled) return
+        const watches = parsePendingJobWatchesApi(data)
+        patchSessionBackgroundJobs(sessionId, () => hydrateBackgroundJobsFromWatches(watches))
         const wake = parsePendingWakesApi(data)[0]
         if (
           wake
@@ -820,8 +987,10 @@ export default function ChatApp() {
     }
   }, [
     activeId,
+    applyBackgroundJobProgressEvent,
     clearSessionWakeState,
     markSessionStreaming,
+    patchSessionBackgroundJobs,
     pushStreamEvent,
     refreshSessions,
     startWakeCountdown,
@@ -1016,6 +1185,7 @@ export default function ChatApp() {
         await abortSessionStream(id)
       }
       clearSessionWakeState(id)
+      clearSessionBackgroundJobs(id)
       clearSessionPromptQueue(id)
       drainIntentRef.current.delete(id)
       syncPromptQueueUi(activeIdRef.current === id ? null : activeIdRef.current)
@@ -1034,7 +1204,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }, [activeId, abortSessionStream, clearSessionWakeState, confirm, loadSession, refreshSessions])
+  }, [activeId, abortSessionStream, clearSessionBackgroundJobs, clearSessionWakeState, confirm, loadSession, refreshSessions])
 
   const handleSelectExpert = useCallback(async (expertId: string) => {
     restoreChatColumn()
@@ -1375,8 +1545,8 @@ export default function ChatApp() {
     }
     // 新一轮默认自动续跑下一条；Stop / runNow 会在本轮中途覆盖
     drainIntentRef.current.set(sessionId, { kind: 'auto' })
-    stopWakeCountdown(sessionId)
-    markSessionWakeWaiting(sessionId, false)
+    clearSessionWakeState(sessionId)
+    clearSessionBackgroundJobs(sessionId)
     const initialSnapshot = createThinkingStreamSnapshot()
     streamCacheRef.current.set(sessionId, initialSnapshot)
     markSessionStreaming(sessionId, true)
@@ -2197,6 +2367,7 @@ export default function ChatApp() {
                   promptQueue={promptQueue}
                   onPromptQueueRemove={handlePromptQueueRemove}
                   onPromptQueueRunNow={handlePromptQueueRunNow}
+                  backgroundJobs={sessionBackgroundJobs}
                   onForkMessage={handleForkFromMessage}
                   onEditResend={handleEditResend}
                   onQuoteSelection={activeId ? handleQuoteSelection : undefined}

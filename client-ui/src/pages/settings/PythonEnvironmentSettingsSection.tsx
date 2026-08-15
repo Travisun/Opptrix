@@ -147,7 +147,7 @@ export default function PythonEnvironmentSettingsSection() {
   const [statusLoading, setStatusLoading] = useState(false)
   const [settings, setSettings] = useState<PythonSettings>({
     pip_index_urls: [],
-    prefer_opptrix_python: false,
+    prefer_opptrix_python: true,
   })
   const [mirrorsText, setMirrorsText] = useState('')
   const [status, setStatus] = useState<PythonRuntimeStatus | null>(null)
@@ -395,7 +395,7 @@ export default function PythonEnvironmentSettingsSection() {
           <SettingsGroup>
             <SettingsRow
               title="优先使用 Opptrix 托管"
-              desc="开启后，在已安装托管版本时优先于系统 Python"
+              desc="已安装托管版本时始终优先采用；此开关默认开启，安装成功后也会自动开启"
               control={(
                 <Switch
                   checked={settings.prefer_opptrix_python}

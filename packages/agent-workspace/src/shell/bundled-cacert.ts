@@ -72,13 +72,15 @@ export function materializeBundledCaCert(grantRootAbs: string): string | null {
 /**
  * 向子进程 env 注入 SSL_CERT_FILE / REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE /
  * NODE_EXTRA_CA_CERTS / PIP_CERT / CERT_PATH。
- * @param certPath 若传入则用之；否则 resolveBundledCaCertPath()
- * @returns 注入的证书路径；未找到则 null 且不改 env
+ * @param certPath 若传入非空字符串则用之；`undefined` 时回退 resolveBundledCaCertPath()；
+ *   **显式 `null` 不回退**（沙盒 materialize 失败时禁止指向围栏外包路径）。
+ * @returns 注入的证书路径；未注入则 null
  */
 export function applyBundledCaCertEnv(
   env: NodeJS.ProcessEnv,
   certPath?: string | null,
 ): string | null {
+  if (certPath === null) return null
   const resolved = (certPath && certPath.trim())
     ? path.resolve(certPath.trim())
     : resolveBundledCaCertPath()
@@ -90,6 +92,22 @@ export function applyBundledCaCertEnv(
   env.PIP_CERT = resolved
   env.CERT_PATH = resolved
   return resolved
+}
+
+const BUNDLED_CA_ENV_KEYS = [
+  'SSL_CERT_FILE',
+  'REQUESTS_CA_BUNDLE',
+  'CURL_CA_BUNDLE',
+  'NODE_EXTRA_CA_CERTS',
+  'PIP_CERT',
+  'CERT_PATH',
+] as const
+
+/** 清除可能指向围栏外 CA 的子进程环境变量（materialize 失败时用） */
+export function clearBundledCaCertEnv(env: NodeJS.ProcessEnv): void {
+  for (const key of BUNDLED_CA_ENV_KEYS) {
+    delete env[key]
+  }
 }
 
 /** 证书文件及其所在目录 — 供 sandbox allowRead */

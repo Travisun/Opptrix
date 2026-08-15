@@ -130,7 +130,7 @@ Opptrix/
 ```
 用户消息 → AgentEngine → ToolPackResolver（播种 packs）
                 ↓
-         activeNames = core+meta+播种+会话激活
+         activeNames = core+meta+workspace+播种+会话激活
                 ↓
          AggregatingToolBroker（外部 MCP 优先级链 → 本地 McpToolBroker）→ LLM tools
                 ↓
@@ -207,15 +207,21 @@ Opptrix/
       - `list_scheduled_job_runs`：`job_id` 必填，`limit` 默认 20、最大 50
     - **与调度关系**：Sidecar 进程内 timer（20s）在应用运行或托盘常驻时扫描并执行；**完全退出应用后不执行**。不再注册系统级 OS tick——Agent 只读写任务定义，不负责 OS 注册（桌面 `reconcileOsSchedule` 仅注销遗留任务）
   - **工作区与文件（`workspace` pack）**：实现 `@opptrix/agent-workspace` + `packages/agent/src/mcp/workspace-tools.ts`
-    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_replace_lines` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `resolve_workspace_path_uri` / `shell_platform_status` / `opptrix_run`（兼容别名 `shell_run`） / `code_preflight` / `opptrix_install`（兼容别名 `shell_install`） / `request_shell_network` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` / `request_secret` / `list_vault_secrets` / `grant_session_secret` / `revoke_session_secret` / `delete_vault_secret`
+    - **工具**：`workspace_glob` / `workspace_grep` / `workspace_read` / `workspace_write` / `workspace_replace_lines`（行号 edits **或** `old_string`/`new_string`/`replace_all` 精确替换）/ `workspace_apply_patch`（OpenCode `*** Begin Patch` Add/Update/Delete）/ `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `resolve_workspace_path_uri` / `shell_platform_status` / `opptrix_run` / `code_preflight` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` / `request_secret` / `list_vault_secrets` / `grant_session_secret` / `revoke_session_secret` / `delete_vault_secret`
     - **消息内文件引用**：聊天 Markdown 展示工作区图片/音视频/文件时，使用协议 `opptrix-ws://{root_id}/{相对路径}`（例：`opptrix-ws://shared/charts/a.png`）。可先调 `resolve_workspace_path_uri({ root_id, path })` 得到规范 `uri` 与 `exists` / `kind_hint`（合法且已授权即返回 uri，不返回本机绝对路径）。UI 将 URI 解析为 `GET /api/sessions/:id/workspace/file` 流。**禁止**消息中写 `file://` 或绝对路径。
-    - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码/编程类处理）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → activate `workspace`，用 `workspace_write` → `code_preflight` → `workspace_replace_lines` → `code_preflight` → `opptrix_run` / `opptrix_install` / `ensure_python` / `workspace_*` 沙盒编程实现（可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
-    - **Python 就绪（`ensure_python` / 异步唤醒）**：`ensure_python` **不阻塞**整轮对话。已就绪时同步返回 `status: "ready"`。未就绪时启动托管安装并**立即**返回 `status: "preparing"|"installing"`、`job_id`、`eta_seconds` / `suggested_wake_seconds`、`async_hint` / `poll_hint`。**优先** `schedule_turn_wake({ seconds: suggested_wake_seconds, prompt, job_id })` 结束本轮、到期同会话自动续跑；必要时再调 `ensure_python({ job_id })`。**禁止 tight-poll**。成功后写入 `prefer_opptrix_python=true`。失败不假 ready。`opptrix_run` 解析 `python`/`pip` 时若尚未就绪会快速失败并提示先 `ensure_python`，**不会**在 tool 内死等。设置页仍用 `/api/settings/python/install` 的 job+poll（行为不变）。
-    - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面与 Agent 摘要均称「**本对话工作区**」，**不**把 `~/.opptrix` 根目录或跨会话全局目录标为默认可写区。
+    - **激活**：`workspace` 为 always-on（与 core/meta 同级，每轮默认加载）；意图播种或 `activate_tool_pack` 仍可用于显式强调，但非必需。须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → 直接用 `workspace_glob` / `workspace_grep` → `workspace_read` → `workspace_replace_lines` / `workspace_write` → `code_preflight` → `opptrix_run` 沙盒编程实现（`ensure_python` **仅失败兜底**；可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
+    - **Python 就绪（`ensure_python` / Job 续跑）**：**非编程第一步**。编程默认把 `python`/`pip` 写进 `opptrix_run.command`（运行时解析）；仅当命令因未就绪失败、或用户明确要装/修 Python 时再 `ensure_python`。本工具**不阻塞**整轮对话。已就绪时同步返回 `status: "ready"`。未就绪时启动托管安装并**立即**返回 `status: "preparing"|"installing"`、`job_id`、`eta_seconds` / `suggested_wake_seconds`、`async_hint` / `poll_hint`。**系统通常自动挂起**（`OPPTRIX_JOB_WATCH=0` 可关），完成后同会话自动通知续跑；无任务事件时可用 `schedule_turn_wake`（禁止传 `job_id`）。**禁止 poll / sleep 查进度**。成功后写入 `prefer_opptrix_python=true`。失败不假 ready。`opptrix_run` 解析 `python`/`pip` 时若尚未就绪会快速失败并提示再 `ensure_python`，**不会**在 tool 内死等。设置页仍用 `/api/settings/python/install` 的 job+poll（行为不变）。
+    - **可访问目录（唯一清单）**：不知 `root_id`、或 Agent 问「能访问哪些目录」时用 `list_workspace_grants`（**至多一次**；属 `workspace` pack，默认已加载；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。已知 root 后直接 `workspace_glob` / `workspace_grep` / `opptrix_run`，勿反复 list。探树顺序：`list_workspace_grants`（至多一次）→ `workspace_glob`，或相对 cwd 的 `opptrix_run(ls/find)`；**禁止**绝对路径 / `abs_path` 探树。读写文件内容必须用 `workspace_*`。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面与 Agent 摘要均称「**本对话工作区**」，**不**把 `~/.opptrix` 根目录或跨会话全局目录标为默认可写区。
     - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
     - **根目录布局**：容器根 `{userData}/agent-workspace/`（quota / 清理统计）；每会话默认 `root_id=default` → `agent-workspace/sessions/<sessionId>/`（读写，**会话隔离**）；**公共复用区** `root_id=shared` → `agent-workspace/shared/`（`packages/` / `data/dumps|exports|cache` / `docs/` + README；会话自动 grant rw；**`clearSession` 不删 shared**）；旧版全局根下散落文件幂等迁入 `_legacy/`。额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
     - **本地数据目录**：`list_local_data_apis` → `get_local_data_catalog({ api_id })`。分类：`instrument_standard` / `agent_tools` / `hub_features`（如 Hub `search_local_instruments`，`access: hub_feature`）/ `shared_packages` / `fuyao_dump` / `workspace_fs`。system 仅挂索引句 + 编程协议短段。
-    - **编程协议**：查目录 → 扫 `shared/packages` → `request_shell_network({intent:"install"})` → `opptrix_install` → `workspace_write`（新建）→ `code_preflight` → `workspace_replace_lines`（按 diagnostics 的 `L{n}:` 行号批量定点改）→ 再 `code_preflight` → `opptrix_run`；**禁止**小改动却整文件 `workspace_write`。离线大数据用 `prepare_fuyao_dump`（服务端持 Key 落盘 `shared/data/dumps` 或短时效 URL）；**禁止** Key 进沙盒；**禁止**引导 `market sync` / `dailyDump`。**禁止**用 `ask_user`「允许联网」冒充沙盒联网授权（须 `request_shell_network` / ConfirmHandler）。
+    - **工具收敛（方案 1 / Cursor·OpenCode 式）**：主身份为投研 Agent（默认 core+meta+workspace always-on + 意图播种行情/财务等）；Coding 为能力层——编程意图强制补种 `workspace`（已 always-on 时幂等）；**读/改/写文本优先专用 `workspace_*`，禁止用 `opptrix_run` 的 cat/sed/echo>/heredoc 等读或改文件内容**；跑命令/装依赖走 `opptrix_run`；找搜优先 `workspace_glob` / `workspace_grep`（shell 仅后备）+ 可选 `code_preflight`。**禁止**因 coding 意图剔除行情 pack 或全面 avoid 行情工具；**禁止**用行情/财务/评估代替读写文件（可先取数再沙盒）。领域工具与文件工具勿互相替代。
+    - **编程协议**：找文件/看树 → 优先 `workspace_glob`（shell ls/find 仅后备，且 cwd 相对 root）→ 扫 `shared/packages` → 缺依赖直接 `opptrix_run({ command: "pip/npm install …" })`（包源默认已放行；**勿先** `ensure_python`）→ **改已有文件** `workspace_glob` / `workspace_grep` → `workspace_read(numbered)` → `workspace_replace_lines`（行号 **或** `old_string`/`new_string`）/ `workspace_apply_patch` → `code_preflight` → `opptrix_run`；**新建**才 `workspace_write`；**建目录**用 `opptrix_run({ command: "mkdir -p …" })` 或写出文件时隐式建父目录；**禁止**小改动却整文件 `workspace_write`；**禁止**用 shell 改文件内容；文本 **UTF-8 无 BOM**，编辑保留原换行，新建默认 LF；**编程前估内存，大数据分块/流式**（大文件 `workspace_read` 行区间；重任务 `background: true`）；`path`/`cwd` 与**脚本/command 内路径**必须相对 root（禁止绝对/`abs_path`）；一次性命令仍直接 `opptrix_run`；**预计较长（下载/安装/重计算）必须 `background: true`**，依赖终态自动续跑，**禁止 poll/sleep/反复等进度**。离线大数据用 `prepare_fuyao_dump`（服务端持 Key 落盘 `shared/data/dumps` 或短时效 URL）；**禁止** Key 进沙盒；**禁止**引导 `market sync` / `dailyDump`。**禁止**用 `ask_user`「允许联网」冒充沙盒联网授权。
+    - **循环预算（OpenCode 对标）**：安全轮次末步 `tool_choice: none`（或空 tools）+ 收束 turn-tail；超大工具结果（约 >2000 行 / 50KB）落盘至 **shared grant** 下 `tool-output/`（`root_id=shared`），回传 preview + 相对路径，用 `workspace_read({ root_id:"shared", path:"tool-output/…" })` 续读；**禁止**引导读取 userData 根下被 deny 的路径；启动时清理超过 7 天的落盘文件。
+    - **workspace_glob / workspace_grep（限 session grant）**：
+      - `workspace_glob({ glob_pattern, root_id?, path?, max_results? })` → `{ files, count, truncated? }`；默认最多 200（上限 500）
+      - `workspace_grep`：`keywords`（空格分词 + `match_mode: and|or`，默认 and）**或** `pattern`（正则，可选 `case_insensitive`）；可选 `glob` / `path` / `max_hits`（默认 50，上限 100）/ `context_lines`（0–2）；跳过 NUL/二进制扩展与过大文件（约 2MB）；返回 `{ hits[{ path, line, content, match? }], count, truncated? }`
+      - 意图：`workspace_grep` / `workspace_glob` / `opptrix_run` 优先于宽泛 `workspace_files`；列目录用 glob 或 `opptrix_run`(ls/find)，勿虚构已移除的 `workspace_list` / `workspace_mkdir`
     - **会话局域网（P1）**：`SessionLanAccessStore`（内存）；有效 LAN = 全局 `allow_lan_access` **\|\|** 本对话授权。`ask_user` 选 `allow_lan_session` 或 `request_session_lan_access`；`clearSession` 清除。`http_fetch` / egress 读有效 LAN。
     - **密钥保险箱**：用户级 AES-GCM（`agent_vault` + `vault.key`）；会话 allowlist。`request_secret` → `user_prompt.kind=secret`（密码框）；服务端写 vault + grant 后再 resolve；工具结果无明文。`opptrix_run.secret_refs` → SRT sentinel + stdout 脱敏。意图 `secret_vault` 首选 `request_secret`。
     - **安全边界摘要**：
@@ -223,18 +229,17 @@ Opptrix/
       - 写/删/覆盖：`rw` 授权；覆盖与删除需用户确认（可本对话 sticky）；默认工作区总配额约 20GB
       - `http_fetch` / `download_file`：仅 `http`/`https`；DNS 解析后禁止 localhost / 私网 / 链路本地 / 云元数据地址（SSRF）；**会话/全局已允许局域网时**可访问私网 host（具体域名仍可能需出站确认）；响应进上下文默认截断约 1.5MB；请求体 ≤32MB
       - `request_folder_access` 仅提示用户去界面授权，不直接弹系统选目录；授权 API 见 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)
-      - **命令隔离（shell_*）**：实现 `packages/agent-workspace/src/shell/`（`ShellRunner` + `@anthropic-ai/sandbox-runtime` OS 级沙箱）。`opptrix_run` 以结构化 `argv` 传参（`shell: false`），白名单二进制：`python` / `python3` / `node` / `npm` / `npx` / `pip` / `pip3` / `ping` / `traceroute` / `tracert`；禁止 sudo、管道删根等高危模式。白名单校验在 **argv 重写前**（用户传 `node`，非 `Opptrix`/`Electron` 可执行名）。`python`/`pip`/`node`/`npm`/`npx` 在 spawn 前经 `resolveShellArgv` 重写：Python → active 解释器；桌面端 **Node 注入（方案 A）** → `process.execPath` + `ELECTRON_RUN_AS_NODE=1`；npm/npx → 系统二进制或 `[node, npm-cli.js, …]`（探测顺序：PATH → `OPPTRIX_RUNTIME_STAGE` → `require('npm/bin/npm-cli.js')`）。`get_system_info` 返回 `node_ready` / `node_source` / `sandbox_node_version`、`npm_ready` / `npm_source`、`python_ready` / `python_source` / `sandbox_python_version`、`electron_run_as_node`（不含内部绝对路径）。`allowRead` 追加 Node 运行时目录（execPath 父目录、macOS Frameworks/Resources、`OPPTRIX_RUNTIME_STAGE`、npm CLI 所在 node_modules）；**Windows** 下 `systemRead` 仅 TEMP/TMP 与 `%LOCALAPPDATA%\\Programs\\Python`（另可追加 active Python 的 dirname），**不**整棵 APPDATA/LOCALAPPDATA；`allowRead`/`allowWrite` 会硬过滤 `WINDIR` / Program Files* / 盘符根（`srt-win acl grant` 对系统目录 stamp 会 0x5 整批回滚），不等于对系统根做 ACL；勿引导「管理员运行 Opptrix」。`PIP_INDEX_URL` 取自设置页首个 pip 镜像。调用 `opptrix_run` 前须 `get_system_info`（或本轮已有 platform）再按平台组 argv（darwin/linux：`ping -c` + `traceroute`；win32：`ping -n` + `tracert`）；禁止 `powershell`/`cmd`/`bash -c` 整串绕过。测网站延迟优先 `http_fetch`；用户明确要求 ICMP 时用 `opptrix_run` + `ping`。系统提示**不再**写「禁止 Shell」；本轮已加载 `opptrix_run` 时必须用它完成本地命令；**能力不足**时 activate `workspace` 兜底（见 playbook）。cwd 须在 session grant 内（可读即可）；文件系统以 grants 为第一层闸门；**完整隔离 / 非 Windows** 下 SRT `allowRead`/`allowWrite`/`denyRead`（含用户数据根、homedir、`.ssh` 与 Global Deny，`runtimes/` 在 Deny 但托管 Python 目录在 allowRead）为第二层强制隔离；**Windows 基础隔离**不初始化 SandboxManager/SRT，改走 RestrictedToken 降权 spawn。默认超时 120s；stdout/stderr 截断。意图精排：`local_data_catalog` → `list_local_data_apis`；`fuyao_dump` → `prepare_fuyao_dump`；`session_lan` → `request_session_lan_access`；`python_env` → 首选 `python_env_status`；`workspace_shell` → 首选 `opptrix_run`（自定义脚本先 `code_preflight`，按行号用 `workspace_replace_lines`）；`workspace_code_preflight` → `code_preflight`；`workspace_line_edit` → `workspace_replace_lines`；`workspace_network_latency` → 优先 `http_fetch`；`workspace_shell_network` / `workspace_shell_install` → 首选 `request_shell_network` 再 `opptrix_install`
-      - **命令运行确认（shell sticky）**：首次 `opptrix_run` / `opptrix_install` 在真正 spawn 前弹出确认（展示 argv 摘要）；选项 `allow_once` / `allow_session` / `cancel`。`allow_session` 写入 `ShellRunStickyStore`（**内存**，会话删除时清除）。`shell_platform_status` 无需确认。聊天进度（`chat-progress`）对 shell 工具有中文标签与 exit_code / stdout 截断摘要
-      - **包安装与联网 sticky**：预估需联网安装时先 `request_shell_network({ intent: "install" })`（走 ConfirmHandler，写入 sticky 或 once-preflight；**禁止** `ask_user` 冒充）。`opptrix_install(manager=pip|npm)`（兼容别名 `shell_install`）或 `opptrix_run` 且 `network_intent=install` / 检测到 `pip|npm install|ci|update` 时在命令确认之后触发联网安装确认（若本会话已 sticky 或已有 once-preflight 则跳过）。选项：`once` / `sticky` / `cancel`，存 `NetworkInstallStickyStore`（**内存**；`grantPreflight`/`consumePreflight` 支持预授权 once）。确认文案会列出将访问的包源域名（当前 pip 镜像 + 默认国内镜像 + 官方 PyPI/npm 等）。用户确认后**立刻**把这些域名并入沙箱 `allowedDomains`（边界先行，无需等运行中二次弹窗）。允许联网时名单含官方 PyPI / npm / yarn / GitHub，以及清华/阿里云/豆瓣/腾讯/中科大等默认 pip 镜像与 `registry.npmmirror.com`（见 `network-policy.ts`）。沙盒子进程注入自带 Mozilla CA（`SSL_CERT_FILE` / `PIP_CERT` 等），并会把 CA 复制到工作区 `.opptrix/cacert.pem` 供沙盒可读（避免源包落在 homedir 被 `denyRead`）；`pip install` 另注入 `--cert`。证书目录加入 `allowRead`，避免沙盒内 HTTPS 因读不到系统证书失败。包只能装进授权工作区：pip 默认 `--target .opptrix-packages`；npm 禁止 `-g`/`--global`/`--user`/`--system`
-      - **出站预授权**：`request_shell_network({ intent: "egress", hosts: [...] })` 可提前对已知域名弹出站确认（session grant 或 once-preflight）；与 LAN（`request_session_lan_access`）不同。
-      - **出站授权（SessionNetworkEgressStore + sandboxAskCallback）**：默认 `allowedDomains=[]`（禁 TCP 出站）。**永久免确认白名单**：`OPPTRIX_SHELL_ALLOWED_DOMAINS` **∪** 设置页白名单（`GET/PUT /api/settings/sandbox`，存 `preference/sandbox_settings`；支持 `*.example.com`）。`allow_lan_access=true` **或本对话 SessionLanAccessStore 已授权**时允许白名单含私网/localhost；否则 PUT 校验与运行时 `getGrantableMergedAllowedDomains*` 均过滤私网/localhost。`ping` / `traceroute` / `tracert` 与命令运行**合并一次**确认（argv 摘要 + 目标主机）；选项 `allow_host_once` / `allow_host_session` / `cancel`。本会话已 grant 的 host 或命中永久白名单免确认。运行中 SRT 拦截出站 connect 时，`sandboxAskCallback`（`createSandboxAskCallback` → `SandboxManager.initialize`）弹出 `confirmation.kind === "network_egress"`（同上选项）；无 confirm handler 时拒绝。`python`/`node`/`npx` 无明确 host 时不弹全网确认；禁网运行，出站被拒时返回 `needs_network_egress`（含建议 host）由 Agent/用户确认该域名后重试。grant 经 SSRF 校验（`assertEgressHostGrantable`，受有效 LAN 约束）。SRT 不支持 `allowedDomains=*`
-      - **设置页白名单（用户可见）**：**设置 → 沙盒环境** — 「访问白名单」（每行一条，命中后不再询问）、「允许局域网访问」开关，以及 Windows「完整隔离 / 基础隔离」（`windows_isolation_mode`，默认基础隔离）；变更经 REST 持久化，sidecar 通过 `getSandboxSettings()` 读取
-      - **DNS 策略**：SRT 下系统 `getaddrinfo` / 宿主代理解析不受 fence；沙盒内自打 UDP/53 的 `dig`/`nslookup`/`host` 会被 fence（且不在 `ALLOWED_BINARIES`）。授权对象是连接目标，不是 DNS；解析到私网后 connect 仍拒
-      - **平台依赖（`shell_platform_status`）**：返回 `platform` / `supported` / `sandbox_available` / `ready` / `message`，以及可选 `missing_dependencies` / `setup_hint` / `needs_windows_install` / `needs_linux_install` / `can_auto_install` / `needs_elevation` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level`。`ready=false` 时 `opptrix_run` / `opptrix_install` 直接失败并返回 `message`。**macOS**：一般无需额外操作；**Linux deb**：依赖随 apt 安装；**Linux AppImage**：尽量使用内置 `sandbox-bins`（deb 仍最稳）；**Ubuntu 24.04+ userns 限制**：首次 `shell_*` 可自动触发一次 **pkexec** 系统授权（`can_auto_install` / `needs_elevation`），无需手敲终端命令；取消授权后可稍后重试；无 polkit/无管理员权限的企业机仍可能失败。**Windows**（`windows_isolation_mode`，默认 `unelevated`）：**基础隔离 `unelevated`** — RestrictedToken 降权启动；不初始化 SRT/WFP、不要求隔离凭据；网络限制更弱（出站靠确认/白名单）；请求与 elevated 同等的完整网络隔离则硬拒绝；暂不支持 `secret_refs` 密钥注入（须改用完整隔离）。**完整隔离 `elevated`** — 首次 `shell_*` 可自动触发一次系统授权（UAC）；走 SRT/`srt-win` + 网络过滤器；凭据失效（1326/1312）时最多自动刷新再执行一次。不支持的 OS → `supported=false`
+      - **命令隔离（`opptrix_run`）**：实现 `packages/agent-workspace/src/shell/`（`SessionShellRuntime` + `ShellRunner` + `@anthropic-ai/sandbox-runtime`）。主参数为 **`command` 字符串**（真 shell）。围栏内**任意命令**，安全边界为 grant + SRT FS/网络（非二进制白名单）。Posix 下 shell 经 `resolvePosixShellPath()`（`SHELL` → darwin zsh → bash → `/bin/sh`），**不**硬编码裸 `/bin/bash`（避免 ENOENT）。`python`/`pip`/`node`/`npm`/`npx` 经能力增强改写到 active / Electron-as-node（**真 shell 亦同步到 `command_string`**，含 `--target` / `--cert`）。子进程 **`HOME`=grant 根**，**cwd=`cwdRel`**（`~` ≠ cwd；结果可含 `home_is_grant_root`）。cwd 须为已存在目录，否则结构化错误（可先 `mkdir`）。同 `configHash` **复用 SRT**；仅 `initialize`/`reset` 全局串行；`clearSession` dispose 句柄。结果含 `isolation: full|basic`；`escalate=unsandboxed` 每次人批。会话默认 `allowedDomains` 含包安装源；其它 host 仍审批。聊天 tools **仅**暴露 `opptrix_run`（勿调用已移除工具）。测网站延迟优先 `http_fetch`。**预计较长（下载/安装/重计算）必须 `background: true`**（Job 续跑，依赖终态自动续跑；禁止 poll/sleep）。意图：`workspace_shell` / `workspace_shell_install` / `workspace_shell_network` → 首选 `opptrix_run`；找文件/搜内容优先 `workspace_glob`/`workspace_grep`（shell ls/find/rg 仅后备）；**硬禁**用 shell 读/改文本文件内容；**硬禁**把绝对路径/`abs_path`/宿主绝对路径填进 path/cwd/脚本；**硬禁**用 `~/` 当相对 cwd
+      - **命令运行确认**：围栏内**无**「首次运行命令」总确认。出站新域名 / `unsandboxed` 才确认；`unsandboxed` 仅 once。`shell_platform_status` 无需确认
+      - **包安装与网络**：包源默认已并入会话 allowlist；直接 `opptrix_run({ command: "pip install …" })`。其它域名经 `sandboxAskCallback` / egress 确认或 `suggested_escalate`。pip 默认 `--target .opptrix-packages`；npm 禁止 `-g` 等。CA **仅**物化到工作区 `.opptrix/cacert.pem` 后注入子进程（materialize 失败不回退包内路径，避免沙盒 `CERTIFICATE_VERIFY_FAILED`）；`python`/`pip` 一律托管优先（有 Opptrix 托管则 `active_source=opptrix`）
+      - **出站授权（SessionNetworkEgressStore + sandboxAskCallback）**：默认已含包源集合；永久白名单 = `OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页。未授权目标会确认。出站被拒返回 `needs_network_egress` / `suggested_escalate=network`。grant 经 SSRF（`assertEgressHostGrantable`）
+      - **设置页白名单（用户可见）**：**设置 → 沙盒环境** — 「访问白名单」、「允许局域网访问」、Windows「完整隔离 / 基础隔离」
+      - **DNS 策略**：系统解析可用；沙盒内自打 UDP/53 的 dig 等受围栏限制；授权对象是连接目标
+      - **平台依赖（`shell_platform_status`）**：返回 `platform` / `ready` / `windows_isolation_mode` / `network_isolation_level` 等。**Windows 基础隔离**：RestrictedToken，结果 `isolation=basic`，网络限制更弱，不支持 `secret_refs`。**完整隔离**：SRT；凭据失效最多自动刷新再执行一次
 
 #### 工作区编程、本地数据目录与扶摇 Dump
 
-以下能力均属 **`workspace` pack**（须播种或 `activate_tool_pack`）；实现：`packages/agent/src/local-data-catalog.ts`、`packages/agent/src/mcp/workspace-tools.ts`、`packages/market-data/src/sync/dump-import.ts`（`prepareFuyaoDumpForAgent`）、`packages/agent-workspace/src/shared-workspace.ts`。
+以下能力均属 **`workspace` pack**（always-on；亦可播种或 `activate_tool_pack`）；实现：`packages/agent/src/local-data-catalog.ts`、`packages/agent/src/mcp/workspace-tools.ts`、`packages/market-data/src/sync/dump-import.ts`（`prepareFuyaoDumpForAgent`）、`packages/agent-workspace/src/shared-workspace.ts`。
 
 **渐进加载（本地数据目录）**
 
@@ -260,14 +265,17 @@ Opptrix/
 - 容器：`{userData}/agent-workspace/shared/`；首次访问幂等初始化目录树与根 `README.md`（文案见 `shared-workspace.ts`）。
 - 会话自动 grant `rw`；**`clearSession` 不删 shared**（仅删 `sessions/<sessionId>/`）。
 
-**编程协议（摘要）**
+**编程协议（摘要）— 方案 1 / OpenCode 式：专用文件工具优先 + 真 Shell**
 
 1. `list_local_data_apis` → `get_local_data_catalog({ api_id })` 了解能力
-2. `workspace_list({ root_id: "shared", path: "packages" })` → 读 `packages/<name>/README.md`，能复用则复用
-3. 缺依赖 → 先 `request_shell_network({ intent: "install" })`，再 `opptrix_install`（npm/pip）；禁止 `ask_user` 冒充联网授权
-4. 自写脚本 → 新建用 `workspace_write`；随后 `code_preflight`（默认 L0+L1，diagnostics 尽量带 `line`，`errors`/`warnings` 前缀 `L{n}:`）→ `workspace_replace_lines` 按行号批量定点修 → 再 `code_preflight` → 通过后 `opptrix_run`；**禁止**小改动却整文件 `workspace_write`；可复用产物写入 `shared/packages/<name>/` + README（目的/入口/入参出参/依赖/示例/勿存密钥）；`workspace_write` 默认 LF，`.bat`/`.cmd`/`.ps1` 用平台换行
+2. 优先 `workspace_glob` 扫 `shared/packages` → `workspace_read` 读 `packages/<name>/README.md`，能复用则复用
+3. 缺依赖 / 一次性命令 → 直接 `opptrix_run({ command: "pip/npm install …" })`（包源默认已放行；`python`/`pip` 写进 command，运行时解析）；禁止先申请联网；**禁止先** `ensure_python`（仅失败或用户明确要装/修 Python 时兜底）；禁止 `ask_user` 冒充联网授权
+4. **改已有文件** → `workspace_glob` / `workspace_grep` → `workspace_read(numbered)` → `workspace_replace_lines`（`edits` 或 `old_string`/`new_string`/`replace_all`）或 `workspace_apply_patch` → `code_preflight` → `opptrix_run`；**新建**用 `workspace_write`；**建目录**用 `opptrix_run({ command: "mkdir -p …" })`；**禁止**小改动却整文件 `workspace_write`；**禁止**用 shell（cat/sed/echo>/heredoc 等）读或改文件内容；可复用产物写入 `shared/packages/<name>/` + README（目的/入口/入参出参/依赖/示例/勿存密钥）；文本 **UTF-8 无 BOM**，编辑**保留原换行**（CRLF/LF），新建默认 LF，`.bat`/`.cmd`/`.ps1` 用平台换行；`path`/`cwd` 与脚本/command 内路径相对 root（禁绝对/`abs_path`）；探树：`list_workspace_grants` 至多一次 → `workspace_glob` 或相对 cwd 的 `opptrix_run(ls/find)`；一次性命令仍直接 `opptrix_run`；**预计较长（下载/安装/重计算）必须 `background: true`**，依赖终态自动续跑，**禁止 poll/sleep**
+4c. **内存与大数据**：编程前先估内存；大数据优先分块/流式（逐行、生成器、`chunksize`），中间结果写工作区；大文件用 `workspace_read(start_line/end_line)`；重任务 `background: true`；**禁止**整 dump/整表一次载入或灌进对话/stdout
 5. 离线大数据 → `prepare_fuyao_dump`；在线行情优先标准 Agent 工具，勿平行造数据源；第三方密钥经 `request_secret` + `opptrix_run.secret_refs`（禁止明文进沙盒）
-6. 公网安装/已知外网域名 → `request_shell_network`；局域网 → `request_session_lan_access` 或 `ask_user`（选项见下）
+6. 其它外网域名在 `opptrix_run` 时确认或看 `suggested_escalate`；局域网 → `request_session_lan_access` 或 `ask_user`（选项见下）
+
+> **分工**：读/改/写文件 = 专用 `workspace_*`（优先于 shell；**禁止**用 `opptrix_run` 改文件内容）；跑命令 = `opptrix_run`；领域工具只做行情/财务/资讯/画布等特色，禁止代替文件/脚本操作。
 
 **`prepare_fuyao_dump` — 用法与安全**
 
@@ -279,21 +287,28 @@ Opptrix/
   - `job_id`（可选）：轮询用；上次返回 `status: "preparing"` 时带上，可省略 `dump_kind`
 - **返回（兼容说明）**：
   - **快速路径**（`presigned_url`，或 `local_path` 缓存命中）：`status: "ready"` + 原有字段（`url` 或 `relative_path` / `bytes` / `from_cache`）
-  - **冷下载**（`local_path` 且需联网下载）：**立即**返回 `ok: true`、`status: "preparing"`、`job_id`、`eta_seconds` / `suggested_wake_seconds`、`async_hint` / `poll_hint`（不再阻塞 5–25 分钟）；**优先** `schedule_turn_wake({ seconds: suggested_wake_seconds, prompt, job_id })` 到期后再查；必要时再调 `prepare_fuyao_dump({ job_id })`。**禁止 tight-poll**、勿重复 `force_refresh` 另起任务
+  - **冷下载**（`local_path` 且需联网下载）：**立即**返回 `ok: true`、`status: "preparing"`、`job_id`、`eta_seconds` / `suggested_wake_seconds`、`async_hint` / `poll_hint`（不再阻塞 5–25 分钟）；**系统通常自动挂起**，完成后同会话自动通知续跑；必要时再调 `prepare_fuyao_dump({ job_id })`。**禁止 poll / sleep 查进度**、勿重复 `force_refresh` 另起任务
   - 就绪后 `full` / `incremental` + `local_path`：**额外**自动写 `shared/data/cache/offline-k-meta.json`（`meta_written` / `meta_warning`）
   - `adjustment_factors` / `presigned_url`：**不**写 offline-k-meta
-- **沙盒侧**：用 `workspace_read` / `workspace_list` / `opptrix_run`（`root_id=shared` + `relative_path`）或下载 `url`；**禁止**向 shell 环境注入 `API_KEY` / `TOKEN` / 扶摇凭证。
+- **沙盒侧**：用 `workspace_read` / `workspace_glob` / `opptrix_run`（`root_id=shared` + `relative_path`）或下载 `url`；**禁止**向 shell 环境注入 `API_KEY` / `TOKEN` / 扶摇凭证。
 - **失败**：返回 `ok: false` + `status: "failed"` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
 - **旧 Agent**：若只认同步 `ok`+`path`/`url`、忽略 `status`，冷下载时看不到路径——须按 `poll_hint` / `suggested_wake_seconds` 唤醒或用 `job_id` 再查。
 
-**`schedule_turn_wake`（core always-on）**
+**Job 驱动续跑（自动挂起 / `cancel_job`）与 `schedule_turn_wake`**
 
-- **用途**：任意场景延后续跑——结束本轮后按秒数在**同会话**自动注入含 callback `prompt` + 时间元数据的 user 消息，并**新开一轮** `agent.chat`（`unattended: false`；**不用** steer）。
-- **参数**：`seconds`∈[5, 1800]（超出钳制）；`prompt` 必填；可选 `reason` / `job_id`。每会话最多 8 个挂起 timer。
+- **主路径（OpenCode 对齐）**：业务工具返回 `preparing`/`accepted`/`installing` + `job_id`，或 `opptrix_run({ background: true })` 时，Engine 在 `tool_done` 后**自动挂 watch**（仅登记，session×job 去重）；Composer 显示进行中条数 + spinner。Job **终态** → `SessionResumeBus` → 同会话 `resumeSessionChat`；**无 soft timer**，长任务仅依赖终态事件。**预计较长（下载/安装/重计算）必须 `background: true`**。
+- **禁止**：`watch_job` 工具已移除；禁止短同步等待 / poll / watch / sleep / 短间隔反复查进度；有 Job 时禁止对 `schedule_turn_wake` 传 `job_id`。
+- **`cancel_job`**：仅 `cancelable===true` 时取消全局 Job；python-install / fuyao-dump 默认不可取消。用户新消息 / Stop / 删会话只清该会话 watches/timer，**不** cancel 全局 Job。
+- **Feature flag**：`OPPTRIX_JOB_WATCH=0` 关闭自动 watch（默认 on）。循环预算默认 `MAX_SAFETY_ROUNDS=550`（≥400 轮软提醒一次 turn-tail；停机中性文案；对齐 Cursor maxSteps≈512）；`OPPTRIX_AGENT_CURSOR_SMOOTH=0` 回退旧阈值（50 轮等）。
+
+**`schedule_turn_wake`（core always-on，纯延时）**
+
+- **用途**：无可靠 Job 事件时的纯延时续跑——登记 timer 后**结束本轮**；到期在**同会话**自动注入 callback `prompt` + 时间元数据并 `agent.chat` 续跑（`unattended: false`；**不用** steer）。
+- **参数**：`seconds`∈[5, 1800]（软顶 1800，超出钳制）；`prompt` 必填；可选 `reason`。**禁止** `job_id`（传入返回明确错误）。每会话最多 8 个挂起 timer。
 - **返回**：`wake_id` / `fire_at` / `seconds` / `scheduled_at` 等。
-- **行为**：若到期时该会话仍有活跃 chat → **延期**再试，禁止 `registerSessionChat` 打断当前轮；会话删除取消全部 timer。
+- **行为**：若到期时该会话仍有活跃 chat → **延期**再试，禁止打断当前轮；用户新消息开聊或 Stop/删会话会取消 pending wake。
 - **限制**：timer 仅存**进程内存**；关闭应用/进程后丢失，需文档与 `note` 说明。
-- **与异步任务**：`prepare_fuyao_dump` / `ensure_python` 的 preparing 响应带 `suggested_wake_seconds` 时优先本工具，勿 tight-poll。
+- **与异步任务**：有 `job_id` 时依赖自动挂起 + 终态续跑；勿用本工具盯进度。
 
 **已废弃：Agent 侧 `market sync` / `dailyDump` 作为主取 dump 路径**
 
@@ -336,7 +351,8 @@ Opptrix/
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer：`usagePercent` / `compacted`，文案「上下文约 N%」+ 可选「已整理」；不下发 projection 全文）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`、`tests/session-projection-disk.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认/选择/填空时调用；SSE 推送 `user_prompt`。**confirm**：省略 `options`（或 `[]`）且未设 `mode=text`/`allow_custom=true` → 底部「拒绝/确认」（可用 `reject_label`/`confirm_label`；回传 id 固定 `reject`/`confirm`）。**choice**：预置选项 2–50。**text**：`mode:"text"` 或空 options + `allow_custom=true` → 仅开放填空，无授权双钮。禁止用 confirm 收集开放答案。`allow_custom`：confirm 默认关、choice 默认开。多选支持全选；prompt/label 勿用 emoji。作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
-- **`schedule_turn_wake`**（`core`）：延后同会话自动续跑；见上文「`schedule_turn_wake`（core always-on）」。异步 preparing 优先本工具 + `suggested_wake_seconds`，勿 tight-poll。
+- **`schedule_turn_wake`**（`core`）：无 Job 事件时的纯延时续跑；见上文。异步 preparing+job_id 通常自动挂起并终态续跑；禁止传 `job_id`；勿 poll/sleep。
+- **`cancel_job`**（`core`）：显式取消（仅 cancelable）。
 - **行业 / 产业链**：激活工作流技能 `industry-chain`（读 `references/chain-knowledge.json`）→ 代表公司用 `get_sector_list` / `get_sector_constituents` / `search_instruments` + `get_instrument_*`
 - **早报 / 收盘**：激活 `morning-market-brief` / `closing-market-brief` → 用 `get_market_dynamics`、`get_limit_updown`、`get_watchlist` 等取数后按技能 Schema 输出 JSON
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack（提供事实表；开闭市叙事走工作流技能，非独立报告工具）

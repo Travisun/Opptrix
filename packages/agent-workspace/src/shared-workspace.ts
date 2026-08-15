@@ -40,7 +40,7 @@ const SHARED_README = `# Opptrix Agent 公共复用区
 
 1. \`list_local_data_apis\` → \`get_local_data_catalog\` 了解能力
 2. 扫 \`packages/*/README\`，能复用则复用
-3. 缺依赖先 \`shell_install\`（npm/pip），勿盲造
+3. 缺依赖先 \`opptrix_run(command="pip/npm install …")\`，勿盲造
 4. 最后自写；可复用产物写入 \`packages/<name>/\` + README
 5. 离线大数据 → \`prepare_fuyao_dump\`；行情优先标准工具，勿平行造数据源
 6. 沙盒无 TOKEN/API_KEY；扶摇仅经 \`prepare_fuyao_dump\`

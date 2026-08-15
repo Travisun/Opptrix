@@ -308,7 +308,7 @@ POST /api/research
 
 ### 沙盒环境设置
 
-命令隔离（`opptrix_run` / `opptrix_install`）的**永久出站白名单**、局域网策略，以及 Windows **隔离强度**（`windows_isolation_mode`：`elevated` 完整隔离 / `unelevated` 基础隔离，默认 `unelevated`）。持久化于用户 SQLite：`preference` / `sandbox_settings`。运行时与部署环境变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）**并集**合并；命中合并白名单的目标免弹出站确认（仍受 SSRF / LAN 策略约束）。设置页入口：**设置 → 沙盒环境**。
+命令隔离（`opptrix_run`）的**永久出站白名单**、局域网策略，以及 Windows **隔离强度**（`windows_isolation_mode`：`elevated` 完整隔离 / `unelevated` 基础隔离，默认 `unelevated`）。持久化于用户 SQLite：`preference` / `sandbox_settings`。运行时与部署环境变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）**并集**合并；命中合并白名单的目标免弹出站确认（仍受 SSRF / LAN 策略约束）。设置页入口：**设置 → 沙盒环境**。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -426,7 +426,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `pip_index_urls` | string[] | pip 镜像 URL 列表（首个用于 `PIP_INDEX_URL`） |
-| `prefer_opptrix_python` | boolean | 默认 `false`；为 `true` 且托管已安装时优先于系统 Python |
+| `prefer_opptrix_python` | boolean | 默认 `true`；运行时只要托管已安装即优先采用（存量 `false` 会迁移为 `true`） |
 
 **GET `/api/settings/python/install` 响应（摘要）**
 
@@ -951,7 +951,9 @@ Content-Type: application/json
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
-| POST | `/api/sessions/:id/chat/cancel` | 取消进行中的聊天；无活动流 → 404；同时清空 pending `ask_user` 与 soft steer |
+| POST | `/api/sessions/:id/chat/cancel` | 取消进行中的聊天；无活动流 → 404；同时清空 pending `ask_user`、soft steer、该会话 turn-wake / job waits·watches（**不** cancel 全局后台 Job） |
+| GET | `/api/sessions/:id/pending-wakes` | `{ wakes, job_watches? }`：未到期纯延时 timer + 挂起的 Job watch 摘要（Composer 条数；长任务依赖终态续跑，无 soft timer） |
+| GET | `/api/sessions/:id/pending-job-watches` | `{ watches }`：仅 Job watch 列表（无 fallback 倒计时字段） |
 | POST | `/api/sessions/:id/chat/steer` | Soft steer：生成中注入补充说明，**不** abort；body `{ message: string }` → `{ ok: true }` 或 `{ ok: false, reason: 'no_active_chat' \| 'empty' }`；下一 LLM 轮前以用户消息「（补充）…」写入会话；SSE 可发 `steer_applied` |
 | POST | `/api/sessions/:id/chat/user-prompt` | 回填 `ask_user` / 密钥问答；见下 |
 | POST | `/api/sessions/:id/fork` | 从助手气泡分叉新会话；body `{ message_index }`（display turn 索引，须为 assistant）→ `{ session, messages, contextRef }`；无效索引/角色 → 404 |
@@ -1130,13 +1132,13 @@ Content-Type: application/json
 
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 
-工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `opptrix_run` / `code_preflight` / `opptrix_install` / `request_shell_network` / `list_workspace_grants` / `resolve_workspace_path_uri` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；多数**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants / file 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区（冷下载先 `preparing`+`job_id` 再轮询），Agent **勿**用 `market sync` / `dailyDump` 作主路径。
+工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `opptrix_run` / `code_preflight` / `list_workspace_grants` / `resolve_workspace_path_uri` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；多数**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants / file 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区（冷下载先 `preparing`+`job_id` 再轮询），Agent **勿**用 `market sync` / `dailyDump` 作主路径。
 
-**Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`opptrix_run`（兼容别名 `shell_run`） / `opptrix_install`（兼容别名 `shell_install`）在 OS 级沙箱中执行；写自定义脚本后建议先 `code_preflight`（软门禁，不硬拦运行），路径仍受本会话 grants 约束。`request_shell_network({ intent: "install"|"egress", hosts? })` 可按预需提前唤起联网安装或指定域名出站确认（ConfirmHandler → sticky / once-preflight；**禁止**用 `ask_user` 冒充）。Windows 读取 `windows_isolation_mode`（默认 `unelevated` 基础隔离；`elevated` 完整隔离，网络围栏更强，见上文「沙盒环境设置」）。完整隔离下凭据失效（1326/1312）最多自动刷新再执行一次。首次 `opptrix_run` / `opptrix_install` 需用户确认运行命令（`confirmation.kind === "opptrix_run"`，读侧兼容旧值 `"shell_run"`；选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`；确认文案含将访问的包源域名）；选 `sticky` 后本会话内跳过重复联网确认；预授权 once 写入 preflight，紧接着的 `opptrix_install` 消费后跳过。确认后立刻放行当前 pip 镜像与默认国内镜像等安装域（边界先行）；沙盒子进程使用随包 Mozilla CA（`SSL_CERT_FILE` 等）。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，隔离运行时出站回调（架构：SRT `sandboxAskCallback`）触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 完整隔离一次系统授权、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
+**Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具 `opptrix_run({ command })` 调用。在 OS 级沙箱中执行任意命令，路径受本会话 grants 约束；同会话隔离配置复用。围栏内**无**「首次运行命令」总确认；包安装源默认已并入会话 allowlist，可直接 `opptrix_run(command="pip install …")`。其它外网域名经运行时确认（`confirmation.kind === "network_egress"`，选项 `allow_host_once` / `allow_host_session` / `cancel`）或结果中的 `suggested_escalate`。自写脚本建议先 `code_preflight`（软门禁，不硬拦运行）。`escalate=unsandboxed` 每次确认，禁止对本对话一律放行。Windows 读取 `windows_isolation_mode`（默认 `unelevated` 基础隔离；`elevated` 完整隔离，见上文「沙盒环境设置」）。完整隔离下凭据失效（1326/1312）最多自动刷新再执行一次。沙盒子进程使用随包 Mozilla CA（`SSL_CERT_FILE` 等）。永久白名单 = `OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted` / `windows_isolation_mode` / `network_isolation_level`（见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
 
 ### Workspace grants（会话文件夹授权）
 
-按**会话**管理 Agent 可访问的本地根目录。列表时会确保存在默认工作区（`root_id: "default"`，路径为用户数据目录下 `agent-workspace/sessions/<sessionId>/`，`mode: "rw"`，`is_default: true`；**每会话隔离**）。额外授权由用户在聊天侧选择文件夹后写入；受保护路径（如用户库、`agent-privileges`、`sessions/` 容器目录本身等）不可授权。默认根不可删除。会话删除时服务端会清理该会话的 grants、写/删 sticky 策略、**命令运行 sticky**、**联网安装 sticky**、**会话局域网授权**（`SessionLanAccessStore`），并尽量删除 `sessions/<sessionId>/` 磁盘目录（`WorkspaceService.clearSession`；**不删** `agent-workspace/shared/`）。本 REST 响应可含 `abs_path`（供 UI）；Agent 工具 `list_workspace_grants` 对默认工作区与用户数据根下路径脱敏，**不**把 `~/.opptrix` 根当作可访问目录暴露给模型（见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
+按**会话**管理 Agent 可访问的本地根目录。列表时会确保存在默认工作区（`root_id: "default"`，路径为用户数据目录下 `agent-workspace/sessions/<sessionId>/`，`mode: "rw"`，`is_default: true`；**每会话隔离**）。额外授权由用户在聊天侧选择文件夹后写入；受保护路径（如用户库、`agent-privileges`、`sessions/` 容器目录本身等）不可授权。默认根不可删除。会话删除时服务端会清理该会话的 grants、写/删 sticky 策略、**出站授权**、**会话局域网授权**（`SessionLanAccessStore`），并 dispose 会话级隔离句柄，尽量删除 `sessions/<sessionId>/` 磁盘目录（`WorkspaceService.clearSession`；**不删** `agent-workspace/shared/`）。本 REST 响应可含 `abs_path`（供 UI）；Agent 工具 `list_workspace_grants` 对默认工作区与用户数据根下路径脱敏，**不**把 `~/.opptrix` 根当作可访问目录暴露给模型（见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

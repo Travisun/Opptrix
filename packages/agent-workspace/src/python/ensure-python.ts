@@ -42,7 +42,7 @@ export interface EnsurePythonDeps {
 }
 
 const ASYNC_HINT =
-  '安装在后台进行。可结束本轮并用 schedule_turn_wake 按 suggested_wake_seconds 唤醒后续跑；勿 tight-poll。'
+  '安装在后台进行。系统通常已自动挂起，完成后同会话通知续跑；无任务事件时可用 schedule_turn_wake（禁止传 job_id）；勿 poll/sleep 查进度。'
 
 const defaultDeps: EnsurePythonDeps = {
   getStatus: getPythonPlatformStatus,
@@ -133,7 +133,7 @@ function inProgressResult(job: PythonInstallJobSnapshot): EnsurePythonResult {
     suggested_wake_seconds: suggested,
     async_hint: ASYNC_HINT,
     poll_hint:
-      `托管 Python 安装进行中（约 ${suggested}s）。优先 schedule_turn_wake({ seconds: ${suggested}, prompt: "检查 ensure_python job_id=${jobId} 是否就绪并继续", job_id: "${jobId}" })；必要时再调 ensure_python({ job_id })。勿 tight-poll。`,
+      `托管 Python 安装进行中（约 ${suggested}s）。系统通常已自动挂起，完成后通知续跑；必要时 ensure_python({ job_id: "${jobId}" })。勿 poll/sleep 查进度。`,
   }
 }
 

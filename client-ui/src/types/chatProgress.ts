@@ -42,6 +42,13 @@ export interface ChatToolStep {
   resultDetail?: string
   startedAt: string
   finishedAt?: string
+  /** 大输出已截断/落盘（兼容后端多种字段） */
+  truncated?: boolean
+  resultTruncated?: boolean
+  /** 后端用户向提示；UI 优先用固定产品文案，不直接展示技术内容 */
+  ui_hint?: string
+  /** 相对路径信号；仅作截断判定，禁止展示给用户 */
+  saved_rel_path?: string
 }
 
 export interface ChatTurnUsageSnapshot extends TokenUsage {
@@ -89,6 +96,25 @@ export type ChatProgressEvent =
     message: string
     usageRatio?: number
     contextTokens?: number
+  }
+  | {
+    type: 'job_watch'
+    action: 'attached' | 'deduped' | 'updated' | 'cleared' | 'resuming'
+    watch_id: string
+    job_id: string
+    kind: string
+    label: string
+    percent?: number
+    eta_seconds?: number
+    source: string
+  }
+  | {
+    type: 'job_progress'
+    job_id: string
+    kind: string
+    state: string
+    label: string
+    percent?: number
   }
 
 export interface ChatLiveTrace {

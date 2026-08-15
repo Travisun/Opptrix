@@ -62,6 +62,13 @@ export interface ChatToolStep {
   startedAt: string
   /** 完成时间 ISO 8601 */
   finishedAt?: string
+  /** 大输出已截断/落盘（供 SSE / UI；落盘逻辑由后端实现） */
+  truncated?: boolean
+  resultTruncated?: boolean
+  /** 可选用户向提示字段（UI 用固定产品文案，不直接展示技术内容） */
+  ui_hint?: string
+  /** 相对路径信号；勿把绝对路径写入此字段供 UI 展示 */
+  saved_rel_path?: string
 }
 
 /**
@@ -144,6 +151,25 @@ export type ChatProgressEvent =
     usageRatio?: number
     contextTokens?: number
   }
+  | {
+    type: 'job_watch'
+    action: 'attached' | 'deduped' | 'updated' | 'cleared' | 'resuming'
+    watch_id: string
+    job_id: string
+    kind: string
+    label: string
+    percent?: number
+    eta_seconds?: number
+    source: string
+  }
+  | {
+    type: 'job_progress'
+    job_id: string
+    kind: string
+    state: string
+    label: string
+    percent?: number
+  }
 
 /**
  * 聊天进度回调选项 — 配置进度推送回调和中断信号。
@@ -160,6 +186,11 @@ export interface ChatProgressOptions {
    * 禁止 waitForAnswer 挂起；工作区覆盖/删除确认自动放行，密钥类立即取消。
    */
   unattended?: boolean
+  /**
+   * 定时唤醒续跑：为 true 时不清该会话 pending wake（由 resume handler 注入）。
+   * 用户主动发消息开聊时须为 false/缺省，以取消挂起 timer。
+   */
+  wakeResume?: boolean
 }
 
 // ── 工具中文标签映射 ──
@@ -283,11 +314,11 @@ const TOOL_LABELS: Record<string, string> = {
   shell_platform_status: '检查运行环境是否就绪',
   python_env_status: '查看 Python 环境',
   ensure_python: '准备 Python 环境',
-  workspace_list: '浏览工作区文件',
+  workspace_glob: '按模式查找文件',
+  workspace_grep: '搜索工作区内容',
   workspace_read: '读取工作区文件',
   workspace_write: '保存到工作区',
   workspace_replace_lines: '按行替换',
-  workspace_mkdir: '创建工作区文件夹',
   workspace_delete: '删除工作区内容',
   download_file: '下载文件到工作区',
   http_fetch: '获取网页内容',
@@ -616,10 +647,17 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     }
     case 'opptrix_run':
     case 'shell_run': {
+      const command = typeof args.command === 'string' ? args.command.trim() : ''
       const argv = Array.isArray(args.argv)
         ? args.argv.filter((v): v is string => typeof v === 'string').slice(0, 4)
         : []
-      const cmd = argv.length ? argv.join(' ') : ''
+      const fromArgv = argv.length ? argv.join(' ') : ''
+      const fromResult = result && typeof result === 'object' && !Array.isArray(result)
+        ? (result as Record<string, unknown>).command_summary
+        : undefined
+      const summary = typeof fromResult === 'string' ? fromResult.trim() : ''
+      // 优先 command；旧路径 argv；结果里的 command_summary 作兜底
+      const cmd = command || fromArgv || summary
       const short = cmd.length > 48 ? `${cmd.slice(0, 48)}…` : cmd
       return short ? `${base} · ${short}` : base
     }
@@ -645,8 +683,8 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'workspace_read':
     case 'workspace_write':
     case 'workspace_replace_lines':
-    case 'workspace_list':
-    case 'workspace_mkdir':
+    case 'workspace_glob':
+    case 'workspace_grep':
     case 'workspace_delete': {
       const hint = workspacePathHint(args)
       return hint ? `${base} · ${hint}` : base
@@ -1127,6 +1165,31 @@ export function formatResultPreview(
   return { preview, detail }
 }
 
+/** 从工具结果映射截断/落盘字段（供 SSE；不实现落盘本身） */
+function extractTruncationFields(result: unknown): Pick<
+  ChatToolStep,
+  'truncated' | 'resultTruncated' | 'ui_hint' | 'saved_rel_path'
+> {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return {}
+  const r = result as Record<string, unknown>
+  const out: Pick<ChatToolStep, 'truncated' | 'resultTruncated' | 'ui_hint' | 'saved_rel_path'> = {}
+  if (r.truncated === true) out.truncated = true
+  if (r.resultTruncated === true) out.resultTruncated = true
+  if (typeof r.ui_hint === 'string' && r.ui_hint.trim()) {
+    out.ui_hint = r.ui_hint.trim()
+  }
+  const saved =
+    (typeof r.saved_rel_path === 'string' && r.saved_rel_path.trim())
+      ? r.saved_rel_path.trim()
+      : (typeof r.savedRelPath === 'string' && r.savedRelPath.trim())
+        ? r.savedRelPath.trim()
+        : (typeof r.relative_path === 'string' && r.relative_path.trim())
+          ? r.relative_path.trim()
+          : ''
+  if (saved) out.saved_rel_path = saved
+  return out
+}
+
 /**
  * 用工具执行结果补全步骤信息 — 更新标签、状态、预览文本和完成时间。
  */
@@ -1141,6 +1204,7 @@ export function enrichStepFromResult(step: ChatToolStep, result: unknown): ChatT
     (result && typeof result === 'object' && 'error' in result)
     || (result && typeof result === 'object' && 'success' in result && (result as { success?: boolean }).success === false),
   )
+  const truncation = extractTruncationFields(result)
   return {
     ...step,
     label,
@@ -1148,5 +1212,6 @@ export function enrichStepFromResult(step: ChatToolStep, result: unknown): ChatT
     resultPreview: preview,
     resultDetail: detail,
     finishedAt: new Date().toISOString(),
+    ...truncation,
   }
 }

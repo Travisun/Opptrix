@@ -1,5 +1,5 @@
 /**
- * schedule_turn_wake 倒计时：解析工具结果 + 秒级文案。
+ * schedule_turn_wake 倒计时：从工具结果 / pending-wakes API 解析 + 秒级文案。
  */
 
 export type PendingWakeInfo = {
@@ -29,21 +29,25 @@ export function secondsLeftUntil(fireAtIso: string, nowMs = Date.now()): number 
   return Math.max(0, Math.ceil((fireMs - nowMs) / 1000))
 }
 
+function parseSecondsField(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return Math.floor(n)
+}
+
 function parseWakePayload(raw: unknown): PendingWakeInfo | null {
   if (!isRecord(raw) || raw.ok === false) return null
   const fireAt = typeof raw.fire_at === 'string' ? raw.fire_at.trim() : ''
   const wakeId = typeof raw.wake_id === 'string' ? raw.wake_id.trim() : ''
   if (!fireAt || !wakeId) return null
-  const seconds = typeof raw.seconds === 'number'
-    ? raw.seconds
-    : Number(raw.seconds)
+  const seconds = parseSecondsField(raw.seconds)
   const reason = typeof raw.reason === 'string' && raw.reason.trim()
     ? raw.reason.trim()
     : undefined
   return {
     wakeId,
     fireAt,
-    seconds: Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : secondsLeftUntil(fireAt),
+    seconds: seconds ?? secondsLeftUntil(fireAt),
     ...(reason ? { reason } : {}),
   }
 }
@@ -68,6 +72,7 @@ export function parseScheduleTurnWakeFromStep(step: {
   return null
 }
 
+/** 解析 GET pending-wakes 响应 */
 export function parsePendingWakesApi(payload: unknown): PendingWakeInfo[] {
   if (!isRecord(payload) || !Array.isArray(payload.wakes)) return []
   const out: PendingWakeInfo[] = []
@@ -79,18 +84,31 @@ export function parsePendingWakesApi(payload: unknown): PendingWakeInfo[] {
     const secondsLeft = typeof item.seconds_left === 'number'
       ? item.seconds_left
       : Number(item.seconds_left)
-    const seconds = typeof item.seconds === 'number' ? item.seconds : Number(item.seconds)
+    const seconds = parseSecondsField(item.seconds)
     const reason = typeof item.reason === 'string' && item.reason.trim()
       ? item.reason.trim()
       : undefined
     out.push({
       wakeId,
       fireAt,
-      seconds: Number.isFinite(seconds) && seconds > 0
-        ? Math.floor(seconds)
-        : (Number.isFinite(secondsLeft) ? Math.max(0, Math.floor(secondsLeft)) : secondsLeftUntil(fireAt)),
+      seconds: seconds
+        ?? (Number.isFinite(secondsLeft) ? Math.max(0, Math.floor(secondsLeft)) : secondsLeftUntil(fireAt)),
       ...(reason ? { reason } : {}),
     })
   }
   return out.sort((a, b) => Date.parse(a.fireAt) - Date.parse(b.fireAt))
+}
+
+/**
+ * 到期后单次 fetch pending-wakes 的决策：有未来 wake 则重启倒计时，否则等 live progress。
+ */
+export function decideAfterWakeExpiryFetch(
+  wakes: PendingWakeInfo[],
+  nowMs = Date.now(),
+): { kind: 'restart'; wake: PendingWakeInfo } | { kind: 'await_progress' } {
+  const next = wakes[0]
+  if (next && secondsLeftUntil(next.fireAt, nowMs) > 0) {
+    return { kind: 'restart', wake: next }
+  }
+  return { kind: 'await_progress' }
 }

@@ -29,6 +29,11 @@ import {
   resolveReasoningSegments,
   type ReasoningSegment,
 } from './reasoningTimeline'
+import {
+  TOOL_RESULT_TRUNCATED_DETAIL_HINT,
+  TOOL_RESULT_TRUNCATED_STEP_HINT,
+  isToolStepResultTruncated,
+} from './toolResultTruncation'
 
 const useStyles = makeStyles({
   root: {
@@ -55,10 +60,11 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
   },
-  scrollWrapper: {
-    maxHeight: '180px',
-    overflowY: 'auto',
-  },
+/** 约 3 行步骤（stepHead 22 + 上下 padding ≈ 30px） */
+scrollWrapper: {
+  maxHeight: 'calc(3 * 30px)',
+  overflowY: 'auto',
+},
   summaryBar: {
     display: 'flex',
     alignItems: 'center',
@@ -94,23 +100,6 @@ const useStyles = makeStyles({
     width: '14px',
     height: '14px',
     color: 'inherit',
-  },
-  collapse: {
-    display: 'grid',
-    gridTemplateRows: '0fr',
-    transitionProperty: 'grid-template-rows',
-    transitionDuration: '260ms',
-    transitionTimingFunction: 'ease',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0s',
-    },
-  },
-  collapseOpen: {
-    gridTemplateRows: '1fr',
-  },
-  collapseInner: {
-    overflow: 'hidden',
-    minHeight: 0,
   },
   stepRow: {
     backgroundColor: 'transparent',
@@ -212,6 +201,29 @@ const useStyles = makeStyles({
   },
   stepLabelError: {
     color: opptrixCssVars.error,
+  },
+  stepLabelCol: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  },
+  stepTruncHint: {
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.3,
+    color: opptrixCssVars.textTertiary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  detailTruncBanner: {
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textSecondary,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    borderRadius: opptrixTokens.radiusMd,
+    padding: '8px 10px',
   },
   stepBody: {
     padding: '0 0 6px 18px',
@@ -526,6 +538,11 @@ function StepDetailDialog({ step, open, onOpenChange }: StepDetailDialogProps) {
           </DialogTitle>
           <DialogContent>
             <div className={mergeClasses(s.dialogScroll, 'opptrix-scroll')}>
+              {isToolStepResultTruncated(step) ? (
+                <Text className={s.detailTruncBanner} block>
+                  {TOOL_RESULT_TRUNCATED_DETAIL_HINT}
+                </Text>
+              ) : null}
               <div className={s.detailSection}>
                 <div className={s.detailSectionHead}>
                   <Text className={s.detailSectionTitle} block>执行信息</Text>
@@ -583,20 +600,28 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
   const [detailOpen, setDetailOpen] = useState(false)
   const running = live && step.status === 'running'
 
+  const truncated = isToolStepResultTruncated(step)
   const head = (
     <>
       <StepLead running={running} expandable={expandable} expanded={expanded} />
-      <Text
-        className={mergeClasses(
-          s.stepLabel,
-          running && s.stepLabelRunning,
-          step.status === 'error' && s.stepLabelError,
-        )}
-        block
-      >
-        {step.label}
-        {running ? '…' : ''}
-      </Text>
+      <div className={s.stepLabelCol}>
+        <Text
+          className={mergeClasses(
+            s.stepLabel,
+            running && s.stepLabelRunning,
+            step.status === 'error' && s.stepLabelError,
+          )}
+          block
+        >
+          {step.label}
+          {running ? '…' : ''}
+        </Text>
+        {!running && truncated ? (
+          <Text className={s.stepTruncHint} block>
+            {TOOL_RESULT_TRUNCATED_STEP_HINT}
+          </Text>
+        ) : null}
+      </div>
     </>
   )
 
@@ -631,6 +656,11 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
       </div>
       {expandable && expanded && (
         <div className={s.stepBody}>
+          {truncated ? (
+            <Text className={s.detailTruncBanner} block>
+              {TOOL_RESULT_TRUNCATED_DETAIL_HINT}
+            </Text>
+          ) : null}
           {step.thinking && (
             <Text className={mergeClasses(s.detailBlock, 'opptrix-scroll')} block>
               {`【分析思路】\n${step.thinking}`}
@@ -757,8 +787,8 @@ export default function ChatProcessTrace({
 }: Props) {
   const s = useStyles()
   const scrollRef = useRef<HTMLDivElement>(null)
-  // History mode: steps / thinking collapse into a summary bar, expandable on click.
-  const [historyExpanded, setHistoryExpanded] = useState(false)
+  // 默认展开全部步骤；收起时仅保留摘要条
+  const [stepsExpanded, setStepsExpanded] = useState(true)
   const [historySnippetExpanded, setHistorySnippetExpanded] = useState(false)
   const segments = resolveReasoningSegments(thinkingSegments, thinkingSnippet)
   const runningStep = live ? steps.find(st => st.status === 'running') : null
@@ -773,16 +803,16 @@ export default function ChatProcessTrace({
   const showHistorySnippet = hasThinking && !live
   const lastSegLen = segments[segments.length - 1]?.content.length ?? 0
 
-  // 实时执行时跟随最新步骤 / 思考全文滚动到底部
+  // 实时执行且步骤展开时，跟随最新步骤滚动到底部
   const liveProgressKey = live
     ? `${steps.length}:${steps.map(st => st.status).join(',')}:${estimatedTokens ?? ''}:${phaseLabel ?? ''}:${segments.length}:${lastSegLen}`
     : ''
   useEffect(() => {
-    if (!live) return
+    if (!live || !stepsExpanded) return
     const el = scrollRef.current
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [live, liveProgressKey])
+  }, [live, stepsExpanded, liveProgressKey])
 
   if (!showStatusHead && !showLiveSnippet && !showHistorySnippet && steps.length === 0) {
     return null
@@ -791,6 +821,9 @@ export default function ChatProcessTrace({
   const historySummary = historySnippetExpanded
     ? '思考过程'
     : `查看思考过程（${segments.length} 段）`
+  const stepsToggleLabel = stepsExpanded
+    ? '收起步骤'
+    : `执行过程（${steps.length} 步）`
 
   return (
     <div className={s.root} data-chat-process-trace={live ? 'live' : 'history'}>
@@ -849,47 +882,35 @@ export default function ChatProcessTrace({
       )}
 
       {steps.length > 0 && (
-        live ? (
-          <div
-            ref={scrollRef}
-            className={mergeClasses(s.scrollWrapper, 'opptrix-scroll')}
+        <>
+          <button
+            type="button"
+            className={s.summaryBar}
+            onClick={() => setStepsExpanded(v => !v)}
+            aria-expanded={stepsExpanded}
           >
-            <div className={s.stepList}>
-              {steps.map(step => (
-                <StepRow key={step.id} step={step} live />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <>
-            <button
-              type="button"
-              className={s.summaryBar}
-              onClick={() => setHistoryExpanded(v => !v)}
-              aria-expanded={historyExpanded}
+            <span className={s.summaryChevron} aria-hidden>
+              {stepsExpanded
+                ? <ChevronDownRegular fontSize={14} />
+                : <ChevronRightRegular fontSize={14} />}
+            </span>
+            <Text className={s.summaryLabel} block>
+              {stepsToggleLabel}
+            </Text>
+          </button>
+          {stepsExpanded && (
+            <div
+              ref={live ? scrollRef : undefined}
+              className={mergeClasses(s.scrollWrapper, 'opptrix-scroll')}
             >
-              <span className={s.summaryChevron} aria-hidden>
-                {historyExpanded
-                  ? <ChevronDownRegular fontSize={14} />
-                  : <ChevronRightRegular fontSize={14} />}
-              </span>
-              <Text className={s.summaryLabel} block>
-                {`执行过程（${steps.length} 步）`}
-              </Text>
-            </button>
-            <div className={mergeClasses(s.collapse, historyExpanded && s.collapseOpen)}>
-              <div className={s.collapseInner}>
-                <div className={mergeClasses(s.scrollWrapper, 'opptrix-scroll')}>
-                  <div className={s.stepList}>
-                    {steps.map(step => (
-                      <StepRow key={step.id} step={step} live={false} />
-                    ))}
-                  </div>
-                </div>
+              <div className={s.stepList}>
+                {steps.map(step => (
+                  <StepRow key={step.id} step={step} live={live} />
+                ))}
               </div>
             </div>
-          </>
-        )
+          )}
+        </>
       )}
     </div>
   )

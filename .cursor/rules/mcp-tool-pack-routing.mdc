@@ -12,7 +12,7 @@ alwaysApply: false
 
 ```
 用户消息 → resolveToolRoutePlan（意图→首选工具）
-         → resolveActivePackIds（core+meta+种子+会话激活）
+         → resolveActivePackIds（core+meta+workspace+种子+会话激活）
          → McpToolBroker(子集) + 选型卡 system + preferred 前置
          → LLM → activate_tool_pack（同轮刷新）/ 业务 tool
 ```

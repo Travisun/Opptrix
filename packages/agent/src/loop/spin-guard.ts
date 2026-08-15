@@ -1,16 +1,39 @@
 /** 反空转：同 fingerprint 成功/失败重复达阈值则短路，并注入 turn-tail 提示。 */
 
-const SUCCESS_REPEAT_LIMIT = 3
-const FAILURE_REPEAT_LIMIT = 2
-const STALE_ROUNDS_WITHOUT_PROGRESS = 3
-/** 白名单轮询工具：同 fingerprint 进行中 status 累计上限，防死循环 */
-const POLL_IN_FLIGHT_HARD_LIMIT = 48
+import { isAgentCursorSmoothEnabled } from './budget.js'
+
+const SMOOTH_LIMITS = {
+  SUCCESS_REPEAT_LIMIT: 5,
+  FAILURE_REPEAT_LIMIT: 3,
+  STALE_ROUNDS_WITHOUT_PROGRESS: 8,
+  POLL_IN_FLIGHT_HARD_LIMIT: 64,
+} as const
+
+const LEGACY_LIMITS = {
+  SUCCESS_REPEAT_LIMIT: 3,
+  FAILURE_REPEAT_LIMIT: 2,
+  STALE_ROUNDS_WITHOUT_PROGRESS: 3,
+  POLL_IN_FLIGHT_HARD_LIMIT: 48,
+} as const
+
+function resolveLimits() {
+  return isAgentCursorSmoothEnabled() ? SMOOTH_LIMITS : LEGACY_LIMITS
+}
+
 const ARGS_JSON_MAX = 480
 
 /** 异步 job 轮询工具：preparing/installing 等不计入 success/failure 重复 */
 export const SPIN_POLL_TOOLS = new Set([
   'ensure_python',
   'prepare_fuyao_dump',
+])
+
+/**
+ * 成功挂起/定时续跑：不计入 success 重复、不推进 stale。
+ * 失败结果仍计 failure。不进入 pollInFlight。
+ */
+export const SPIN_WAKE_SUCCESS_PROGRESS_TOOLS = new Set([
+  'schedule_turn_wake',
 ])
 
 const IN_PROGRESS_JOB_STATUSES = new Set([
@@ -22,6 +45,10 @@ const IN_PROGRESS_JOB_STATUSES = new Set([
 
 export function isSpinPollTool(toolName: string): boolean {
   return SPIN_POLL_TOOLS.has(toolName.trim())
+}
+
+export function isSpinWakeSuccessProgressTool(toolName: string): boolean {
+  return SPIN_WAKE_SUCCESS_PROGRESS_TOOLS.has(toolName.trim())
 }
 
 /** 从 result.status 判断是否为进行中（大小写不敏感，trim） */
@@ -53,7 +80,7 @@ type SessionSpinState = {
   staleRounds: number
   forceCloseHint: boolean
   lastBlockedHint: string | null
-  /** 本轮是否有白名单进行中轮询（视为有进展） */
+  /** 本轮是否有白名单进行中轮询 / 成功 wake（视为有进展） */
   pollProgressThisRound: boolean
 }
 
@@ -131,7 +158,9 @@ export function checkSpinGuard(
   const stats = state.byFingerprint.get(fp)
   if (!stats) return null
 
-  if (isSpinPollTool(toolName) && stats.pollInFlight >= POLL_IN_FLIGHT_HARD_LIMIT) {
+  const limits = resolveLimits()
+
+  if (isSpinPollTool(toolName) && stats.pollInFlight >= limits.POLL_IN_FLIGHT_HARD_LIMIT) {
     const hint =
       '同一任务轮询次数过多，可能已卡住。请换路径、说明进度异常，或基于已有材料继续，勿无限等待。'
     state.lastBlockedHint = hint
@@ -142,8 +171,11 @@ export function checkSpinGuard(
     }
   }
 
-  if (stats.success >= SUCCESS_REPEAT_LIMIT) {
-    const hint = '同一查询已重复多次且结果无新意。请换数据源或角度，或开始整理成稿，勿继续空转。'
+  // 成功 wake 工具不走 success 重复拦截
+  const skipSuccessRepeat = isSpinWakeSuccessProgressTool(toolName)
+
+  if (!skipSuccessRepeat && stats.success >= limits.SUCCESS_REPEAT_LIMIT) {
+    const hint = spinRepeatHint(toolName, 'success')
     state.lastBlockedHint = hint
     return {
       error: '已拦截重复调用',
@@ -151,8 +183,8 @@ export function checkSpinGuard(
       hint,
     }
   }
-  if (stats.failure >= FAILURE_REPEAT_LIMIT) {
-    const hint = '同一操作连续失败。请更换路径、说明缺口，或开始基于已有材料成稿。'
+  if (stats.failure >= limits.FAILURE_REPEAT_LIMIT) {
+    const hint = spinRepeatHint(toolName, 'failure')
     state.lastBlockedHint = hint
     return {
       error: '已拦截重复失败调用',
@@ -161,6 +193,23 @@ export function checkSpinGuard(
     }
   }
   return null
+}
+
+function spinRepeatHint(toolName: string, kind: 'success' | 'failure'): string {
+  const name = toolName.trim()
+  if (name === 'list_workspace_grants') {
+    return kind === 'success'
+      ? 'list_workspace_grants 已重复多次。勿对同一 root 反复 list；用已有 root_id + 相对 path 继续读/写/跑，或向用户说明缺口。'
+      : '列出工作区授权连续失败。请改相对路径或向用户说明，勿换 root 乱试、勿同模式空转 list。'
+  }
+  if (name === 'opptrix_run') {
+    return kind === 'success'
+      ? '同一 opptrix_run 已重复多次且无新意。请推进下一步或向用户说明结果，勿同命令空转。'
+      : 'opptrix_run 连续同类失败。若报绝对路径：立刻改相对 root_id 的 cwd/path 重试；否则改 command/策略或向用户说明，勿同模式空转。'
+  }
+  return kind === 'success'
+    ? '同一查询已重复多次且结果无新意。请换数据源或角度，或开始整理成稿，勿继续空转。'
+    : '同一操作连续失败。请更换路径、说明缺口，或开始基于已有材料成稿。'
 }
 
 export function recordSpinOutcome(
@@ -179,6 +228,13 @@ export function recordSpinOutcome(
   }
   const stats = state.byFingerprint.get(fp) ?? emptyStats()
 
+  if (isSpinWakeSuccessProgressTool(toolName) && !isFailureResult(result)) {
+    // 成功挂起 = 合法收口本轮，不推进 stale、不计 success 重复
+    state.pollProgressThisRound = true
+    state.byFingerprint.set(fp, stats)
+    return
+  }
+
   if (isSpinPollTool(toolName) && isInProgressJobStatus(result)) {
     stats.pollInFlight += 1
     state.pollProgressThisRound = true
@@ -193,7 +249,7 @@ export function recordSpinOutcome(
 
 /**
  * 每 LLM 工具轮结束后调用：若本轮无新 fingerprint 且 checklist 无进展，累计空转轮。
- * 白名单进行中轮询（pollProgressThisRound）视为有进展。
+ * 白名单进行中轮询 / 成功 wake（pollProgressThisRound）视为有进展。
  * @returns 是否应注入强制收口 turn-tail
  */
 export function noteRoundProgress(
@@ -209,7 +265,8 @@ export function noteRoundProgress(
     return false
   }
   state.staleRounds += 1
-  if (state.staleRounds >= STALE_ROUNDS_WITHOUT_PROGRESS) {
+  const staleLimit = resolveLimits().STALE_ROUNDS_WITHOUT_PROGRESS
+  if (state.staleRounds >= staleLimit) {
     state.forceCloseHint = true
     return true
   }
@@ -258,9 +315,18 @@ export function resetSpinGuardForTests(): void {
   sessions.clear()
 }
 
+/** 运行时阈值（随 OPPTRIX_AGENT_CURSOR_SMOOTH 变化） */
 export const SPIN_GUARD_LIMITS = {
-  SUCCESS_REPEAT_LIMIT,
-  FAILURE_REPEAT_LIMIT,
-  STALE_ROUNDS_WITHOUT_PROGRESS,
-  POLL_IN_FLIGHT_HARD_LIMIT,
+  get SUCCESS_REPEAT_LIMIT() {
+    return resolveLimits().SUCCESS_REPEAT_LIMIT
+  },
+  get FAILURE_REPEAT_LIMIT() {
+    return resolveLimits().FAILURE_REPEAT_LIMIT
+  },
+  get STALE_ROUNDS_WITHOUT_PROGRESS() {
+    return resolveLimits().STALE_ROUNDS_WITHOUT_PROGRESS
+  },
+  get POLL_IN_FLIGHT_HARD_LIMIT() {
+    return resolveLimits().POLL_IN_FLIGHT_HARD_LIMIT
+  },
 } as const

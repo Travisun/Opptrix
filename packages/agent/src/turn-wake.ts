@@ -1,6 +1,7 @@
 /**
- * 同会话定时唤醒（进程内存 timer）。
- * 到期后新开一轮 agent.chat；活跃 chat 时延期，不 abort 当前轮。
+ * 同会话定时续跑（进程内存 timer）。
+ * 纯延时：无 job_id。有后台 Job 依赖时须走 JobRegistry 终态 → ResumeBus，勿挂本工具。
+ * 到期后同会话自动续跑（注入续跑消息 + chat）；活跃 chat 时延期，不 abort 当前轮。
  * 关进程后 timer 丢失，须在文档中说明。
  */
 import { randomUUID } from 'node:crypto'
@@ -20,8 +21,6 @@ export interface TurnWakeJob {
   scheduledAt: string
   fireAt: string
   reason?: string
-  /** 关联的异步任务 id（如 prepare_fuyao_dump / ensure_python 的 job_id） */
-  jobId?: string
   model?: string
 }
 
@@ -43,11 +42,22 @@ interface InternalEntry {
 const byId = new Map<string, InternalEntry>()
 const bySession = new Map<string, Set<string>>()
 
+export type TurnWakeFiredListener = (job: TurnWakeJob) => void
+
 let resumeHandler: TurnWakeResumeHandler | null = null
 let runtime: TurnWakeRuntime | null = null
+const firedListeners = new Set<TurnWakeFiredListener>()
 
 export function setTurnWakeResumeHandler(handler: TurnWakeResumeHandler | null): void {
   resumeHandler = handler
+}
+
+/** timer 已触发后续跑时通知（可选监听） */
+export function onTurnWakeFired(listener: TurnWakeFiredListener): () => void {
+  firedListeners.add(listener)
+  return () => {
+    firedListeners.delete(listener)
+  }
 }
 
 export function configureTurnWakeRuntime(next: TurnWakeRuntime | null): void {
@@ -119,8 +129,7 @@ export function estimateEtaFromProgress(opts: {
 
 export function formatWakeMessage(job: TurnWakeJob, firedAtIso?: string): string {
   const lines = [
-    '【定时唤醒】',
-    '请根据下列回调继续执行（同会话自动续跑）：',
+    '系统续跑：定时器已到期，请按下列说明继续（接上原计划；勿 poll / sleep 查进度）。',
     '',
     job.prompt.trim(),
     '',
@@ -132,8 +141,6 @@ export function formatWakeMessage(job: TurnWakeJob, firedAtIso?: string): string
   ]
   if (firedAtIso) lines.push(`fired_at: ${firedAtIso}`)
   if (job.reason?.trim()) lines.push(`reason: ${job.reason.trim()}`)
-  if (job.jobId?.trim()) lines.push(`job_id: ${job.jobId.trim()}`)
-  lines.push('说明: 先检查关联异步任务是否就绪，再继续原计划；勿 tight-poll。')
   return lines.join('\n')
 }
 
@@ -179,7 +186,6 @@ async function onTimerFire(id: string): Promise<void> {
   const entry = byId.get(id)
   if (!entry) return
   const { job } = entry
-  // 从 map 移除但先不删 job 元数据；busy 时会重新挂
   byId.delete(id)
   const set = bySession.get(job.sessionId)
   if (set) {
@@ -206,6 +212,13 @@ async function onTimerFire(id: string): Promise<void> {
     console.warn('[turn-wake] resume handler unset; drop wake', job.id)
     return
   }
+  for (const listener of [...firedListeners]) {
+    try {
+      listener(job)
+    } catch {
+      /* ignore */
+    }
+  }
   const wakeMessage = formatWakeMessage(job, new Date(runtime?.now?.() ?? Date.now()).toISOString())
   try {
     await handler(job, wakeMessage)
@@ -220,12 +233,22 @@ export function scheduleTurnWake(input: {
   prompt: string
   seconds: unknown
   reason?: string
+  /** @deprecated 传 job_id 一律拒绝；有 Job 依赖终态事件 */
   jobId?: string
   model?: string
-}): { ok: true; wake_id: string; session_id: string; seconds: number; fire_at: string; scheduled_at: string; prompt: string; reason?: string; job_id?: string; note: string }
+}): { ok: true; wake_id: string; session_id: string; seconds: number; fire_at: string; scheduled_at: string; prompt: string; reason?: string; note: string }
   | { ok: false; error: string } {
   const sessionId = String(input.sessionId ?? '').trim()
   if (!sessionId) return { ok: false, error: 'session_id 不可用（须在聊天会话中调用）' }
+
+  const linkedJob = input.jobId != null ? String(input.jobId).trim() : ''
+  if (linkedJob) {
+    return {
+      ok: false,
+      error:
+        'schedule_turn_wake 不接受 job_id：有后台任务时依赖终态自动续跑；本工具仅用于无任务事件的纯延时',
+    }
+  }
 
   if (runtime && !runtime.isSessionAlive(sessionId)) {
     return { ok: false, error: '会话不存在或已删除' }
@@ -247,7 +270,6 @@ export function scheduleTurnWake(input: {
   const scheduledAt = new Date(now).toISOString()
   const fireAt = new Date(now + seconds * 1000).toISOString()
   const reason = input.reason?.trim() || undefined
-  const jobId = input.jobId?.trim() || undefined
 
   const job: TurnWakeJob = {
     id: randomUUID(),
@@ -257,7 +279,6 @@ export function scheduleTurnWake(input: {
     scheduledAt,
     fireAt,
     reason,
-    jobId,
     model: input.model?.trim() || undefined,
   }
 
@@ -272,9 +293,8 @@ export function scheduleTurnWake(input: {
     scheduled_at: scheduledAt,
     prompt,
     ...(reason ? { reason } : {}),
-    ...(jobId ? { job_id: jobId } : {}),
     note:
-      '本轮可结束。到期后将在同会话自动注入续跑消息并新开一轮（交互模式）。定时器仅存进程内存，关闭应用会丢失。',
+      '本轮可结束；到期同会话自动续跑。定时器仅存进程内存，关闭应用会丢失。有后台任务请依赖完成通知，勿传 job_id。',
   }
 }
 
@@ -343,4 +363,5 @@ export function resetTurnWakeForTests(): void {
   bySession.clear()
   resumeHandler = null
   runtime = null
+  firedListeners.clear()
 }
