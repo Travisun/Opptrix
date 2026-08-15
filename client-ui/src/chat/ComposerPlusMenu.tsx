@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { mergeClasses } from '@fluentui/react-components'
 import {
   AddRegular,
@@ -8,12 +8,14 @@ import {
   FolderAddRegular,
   SparkleRegular,
 } from '@fluentui/react-icons'
-import { listAgentSkills, type PublicAgentSkill } from '../api/client'
+import { type PublicAgentSkill } from '../api/client'
 import { listRowKey } from '../utils/listRowKey'
+import { useAgentSkillsCatalog } from './agentSkillsCatalog'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
 } from './ComposerTooltipMenu'
+import { skillDisplaySummary, skillDisplayTitle } from './skillDisplay'
 
 type MenuView = 'root' | 'skills' | 'starters'
 
@@ -47,9 +49,12 @@ export default function ComposerPlusMenu({
 }: Props) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<MenuView>('root')
-  const [skills, setSkills] = useState<PublicAgentSkill[]>([])
-  const [skillsLoading, setSkillsLoading] = useState(false)
-  const [skillsError, setSkillsError] = useState<string | null>(null)
+  const skillsEnabled = open && view === 'skills'
+  const {
+    skills,
+    loading: skillsLoading,
+    error: skillsError,
+  } = useAgentSkillsCatalog(skillsEnabled)
   const anchorRef = useRef<HTMLButtonElement>(null)
 
   const showStarters = starters.length > 0 && Boolean(onSelectStarter)
@@ -57,27 +62,7 @@ export default function ComposerPlusMenu({
   const handleClose = useCallback(() => {
     setOpen(false)
     setView('root')
-    setSkillsError(null)
   }, [])
-
-  const loadSkills = useCallback(async () => {
-    setSkillsLoading(true)
-    setSkillsError(null)
-    try {
-      const resp = await listAgentSkills()
-      setSkills(resp.skills.slice().sort((a, b) => a.name.localeCompare(b.name)))
-    } catch {
-      setSkills([])
-      setSkillsError('暂时无法加载技能列表，请稍后重试')
-    } finally {
-      setSkillsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!open || view !== 'skills') return
-    void loadSkills()
-  }, [loadSkills, open, view])
 
   const handleAttach = useCallback(() => {
     if (!attachmentsAllowed) return
@@ -140,7 +125,6 @@ export default function ComposerPlusMenu({
             className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
             onClick={() => {
               setView('root')
-              setSkillsError(null)
             }}
           >
             返回
@@ -215,19 +199,23 @@ export default function ComposerPlusMenu({
                 可在设置中添加或安装技能
               </div>
             )}
-            {!skillsLoading && !skillsError && skills.map((skill, index) => (
-              <ComposerTooltipMenuItem
-                key={listRowKey(index, skill.name, skill.source)}
-                onClick={() => handleSkill(skill)}
-              >
-                <span className="opptrix-composer-plus-menu__label">
-                  <span className="opptrix-composer-plus-menu__title">{skill.name}</span>
-                  {skill.description ? (
-                    <span className="opptrix-composer-plus-menu__hint">{skill.description}</span>
-                  ) : null}
-                </span>
-              </ComposerTooltipMenuItem>
-            ))}
+            {!skillsLoading && !skillsError && skills.map((skill, index) => {
+              const title = skillDisplayTitle(skill)
+              const summary = skillDisplaySummary(skill)
+              return (
+                <ComposerTooltipMenuItem
+                  key={listRowKey(index, skill.name, skill.source)}
+                  onClick={() => handleSkill(skill)}
+                >
+                  <span className="opptrix-composer-plus-menu__label">
+                    <span className="opptrix-composer-plus-menu__title">{title}</span>
+                    {summary ? (
+                      <span className="opptrix-composer-plus-menu__hint">{summary}</span>
+                    ) : null}
+                  </span>
+                </ComposerTooltipMenuItem>
+              )
+            })}
           </>
         ) : (
           <>

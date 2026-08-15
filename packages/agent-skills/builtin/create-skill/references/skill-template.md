@@ -5,15 +5,18 @@
 ```markdown
 ---
 name: my-skill-name
-description: 一句话说明何时使用；含触发词，如「用户说 XXX 时使用」。
+description: 一句话说明何时使用；含触发词；投研类写明默认用网页交付（create_web）。
 license: Apache-2.0
-# 激活技能时按工具名自动挂上所属工具包（非硬白名单；未知工具名忽略）
-allowed-tools: create_canvas create_web
+allowed-tools: get_instrument_profile create_web update_web read_web list_web_vendor
 metadata:
   author: user
   version: "1.0"
-  # 可选：直接声明工具包 id（空格或逗号分隔）
-  # required-packs: artifacts
+  title: 短标题
+  summary: 一句结果导向说明（勿写工具名）
+  category: equity
+  slash-rank: "400"
+  default-deliverable: web
+  required-packs: fundamentals artifacts
 references:
   - references/notes.md
 ---
@@ -24,23 +27,32 @@ references:
 
 说明场景边界（不是什么）。
 
+## 分析架构（投研方法）
+
+- 问题/假设 → 证据清单 → 多维交叉验证 → 结论与不确定 → 风险与缺口
+- 事实与推断必须分开
+
+## 数据维度
+
+| 维度 | 取数方向 | 缺失时 |
+|------|----------|--------|
+| … | … | … |
+
 ## 步骤
 
-1. 第一步：…
-2. 第二步：调用 `某工具` …
-3. 输出：按 Schema 或格式交付
+1. 确认范围
+2. 按维度取数（点名工具）
+3. 交叉验证与结构化结论
+4. 交付网页（默认）：`list_web_vendor` → `create_web`
+5. 仅当用户点名画布/脑图时改用对应工具
 
-## 输出 Schema（可选）
+## 网页报告建议目录
 
-```json
-{
-  "field": "string"
-}
-```
+…
 
-## 注意
+## 禁止
 
-- 事实导向，数据缺失时说明，禁止编造。
+- 荐股/编造；禁止无交付就结束（除非用户只要口头要点）
 ```
 
 ## name 规则
@@ -54,11 +66,17 @@ references:
 ## description 规则
 
 - 非空，≤ 1024 字符
-- 面向 Agent：写清触发条件与能力，而非实现细节
+- 面向 Agent：写清触发条件与能力；投研类写明默认网页交付
+
+## Composer 元数据
+
+- `title` / `summary`：用户可见，禁止工具名/API/包名
+- `category`：`market` | `equity` | `portfolio` | `strategy` | `deliverable` | `ops`
+- `slash-rank`：越小越靠前
+- `default-deliverable`：投研 `web`；运维可 `none`
 
 ## allowed-tools / required-packs
 
-- `allowed-tools`：空格分隔的**工具名**（如 `create_canvas create_web`）。激活时映射到所属工具包并自动挂上，本轮即可调用。
-- `metadata.required-packs`（或 `requiredPacks`）：空格/逗号分隔的**工具包 id**（如 `artifacts strategy_extra`）。
+- `allowed-tools`：空格分隔的**工具名**。投研类须含 `create_web update_web read_web list_web_vendor`。
+- `metadata.required-packs`：业务 pack + `artifacts`（投研类）。
 - 二者可同时使用；**不会**把 `allowed-tools` 当成拦截其它工具的硬白名单。
-- 仅声明本技能步骤真正需要的能力，避免无关包膨胀上下文。

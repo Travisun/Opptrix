@@ -1,6 +1,10 @@
 /**
  * 网页制品服务端全页截图（Playwright fullPage），供右侧预览「下载长图 / PDF」。
  * 不经 agent-browser 的 URL 策略（该策略禁 file:）；仅对本机 loopback 预览 URL 截图。
+ *
+ * 导出分辨率与 UI 窗口 / 预览面板无关：固定 CSS viewport + deviceScaleFactor，
+ * 使 PNG 逻辑像素宽 ≈ EXPORT_VIEWPORT_WIDTH × EXPORT_DEVICE_SCALE_FACTOR。
+ * deviceScaleFactor=3 为清晰导出默认（PNG 宽 ≈ 1280×3=3840）；超长页可能占更多内存，一般可接受。
  */
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -12,7 +16,13 @@ import {
 } from '@opptrix/agent-browser'
 import { isDesktopRuntime } from '@opptrix/shared'
 
-const DEFAULT_VIEWPORT = { width: 1280, height: 720 } as const
+/** 导出用固定 CSS 视口宽（px）；禁止从客户端窗口/iframe 尺寸传入。 */
+export const EXPORT_VIEWPORT_WIDTH = 1280
+/** 初始视口高；fullPage 截图会按内容拉长。 */
+export const EXPORT_VIEWPORT_HEIGHT = 720
+/** 3x 清晰导出；PNG 像素宽 ≈ width × scale（≈ 1280×3=3840）。 */
+export const EXPORT_DEVICE_SCALE_FACTOR = 3
+
 const NAV_TIMEOUT_MS = 45_000
 const SCREENSHOT_TIMEOUT_MS = 60_000
 /** 图表等异步绘制的短暂等待 */
@@ -86,10 +96,10 @@ function userFacingCaptureError(err: unknown): WebPreviewExportFailure {
 /**
  * 对本机网页预览 URL 做 fullPage 截图。
  * `pageUrl` 须由 {@link buildLoopbackWebPreviewUrl} 生成（仅 loopback）。
+ * 视口与缩放为服务端固定常量，不接受客户端窗口尺寸。
  */
 export async function captureWebPreviewFullPagePng(
   pageUrl: string,
-  opts?: { viewportWidth?: number; viewportHeight?: number },
 ): Promise<WebPreviewExportResult> {
   const trimmed = pageUrl.trim()
   if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//i.test(trimmed)) {
@@ -120,9 +130,10 @@ export async function captureWebPreviewFullPagePng(
     })
     const context = await browser.newContext({
       viewport: {
-        width: opts?.viewportWidth ?? DEFAULT_VIEWPORT.width,
-        height: opts?.viewportHeight ?? DEFAULT_VIEWPORT.height,
+        width: EXPORT_VIEWPORT_WIDTH,
+        height: EXPORT_VIEWPORT_HEIGHT,
       },
+      deviceScaleFactor: EXPORT_DEVICE_SCALE_FACTOR,
     })
     const page = await context.newPage()
     page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS)
@@ -139,6 +150,7 @@ export async function captureWebPreviewFullPagePng(
     const png = await page.screenshot({
       type: 'png',
       fullPage: true,
+      animations: 'disabled',
       timeout: SCREENSHOT_TIMEOUT_MS,
     })
 

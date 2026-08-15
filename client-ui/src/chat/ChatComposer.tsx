@@ -18,6 +18,7 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
 import { findSlashTrigger, useSkillSlash } from './useSkillSlash'
+import { skillDisplayTitle } from './skillDisplay'
 import type { AvailableModel, ChatAttachmentMeta, ChatContextUsage, SessionContextRef, SessionLlmParams } from '../types/chat'
 import type { ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { WatchlistItem } from '../types/market'
@@ -740,7 +741,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
     const data: InlineChipData = {
       key,
       sendText: `@skill:${skill.name}`,
-      name: skill.name,
+      name: skillDisplayTitle(skill),
     }
     root.focus()
     const savedRange = caretRangeRef.current

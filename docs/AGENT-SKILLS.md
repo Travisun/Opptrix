@@ -37,10 +37,69 @@ packages/agent-skills/builtin/<name>/SKILL.md   # 内置
 
 | 字段 | 说明 |
 |------|------|
-| `allowed-tools` | 空格分隔的**工具名**（如 `create_canvas create_web`）。激活技能时经 `packIdForTool` 收集所属 pack 并 `toolPackSessions.activate`；未知工具名忽略；**不是**运行时硬白名单 |
-| `metadata.required-packs` 或 `requiredPacks` | 空格/逗号分隔的 **pack_id**（如 `artifacts strategy_extra`）；与上项合并去重 |
+| `allowed-tools` | 空格分隔的**工具名**（如 `create_web update_web read_web list_web_vendor`）。激活技能时经 `packIdForTool` 收集所属 pack 并 `toolPackSessions.activate`；未知工具名忽略；**不是**运行时硬白名单 |
+| `metadata.required-packs` 或 `requiredPacks` | 空格/逗号分隔的 **pack_id**（如 `market artifacts`）；与上项合并去重 |
 
 激活副作用与 `activate_tool_pack` 一致：刷新本轮 active packs / context usage。`activate_agent_skill` 返回 `activated_packs` 与可选 `tools_hint`。
+
+### Composer 展示元数据（`metadata.*`）
+
+设置页 / Composer `/` 列表优先读下列字段（用户可见文案，**禁止**工具名、API、包名）：
+
+| 字段 | 说明 |
+|------|------|
+| `metadata.title` | 中文短名，约 2–8 字（如「早报」「个股尽调」） |
+| `metadata.summary` | 一句结果导向说明，建议 ≤40 字 |
+| `metadata.category` | `market` \| `equity` \| `portfolio` \| `strategy` \| `deliverable` \| `ops` \| `valuation` \| `decision` \| `quant` \| `macro` \| `cn-market` \| `event` |
+| `metadata.slash-rank` | 字符串数字，越小越靠前（如 `"10"`） |
+| `metadata.default-deliverable` | 投研技能一律 `web`；`create-skill` / `browser-browse` / `scheduled-jobs` 为 `none` |
+
+建议 `slash-rank`：早报 10、收盘 20、资讯 30、个股尽调 40、财报 50、信号 60、产业链 70、ETF 80、组合 90、回测 100、策略报告 110；估值/决策簇约 120–250；量化 260–280；宏观 290–305；A 股专题 310–330；事件/诚实缺口 340–365；**LEAN 启发技能 400–530**；网页 200、画布 210、脑图 220；浏览 900、定时 910、新建技能 920。
+
+### 默认交付约定（投研 → Web）
+
+| 约定 | 说明 |
+|------|------|
+| **默认** | 投研类内置技能激活后须能调用 `create_web`（`allowed-tools` 含 `create_web update_web read_web list_web_vendor`，`required-packs` 含业务 pack + `artifacts`），流程默认产出可预览 HTML 报告页 |
+| **画布备选** | 用户明确要「画布 / 一页式机构报告」才用 `create_canvas`（`@skill:create-canvas`） |
+| **结构图备选** | 用户只要「结构图 / 脑图」才用 `create_mindmap` |
+| **运维类** | `browser-browse` / `scheduled-jobs` / `create-skill` **不**强迫 `create_web`（`default-deliverable: none`） |
+
+正文建议含：何时使用、分析架构、数据维度表、步骤（含交付网页）、该技能专属网页目录、禁止项（含「禁止无交付就结束」）；结论须 **事实 \| 假设 \| 推断** 分栏；禁止荐股与编造未返回数字。
+
+### 投研技能簇与诚实降级
+
+除早报/尽调/回测等基础簇外，内置还包括：
+
+| 簇 | category 示例 | 说明 |
+|----|---------------|------|
+| **估值 / 决策** | `valuation` / `decision` | DCF、可比、球场图、备忘录等；显式假设，禁止假装卖方共识 |
+| **量化** | `quant` | 因子暴露/研究、稳健性、配对价差、股票池筛选 |
+| **宏观** | `macro` | 宏观简报、风格轮动、跨资产、流动性地图 |
+| **A 股专题** | `cn-market` | 催化日历、北向、主题政策、涨跌停归因、AH 对照 |
+| **事件 / 诚实缺口** | `event` | 并购/IPO/再融资等；能力不足时 **诚实降级** |
+| **LEAN 启发** | `quant` / `macro` / `portfolio` / `event` | 方法溯源 QuantConnect LEAN；**非**本机 LEAN 引擎；`slash-rank` **400–530** |
+
+**诚实降级约定**（`assumption-only` / `not-feasible-now`）：
+
+- 无官方风格指数、无原生协整库、无 AH 专用 capability、无 L2、无结构化催化剂库等 → 开篇声明，用代理/公告拼装，禁止装成完整能力
+- `precedent-tx` / `seo-refi` / `credit-brief` / `esg-scan` 等须在正文开篇放 **能力声明横幅**；禁止伪造先例库、历史折价库、评级字母、ESG 分数
+- 字段探测失败（如北向净买）→ 写缺口，**禁止编造**
+
+### LEAN 启发技能
+
+内置 `lean-*` 技能方法溯源 [QuantConnect LEAN](https://www.lean.io/) / 社区算法思路，用于投研工作流编排与教育解读。**主流程默认 CN（A股 / 场内 ETF）**：专节 `## A股适配（默认）` 与「步骤」第 1 步「确认默认 CN」双约束；美股原版方法仅作溯源对照，**禁止把美股成分/ETF 清单不经映射直接当 A 股结果**，也禁止假设可自由融券做空。
+
+| 约定 | 说明 |
+|------|------|
+| **溯源** | 正文须写明灵感来自 LEAN 文档/示例/社区算法；可引用概念名（如 QC500、Dual Thrust、Black-Litterman）作路由触发词，但须写「默认 A股适配」 |
+| **默认市场** | **CN（A股 / 场内 ETF）**；用户点名美股/港股再切换并声明数据差异。各 `lean-*` 须同时满足：① `## A股适配（默认）`；②「何时使用」首句默认 CN；③「步骤」第 1 步确认默认 CN；④「分析架构」含微观/制度风险；⑤ 禁止美股清单直套与自由做空 |
+| **非引擎** | **禁止假装本机运行 LEAN Runtime**；禁止伪造 LEAN 回测曲线、订单日志或 QuantConnect 云端结果；取数/计算仅限 Opptrix 工具与 `opptrix_run` 沙盒 |
+| **slash-rank** | **400–530**（与既有投研簇错开；W1–W2 约 400–455，W3–W4 约 460–530） |
+| **交付** | 与其他投研技能相同：`default-deliverable: web`，`create_web` 四件套 + `artifacts`；网页 TOC 第 1 节为「范围：默认 A股/场内 ETF + LEAN 溯源」，并保留「A股适配与限制」 |
+| **诚实横幅** | 如流动性筛选（非官方 QC500）、Pearson（无协整声明）、Black-Litterman / 利率地产 / 情绪文本（assumption-only）、波动通道无 VIX、参数网格未做 Walk-forward 等，须开篇声明；无 VIX/官方 QC500 等不可硬适配时标 partial / assumption-only / not-feasible-now |
+
+与相邻技能边界示例：`lean-pearson-pairs`（仅相关）vs `@skill:pairs-rv`（价差框架）；`lean-param-grid-optimize` vs `@skill:robustness-check` / `@skill:factor-research`。
 
 ## Frontmatter：`references`
 
@@ -75,31 +134,52 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 
 ## 内置技能目录
 
-| name | 用途 | 备注 |
-|------|------|------|
-| `equity-deep-dive` | 个股深度分析工作流 | 快照 → 基本面 → 资金/资讯 → 结构化结论；`allowed-tools` 含画布/网页与基本面相关工具；可交叉引用 `` `@skill:create-canvas` `` / `` `@skill:create-web` `` |
-| `create-canvas` | 投研画布 / 可视化报告 | 对齐工具 `create_canvas`；多章节图文；与消息内 chart 围栏区分；自动挂 `artifacts` |
-| `create-web` | HTML 网页 / 离线交互页 | 对齐工具 `create_web` + `/opptrix-vendor`；禁 CDN；自动挂 `artifacts` |
-| `create-mindmap` | 思维导图 / 结构图 | 对齐工具 `create_mindmap`；自动挂 `artifacts` |
-| `run-backtest` | 策略回测 | 对齐工具 `run_backtest`；自动挂 `strategy_extra` |
-| `strategy-report` | 策略报告 | 对齐工具 `strategy_report`；自动挂 `strategy_extra` |
-| `etf-research` | ETF 研究 | `get_etf_*`；自动挂 `etf` |
-| `portfolio-review` | 组合 / 关注列表复盘 | `get_watchlist` / `analyze_portfolio` 等；自动挂 `portfolio` |
-| `news-digest` | 资讯 / 公告摘要 | `list_news_articles` 等；自动挂 `news` |
-| `browser-browse` | 浏览器浏览取证 | `browser_navigate` 等；自动挂 `browser` |
-| `scheduled-jobs` | 定时任务管理 | `list_scheduled_jobs` / `create_scheduled_job` 等；自动挂 `automation` |
-| `instrument-signals` | 标的信号 / 指标 | `evaluate_instrument` 等；自动挂 `instrument_analytics` |
-| `morning-market-brief` | 早报 / 开市简报 | **v2** 结构化 JSON（`report_type: morning`）；自动挂 `market`/`news`/`portfolio` 等 |
-| `closing-market-brief` | 收盘报告 | 结构化 JSON（`report_type: closing`）；自动挂 `market` |
-| `industry-chain` | 产业链透视 | 读内置知识库 + 可选板块成分；输出 JSON + Mermaid |
-| `earnings-quick-read` | 财报速读 | 报告期确认 → 财务表 → 亮点/风险（无买卖建议） |
-| `create-skill` | 新建 / 定制工作流技能 | 引导命名、frontmatter（含 `allowed-tools`）、正文与附件；经确认后 `create_agent_skill` 写入 |
+| name | title | 默认交付 | 备注 |
+|------|------|----------|------|
+| `morning-market-brief` | 早报 | web | `market`/`news`/`portfolio` + `artifacts`；`create_web` |
+| `closing-market-brief` | 收盘 | web | `market` + `artifacts` |
+| `news-digest` | 资讯摘要 | web | `news` + `artifacts` |
+| `equity-deep-dive` | 个股尽调 | web | `fundamentals`/`market`/`instrument_analytics` + `artifacts` |
+| `earnings-quick-read` | 财报速读 | web | `fundamentals` + `artifacts` |
+| `instrument-signals` | 标的信号 | web | `instrument_analytics` + `artifacts` |
+| `industry-chain` | 产业链 | web | 知识库 + `industry` + `artifacts` |
+| `etf-research` | ETF研究 | web | `etf` + `artifacts` |
+| `portfolio-review` | 组合复盘 | web | `portfolio` + `artifacts` |
+| `run-backtest` | 策略回测 | web | `strategy_extra` + `artifacts` |
+| `strategy-report` | 策略报告 | web | `strategy_extra` + `artifacts` |
+| `factor-exposure` | 因子暴露 | web | `portfolio` + `artifacts`；非 Barra |
+| `factor-research` | 因子研究 | web | `strategy_extra` + `artifacts`；须写样本期 |
+| `robustness-check` | 稳健性检验 | web | `instrument_analytics`/`strategy_extra`/`workspace` + `artifacts` |
+| `pairs-rv` | 配对价差 | web | assumption-only；无原生协整库 |
+| `universe-screen` | 股票池筛选 | web | 成分+批量快照；非荐股池 |
+| `macro-brief` | 宏观简报 | web | `market`/`news` + `artifacts` |
+| `style-rotation` | 风格轮动 | web | assumption-only；板块代理风格 |
+| `cross-asset` | 跨资产对照 | web | 多市场对照；非风险平价 |
+| `liquidity-map` | 流动性地图 | web | 资金流/龙虎榜；无 L2 |
+| `catalyst-calendar` | 催化日历 | web | 公告+交易日历；无催化剂库 |
+| `northbound-flow` | 北向资金 | web | 字段探测；禁编造净买 |
+| `theme-policy-map` | 主题政策地图 | web | 政策主题映射；非产业链上下游 |
+| `limit-move-attribution` | 涨跌停归因 | web | 禁明日连板名单 |
+| `ah-compare` | AH对照 | web | 汇率假设显式 |
+| `mna-event` | 并购事件 | web | 公告条款；无假先例 |
+| `ipo-note` | 新股笔记 | web | assumption-only |
+| `precedent-tx` | 先例交易 | web | **not-feasible-now**；无先例库横幅 |
+| `seo-refi` | 再融资条款 | web | **not-feasible-now**；无历史折价库 |
+| `credit-brief` | 信用简报 | web | **not-feasible-now**；禁伪造评级 |
+| `esg-scan` | ESG扫描 | web | **not-feasible-now**；禁伪造 ESG 分数 |
+| `create-web` | 网页报告 | web | 投研 HTML **默认载体**；`/opptrix-vendor`；禁 CDN |
+| `create-canvas` | 投研画布 | 备选 | 用户点名画布 / 一页式机构报告 |
+| `create-mindmap` | 结构脑图 | 备选 | 用户只要结构图 |
+| `browser-browse` | 网页浏览 | none | `browser`；不强迫 web |
+| `scheduled-jobs` | 定时任务 | none | `automation`；写入前确认 |
+| `create-skill` | 新建技能 | none | 引导 frontmatter（含展示元数据与 web 交付约定） |
 
 ### `industry-chain` 与知识库
 
 - Frontmatter：`references: [references/chain-knowledge.json]`
 - 步骤要求先 `get_agent_skill_file(skill_name="industry-chain", path="references/chain-knowledge.json")` 再匹配行业节点
 - 代表公司可用 `get_sector_list` / `get_sector_constituents` / `search_instruments` 补全，禁止编造
+- **默认交付** `create_web` HTML 产业链报告；用户只要结构图时用 `create_mindmap`
 
 ### 意图路由（相对旧硬编码工具）
 
@@ -109,9 +189,9 @@ YAML frontmatter 可选字段 `references`：字符串数组，列出技能内�
 | 收盘报告、尾盘复盘 | `closing-market-brief` | 已删除的 `get_closing_report` / Hub `market_report` |
 | 产业链、上下游、行业透视 | `industry-chain` | 已删除的 `industry_mining` / `industry_mermaid` |
 | 帮我建工作流技能、新建/定制技能 | `create-skill` → `create_agent_skill` | 勿跳过引导直接 import；勿与 Tool Pack 混淆 |
-| 画布、可视化报告、一页式报告、对比表报告、create_canvas | `create-canvas` → `create_canvas` | 勿用正文 chart 围栏冒充完整报告；勿用 `workspace_write` |
-| 网页、HTML、离线图表页、交互页面、create_web | `create-web` → `create_web` | 只许 `/opptrix-vendor`；禁 CDN；勿与画布混淆 |
-| 思维导图、脑图、mindmap、create_mindmap | `create-mindmap` → `create_mindmap` | 勿与画布报告混淆 |
+| 画布、可视化报告、一页式报告、对比表报告、create_canvas | `create-canvas` → `create_canvas` | 投研默认用网页；勿用正文 chart 围栏冒充完整报告；勿用 `workspace_write` |
+| 网页、HTML、离线图表页、交互页面、投研报告页、create_web | `create-web` → `create_web` | **投研默认交付**；只许 `/opptrix-vendor`；禁 CDN；勿与画布混淆 |
+| 思维导图、脑图、mindmap、结构图、create_mindmap | `create-mindmap` → `create_mindmap` | 仅结构图；勿与完整报告混淆 |
 | 回测、run_backtest | `run-backtest` → `run_backtest` | 自动挂 `strategy_extra`；勿口头编造回测 |
 | 策略报告、strategy_report | `strategy-report` → `strategy_report` | 自动挂 `strategy_extra` |
 | ETF、场内基金、净值、持仓 | `etf-research` | 自动挂 `etf` |
