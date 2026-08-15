@@ -51,6 +51,8 @@ export {
   ffmpegRuntime,
   isFfmpegAvailable,
   resolveFfmpegBinaryPath,
+  ensureFfmpegExecutable,
+  clearFfmpegAvailabilityCache,
   FFMPEG_MISSING_MARKER,
   FFMPEG_FILE_ERROR_MARKER,
 } from './media/ffmpeg-runtime.js'
@@ -59,6 +61,21 @@ export {
   mediaTranscriptUserFacingError,
   type SpeechEngineHint,
 } from './media/speech-user-errors.js'
+export {
+  computeSpeechReadyFlags,
+  speechComposerBlockedMessage,
+  speechEnsureModelReadyMessage,
+  speechEnsureSuccessToastMessage,
+  speechSettingsSenseVoicePresentation,
+  SPEECH_FULLY_READY_MESSAGE,
+  SPEECH_MODEL_READY_MESSAGE,
+  SPEECH_MODEL_READY_DECODE_PENDING_MESSAGE,
+  SPEECH_MEDIA_DECODE_NOT_READY_MESSAGE,
+  SPEECH_COMPONENT_NOT_READY_MESSAGE,
+  SPEECH_SERVICE_UNREACHABLE_MESSAGE,
+  type SpeechReadyFlags,
+  type SpeechSettingsSenseVoicePresentation,
+} from './media/speech-readiness.js'
 export {
   WhisperRuntime,
   whisperRuntime,

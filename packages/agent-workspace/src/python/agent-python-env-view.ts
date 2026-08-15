@@ -21,8 +21,8 @@ export interface AgentPythonEnvView {
 }
 
 function priorityLabel(source: PythonActiveSource): string {
-  if (source === 'opptrix') return '当前优先：Opptrix 托管'
-  if (source === 'system') return '当前优先：系统 Python'
+  if (source === 'opptrix') return '当前优先：Opptrix 托管（随应用提供）'
+  if (source === 'system') return '当前优先：本机 Python'
   return '当前优先：无可用 Python'
 }
 

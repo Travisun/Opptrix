@@ -318,6 +318,25 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。主进程转写等待上限 **180s**（冷启 + 较长录音）；与 UI 本机重接口超时一致，全局快路径仍为 10s。
 
+**打包不变量**：桌面 `stage-runtime` **必须**把 `ffmpeg-static` 平台二进制打进 sidecar（`runtime-stage` → 安装包内 `node_modules/ffmpeg-static/ffmpeg[.exe]`）；缺失则 stage / `verify-packaged-runtime` **硬失败**，禁止 warn 后继续。sidecar 经 `FFMPEG_PATH` 指向该二进制。Stage 断言后会 `chmod +x` 并用 `ffmpeg -version` 冒烟（host 与目标平台一致时）；运行时若二进制无执行位也会尝试修复，避免开发机 `ffmpeg-static` 偶发 0644 导致 `spawn EACCES`。
+
+### 托管 Python（安装包内置）
+
+桌面安装包默认打入与在线 `ensure_python` **同一 catalog** 的托管 Python 树：
+
+| 项 | 说明 |
+|----|------|
+| Stage | `apps/desktop/scripts/stage-python.mjs` → `resources/python/`（含 `bundle-manifest.json`） |
+| 打包 | `extraResources`：`resources/python` → `python`（安装后 `process.resourcesPath/python`） |
+| Sidecar | `OPPTRIX_PYTHON_BUNDLED_DIR` / `OPPTRIX_RESOURCES_PATH`（`sidecar-launch.cjs`） |
+| 首次运行 | 若 `~/.opptrix/runtimes/python/current` 尚无可用解释器，从包内树**种子复制**到用户目录（不覆盖已有托管） |
+| 解析优先序 | `OPPTRIX_PYTHON_PATH` → 用户托管 `current` → 包内 `python/` → 本机 PATH/常见安装路径 |
+| `active_source` | 托管与包内均标 `opptrix`（随应用提供） |
+
+**体积与取舍**：Windows 使用官方 **embed** 包（体积小、可重定位）。macOS / Linux 与现网安装路径一致，使用 **Miniconda py312**（安装包约数十 MB，展开后约数百 MB）。catalog 虽声明 `standalone` 种类，当前无独立 standalone artifact；若未来要压安装包体积，可再引入可重定位 standalone 并保留 Miniconda 作为在线安装回退。
+
+下载失败或物化后缺少解释器 → **硬失败**（与 SenseVoice / ffmpeg stage 同级）。本地可设 `OPPTRIX_SKIP_STAGE_PYTHON=1` 跳过（仅开发；打包禁止）。
+
 **默认引擎**：SenseVoice。Composer 语音输入与新闻音视频转写均使用本机 SenseVoice 模型；安装包内置 q8 模型与 VAD，优先加载内置资源，其次用户目录，缺失时再下载。
 
 ### 文档库语义检索与解析引擎（桌面内置 / 离线）

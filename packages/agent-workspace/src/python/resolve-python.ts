@@ -4,6 +4,11 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { resolvePythonRuntimeRoot } from '@opptrix/shared'
 import { getPythonSettings } from '../python-settings-store.js'
+import {
+  bundledPythonCandidatePaths,
+  resolveBundledPythonRoot,
+  seedBundledPythonIfNeeded,
+} from './bundled-python.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -25,6 +30,8 @@ export interface PythonRuntimeStatus {
   ready: boolean
   recommend_install: boolean
   message: string
+  /** 安装包内置 Python 是否可用（含尚未种子到用户目录） */
+  bundled_available?: boolean
 }
 
 export type PythonProbe = { path: string; version: string }
@@ -254,39 +261,87 @@ async function probeOpptrixPython(): Promise<PythonProbe | null> {
   return null
 }
 
+async function probeBundledPython(): Promise<PythonProbe | null> {
+  const root = resolveBundledPythonRoot()
+  if (!root) return null
+  for (const candidate of bundledPythonCandidatePaths(root)) {
+    if (await fileExists(candidate)) {
+      const probed = await probeExecutable(candidate)
+      if (probed) return probed
+    }
+  }
+  return null
+}
+
+async function probeExplicitPython(): Promise<PythonProbe | null> {
+  const fromEnv = process.env.OPPTRIX_PYTHON_PATH?.trim()
+  if (!fromEnv) return null
+  if (!(await fileExists(fromEnv))) return null
+  return probeExecutable(fromEnv)
+}
+
+function classifyExplicitSource(exePath: string): PythonActiveSource {
+  const runtimeRoot = resolvePythonRuntimeRoot()
+  const bundleRoot = resolveBundledPythonRoot()
+  const norm = path.resolve(exePath).toLowerCase()
+  if (norm.startsWith(path.resolve(runtimeRoot).toLowerCase())) return 'opptrix'
+  if (bundleRoot && norm.startsWith(path.resolve(bundleRoot).toLowerCase())) return 'opptrix'
+  return 'system'
+}
+
 function buildStatusMessage(
   ready: boolean,
   activeSource: PythonActiveSource,
+  bundledAvailable: boolean,
 ): string {
   if (!ready) {
-    return '尚未检测到可用的 Python。可在设置中安装托管版本，或先在系统中安装 Python。'
+    return bundledAvailable
+      ? '正在准备随应用提供的 Python…若仍不可用，可在设置中重新安装托管版本。'
+      : '尚未检测到可用的 Python。可在设置中安装托管版本，或先在系统中安装 Python。'
   }
   if (activeSource === 'opptrix') {
-    return '已使用 Opptrix 托管 Python，可直接运行脚本与安装依赖。'
+    return bundledAvailable
+      ? '已使用 Opptrix 托管 Python（随应用提供），优先于本机 Python。'
+      : '已使用 Opptrix 托管 Python，可直接运行脚本与安装依赖。'
   }
   return '已检测到系统 Python，可直接运行脚本与安装依赖。'
 }
 
 /**
- * 探测系统与 Opptrix 托管 Python。
- * 一律托管优先：有托管则 active=opptrix，否则 system（忽略 prefer_opptrix_python=false）。
+ * 探测 Python。优先序：
+ * `OPPTRIX_PYTHON_PATH` → 用户托管 current（可从 bundle 种子）→ 包内 Resources/python → 系统。
+ * 托管 / 包内均标 `active_source=opptrix`。
  */
 export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
-  // 触发存量 prefer=false → true 迁移（设置开关语义为展示/安装后写入）
   getPythonSettings()
-  const [system, opptrix] = await Promise.all([
+  await seedBundledPythonIfNeeded()
+
+  const [explicit, system, opptrix, bundled] = await Promise.all([
+    probeExplicitPython(),
     probeSystemPython(),
     probeOpptrixPython(),
+    probeBundledPython(),
   ])
+
+  const bundled_available = bundled != null
+  const opptrixEffective = opptrix ?? bundled
 
   let active_source: PythonActiveSource = 'none'
   let active_path: string | null = null
   let active_version: string | null = null
 
-  if (opptrix) {
+  if (explicit) {
+    active_source = classifyExplicitSource(explicit.path)
+    active_path = explicit.path
+    active_version = explicit.version
+  } else if (opptrix) {
     active_source = 'opptrix'
     active_path = opptrix.path
     active_version = opptrix.version
+  } else if (bundled) {
+    active_source = 'opptrix'
+    active_path = bundled.path
+    active_version = bundled.version
   } else if (system) {
     active_source = 'system'
     active_path = system.path
@@ -299,14 +354,15 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   return {
     system_path: system?.path ?? null,
     system_version: system?.version ?? null,
-    opptrix_path: opptrix?.path ?? null,
-    opptrix_version: opptrix?.version ?? null,
+    opptrix_path: opptrixEffective?.path ?? null,
+    opptrix_version: opptrixEffective?.version ?? null,
     active_source,
     active_path,
     active_version,
     ready,
     recommend_install,
-    message: buildStatusMessage(ready, active_source),
+    bundled_available,
+    message: buildStatusMessage(ready, active_source, bundled_available),
   }
 }
 

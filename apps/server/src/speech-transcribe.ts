@@ -10,6 +10,7 @@ import {
   ffmpegRuntime,
   getSenseVoiceModelsDir,
   getWhisperModelsDir,
+  computeSpeechReadyFlags,
   isFfmpegAvailable,
   isSenseVoiceReady,
   isWhisperModelInstalled,
@@ -86,9 +87,7 @@ export function getSpeechStatusPayload() {
   if (engine === 'sensevoice') {
     const modelReady = isSenseVoiceReady(modelName)
     return {
-      ready: modelReady && ffmpegReady,
-      modelReady,
-      ffmpegReady,
+      ...computeSpeechReadyFlags(modelReady, ffmpegReady),
       engine,
       modelName,
       modelsDir: getSenseVoiceModelsDir(),
@@ -98,9 +97,7 @@ export function getSpeechStatusPayload() {
   const prompt = resolveSpeechPrompt()
   const modelReady = isWhisperModelInstalled(modelName)
   return {
-    ready: modelReady && ffmpegReady,
-    modelReady,
-    ffmpegReady,
+    ...computeSpeechReadyFlags(modelReady, ffmpegReady),
     engine,
     modelName,
     modelsDir: getWhisperModelsDir(),

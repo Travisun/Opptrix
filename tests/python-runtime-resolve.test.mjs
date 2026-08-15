@@ -324,7 +324,7 @@ describe('toAgentPythonEnvView', () => {
     }, true)
     assert.equal(view.ready, true)
     assert.equal(view.active_source, 'opptrix')
-    assert.equal(view.priority, '当前优先：Opptrix 托管')
+    assert.equal(view.priority, '当前优先：Opptrix 托管（随应用提供）')
     assert.equal(view.prefer_opptrix_python, true)
     assert.equal(view.opptrix_installed, true)
     assert.equal(view.system_detected, true)
@@ -334,6 +334,156 @@ describe('toAgentPythonEnvView', () => {
     assert.equal('system_path' in view, false)
     assert.equal('opptrix_path' in view, false)
     assert.equal('active_path' in view, false)
+  })
+})
+
+describe('bundled python resolve priority', () => {
+  it('prefers user-hosted over system when both exist', async (t) => {
+    const { resolvePythonRuntime } = await importResolvePython()
+    const { resetPythonSettingsStoreForTests } = await importPythonSettingsStore()
+    resetPythonSettingsStoreForTests()
+    const status = await resolvePythonRuntime()
+    if (!status.opptrix_path || !status.system_path) {
+      t.skip('need both opptrix and system python')
+      return
+    }
+    assert.equal(status.active_source, 'opptrix')
+    assert.equal(status.active_path, status.opptrix_path)
+  })
+
+  it('seeds from OPPTRIX_PYTHON_BUNDLED_DIR when user current missing', async (t) => {
+    const fs = await import('node:fs/promises')
+    const os = await import('node:os')
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const execFileAsync = promisify(execFile)
+
+    // Locate a real python binary to plant as "bundle"
+    let systemPython = null
+    for (const name of ['python3', 'python']) {
+      try {
+        const cmd = process.platform === 'win32' ? 'where' : 'which'
+        const { stdout } = await execFileAsync(cmd, [name])
+        systemPython = stdout.trim().split(/\r?\n/)[0]?.trim() || null
+        if (systemPython) break
+      } catch {
+        /* next */
+      }
+    }
+    if (!systemPython) {
+      t.skip('no system python to plant as fake bundle')
+      return
+    }
+
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-py-bundle-'))
+    const dataDir = path.join(tmp, 'data')
+    const bundleDir = path.join(tmp, 'bundle')
+    await fs.mkdir(bundleDir, { recursive: true })
+
+    if (process.platform === 'win32') {
+      await fs.copyFile(systemPython, path.join(bundleDir, 'python.exe'))
+    } else {
+      await fs.mkdir(path.join(bundleDir, 'bin'), { recursive: true })
+      await fs.copyFile(systemPython, path.join(bundleDir, 'bin', 'python3'))
+      await fs.chmod(path.join(bundleDir, 'bin', 'python3'), 0o755)
+    }
+    await fs.writeFile(
+      path.join(bundleDir, 'bundle-manifest.json'),
+      JSON.stringify({
+        version: '3.12.8',
+        platformKey: `${process.platform}-test`,
+        kind: 'standalone',
+        stagedAt: new Date().toISOString(),
+      }),
+      'utf8',
+    )
+
+    const prevData = process.env.OPPTRIX_DATA_DIR
+    const prevBundle = process.env.OPPTRIX_PYTHON_BUNDLED_DIR
+    process.env.OPPTRIX_DATA_DIR = dataDir
+    process.env.OPPTRIX_PYTHON_BUNDLED_DIR = bundleDir
+    delete process.env.OPPTRIX_PYTHON_PATH
+
+    try {
+      // Re-import after env so resolvePythonRuntimeRoot picks up DATA_DIR
+      // shared paths resolve at call time via env — ok
+      const { seedBundledPythonIfNeeded } = await import(
+        path.join(repoRoot, 'packages/agent-workspace/dist/python/bundled-python.js')
+      )
+      const { resolvePythonRuntime } = await import(
+        path.join(repoRoot, 'packages/agent-workspace/dist/python/resolve-python.js')
+      )
+      const { resetPythonSettingsStoreForTests } = await importPythonSettingsStore()
+      resetPythonSettingsStoreForTests()
+
+      const seed = await seedBundledPythonIfNeeded()
+      assert.equal(seed.seeded, true, seed.reason)
+
+      const status = await resolvePythonRuntime()
+      assert.equal(status.active_source, 'opptrix')
+      assert.ok(status.opptrix_path)
+      assert.ok(status.ready)
+      assert.ok(
+        String(status.opptrix_path).includes(path.join('runtimes', 'python'))
+        || String(status.active_path).includes('python'),
+      )
+    } finally {
+      if (prevData === undefined) delete process.env.OPPTRIX_DATA_DIR
+      else process.env.OPPTRIX_DATA_DIR = prevData
+      if (prevBundle === undefined) delete process.env.OPPTRIX_PYTHON_BUNDLED_DIR
+      else process.env.OPPTRIX_PYTHON_BUNDLED_DIR = prevBundle
+      await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
+    }
+  })
+
+  it('honors OPPTRIX_PYTHON_PATH over hosted and system', async (t) => {
+    const fs = await import('node:fs/promises')
+    const os = await import('node:os')
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const execFileAsync = promisify(execFile)
+
+    let systemPython = null
+    for (const name of ['python3', 'python']) {
+      try {
+        const cmd = process.platform === 'win32' ? 'where' : 'which'
+        const { stdout } = await execFileAsync(cmd, [name])
+        systemPython = stdout.trim().split(/\r?\n/)[0]?.trim() || null
+        if (systemPython) break
+      } catch {
+        /* next */
+      }
+    }
+    if (!systemPython) {
+      t.skip('no system python')
+      return
+    }
+
+    const prev = process.env.OPPTRIX_PYTHON_PATH
+    process.env.OPPTRIX_PYTHON_PATH = systemPython
+    try {
+      const { resolvePythonRuntime } = await importResolvePython()
+      const { resetPythonSettingsStoreForTests } = await importPythonSettingsStore()
+      resetPythonSettingsStoreForTests()
+      const status = await resolvePythonRuntime()
+      assert.equal(status.active_path, path.resolve(systemPython))
+      assert.equal(status.ready, true)
+    } finally {
+      if (prev === undefined) delete process.env.OPPTRIX_PYTHON_PATH
+      else process.env.OPPTRIX_PYTHON_PATH = prev
+    }
+  })
+})
+
+describe('stage-python script contract', () => {
+  it('exists and hard-fails on missing catalog import path', async () => {
+    const fs = await import('node:fs')
+    const script = path.join(repoRoot, 'apps/desktop/scripts/stage-python.mjs')
+    assert.equal(fs.existsSync(script), true)
+    const src = fs.readFileSync(script, 'utf8')
+    assert.ok(src.includes('process.exit(1)'))
+    assert.ok(src.includes('materializePythonArtifact'))
+    assert.ok(src.includes('resources/python'))
   })
 })
 

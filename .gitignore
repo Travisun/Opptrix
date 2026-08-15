@@ -66,6 +66,8 @@ apps/desktop/resources/sensevoice/*.gguf
 apps/desktop/resources/llms/
 # Desktop bundled Python RAG engine wheels (staged at build time)
 apps/desktop/resources/engines/
+# Desktop bundled managed Python runtime (staged at build time)
+apps/desktop/resources/python/
 # Legacy stage path (pre-llms unification)
 apps/desktop/resources/models/
 

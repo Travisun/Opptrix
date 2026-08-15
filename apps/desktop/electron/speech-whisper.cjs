@@ -2,14 +2,18 @@ const path = require('node:path')
 const fs = require('node:fs/promises')
 const os = require('node:os')
 
-const API_HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
-const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024
 /** 冷启 + 较长录音：与 client LOCAL_HEAVY_TIMEOUT（3min）对齐 */
 const TRANSCRIBE_TIMEOUT_MS = 180_000
 
+/**
+ * 每次调用读 env：本模块在 main 顶部 require，早于 initResolvedPorts() 可能 bump STOCK_RESEARCH_PORT。
+ * 勿在模块级固化 HOST/PORT。
+ */
 function apiBase() {
-  return `http://${API_HOST}:${API_PORT}/api`
+  const host = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
+  const port = process.env.STOCK_RESEARCH_PORT ?? '8711'
+  return `http://${host}:${port}/api`
 }
 
 function extForMime(mime) {
@@ -116,6 +120,7 @@ async function speechTranscribe(payload) {
  *   modelName: string,
  *   modelsDir?: string,
  *   engine?: string,
+ *   error?: 'unreachable',
  * }>}
  */
 async function speechGetStatus() {
@@ -125,7 +130,7 @@ async function speechGetStatus() {
       signal: AbortSignal.timeout(8_000),
     })
     if (!resp.ok) {
-      return { ready: false, modelName: 'tiny' }
+      return { ready: false, modelName: 'tiny', error: 'unreachable' }
     }
     const json = await resp.json()
     return {
@@ -137,7 +142,7 @@ async function speechGetStatus() {
       engine: typeof json?.engine === 'string' ? json.engine : undefined,
     }
   } catch {
-    return { ready: false, modelName: 'tiny' }
+    return { ready: false, modelName: 'tiny', error: 'unreachable' }
   }
 }
 

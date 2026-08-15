@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { news } from '../api/client'
 import { isElectron } from '../platform/detect'
 
 export type ComposerSpeechPhase = 'idle' | 'requesting' | 'recording' | 'transcribing'
@@ -18,66 +17,54 @@ const SPEECH_RMS_THRESHOLD = 0.018
 /** 至少录这么久才允许静音自动结束，避免刚开口就切 */
 const MIN_RECORD_BEFORE_AUTO_STOP_MS = 800
 const LEVEL_POLL_MS = 50
+/** 与主进程 speech-whisper / LOCAL_HEAVY_TIMEOUT 对齐 */
+const TRANSCRIBE_TIMEOUT_MS = 180_000
 
-const SPEECH_COMPONENT_NOT_READY =
-  '语音识别组件尚未就绪，请稍后再试或到设置中完成准备'
+type TranscribeResult =
+  | { ok: true; text: string; model: string }
+  | { ok: false; error: string }
 
-type SpeechStatusSnapshot = {
-  ready: boolean
-  modelReady?: boolean
-  ffmpegReady?: boolean
-  modelName: string
-  modelsDir?: string
-  engine?: string
-}
-
-function fallbackSpeechStatus(): SpeechStatusSnapshot {
-  return { ready: false, modelName: 'q8' }
+function speechApiBase(): string {
+  return import.meta.env.VITE_API_BASE || '/api'
 }
 
 /**
- * 录音/转写前：探测就绪；模型未装则触发 ensure；组件仍不可用则拦截。
- * @returns true = 可继续录音
+ * POST /api/speech/transcribe（octet-stream + X-Speech-Mime）。
+ * 仅作 IPC `speechTranscribe` 缺失时的可选兜底；网络不可达返回 null。
  */
-async function ensureSpeechReadyForComposer(
-  setStatusHint: (hint: string | null) => void,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const getStatus = window.electronAPI?.speechGetStatus
-  if (!getStatus) {
-    return { ok: false, error: SPEECH_COMPONENT_NOT_READY }
-  }
-
-  setStatusHint('正在检查语音识别…')
-  let status: SpeechStatusSnapshot = await getStatus().catch(fallbackSpeechStatus)
-
-  if (status.ready) return { ok: true }
-
-  // 处理组件（如音视频解码）缺失：ensure 无法修复，勿假装处理录音
-  if (status.ffmpegReady === false) {
-    return { ok: false, error: SPEECH_COMPONENT_NOT_READY }
-  }
-
-  setStatusHint('正在准备语音识别…')
+async function transcribeViaApi(
+  data: ArrayBuffer,
+  mime: string,
+): Promise<TranscribeResult | null> {
   try {
-    await news.ensureSenseVoiceModel({
-      onProgress: (job) => {
-        setStatusHint(job.message?.trim() || '正在准备语音识别…')
+    const resp = await fetch(`${speechApiBase()}/speech/transcribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Speech-Mime': mime,
       },
+      body: data,
+      signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
     })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message.trim() : ''
-    return {
-      ok: false,
-      error: msg || SPEECH_COMPONENT_NOT_READY,
+    const json = (await resp.json().catch(() => ({}))) as Record<string, unknown>
+    if (!resp.ok) {
+      const message =
+        typeof json.error === 'string' && json.error.trim()
+          ? json.error.trim()
+          : '语音识别暂时不可用，请稍后重试'
+      return { ok: false, error: message }
     }
+    return {
+      ok: true,
+      text: String(json.text ?? '').trim(),
+      model: String(json.model ?? 'tiny'),
+    }
+  } catch (err) {
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      return { ok: false, error: '识别超时，请说得短一些后重试' }
+    }
+    return null
   }
-
-  status = await getStatus().catch(fallbackSpeechStatus)
-  if (status.ready) return { ok: true }
-  if (status.ffmpegReady === false) {
-    return { ok: false, error: SPEECH_COMPONENT_NOT_READY }
-  }
-  return { ok: false, error: SPEECH_COMPONENT_NOT_READY }
 }
 
 function pickRecorderMime(): string {
@@ -116,7 +103,7 @@ function computeRms(analyser: AnalyserNode, buffer: Float32Array<ArrayBuffer>): 
 
 /**
  * Composer 语音输入：点按开始 → 说完静音自动结束（也可再点一次）→ 本机转写。
- * 仅 Electron 桌面端可用。
+ * 仅 Electron 桌面端可用。对齐安装版：录音前无 status 门禁；转写主路径为 speechTranscribe IPC。
  */
 export function useComposerSpeech({
   disabled = false,
@@ -213,14 +200,25 @@ export function useComposerSpeech({
         return
       }
 
+      const mime = blob.type || mimeRef.current
       const buffer = await blob.arrayBuffer()
-      const result = await window.electronAPI?.speechTranscribe?.({
-        data: buffer,
-        mime: blob.type || mimeRef.current,
-      })
+
+      // 安装版主路径：IPC speechTranscribe；HTTP 仅 IPC 缺失时兜底
+      let result: TranscribeResult | null | undefined =
+        await window.electronAPI?.speechTranscribe?.({
+          data: buffer,
+          mime,
+        })
+      if (!result) {
+        result = await transcribeViaApi(buffer, mime)
+      }
 
       if (!result || !result.ok) {
-        onError?.(result?.error || '语音识别暂时不可用，请稍后重试')
+        onError?.(
+          result && !result.ok
+            ? result.error
+            : '语音识别暂时不可用，请稍后重试',
+        )
         setPhaseSafe('idle')
         setStatusHint(null)
         return
@@ -332,16 +330,6 @@ export function useComposerSpeech({
     if (phaseRef.current !== 'idle') return
 
     setPhaseSafe('requesting')
-    setStatusHint('正在检查语音识别…')
-
-    const readiness = await ensureSpeechReadyForComposer(setStatusHint)
-    if (!readiness.ok) {
-      onError?.(readiness.error)
-      setPhaseSafe('idle')
-      setStatusHint(null)
-      return
-    }
-
     setStatusHint('正在请求麦克风…')
 
     const permission = await ensureMicPermission()

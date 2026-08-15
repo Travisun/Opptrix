@@ -110,6 +110,39 @@ console.log('audit-desktop-pack: start')
     } else ok('sensevoice extraResources filters *.gguf')
   }
 
+  const pythonExtra = extra.find((e) => e?.from === 'resources/python' && e?.to === 'python')
+  if (!pythonExtra) {
+    fail('extraResources must copy resources/python → python (bundled managed runtime)')
+  } else {
+    ok('extraResources maps bundled Python runtime')
+  }
+
+  const stagePythonPath = path.join('scripts', 'stage-python.mjs')
+  if (!exists(stagePythonPath)) {
+    fail('missing scripts/stage-python.mjs')
+  } else {
+    ok('stage-python.mjs present')
+    const stagePythonSrc = read(stagePythonPath)
+    if (!stagePythonSrc.includes('materializePythonArtifact') || !stagePythonSrc.includes('process.exit(1)')) {
+      fail('stage-python.mjs must materialize catalog artifact and hard-fail on error')
+    } else ok('stage-python.mjs hard-fails and reuses installer')
+  }
+
+  // Staged tree is required during prebuild (sets OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1).
+  // Standalone audit:desktop-pack without staging should not hard-fail on missing tree.
+  if (process.env.OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON === '1') {
+    const pyManifest = path.join('resources/python', 'bundle-manifest.json')
+    if (!exists(pyManifest)) {
+      fail(`missing ${pyManifest} — run node scripts/stage-python.mjs before packaging`)
+    } else {
+      ok(`present ${pyManifest}`)
+    }
+  } else if (exists(path.join('resources/python', 'bundle-manifest.json'))) {
+    ok('present resources/python/bundle-manifest.json')
+  } else {
+    warn('bundled python tree not staged yet (ok for static audit; prebuild runs stage-python)')
+  }
+
   for (const gguf of ['sensevoice-small-q8.gguf', 'fsmn-vad.gguf']) {
     const rel = path.join('resources/sensevoice', gguf)
     if (!exists(rel)) {
@@ -459,6 +492,35 @@ console.log('audit-desktop-pack: start')
   if (!stageSrc.includes('assertSandboxRuntimeVendor')) {
     fail('stage-runtime.mjs must assert @anthropic-ai/sandbox-runtime vendor (srt-win + seccomp)')
   } else ok('stage-runtime asserts sandbox-runtime vendor')
+
+  // ffmpeg hard gate — soft warn-and-continue must not regress
+  if (!stageSrc.includes('ensureFfmpegStatic') || !stageSrc.includes('assertFfmpegBinaryPresent')) {
+    fail('stage-runtime.mjs must hard-assert ffmpeg-static binary (ensureFfmpegStatic + assertFfmpegBinaryPresent)')
+  } else ok('stage-runtime hard-asserts ffmpeg-static')
+  if (
+    stageSrc.includes('sidecar audio/video features may be unavailable')
+    || /console\.warn\(\s*['"`]ffmpeg-static not installed/.test(stageSrc)
+  ) {
+    fail('stage-runtime ensureFfmpegStatic must throw/exit on missing binary (no warn-and-continue)')
+  } else ok('stage-runtime ffmpeg gate rejects soft-fail regression')
+  if (
+    !stageSrc.includes("path.join(STAGE_DEPS, 'ffmpeg-static')")
+    && !stageSrc.includes('path.join(STAGE_DEPS, "ffmpeg-static")')
+  ) {
+    fail('stage-runtime.mjs must assert ffmpeg under deps/ after node_modules → deps rename')
+  } else ok('stage-runtime asserts ffmpeg under deps/ after rename')
+
+  const verifyPackSrc = read('scripts/verify-packaged-runtime.mjs')
+  if (
+    !verifyPackSrc.includes('ffmpeg-static')
+    || !verifyPackSrc.includes("fail(")
+    || !(
+      verifyPackSrc.includes("path.join(ffmpegDir, 'ffmpeg')")
+      || verifyPackSrc.includes('path.join(ffmpegDir, "ffmpeg")')
+    )
+  ) {
+    fail('verify-packaged-runtime.mjs must hard-fail when packaged ffmpeg-static binary is missing')
+  } else ok('verify-packaged-runtime hard-fails on missing ffmpeg')
 
   const mainSrc = read('electron/main.cjs')
   if (!mainSrc.includes('RUNTIME_DEPS_DIR') || !mainSrc.includes('NODE_PATH')) {

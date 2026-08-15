@@ -18,6 +18,16 @@ test('speechUserFacingError: missing component is not a file error', () => {
   assert.ok(!/ffmpeg|Whisper|SenseVoice/i.test(msg))
 })
 
+test('speechUserFacingError: no execute permission maps to component not ready', () => {
+  const msg = speechUserFacingError(
+    new Error(`${FFMPEG_MISSING_MARKER}: 语音处理组件无执行权限`),
+    'sensevoice',
+  )
+  assert.match(msg, /语音识别组件尚未就绪/)
+  assert.ok(!msg.includes('无法处理该文件'))
+  assert.ok(!/EACCES|chmod|执行权限/i.test(msg))
+})
+
 test('speechUserFacingError: legacy ffmpeg missing string maps to component not ready', () => {
   const msg = speechUserFacingError(new Error('未找到 ffmpeg 可执行文件（ffmpeg-static）'), 'sensevoice')
   assert.match(msg, /语音识别组件尚未就绪/)

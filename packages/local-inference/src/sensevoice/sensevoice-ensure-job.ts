@@ -10,6 +10,7 @@ import {
   type SenseVoiceReadyInfo,
 } from './sensevoice-runtime.js'
 import type { SenseVoiceAssetSource } from '../paths.js'
+import { speechEnsureModelReadyMessage } from '../media/speech-readiness.js'
 
 export type SenseVoiceEnsurePhase =
   | 'idle'
@@ -69,7 +70,7 @@ function createIdleSnapshot(
   if (readyInfo.ready) {
     return {
       phase: 'ready',
-      message: '语音识别已就绪',
+      message: speechEnsureModelReadyMessage(),
       accepted: false,
       started: false,
       percent: 100,
@@ -141,7 +142,7 @@ async function runEnsurePipeline(modelName: string, repoRoot?: string): Promise<
       updateJob({
         phase: 'ready',
         percent: 100,
-        message: '语音识别已就绪',
+        message: speechEnsureModelReadyMessage(),
         ready: true,
         modelsDir: info.modelsDir,
         source: info.source,
@@ -185,7 +186,7 @@ async function runEnsurePipeline(modelName: string, repoRoot?: string): Promise<
       phase: after.ready ? 'ready' : 'error',
       percent: after.ready ? 100 : 0,
       message: after.ready
-        ? '语音识别已就绪'
+        ? speechEnsureModelReadyMessage()
         : '语音识别尚未就绪，请稍后重试',
       error: after.ready ? null : '语音识别尚未就绪，请稍后重试',
       ready: after.ready,
@@ -252,7 +253,7 @@ export function getSenseVoiceEnsureJobStatus(
           modelsDir: info.modelsDir,
           source: info.source,
           percent: 100,
-          message: lastJob.phase === 'ready' ? lastJob.message : '语音识别已就绪',
+          message: lastJob.phase === 'ready' ? lastJob.message : speechEnsureModelReadyMessage(),
           error: null,
         }
       }
@@ -288,7 +289,7 @@ export function startSenseVoiceEnsureJob(
       started: false,
       phase: 'ready',
       percent: 100,
-      message: '语音识别已就绪',
+      message: speechEnsureModelReadyMessage(),
     }
     return getSenseVoiceEnsureJobStatus(name, repoRoot)
   }

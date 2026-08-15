@@ -165,6 +165,24 @@ export {
   type EnsurePythonDeps,
 } from './python/ensure-python.js'
 export {
+  resolveBundledPythonRoot,
+  seedBundledPythonIfNeeded,
+  BUNDLED_PYTHON_MANIFEST,
+  type BundledPythonManifest,
+} from './python/bundled-python.js'
+export {
+  getPythonPlatformArtifact,
+  listPythonPlatformArtifacts,
+  pythonPlatformKeyFromTarget,
+  PYTHON_RUNTIME_VERSION,
+  type PythonPlatformArtifact,
+} from './python/catalog.js'
+export {
+  materializePythonArtifact,
+  pythonBinaryCandidates,
+  linkPythonCurrent,
+} from './python/installer.js'
+export {
   WorkspaceService,
   getWorkspaceService,
   resetWorkspaceService,
