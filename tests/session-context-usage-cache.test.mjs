@@ -46,6 +46,16 @@ test('getCachedSessionContextUsage miss returns null without compute', async () 
   })
 })
 
+test('empty session returns cacheHitPercent 0', async () => {
+  await withTempStore(async () => {
+    const engine = makeEngine()
+    const session = await engine.createSession({ title: 'empty-cache' })
+    const usage = await engine.getSessionContextUsage(session.id)
+    assert.ok(usage)
+    assert.equal(usage.cacheHitPercent, 0)
+  })
+})
+
 test('getSessionContextUsage caches; hit returns same snapshot; invalidate clears', async () => {
   await withTempStore(async () => {
     const engine = makeEngine()

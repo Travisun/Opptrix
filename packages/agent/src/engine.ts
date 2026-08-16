@@ -180,6 +180,7 @@ import {
   promptCacheKeyForSession,
   resolveCacheWarmth,
   computeCacheHitPercent,
+  hasAssistantTurnUsage,
   resolveSessionCacheHitSource,
   type TokenUsage,
 } from './llm/token-usage.js'
@@ -1002,9 +1003,13 @@ export class AgentEngine {
     const usedTokens = estimateModelViewTokens(modelView) + toolsTokens + 512
 
     const cacheSource = resolveSessionCacheHitSource(record.turns, record.usageTotals)
-    const cacheHitPercent = cacheSource
+    let cacheHitPercent = cacheSource
       ? computeCacheHitPercent(cacheSource.cachedPromptTokens, cacheSource.promptTokens)
       : undefined
+    // 空/新会话尚无 assistant usage：默认展示缓存 0%，勿与「有历史但上游未报 cached」混淆
+    if (cacheHitPercent === undefined && !hasAssistantTurnUsage(record.turns)) {
+      cacheHitPercent = 0
+    }
 
     const usage: SessionContextUsage = {
       usedTokens,
