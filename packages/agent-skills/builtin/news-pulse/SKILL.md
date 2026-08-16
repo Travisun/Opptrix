@@ -16,7 +16,7 @@ allowed-tools: search_instruments get_instrument_quotes get_instrument_chart get
 
 # 公司新闻脉搏：股价异动快速归因
 
-> 署名：**Opptrix · AI Berkshire 投研流程**  
+> 署名：**Opptrix · AI Berkshire 分析**  
 > 目标：约 10–15 分钟内回答「发生了什么？主因是什么？要不要重审论文？」——**不是**深度投研。
 
 ## 何时使用 / 边界

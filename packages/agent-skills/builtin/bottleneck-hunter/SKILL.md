@@ -33,7 +33,7 @@ references:
 - 瓶颈真实 ≠ 投资机会；估值红灯可封顶信号强度  
 - 强制结论：深入研究 / 观察 / 等待更好价格 / 数据不足  
 - 正反论据；A/B/C；`get_current_time`  
-- 署名 **Opptrix · AI Berkshire 投研流程**
+- 署名 **Opptrix · AI Berkshire 分析**
 
 ## 流程摘要
 

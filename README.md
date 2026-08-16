@@ -156,7 +156,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 | **核心投研** | 数十个 | 个股深潜、多角色研讨、报告审计、网页/画布交付等日常投研流程 |
 | **Lean 量化** | 约 27（`lean-*`） | 组合构建、风险、执行与研究等工作流参照 Lean 方法论 |
 | **量化方法库** | 约 60+ | 因子、择时、行业轮动、情绪与微观结构等可运行方法（由开源量化研究材料映射为自洽技能） |
-| **价值投资** | 约 20+ | 财务严谨检查、报告审计、论点跟踪与组合复盘；总入口 **`ai-berkshire`（AI Berkshire 投研流程）**（场景路由 → 取数 → 子技能 → 交付） |
+| **价值投资** | 约 20+ | 财务严谨检查、报告审计、论点跟踪与组合复盘；总入口 **`ai-berkshire`（AI Berkshire 分析）**（场景路由 → 取数 → 子技能 → 交付） |
 
 开发者映射与契约：[docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md)、[docs/quants-playbook-skill-map.md](docs/quants-playbook-skill-map.md)、[docs/ai-berkshire-skill-map.md](docs/ai-berkshire-skill-map.md)。
 

@@ -170,7 +170,7 @@ python scripts/quality_screen.py --input data.json --output result.json
 ## 8. 默认交付与署名
 
 1. **默认 `create_web`** 交付可预览 HTML 报告（用户明确只要画布再用 `create_canvas`；关系结构可用 `create_mindmap`）。  
-2. 报告署名使用产品文案：**「Opptrix · AI Berkshire 投研流程」**（总入口与基础 skill 统一此署名，勿再用「编排」字样）。  
+2. 报告署名使用产品文案：**「Opptrix · AI Berkshire 分析」**（总入口与基础 skill 统一此署名）。  
 3. **禁止**在用户可见文案中堆砌：MCP、Provider、SQLite、Hub、脚本路径、`opptrix_run`、HTTP 状态码等实现细节（内部 SKILL 步骤可写工具名供 Agent 执行）。  
 4. 勿在标题默认追加「四大师综合」「投资备忘录」等冗余后缀，除非用户点名（与 `investment-memo-craft` 版式约定一致）。
 

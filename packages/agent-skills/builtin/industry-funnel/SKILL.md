@@ -35,7 +35,7 @@ references:
 - 四大师框架覆盖终选 3 家（段/巴/芒/李）；数据不足须声明无法评分
 - 强制结论：激进/稳健/保守分层 + 条件区间；**好生意 ≠ 好价格下的好投资**
 - 镜子测试（买入建议前 ≤5 句）；A/B/C 信息丰富度；快速否决不可被分数对冲
-- `get_current_time`；署名 **Opptrix · AI Berkshire 投研流程**；免责声明
+- `get_current_time`；署名 **Opptrix · AI Berkshire 分析**；免责声明
 
 ## 漏斗结构
 

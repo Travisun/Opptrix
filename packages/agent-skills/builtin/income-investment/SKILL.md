@@ -34,7 +34,7 @@ references:
 - 安全门（覆盖失败、债务危机、结构恶化、诚信、数据不足）**覆盖**打分卡  
 - 事实/估计/假设/判断分栏；双源差异 >1% 标记（遵循 `@skill:financial-data`）  
 - 强制唯一结论态之一：`CORE INCOME` / `OPPORTUNISTIC INCOME` / `WATCHLIST` / `HOLD – DO NOT ADD` / `REDUCE` / `REJECT / YIELD TRAP` / `INSUFFICIENT DATA`  
-- 署名 **Opptrix · AI Berkshire 投研流程**；非个性化投资建议  
+- 署名 **Opptrix · AI Berkshire 分析**；非个性化投资建议  
 
 ## Opptrix 取数
 

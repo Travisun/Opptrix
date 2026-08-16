@@ -1,6 +1,6 @@
 ---
 name: earnings-review
-description: 财报精读（一手资料）。用户说「精读财报」「读年报」「电话会纪要」「一手财报」「像巴菲特读年报」「/earnings-review」时使用。只读原始财报/纪要；非原始须标注。默认 create_web；署名 Opptrix · AI Berkshire 投研流程。
+description: 财报精读（一手资料）。用户说「精读财报」「读年报」「电话会纪要」「一手财报」「像巴菲特读年报」「/earnings-review」时使用。只读原始财报/纪要；非原始须标注。默认 create_web；署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -24,7 +24,7 @@ references:
 
 # 财报精读（一手资料）
 
-输入：`公司名 季度`（如 `腾讯 2025Q4`、`美团 最新`）。署名：**Opptrix · AI Berkshire 投研流程**。
+输入：`公司名 季度`（如 `腾讯 2025Q4`、`美团 最新`）。署名：**Opptrix · AI Berkshire 分析**。
 
 > 「我从不看卖方研报，只读原始财报。」—— 李录
 

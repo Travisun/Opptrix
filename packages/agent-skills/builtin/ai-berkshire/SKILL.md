@@ -1,11 +1,11 @@
 ---
 name: ai-berkshire
-description: AI Berkshire 投研流程。用户说「AI Berkshire」「价值投资流程」「四大师投研」「按场景路由投研」「/ai-berkshire」时使用。按场景路由基础 skill，强制质量规则，端到端澄清→取数→子 skill→审计建议→create_web。非投资研讨团。默认 create_web。
+description: AI Berkshire 分析。用户说「AI Berkshire」「AI Berkshire 分析」「价值投资流程」「四大师投研」「按场景路由投研」「/ai-berkshire」时使用。按场景路由基础 skill，强制质量规则，端到端澄清→取数→子 skill→审计建议→create_web。非投资研讨团。默认 create_web。
 license: Apache-2.0
 metadata:
   author: opptrix
   version: "1.0"
-  title: AI Berkshire 投研流程
+  title: AI Berkshire 分析
   summary: 场景路由价值投资技能，交付带强制结论的投研网页
   category: decision
   slash-rank: "38"
@@ -19,9 +19,9 @@ references:
   - references/route-table.md
 ---
 
-# AI Berkshire 投研流程
+# AI Berkshire 分析
 
-> 署名：**Opptrix · AI Berkshire 投研流程**  
+> 署名：**Opptrix · AI Berkshire 分析**  
 > 本技能是价值投资工作流**总入口**：路由并激活基础 skill，**禁止**无差别串行跑完全部重研究 skill（成本爆炸）。
 
 ## 何时使用 / 非目标 / 边界
@@ -38,7 +38,7 @@ references:
 |--|--------|------------|
 | 框架 | 段永平/巴菲特/芒格/李录价值投资 | 多空辩论 + 风险互评 |
 | 角色 | 流程入口 + 基础 AB skill | 分析师→Bull/Bear→主席→风险三人 |
-| 署名 | Opptrix · AI Berkshire 投研流程 | Opptrix投资研讨团流程 |
+| 署名 | Opptrix · AI Berkshire 分析 | Opptrix投资研讨团流程 |
 | 禁止合并 | 勿把研讨团报告写成四大师流程，反之亦然 | |
 
 ## 强制质量规则摘要（契约 §6，执行时必须重申）
@@ -99,7 +99,7 @@ python scripts/route_plan.py --input route.json --output plan.json
 
 报告**必须**包含：
 
-1. **页眉**：标的、场景、**数据截止日期**、信息丰富度 A/B/C、署名「Opptrix · AI Berkshire 投研流程」  
+1. **页眉**：标的、场景、**数据截止日期**、信息丰富度 A/B/C、署名「Opptrix · AI Berkshire 分析」  
 2. **强制结论表**：决策态 +（如适用）价格/条件带或触发条件；空仓者 vs 持有者分行（若深度研究）  
 3. **四视角摘要**表（段永平 / 巴菲特 / 芒格 / 李录）— 不足则格子内写「数据不足，无法评分」  
 4. 场景主体（子 skill 产出的核心章节，可摘要嵌入）  

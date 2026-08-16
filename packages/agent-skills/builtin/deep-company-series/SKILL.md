@@ -1,6 +1,6 @@
 ---
 name: deep-company-series
-description: 《看懂XX》长文系列。用户说「看懂系列」「深度长文系列」「教科书级公司拆解」「多篇公众号」「/deep-company-series」时使用。3–8 篇按复杂度适配；事实核查优先于文采。默认 create_web；署名 Opptrix · AI Berkshire 投研流程。
+description: 《看懂XX》长文系列。用户说「看懂系列」「深度长文系列」「教科书级公司拆解」「多篇公众号」「/deep-company-series」时使用。3–8 篇按复杂度适配；事实核查优先于文采。默认 create_web；署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -25,7 +25,7 @@ references:
 
 # 《看懂 XX》长文系列
 
-为指定公司撰写 **3–8 篇**可独立分享的系列长文。核心能力是**改得严**，不是堆文采。署名：**Opptrix · AI Berkshire 投研流程**。
+为指定公司撰写 **3–8 篇**可独立分享的系列长文。核心能力是**改得严**，不是堆文采。署名：**Opptrix · AI Berkshire 分析**。
 
 ## 何时使用 / 边界
 

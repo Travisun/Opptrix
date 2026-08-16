@@ -1,6 +1,6 @@
 ---
 name: investment-team
-description: 四角色并行投研团队。用户说「投研团队」「四大师并行」「team 研究」「多 Agent 投研」「/investment-team」时使用。Team Lead + 段/巴/芒/李四角色经 run_subagent 并行独立成稿再综合；禁止联网失败伪装。默认 create_web；署名 Opptrix · AI Berkshire 投研流程。
+description: 四角色并行投研团队。用户说「投研团队」「四大师并行」「team 研究」「多 Agent 投研」「/investment-team」时使用。Team Lead + 段/巴/芒/李四角色经 run_subagent 并行独立成稿再综合；禁止联网失败伪装。默认 create_web；署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -25,7 +25,7 @@ references:
 
 # 四角色并行投研团队
 
-对用户指定标的做**真正并行**的四大师投研，再由 Team Lead（父 Agent）综合。署名：**Opptrix · AI Berkshire 投研流程**。
+对用户指定标的做**真正并行**的四大师投研，再由 Team Lead（父 Agent）综合。署名：**Opptrix · AI Berkshire 分析**。
 
 ## 何时使用 / 边界
 
@@ -91,7 +91,7 @@ python scripts/scorecard.py --input evidence.json --output scorecard.json
 
 ### S3 — 抽检与交付
 
-`report_audit` extract → 核验 → verdict。`list_web_vendor` → **`create_web`**。署名 **Opptrix · AI Berkshire 投研流程** + 免责声明。
+`report_audit` extract → 核验 → verdict。`list_web_vendor` → **`create_web`**。署名 **Opptrix · AI Berkshire 分析** + 免责声明。
 
 ### S4 — 收尾
 

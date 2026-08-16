@@ -34,7 +34,7 @@ references:
 - 四大师：段（生意）/ 巴（财务与护城河）/ 芒（失败路径）/ 李（长期确定性）
 - 强制结论与分层仓位；镜子测试；A/B/C（行业研究警惕「资料多的成熟行业看起来更确定」）
 - 反偏见：冷门优质、未上市关键玩家、中文市场不可因英文资料少而漏
-- `get_current_time`；署名 **Opptrix · AI Berkshire 投研流程**
+- `get_current_time`；署名 **Opptrix · AI Berkshire 分析**
 
 ## Opptrix 取数
 

@@ -1,6 +1,6 @@
 ---
 name: private-company-research
-description: 未上市公司深度研究。用户说「未上市研究」「私募公司尽调」「独角兽研究」「蚂蚁/小红书式研究」「/private-company-research」时使用。信息稀缺下还原生意真实价值；多角色并行；诚实留白；禁止虚假精确。默认 create_web；署名 Opptrix · AI Berkshire 投研流程。
+description: 未上市公司深度研究。用户说「未上市研究」「私募公司尽调」「独角兽研究」「蚂蚁/小红书式研究」「/private-company-research」时使用。信息稀缺下还原生意真实价值；多角色并行；诚实留白；禁止虚假精确。默认 create_web；署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -30,7 +30,7 @@ references:
 
 # 未上市公司深度研究
 
-面向蚂蚁、小红书、SpaceX、Stripe 等**未上市**标的。最终目标：在信息天然稀缺下，尽可能还原**生意真实价值**（不是融资叙事估值）。署名：**Opptrix · AI Berkshire 投研流程**。
+面向蚂蚁、小红书、SpaceX、Stripe 等**未上市**标的。最终目标：在信息天然稀缺下，尽可能还原**生意真实价值**（不是融资叙事估值）。署名：**Opptrix · AI Berkshire 分析**。
 
 详细任务说明书见 `references/`（经 `get_agent_skill_file` 读取）。偏见原则见 `bias-and-principles.md`。
 

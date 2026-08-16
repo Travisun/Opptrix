@@ -19,7 +19,7 @@ references:
 
 # 投资论文漂移检测
 
-> 署名：**Opptrix · AI Berkshire 投研流程**
+> 署名：**Opptrix · AI Berkshire 分析**
 
 ## 何时使用 / 边界
 

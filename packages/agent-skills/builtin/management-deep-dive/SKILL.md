@@ -1,6 +1,6 @@
 ---
 name: management-deep-dive
-description: 管理层纵深研究。用户说「买股票就是买人」「管理层研究」「CEO 诚信」「资本配置能力」「承诺兑现」「/management-deep-dive」时使用。诚信一票否决；追踪承诺 vs 兑现与资本配置。默认 create_web；署名 Opptrix · AI Berkshire 投研流程。
+description: 管理层纵深研究。用户说「买股票就是买人」「管理层研究」「CEO 诚信」「资本配置能力」「承诺兑现」「/management-deep-dive」时使用。诚信一票否决；追踪承诺 vs 兑现与资本配置。默认 create_web；署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -26,7 +26,7 @@ references:
 > 「买股票就是买人。」—— 段永平  
 > 「评估管理层，要看他们在没人看着的时候做什么。」—— 巴菲特
 
-输入：`公司名` 或 `人名 公司名`。署名：**Opptrix · AI Berkshire 投研流程**。
+输入：`公司名` 或 `人名 公司名`。署名：**Opptrix · AI Berkshire 分析**。
 
 ## 何时使用 / 边界
 

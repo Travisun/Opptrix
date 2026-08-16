@@ -1,6 +1,6 @@
 ---
 name: earnings-team
-description: 财报精读团队 + 成稿。用户说「财报团队」「四大师读财报」「财报公众号成稿」「/earnings-team」时使用。四角色并行精读 → 合成底稿 → 编辑+读者评审 → create_web。署名 Opptrix · AI Berkshire 投研流程。
+description: 财报精读团队 + 成稿。用户说「财报团队」「四大师读财报」「财报公众号成稿」「/earnings-team」时使用。四角色并行精读 → 合成底稿 → 编辑+读者评审 → create_web。署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -25,7 +25,7 @@ references:
 
 # 财报精读团队 + 成稿
 
-输入：`公司名 季度`。三阶段：研究 → 合成 → 发布。署名：**Opptrix · AI Berkshire 投研流程**。
+输入：`公司名 季度`。三阶段：研究 → 合成 → 发布。署名：**Opptrix · AI Berkshire 分析**。
 
 ## 何时使用 / 边界
 

@@ -16,7 +16,7 @@ allowed-tools: workspace_read workspace_write read_document search_library ask_u
 
 # 投研报告写作与版式叠加
 
-> 署名：**Opptrix · AI Berkshire 投研流程**  
+> 署名：**Opptrix · AI Berkshire 分析**  
 > 源：Codex-only `investment-memo-craft`；**写作/判断叠加**，不替代 `financial-data` / 研究 skill / `report_audit`。
 
 ## 何时使用 / 边界

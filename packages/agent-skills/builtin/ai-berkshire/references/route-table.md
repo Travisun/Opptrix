@@ -29,7 +29,7 @@
 | | `ai-berkshire` | `multi-role-research-council` |
 |--|----------------|-------------------------------|
 | 定位 | 价值投资（四大师）skill **总入口与路由** | 多空辩论 **研讨团** |
-| 署名 | Opptrix · AI Berkshire 投研流程 | Opptrix投资研讨团流程 |
+| 署名 | Opptrix · AI Berkshire 分析 | Opptrix投资研讨团流程 |
 | 何时 | 用户要巴菲特式框架 / AB 工作流 | 用户要多空辩论链 / 「投资研讨团」 |
 | 禁止 | 无差别跑完全部 21 个重 skill | 把报告品牌写成 TradingAgents |
 

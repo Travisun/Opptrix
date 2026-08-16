@@ -16,7 +16,7 @@ allowed-tools: ask_user list_news_articles get_news_article get_instrument_notic
 
 # 公众号三 Agent 成稿
 
-> 署名：**Opptrix · AI Berkshire 投研流程**（内容向；非买卖建议）
+> 署名：**Opptrix · AI Berkshire 分析**（内容向；非买卖建议）
 
 ## 何时使用 / 边界
 

@@ -16,7 +16,7 @@ allowed-tools: get_portfolio_holdings portfolio_summary analyze_portfolio get_wa
 
 # 价值投资组合审视
 
-> 署名：**Opptrix · AI Berkshire 投研流程**  
+> 署名：**Opptrix · AI Berkshire 分析**  
 > 源映射：AI Berkshire `portfolio-review` → 本技能 **`value-portfolio-review`**（**禁止**覆盖 `@skill:portfolio-review`）
 
 ## 何时使用 / 非目标 / 边界

@@ -35,7 +35,7 @@ references:
 - A/B/C：C 级不勉强填满六关；**数据不足 = 灰色地带**，≠ 通过/否决  
 - 镜子测试不可跳过：≤5 句话说不清 → **不买**  
 - 快速否决一票否决；诚信污点不可被高分对冲  
-- 关键财务用 `financial_rigor`；署名 **Opptrix · AI Berkshire 投研流程**
+- 关键财务用 `financial_rigor`；署名 **Opptrix · AI Berkshire 分析**
 
 ## 六关
 

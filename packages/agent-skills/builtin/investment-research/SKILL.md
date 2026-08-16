@@ -1,6 +1,6 @@
 ---
 name: investment-research
-description: 四大师综合深度研究。用户说「四大师研究」「深度投研」「巴菲特芒格段永平李录」「系统研究这家公司」「/investment-research」时使用。七模块：偏见评级→取数验算→生意/护城河/逆向/管理层/文明趋势/估值→强制结论与镜子测试。默认 create_web；署名 Opptrix · AI Berkshire 投研流程。
+description: 四大师综合深度研究。用户说「四大师研究」「深度投研」「巴菲特芒格段永平李录」「系统研究这家公司」「/investment-research」时使用。七模块：偏见评级→取数验算→生意/护城河/逆向/管理层/文明趋势/估值→强制结论与镜子测试。默认 create_web；署名 Opptrix · AI Berkshire 分析。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -25,7 +25,7 @@ references:
 
 # 四大师综合深度研究
 
-对用户指定标的做系统化价值投资研究。署名交付：**Opptrix · AI Berkshire 投研流程**。
+对用户指定标的做系统化价值投资研究。署名交付：**Opptrix · AI Berkshire 分析**。
 
 ## 何时使用 / 非目标 / 边界
 
@@ -100,7 +100,7 @@ python scripts/scorecard.py --input evidence.json --output scorecard.json
 
 ### 8 — 抽检与交付
 
-`report_audit` extract→取数填值→verdict；可选 `scorecard.py`。`list_web_vendor` → **`create_web`**。署名 **Opptrix · AI Berkshire 投研流程**；附免责声明（学习辅助，非投资建议）。
+`report_audit` extract→取数填值→verdict；可选 `scorecard.py`。`list_web_vendor` → **`create_web`**。署名 **Opptrix · AI Berkshire 分析**；附免责声明（学习辅助，非投资建议）。
 
 ## 网页报告建议目录
 

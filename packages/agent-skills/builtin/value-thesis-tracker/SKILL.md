@@ -16,7 +16,7 @@ allowed-tools: search_instruments get_instrument_quotes get_instrument_snapshot 
 
 # 价值投资论文追踪
 
-> 署名：**Opptrix · AI Berkshire 投研流程**  
+> 署名：**Opptrix · AI Berkshire 分析**  
 > 源映射：AI Berkshire `thesis-tracker` → 本技能 **`value-thesis-tracker`**（**禁止**覆盖 `@skill:thesis-tracker`）
 
 ## 何时使用 / 非目标 / 边界
