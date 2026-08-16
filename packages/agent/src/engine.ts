@@ -33,13 +33,22 @@ import {
 import {
   resolveToolRoutePlan,
   buildRoundRoutePlaybook,
-  orderToolsByPreference,
   type ToolRoutePlan,
 } from './mcp/tool-route-plan.js'
+import {
+  type SessionFrozenToolsEntry,
+  businessPackIdsForSessionSeed,
+  filterFrozenToolsForSubagent,
+  filterFrozenToolsForUnattended,
+  orderToolsStable,
+  resolveFullSessionPackIds,
+  resolveFullSessionToolNames,
+} from './mcp/session-frozen-tools.js'
 import {
   appendTurnTailMessages,
   buildSessionClockPlaybook,
   buildTurnTailPrompt,
+  buildResearchTierTurnTail,
   parseNamespacedMcpTool,
 } from '@opptrix/shared'
 import { clearSessionTurnWakes } from './turn-wake.js'
@@ -170,6 +179,8 @@ import {
   emptyTokenUsage,
   promptCacheKeyForSession,
   resolveCacheWarmth,
+  computeCacheHitPercent,
+  resolveSessionCacheHitSource,
   type TokenUsage,
 } from './llm/token-usage.js'
 import {
@@ -194,6 +205,10 @@ export interface SessionContextUsage {
   usagePercent: number
   /** 本会话已做过上下文整理（投影存在；刷新仍在） */
   compacted: boolean
+  /** 最近一轮（或累计）前缀缓存命中率 0–100；无上游上报则省略 */
+  cacheHitPercent?: number
+  /** 观测用；与 cacheHitPercent 同源 */
+  cachedPromptTokens?: number
 }
 
 export interface AgentSettings {
@@ -308,6 +323,9 @@ export class AgentEngine {
   private readonly workspaceService = getWorkspaceService()
   /** 会话上下文用量估算缓存（内存；切会话命中则不再 rebuildRoundTools） */
   private readonly contextUsageCache = new Map<string, SessionContextUsage>()
+  /** 会话级冻结 openAiTools（DSH 前缀缓存；MCP schema 变更时 bump generation 重建） */
+  private readonly frozenToolsBySession = new Map<string, SessionFrozenToolsEntry>()
+  private frozenToolsSchemaGeneration = 0
   /** 附件 GET 与 content parts 本地 URL 前缀 */
   private apiBaseUrl = 'http://127.0.0.1:8711/api'
   /** 进行中 chat 的 AbortController（cancel_subagent / Stop 父用） */
@@ -334,6 +352,16 @@ export class AgentEngine {
   /** @internal 测试用 */
   markExpertPackSeededForTests(sessionId: string, expertId: string): void {
     this.expertPacksSeeded.add(`${sessionId}:${expertId}`)
+  }
+
+  /** @internal 测试用 — 冻结 tools JSON 字节快照 */
+  frozenToolsJsonForTests(sessionId: string): string | null {
+    return this.frozenToolsBySession.get(sessionId)?.toolsJson ?? null
+  }
+
+  /** @internal 测试用 */
+  async ensureFrozenToolsForTests(sessionId: string): Promise<SessionFrozenToolsEntry> {
+    return this.ensureFrozenSessionTools(sessionId, { isSubSession: false })
   }
 
   setApiBaseUrl(url: string) {
@@ -372,9 +400,8 @@ export class AgentEngine {
     })
   }
 
-  /** 构建数据源优先级策略说明（注入 system prompt） */
-  private buildDataSourcingPolicy(plan: ToolRoutePlan | null): string {
-    const tier = plan?.researchTier ?? 'standard'
+  /** 稳定数据源策略（无按轮档位分支） */
+  private buildStaticDataSourcingPolicy(): string {
     const lines = [
       '【数据源优先级策略 — 必须严格遵守】',
       '0. 三级优先，不可倒置：远程 MCP 工具（命名空间 server__tool）= 最高优先，永远先用；本地工具 = 最低优先，仅作兜底。工具列表中远程工具已排在最前，同名能力优先取远程。',
@@ -386,34 +413,32 @@ export class AgentEngine {
       '   - source="local" + degraded=true → 远程不可用，本地兜底降级，结果可能不完整：须在答复中提示该维度为降级数据、可信度受限，并在其它远程工具可用时尝试交叉补全',
       '4. 投研答复引用数据时体现数据源：远程权威源优于本地缓存；降级数据须显式标注不确定性。',
     ]
-    // 高研究档位强调交叉验证
-    if (tier === 'L3') {
-      lines.push(`5. 当前为 ${tier} 档位：对重要标的/事件，即使远程已返回结果，也可主动补充本地交叉验证 — 但须在结果中注明来源与差异。`)
-    }
     return lines.join('\n')
   }
 
-  /** 稳定 system（无每轮时钟/选型卡，利于前缀缓存） */
-  private buildRoundSystemPrompt(sessionId: string, activeNames: readonly string[]) {
+  /** L3 档位交叉验证提示 — 仅 turn-tail */
+  private buildTierDataSourcingTurnTail(tier: import('@opptrix/shared').ResearchTier): string {
+    if (tier !== 'L3') return ''
+    return `5. 当前为 ${tier} 档位：对重要标的/事件，即使远程已返回结果，也可主动补充本地交叉验证 — 但须在结果中注明来源与差异。`
+  }
+
+  /** @deprecated 保留供测试/兼容 */
+  private buildDataSourcingPolicy(plan: ToolRoutePlan | null): string {
+    return this.buildStaticDataSourcingPolicy()
+  }
+
+  /** 稳定 system（无每轮时钟/选型卡/档位长分支，利于前缀缓存） */
+  private buildRoundSystemPrompt(sessionId: string) {
     const record = this.ensureSessionRolePersona(sessionId)
     const expert = record?.expertId
       ? getExpertCatalogService().getDefinitionSync(record.expertId)
       : null
-    const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
-      message: this.lastChatSeedMessage,
-      contextRef: record?.contextRef ?? null,
-    })
-    const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
     return this.tools.systemPrompt({
       expert,
       sessionRolePersona: record?.rolePersona ?? null,
       roleLabel: expert?.title ?? null,
-      activePacks: this.lastRoundPackIds,
-      activeToolNames: activeNames,
-      researchTier: resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier),
-      dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
+      dataSourcingPolicy: this.buildStaticDataSourcingPolicy(),
       agentSkillCatalog: buildSkillCatalogPrompt(),
-      activatedAgentSkills: buildActivatedSkillsPrompt(activatedSkills),
     })
   }
 
@@ -430,18 +455,26 @@ export class AgentEngine {
     return resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier)
   }
 
-  /** 本轮动态尾注：会话时钟 + 选型卡 + checklist/反空转（append 到 modelView，不进稳定 system） */
+  /** 本轮动态尾注：时钟 + 选型卡 + 档位 + 技能正文 + checklist/反空转 */
   private buildRoundTurnTail(sessionId: string, activeNames: readonly string[]) {
     const record = this.sessions.get(sessionId)
     const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
       message: this.lastChatSeedMessage,
       contextRef: record?.contextRef ?? null,
     })
+    const expert = record?.expertId
+      ? getExpertCatalogService().getDefinitionSync(record.expertId)
+      : null
+    const tier = resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier) ?? 'L2'
+    const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
     const base = buildTurnTailPrompt({
       sessionClock: buildSessionClockPlaybook(getCurrentTime()),
       routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
     })
     const extras = [
+      buildResearchTierTurnTail(tier),
+      this.buildTierDataSourcingTurnTail(tier),
+      buildActivatedSkillsPrompt(activatedSkills),
       buildChecklistTurnTail(sessionId),
       buildSpinGuardTurnTail(sessionId),
     ].filter(Boolean)
@@ -502,11 +535,71 @@ export class AgentEngine {
     const names = unattended ? filterToolNamesForUnattended(activeNames) : activeNames
     const broker = await this.createRoundBroker(names)
     const rawTools = await broker.openAiTools()
-    const preferred = this.lastRoutePlan?.preferredTools ?? []
-    // 远程 MCP 工具整体优先于本地兜底工具；preferred 排序仅在各自分组内生效。
-    let openAiTools = orderToolsByPreference(rawTools, preferred, { remoteFirst: true })
+    let openAiTools = orderToolsStable(rawTools)
     if (unattended) openAiTools = filterOpenAiToolsForUnattended(openAiTools)
     return { broker, openAiTools }
+  }
+
+  private clearFrozenTools(sessionId: string) {
+    this.frozenToolsBySession.delete(sessionId)
+  }
+
+  private clearFrozenToolsForSubtree(sessionId: string) {
+    this.clearFrozenTools(sessionId)
+    for (const key of [...this.frozenToolsBySession.keys()]) {
+      const child = this.sessions.get(key)
+      if (child?.parentSessionId === sessionId || child?.rootSessionId === sessionId) {
+        this.frozenToolsBySession.delete(key)
+      }
+    }
+  }
+
+  /** 会话首次 chat 全量 pack + 冻结 openAiTools；subagent 继承父快照再滤 blocked */
+  private async ensureFrozenSessionTools(
+    sessionId: string,
+    opts: {
+      parentSessionId?: string | null
+      unattended?: boolean
+      isSubSession?: boolean
+    },
+  ): Promise<SessionFrozenToolsEntry> {
+    const cached = this.frozenToolsBySession.get(sessionId)
+    if (cached) return cached
+
+    if (opts.isSubSession && opts.parentSessionId) {
+      const parentEntry = this.frozenToolsBySession.get(opts.parentSessionId)
+        ?? await this.ensureFrozenSessionTools(opts.parentSessionId, { isSubSession: false })
+      let entry = filterFrozenToolsForSubagent(parentEntry)
+      if (opts.unattended) entry = filterFrozenToolsForUnattended(entry)
+      this.frozenToolsBySession.set(sessionId, entry)
+      return entry
+    }
+
+    for (const id of businessPackIdsForSessionSeed()) {
+      this.toolPackSessions.activate(sessionId, [id])
+    }
+    let activeNames = resolveFullSessionToolNames()
+    if (opts.unattended) activeNames = filterToolNamesForUnattended(activeNames)
+    const { broker, openAiTools } = await this.rebuildRoundTools(activeNames, opts.unattended)
+    await broker.close().catch(() => {})
+    const entry: SessionFrozenToolsEntry = {
+      openAiTools,
+      activeNames,
+      toolsJson: JSON.stringify(openAiTools),
+      schemaGeneration: this.frozenToolsSchemaGeneration,
+    }
+    this.frozenToolsBySession.set(sessionId, entry)
+    return entry
+  }
+
+  /** MCP 工具 schema 变更：冷启动重建冻结集（prompt_cache_key 后缀随 generation 变） */
+  private async rebuildFrozenToolsAfterSchemaChange(
+    sessionId: string,
+    opts: { unattended?: boolean; isSubSession?: boolean; parentSessionId?: string | null },
+  ): Promise<SessionFrozenToolsEntry> {
+    this.frozenToolsSchemaGeneration += 1
+    this.clearFrozenToolsForSubtree(sessionId)
+    return this.ensureFrozenSessionTools(sessionId, opts)
   }
 
   private bindWorkspaceBridge(
@@ -752,20 +845,20 @@ export class AgentEngine {
   private bindPackBridge(sessionId: string): number {
     return this.tools.bindPackSession({
       sessionId,
-      listPacks: () => listToolPacksPayload(this.lastRoundPackIds),
+      listPacks: () => listToolPacksPayload(resolveFullSessionPackIds()),
       activatePacks: (packIds: string[]) => {
         const { activated, skipped } = this.toolPackSessions.activate(sessionId, packIds)
-        this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
-        this.invalidateContextUsage(sessionId)
+        const frozen = this.frozenToolsBySession.get(sessionId)
         return {
           ok: true,
+          already_loaded: true,
           activated,
           skipped,
-          active_packs: this.lastRoundPackIds,
-          tools_available: toolNamesForPacks(this.lastRoundPackIds).length,
+          active_packs: resolveFullSessionPackIds(),
+          tools_available: frozen?.activeNames.length ?? resolveFullSessionToolNames().length,
           hint: skipped.length
-            ? `部分 id 无效：${skipped.join(', ')}`
-            : '已激活；本轮工具列表将立即刷新',
+            ? `部分 id 无效：${skipped.join(', ')}；本会话 tools 已在首次 chat 全量加载，无需刷新 schema`
+            : '工具包已在会话启动时全量加载；activate_tool_pack 为 no-op，请直接调用 tools 列表中的工具',
         }
       },
     })
@@ -804,9 +897,8 @@ export class AgentEngine {
         if (packIdSet.size > 0) {
           const packResult = this.toolPackSessions.activate(sessionId, [...packIdSet])
           activatedPacks = packResult.activated
-          this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
           if (activatedPacks.length) {
-            toolsHint = `已挂上工具包：${activatedPacks.join(', ')}；本轮可直接调用包内工具，无需再 activate_tool_pack`
+            toolsHint = `已记录技能所需工具包：${activatedPacks.join(', ')}；本会话 tools 已全量加载，可直接调用`
           }
         }
 
@@ -881,8 +973,7 @@ export class AgentEngine {
     const modelId = resolved?.model ?? modelRef.replace(/^[^:]+:/, '') ?? 'default'
     const limitTokens = await resolveModelContextTokensAsync(modelId, providerId)
 
-    const activeNames = toolNamesForPacks(this.resolveRoundPackIds(sessionId))
-    const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
+    const systemPrompt = this.buildRoundSystemPrompt(sessionId)
     const contextMessages = contextRefToChatMessages(record.contextRef)
     const modelView = assembleModelView({
       systemPrompt,
@@ -892,19 +983,28 @@ export class AgentEngine {
       keepRecent: KEEP_RECENT_DEFAULT,
       contextProjection: record.contextProjection,
     })
-    let toolsTokens = activeNames.length * 120
-    try {
-      const { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
+    let toolsTokens = resolveFullSessionToolNames().length * 120
+    const frozen = this.frozenToolsBySession.get(sessionId)
+    if (frozen) {
+      toolsTokens = estimateToolsTokens(frozen.openAiTools)
+    } else {
       try {
-        toolsTokens = estimateToolsTokens(openAiTools)
-      } finally {
-        await broker.close().catch(() => {})
+        const entry = await this.ensureFrozenSessionTools(sessionId, {
+          parentSessionId: record.parentSessionId,
+          isSubSession: record.kind === 'subagent' || Boolean(record.parentSessionId),
+        })
+        toolsTokens = estimateToolsTokens(entry.openAiTools)
+      } catch {
+        /* 粗估 */
       }
-    } catch {
-      /* 无完整 schema 时沿用 activeNames 粗估 */
     }
     // modelView 已含 system + memory + 近端；tools 为 API 侧单独字段，另加固定开销
     const usedTokens = estimateModelViewTokens(modelView) + toolsTokens + 512
+
+    const cacheSource = resolveSessionCacheHitSource(record.turns, record.usageTotals)
+    const cacheHitPercent = cacheSource
+      ? computeCacheHitPercent(cacheSource.cachedPromptTokens, cacheSource.promptTokens)
+      : undefined
 
     const usage: SessionContextUsage = {
       usedTokens,
@@ -914,6 +1014,12 @@ export class AgentEngine {
       estimated: true,
       usagePercent: computeContextUsagePercent(usedTokens, limitTokens),
       compacted: Boolean(record.contextProjection),
+      ...(cacheHitPercent !== undefined
+        ? {
+            cacheHitPercent,
+            cachedPromptTokens: cacheSource?.cachedPromptTokens,
+          }
+        : {}),
     }
     this.contextUsageCache.set(sessionId, usage)
     return usage
@@ -934,8 +1040,7 @@ export class AgentEngine {
     const resolved = this.registry.resolve(activeModel)
     const modelId = resolved?.model ?? activeModel?.replace(/^[^:]+:/, '') ?? 'default'
     const providerId = providerIdFromModelRef(activeModel)
-    const activeNames = toolNamesForPacks(this.resolveRoundPackIds(sessionId))
-    const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
+    const systemPrompt = this.buildRoundSystemPrompt(sessionId)
     const budget = await this.applyContextBudget(record, {
       modelId,
       providerId,
@@ -1158,6 +1263,7 @@ export class AgentEngine {
         // 避免子再 cascade 回父：直接清旁路后删记录
         this.userPromptBridge.cancelSession(childId)
         this.clearLoopSessionState(childId)
+        this.clearFrozenTools(childId)
         this.toolPackSessions.clear(childId)
         this.agentSkillSessions.clear(childId)
         this.clearExpertPacksSeeded(childId)
@@ -1178,6 +1284,7 @@ export class AgentEngine {
     this.chatAbortBySession.get(id)?.abort()
     this.userPromptBridge.cancelSession(id)
     this.clearLoopSessionState(id)
+    this.clearFrozenTools(id)
     this.toolPackSessions.clear(id)
     this.agentSkillSessions.clear(id)
     this.clearExpertPacksSeeded(id)
@@ -1624,11 +1731,15 @@ export class AgentEngine {
         emit,
         signal,
       })
-    this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
-    let activeNames = toolNamesForPacks(this.lastRoundPackIds)
-    if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
-    if (isSubSession) activeNames = filterToolNamesForSubagent(activeNames)
-    let { broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended)
+    this.lastRoundPackIds = resolveFullSessionPackIds()
+    const frozenEntry = await this.ensureFrozenSessionTools(sessionId, {
+      parentSessionId: record.parentSessionId,
+      unattended,
+      isSubSession,
+    })
+    let activeNames = [...frozenEntry.activeNames]
+    let openAiTools = frozenEntry.openAiTools
+    let broker = await this.createRoundBroker(activeNames)
 
     try {
     let businessToolsUsed = 0
@@ -1683,7 +1794,7 @@ export class AgentEngine {
       }
 
       // 稳定 system（无时钟/选型卡）；动态内容经 turn-tail 追加，利于前缀缓存
-      const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
+      const systemPrompt = this.buildRoundSystemPrompt(sessionId)
       let turnTail = this.buildRoundTurnTail(sessionId, activeNames)
       if (ephemeralTurnTailExtra) {
         turnTail = [turnTail, ephemeralTurnTailExtra].filter(Boolean).join('\n\n')
@@ -1697,7 +1808,10 @@ export class AgentEngine {
         ?? 'default'
       const providerId = providerIdFromModelRef(activeModel)
 
-      const promptCacheKey = promptCacheKeyForSession(sessionId)
+      const promptCacheKey = promptCacheKeyForSession(
+        sessionId,
+        frozenEntry.schemaGeneration,
+      )
       logChatDebugRoundStart(sessionId, {
         round: round + 1,
         model: activeModel || modelId,
@@ -1754,6 +1868,7 @@ export class AgentEngine {
         }
         const turn = await llm.chat(modelView, roundTools, signal, {
           sessionId,
+          promptCacheKey,
           temperature: record.llmParams?.temperature,
           maxTokens: record.llmParams?.maxTokens,
           reasoningEffort: record.llmParams?.reasoningEffort,
@@ -2024,12 +2139,9 @@ export class AgentEngine {
               result = { error: unloadedToolHint(fn) }
             } else {
               result = await runInToolSession(sessionId, () => broker.call(fn, args, { signal }))
-              // activate_agent_skill 会经 skill bridge 激活 required-packs / allowed-tools 对应 pack，
-              // 须与 activate_tool_pack 一样刷新本轮 activeNames/broker，否则同轮调用 pack 内工具会走 unloadedToolHint。
+              // MCP 运维会改变外部 tools schema → 冷启动重建冻结集（accept cache miss）
               if (
-                fn === 'activate_tool_pack'
-                || fn === 'activate_agent_skill'
-                || fn === 'enable_mcp_server'
+                fn === 'enable_mcp_server'
                 || fn === 'disable_mcp_server'
                 || fn === 'edit_mcp_server'
                 || fn === 'install_mcp_server'
@@ -2129,11 +2241,14 @@ export class AgentEngine {
 
         if (refreshTools) {
           await broker.close()
-          this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
-          activeNames = toolNamesForPacks(this.lastRoundPackIds)
-          if (unattended) activeNames = filterToolNamesForUnattended(activeNames)
-          if (isSubSession) activeNames = filterToolNamesForSubagent(activeNames)
-          ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames, unattended))
+          const refrozen = await this.rebuildFrozenToolsAfterSchemaChange(sessionId, {
+            unattended,
+            isSubSession,
+            parentSessionId: record.parentSessionId,
+          })
+          activeNames = [...refrozen.activeNames]
+          openAiTools = refrozen.openAiTools
+          broker = await this.createRoundBroker(activeNames)
         }
         continue
       }

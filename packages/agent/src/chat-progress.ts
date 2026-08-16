@@ -27,6 +27,9 @@ export interface ChatContextUsageSnapshot {
   usagePercent: number
   /** 已整理过上下文（刷新仍在） */
   compacted: boolean
+  /** 最近一轮前缀缓存命中率 0–100；无上游上报则省略 */
+  cacheHitPercent?: number
+  cachedPromptTokens?: number
 }
 
 export interface ChatTurnUsageSnapshot extends TokenUsage {

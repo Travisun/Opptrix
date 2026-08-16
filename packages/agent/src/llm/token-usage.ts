@@ -32,6 +32,9 @@ export function mergeTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 }
 
 function parseCachedPromptTokens(u: Record<string, unknown>): number | undefined {
+  if (typeof u.prompt_cache_hit_tokens === 'number' && Number.isFinite(u.prompt_cache_hit_tokens)) {
+    return Math.max(0, u.prompt_cache_hit_tokens)
+  }
   if (typeof u.cached_tokens === 'number' && Number.isFinite(u.cached_tokens)) {
     return Math.max(0, u.cached_tokens)
   }
@@ -72,7 +75,43 @@ export function resolveCacheWarmth(
   return usage.cachedPromptTokens > 0 ? 'warm' : 'cold'
 }
 
-/** 稳定 prompt_cache_key（同会话多轮不变） */
-export function promptCacheKeyForSession(sessionId: string): string {
-  return `opptrix-session:${sessionId}`
+/** 上游有 cached 上报时：round(100 * cached / max(prompt, 1))，钳制 0–100；无字段 → undefined */
+export function computeCacheHitPercent(
+  cachedPromptTokens: number | undefined,
+  promptTokens: number,
+): number | undefined {
+  if (cachedPromptTokens === undefined) return undefined
+  const denom = Math.max(promptTokens, 1)
+  return Math.min(100, Math.max(0, Math.round((100 * cachedPromptTokens) / denom)))
+}
+
+/** 最近一轮 assistant turn 含 cached 上报的 usage（从新到旧） */
+export function resolveLatestTurnCacheUsage(
+  turns: Array<{ role: string; usage?: TokenUsage }> | undefined,
+): TokenUsage | undefined {
+  if (!turns?.length) return undefined
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i]
+    if (turn.role === 'assistant' && turn.usage?.cachedPromptTokens !== undefined) {
+      return turn.usage
+    }
+  }
+  return undefined
+}
+
+/** 最近一轮 turn 优先；否则会话累计 usageTotals（均有 cached 字段才返回） */
+export function resolveSessionCacheHitSource(
+  turns: Array<{ role: string; usage?: TokenUsage }> | undefined,
+  usageTotals?: TokenUsage | null,
+): Pick<TokenUsage, 'cachedPromptTokens' | 'promptTokens'> | undefined {
+  const fromTurn = resolveLatestTurnCacheUsage(turns)
+  if (fromTurn?.cachedPromptTokens !== undefined) return fromTurn
+  if (usageTotals?.cachedPromptTokens !== undefined) return usageTotals
+  return undefined
+}
+
+/** 稳定 prompt_cache_key（同会话多轮不变；schema 冷启动时 generation>0 追加后缀） */
+export function promptCacheKeyForSession(sessionId: string, schemaGeneration = 0): string {
+  const base = `opptrix-session:${sessionId}`
+  return schemaGeneration > 0 ? `${base}:s${schemaGeneration}` : base
 }

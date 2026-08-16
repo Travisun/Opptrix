@@ -466,10 +466,10 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
       '4) 综合判断：条件化结论 + 主要风险与否证条件',
       '5) 数据缺口：列出仍缺的维度或未加载工具包',
       '- 每一维最多一个主证据工具；「全面」不等于堆砌重复工具',
-      '- 声称全面分析前：缺 fundamentals/market/news 等能力时先 activate_tool_pack，或明示缺口',
+      '- 声称全面分析前：缺 fundamentals/market/news 等能力时按选型卡首选工具直接取数，或明示缺口',
       '- 【正文插图（默认）】有可对比/趋势/占比/强弱矩阵等定量事实 → 在答复中灵活插入 ```chart / ```opptrix-chart（→ @opptrix/canvas Chart）；无需授权、无需 activate artifacts；禁止 shell/python（matplotlib 等）绘图代替围栏',
-      '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：activate_tool_pack([\'artifacts\']) → create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
-      '- 【关系梳理】产业链/股东/主题/流程等关系结构 → activate_tool_pack([\'artifacts\']) → create_mindmap；禁止虚构独立知识图谱工具',
+      '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：直接 create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
+      '- 【关系梳理】产业链/股东/主题/流程等关系结构 → 直接 create_mindmap；禁止虚构独立知识图谱工具',
       '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas / create_mindmap',
       '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas；「关系/脑图/结构梳理」用 create_mindmap',
     ].join('\n')
@@ -479,8 +479,8 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
     '- 结构：结论摘要 → 事实依据（工具+时点）→ 简短解读 → 主要风险一句',
     '- 工具：首选路径取证据后停止；用户未要求则不升维到 L3 全备忘录',
     '- 【正文插图（默认）】有可对比/趋势/占比/强弱矩阵等定量事实 → 在答复中灵活插入 ```chart / ```opptrix-chart（→ @opptrix/canvas Chart）；无需授权、无需 activate artifacts；禁止 shell/python（matplotlib 等）绘图代替围栏',
-    '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：activate_tool_pack([\'artifacts\']) → create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
-    '- 【关系梳理】产业链/股东/主题/流程等关系结构 → activate_tool_pack([\'artifacts\']) → create_mindmap；禁止虚构独立知识图谱工具',
+    '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：直接 create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
+    '- 【关系梳理】产业链/股东/主题/流程等关系结构 → 直接 create_mindmap；禁止虚构独立知识图谱工具',
     '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas / create_mindmap',
     '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas；「关系/脑图/结构梳理」用 create_mindmap',
   ].join('\n')
@@ -499,7 +499,7 @@ export function buildResearchCompletenessLoop(tier: ResearchTier = 'L2'): string
     '1) 缺口自检：整理本轮已获数据，对照本档位输出骨架逐维核对，列出「缺失维度 / 空数据 / 陈旧数据 / 结果标注 degraded 的降级项」。',
     '2) 针对性补齐：对每个缺口，判断是否有可用工具可补——',
     '   - 首选工具报错/空 → 换数据源或换等价工具重试一次；',
-    '   - 缺整类能力（如基本面/行情/资讯/行业）→ 先 list_tool_packs → activate_tool_pack 再取；',
+    '   - 缺整类能力（如基本面/行情/资讯/行业）→ 先看本轮尾注「工具选型卡」选首选工具；仍无对应工具则 list_tool_packs 核对后明示缺口；',
     '   - 结果为 local 降级 → 尽量重试远程 MCP 补权威数据。',
     '3) 重新纳入：补齐后的数据必须回到分析中重新研判，不得把补充数据仅附在末尾。',
     '4) 收敛：仅当「缺口已补齐」或「确认无工具可补（须在报告『数据缺口』中说明原因）」时，才输出最终报告。',
@@ -559,15 +559,23 @@ function packLoaded(set: Set<string> | null, id: string): boolean {
   return set == null || set.has(id)
 }
 
+/** 按档位注入 turn-tail（稳定 system 不含 L1/L2/L3 长分支） */
+export function buildResearchTierTurnTail(tier: ResearchTier = 'L2'): string {
+  const parts = [buildResearchOutputPlaybook(tier)]
+  if (tier !== 'L1') {
+    parts.push(buildResearchCompletenessLoop(tier))
+  }
+  return parts.filter(Boolean).join('\n\n')
+}
+
 /** 聊天 Agent 完整 system 规则正文（不含角色行） */
 export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   const packs = packSet(opts?.activePacks)
-  const tier = opts?.researchTier ?? 'L2'
   const sections: string[] = [
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
     '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
-    '- 仅使用当前会话已加载的 MCP 工具（见 tools 列表）；缺能力时 list_tool_packs → activate_tool_pack',
+    '- 本会话 tools 列表已在首次 chat 全量加载并冻结；优先按本轮尾注「工具选型卡」选工具',
   ]
 
   sections.push(
@@ -579,21 +587,13 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     '3) 引用须带文档名与页码；禁止臆造未读内容；勿一次灌全文',
   )
 
-  // 会话时钟 / 选型卡 → turn-tail（见 buildTurnTailPrompt），勿写入稳定 system
+  // 会话时钟 / 选型卡 / 档位骨架 → turn-tail（见 buildTurnTailPrompt / buildResearchTierTurnTail）
 
-  sections.push(
-    buildResearchEpistemicPlaybook(),
-    buildResearchOutputPlaybook(tier),
-  )
+  sections.push(buildResearchEpistemicPlaybook())
 
   sections.push(buildWorkspaceAccessPlaybook())
   sections.push(buildLocalDataCatalogIndexPrompt())
   sections.push(buildLocalProgrammingPlaybook())
-
-  // 完备性闭环仅作用于 L2/L3 报告类输出；L1 事实快答保持轻量。
-  if (tier !== 'L1') {
-    sections.push(buildResearchCompletenessLoop(tier))
-  }
 
   sections.push(buildToolPackCatalogPrompt())
   sections.push(buildInstrumentNamespacePlaybook())
@@ -602,10 +602,8 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   if (packLoaded(packs, 'core')) {
     sections.push(buildStandardInstrumentApiPlaybook())
   }
-  // 协作委派：本轮暴露 run_subagent，或未列 tool 名但 core 已加载时注入
-  const hasRunSubagentTool = opts?.activeToolNames?.includes('run_subagent') === true
-  const assumeCoreHasSubagent = opts?.activeToolNames == null && packLoaded(packs, 'core')
-  if (hasRunSubagentTool || assumeCoreHasSubagent) {
+  // 协作委派：core 已全量加载
+  if (packLoaded(packs, 'core')) {
     sections.push(buildCollaborationSubagentPlaybook())
   }
   if (packLoaded(packs, 'fundamentals')) {
@@ -631,23 +629,18 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     sections.push(buildNewsRetrievalPlaybook())
   }
 
-  if (opts?.activeToolNames?.length) {
-    sections.push(
-      `- 本轮可用工具（共 ${opts.activeToolNames.length} 个）：${opts.activeToolNames.slice(0, 40).join(', ')}${opts.activeToolNames.length > 40 ? '…' : ''}`,
-    )
-  }
-
   sections.push(
-    '- 每个已加载工具描述含【何时使用】【调用规范】，严格遵守；以本轮选型卡与证据纪律为首要决策依据',
+    '- 每个工具描述含【何时使用】【调用规范】，严格遵守；以本轮尾注选型卡与证据纪律为首要决策依据',
     '- 不推荐具体买卖，仅提供研究与数据解读',
-    '- L1 走最短正确路径；L3 按备忘录骨架覆盖并声明缺口；禁止为堆砌而重复调用',
+    '- 答复档位与输出骨架见本轮尾注，勿为堆砌而重复调用',
   )
 
-  const hasShellTools = opts?.activeToolNames?.some(
-    name => name === 'opptrix_run' || name === 'code_preflight'
-      || name === 'workspace_replace_lines'
-      || name.startsWith('workspace_'),
-  )
+  const hasShellTools = packLoaded(packs, 'workspace')
+    || opts?.activeToolNames?.some(
+      name => name === 'opptrix_run' || name === 'code_preflight'
+        || name === 'workspace_replace_lines'
+        || name.startsWith('workspace_'),
+    )
   if (hasShellTools) {
     sections.push(
       '- 【方案 1 / OpenCode 式】读改写文件 = workspace_*（优先于 shell）；跑命令 = opptrix_run（真 shell，含 background）+ 可选 code_preflight；领域工具仅行情/财务/资讯/画布；勿互相替代',
@@ -665,7 +658,7 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     )
   } else {
     sections.push(
-      '- 未加载 opptrix_run / workspace_* 时：勿声称具备本地命令、工作区文件或未提供的工具能力；内置工具不够或无匹配时 → 默认已含 workspace pack，直接用 opptrix_run / code_preflight / workspace_* 沙盒编程实现（ensure_python 仅失败兜底；可先标准工具取数再沙盒计算），勿空转 activate 无关 pack，勿直接声称无法完成',
+      '- 沙盒 workspace 工具已随会话全量加载；内置工具不够时直接用 opptrix_run / code_preflight / workspace_* 编程实现（ensure_python 仅失败兜底），勿空转 activate，勿直接声称无法完成',
     )
   }
 

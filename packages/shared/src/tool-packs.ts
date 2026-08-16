@@ -343,12 +343,22 @@ export function alwaysOnPackIds(): ToolPackId[] {
   return TOOL_PACK_DEFS.filter(p => p.alwaysOn).map(p => p.id)
 }
 
+/** 会话冻结 Broker 用：全部 pack（always-on + 业务） */
+export function allToolPackIds(): ToolPackId[] {
+  return [...TOOL_PACK_IDS]
+}
+
+/** 非 always-on 的业务 pack（会话首次 chat 一次性激活） */
+export function businessPackIds(): ToolPackId[] {
+  return TOOL_PACK_DEFS.filter(p => !p.alwaysOn).map(p => p.id)
+}
+
 /** system 提示用的简短 pack 目录（替代长 TOOL_ROUTING 表） */
 export function buildToolPackCatalogPrompt(): string {
   const lines = [
     '## 工具包目录（按需加载）',
-    '每轮默认加载 core + meta + workspace；其它包由意图播种或 activate_tool_pack 激活。',
-    '需要未加载能力时：先 list_tool_packs，再 activate_tool_pack({ pack_ids: [...] })。',
+    '会话首次进入 chat 时全量加载所有工具包（core + meta + workspace + 全部业务 pack）；tools 列表本会话冻结不变。',
+    'activate_tool_pack 为 no-op（已加载）；缺能力时先看本轮尾注「工具选型卡」选首选工具，勿重复 activate。',
     '',
     '| pack_id | 标题 | 何时激活 |',
     '|---------|------|----------|',

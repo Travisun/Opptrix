@@ -161,6 +161,14 @@ export {
   unloadedToolHint,
 } from './mcp/tool-pack-session.js'
 export {
+  orderToolsStable,
+  resolveFullSessionPackIds,
+  resolveFullSessionToolNames,
+  businessPackIdsForSessionSeed,
+  filterFrozenToolsForSubagent,
+  type SessionFrozenToolsEntry,
+} from './mcp/session-frozen-tools.js'
+export {
   resolvePackIdsFromSkill,
   splitSkillDeclarationTokens,
   type SkillPackDeclaration,
@@ -346,6 +354,9 @@ export {
   mergeTokenUsage,
   parseOpenAiUsage,
   resolveCacheWarmth,
+  computeCacheHitPercent,
+  resolveLatestTurnCacheUsage,
+  resolveSessionCacheHitSource,
   promptCacheKeyForSession,
 } from './llm/token-usage.js'
 

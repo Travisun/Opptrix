@@ -7,6 +7,8 @@ import {
   buildAgentSystemRules,
   buildResearchEpistemicPlaybook,
   buildResearchOutputPlaybook,
+  buildResearchCompletenessLoop,
+  buildResearchTierTurnTail,
   buildSessionClockPlaybook,
   buildWorkspaceAccessPlaybook,
   buildLocalProgrammingPlaybook,
@@ -138,12 +140,22 @@ test('L2/L3 output playbooks prefer inline chart; no ask_user report gate', () =
     assert.match(text, /关系梳理/)
     assert.match(text, /create_mindmap/)
     assert.match(text, /禁止虚构.*知识图谱|禁止虚构独立知识图谱/)
+    assert.match(text, /直接 create_canvas|直接 create_mindmap/)
+    assert.doesNotMatch(text, /activate_tool_pack/)
     assert.ok(!text.includes('可视化报告确认'))
     assert.ok(!text.includes('跳过询问'))
     assert.ok(!text.includes('同意后'))
     assert.ok(!text.includes('拒绝后'))
     assert.ok(!text.includes('仅文字答复'))
     assert.ok(!/优先 ask_user 询问是否生成可视化/.test(text))
+  }
+})
+
+test('research completeness loop avoids ritual activate_tool_pack', () => {
+  for (const tier of /** @type {const} */ (['L2', 'L3'])) {
+    const text = buildResearchCompletenessLoop(tier)
+    assert.match(text, /工具选型卡/)
+    assert.doesNotMatch(text, /activate_tool_pack/)
   }
 })
 
@@ -166,22 +178,15 @@ test('collaboration subagent playbook covers schema and lifecycle', () => {
   assert.match(text, /忙等|poll/)
 })
 
-test('system rules inject collaboration playbook when run_subagent available', () => {
-  const withTool = buildAgentSystemRules({
+test('system rules inject collaboration playbook when core pack loaded', () => {
+  const withCore = buildAgentSystemRules({
     activePacks: ['core'],
     activeToolNames: ['run_subagent', 'get_instrument_snapshot'],
   })
-  assert.match(withTool, /协作任务 — run_subagent/)
-  assert.match(withTool, /建议强制 summary/)
+  assert.match(withCore, /协作任务 — run_subagent/)
 
   const coreOnly = buildAgentSystemRules({ activePacks: ['core'] })
   assert.match(coreOnly, /协作任务 — run_subagent/)
-
-  const withoutTool = buildAgentSystemRules({
-    activePacks: ['core'],
-    activeToolNames: ['get_instrument_snapshot'],
-  })
-  assert.ok(!withoutTool.includes('协作任务 — run_subagent'))
 })
 
 test('artifacts playbook report-priority without prior ask confirmation', () => {
@@ -191,17 +196,18 @@ test('artifacts playbook report-priority without prior ask confirmation', () => 
   assert.ok(!text.includes('用户已确认要可视化投研报告'))
 })
 
-test('system rules always include epistemic + tier skeleton', () => {
+test('stable system excludes tier skeleton; turn-tail carries L3 branches', () => {
   const rules = buildAgentSystemRules({
     activePacks: ['core', 'meta'],
     researchTier: 'L3',
     routePlaybook: '【本轮工具选型卡】\n- test',
   })
   assert.match(rules, /投研证据纪律/)
-  assert.match(rules, /深度投研备忘录/)
-  // 选型卡进 turn-tail，不进稳定 system
+  assert.ok(!rules.includes('深度投研备忘录'))
   assert.ok(!rules.includes('本轮工具选型卡'))
   assert.ok(!rules.includes('【资讯调阅'))
+  const tail = buildResearchTierTurnTail('L3')
+  assert.match(tail, /深度投研备忘录/)
 })
 
 test('research tier: price=L1, news=L2, depth=L3, 全面 upgrades', () => {
@@ -237,13 +243,13 @@ test('L1 plan playbook asks to stop after short path', () => {
 
 test('ToolRegistry systemPrompt embeds researcher persona and epistemic rules', () => {
   const prompt = new ToolRegistry(new ResearchHub()).systemPrompt({
-    researchTier: 'L2',
     activePacks: ['core', 'meta'],
   })
   assert.match(prompt, /系统底线/)
   assert.match(prompt, /投研研究员/)
   assert.match(prompt, /投研证据纪律/)
-  assert.match(prompt, /答复档位 L2/)
+  assert.ok(!prompt.includes('答复档位 L2'))
+  assert.match(buildResearchTierTurnTail('L2'), /答复档位 L2/)
 })
 
 test('Layer0 baseline cannot be overridden by expert persona injection', () => {

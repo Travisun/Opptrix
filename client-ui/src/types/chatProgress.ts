@@ -63,6 +63,9 @@ export interface ChatContextUsageSnapshot {
   estimated: boolean
   usagePercent?: number
   compacted?: boolean
+  /** 最近一轮前缀缓存命中率 0–100；无上报则省略 */
+  cacheHitPercent?: number
+  cachedPromptTokens?: number
 }
 
 export type ChatProgressEvent =

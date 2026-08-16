@@ -645,8 +645,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   activate_tool_pack: {
     packId: 'meta',
-    usageGuide: '按需激活业务工具包，使本轮及后续轮次可调用该包内工具；当前 tools 不足时使用。',
-    compliance: 'pack_ids 为字符串数组（如 ["news","instrument_analytics"]）；同会话累积激活；无效 id 会出现在 skipped。',
+    usageGuide: '记录需强调的业务域（本会话 tools 已全量加载）；选型卡已给出首选工具，通常无需再 activate。',
+    compliance: 'pack_ids 为字符串数组；同会话 tools schema 冻结不变；返回 already_loaded。',
   },
   list_agent_skills: {
     packId: 'meta',
@@ -655,8 +655,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   activate_agent_skill: {
     packId: 'meta',
-    usageGuide: '激活工作流技能，将完整步骤注入本会话 system；用户提到早报/收盘报告/产业链/财报速读/深度分析流程时使用。技能正文中的 `@skill:依赖` 会自动递归激活；声明的 allowed-tools / required-packs 会自动挂上对应工具包。',
-    compliance: 'skill_names 为字符串数组；同会话最多 3 个；无效名或超额进入 skipped；循环依赖会被检测并跳过；返回 activated_packs / tools_hint。',
+    usageGuide: '激活工作流技能，完整步骤注入本轮尾注；技能 required-packs 仅作记录，tools schema 不重建。',
+    compliance: 'skill_names 为字符串数组；同会话最多 3 个；无效名或超额进入 skipped；循环依赖会被检测并跳过；返回 activated_packs。',
   },
   update_research_checklist: {
     packId: 'meta',

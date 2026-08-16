@@ -136,6 +136,8 @@ export type LlmToolChoice =
 
 export interface LlmChatOpts {
   sessionId?: string
+  /** 显式 prompt_cache_key；未设则回退 promptCacheKeyForSession(sessionId) */
+  promptCacheKey?: string
   /** 传入时走 SSE 流式；文本增量与 tool_calls 发现会回调 */
   onDelta?: (delta: LlmChatDelta) => void
   /** 本轮覆盖；未设则回退 LlmConfig / 默认 ladder */
@@ -163,6 +165,18 @@ export function resolveBodyToolChoice(
 function toolChoiceNeedsFallback(toolChoice: LlmToolChoice | undefined): boolean {
   if (toolChoice == null || toolChoice === 'auto') return false
   return true
+}
+
+/** 供测试与 buildBody 共用：解析 prompt_cache_key */
+export function resolveBodyPromptCacheKey(
+  sessionId?: string,
+  explicitKey?: string,
+): string | undefined {
+  const trimmedKey = explicitKey?.trim()
+  if (trimmedKey) return trimmedKey
+  const trimmedSession = sessionId?.trim()
+  if (trimmedSession) return promptCacheKeyForSession(trimmedSession)
+  return undefined
 }
 
 export interface LlmProvider {
@@ -585,9 +599,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         body.reasoning_effort = opts.reasoningEffort
       }
       // 观测用：稳定 session 级 prompt cache key；不因 warm/cold 改写 messages
-      const sessionId = opts?.sessionId?.trim()
-      if (sessionId) {
-        body.prompt_cache_key = promptCacheKeyForSession(sessionId)
+      const promptCacheKey = resolveBodyPromptCacheKey(opts?.sessionId, opts?.promptCacheKey)
+      if (promptCacheKey) {
+        body.prompt_cache_key = promptCacheKey
       }
       if (tools?.length) {
         body.tools = tools

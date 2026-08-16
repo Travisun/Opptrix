@@ -50,6 +50,8 @@ export interface TokenUsage {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  /** 上游 prefix cache 命中 tokens；缺省表示未上报 */
+  cachedPromptTokens?: number
 }
 
 export interface ChatContextUsage {
@@ -62,6 +64,9 @@ export interface ChatContextUsage {
   usagePercent?: number
   /** 已整理过上下文（刷新仍在） */
   compacted?: boolean
+  /** 最近一轮前缀缓存命中率 0–100；无上报则省略 */
+  cacheHitPercent?: number
+  cachedPromptTokens?: number
 }
 
 export type ReasoningEffort = 'low' | 'medium' | 'high'

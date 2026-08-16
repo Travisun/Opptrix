@@ -136,6 +136,23 @@ describe('parseOpenAiUsage', () => {
   })
 })
 
+describe('resolveBodyPromptCacheKey', () => {
+  it('prefers explicit key with schema generation suffix', async () => {
+    const { resolveBodyPromptCacheKey } = await import('../packages/agent/dist/llm/provider.js')
+    assert.equal(
+      resolveBodyPromptCacheKey('sess-1', 'opptrix-session:sess-1:s2'),
+      'opptrix-session:sess-1:s2',
+    )
+    assert.equal(resolveBodyPromptCacheKey('sess-1', '  '), 'opptrix-session:sess-1')
+    assert.equal(resolveBodyPromptCacheKey(undefined, undefined), undefined)
+  })
+
+  it('falls back to session id without generation', async () => {
+    const { resolveBodyPromptCacheKey } = await import('../packages/agent/dist/llm/provider.js')
+    assert.equal(resolveBodyPromptCacheKey('abc'), 'opptrix-session:abc')
+  })
+})
+
 describe('resolveCacheWarmth / promptCacheKeyForSession', () => {
   it('derives warm|cold|unknown', async () => {
     const { resolveCacheWarmth, promptCacheKeyForSession } = await import(
@@ -146,6 +163,40 @@ describe('resolveCacheWarmth / promptCacheKeyForSession', () => {
     assert.equal(resolveCacheWarmth({ cachedPromptTokens: 0 }), 'cold')
     assert.equal(resolveCacheWarmth({ cachedPromptTokens: 12 }), 'warm')
     assert.equal(promptCacheKeyForSession('abc'), 'opptrix-session:abc')
+  })
+})
+
+describe('computeCacheHitPercent / resolveSessionCacheHitSource', () => {
+  it('computes percent and clamps 0–100', async () => {
+    const { computeCacheHitPercent } = await import('../packages/agent/dist/llm/token-usage.js')
+    assert.equal(computeCacheHitPercent(undefined, 100), undefined)
+    assert.equal(computeCacheHitPercent(80, 100), 80)
+    assert.equal(computeCacheHitPercent(50, 0), 100)
+    assert.equal(computeCacheHitPercent(150, 100), 100)
+    assert.equal(computeCacheHitPercent(-5, 100), 0)
+  })
+
+  it('prefers latest assistant turn over usageTotals', async () => {
+    const { resolveSessionCacheHitSource } = await import('../packages/agent/dist/llm/token-usage.js')
+    const turns = [
+      { role: 'user', usage: undefined },
+      {
+        role: 'assistant',
+        usage: { promptTokens: 200, completionTokens: 10, totalTokens: 210, cachedPromptTokens: 180 },
+      },
+    ]
+    const totals = { promptTokens: 500, completionTokens: 50, totalTokens: 550, cachedPromptTokens: 100 }
+    const hit = resolveSessionCacheHitSource(turns, totals)
+    assert.equal(hit?.cachedPromptTokens, 180)
+    assert.equal(hit?.promptTokens, 200)
+  })
+
+  it('falls back to usageTotals when no turn has cached', async () => {
+    const { resolveSessionCacheHitSource } = await import('../packages/agent/dist/llm/token-usage.js')
+    const turns = [{ role: 'assistant', usage: { promptTokens: 10, completionTokens: 1, totalTokens: 11 } }]
+    const totals = { promptTokens: 100, completionTokens: 5, totalTokens: 105, cachedPromptTokens: 40 }
+    const hit = resolveSessionCacheHitSource(turns, totals)
+    assert.equal(hit?.cachedPromptTokens, 40)
   })
 })
 

@@ -1025,7 +1025,7 @@ export class ToolRegistry {
       {
         name: 'activate_tool_pack',
         category: '工具包',
-        description: '激活一个或多个业务工具包，使同会话后续（含本轮刷新后）可调用其中工具',
+        description: '记录工具包激活意图（本会话 tools 已在首次 chat 全量加载；调用为 no-op，请直接使用 tools 列表）',
         parameters: S({
           pack_ids: {
             type: 'array',

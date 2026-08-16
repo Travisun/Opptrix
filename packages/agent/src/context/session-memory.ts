@@ -66,6 +66,11 @@ export function formatSessionMemoryForPrompt(memory: SessionMemory | null | unde
   ].join('\n\n')
 }
 
+/** 压缩后工作记忆：用 user 尾块注入，避免第二条 role:system 破坏前缀缓存 */
+export function sessionMemoryAsUserBlock(memory: SessionMemory | null | undefined): string | null {
+  return formatSessionMemoryForPrompt(memory)
+}
+
 export function parseSessionMemoryFromModelText(
   raw: string,
   prev: SessionMemory | null | undefined,

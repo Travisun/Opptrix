@@ -5,6 +5,7 @@ import {
   TOOL_PACK_MEMBERSHIP,
   TOOL_PACK_DEFS,
   alwaysOnPackIds,
+  allToolPackIds,
   toolsInPack,
   packIdForTool,
   buildToolPackCatalogPrompt,
@@ -98,22 +99,18 @@ test('resolver seeds industry for 指数成分', () => {
   assert.ok(packs.includes('industry'))
 })
 
-test('activate expands active tool names across session', () => {
+test('activate expands session pack bookkeeping without shrinking tool exposure', () => {
   const store = new ToolPackSessionStore()
   const sessionId = 'test-session'
   const before = resolveActivePackIds(store, sessionId, { message: '你好' })
   assert.deepEqual([...before].sort(), ['core', 'meta', 'workspace'])
-  const namesBefore = toolNamesForPacks(before)
-  assert.ok(namesBefore.includes('search_instruments'))
-  assert.ok(namesBefore.includes('opptrix_run'))
-  assert.ok(!namesBefore.includes('list_news_articles'))
-
   store.activate(sessionId, ['news'])
   const after = resolveActivePackIds(store, sessionId, { message: '你好' })
   assert.ok(after.includes('news'))
-  const namesAfter = toolNamesForPacks(after)
-  assert.ok(namesAfter.includes('list_news_articles'))
-  assert.ok(namesAfter.length > namesBefore.length)
+  const fullNames = toolNamesForPacks(allToolPackIds())
+  const coldNames = toolNamesForPacks(before)
+  assert.ok(fullNames.length > coldNames.length)
+  assert.ok(fullNames.includes('list_news_articles'))
 })
 
 test('cold start always includes workspace pack tools', () => {
@@ -127,16 +124,18 @@ test('cold start always includes workspace pack tools', () => {
   assert.ok(!names.includes('workspace_mkdir'))
 })
 
-test('unloaded tool hint points to activate_tool_pack', () => {
+test('unloaded tool hint reflects frozen session tools', () => {
   const hint = unloadedToolHint('evaluate_instrument')
-  assert.match(hint, /activate_tool_pack/)
+  assert.match(hint, /冻结|全量加载/)
   assert.match(hint, /instrument_analytics/)
+  assert.match(hint, /选型卡|tools/)
+  assert.doesNotMatch(hint, /请先调用 activate_tool_pack/)
 })
 
 test('unloaded tool hint for list_web_vendor names artifacts pack', () => {
   assert.equal(packIdForTool('list_web_vendor'), 'artifacts')
   const hint = unloadedToolHint('list_web_vendor')
-  assert.match(hint, /activate_tool_pack/)
+  assert.match(hint, /冻结|tools/)
   assert.match(hint, /artifacts/)
   assert.doesNotMatch(hint, /未知或不支持/)
 })
@@ -149,17 +148,17 @@ test('unknown tool hint falls back to workspace sandbox', () => {
   assert.match(hint, /勿虚构/)
 })
 
-test('engine refreshes tools after activate_agent_skill (same as activate_tool_pack)', () => {
-  // 契约：技能激活会写入 session packs，须同轮 refreshTools，否则 list_web_vendor 等会误报未加载/未知
+test('activate_agent_skill does not trigger mid-loop tools schema rebuild', () => {
   const engineSrc = fs.readFileSync(
     new URL('../packages/agent/src/engine.ts', import.meta.url),
     'utf8',
   )
-  const refreshBlock = engineSrc.match(
-    /if\s*\(\s*fn === 'activate_tool_pack'[\s\S]*?\)\s*\{\s*refreshTools = true/,
+  assert.doesNotMatch(
+    engineSrc,
+    /fn === 'activate_agent_skill'[\s\S]*?\)\s*\{\s*refreshTools = true/,
   )
-  assert.ok(refreshBlock, 'expected refreshTools condition block after pack/skill activate')
-  assert.match(refreshBlock[0], /fn === 'activate_agent_skill'/)
+  assert.match(engineSrc, /buildActivatedSkillsPrompt/)
+  assert.match(engineSrc, /buildRoundTurnTail/)
 })
 
 test('list_tool_packs payload marks loaded state', () => {
@@ -176,6 +175,7 @@ test('pack catalog prompt is slim vs legacy routing tables', () => {
   assert.match(prompt, /activate_tool_pack/)
   assert.match(prompt, /调用纪律/)
   assert.match(prompt, /workspace/)
+  assert.match(prompt, /全量加载|冻结/)
   assert.match(prompt, /core \+ meta \+ workspace|默认加载 core \+ meta \+ workspace/)
   assert.match(prompt, /opptrix_run|沙盒|编程实现/)
   assert.match(prompt, /禁止仅为「开工」再 activate|勿仪式化|已加载/)
@@ -189,28 +189,8 @@ test('workspace seed patterns cover programming fallback without research spam',
   assert.ok(!resolveSeedPacks({ message: '茅台现价多少' }).includes('workspace'))
 })
 
-test('cold start exposed tools << full registry', () => {
-  const store = new ToolPackSessionStore()
-  const packs = resolveActivePackIds(store, 's1', { message: '随便问问' })
-  const exposed = toolNamesForPacks(packs)
+test('full session pack load exposes all registered chat tools', () => {
   const full = new ToolRegistry(new ResearchHub()).list().length
-  assert.ok(exposed.length < full)
-  const alwaysOnMax =
-    toolsInPack('core').length + toolsInPack('meta').length + toolsInPack('workspace').length
-  assert.ok(exposed.length <= alwaysOnMax)
-})
-
-test('analysis seed keeps tools under full set', () => {
-  const store = new ToolPackSessionStore()
-  const packs = resolveActivePackIds(store, 's2', { message: '分析 600519' })
-  assert.ok(packs.includes('instrument_analytics'))
-  assert.ok(
-    packs.filter(p => p !== 'core' && p !== 'meta' && p !== 'workspace').length
-      <= MAX_SEEDED_BUSINESS_PACKS,
-  )
-  const exposed = toolNamesForPacks(packs)
-  const full = new ToolRegistry(new ResearchHub()).list().length
-  assert.ok(exposed.length < full)
-  assert.ok(exposed.includes('evaluate_instrument'))
-  assert.ok(exposed.includes('search_instruments'))
+  const exposed = toolNamesForPacks(allToolPackIds())
+  assert.equal(exposed.length, full)
 })
