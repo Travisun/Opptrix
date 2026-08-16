@@ -704,6 +704,32 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.3.4': {
+    welcomeTitle: '研讨更深，技能更好用',
+    welcomeSubtitle:
+      '这一版工作流技能覆盖量化与价值投资；可召开投资研讨团出综合报告；结论可预览为网页；设置中还可按需开启自进化。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '替你推进',
+        title: '量化与价值投资，按流程走完',
+        desc: '内置更多成熟分析步骤：因子择时、财务核查与论点跟踪等，一句话即可按方法推进，少重复交代。',
+        note: '把精力留给判断，而不是拼流程。',
+      },
+      {
+        kicker: '替你辩论',
+        title: '投资研讨团，多空对完再下结论',
+        desc: '多角色取证、多空辩论与风险互评后，整理成一份可读的综合研究报告。',
+        note: '立场更立体，结论更有对照。',
+      },
+      {
+        kicker: '更省心',
+        title: '结论成网页，助手也可自进化',
+        desc: '报告可预览并导出为网页便于复盘分享；设置中可按需开启自进化，让常用模型更贴合你的用法。',
+        note: '交付更完整，习惯越用越顺。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

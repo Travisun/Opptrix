@@ -37,6 +37,7 @@ jobs:
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#desktop-v}"
           PRERELEASE_FLAG=""
+          DRAFT_FLAG="--draft"
           NOTES_FILE="$(mktemp)"
           if [[ "$TAG" == *-dev* ]]; then
             PRERELEASE_FLAG="--prerelease"
@@ -46,12 +47,19 @@ jobs:
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists"
+            IS_DRAFT="$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || echo false)"
+            echo "isDraft=$IS_DRAFT"
             exit 0
           fi
 
+          # Always create as GitHub draft first so QA can install from Release assets
+          # without publishing auto-update to R2. Promote later with:
+          #   gh release edit "$TAG" --draft=false
+          # then run workflow "Resync Desktop R2" (no retag / rebuild).
           gh release create "$TAG" \
             --title "Opptrix Desktop ${VERSION}" \
             --notes-file "$NOTES_FILE" \
+            $DRAFT_FLAG \
             $PRERELEASE_FLAG
 
   release:
@@ -452,19 +460,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Skip R2 sync for draft releases
+        id: draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          IS_DRAFT="$(gh release view "$TAG" --json isDraft -q .isDraft)"
+          echo "isDraft=$IS_DRAFT"
+          if [[ "$IS_DRAFT" == "true" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Draft release $TAG — skip Cloudflare R2 sync (promote with gh release edit --draft=false, then Resync Desktop R2)."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Node
+        if: steps.draft.outputs.skip != 'true'
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
+        if: steps.draft.outputs.skip != 'true'
         run: npm ci
 
       - name: Verify release metadata policy
+        if: steps.draft.outputs.skip != 'true'
         run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
 
       - name: Download release assets
+        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -477,9 +505,11 @@ jobs:
           ls -la "$WORK"
 
       - name: Verify release coherence (tag, yml, assets)
+        if: steps.draft.outputs.skip != 'true'
         run: node apps/desktop/scripts/verify-release-coherence.mjs "${{ github.ref_name }}" "$ASSET_DIR"
 
       - name: Verify R2 credentials
+        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -489,6 +519,7 @@ jobs:
         run: node apps/desktop/scripts/verify-r2-credentials.mjs
 
       - name: Sync to Cloudflare R2 (upload then prune obsolete)
+        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -500,6 +531,7 @@ jobs:
 
       # Purge before public verify — edge may cache 404 from mid-upload probes.
       - name: Purge Cloudflare CDN cache (yml + Linux installers/CMS)
+        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -509,6 +541,7 @@ jobs:
         run: node apps/desktop/scripts/purge-update-cdn-cache.mjs "$ASSET_DIR"
 
       - name: Verify public update metadata
+        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}

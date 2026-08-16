@@ -128,15 +128,24 @@ git push origin desktop-v0.6.1
 
 推送 `desktop-v*` 标签后，GitHub Actions 会：
 
-1. **prepare-release**：创建 GitHub Release（`desktop-v{version}`）
-2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux）
-3. 各 job 用 `gh release upload` 上传安装包（`electron-builder --publish never`，避免 CI 内自动 publish/签名冲突）
-4. **finalize-release** 合并 macOS 双架构 `latest-mac.yml` 并校验 yml 与 Release 附件一致
-5. **sync-r2** 将当前 Release 产物同步至 Cloudflare R2（先上传含 `*.opptrix-cms` 的完整产物，再删除过期对象），供客户端加速更新
+1. **prepare-release**：创建 **Draft** GitHub Release（`desktop-v{version}`），便于先测安装包、再转正，**无需重新打包**
+2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux），含 SenseVoice / e5 / RapidOCR / engines / Python 等预装 stage
+3. 各 job 用 `gh release upload` 上传安装包到该 Draft Release
+4. **finalize-release** 合并 macOS 双架构 `latest-mac.yml` 并校验附件一致
+5. **sync-r2**：若 Release 仍为 Draft → **跳过**（不把更新源推到 Cloudflare R2）；正式发布后再同步
 
-若仅需把已有 Release 重新同步到 R2（例如补传 Linux CMS），在 Actions 运行 **Resync Desktop R2**，输入标签如 `desktop-v1.2.6`。
+#### 草稿 → 正式（不重新打标签 / 不重建）
 
-Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名。
+测试通过后，用**同一标签与同一批附件**转正：
+
+```bash
+gh release edit desktop-v1.3.4 --draft=false
+# Actions → 手动运行 「Resync Desktop R2」，输入标签 desktop-v1.3.4
+```
+
+转正后客户端自动更新才会从 R2 拉到该版本。Draft 期间请从 GitHub Release 页面手动下载安装包测试。
+
+Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名（并标记 GitHub prerelease）。
 
 `electron-builder` 会：
 
