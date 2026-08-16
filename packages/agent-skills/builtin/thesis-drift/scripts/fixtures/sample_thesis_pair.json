@@ -1,0 +1,46 @@
+{
+  "symbol": "00700",
+  "company": "腾讯控股",
+  "old": {
+    "date": "2025-10-01",
+    "thesis_summary": "以合理价格买入优质互联网平台",
+    "action": "hold",
+    "assumptions": [
+      {"id": "1", "text": "游戏与广告收入稳健", "status": "ok"},
+      {"id": "2", "text": "自由现金流持续增长", "status": "ok"},
+      {"id": "3", "text": "监管环境可预期", "status": "ok"}
+    ],
+    "redlines": [
+      {"id": "1", "text": "管理层诚信重大问题", "triggered": false},
+      {"id": "2", "text": "核心业务连续两季下滑", "triggered": false}
+    ],
+    "valuation": {
+      "price": 380,
+      "pe": 17,
+      "margin_of_safety": 0.25
+    },
+    "management": "trustworthy",
+    "moat": "stable"
+  },
+  "new": {
+    "date": "2026-04-01",
+    "thesis_summary": "以合理价格买入优质互联网平台",
+    "action": "reduce",
+    "assumptions": [
+      {"id": "1", "text": "游戏与广告收入稳健", "status": "weakening"},
+      {"id": "2", "text": "自由现金流持续增长", "status": "ok"},
+      {"id": "3", "text": "监管环境可预期", "status": "impaired"}
+    ],
+    "redlines": [
+      {"id": "1", "text": "管理层诚信重大问题", "triggered": false},
+      {"id": "2", "text": "核心业务连续两季下滑", "triggered": true}
+    ],
+    "valuation": {
+      "price": 420,
+      "pe": 22,
+      "margin_of_safety": 0.08
+    },
+    "management": "trustworthy",
+    "moat": "narrowing"
+  }
+}

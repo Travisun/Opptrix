@@ -1,0 +1,39 @@
+{
+  "instruments": [
+    {
+      "symbol": "PASS1",
+      "name": "示例通过",
+      "info_grade": "A",
+      "mirror_ok": true,
+      "gates": {
+        "circle": 5,
+        "business": 5,
+        "moat": 4,
+        "management": 4,
+        "margin_of_safety": 4,
+        "discipline": 5
+      },
+      "vetoes": []
+    },
+    {
+      "symbol": "GREY1",
+      "info_grade": "C",
+      "gates": { "circle": 3, "business": 3 },
+      "vetoes": []
+    },
+    {
+      "symbol": "VETO1",
+      "info_grade": "A",
+      "mirror_ok": true,
+      "gates": {
+        "circle": 4,
+        "business": 4,
+        "moat": 4,
+        "management": 4,
+        "margin_of_safety": 3,
+        "discipline": 3
+      },
+      "vetoes": ["integrity_stain"]
+    }
+  ]
+}

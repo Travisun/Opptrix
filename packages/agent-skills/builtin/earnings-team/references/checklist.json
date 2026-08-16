@@ -1,0 +1,12 @@
+{
+  "title": "earnings-team",
+  "items": [
+    {"id": "materials", "label": "一手资料与 A/B/C"},
+    {"id": "four", "label": "四大师并行完成并 reclaim"},
+    {"id": "synth", "label": "合成研究底稿"},
+    {"id": "edit", "label": "编辑成稿并 reclaim"},
+    {"id": "review", "label": "读者评审并 reclaim"},
+    {"id": "audit", "label": "抽检准出"},
+    {"id": "web", "label": "create_web 交付"}
+  ]
+}

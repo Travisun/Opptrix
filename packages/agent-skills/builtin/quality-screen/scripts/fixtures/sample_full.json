@@ -1,0 +1,48 @@
+{
+  "meta": { "skill": "quality-screen" },
+  "instruments": [
+    {
+      "symbol": "GOOD",
+      "name": "优质示例",
+      "years_listed": 15,
+      "metrics": {
+        "roe_10y_avg": 0.22,
+        "fcf_5y_cumulative": 5.0e10,
+        "interest_coverage": 25,
+        "gross_margin_long": 0.45,
+        "ocf_ni_5y_avg": 1.05,
+        "net_margin_long": 0.18,
+        "share_dilution_5y": 0.03
+      }
+    },
+    {
+      "symbol": "BAD",
+      "name": "劣质示例",
+      "metrics": {
+        "roe_10y_avg": 0.03,
+        "fcf_5y_cumulative": -1.0e9,
+        "interest_coverage": 0.8,
+        "gross_margin_long": 0.08,
+        "ocf_ni_5y_avg": 0.4,
+        "net_margin_long": 0.01,
+        "share_dilution_5y": 0.35
+      }
+    },
+    {
+      "symbol": "EXEMPT_A",
+      "name": "投入期豁免",
+      "years_listed": 6,
+      "metrics": {
+        "roe_10y_avg": 0.05,
+        "fcf_5y_cumulative": 2.0e9,
+        "interest_coverage": 8,
+        "gross_margin_long": 0.35,
+        "ocf_ni_5y_avg": 0.9,
+        "net_margin_long": 0.06,
+        "share_dilution_5y": 0.05,
+        "gross_margin_gt_30": true,
+        "ocf_positive_last_2y": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "meta": { "skill": "quality-screen" },
+  "panels": {
+    "financials": [
+      {
+        "symbol": "PROXY1",
+        "name": "仅部分字段",
+        "roe_10y_avg": 0.12,
+        "gross_margin_long": 0.28,
+        "net_margin_long": 0.09
+      }
+    ]
+  }
+}
