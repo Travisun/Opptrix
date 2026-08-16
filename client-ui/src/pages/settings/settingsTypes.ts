@@ -4,6 +4,7 @@ export type SettingsSection =
   | 'data_providers'
   | 'mcp_servers'
   | 'agent_skills'
+  | 'self_evolve'
   | 'news_feed'
   | 'sandbox'
   | 'schedule'
@@ -23,6 +24,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'multimodal',
   'mcp_servers',
   'agent_skills',
+  'self_evolve',
   'sandbox',
   'schedule',
   'python',

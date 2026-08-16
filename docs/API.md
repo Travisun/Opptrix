@@ -450,7 +450,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 ### 分析习惯（按模型）
 
-按所选大模型查看 / 恢复「怎么分析」的习惯版本，以及是否允许离线自动合入。持久化于用户库 `documents`（namespace=`harness`）。设置页入口：**设置 → 大模型 → 此模型的分析习惯**。鉴权与本机其他 `/api/settings/*` 相同。
+按所选大模型查看 / 恢复「怎么分析」的习惯版本，以及是否允许离线自动合入。持久化于用户库 `documents`（namespace=`harness`）。设置页入口：**设置 → 自进化**。鉴权与本机其他 `/api/settings/*` 相同。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

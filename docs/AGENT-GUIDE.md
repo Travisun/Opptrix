@@ -127,7 +127,7 @@ Opptrix/
 
 ### 4.2 Agent 与 MCP
 
-> **Self-Harness Phase 0–3（研发）**：`@opptrix/agent` 导出 `buildWeaknessReport`、`runHarnessLab`（`promote: true|'manual'|'auto'`）、`promoteHarnessProposal` / `rollbackHarnessForModel` / `rollbackHarnessToDefault`、`getActiveHarnessVersionForModel`、`buildHarnessRouteHintAppendix` 等。弱点挖掘与实验室**不阻塞** `engine.chat`。**用户侧可用：主会话回合成功后异步离线进化（默认开、可关）**；仍可用离线 lab / `npm run harness:lab`。本地跑法仓 `formatVersion=2`（`activeByModel` 按模型分桶，跨应用升级保留）；有 active 时冷启动叠层技能正文，`route_hint_append` 挂入本轮选型卡尾注；`OPPTRIX_HARNESS_AUTO_PROMOTE=0` 或 store 关停可禁用自动晋升。设置页「此模型的分析习惯」走 `/api/settings/harness/*`（`auto-promote` 返回有效状态 + 可选 `envForcedOff`）。详见 [SELF-HARNESS-PRODUCT.md](./SELF-HARNESS-PRODUCT.md) §16。**禁止**对终端用户 UI 暴露 Self-Harness / Harness 等技术词。
+> **Self-Harness Phase 0–3（研发）**：`@opptrix/agent` 导出 `buildWeaknessReport`、`runHarnessLab`（`promote: true|'manual'|'auto'`）、`promoteHarnessProposal` / `rollbackHarnessForModel` / `rollbackHarnessToDefault`、`getActiveHarnessVersionForModel`、`buildHarnessRouteHintAppendix` 等。弱点挖掘与实验室**不阻塞** `engine.chat`。**用户侧可用：主会话回合成功后异步离线进化（默认开、可关）**；仍可用离线 lab / `npm run harness:lab`。本地跑法仓 `formatVersion=2`（`activeByModel` 按模型分桶，跨应用升级保留）；有 active 时冷启动叠层技能正文，`route_hint_append` 挂入本轮选型卡尾注；`OPPTRIX_HARNESS_AUTO_PROMOTE=0` 或 store 关停可禁用自动晋升。设置页「自进化」走 `/api/settings/harness/*`（`auto-promote` 返回有效状态 + 可选 `envForcedOff`）。详见 [SELF-HARNESS-PRODUCT.md](./SELF-HARNESS-PRODUCT.md) §16。**禁止**对终端用户 UI 暴露 Self-Harness / Harness 等技术词。
 
 ```
 用户消息 → AgentEngine → ensureFrozenSessionTools（全业务 pack + always-on，会话级一次）

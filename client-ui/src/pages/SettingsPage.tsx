@@ -23,7 +23,7 @@ import DocLibrarySettingsSection from './settings/DocLibrarySettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
-import ModelHarnessHabitsSection from './settings/ModelHarnessHabitsSection'
+import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -726,9 +726,6 @@ function SettingsPageView({
                 )}
               </SettingsGroup>
             </div>
-            <div className={s.sectionBlock}>
-              <ModelHarnessHabitsSection />
-            </div>
           </>
         )
 
@@ -741,6 +738,9 @@ function SettingsPageView({
 
       case 'agent_skills':
         return <AgentSkillsSettingsSection />
+
+      case 'self_evolve':
+        return <SelfEvolveSettingsSection />
 
       case 'news_feed':
         return <NewsFeedSettingsSection />

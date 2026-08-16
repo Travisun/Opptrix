@@ -1,6 +1,6 @@
 # Opptrix 自进化 Harness（Self-Harness）— 产品设计
 
-> **状态**：**工程契约已落地**（Phase 0–3 REST + 设置「此模型的分析习惯」UI，2026-08-16）。**用户侧可用：回合后异步离线进化（默认可关）**；`promote:'auto'` 仅 A + held-out + 安全闸，不阻塞当前回合、不改写本回合 system/tools 冻结。离线 lab / `npm run harness:lab` 仍可用。  
+> **状态**：**工程契约已落地**（Phase 0–3 REST + 设置「自进化」页，2026-08-16）。**用户侧可用：回合后异步离线进化（默认可关）**；`promote:'auto'` 仅 A + held-out + 安全闸，不阻塞当前回合、不改写本回合 system/tools 冻结。离线 lab / `npm run harness:lab` 仍可用。  
 > **参照**：上海 AI Lab *Self-Harness: Harnesses That Improve Themselves*（[arXiv:2606.09498](https://arxiv.org/abs/2606.09498)）  
 > **相关文档**：[AGENT-GUIDE.md](./AGENT-GUIDE.md)、[AGENT-SKILLS.md](./AGENT-SKILLS.md)、[EXPERT-GUIDE.md](./EXPERT-GUIDE.md)、本节 §16
 
@@ -173,7 +173,7 @@ Self-Harness 在论文里依赖 Terminal-Bench 的硬通过。Opptrix 必须自�
 
 建议文案方向（符合 UI 文案规范）：
 
-- 标题：**此模型的分析习惯**  
+- 标题：**自进化**（设置侧栏独立页）  
 - 说明：习惯版本来自本地已晋升的分析跑法；开关只控制离线合入是否允许。安全底线不会改。  
 - 操作：**查看版本** / **恢复默认习惯**  
 
@@ -283,7 +283,7 @@ node --test tests/harness-exam-lab.test.mjs tests/harness-local-store-migrate.te
 |---|------|------|
 | 1 | 主战场 | 通用取数 + 少空转 + 研讨交付 + 安全 + 协作；考题结构覆盖 |
 | 2 | 晋升权 | 本地仓为主；Phase3 仅 A 级可自动；B 人工；C 永不自动 |
-| 3 | 用户可见性 | 设置「此模型的分析习惯」：查看版本 / 恢复默认；禁 Self-Harness/API/MCP |
+| 3 | 用户可见性 | 设置「自进化」：关停 / 按模型习惯 / 更新记录；禁 Self-Harness/API/MCP |
 | 4 | 多模型 | **一模型一跑法**：`modelRef` → `providerId:*` → `*` |
 | 5 | 会话级补丁 | Phase 2/3 **不做**会话级自动补丁；仅冷启动版本叠层 |
 | 6 | 自动关停 | 用户偏好 + 环境变量一键关停 |
@@ -687,31 +687,34 @@ export interface RunHarnessLabInput {
 
 #### 挂载位置
 
-- **不**新增侧栏一级：挂在现有 **`models`（大模型）** 分区底部独立分组，或 `general` 下「分析习惯」——**推荐 `models`**（与模型选择同页）。
-- 组件：`client-ui/src/pages/settings/ModelHarnessHabitsSection.tsx`
-- 注册：`SettingsPage.tsx` 在 `section === 'models'` 渲染区追加；`settingsSearchIndex` 增加可搜条目。
+- 侧栏独立分区：`self_evolve`（**自进化**），位于「扩展与运行环境」组（工作流技能与沙盒之间）。
+- 组件：`client-ui/src/pages/settings/SelfEvolveSettingsSection.tsx`（旧 `ModelHarnessHabitsSection` 仅 re-export）
+- 注册：`SettingsPage.tsx` 的 `case 'self_evolve'`；`settingsSearchIndex` / `SETTINGS_SECTION_IDS` 已登记。
 
 #### 文案草案（`ui-copy-standard`）
 
 | 槽位 | 文案 |
 |------|------|
-| 分区标题 | 此模型的分析习惯 |
-| 说明 | 习惯会随使用逐步优化（回合结束后在后台合入）；下方开关可随时关掉自动更新。安全底线不会改。 |
+| 侧栏 / 页标题 | 自进化 |
+| 页副标题 | 管理使用中自动优化分析习惯 |
+| 总开关分区 | 自进化 |
+| 说明 | 使用中可自动优化分析习惯；关闭后不再自动合入。安全底线不会改。 |
+| 开关标题 | 开启自进化 |
+| 开关说明（开） | 开启后，使用过程中可能自动合入更稳妥的分析习惯；关闭后不再自动合入，你仍可手动恢复默认。 |
+| 开关（env 强制关） | 当前环境已关闭自进化；开关不可用。（Switch disabled） |
+| 模型分区 | 按模型习惯 |
 | 模型选择器标签 | 当前模型 |
 | 版本行（有 active） | 当前习惯版本 · {相对时间或短 id} |
 | 版本行（无） | 正在使用默认习惯 |
-| 开关标题 | 允许自动更新习惯 |
-| 开关说明（开） | 默认开启：使用过程中可能自动合入更稳妥的分析习惯；关闭后不再自动更新，你仍可手动恢复默认。 |
-| 主按钮 | 恢复默认习惯 |
-| 开关（env 强制关） | 当前环境已关闭自动合入；偏好仍可保存，但不会生效。（Switch disabled） |
-| 空态 | 还没有为此模型保存过分析习惯。本地已晋升的跑法会出现在这里。 |
+| 主按钮 | 恢复默认 |
+| 空态 | 还没有为此模型保存过分析习惯。使用过程中合入的习惯会出现在这里。 |
 | 加载 | 正在加载分析习惯… |
 | 错误 | 暂时无法加载分析习惯。请稍后重试。 |
 | 确认标题 | 恢复默认习惯？ |
 | 确认正文 | 将清除此模型的自定义分析习惯，之后按默认方式分析。此操作可再通过新习惯更新覆盖。 |
 | 确认主按钮 | 恢复默认 |
 | 成功 toast | 已恢复默认习惯 |
-| 审计只读（可选折叠） | 最近更新记录 |
+| 更新记录 | 进入页面即加载；空态「还没有更新记录」 |
 
 **禁止**：Self-Harness、Harness、API、MCP、prompt、回归、held-out、patch、tier。
 
@@ -784,7 +787,7 @@ S4 REST harness-settings-routes + client api
     ↓
 S5 考题扩容 ≥24 + CATEGORY collaboration
     ↓
-S6 UI ModelHarnessHabitsSection（models 分区）
+S6 UI SelfEvolveSettingsSection（settings `self_evolve`）
     ↓
 S7 测试矩阵全绿 + API.md / AGENT-GUIDE 同步
 ```
@@ -808,7 +811,7 @@ S7 测试矩阵全绿 + API.md / AGENT-GUIDE 同步
 | 日期 | 说明 |
 |------|------|
 | 2026-08-16 | **用户侧回合后异步离线进化**：`scheduleHarnessEvolveAfterTurn` 挂主会话 `emitDone` 后；默认开、可关；节流 no_weakness/cooldown；不 mid-loop 改 tools |
-| 2026-08-16 | Phase 2/3 **REST + 设置「此模型的分析习惯」UI** 落地：`/api/settings/harness/*`、`ModelHarnessHabitsSection`、API.md |
+| 2026-08-16 | Phase 2/3 **REST + 设置「自进化」页** 落地：`/api/settings/harness/*`、`SelfEvolveSettingsSection`、API.md |
 | 2026-08-16 | Phase 2/3 **核心落地**：formatVersion 2、`activeByModel`、ALS 叠层、route_hint→turn-tail、lab auto 闸、考题≥24；UI/REST 另轨 |
 | 2026-08-16 | **§16 Phase 2/3 工程契约**：formatVersion 2、模型分桶、REST、route_hint 挂载、自动晋升 A、考题≥24、测试矩阵、DAG |
 | 2026-08-16 | 关闭 §13 开放问题；路线图 Phase 2/3 规格已定 |
