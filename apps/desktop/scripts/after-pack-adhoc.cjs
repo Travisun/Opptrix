@@ -10,8 +10,12 @@
  *    bare imports via NODE_PATH — only classic `node_modules` parent walks work.
  * 2) OpptrixSchedule helper generation retired (in-process schedule only).
  * 3) On signed mac builds: serially pre-sign Mach-O under `python/` and
- *    `runtime-stage/node_modules/` so electron-osx-sign can skip those trees
- *    via `build.mac.signIgnore` (avoids EMFILE from concurrent deep scans).
+ *    `runtime-stage/node_modules/` / playwright, then stash those trees so
+ *    osx-sign does not EMFILE (`build.mac.signIgnore` alone is not enough —
+ *    walkAsync still opens every file). afterSign restores + re-seals, then
+ *    notarizes+staples the final .app (`build.mac.notarize: false` so builder
+ *    does not notarize before restore). Pipeline:
+ *    afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize) → dmg
  * 4) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
  */
 const { execFileSync } = require('node:child_process')
@@ -358,7 +362,8 @@ function preSignHeavyMacTrees(context) {
 /**
  * Move pre-signed heavy trees out of the .app so @electron/osx-sign walkAsync
  * (Promise.all + isBinaryFile on every file) does not hit EMFILE before signIgnore.
- * afterSign restores them and re-seals the outer .app.
+ * afterSign restores them, re-seals the outer .app, then notarizes+staples
+ * (builder's early notarize is disabled via `build.mac.notarize: false`).
  * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
  * @param {string} identity
  */

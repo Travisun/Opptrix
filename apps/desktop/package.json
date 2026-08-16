@@ -138,6 +138,7 @@
       "category": "public.app-category.finance",
       "icon": "build/icons/icon.icon",
       "hardenedRuntime": true,
+      "notarize": false,
       "gatekeeperAssess": false,
       "entitlements": "resources/entitlements.mac.plist",
       "entitlementsInherit": "resources/entitlements.mac.inherit.plist",

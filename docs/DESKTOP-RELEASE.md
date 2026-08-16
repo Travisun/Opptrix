@@ -423,7 +423,7 @@ npm run build:desktop
 5. 项目已内置公证用 entitlements（`apps/desktop/resources/entitlements.mac.plist` 及 `.inherit.plist`），覆盖 Electron 主进程与 sidecar 子进程的原生模块加载；**不要**在签名时移除。
 6. 重新打 `desktop-v*` 标签发布。
 
-`electron-builder` 检测到 `CSC_*` 后会自动签名；提供 `APPLE_*` 时会尝试公证。本地 Mac 若 Keychain 已有证书，也可直接 `npm run build:desktop` 无需导 p12。
+`electron-builder` 检测到 `CSC_*` 后会自动签名。macOS 正式包将 `build.mac.notarize` 设为 `false`（避免 builder 在 `afterSign` 还原 heavy trees / 重签外层**之前**公证），改由 `after-sign-restore-heavy.cjs` 在 restore + reseal 之后调用 `@electron/notarize` 并 `stapler validate`；需配置 `APPLE_*`（或 API Key / Keychain Profile）。本地 Mac 若 Keychain 已有证书，也可直接 `npm run build:desktop` 无需导 p12。
 
 未签名时：用户可能需 **右键 → 打开**，Mac 自动更新体验也会变差。
 

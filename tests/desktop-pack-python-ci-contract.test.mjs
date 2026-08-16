@@ -181,6 +181,28 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(!src.includes("'--deep'") || src.includes('No --deep'), 'outer re-seal must not --deep')
   })
 
+  it('mac notarize runs in afterSign after restore (builder notarize disabled)', () => {
+    const pkg = JSON.parse(read('apps/desktop/package.json'))
+    assert.equal(
+      pkg.build?.mac?.notarize,
+      false,
+      'build.mac.notarize must be false so electron-builder 26 does not notarize before afterSign',
+    )
+    const src = read('apps/desktop/scripts/after-sign-restore-heavy.cjs')
+    assert.ok(src.includes('@electron/notarize'), 'afterSign must call @electron/notarize')
+    assert.ok(src.includes('notarize(') || src.includes('notarizeAndStaple'), 'must invoke notarize')
+    assert.ok(src.includes('stapler'), 'must staple/validate after notarize')
+    assert.ok(
+      src.includes('OPPTRIX_MAC_UNSIGNED') && src.includes('skip notarize'),
+      'unsigned / no-credentials path must skip with clear log',
+    )
+    assert.ok(
+      /sign → afterSign|afterSign\(restore.*notarize/i.test(src)
+        || src.includes('notarize + staple → dmg'),
+      'comment must document sign → afterSign(restore+reseal) → notarize+staple → dmg',
+    )
+  })
+
   it('release-desktop.yml: stage-shared-models once; matrix restores + skips re-stage', () => {
     const wf = read('.github/workflows/release-desktop.yml')
     assert.ok(wf.includes('stage-shared-models:'), 'must define stage-shared-models job')
