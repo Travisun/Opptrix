@@ -17,7 +17,7 @@
 </table>
 
 <p align="center">
-  <img src="screenshot.jpg" alt="Opptrix 主界面：对话投研、工具执行过程与右侧个股行情面板" width="920" />
+  <img src="screenshot.webp" alt="Opptrix 主界面：对话投研、工作流技能与右侧个股行情面板" width="920" />
 </p>
 
 <p align="center"><sub>主界面：多会话聊天、Agent 工具与工作流技能、右侧关注/个股面板；桌面与 Web 共用同一套 UI</sub></p>
