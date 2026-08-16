@@ -32,6 +32,7 @@ import {
 } from '@opptrix/agent-skills'
 import { ensureHarnessOverlayRegistered } from './harness/register-overlay.js'
 import { runWithHarnessModelRef } from './harness/model-context.js'
+import { scheduleHarnessEvolveAfterTurn } from './harness/session-evolve.js'
 import {
   appendHarnessRouteHintToPlaybook,
   buildHarnessRouteHintAppendix,
@@ -2368,6 +2369,17 @@ export class AgentEngine {
         persistedSegments.length ? persistedSegments : undefined,
       )
       await emitDone({ reply })
+      // 回合成功后异步离线进化；不阻塞 / 不改本回合 system·tools 冻结
+      if (!isSubSession) {
+        scheduleHarnessEvolveAfterTurn(
+          sessionId,
+          () => this.sessions.get(sessionId),
+          {
+            activatedSkills: this.agentSkillSessions.getActivated(sessionId),
+            isSubSession: false,
+          },
+        )
+      }
       return { reply, toolsUsed, sessionId, title: record.title }
     }
 
@@ -2381,6 +2393,16 @@ export class AgentEngine {
       mergeAssistantAttachments(),
     )
     await emitDone({ reply })
+    if (!isSubSession) {
+      scheduleHarnessEvolveAfterTurn(
+        sessionId,
+        () => this.sessions.get(sessionId),
+        {
+          activatedSkills: this.agentSkillSessions.getActivated(sessionId),
+          isSubSession: false,
+        },
+      )
+    }
     return { reply, toolsUsed, sessionId, title: record.title }
     } finally {
       await broker.close().catch(() => {})

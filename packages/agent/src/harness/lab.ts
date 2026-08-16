@@ -48,7 +48,8 @@ export interface RunHarnessLabResult {
 
 /**
  * 离线：弱点 → 模板提案 → held-out 验证 →（可选）promote。
- * **禁止**从 engine.chat 调用。
+ * **禁止**在 engine.chat 同步调用栈内直接调用；主会话成功收尾请用
+ * `scheduleHarnessEvolveAfterTurn`（setImmediate 异步）。
  */
 export function runHarnessLab(input: RunHarnessLabInput = {}): RunHarnessLabResult {
   let report = input.report ?? null

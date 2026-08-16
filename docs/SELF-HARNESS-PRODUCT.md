@@ -1,6 +1,6 @@
 # Opptrix 自进化 Harness（Self-Harness）— 产品设计
 
-> **状态**：**工程契约已落地**（Phase 0–3 REST + 设置「此模型的分析习惯」UI，2026-08-16）。用户侧「聊天自动自进化」**未**上线；自动晋升仅离线 lab / `npm run harness:lab`。  
+> **状态**：**工程契约已落地**（Phase 0–3 REST + 设置「此模型的分析习惯」UI，2026-08-16）。**用户侧可用：回合后异步离线进化（默认可关）**；`promote:'auto'` 仅 A + held-out + 安全闸，不阻塞当前回合、不改写本回合 system/tools 冻结。离线 lab / `npm run harness:lab` 仍可用。  
 > **参照**：上海 AI Lab *Self-Harness: Harnesses That Improve Themselves*（[arXiv:2606.09498](https://arxiv.org/abs/2606.09498)）  
 > **相关文档**：[AGENT-GUIDE.md](./AGENT-GUIDE.md)、[AGENT-SKILLS.md](./AGENT-SKILLS.md)、[EXPERT-GUIDE.md](./EXPERT-GUIDE.md)、本节 §16
 
@@ -260,8 +260,8 @@ node --test tests/harness-exam-lab.test.mjs tests/harness-local-store-migrate.te
 **状态**：已落地（lab `promote: 'auto'` + 关停闸；设置 UI 另轨）  
 
 **交付**：仅 A 级（`skill_body_append` / `route_hint_append`）在 held-out + 安全闸通过后可自动晋升；B 仍人工；C 永不自动；可一键关停（env / store）  
-**用户**：默认无感；设置可关「允许离线自动合入」（UI 另轨）  
-**准出**：自动合入有审计日志；关停后与现网一致；**永不**从 `engine.chat` 调 lab  
+**用户**：默认开启；主会话回合成功结束后异步离线进化（有弱点 + 冷却）；设置可关「允许自动更新习惯」  
+**准出**：自动合入有审计日志；关停后与现网一致；**lab 仅经 `scheduleHarnessEvolveAfterTurn` 异步调度，禁止同步挡在 chat 调用栈**
 
 ---
 
@@ -287,7 +287,7 @@ node --test tests/harness-exam-lab.test.mjs tests/harness-local-store-migrate.te
 | 4 | 多模型 | **一模型一跑法**：`modelRef` → `providerId:*` → `*` |
 | 5 | 会话级补丁 | Phase 2/3 **不做**会话级自动补丁；仅冷启动版本叠层 |
 | 6 | 自动关停 | 用户偏好 + 环境变量一键关停 |
-| 7 | 零干扰 | 无 active / 关停时与现网一致；不 mid-loop 改 tools；lab 不进 chat |
+| 7 | 零干扰 | 无 active / 关停时与现网一致；不 mid-loop 改 tools；lab **异步**挂主会话成功收尾，禁止同步挡 chat |
 
 ---
 
@@ -666,11 +666,14 @@ export interface RunHarnessLabInput {
  *
  * promote === true | 'manual'：不要求 A，不检查 auto 开关（人工）
  *
- * 默认不在 engine.chat / tools handler 调用本函数。
+ * 主会话 chat **成功收尾后**可经 `scheduleHarnessEvolveAfterTurn` 异步调用（setImmediate）；
+ * **禁止**在 engine.chat 同步调用栈内直接 `runHarnessLab`。
  */
 ```
 
 可选脚本：`scripts/harness-lab-auto.mjs`（或 `npm run harness:lab`）调用 `runHarnessLab({ promote: 'auto', ... })`；**不**注册为 chat tool。
+
+会话进化节流（`session-evolve.ts`）：无弱点 → `skip_auto_promote`/`no_weakness`；同 session 冷却或已成功 promote → `cooldown`；协作子会话 skip。
 
 #### A/B/C 判定
 
@@ -693,13 +696,13 @@ export interface RunHarnessLabInput {
 | 槽位 | 文案 |
 |------|------|
 | 分区标题 | 此模型的分析习惯 |
-| 说明 | 习惯版本来自本地已晋升的分析跑法；下方开关只控制离线合入是否允许。安全底线不会改。 |
+| 说明 | 习惯会随使用逐步优化（回合结束后在后台合入）；下方开关可随时关掉自动更新。安全底线不会改。 |
 | 模型选择器标签 | 当前模型 |
 | 版本行（有 active） | 当前习惯版本 · {相对时间或短 id} |
 | 版本行（无） | 正在使用默认习惯 |
+| 开关标题 | 允许自动更新习惯 |
+| 开关说明（开） | 默认开启：使用过程中可能自动合入更稳妥的分析习惯；关闭后不再自动更新，你仍可手动恢复默认。 |
 | 主按钮 | 恢复默认习惯 |
-| 开关 | 允许离线自动合入 |
-| 开关说明 | 关闭后，离线实验室不会自动合入新习惯；你仍可手动恢复默认。 |
 | 开关（env 强制关） | 当前环境已关闭自动合入；偏好仍可保存，但不会生效。（Switch disabled） |
 | 空态 | 还没有为此模型保存过分析习惯。本地已晋升的跑法会出现在这里。 |
 | 加载 | 正在加载分析习惯… |
@@ -804,6 +807,7 @@ S7 测试矩阵全绿 + API.md / AGENT-GUIDE 同步
 
 | 日期 | 说明 |
 |------|------|
+| 2026-08-16 | **用户侧回合后异步离线进化**：`scheduleHarnessEvolveAfterTurn` 挂主会话 `emitDone` 后；默认开、可关；节流 no_weakness/cooldown；不 mid-loop 改 tools |
 | 2026-08-16 | Phase 2/3 **REST + 设置「此模型的分析习惯」UI** 落地：`/api/settings/harness/*`、`ModelHarnessHabitsSection`、API.md |
 | 2026-08-16 | Phase 2/3 **核心落地**：formatVersion 2、`activeByModel`、ALS 叠层、route_hint→turn-tail、lab auto 闸、考题≥24；UI/REST 另轨 |
 | 2026-08-16 | **§16 Phase 2/3 工程契约**：formatVersion 2、模型分桶、REST、route_hint 挂载、自动晋升 A、考题≥24、测试矩阵、DAG |

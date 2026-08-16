@@ -112,6 +112,16 @@ export {
 } from './lab.js'
 
 export {
+  scheduleHarnessEvolveAfterTurn,
+  evolveHarnessFromSessionSyncForTests,
+  resetHarnessSessionEvolveForTests,
+  HARNESS_EVOLVE_SESSION_COOLDOWN_MS,
+  type ScheduleHarnessEvolveOpts,
+  type EvolveHarnessResult,
+  type EvolveHarnessSkipResult,
+} from './session-evolve.js'
+
+export {
   ensureHarnessOverlayRegistered,
   resetHarnessOverlayRegistrationForTests,
 } from './register-overlay.js'

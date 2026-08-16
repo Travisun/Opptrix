@@ -284,13 +284,13 @@ export default function ModelHarnessHabitsSection() {
 
   const autoPromoteDesc = envForcedOff
     ? '当前环境已关闭自动合入；偏好仍可保存，但不会生效。'
-    : '关闭后，离线实验室不会自动合入新习惯；你仍可手动恢复默认。'
+    : '默认开启：使用过程中可能自动合入更稳妥的分析习惯；关闭后不再自动更新，你仍可手动恢复默认。'
 
   return (
     <div className={s.root}>
       <SettingsSectionLabel spaced>此模型的分析习惯</SettingsSectionLabel>
       <Text className={s.hint} block>
-        习惯版本来自本地已晋升的分析跑法；下方开关只控制离线合入是否允许。安全底线不会改。
+        习惯会随使用逐步优化（回合结束后在后台合入）；下方开关可随时关掉自动更新。安全底线不会改。
       </Text>
 
       {loading ? (
@@ -335,7 +335,7 @@ export default function ModelHarnessHabitsSection() {
             )}
           />
           <SettingsRow
-            title="允许离线自动合入"
+            title="允许自动更新习惯"
             desc={autoPromoteDesc}
             control={(
               <Switch
@@ -344,7 +344,7 @@ export default function ModelHarnessHabitsSection() {
                 onChange={(_, data) => {
                   void handleAutoPromoteChange(Boolean(data.checked))
                 }}
-                aria-label="允许离线自动合入"
+                aria-label="允许自动更新习惯"
               />
             )}
           />

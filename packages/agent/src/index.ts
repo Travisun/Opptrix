@@ -541,6 +541,10 @@ export {
   getHarnessAutoPromoteEffectiveState,
   setHarnessAutoPromote,
   runHarnessLab,
+  scheduleHarnessEvolveAfterTurn,
+  evolveHarnessFromSessionSyncForTests,
+  resetHarnessSessionEvolveForTests,
+  HARNESS_EVOLVE_SESSION_COOLDOWN_MS,
   ensureHarnessOverlayRegistered,
   resetHarnessOverlayRegistrationForTests,
   type WeaknessCode,
@@ -562,6 +566,9 @@ export {
   type HarnessAutoPromotePref,
   type ApplyOverlayResult,
   type RunHarnessLabResult,
+  type ScheduleHarnessEvolveOpts,
+  type EvolveHarnessResult,
+  type EvolveHarnessSkipResult,
 } from './harness/index.js'
 
 export {
