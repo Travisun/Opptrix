@@ -23,6 +23,7 @@ import DocLibrarySettingsSection from './settings/DocLibrarySettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
+import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -675,55 +676,57 @@ function SettingsPageView({
 
       case 'models':
         return (
-          <div className={s.sectionBlock}>
-            <SettingsGroup>
-              <SettingsPanelHeader
-                title="提供商"
-                action={(
-                  <OpptrixButton
-                    variant="secondary"
-                    size="small"
-                    icon={<AddRegular />}
-                    onClick={() => openProviderWizard()}
-                  >
-                    添加
-                  </OpptrixButton>
-                )}
-              />
-              {providers.length === 0 ? (
-                <SettingsEmptyState
-                  title="还没有配置提供商"
-                  desc="点击上方「添加」，选择预置服务或自定义后即可开始对话"
+          <>
+            <div className={s.sectionBlock}>
+              <SettingsGroup>
+                <SettingsPanelHeader
+                  title="提供商"
+                  action={(
+                    <OpptrixButton
+                      variant="secondary"
+                      size="small"
+                      icon={<AddRegular />}
+                      onClick={() => openProviderWizard()}
+                    >
+                      添加
+                    </OpptrixButton>
+                  )}
                 />
-              ) : (
-                providers.map((p, i) => (
-                  <SettingsProviderRow
-                    key={p.id}
-                    name={p.name}
-                    models={p.models}
-                    avatar={p.name.charAt(0).toUpperCase()}
-                    first={i === 0}
-                    action={(
-                      <>
-                        <OpptrixButton
-                          variant="icon"
-                          icon={<EditRegular />}
-                          onClick={() => openProviderWizard(p)}
-                          aria-label={`编辑 ${p.name}`}
-                        />
-                        <OpptrixButton
-                          variant="icon"
-                          icon={<DeleteRegular />}
-                          onClick={() => handleDeleteProvider(p)}
-                          aria-label={`删除 ${p.name}`}
-                        />
-                      </>
-                    )}
+                {providers.length === 0 ? (
+                  <SettingsEmptyState
+                    title="还没有配置提供商"
+                    desc="点击上方「添加」，选择预置服务或自定义后即可开始对话"
                   />
-                ))
-              )}
-            </SettingsGroup>
-          </div>
+                ) : (
+                  providers.map((p, i) => (
+                    <SettingsProviderRow
+                      key={p.id}
+                      name={p.name}
+                      models={p.models}
+                      avatar={p.name.charAt(0).toUpperCase()}
+                      first={i === 0}
+                      action={(
+                        <>
+                          <OpptrixButton
+                            variant="icon"
+                            icon={<EditRegular />}
+                            onClick={() => openProviderWizard(p)}
+                            aria-label={`编辑 ${p.name}`}
+                          />
+                          <OpptrixButton
+                            variant="icon"
+                            icon={<DeleteRegular />}
+                            onClick={() => handleDeleteProvider(p)}
+                            aria-label={`删除 ${p.name}`}
+                          />
+                        </>
+                      )}
+                    />
+                  ))
+                )}
+              </SettingsGroup>
+            </div>
+          </>
         )
 
 
@@ -735,6 +738,9 @@ function SettingsPageView({
 
       case 'agent_skills':
         return <AgentSkillsSettingsSection />
+
+      case 'self_evolve':
+        return <SelfEvolveSettingsSection />
 
       case 'news_feed':
         return <NewsFeedSettingsSection />

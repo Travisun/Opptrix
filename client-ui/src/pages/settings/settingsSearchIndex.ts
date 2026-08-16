@@ -32,6 +32,12 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
   { section: 'mcp_servers', title: 'MCP 服务', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具', 'MCP 服务器'] },
   { section: 'agent_skills', title: '工作流技能', desc: '导入与管理投研流程说明', keywords: ['技能', '工作流', '早报', '财报', '流程', 'skill'] },
+  {
+    section: 'self_evolve',
+    title: '自进化',
+    desc: '管理使用中自动优化分析习惯',
+    keywords: ['自进化', '进化', '合入', '更新记录', '关闭自进化', '分析习惯'],
+  },
   { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
   { section: 'schedule', title: '计划任务', desc: '管理定时任务与开机启动', keywords: ['定时', '自动执行', '开机启动'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
@@ -59,6 +65,35 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'models', title: '提供商', desc: '配置服务地址与密钥', keywords: ['大模型', 'LLM', 'OpenAI', '密钥', '提供商'] },
   { section: 'models', title: '添加提供商', keywords: ['新增', '添加', '大模型'] },
   { section: 'models', title: '编辑提供商', keywords: ['修改', '大模型'] },
+  // 自进化
+  {
+    section: 'self_evolve',
+    group: '自进化',
+    title: '开启自进化',
+    desc: '开启后使用中可能自动合入分析习惯；关闭后不再自动合入。',
+    keywords: ['自进化', '进化', '合入', '关闭自进化', '分析习惯'],
+  },
+  {
+    section: 'self_evolve',
+    group: '按模型习惯',
+    title: '按模型习惯',
+    desc: '不同模型可保留各自的分析习惯；可随时恢复默认。',
+    keywords: ['分析习惯', '习惯', '恢复默认', '当前模型'],
+  },
+  {
+    section: 'self_evolve',
+    group: '按模型习惯',
+    title: '恢复默认习惯',
+    desc: '清除此模型的自定义分析习惯',
+    keywords: ['恢复默认', '默认习惯'],
+  },
+  {
+    section: 'self_evolve',
+    group: '更新记录',
+    title: '更新记录',
+    desc: '查看合入与恢复等操作记录',
+    keywords: ['更新记录', '合入', '进化'],
+  },
 
   // 数据源
   { section: 'data_providers', group: 'A 股', title: 'Tushare Pro', keywords: ['tushare', '行情源', 'token'] },
@@ -127,6 +162,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   multimodal: '多模态',
   mcp_servers: 'MCP 服务',
   agent_skills: '工作流技能',
+  self_evolve: '自进化',
   sandbox: '沙盒',
   schedule: '计划任务',
   python: 'Python',

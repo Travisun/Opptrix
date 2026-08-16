@@ -37,6 +37,7 @@ import { registerNewsRoutes } from './news-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
+import { registerHarnessSettingsRoutes } from './harness-settings-routes.js'
 import { registerMarketDataPackageRoutes } from './market-data-package-routes.js'
 import { registerDocLibrarySettingsRoutes } from './doc-library-settings-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
@@ -2007,6 +2008,7 @@ async function bootstrap() {
   registerSandboxSettingsRoutes(app)
   registerScheduleRoutes(app, scheduleService)
   registerPythonSettingsRoutes(app)
+  registerHarnessSettingsRoutes(app)
   registerMarketDataPackageRoutes(app)
   await registerDocLibrarySettingsRoutes(app)
   await registerEnrichmentRoutes(app)

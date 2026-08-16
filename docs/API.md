@@ -448,6 +448,36 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 `POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
 
+### 分析习惯（按模型）
+
+按所选大模型查看 / 恢复「怎么分析」的习惯版本，以及是否允许离线自动合入。持久化于用户库 `documents`（namespace=`harness`）。设置页入口：**设置 → 自进化**。鉴权与本机其他 `/api/settings/*` 相同。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/harness/versions` | 列表；query `modelRef?` 过滤（精确桶或未设/`*`） |
+| GET | `/api/settings/harness/active` | query **`modelRef` 必填**（空串表示全局 `*`）；返回解析后的 active 或 null |
+| POST | `/api/settings/harness/rollback` | body `{ modelRef: string }` → 该桶恢复默认 |
+| GET | `/api/settings/harness/auto-promote` | `{ enabled, updatedAt, envForcedOff? }`（`enabled` 为有效值） |
+| PUT | `/api/settings/harness/auto-promote` | body `{ enabled: boolean }`；写 store 后返回有效状态 |
+| GET | `/api/settings/harness/audit` | query `limit?`（默认 50，最大 200）只读 |
+
+非法 body / 缺 `modelRef` → `400` + `{ error: string }`（短句）。
+
+**GET `/api/settings/harness/active` 响应（摘要）**
+
+```json
+{
+  "modelRef": "openai:gpt-4o",
+  "resolvedBucket": "openai:gpt-4o",
+  "version": {
+    "id": "hv-xxx",
+    "createdAt": "2026-08-16T00:00:00.000Z",
+    "summary": "取数纪律",
+    "tier": "A"
+  }
+}
+```
+
 ### 市场数据包（导出 / 导入）
 
 本地市场库 `.opmd` 打包可能较久，**导出主路径为异步 job**（避免单次 HTTP 卡数分钟无反馈）。
