@@ -268,18 +268,20 @@ jobs:
           OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
         run: |
           # codesign deep-scan of runtime-stage/node_modules needs high FD limit (EMFILE).
+          # Soft-only (`ulimit -S -n`) — bare `ulimit -n N` also clamps hard (unlimited→N).
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             echo "macOS FD limits before raise: soft=$(ulimit -Sn) hard=$(ulimit -Hn)"
-            if ! ulimit -n 65536 2>/dev/null; then
-              HARD="$(ulimit -Hn)"
-              if [[ "$HARD" == "unlimited" ]]; then
-                echo "::error::Failed to raise ulimit -n to 65536 (hard=unlimited)"
-                exit 1
+            RAISED=0
+            for TARGET in 1048576 524288 131072 65536; do
+              if ulimit -S -n "$TARGET" 2>/dev/null; then
+                echo "macOS FD soft raised to $TARGET"
+                RAISED=1
+                break
               fi
-              if ! ulimit -n "$HARD" 2>/dev/null; then
-                echo "::error::Failed to raise ulimit -n to hard limit ($HARD)"
-                exit 1
-              fi
+            done
+            if [[ "$RAISED" -ne 1 ]]; then
+              echo "::error::Failed to raise soft ulimit -S -n (tried 1048576→65536)"
+              exit 1
             fi
             SOFT="$(ulimit -Sn)"
             HARD="$(ulimit -Hn)"

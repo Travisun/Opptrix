@@ -99,17 +99,37 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     )
   })
 
-  it('release-desktop.yml raises macOS FD limit to 65536 without swallowing failures', () => {
+  it('release-desktop.yml raises macOS FD soft-only (ulimit -S) without clamping hard', () => {
     const wf = read('.github/workflows/release-desktop.yml')
-    assert.ok(wf.includes('ulimit -n 65536'), 'must target ulimit -n 65536')
+    assert.ok(wf.includes('ulimit -S -n'), 'must use soft-only ulimit -S -n')
+    assert.ok(
+      wf.includes('1048576') && wf.includes('524288') && wf.includes('131072') && wf.includes('65536'),
+      'must try soft ladder 1048576→524288→131072→65536',
+    )
+    // Bare `ulimit -n 65536` (no -S) clamps hard from unlimited → 65536 on Darwin.
+    assert.ok(!/\bulimit -n 65536\b/.test(wf), 'must not use bare ulimit -n 65536 (clamps hard)')
     assert.ok(!wf.includes('ulimit -n 10240 || true'), 'must not use swallowed 10240 || true')
     assert.ok(wf.includes('20000'), 'must fail when soft limit still below 20000')
   })
 
-  it('mac package scripts use with-raised-fd-limit wrapper', () => {
+  it('mac package scripts use with-raised-fd-limit wrapper (soft-only ladder)', () => {
     const pkg = JSON.parse(read('apps/desktop/package.json'))
     const wrapperPath = path.join(repoRoot, 'apps/desktop/scripts/with-raised-fd-limit.sh')
     assert.ok(fs.existsSync(wrapperPath), 'with-raised-fd-limit.sh must exist')
+    const wrapper = fs.readFileSync(wrapperPath, 'utf8')
+    assert.ok(wrapper.includes('ulimit -S -n'), 'wrapper must raise soft-only via ulimit -S -n')
+    assert.ok(
+      wrapper.includes('1048576') &&
+        wrapper.includes('524288') &&
+        wrapper.includes('131072') &&
+        wrapper.includes('65536'),
+      'wrapper must try soft ladder 1048576→524288→131072→65536',
+    )
+    assert.ok(
+      !/\bulimit -n 65536\b/.test(wrapper),
+      'wrapper must not use bare ulimit -n 65536 (clamps hard)',
+    )
+    assert.ok(wrapper.includes('20000'), 'wrapper must abort when soft < 20000')
     for (const name of [
       'build:package:mac-arm64',
       'build:package:mac-x64',
@@ -124,6 +144,17 @@ describe('desktop pack python / ffmpeg CI contract', () => {
       )
     }
   })
+
+  it('mac.signIgnore skips playwright-browsers (already signed Chrome for Testing)', () => {
+    const pkg = JSON.parse(read('apps/desktop/package.json'))
+    const signIgnore = pkg.build?.mac?.signIgnore
+    assert.ok(Array.isArray(signIgnore), 'build.mac.signIgnore must be an array')
+    assert.ok(
+      signIgnore.some((p) => String(p).includes('playwright-browsers')),
+      'signIgnore must include playwright-browsers',
+    )
+  })
+
 
   it('release-desktop.yml sets OPPTRIX_RUNTIME_ARCH for stage-rag-engines cross mac-x64', () => {
     const wf = read('.github/workflows/release-desktop.yml')
