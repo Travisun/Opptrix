@@ -8,7 +8,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { readYamlFile } from './lib/load-yaml.mjs'
 import {
-  UPDATE_YML_PUBLIC,
+  UPDATE_YML_OPTIONAL,
+  UPDATE_YML_REQUIRED,
   assertMacMergedUpdateInfo,
   assertYmlReferencesInAssetSet,
   inferredPrereleaseChannel,
@@ -48,7 +49,7 @@ function main() {
     throw new Error(`No files under ${assetsDir}`)
   }
 
-  for (const ymlName of UPDATE_YML_PUBLIC) {
+  for (const ymlName of UPDATE_YML_REQUIRED) {
     const ymlPath = path.join(assetsDir, ymlName)
     if (!fs.existsSync(ymlPath)) {
       throw new Error(`Missing required public update metadata: ${ymlName}`)
@@ -61,6 +62,20 @@ function main() {
     if (ymlName === 'latest-mac.yml') {
       assertMacMergedUpdateInfo(info)
     }
+    console.log(`verify-release-coherence: OK ${ymlName} (v${info.version})`)
+  }
+
+  for (const ymlName of UPDATE_YML_OPTIONAL) {
+    const ymlPath = path.join(assetsDir, ymlName)
+    if (!fs.existsSync(ymlPath)) {
+      console.log(`verify-release-coherence: skip optional ${ymlName} (not in bundle)`)
+      continue
+    }
+    const info = readYamlFile(ymlPath)
+    if (info.version !== tagVersion) {
+      throw new Error(`${ymlName} version ${info.version} != tag ${tagVersion}`)
+    }
+    assertYmlReferencesInAssetSet(ymlName, info, assets)
     console.log(`verify-release-coherence: OK ${ymlName} (v${info.version})`)
   }
 

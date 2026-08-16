@@ -20,6 +20,17 @@ export const UPDATE_YML_PUBLIC = Object.freeze([
   'latest-linux.yml',
 ])
 
+/** Required when shipping Win+Mac (Linux may be omitted temporarily). */
+export const UPDATE_YML_REQUIRED = Object.freeze([
+  'latest-mac.yml',
+  'latest.yml',
+])
+
+/** Optional platforms — verify when present, do not fail when absent. */
+export const UPDATE_YML_OPTIONAL = Object.freeze([
+  'latest-linux.yml',
+])
+
 /** Per-arch macOS yml uploaded by matrix jobs before finalize merge. */
 export const UPDATE_YML_MAC_PER_ARCH = Object.freeze([
   'latest-mac-arm64.yml',

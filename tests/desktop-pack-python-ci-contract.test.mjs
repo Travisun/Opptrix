@@ -243,9 +243,13 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     )
     assert.ok(wf.includes('actions/upload-artifact@v4'), 'must upload-artifact platform staging')
     assert.ok(wf.includes('desktop-win-x64'), 'must name win artifact')
-    assert.ok(wf.includes('desktop-linux-x64'), 'must name linux artifact')
     assert.ok(wf.includes('desktop-mac-arm64'), 'must name mac-arm64 artifact')
     assert.ok(wf.includes('desktop-mac-x64'), 'must name mac-x64 artifact')
+    // Linux temporarily omitted from release matrix (Win + Mac only).
+    assert.ok(
+      !/label:\s*Linux x64/.test(wf) && !wf.includes('artifact: desktop-linux-x64'),
+      'release matrix must not include Linux while Win+Mac-only mode is active',
+    )
     assert.ok(wf.includes('desktop-release-bundle'), 'must produce desktop-release-bundle')
     assert.ok(wf.includes('actions/download-artifact@v4'), 'finalize/sync must download-artifact')
     assert.ok(
