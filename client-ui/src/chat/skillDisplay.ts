@@ -72,7 +72,7 @@ export const BUILTIN_SKILL_TITLES: Readonly<Record<string, string>> = {
   'meeting-notes': '会议纪要',
   'mna-event': '并购事件',
   'morning-market-brief': '早报',
-  'multi-role-research-council': '多角色研讨',
+  'multi-role-research-council': '投资研讨团',
   'news-digest': '资讯摘要',
   'northbound-flow': '北向资金',
   'pairs-rv': '配对价差',

@@ -1667,7 +1667,7 @@ export class AgentEngine {
       )
     }
 
-    const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
+    const finalizeCancelled = async (partialTools: string[], partialSteps: ChatToolStep[]): Promise<ChatResult> => {
       logChatDebugAbort(sessionId, { reason: 'cancelled' })
       const bound = getBoundSubagentHost(sessionId)
       cancelRunningSubagentsForParent(sessionId, {
@@ -1694,7 +1694,7 @@ export class AgentEngine {
         chatUsage.estimated,
       )
       emit({ type: 'error', message: '已取消' })
-      void emitDone({ reply, partialTools, partialSteps, cancelled: true })
+      await emitDone({ reply, partialTools, partialSteps, cancelled: true })
       return { reply, toolsUsed: partialTools, sessionId, title: record!.title }
     }
 
@@ -2000,7 +2000,7 @@ export class AgentEngine {
 
       if (turn.finishReason === 'error') {
         if (turn.error === 'cancelled' || signal?.aborted) {
-          return finalizeCancelled(toolsUsed, toolSteps)
+          return await finalizeCancelled(toolsUsed, toolSteps)
         }
         const overflow = turn.contextOverflow || isContextOverflowError(turn.error, turnContentText)
         const reply = overflow
@@ -2011,7 +2011,7 @@ export class AgentEngine {
           type: 'error',
           message: reply,
         })
-        void emitDone({ reply })
+        await emitDone({ reply })
         return { reply, toolsUsed, sessionId, title: record.title }
       }
 
@@ -2348,7 +2348,7 @@ export class AgentEngine {
         turnTimeline,
         persistedSegments.length ? persistedSegments : undefined,
       )
-      void emitDone({ reply })
+      await emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
     }
 
@@ -2361,7 +2361,7 @@ export class AgentEngine {
       chatUsage.estimated,
       mergeAssistantAttachments(),
     )
-    void emitDone({ reply })
+    await emitDone({ reply })
     return { reply, toolsUsed, sessionId, title: record.title }
     } finally {
       await broker.close().catch(() => {})
@@ -2379,7 +2379,7 @@ export class AgentEngine {
         || signal?.aborted
         || (e instanceof DOMException && e.name === 'AbortError')
       ) {
-        return finalizeCancelled(toolsUsed, toolSteps)
+        return await finalizeCancelled(toolsUsed, toolSteps)
       }
       throw e
     }

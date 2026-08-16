@@ -1275,6 +1275,19 @@ export default function ChatApp() {
     return list
   }, [])
 
+  const refreshContextUsage = useCallback(async (sessionId: string) => {
+    try {
+      const { contextUsage: next } = await getSessionContextUsage(sessionId)
+      if (activeIdRef.current === sessionId) {
+        setContextUsage(next)
+      }
+    } catch {
+      if (activeIdRef.current === sessionId) {
+        setContextUsage(null)
+      }
+    }
+  }, [])
+
   // 订阅 live-progress：wake 到期续跑的 thinking/tool/done 推到同一会话 UI
   useEffect(() => {
     if (!activeId) return
@@ -1299,7 +1312,11 @@ export default function ChatApp() {
         setContextRef(fresh.contextRef ?? null)
         setSessionModelState(fresh.session.model)
         setSessionLlmParamsState(fresh.session.llmParams)
-        setContextUsage(fresh.contextUsage ?? null)
+        if (fresh.contextUsage) {
+          setContextUsage(fresh.contextUsage)
+        } else {
+          void refreshContextUsage(sid)
+        }
         await refreshSessions()
       } catch {
         /* keep current */
@@ -1402,6 +1419,7 @@ export default function ChatApp() {
     patchSessionBackgroundJobs,
     patchSessionCollaborationTasks,
     pushStreamEvent,
+    refreshContextUsage,
     refreshSessions,
     startWakeCountdown,
   ])
@@ -1424,19 +1442,6 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '暂时无法加载归档')
       return []
-    }
-  }, [])
-
-  const refreshContextUsage = useCallback(async (sessionId: string) => {
-    try {
-      const { contextUsage: next } = await getSessionContextUsage(sessionId)
-      if (activeIdRef.current === sessionId) {
-        setContextUsage(next)
-      }
-    } catch {
-      if (activeIdRef.current === sessionId) {
-        setContextUsage(null)
-      }
     }
   }, [])
 
@@ -2027,7 +2032,11 @@ export default function ChatApp() {
         setContextRef(fresh.contextRef ?? null)
         setSessionModelState(fresh.session.model)
         setSessionLlmParamsState(fresh.session.llmParams)
-        setContextUsage(fresh.contextUsage ?? null)
+        if (fresh.contextUsage) {
+          setContextUsage(fresh.contextUsage)
+        } else {
+          void refreshContextUsage(sid)
+        }
       }
       const list = await refreshSessions()
       if (isStreamStale()) return
