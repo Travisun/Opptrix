@@ -334,7 +334,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 | `active_source` | 托管与包内均标 `opptrix`（随应用提供） |
 | CI / release | **先** `npm run build:packages` → `stage-python` → `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` 再跑 `audit-desktop-pack`；`prebuild` 同序。打包后 `verify-packaged-runtime` 校验安装包内 `python/bundle-manifest.json` 的 `platformKey` 与解释器 |
 
-**体积与取舍**：Windows 使用官方 **embed** 包（体积小、可重定位）。macOS / Linux 与现网安装路径一致，使用 **Miniconda py312**（安装包约数十 MB，展开后约数百 MB）。catalog 虽声明 `standalone` 种类，当前无独立 standalone artifact；若未来要压安装包体积，可再引入可重定位 standalone 并保留 Miniconda 作为在线安装回退。
+**体积与取舍**：Windows 使用官方 **embed** 包（体积小、可重定位）。macOS / Linux 与现网安装路径一致，使用 **Miniconda py312**（安装包约数十 MB，展开后约数百 MB）。物化成功后会删除 `pkgs/`（安装缓存，含易断链的符号链接；运行时只用 `lib/`/`bin/`），体积统计用 `lstat` 不跟随符号链接。catalog 虽声明 `standalone` 种类，当前无独立 standalone artifact；若未来要压安装包体积，可再引入可重定位 standalone 并保留 Miniconda 作为在线安装回退。
 
 下载失败或物化后缺少解释器 → **硬失败**（与 SenseVoice / ffmpeg stage 同级）。本地可设 `OPPTRIX_SKIP_STAGE_PYTHON=1` 跳过（仅开发；打包禁止）。静态 `audit:desktop-pack` 未设 `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON` 时，缺 python 树仅 **warn**；CI / release / prebuild 必须设 `=1` 硬失败。
 

@@ -69,4 +69,13 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(stagePy < audit)
     assert.ok(wf.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON'))
   })
+
+  it('stage-python prunes pkgs and size-walks with lstat (no dangling-symlink ENOENT)', () => {
+    const src = read('apps/desktop/scripts/stage-python.mjs')
+    assert.ok(src.includes('lstatSync'), 'size walk must use lstatSync')
+    assert.ok(!src.includes('fs.statSync'), 'must not follow symlinks via fs.statSync')
+    assert.ok(src.includes("'pkgs'") || src.includes('"pkgs"'), 'must prune pkgs/')
+    assert.ok(src.includes('rmSync'), 'must rmSync pkgs/')
+    assert.ok(src.includes('walk skip') || src.includes('size walk failed'), 'walk failures must warn, not hard-fail')
+  })
 })

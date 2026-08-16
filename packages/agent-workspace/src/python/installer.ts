@@ -204,6 +204,11 @@ export async function materializePythonArtifact(
     }
   }
 
+  // Miniconda pkgs/ is install cache; dangling links break packaging walks; runtime uses lib/bin.
+  if (artifact.kind === 'miniconda') {
+    await fs.rm(path.join(installDir, 'pkgs'), { recursive: true, force: true })
+  }
+
   return { runtimeRoot: effectiveRoot, pythonPath, pythonVersion }
 }
 

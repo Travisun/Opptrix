@@ -151,6 +151,14 @@ async function main() {
     fail(`staged tree missing python binary under ${TARGET_DIR}`)
   }
 
+  // Miniconda pkgs/ is package cache only; runtime uses lib/bin. Dangling symlinks
+  // inside pkgs (e.g. libgomp.so.1) make follow-stat size walks ENOENT on CI.
+  const pkgsDir = path.join(TARGET_DIR, 'pkgs')
+  if (fs.existsSync(pkgsDir)) {
+    fs.rmSync(pkgsDir, { recursive: true, force: true })
+    ok('pruned pkgs/ (miniconda package cache)')
+  }
+
   const bundleManifest = {
     version: artifact.version,
     platformKey: artifact.platformKey,
@@ -159,18 +167,35 @@ async function main() {
   }
   fs.writeFileSync(manifestPath, `${JSON.stringify(bundleManifest, null, 2)}\n`, 'utf8')
 
-  // Size note for pack logs
+  // Size note for pack logs — lstat only; never follow symlinks (dangling → ENOENT).
   let totalBytes = 0
   const walk = (dir) => {
-    for (const name of fs.readdirSync(dir)) {
+    let names
+    try {
+      names = fs.readdirSync(dir)
+    } catch (err) {
+      console.warn(`stage-python: walk skip ${dir}: ${err instanceof Error ? err.message : err}`)
+      return
+    }
+    for (const name of names) {
       const p = path.join(dir, name)
-      const st = fs.statSync(p)
-      if (st.isDirectory()) walk(p)
-      else totalBytes += st.size
+      try {
+        const st = fs.lstatSync(p)
+        if (st.isSymbolicLink()) continue
+        if (st.isDirectory()) walk(p)
+        else totalBytes += st.size
+      } catch (err) {
+        console.warn(`stage-python: walk skip ${p}: ${err instanceof Error ? err.message : err}`)
+      }
     }
   }
-  walk(TARGET_DIR)
-  ok(`OK — ${bin} (~${(totalBytes / 1024 / 1024).toFixed(1)} MiB tree, kind=${artifact.kind})`)
+  try {
+    walk(TARGET_DIR)
+    ok(`OK — ${bin} (~${(totalBytes / 1024 / 1024).toFixed(1)} MiB tree, kind=${artifact.kind})`)
+  } catch (err) {
+    console.warn(`stage-python: size walk failed: ${err instanceof Error ? err.message : err}`)
+    ok(`OK — ${bin} (kind=${artifact.kind}; size unknown)`)
+  }
 }
 
 main().catch((err) => {
