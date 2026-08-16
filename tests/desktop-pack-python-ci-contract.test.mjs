@@ -99,6 +99,32 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     )
   })
 
+  it('release-desktop.yml raises macOS FD limit to 65536 without swallowing failures', () => {
+    const wf = read('.github/workflows/release-desktop.yml')
+    assert.ok(wf.includes('ulimit -n 65536'), 'must target ulimit -n 65536')
+    assert.ok(!wf.includes('ulimit -n 10240 || true'), 'must not use swallowed 10240 || true')
+    assert.ok(wf.includes('20000'), 'must fail when soft limit still below 20000')
+  })
+
+  it('mac package scripts use with-raised-fd-limit wrapper', () => {
+    const pkg = JSON.parse(read('apps/desktop/package.json'))
+    const wrapperPath = path.join(repoRoot, 'apps/desktop/scripts/with-raised-fd-limit.sh')
+    assert.ok(fs.existsSync(wrapperPath), 'with-raised-fd-limit.sh must exist')
+    for (const name of [
+      'build:package:mac-arm64',
+      'build:package:mac-x64',
+      'build:publish:mac-arm64',
+      'build:publish:mac-x64',
+    ]) {
+      const script = pkg.scripts[name]
+      assert.ok(script, `${name} must exist`)
+      assert.ok(
+        script.includes('with-raised-fd-limit'),
+        `${name} must invoke with-raised-fd-limit.sh`,
+      )
+    }
+  })
+
   it('release-desktop.yml sets OPPTRIX_RUNTIME_ARCH for stage-rag-engines cross mac-x64', () => {
     const wf = read('.github/workflows/release-desktop.yml')
     const rag = wf.indexOf('stage-rag-engines.mjs')
