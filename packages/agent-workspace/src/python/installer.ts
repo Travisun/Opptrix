@@ -204,12 +204,40 @@ export async function materializePythonArtifact(
     }
   }
 
-  // Miniconda pkgs/ is install cache; dangling links break packaging walks; runtime uses lib/bin.
   if (artifact.kind === 'miniconda') {
-    await fs.rm(path.join(installDir, 'pkgs'), { recursive: true, force: true })
+    await pruneMinicondaStagedTree(installDir)
   }
 
   return { runtimeRoot: effectiveRoot, pythonPath, pythonVersion }
+}
+
+/**
+ * Drop Miniconda install-only / docs / terminfo trees that are unused at runtime.
+ * WHY: electron-builder walks every staged file; ~10k+ terminfo + pkgs entries
+ * trigger EMFILE on macOS CI and inflate the app bundle. Keep bin/, lib/python*,
+ * .dylib/.so, ssl/, and zoneinfo.
+ */
+export async function pruneMinicondaStagedTree(installDir: string): Promise<void> {
+  const relativeTargets = [
+    'pkgs',
+    'lib/terminfo',
+    'share/terminfo',
+    'share/tabset',
+    'man',
+    'share/man',
+    'share/doc',
+    'share/info',
+    'share/examples',
+    'share/aclocal',
+    'share/cmake',
+    'include',
+    'cmake',
+    'uninstall.sh',
+    'python.app',
+  ]
+  for (const rel of relativeTargets) {
+    await fs.rm(path.join(installDir, rel), { recursive: true, force: true })
+  }
 }
 
 export async function installPythonArtifact(

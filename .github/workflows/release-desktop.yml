@@ -120,8 +120,11 @@ jobs:
         run: node apps/desktop/scripts/stage-rapidocr.mjs
 
       # Writes resources/engines/<plat-arch>/MANIFEST.json for audit / prebuild compat (no pip download).
+      # Cross mac-x64 on arm64 runners must set OPPTRIX_RUNTIME_ARCH so MANIFEST lands under darwin-x64.
       - name: Stage RAG engines MANIFEST (Node OCR)
         run: node apps/desktop/scripts/stage-rag-engines.mjs
+        env:
+          OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
 
       # Stages build/icons including tray/* (audit requires full tray set; not produced by RAG stage scripts).
       - name: Stage desktop icons / tray
@@ -257,6 +260,11 @@ jobs:
           APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
           OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
         run: |
+          # Soften macOS default FD limit; prune Miniconda tree is the real EMFILE fix.
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            ulimit -n 10240 || true
+          fi
+
           if [[ "${{ runner.os }}" == "macOS" && -n "${CSC_KEYCHAIN:-}" ]]; then
             cleanup_signing_keychain() {
               security delete-keychain "$CSC_KEYCHAIN" 2>/dev/null || true

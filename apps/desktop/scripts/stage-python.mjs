@@ -113,7 +113,13 @@ async function main() {
     try {
       const prev = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
       if (prev.platformKey === platformKey && prev.version === artifact.version) {
-        ok(`reuse existing tree (${existingBin})`)
+        // Re-prune so CI reuse of a pre-fix fat tree still drops terminfo/pkgs (EMFILE).
+        if (artifact.kind === 'miniconda') {
+          await installer.pruneMinicondaStagedTree(TARGET_DIR)
+          ok(`reuse existing tree (${existingBin}); re-pruned miniconda extras`)
+        } else {
+          ok(`reuse existing tree (${existingBin})`)
+        }
         return
       }
     } catch {
@@ -151,12 +157,11 @@ async function main() {
     fail(`staged tree missing python binary under ${TARGET_DIR}`)
   }
 
-  // Miniconda pkgs/ is package cache only; runtime uses lib/bin. Dangling symlinks
-  // inside pkgs (e.g. libgomp.so.1) make follow-stat size walks ENOENT on CI.
-  const pkgsDir = path.join(TARGET_DIR, 'pkgs')
-  if (fs.existsSync(pkgsDir)) {
-    fs.rmSync(pkgsDir, { recursive: true, force: true })
-    ok('pruned pkgs/ (miniconda package cache)')
+  // Align with installer.pruneMinicondaStagedTree — pkgs/terminfo/docs/headers inflate
+  // file count (~10k+) and trigger electron-builder EMFILE on macOS CI.
+  if (artifact.kind === 'miniconda') {
+    await installer.pruneMinicondaStagedTree(TARGET_DIR)
+    ok('pruned miniconda install-only dirs (pkgs/terminfo/docs/headers/…)')
   }
 
   const bundleManifest = {

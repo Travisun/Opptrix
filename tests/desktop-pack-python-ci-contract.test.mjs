@@ -70,12 +70,43 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(wf.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON'))
   })
 
-  it('stage-python prunes pkgs and size-walks with lstat (no dangling-symlink ENOENT)', () => {
+  it('stage-python + installer prune miniconda extras (terminfo/pkgs) for EMFILE', () => {
     const src = read('apps/desktop/scripts/stage-python.mjs')
     assert.ok(src.includes('lstatSync'), 'size walk must use lstatSync')
     assert.ok(!src.includes('fs.statSync'), 'must not follow symlinks via fs.statSync')
-    assert.ok(src.includes("'pkgs'") || src.includes('"pkgs"'), 'must prune pkgs/')
-    assert.ok(src.includes('rmSync'), 'must rmSync pkgs/')
+    assert.ok(src.includes('pruneMinicondaStagedTree'), 'must call installer prune helper')
     assert.ok(src.includes('walk skip') || src.includes('size walk failed'), 'walk failures must warn, not hard-fail')
+
+    const installer = read('packages/agent-workspace/src/python/installer.ts')
+    assert.ok(installer.includes('pruneMinicondaStagedTree'), 'installer must export prune helper')
+    for (const needle of [
+      'pkgs',
+      'lib/terminfo',
+      'share/terminfo',
+      'share/tabset',
+      'man',
+      'share/man',
+      'share/doc',
+      'include',
+      'cmake',
+      'uninstall.sh',
+    ]) {
+      assert.ok(installer.includes(`'${needle}'`), `prune list must include ${needle}`)
+    }
+    assert.ok(
+      installer.includes('EMFILE') || installer.includes('terminfo'),
+      'prune helper must document WHY (EMFILE / terminfo)',
+    )
+  })
+
+  it('release-desktop.yml sets OPPTRIX_RUNTIME_ARCH for stage-rag-engines cross mac-x64', () => {
+    const wf = read('.github/workflows/release-desktop.yml')
+    const rag = wf.indexOf('stage-rag-engines.mjs')
+    assert.ok(rag >= 0, 'must run stage-rag-engines.mjs')
+    const afterRag = wf.slice(rag, rag + 400)
+    assert.ok(
+      afterRag.includes('OPPTRIX_RUNTIME_ARCH'),
+      'stage-rag-engines step must set OPPTRIX_RUNTIME_ARCH (darwin-x64 MANIFEST on arm64 runners)',
+    )
   })
 })

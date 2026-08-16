@@ -179,6 +179,7 @@ export {
 } from './python/catalog.js'
 export {
   materializePythonArtifact,
+  pruneMinicondaStagedTree,
   pythonBinaryCandidates,
   linkPythonCurrent,
 } from './python/installer.js'
