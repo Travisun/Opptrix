@@ -1288,6 +1288,13 @@ export default function ChatApp() {
     }
   }, [])
 
+  /** 切到新空会话 / 清空活动会话：先清 React 残留，再拉本窗用量 */
+  const resetContextUsageForSession = useCallback((sessionId: string | null) => {
+    setContextUsage(null)
+    if (!sessionId) return
+    void refreshContextUsage(sessionId)
+  }, [refreshContextUsage])
+
   // 订阅 live-progress：wake 到期续跑的 thinking/tool/done 推到同一会话 UI
   useEffect(() => {
     if (!activeId) return
@@ -1315,7 +1322,7 @@ export default function ChatApp() {
         if (fresh.contextUsage) {
           setContextUsage(fresh.contextUsage)
         } else {
-          void refreshContextUsage(sid)
+          resetContextUsageForSession(sid)
         }
         await refreshSessions()
       } catch {
@@ -1420,6 +1427,7 @@ export default function ChatApp() {
     patchSessionCollaborationTasks,
     pushStreamEvent,
     refreshContextUsage,
+    resetContextUsageForSession,
     refreshSessions,
     startWakeCountdown,
   ])
@@ -1456,6 +1464,7 @@ export default function ChatApp() {
     }
     pushComposerDraft('')
     const data = await getSession(id)
+    activeIdRef.current = id
     setActiveId(id)
     setActiveSessionMeta(data.session)
     setMessages(data.messages)
@@ -1571,6 +1580,7 @@ export default function ChatApp() {
       const { session } = await createSession()
       const list = await refreshSessions()
       setSessions(list)
+      activeIdRef.current = session.id
       setActiveId(session.id)
       setActiveSessionMeta(session)
       setMessages([])
@@ -1581,12 +1591,13 @@ export default function ChatApp() {
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
+      resetContextUsageForSession(session.id)
       closeDrawer()
       if (view !== 'chat') navigate('chat')
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建对话失败')
     }
-  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn, view])
+  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, resetContextUsageForSession, restoreChatColumn, view])
 
   const handleSelect = useCallback(async (id: string) => {
     restoreChatColumn()
@@ -1626,16 +1637,18 @@ export default function ChatApp() {
         if (list.length > 0) {
           await loadSession(list[0].id)
         } else {
+          activeIdRef.current = null
           setActiveId(null)
           setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
+          resetContextUsageForSession(null)
         }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }, [activeId, abortSessionStream, clearSessionBackgroundJobs, clearSessionCollaborationTasks, clearSessionWakeState, confirm, loadSession, refreshSessions])
+  }, [activeId, abortSessionStream, clearSessionBackgroundJobs, clearSessionCollaborationTasks, clearSessionWakeState, confirm, loadSession, refreshSessions, resetContextUsageForSession])
 
   const handleSelectExpert = useCallback(async (expertId: string) => {
     restoreChatColumn()
@@ -1643,6 +1656,7 @@ export default function ChatApp() {
       const { session } = await createSession({ expertId })
       const list = await refreshSessions()
       setSessions(list)
+      activeIdRef.current = session.id
       setActiveId(session.id)
       setActiveSessionMeta(session)
       setMessages([])
@@ -1653,13 +1667,14 @@ export default function ChatApp() {
       pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
+      resetContextUsageForSession(session.id)
       setSidebarListTab('experts')
       closeDrawer()
       navigate('chat')
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建专家对话失败')
     }
-  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn])
+  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, resetContextUsageForSession, restoreChatColumn])
 
   const handleArchive = useCallback(async (id: string, folderId: string) => {
     try {
@@ -1673,18 +1688,20 @@ export default function ChatApp() {
         if (list.length > 0) {
           await loadSession(list[0].id)
         } else {
+          activeIdRef.current = null
           setActiveId(null)
           setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
           setSessionLlmParamsState(undefined)
+          resetContextUsageForSession(null)
         }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '归档失败')
     }
-  }, [activeId, loadSession, refreshArchived, refreshSessions])
+  }, [activeId, loadSession, refreshArchived, refreshSessions, resetContextUsageForSession])
 
   const handleCreateArchiveFolder = useCallback(async (title: string) => {
     try {
@@ -1725,18 +1742,20 @@ export default function ChatApp() {
         if (list.length > 0) {
           await loadSession(list[0].id)
         } else {
+          activeIdRef.current = null
           setActiveId(null)
           setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
           setSessionLlmParamsState(undefined)
+          resetContextUsageForSession(null)
         }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '清空文件夹失败')
     }
-  }, [activeId, archivedGroups, loadSession, refreshArchived, refreshSessions])
+  }, [activeId, archivedGroups, loadSession, refreshArchived, refreshSessions, resetContextUsageForSession])
 
   const handleDeleteArchivedSession = useCallback(async (id: string) => {
     try {
@@ -1747,18 +1766,20 @@ export default function ChatApp() {
         if (list.length > 0) {
           await loadSession(list[0].id)
         } else {
+          activeIdRef.current = null
           setActiveId(null)
           setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
           setSessionLlmParamsState(undefined)
+          resetContextUsageForSession(null)
         }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }, [activeId, loadSession, refreshArchived, refreshSessions])
+  }, [activeId, loadSession, refreshArchived, refreshSessions, resetContextUsageForSession])
 
   const handleRenameSession = useCallback(async (title: string) => {
     if (!activeId) return
@@ -1939,12 +1960,14 @@ export default function ChatApp() {
       try {
         const { session } = await createSession()
         sessionId = session.id
+        activeIdRef.current = sessionId
         setActiveId(sessionId)
         setActiveSessionMeta(session)
         setSessionModelState(session.model)
         setSessionLlmParamsState(session.llmParams)
         if (session.model?.trim()) setDefaultModel(session.model.trim())
         await refreshSessions()
+        resetContextUsageForSession(sessionId)
       } catch (e) {
         setError(e instanceof Error ? e.message : '创建对话失败')
         return
@@ -2035,7 +2058,7 @@ export default function ChatApp() {
         if (fresh.contextUsage) {
           setContextUsage(fresh.contextUsage)
         } else {
-          void refreshContextUsage(sid)
+          resetContextUsageForSession(sid)
         }
       }
       const list = await refreshSessions()
@@ -2054,6 +2077,7 @@ export default function ChatApp() {
       if (!isStreamStale()) {
         const sid = resolvedSessionId
         if (sid !== sessionId && activeIdRef.current === sessionId) {
+          activeIdRef.current = sid
           setActiveId(sid)
         }
         await applyFreshSession(sid)
@@ -2152,14 +2176,16 @@ export default function ChatApp() {
   const ensureSession = useCallback(async (): Promise<string> => {
     if (activeIdRef.current) return activeIdRef.current
     const { session } = await createSession()
+    activeIdRef.current = session.id
     setActiveId(session.id)
     setActiveSessionMeta(session)
     setSessionModelState(session.model)
     setSessionLlmParamsState(session.llmParams)
     if (session.model?.trim()) setDefaultModel(session.model.trim())
     await refreshSessions()
+    resetContextUsageForSession(session.id)
     return session.id
-  }, [refreshSessions])
+  }, [refreshSessions, resetContextUsageForSession])
 
   const handleStreamError = useCallback((message: string) => {
     setError(message)
@@ -2171,6 +2197,7 @@ export default function ChatApp() {
       const data = await forkSession(activeId, messageIndex)
       const list = await refreshSessions()
       setSessions(list)
+      activeIdRef.current = data.session.id
       setActiveId(data.session.id)
       setMessages(data.messages)
       setContextRef(data.contextRef ?? null)
@@ -2178,12 +2205,13 @@ export default function ChatApp() {
       setSessionLlmParamsState(data.session.llmParams)
       pushComposerDraft('')
       setError('')
+      resetContextUsageForSession(data.session.id)
       closeDrawer()
       if (view !== 'chat') navigate('chat')
     } catch (e) {
       setError(e instanceof Error ? e.message : '分叉对话失败')
     }
-  }, [activeId, closeDrawer, navigate, pushComposerDraft, refreshSessions, view])
+  }, [activeId, closeDrawer, navigate, pushComposerDraft, refreshSessions, resetContextUsageForSession, view])
 
   const handleEditResend = useCallback(async (messageIndex: number, text: string) => {
     const sid = activeIdRef.current
@@ -2317,6 +2345,7 @@ export default function ChatApp() {
       const { session } = await createSession()
       const list = await refreshSessions()
       setSessions(list)
+      activeIdRef.current = session.id
       setActiveId(session.id)
       setActiveSessionMeta(session)
       setMessages([])
@@ -2329,11 +2358,11 @@ export default function ChatApp() {
       setWelcomeEpoch(epoch => epoch + 1)
       closeDrawer()
       navigate('chat')
-      await refreshContextUsage(session.id)
+      resetContextUsageForSession(session.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建对话失败')
     }
-  }, [closeDrawer, navigate, pushComposerDraft, refreshContextUsage, refreshSessions, restoreChatColumn])
+  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, resetContextUsageForSession, restoreChatColumn])
 
   const handleEphemeralAsk = useCallback(async (
     message: string,

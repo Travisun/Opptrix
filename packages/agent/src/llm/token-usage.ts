@@ -85,6 +85,14 @@ export function computeCacheHitPercent(
   return Math.min(100, Math.max(0, Math.round((100 * cachedPromptTokens) / denom)))
 }
 
+/** 是否存在任意 assistant turn 且上游回报过 usage（不要求含 cached 字段） */
+export function hasAssistantTurnUsage(
+  turns: Array<{ role: string; usage?: TokenUsage }> | undefined,
+): boolean {
+  if (!turns?.length) return false
+  return turns.some((turn) => turn.role === 'assistant' && turn.usage !== undefined)
+}
+
 /** 最近一轮 assistant turn 含 cached 上报的 usage（从新到旧） */
 export function resolveLatestTurnCacheUsage(
   turns: Array<{ role: string; usage?: TokenUsage }> | undefined,

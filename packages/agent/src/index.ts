@@ -356,6 +356,7 @@ export {
   resolveCacheWarmth,
   computeCacheHitPercent,
   resolveLatestTurnCacheUsage,
+  hasAssistantTurnUsage,
   resolveSessionCacheHitSource,
   promptCacheKeyForSession,
 } from './llm/token-usage.js'
