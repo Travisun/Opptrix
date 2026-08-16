@@ -13,7 +13,7 @@
 |------|------|
 | `skills/*.md`（20） | 全部映射为独立基础 skill |
 | `codex-skills/investment-memo-craft` | 额外映射 1 个写作/排版叠加 skill |
-| 综合编排 | 新增 `ai-berkshire`，编排全部基础 skill |
+| 投研总入口 | 新增 `ai-berkshire`，按场景路由全部基础 skill |
 | `tools/*.py` 中取数型（`ashare_data` / `twstock_data` / `xueqiu_scraper` / `morningstar_fair_value` / `stock_screener` / `momentum_backtest*`） | **不**单独建 skill；由 Opptrix Agent 工具替换，或在契约中禁止脚本联网 |
 | `tools/financial_rigor.py` / `tools/report_audit.py` | **不**单独建 skill；算法移植为各需严谨计算的 skill 内 `scripts/` |
 | Claude Code 内置 `/deep-research` | 非本仓分发，**不映射** |
@@ -25,7 +25,7 @@
   - 源 `thesis-tracker` → **`value-thesis-tracker`**
   - 源 `portfolio-review` → **`value-portfolio-review`**
 - 其余尽量保留原名（`investment-research`、`investment-team`、…）
-- 综合编排 skill：**`ai-berkshire`**（单独一行）
+- 投研总入口 skill：**`ai-berkshire`**（单独一行）
 - 默认产物：投研/内容类均为可预览 **web**（`create_web`）；纯规范类可为 web 或 checklist 页；署名见契约
 
 ## 统计
@@ -33,7 +33,7 @@
 | 项 | 数量 |
 |----|-----:|
 | 基础 skill（可独立实现） | **21** |
-| 综合编排 | **1**（`ai-berkshire`） |
+| 投研总入口 | **1**（`ai-berkshire`） |
 | 映射表行数 | **22** |
 | 分类 | deep-research=5，earnings=2，industry=4，portfolio=5，thinking=3，content=1，overlay=1，orchestrator=1 |
 
@@ -62,7 +62,7 @@
 | 19 | `skills/financial-data.md` | `financial-data` | 财务数据交叉验证规范 | thinking | 关键数据双源；误差>1%标记；市值手算；台股 FinMind 规范 | `ashare_data` / `twstock_data`；多市场站点 | **规范 skill**：取数统一走 `get_instrument_*` 族 + `http_fetch` 第二源；校验走 `scripts/financial_rigor.py`；台股专属 API **不**在脚本内联网 | `scripts/financial_rigor.py`（规范演示/验算） | web（规范说明页） | 作为被其他 skill 引用的 SSOT 规范 | 非 `get_instrument_financials` 工具本身；其他 AB skill 应引用本规范而非另起口径 |
 | 20 | `skills/wechat-article.md` | `wechat-article` | 公众号三 Agent 成稿 | content | 作者→编辑→读者；可发布中文长文 | WebSearch；主题研究 | 主题取证同新闻/财报工具子集；三角色 `run_subagent`；成稿 `create_web` | 无强制；涉财务时用 `financial_rigor.py` | web | 非投研决策主路径；质量依赖评审环 | 易混 `deep-company-series` / `earnings-team` 成稿阶段 |
 | 21 | `codex-skills/investment-memo-craft/`（Codex-only） | `investment-memo-craft` | 投研报告写作与版式叠加 | overlay | 决策可读性：生意机制、可证伪护城河、逆向、估值→行动；冷静 Markdown 版式；不替代取数/审计 | 叠加在 research/team 等产出之上 | 读已有底稿 `workspace_read`；需要时补 `get_instrument_*`；终稿 `create_web` | 无（写作叠加）；数字仍须上游 rigor | web | 单独使用无研究底稿易空转 | 易混 `thesis-memo`（短论点备忘）与 `ic-memo`；本 skill 为长文研究报告版式/判断叠加 |
-| 22 | （Opptrix 新增编排） | `ai-berkshire` | AI Berkshire 综合投研编排 | orchestrator | 按场景路由到全部基础 skill；强制质量规则；默认 web 交付与统一署名 | 编排全部 #1–#21；共享 `financial-data` 规范 | 路由激活：`activate_agent_skill` / `get_agent_skill`；取数与子流程委托各基础 skill；并行 `run_subagent`；交付 `create_web` | 可选 `scripts/route_hints.json`（场景→skill）；无联网脚本 | web | 编排不当会重复跑重 skill → 成本爆炸 | 易混 `multi-role-research-council`；本 skill 是价值投资 skill 总入口，不是研讨团 |
+| 22 | （Opptrix 新增总入口） | `ai-berkshire` | AI Berkshire 投研流程 | entry | 按场景路由到全部基础 skill；强制质量规则；默认 web 交付与统一署名 | 路由全部 #1–#21；共享 `financial-data` 规范 | 路由激活：`activate_agent_skill` / `get_agent_skill`；取数与子流程委托各基础 skill；并行 `run_subagent`；交付 `create_web` | 可选 `scripts/route_hints.json`（场景→skill）；无联网脚本 | web | 路由不当会重复跑重 skill → 成本爆炸 | 易混 `multi-role-research-council`；本 skill 是价值投资 skill 总入口，不是研讨团 |
 
 ## 源工具层对照（不单独建 skill）
 
@@ -83,17 +83,18 @@
 2. **P1 主研究路径**：`investment-research` → `investment-team` → `earnings-review`  
 3. **P2 持仓纪律**：`value-thesis-tracker`、`thesis-drift`、`value-portfolio-review`、`news-pulse`  
 4. **P3 行业/系列/内容**：`industry-funnel`、`industry-research`、`bottleneck-hunter`、`deep-company-series`、`wechat-article`、`investment-memo-craft`  
-5. **P4 编排收口**：`ai-berkshire`（依赖基础 skill 就绪）
+5. **P4 总入口收口**：`ai-berkshire`（依赖基础 skill 就绪）
 
 ## 完整 skill 名列表（22）
 
 **基础（21）**：`investment-research`、`investment-team`、`management-deep-dive`、`private-company-research`、`deep-company-series`、`earnings-review`、`earnings-team`、`industry-research`、`industry-funnel`、`quality-screen`、`bottleneck-hunter`、`investment-checklist`、`income-investment`、`value-portfolio-review`、`value-thesis-tracker`、`thesis-drift`、`news-pulse`、`dyp-ask`、`financial-data`、`wechat-article`、`investment-memo-craft`
 
-**综合（1）**：`ai-berkshire`
+**总入口（1）**：`ai-berkshire`
 
 ## 修订记录
 
 | 日期 | 说明 |
 |------|------|
-| 2026-08-16 | 定稿：20 canonical + `investment-memo-craft` + 编排 `ai-berkshire`；冲突改名 `value-thesis-tracker` / `value-portfolio-review` |
-| 2026-08-16 | 分支 `new-ai-berkshire-skills`：21 基础 + `ai-berkshire` 综合已落地（SKILL + 必要 scripts/references）；禁止外部源仓路径；取数走 Opptrix 工具 |
+| 2026-08-16 | 定稿：20 canonical + `investment-memo-craft` + 总入口 `ai-berkshire`；冲突改名 `value-thesis-tracker` / `value-portfolio-review` |
+| 2026-08-16 | 分支 `new-ai-berkshire-skills`：21 基础 + `ai-berkshire` 投研流程已落地（SKILL + 必要 scripts/references）；禁止外部源仓路径；取数走 Opptrix 工具 |
+| 2026-08-16 | 产品命名：`ai-berkshire` 展示名/署名由「编排」改为「投研流程」 |

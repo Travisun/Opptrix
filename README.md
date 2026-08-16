@@ -119,7 +119,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 
 ---
 
-**Opptrix** 是一款开源的 **全球多市场投研工作台**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场。用自然语言提问，由大模型按意图挂载 **150+ 投研工具**，并可激活 **170+ 内置工作流技能**（量化因子 / 择时 / 价值投资编排等），把结构化数据整理成中文报告或可预览投研页。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API；设置中可选开启 **自进化**，让同一模型在投研主路径上更稳、更完整。
+**Opptrix** 是一款开源的 **全球多市场投研工作台**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场。用自然语言提问，由大模型按意图挂载 **150+ 投研工具**，并可激活 **170+ 内置工作流技能**（量化因子 / 择时 / 价值投资流程等），把结构化数据整理成中文报告或可预览投研页。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API；设置中可选开启 **自进化**，让同一模型在投研主路径上更稳、更完整。
 
 ---
 
@@ -156,7 +156,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 | **核心投研** | 数十个 | 个股深潜、多角色研讨、报告审计、网页/画布交付等日常投研流程 |
 | **Lean 量化** | 约 27（`lean-*`） | 组合构建、风险、执行与研究等工作流参照 Lean 方法论 |
 | **量化方法库** | 约 60+ | 因子、择时、行业轮动、情绪与微观结构等可运行方法（由开源量化研究材料映射为自洽技能） |
-| **价值投资** | 约 20+ | 财务严谨检查、报告审计、论点跟踪与组合复盘；综合编排 **`ai-berkshire`**（场景路由 → 取数 → 子技能 → 交付） |
+| **价值投资** | 约 20+ | 财务严谨检查、报告审计、论点跟踪与组合复盘；总入口 **`ai-berkshire`（AI Berkshire 投研流程）**（场景路由 → 取数 → 子技能 → 交付） |
 
 开发者映射与契约：[docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md)、[docs/quants-playbook-skill-map.md](docs/quants-playbook-skill-map.md)、[docs/ai-berkshire-skill-map.md](docs/ai-berkshire-skill-map.md)。
 
@@ -465,7 +465,7 @@ Opptrix 的 Agent 工作流、投研协作与量化/价值投资技能设计，�
 | [anthropics/claude-code](https://github.com/anthropics/claude-code) | Agent 工作区、工具编排与工程化 Agent 体验的参照 |
 | [tauricresearch/tradingagents](https://github.com/tauricresearch/tradingagents) | 多角色投研协作与 Agent 分工的参照 |
 | [hugo2046/QuantsPlaybook](https://github.com/hugo2046/QuantsPlaybook) | 量化因子 / 择时等方法映射为内置工作流技能的来源之一 |
-| [xbtlin/ai-berkshire](https://github.com/xbtlin/ai-berkshire) | 价值投资流程编排（含 `ai-berkshire` 技能）的灵感来源 |
+| [xbtlin/ai-berkshire](https://github.com/xbtlin/ai-berkshire) | 价值投资流程（含 `ai-berkshire` 技能）的灵感来源 |
 | [QuantConnect/Lean](https://github.com/QuantConnect/Lean) | Lean 风格量化方法论在 `lean-*` 技能中的参照 |
 | [anomalyco/opencode](https://github.com/anomalyco/opencode) | 开放式编码型 Agent / 工具工作流的参照 |
 

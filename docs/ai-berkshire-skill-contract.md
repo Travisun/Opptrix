@@ -1,7 +1,7 @@
 # AI Berkshire Skill 契约（定稿）
 
 > 适用于由 AI Berkshire 映射而来的 Opptrix Agent Skills（见 [`ai-berkshire-skill-map.md`](./ai-berkshire-skill-map.md)）。  
-> 精神对齐 [`quants-skill-script-contract.md`](./quants-skill-script-contract.md)，但对象是**投研工作流 skill**（研究编排 + 可选严谨计算脚本），不是截面因子/择时信号流水线。
+> 精神对齐 [`quants-skill-script-contract.md`](./quants-skill-script-contract.md)，但对象是**投研工作流 skill**（研究流程 + 可选严谨计算脚本），不是截面因子/择时信号流水线。
 
 ## 1. 包体结构
 
@@ -104,7 +104,7 @@ python scripts/quality_screen.py --input data.json --output result.json
 
 ## 6. 研究质量硬性规则（写入每个投研类 SKILL.md）
 
-以下理念来自 AI Berkshire README / AGENTS / CLAUDE，实现时**必须**进入 SKILL「研究质量」段落（编排 skill `ai-berkshire` 亦须重申）：
+以下理念来自 AI Berkshire README / AGENTS / CLAUDE，实现时**必须**进入 SKILL「研究质量」段落（总入口 skill `ai-berkshire` 亦须重申）：
 
 ### 6.1 四大师框架
 
@@ -170,7 +170,7 @@ python scripts/quality_screen.py --input data.json --output result.json
 ## 8. 默认交付与署名
 
 1. **默认 `create_web`** 交付可预览 HTML 报告（用户明确只要画布再用 `create_canvas`；关系结构可用 `create_mindmap`）。  
-2. 报告署名使用产品文案，例如：**「Opptrix · AI Berkshire 投研流程」**（编排入口可用同一署名或「Opptrix · AI Berkshire 综合编排」）。  
+2. 报告署名使用产品文案：**「Opptrix · AI Berkshire 投研流程」**（总入口与基础 skill 统一此署名，勿再用「编排」字样）。  
 3. **禁止**在用户可见文案中堆砌：MCP、Provider、SQLite、Hub、脚本路径、`opptrix_run`、HTTP 状态码等实现细节（内部 SKILL 步骤可写工具名供 Agent 执行）。  
 4. 勿在标题默认追加「四大师综合」「投资备忘录」等冗余后缀，除非用户点名（与 `investment-memo-craft` 版式约定一致）。
 
@@ -205,7 +205,7 @@ python scripts/quality_screen.py --input data.json --output result.json
 - ❌ 覆盖现有 `thesis-tracker` / `portfolio-review` 目录名  
 - ❌ 用户可见文案堆技术实现词  
 - ❌ 把整份超大源 md 塞进 skill 导致超过 200KB/16 文件  
-- ❌ 编排 skill 无差别串行跑完全部重研究 skill（成本爆炸、无场景路由）
+- ❌ 总入口 skill 无差别串行跑完全部重研究 skill（成本爆炸、无场景路由）
 
 ## 修订记录
 

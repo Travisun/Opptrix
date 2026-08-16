@@ -347,7 +347,7 @@ def compute(payload: dict[str, Any]) -> dict[str, Any]:
                 "四视角摘要（段永平/巴菲特/芒格/李录，不足则声明）",
                 "数据截止日期",
                 "免责声明",
-                "署名 Opptrix · AI Berkshire 综合编排",
+                "署名 Opptrix · AI Berkshire 投研流程",
             ],
         },
         "boundary": {
