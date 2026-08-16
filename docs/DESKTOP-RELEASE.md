@@ -134,7 +134,8 @@ git push origin desktop-v0.6.1
 3. **4 个并行 matrix job** 打包（macOS x64 / arm64、Windows、Linux）：`download-artifact` 复用共享模型（`OPPTRIX_SKIP_SHARED_MODEL_STAGE=1`，prebuild 不再重复 stage）；仍各自 stage engines / Python / Playwright 等架构相关资源
 4. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-linux-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
 5. **finalize-release**：按平台分别下载 artifact（避免误收 `desktop-shared-models`）→ 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
-6. **sync-r2**：下载 `desktop-release-bundle`，**始终**同步到 Cloudflare R2（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）
+6. **sync-r2**：下载 `desktop-release-bundle`，先同步 Cloudflare R2；再同步 FTP 镜像（需 `FTP_HOST` 等 secrets）。R2 失败但 FTP 已配置时可继续；CDN purge / 公开 URL 校验仅在 R2 成功时执行。
+
 
 #### 共享模型源序与 Secrets
 
@@ -243,6 +244,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job（**不因 Draft 跳
 | **托管 Python** | `build:packages` → `stage-python.mjs` → `resources/python/`；`extraResources` → 安装包 `python/`；`OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` 审计硬门禁 | CI / release 在 audit 前显式 stage；打包后 `verify-packaged-runtime` 校验 `bundle-manifest.json` + 解释器。**翻译 GGUF 不打进包**（用户按需下载） |
 | **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD` / `_KEY_PEM`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
 | **R2 同步** | 始终从 `desktop-release-bundle` 上传；仅保留最新一版对象；含全部安装包 + 三份 yml + Linux `*.opptrix-cms` | Draft 不阻止同步；旧客户端靠 semver 比较版本，不靠多通道 |
+| **FTP 镜像** | R2 之后再传同一套文件到 FTP（`FTP_HOST` / `FTP_USERNAME` / `FTP_PASSWORD`）；远端目录默认取更新源 URL 路径（如 `/desktop`），可用 `FTP_REMOTE_DIR` 覆盖 | R2 失败且已配置 FTP 时仍可完成分发；CDN purge / 公开校验仅在 R2 成功时执行 |
 | **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` / `release-desktop.yml`：`build:packages` → `stage-python` → `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` + `OPPTRIX_AUDIT_STAGE_UPDATER=1`；本地打标签前至少 `OPPTRIX_AUDIT_STAGE_UPDATER=1`（无 python tree 时 warn；设 REQUIRE 则须先 stage） |
 
 **版本升级语义（electron-updater）**

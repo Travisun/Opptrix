@@ -638,6 +638,8 @@ jobs:
         run: node apps/desktop/scripts/verify-r2-credentials.mjs
 
       - name: Sync to Cloudflare R2 (upload then prune obsolete)
+        id: sync_r2
+        continue-on-error: true
         shell: bash
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -647,8 +649,41 @@ jobs:
           OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
         run: node apps/desktop/scripts/sync-release-to-r2.mjs "$ASSET_DIR"
 
+      # FTP mirror (backup when R2 quota is tight). Skips if FTP_HOST unset.
+      - name: Sync to FTP mirror (upload then prune obsolete)
+        id: sync_ftp
+        shell: bash
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_SECURE: ${{ secrets.FTP_SECURE }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: node apps/desktop/scripts/sync-release-to-ftp.mjs "$ASSET_DIR"
+
+      - name: Require R2 or FTP distribution
+        shell: bash
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          R2_OUTCOME: ${{ steps.sync_r2.outcome }}
+        run: |
+          if [[ "$R2_OUTCOME" == "success" ]]; then
+            echo "R2 sync OK"
+            exit 0
+          fi
+          echo "::warning::R2 sync did not succeed (outcome=$R2_OUTCOME)"
+          if [[ -n "${FTP_HOST:-}" ]]; then
+            echo "FTP_HOST configured — relying on FTP mirror step above"
+            exit 0
+          fi
+          echo "::error::R2 failed and FTP_HOST is not configured"
+          exit 1
+
       # Purge before public verify — edge may cache 404 from mid-upload probes.
       - name: Purge Cloudflare CDN cache (yml + Linux installers/CMS)
+        if: steps.sync_r2.outcome == 'success'
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -658,6 +693,7 @@ jobs:
         run: node apps/desktop/scripts/purge-update-cdn-cache.mjs "$ASSET_DIR"
 
       - name: Verify public update metadata
+        if: steps.sync_r2.outcome == 'success'
         shell: bash
         env:
           OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}

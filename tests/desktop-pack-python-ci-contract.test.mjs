@@ -270,6 +270,14 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(wf.includes('desktop-release-bundle'), 'must produce desktop-release-bundle')
     assert.ok(wf.includes('actions/download-artifact@v4'), 'finalize/sync must download-artifact')
     assert.ok(
+      wf.includes('sync-release-to-ftp.mjs') && wf.includes('FTP_HOST'),
+      'must sync release assets to FTP when FTP_HOST is configured',
+    )
+    assert.ok(
+      wf.includes('continue-on-error: true') && wf.includes('Require R2 or FTP'),
+      'R2 may soft-fail when FTP mirror is the backup',
+    )
+    assert.ok(
       !/Skip R2 sync for draft/i.test(wf) && !/skip=true.*[Dd]raft/.test(wf),
       'draft must not skip R2 sync',
     )
