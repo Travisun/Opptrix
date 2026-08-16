@@ -50,6 +50,7 @@ export async function hostRunSubagent(
     result_schema: SubagentResultSchema
     mode?: SubagentRunMode
     label?: string
+    restart_run_id?: string
   },
 ): Promise<SubagentToolResult> {
   const bound = hostsBySession.get(parentSessionId)
@@ -69,6 +70,7 @@ export async function hostRunSubagent(
     result_schema: args.result_schema,
     mode: args.mode,
     label: args.label,
+    restart_run_id: args.restart_run_id,
     emit: bound.emit,
     signal: bound.signal,
   })
@@ -87,7 +89,7 @@ export async function hostCancelSubagent(
       error: 'cancel_subagent 须在父会话聊天上下文中调用',
     }
   }
-  return cancelSubagentRun(runId, bound.runnerHost)
+  return cancelSubagentRun(runId, bound.runnerHost, undefined, bound.emit)
 }
 
 export function hostListSubagents(parentSessionId: string): {

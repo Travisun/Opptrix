@@ -850,23 +850,29 @@ export class ToolRegistry {
         name: 'run_subagent',
         category: '委派',
         description:
-          '委派子 Agent：role{name,instructions,model?,temperature?,max_rounds?} + task + result_schema(object)；可选 context/label；mode=foreground|background。子不可再委派，亦无人机确认类工具',
+          '高可用委派：role{name,instructions}（instructions 写清禁止编造/荐股/再委派）+ task + result_schema（type:object，含 properties+required，建议强制 summary:string；例 {"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}）+ 可选 context 摘要 / label 短中文；mode=background 并行、foreground 串行。创建前可 list_subagents 一次；同 label/role 进行中自动 dedupe；失败优先 restart_run_id 复用同卡。子不可再委派、无 ask_user；禁止 list/get 忙等 poll',
         parameters: S({
           role: {
             type: 'object',
-            description: '子角色：name、instructions 必填；可选 model/temperature/max_rounds',
+            description:
+              '子角色：name、instructions 必填（写清角色纪律与禁止项：编造、荐股、再委派、ask_user）；可选 model（须为已启用的 providerId:model，否则省略以继承父会话）/temperature/max_rounds',
           },
           task: { type: 'string', description: '子任务目标（必填）' },
-          context: { type: 'string', description: '可选上下文摘要' },
+          context: { type: 'string', description: '可选上下文摘要（勿整篇堆叠）' },
           result_schema: {
             type: 'object',
-            description: '终态 JSON Schema（type:object），子输出须通过校验',
+            description:
+              '终态 JSON Schema：type 须为 object；须含 properties+required；建议强制 summary:string。坏例：空 object、无 required、无 summary、嵌套过深',
           },
           mode: {
             type: 'string',
-            description: 'foreground（默认，阻塞）| background（立即返回 run_id）',
+            description: 'background=独立并行（推荐多角色）；foreground=强依赖上一步（默认阻塞）',
           },
-          label: { type: 'string', description: '可选展示标签' },
+          label: { type: 'string', description: '短中文展示名（用户可见）；同 label 进行中会 dedupe' },
+          restart_run_id: {
+            type: 'string',
+            description: '可选。复用 failed/cancelled/needs_parent_action 的 run_id 重启（同 child_session_id），勿堆新卡',
+          },
         }, ['role', 'task', 'result_schema']),
         handler: async (args: Record<string, unknown>) => {
           const sessionId = currentToolSessionId()
@@ -913,13 +919,15 @@ export class ToolRegistry {
             result_schema: resultSchema as import('./subagents/types.js').SubagentResultSchema,
             mode,
             label: args.label != null ? String(args.label) : undefined,
+            restart_run_id: args.restart_run_id != null ? String(args.restart_run_id) : undefined,
           })
         },
       },
       {
         name: 'list_subagents',
         category: '委派',
-        description: '列出本父会话下的子任务运行记录',
+        description:
+          '列出本父会话协作任务（只读）。创建前可调用一次核对；禁止 sleep/忙等轮询；终态会自动续跑；需完整结果时对目标 run 调用一次 get_subagent；失败优先 restart_run_id',
         parameters: S({}),
         handler: async () => {
           const sessionId = currentToolSessionId()
@@ -955,7 +963,8 @@ export class ToolRegistry {
       {
         name: 'get_subagent',
         category: '委派',
-        description: '查询子任务状态与结果',
+        description:
+          '查询协作任务状态与完整结果（只读）。禁止为等进度反复 get/poll/sleep；只需在需要读结果时调用一次；失败可再 run_subagent',
         parameters: S({
           run_id: { type: 'string', description: '子任务 run_id（必填）' },
         }, ['run_id']),

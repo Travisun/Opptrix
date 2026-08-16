@@ -199,6 +199,24 @@ export type ChatProgressEvent =
     mode: string
     summary?: string
   }
+  | {
+    type: 'subagent_child_progress'
+    run_id: string
+    child_session_id: string
+    label: string
+    mode: string
+    child:
+      | {
+        type: 'thinking'
+        round: number
+        label: string
+        snippet?: string
+        segments?: ReasoningSegment[]
+      }
+      | { type: 'tool_start'; step: ChatToolStep }
+      | { type: 'tool_done'; step: ChatToolStep }
+      | { type: 'reply'; content?: string; estimatedTokens?: number }
+  }
 
 /**
  * 聊天进度回调选项 — 配置进度推送回调和中断信号。

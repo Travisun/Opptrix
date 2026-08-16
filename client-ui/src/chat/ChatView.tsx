@@ -22,6 +22,7 @@ import type { ChatComposerHandle } from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
 import ChatProcessTrace from './ChatProcessTrace'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import OpptrixSpinner from '../components/opptrix/OpptrixSpinner'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
 import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMessageSelection'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -34,7 +35,7 @@ import {
   ArrowMaximizeRegular,
   ArrowMinimizeRegular,
 } from './chatIcons'
-import { FolderListRegular } from '@fluentui/react-icons'
+import { ArrowLeftRegular, FolderListRegular } from '@fluentui/react-icons'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -175,28 +176,59 @@ const useStyles = makeStyles({
   collaborationTabsSlot: {
     flexShrink: 0,
     width: '100%',
-    maxWidth: opptrixTokens.chatThreadMaxWidth,
-    marginInline: 'auto',
-    paddingLeft: opptrixTokens.chatThreadPaddingX,
-    paddingRight: opptrixTokens.chatThreadPaddingX,
+    maxWidth: 'none',
+    marginInline: 0,
+    paddingLeft: 0,
+    paddingRight: 0,
     boxSizing: 'border-box',
   },
   collaborationTabsSlotMobile: {
     maxWidth: 'none',
-    paddingLeft: opptrixTokens.chatThreadPaddingXMobile,
-    paddingRight: opptrixTokens.chatThreadPaddingXMobile,
+    paddingLeft: 0,
+    paddingRight: 0,
   },
   collaborationReadonlyBar: {
     flexShrink: 0,
     width: '100%',
     maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    padding: '10px 16px 14px',
+    padding: '8px 12px 12px',
     boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  collaborationReadonlyBack: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    minHeight: '32px',
+    padding: '0 10px',
+    margin: 0,
+    border: 'none',
+    borderRadius: opptrixTokens.radiusMd,
+    background: 'transparent',
+    color: opptrixCssVars.textSecondary,
     fontSize: 'var(--opptrix-font-sm)',
-    lineHeight: 1.45,
-    color: opptrixCssVars.textTertiary,
-    textAlign: 'center',
+    fontWeight: 500,
+    fontFamily: 'inherit',
+    lineHeight: 1.35,
+    cursor: 'pointer',
+    transitionProperty: 'color, background-color',
+    transitionDuration: '120ms',
+    ':hover': {
+      color: opptrixCssVars.textPrimary,
+      backgroundColor: 'color-mix(in srgb, var(--opptrix-text-primary) 4%, transparent)',
+    },
+    ':focus-visible': {
+      outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: opptrixTokens.focusRingOffset,
+    },
+  },
+  collaborationReadonlyBackIcon: {
+    flexShrink: 0,
+    display: 'inline-flex',
+    fontSize: 'var(--opptrix-font-base)',
   },
   collaborationReadonlyBarMobile: {
     maxWidth: 'none',
@@ -210,6 +242,17 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     color: opptrixCssVars.textSecondary,
     textAlign: 'center',
+  },
+  collaborationChildLoadingRow: {
+    alignSelf: 'stretch',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '16px 0',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textSecondary,
   },
   collaborationChildError: {
     color: opptrixCssVars.error,
@@ -453,6 +496,9 @@ interface ChatViewProps {
   /** 协作任务 Tab：只读消息（getSession(child)） */
   collaborationChildLoading?: boolean
   collaborationChildError?: string
+  /** 子 Tab 实时过程（SSE / 子会话 live-progress） */
+  collaborationChildLiveTrace?: ChatLiveTrace | null
+  collaborationChildStreaming?: boolean
   /** 子窗加载失败时重新加载 */
   onReloadCollaborationChild?: () => void
   onForkMessage?: (messageIndex: number) => void
@@ -499,6 +545,8 @@ function ChatView({
   onCollaborationViewTabChange,
   collaborationChildLoading = false,
   collaborationChildError = '',
+  collaborationChildLiveTrace = null,
+  collaborationChildStreaming = false,
   onReloadCollaborationChild,
   onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
@@ -843,7 +891,9 @@ function ChatView({
   }, [])
 
   useEffect(() => {
-    if (loading || wakeWaiting || liveTrace) {
+    const streaming = loading || wakeWaiting || liveTrace
+      || (collaborationReadonly && collaborationChildStreaming)
+    if (streaming) {
       if (stickToBottomRef.current) {
         scrollToBottom(messages.length <= 1 ? 'auto' : 'smooth')
       }
@@ -867,7 +917,16 @@ function ChatView({
     }
 
     prevLoadingRef.current = loading || wakeWaiting
-  }, [messages, loading, wakeWaiting, liveTrace, scrollToBottom, scrollMessageStartToCenter])
+  }, [
+    messages,
+    loading,
+    wakeWaiting,
+    liveTrace,
+    collaborationReadonly,
+    collaborationChildStreaming,
+    scrollToBottom,
+    scrollMessageStartToCenter,
+  ])
 
   useEffect(() => {
     if (!chatScrollEpoch || !sessionId || loading || wakeWaiting || liveTrace || messages.length === 0) return
@@ -1106,13 +1165,28 @@ function ChatView({
                 </div>
               ) : null}
 
-              {collaborationReadonly && collaborationChildLoading && messages.length === 0 && !collaborationChildError ? (
-                <Text className={s.collaborationChildStatus} block role="status">
-                  正在加载协作任务进展…
-                </Text>
+              {collaborationReadonly && collaborationChildLoading && messages.length === 0 && !collaborationChildError && !collaborationChildLiveTrace ? (
+                <div className={s.collaborationChildLoadingRow} role="status">
+                  <OpptrixSpinner size="status" />
+                  <Text>正在加载协作任务进展…</Text>
+                </div>
               ) : null}
 
-              {collaborationReadonly && !collaborationChildLoading && messages.length === 0 && !collaborationChildError ? (
+              {collaborationReadonly && collaborationChildStreaming && (
+                <div className={s.loadingRow} data-message-role="assistant">
+                  <ChatProcessTrace
+                    steps={collaborationChildLiveTrace?.steps ?? []}
+                    thinkingLabel={collaborationChildLiveTrace?.thinkingLabel ?? '正在处理协作任务…'}
+                    phaseLabel={collaborationChildLiveTrace?.phaseLabel ?? '正在处理协作任务'}
+                    estimatedTokens={collaborationChildLiveTrace?.estimatedTokens}
+                    thinkingSnippet={collaborationChildLiveTrace?.thinkingSnippet}
+                    thinkingSegments={collaborationChildLiveTrace?.thinkingSegments}
+                    live
+                  />
+                </div>
+              )}
+
+              {collaborationReadonly && !collaborationChildLoading && messages.length === 0 && !collaborationChildError && !collaborationChildStreaming ? (
                 <Text className={s.collaborationChildStatus} block role="status">
                   此协作任务还没有可查看的进展
                 </Text>
@@ -1169,9 +1243,19 @@ function ChatView({
             {collaborationReadonly ? (
               <div
                 className={mergeClasses(s.collaborationReadonlyBar, isMobile && s.collaborationReadonlyBarMobile)}
-                role="status"
               >
-                此协作任务仅供查看进展
+                {onCollaborationViewTabChange ? (
+                  <button
+                    type="button"
+                    className={s.collaborationReadonlyBack}
+                    onClick={() => onCollaborationViewTabChange('main')}
+                  >
+                    <span className={s.collaborationReadonlyBackIcon} aria-hidden>
+                      <ArrowLeftRegular fontSize={14} />
+                    </span>
+                    返回主对话
+                  </button>
+                ) : null}
               </div>
             ) : (
             <ChatComposer

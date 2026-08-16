@@ -49,8 +49,14 @@ import {
   isActiveCollaborationStatus,
   mergeCollaborationTasksFromApi,
   shouldShowCollaborationTask,
+  sortCollaborationTasksForTabs,
   type SessionCollaborationTask,
 } from './sessionCollaborationTasks'
+import {
+  applyChildLiveProgressEvent,
+  parseChildProgressRelay,
+  shouldIgnoreChildSessionProgressEvent,
+} from './collaborationChildLiveTrace'
 import type { CollaborationViewTab } from './SessionCollaborationTabs'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
@@ -484,15 +490,19 @@ export default function ChatApp() {
     ? (collaborationTasksBySession[activeId] ?? [])
     : []
   const visibleCollaborationTasks = useMemo(
-    () => sessionCollaborationTasks.filter(shouldShowCollaborationTask),
+    () => sortCollaborationTasksForTabs(
+      sessionCollaborationTasks.filter(shouldShowCollaborationTask),
+    ),
     [sessionCollaborationTasks],
   )
 
   const [collaborationViewTab, setCollaborationViewTab] = useState<CollaborationViewTab>('main')
+  const collaborationViewTabRef = useRef<CollaborationViewTab>('main')
   const [collaborationChildMessages, setCollaborationChildMessages] = useState<ChatDisplayMessage[]>([])
   const [collaborationChildLoading, setCollaborationChildLoading] = useState(false)
   const [collaborationChildError, setCollaborationChildError] = useState('')
   const [collaborationChildReloadNonce, setCollaborationChildReloadNonce] = useState(0)
+  const [childLiveTraceVersion, setChildLiveTraceVersion] = useState(0)
 
   const selectedCollaborationTask = useMemo(() => {
     if (collaborationViewTab === 'main') return null
@@ -527,11 +537,75 @@ export default function ChatApp() {
     setCollaborationChildReloadNonce((n) => n + 1)
   }, [])
 
+  const bumpChildLiveTrace = useCallback((
+    runId: string,
+    inner: ChatProgressEvent,
+  ) => {
+    const id = runId.trim()
+    const sid = activeIdRef.current
+    if (!id || !sid) return
+    const prev = streamCacheRef.current.get(sid) ?? createThinkingStreamSnapshot()
+    const prevTraces = prev.collaborationTraces ?? {}
+    const prevChild = prevTraces[id] ?? null
+    const childSnap = applyChildLiveProgressEvent(
+      {
+        liveTrace: prevChild,
+        pendingUserPrompt: null,
+        userPromptSubmitting: false,
+        contextHint: null,
+      },
+      inner,
+    )
+    streamCacheRef.current.set(sid, {
+      ...prev,
+      collaborationTraces: {
+        ...prevTraces,
+        [id]: childSnap.liveTrace ?? { steps: [] },
+      },
+    })
+    if (collaborationViewTabRef.current === id) {
+      setChildLiveTraceVersion((v) => v + 1)
+    }
+  }, [])
+
+  const clearChildLiveTrace = useCallback((runId: string) => {
+    const id = runId.trim()
+    const sid = activeIdRef.current
+    if (!id || !sid) return
+    const prev = streamCacheRef.current.get(sid)
+    if (!prev?.collaborationTraces?.[id]) return
+    const { [id]: _removed, ...rest } = prev.collaborationTraces
+    streamCacheRef.current.set(sid, {
+      ...prev,
+      collaborationTraces: Object.keys(rest).length > 0 ? rest : undefined,
+    })
+    if (collaborationViewTabRef.current === id) {
+      setChildLiveTraceVersion((v) => v + 1)
+    }
+  }, [])
+
+  const collaborationChildLiveTrace = useMemo(() => {
+    if (collaborationViewTab === 'main' || !activeId) return null
+    void childLiveTraceVersion
+    const traces = streamCacheRef.current.get(activeId)?.collaborationTraces
+    return traces?.[collaborationViewTab] ?? null
+  }, [activeId, collaborationViewTab, childLiveTraceVersion])
+
+  const collaborationChildStreaming = Boolean(
+    selectedCollaborationTask
+    && isActiveCollaborationStatus(selectedCollaborationTask.status),
+  )
+
+  useEffect(() => {
+    collaborationViewTabRef.current = collaborationViewTab
+  }, [collaborationViewTab])
+
   useEffect(() => {
     setCollaborationViewTab('main')
     setCollaborationChildMessages([])
     setCollaborationChildError('')
     setCollaborationChildLoading(false)
+    setChildLiveTraceVersion((v) => v + 1)
   }, [activeId])
 
   useEffect(() => {
@@ -599,6 +673,50 @@ export default function ChatApp() {
     collaborationChildSessionId,
     collaborationChildRefreshKey,
     collaborationChildReloadNonce,
+    selectedCollaborationTask?.status,
+  ])
+
+  useEffect(() => {
+    if (collaborationViewTab === 'main') return
+    const task = selectedCollaborationTask
+    if (!task || !isActiveCollaborationStatus(task.status)) return
+    const childSid = task.childSessionId?.trim()
+    if (!childSid) return
+
+    const runId = task.runId
+    let cancelled = false
+    const ac = new AbortController()
+
+    const onChildEvent = (event: ChatProgressEvent) => {
+      if (cancelled || shouldIgnoreChildSessionProgressEvent(event)) return
+      bumpChildLiveTrace(runId, event)
+    }
+
+    void (async () => {
+      while (!cancelled && !ac.signal.aborted) {
+        try {
+          await subscribeSessionLiveProgress(childSid, onChildEvent, ac.signal)
+          break
+        } catch (e) {
+          const aborted = (
+            (e instanceof DOMException && e.name === 'AbortError')
+            || (e instanceof Error && e.name === 'AbortError')
+          )
+          if (aborted || cancelled) break
+          await new Promise((r) => setTimeout(r, 1500))
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
+  }, [
+    bumpChildLiveTrace,
+    collaborationViewTab,
+    selectedCollaborationTask?.runId,
+    selectedCollaborationTask?.childSessionId,
     selectedCollaborationTask?.status,
   ])
 
@@ -952,9 +1070,32 @@ export default function ChatApp() {
   ])
 
   const pushStreamEvent = useCallback((targetSessionId: string, event: ChatProgressEvent) => {
+    const childRelay = parseChildProgressRelay(event)
+    if (childRelay && event.type !== 'subagent_child_progress') {
+      bumpChildLiveTrace(childRelay.runId, childRelay.inner)
+    }
+
     const prev = streamCacheRef.current.get(targetSessionId) ?? createThinkingStreamSnapshot()
     const next = applyChatProgressEvent(prev, event)
     streamCacheRef.current.set(targetSessionId, next)
+
+    if (
+      event.type === 'subagent_child_progress'
+      || next.collaborationTraces !== prev.collaborationTraces
+    ) {
+      const runId = event.type === 'subagent_child_progress'
+        ? (typeof event.run_id === 'string' ? event.run_id.trim() : '')
+        : ''
+      const touchedRunId = runId
+        || (childRelay?.runId ?? '')
+        || Object.keys(next.collaborationTraces ?? {}).find(
+          (k) => next.collaborationTraces?.[k] !== prev.collaborationTraces?.[k],
+        )
+        || ''
+      if (touchedRunId && collaborationViewTabRef.current === touchedRunId) {
+        setChildLiveTraceVersion((v) => v + 1)
+      }
+    }
 
     if (event.type === 'tool_done') {
       const wake = parseScheduleTurnWakeFromStep(event.step)
@@ -971,6 +1112,10 @@ export default function ChatApp() {
       patchSessionCollaborationTasks(targetSessionId, (list) =>
         applySubagentProgressToTasks(list, event),
       )
+      if (event.type === 'subagent_done') {
+        const runId = typeof event.run_id === 'string' ? event.run_id.trim() : ''
+        if (runId) clearChildLiveTrace(runId)
+      }
     }
     if (event.type === 'done' && Array.isArray(event.tool_steps)) {
       for (const step of event.tool_steps) {
@@ -1027,6 +1172,8 @@ export default function ChatApp() {
     }
   }, [
     applyBackgroundJobProgressEvent,
+    bumpChildLiveTrace,
+    clearChildLiveTrace,
     handleNotificationResult,
     maybeNotifyChatDone,
     patchSessionCollaborationTasks,
@@ -1708,10 +1855,28 @@ export default function ChatApp() {
 
   const handleStop = useCallback(async () => {
     const sid = activeId
-    if (!sid || !streamingSessionIdsRef.current.has(sid) || stoppingSessionsRef.current.has(sid)) return
+    if (!sid || stoppingSessionsRef.current.has(sid)) return
+    const hasActiveCollab = (collaborationTasksBySession[sid] ?? []).some(
+      (t) => isActiveCollaborationStatus(t.status),
+    )
+    const wasStreaming = streamingSessionIdsRef.current.has(sid)
+    // 父未 streaming 但有后台协作任务时仍须 cancel
+    if (!wasStreaming && !hasActiveCollab) return
     drainIntentRef.current.set(sid, { kind: 'none' })
     await abortSessionStream(sid)
-  }, [abortSessionStream, activeId])
+    if (!wasStreaming) {
+      // 无父流时 abort 不会走 stream finally，须手动清 stopping 标记
+      stoppingSessionsRef.current.delete(sid)
+    }
+    try {
+      const sub = await listSessionSubagents(sid)
+      patchSessionCollaborationTasks(sid, (prev) =>
+        mergeCollaborationTasksFromApi(prev, sub.runs),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [abortSessionStream, activeId, collaborationTasksBySession, patchSessionCollaborationTasks])
 
   const loadingRef = useRef(loading)
   const sessionModelRef = useRef(resolvedSessionModel)
@@ -2657,6 +2822,8 @@ export default function ChatApp() {
                   onCollaborationViewTabChange={handleCollaborationViewTabChange}
                   collaborationChildLoading={collaborationChildLoading}
                   collaborationChildError={collaborationChildError}
+                  collaborationChildLiveTrace={collaborationChildLiveTrace}
+                  collaborationChildStreaming={collaborationChildStreaming}
                   onReloadCollaborationChild={handleReloadCollaborationChild}
                   onForkMessage={handleForkFromMessage}
                   onEditResend={handleEditResend}

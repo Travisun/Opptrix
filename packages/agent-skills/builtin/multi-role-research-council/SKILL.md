@@ -1,6 +1,6 @@
 ---
 name: multi-role-research-council
-description: 多角色研讨 / 多空辩论工作流。用户说「多角色研讨」「多空辩论」「研究委员会」「研讨链」「TradingAgents」「multi-role-research-council」「/多角色研讨」时使用。四类分析师并行取证 → Bull/Bear 辩论（2–5 轮自适应）→ 主席综合研究立场 → 风险三人互评 → create_web 综合研究报告。研究立场为看多/看空倾向（非买卖指令）；须附固定免责声明。
+description: 多角色研讨 / 多空辩论工作流。用户说「多角色研讨」「多空辩论」「研究委员会」「研讨链」「TradingAgents」「multi-role-research-council」「/多角色研讨」时使用。四类分析师并行取证 → Bull/Bear 辩论（默认 1 轮、最多 3 轮）→ 主席综合研究立场 → 风险三人互评 → create_web 综合研究报告。研究立场为看多/看空倾向（非买卖指令）；须附固定免责声明。
 license: Apache-2.0
 metadata:
   author: opptrix
@@ -40,7 +40,7 @@ references:
 - **问题/假设**：在可得证据下，研究立场更接近看多倾向、看空倾向、均衡，还是证据不足？
 - **角色链（固定顺序）**：
   1. 四类**分析师**（可并行）：行情结构 / 基本面 / 资讯披露 / 资金情绪
-  2. **Bull / Bear** 辩论（2–5 轮自适应停止）
+  2. **Bull / Bear** 辩论（默认 1 轮、最多 3 轮；round≥1 可停）
   3. **research_chair** 综合 → 研究立场枚举
   4. **风险三人**（进取 / 中性 / 稳健）两阶段互评
   5. 父 Agent 汇总 → `create_web`
@@ -91,7 +91,7 @@ references:
 
 1. 将四分析师 JSON 摘要注入 Bull、Bear 的 `task`/`context`。
 2. 每轮：先 Bear 攻击（或按模板约定序），再 Bull 回应（或反之）；双方均用 `debate` schema。
-3. 每轮结束后由父（或轻量 chair 子任务）用 `chair_stop` schema 判定是否停止；规则见 `debate-stop-rules.md`（最少 2 轮、最多 5 轮）。
+3. 每轮结束后由父（或轻量 chair 子任务）用 `chair_stop` schema 判定是否停止；规则见 `debate-stop-rules.md`（默认 1 轮、最多 3 轮；round≥1 可停，round≥3 强制停）。
 4. 每轮子任务终态后 **reclaim**；禁止堆积未回收会话。
 
 ### S3 — research_chair 综合
@@ -130,6 +130,6 @@ checklist 全部完成或标注跳过原因；取消仍在跑的子任务（`can
 - 编造未返回的财务/资金/公告事实  
 - **禁止无交付就结束**（默认须有 web 产物，除非用户明确只要口头要点）  
 - 子 Agent 再 `run_subagent`；跳过 reclaim 导致会话堆积  
-- 辩论不足 2 轮就出主席结论，或超过 5 轮仍强行继续  
+- 辩论未审查首轮就强行多轮，或超过 3 轮仍继续  
 - 使用不存在的工具名（如 `get_instrument_news`）  
 - 在用户可见文案中暴露内部实现术语

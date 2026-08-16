@@ -9,6 +9,8 @@ import {
 
 export type SessionStreamSnapshot = {
   liveTrace: ChatLiveTrace | null
+  /** 按协作 run_id 索引的子任务实时 trace（subagent_child_progress） */
+  collaborationTraces?: Record<string, ChatLiveTrace>
   pendingUserPrompt: ChatUserPromptPayload | null
   userPromptSubmitting: boolean
   /** 会话内上下文整理轻提示 */
@@ -231,6 +233,60 @@ export function applyChatProgressEvent(
         ...snapshot,
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
           phaseLabel,
+          thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
+          thinkingSegments: snapshot.liveTrace?.thinkingSegments,
+        }),
+      }
+    }
+    case 'subagent_child_progress': {
+      const runId = event.run_id?.trim() || ''
+      if (!runId) return snapshot
+      const inner = event.child
+        ?? event.event
+        ?? event.progress
+        ?? event.child_progress
+      if (!inner || typeof inner !== 'object' || !('type' in inner)) return snapshot
+      const prevTraces = snapshot.collaborationTraces ?? {}
+      const prevChildTrace = prevTraces[runId] ?? null
+      const childSnap = applyChatProgressEvent(
+        {
+          liveTrace: prevChildTrace,
+          pendingUserPrompt: null,
+          userPromptSubmitting: false,
+          contextHint: null,
+        },
+        inner,
+      )
+      const collaborationTraces = {
+        ...prevTraces,
+        [runId]: childSnap.liveTrace ?? { steps: [] },
+      }
+      const label = event.label?.trim() || '协作任务'
+      const stepId = `collab:${runId}`
+      const prevSteps = snapshot.liveTrace?.steps ?? []
+      const hasStep = prevSteps.some(st => st.id === stepId)
+      const steps = hasStep
+        ? prevSteps.map(st =>
+          st.id === stepId
+            ? { ...st, label: `协作任务：${label}`, status: 'running' as const }
+            : st,
+        )
+        : [
+          ...prevSteps,
+          {
+            id: stepId,
+            tool: 'collaboration_task',
+            label: `协作任务：${label}`,
+            status: 'running' as const,
+            startedAt: new Date().toISOString(),
+          },
+        ]
+      return {
+        ...snapshot,
+        collaborationTraces,
+        liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
+          phaseLabel: `协作任务进行中：${label}`,
+          steps,
           thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
           thinkingSegments: snapshot.liveTrace?.thinkingSegments,
         }),

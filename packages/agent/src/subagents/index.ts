@@ -54,6 +54,8 @@ export {
   getSubagentRunResult,
   listSubagentRunsForParent,
   reclaimSubagentRun,
+  notifyParentOnBackgroundTerminal,
+  pickSubagentModel,
   type SubagentRunnerHost,
   type RunSubagentParams,
 } from './runner.js'

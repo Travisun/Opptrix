@@ -28,6 +28,7 @@ const {
   getSessionResumeBus,
   formatJobResumeMessage,
   listSubagentRunsForParent,
+  pickSubagentModel,
 } = await import('../packages/agent/dist/index.js')
 
 test('filterTools 去掉 ask_user / run_subagent', () => {
@@ -170,6 +171,120 @@ test('listActive 不含子会话', () => {
   assert.equal(isSidebarSession({ kind: 'user' }), true)
 })
 
+test('pickSubagentModel 无效 role.model 回退父 model', () => {
+  const resolveModelRef = (ref) => {
+    if (ref === 'openai:gpt-4o' || ref === 'deepseek:chat') return ref
+    return null
+  }
+  const host = { resolveModelRef }
+  assert.equal(
+    pickSubagentModel('随便写的模型名', 'openai:gpt-4o', host),
+    'openai:gpt-4o',
+  )
+  assert.equal(
+    pickSubagentModel('openai:gpt-4o', 'deepseek:chat', host),
+    'openai:gpt-4o',
+  )
+  assert.equal(pickSubagentModel('无效', '也无效', host), undefined)
+})
+
+test('无效 role.model 回退父 model 仍可 chat（mock resolveModelRef）', async () => {
+  const store = new SessionStore()
+  const parent = store.create({ title: '父-model', model: 'openai:gpt-4o' })
+  const registry = new SubagentRunRegistry()
+  let chatModelRef
+  const resolveModelRef = (ref) => {
+    if (ref === 'openai:gpt-4o' || ref === 'deepseek:chat') return ref
+    return null
+  }
+  const result = await runSubagent(
+    {
+      createSession: (opts) => store.create(opts),
+      getSession: (id) => store.get(id),
+      resolveModelRef,
+      chat: async (sid, _msg, _progress, modelRef) => {
+        chatModelRef = modelRef
+        return {
+          reply: '```json\n{"ok":true,"summary":"fallback ok"}\n```',
+          sessionId: sid,
+        }
+      },
+    },
+    {
+      parentSessionId: parent.id,
+      role: {
+        name: '分析员',
+        instructions: '只输出 JSON',
+        model: '随便填的模型名',
+      },
+      task: '测试回退',
+      result_schema: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+          summary: { type: 'string' },
+        },
+        required: ['ok'],
+      },
+      mode: 'foreground',
+    },
+    registry,
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'completed')
+  assert.equal(chatModelRef, 'openai:gpt-4o')
+  const childId = result.child_session_id
+  assert.ok(childId)
+  assert.equal(store.get(childId)?.model, 'openai:gpt-4o')
+})
+
+test('有效 role.model 覆盖父 model', async () => {
+  const store = new SessionStore()
+  const parent = store.create({ title: '父-override', model: 'openai:gpt-4o' })
+  const registry = new SubagentRunRegistry()
+  let chatModelRef
+  const resolveModelRef = (ref) => {
+    if (ref === 'openai:gpt-4o' || ref === 'deepseek:chat') return ref
+    return null
+  }
+  const result = await runSubagent(
+    {
+      createSession: (opts) => store.create(opts),
+      getSession: (id) => store.get(id),
+      resolveModelRef,
+      chat: async (sid, _msg, _progress, modelRef) => {
+        chatModelRef = modelRef
+        return {
+          reply: '```json\n{"ok":true,"summary":"override ok"}\n```',
+          sessionId: sid,
+        }
+      },
+    },
+    {
+      parentSessionId: parent.id,
+      role: {
+        name: '分析员',
+        instructions: '只输出 JSON',
+        model: 'deepseek:chat',
+      },
+      task: '测试覆盖',
+      result_schema: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+          summary: { type: 'string' },
+        },
+        required: ['ok'],
+      },
+      mode: 'foreground',
+    },
+    registry,
+  )
+  assert.equal(result.ok, true)
+  assert.equal(chatModelRef, 'deepseek:chat')
+  assert.equal(store.get(result.child_session_id)?.model, 'deepseek:chat')
+})
+
 test('run_subagent foreground 契约通过（mock chat）', async () => {
   const store = new SessionStore()
   const parent = store.create({ title: '父会话' })
@@ -224,6 +339,193 @@ async function waitFor(predicate, { timeoutMs = 2000, intervalMs = 20 } = {}) {
   }
   throw new Error('waitFor timeout')
 }
+
+test('同 label active 时 dedupe 复用 run', async () => {
+  const store = new SessionStore()
+  const parent = store.create({ title: '父-dedupe' })
+  const registry = new SubagentRunRegistry()
+  const schema = {
+    type: 'object',
+    properties: { ok: { type: 'boolean' }, summary: { type: 'string' } },
+    required: ['ok'],
+  }
+  let createCount = 0
+  const host = {
+    createSession: (opts) => {
+      createCount += 1
+      return store.create(opts)
+    },
+    getSession: (id) => store.get(id),
+    chat: async (sid) => ({
+      reply: '```json\n{"ok":true,"summary":"first"}\n```',
+      sessionId: sid,
+    }),
+  }
+  const first = await runSubagent(
+    host,
+    {
+      parentSessionId: parent.id,
+      role: { name: '分析', instructions: 'json' },
+      task: '任务 A',
+      result_schema: schema,
+      mode: 'foreground',
+      label: '基本面取证',
+    },
+    registry,
+  )
+  assert.equal(first.ok, true)
+  assert.equal(first.deduped, undefined)
+  assert.equal(createCount, 1)
+
+  registry.setStatus(first.run_id, 'running', { startedAt: new Date().toISOString() })
+  const second = await runSubagent(
+    host,
+    {
+      parentSessionId: parent.id,
+      role: { name: '分析', instructions: 'json' },
+      task: '任务 B',
+      result_schema: schema,
+      mode: 'foreground',
+      label: '基本面取证',
+    },
+    registry,
+  )
+  assert.equal(second.deduped, true)
+  assert.equal(second.run_id, first.run_id)
+  assert.equal(createCount, 1)
+})
+
+test('restart_run_id 复用 run_id + child_session 重启', async () => {
+  const store = new SessionStore()
+  const parent = store.create({ title: '父-restart' })
+  const registry = new SubagentRunRegistry()
+  const schema = {
+    type: 'object',
+    properties: { ok: { type: 'boolean' }, summary: { type: 'string' } },
+    required: ['ok'],
+  }
+  let chatCalls = 0
+  const host = {
+    createSession: (opts) => store.create(opts),
+    getSession: (id) => store.get(id),
+    chat: async (sid) => {
+      chatCalls += 1
+      if (chatCalls <= 2) {
+        return { reply: 'not-json', sessionId: sid }
+      }
+      return {
+        reply: '```json\n{"ok":true,"summary":"restarted ok"}\n```',
+        sessionId: sid,
+      }
+    },
+  }
+  const failed = await runSubagent(
+    host,
+    {
+      parentSessionId: parent.id,
+      role: { name: 'r', instructions: 'json' },
+      task: '第一次',
+      result_schema: schema,
+      mode: 'foreground',
+      label: '可重启任务',
+    },
+    registry,
+  )
+  assert.equal(failed.ok, false)
+  assert.equal(failed.status, 'failed')
+  const childId = failed.child_session_id
+  assert.ok(childId)
+
+  const restarted = await runSubagent(
+    host,
+    {
+      parentSessionId: parent.id,
+      role: { name: 'r', instructions: 'json' },
+      task: '第二次',
+      result_schema: schema,
+      mode: 'foreground',
+      label: '可重启任务',
+      restart_run_id: failed.run_id,
+    },
+    registry,
+  )
+  assert.equal(restarted.restarted, true)
+  assert.equal(restarted.run_id, failed.run_id)
+  assert.equal(restarted.child_session_id, childId)
+  assert.equal(restarted.ok, true)
+  assert.equal(restarted.status, 'completed')
+  assert.equal(restarted.result?.summary, 'restarted ok')
+})
+
+test('subagent_child_progress 透传 thinking/tool 事件', async () => {
+  const store = new SessionStore()
+  const parent = store.create({ title: '父-child-progress' })
+  const registry = new SubagentRunRegistry()
+  const schema = {
+    type: 'object',
+    properties: { ok: { type: 'boolean' }, summary: { type: 'string' } },
+    required: ['ok'],
+  }
+  const events = []
+  await runSubagent(
+    {
+      createSession: (opts) => store.create(opts),
+      getSession: (id) => store.get(id),
+      chat: async (sid, _msg, progress) => {
+        progress?.onProgress?.({
+          type: 'thinking',
+          round: 1,
+          label: '子任务思考中',
+        })
+        progress?.onProgress?.({
+          type: 'tool_start',
+          step: {
+            id: 's1',
+            tool: 'get_instrument_snapshot',
+            label: '获取标的快照',
+            status: 'running',
+            startedAt: new Date().toISOString(),
+          },
+        })
+        progress?.onProgress?.({
+          type: 'tool_done',
+          step: {
+            id: 's1',
+            tool: 'get_instrument_snapshot',
+            label: '获取标的快照',
+            status: 'done',
+            startedAt: new Date().toISOString(),
+            finishedAt: new Date().toISOString(),
+          },
+        })
+        return {
+          reply: '```json\n{"ok":true,"summary":"ok"}\n```',
+          sessionId: sid,
+        }
+      },
+    },
+    {
+      parentSessionId: parent.id,
+      role: { name: 'p', instructions: 'json' },
+      task: '进度',
+      result_schema: schema,
+      mode: 'foreground',
+      label: '进度任务',
+      emit: (e) => events.push(e),
+    },
+    registry,
+  )
+  const childEvents = events.filter(e => e.type === 'subagent_child_progress')
+  assert.ok(childEvents.length >= 3)
+  for (const e of childEvents) {
+    assert.ok(e.run_id)
+    assert.ok(e.child_session_id)
+    assert.ok(e.child)
+  }
+  assert.ok(childEvents.some(e => e.child?.type === 'thinking'))
+  assert.ok(childEvents.some(e => e.child?.type === 'tool_start'))
+  assert.ok(childEvents.some(e => e.child?.type === 'tool_done'))
+})
 
 test('formatJobResumeMessage subagent_terminal 文案', () => {
   const msg = formatJobResumeMessage({
@@ -314,7 +616,7 @@ test('background completed → enqueue subagent_terminal；foreground 不 enqueu
   bus.resetForTests()
 })
 
-test('background failed → enqueue；cancelled 不 enqueue', async () => {
+test('background failed / cancelled → 均 enqueue resume', async () => {
   const bus = getSessionResumeBus()
   bus.resetForTests()
   const enqueued = []
@@ -357,8 +659,8 @@ test('background failed → enqueue；cancelled 不 enqueue', async () => {
   await waitFor(() => registry.get(failed.run_id)?.status === 'failed')
   await waitFor(() => enqueued.some(r => r.jobId === failed.run_id))
   assert.ok(enqueued.some(r => r.jobId === failed.run_id && r.cause === 'subagent_terminal'))
+  assert.match(String(enqueued.find(r => r.jobId === failed.run_id)?.prompt), /run_subagent|勿 poll/)
 
-  const beforeCancel = enqueued.length
   const ac = new AbortController()
   ac.abort()
   const cancelled = await runSubagent(
@@ -385,13 +687,12 @@ test('background failed → enqueue；cancelled 不 enqueue', async () => {
     const st = registry.get(cancelled.run_id)?.status
     return st === 'cancelled' || st === 'failed'
   })
-  await new Promise(r => setTimeout(r, 50))
-  assert.equal(
-    enqueued.filter(r => r.jobId === cancelled.run_id).length,
-    0,
-    'cancelled 不应 enqueue resume',
-  )
-  assert.equal(enqueued.length, beforeCancel)
+  await waitFor(() => enqueued.some(r => r.jobId === cancelled.run_id))
+  const cancelReq = enqueued.find(r => r.jobId === cancelled.run_id)
+  assert.ok(cancelReq)
+  assert.equal(cancelReq.cause, 'subagent_terminal')
+  assert.match(String(cancelReq.prompt), /已停止/)
+  assert.match(String(cancelReq.prompt), /run_subagent|勿 poll/)
 
   bus.resetForTests()
 })

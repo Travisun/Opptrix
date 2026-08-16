@@ -145,6 +145,29 @@ export type ChatProgressEvent =
     mode?: string
     summary?: string
   }
+  | {
+    type: 'subagent_child_progress'
+    run_id: string
+    child_session_id?: string
+    label?: string
+    mode?: string
+    /** Agent 合入形态：嵌套子过程 */
+    child?:
+      | {
+        type: 'thinking'
+        round: number
+        label: string
+        snippet?: string
+        segments?: ReasoningSegment[]
+      }
+      | { type: 'tool_start'; step: ChatToolStep }
+      | { type: 'tool_done'; step: ChatToolStep }
+      | { type: 'reply'; content?: string; estimatedTokens?: number }
+    /** 兼容字段名：event / progress / child_progress */
+    event?: ChatProgressEvent
+    progress?: ChatProgressEvent
+    child_progress?: ChatProgressEvent
+  }
 
 export interface ChatLiveTrace {
   /** 展示用完整状态行（由 phaseLabel / tokens / 步数拼装） */

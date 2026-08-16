@@ -47,7 +47,7 @@ function notifyParentOnNeedsParentAction(run: SubagentRun): void {
     `说明：${message}`,
     `run_id: ${run.id}`,
     '',
-    '请确认或授权后，再决定是否继续该协作任务（可用 get_subagent 查看详情）。',
+    '请确认或授权后，再决定是否继续该协作任务。需要详情时调用一次 get_subagent；勿 poll / sleep / 反复查进度。失败后可再 run_subagent。',
   ].join('\n')
   getSessionResumeBus().enqueue({
     sessionId: run.parentSessionId,

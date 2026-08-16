@@ -100,6 +100,7 @@ import {
 import {
   bindSubagentHost,
   unbindSubagentHost,
+  getBoundSubagentHost,
   cascadeDeleteSubagents,
   cancelRunningSubagentsForParent,
   cancelSubagentRun,
@@ -660,6 +661,11 @@ export class AgentEngine {
     return {
       createSession: (opts) => this.sessions.create(opts),
       getSession: (id) => this.sessions.get(id),
+      resolveModelRef: (ref) => {
+        const trimmed = ref?.trim()
+        if (!trimmed) return null
+        return this.registry.createLlm(trimmed) ? trimmed : null
+      },
       abortSessionChat: (id) => {
         this.chatAbortBySession.get(id)?.abort()
       },
@@ -687,11 +693,13 @@ export class AgentEngine {
   cancelRunningSubagents(parentSessionId: string): number {
     const id = parentSessionId.trim()
     if (!id) return 0
+    const bound = getBoundSubagentHost(id)
     return cancelRunningSubagentsForParent(id, {
       cancelChildChat: (childId) => {
         this.chatAbortBySession.get(childId)?.abort()
         this.userPromptBridge.cancelSession(childId)
       },
+      emit: bound?.emit,
     })
   }
 
@@ -719,7 +727,7 @@ export class AgentEngine {
     if (!run || run.parentSessionId !== parentId) {
       return { ok: false, run_id: rid, status: 'failed', error: '任务不存在或不属于该会话' }
     }
-    return cancelSubagentRun(rid, this.createSubagentRunnerHost())
+    return cancelSubagentRun(rid, this.createSubagentRunnerHost(), undefined, getBoundSubagentHost(parentId)?.emit)
   }
 
   listWorkspaceGrants(sessionId: string) {
@@ -1554,11 +1562,13 @@ export class AgentEngine {
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
       logChatDebugAbort(sessionId, { reason: 'cancelled' })
+      const bound = getBoundSubagentHost(sessionId)
       cancelRunningSubagentsForParent(sessionId, {
         cancelChildChat: (childId) => {
           this.chatAbortBySession.get(childId)?.abort()
           this.userPromptBridge.cancelSession(childId)
         },
+        emit: bound?.emit ?? progress?.onProgress,
       })
       this.userPromptBridge.cancelSession(sessionId)
       this.steerBridge.clear(sessionId)

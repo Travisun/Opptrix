@@ -96,6 +96,26 @@ export class SubagentRunRegistry {
     )
   }
 
+  /**
+   * 同父下 active（queued|running）去重：优先 label，其次 role.name。
+   */
+  findActiveDuplicate(
+    parentSessionId: string,
+    opts: { label?: string; roleName?: string },
+  ): SubagentRun | null {
+    const active = this.listRunningByParent(parentSessionId)
+    const label = opts.label?.trim()
+    if (label) {
+      const hit = active.find(r => r.label.trim() === label)
+      if (hit) return hit
+    }
+    const roleName = opts.roleName?.trim()
+    if (roleName) {
+      return active.find(r => r.role.name.trim() === roleName) ?? null
+    }
+    return null
+  }
+
   /** 按 child session 定位 run（同父下通常唯一） */
   findByChildSessionId(
     childSessionId: string,
@@ -128,6 +148,12 @@ export class SubagentRunRegistry {
       | 'needsParentAction'
       | 'startedAt'
       | 'finishedAt'
+      | 'task'
+      | 'context'
+      | 'role'
+      | 'resultSchema'
+      | 'label'
+      | 'mode'
     >>,
   ): SubagentRun | null {
     const cur = this.get(runId)
