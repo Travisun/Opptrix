@@ -24,6 +24,12 @@ export function formatContextUsageLabel(usagePercent: number, compacted?: boolea
   return compacted ? `${base} · 已整理` : base
 }
 
+/** Composer 底栏：前缀缓存命中率（有上游上报时） */
+export function formatCacheHitLabel(percent: number): string {
+  const pct = Math.min(100, Math.max(0, Math.round(percent)))
+  return `缓存约 ${pct}%`
+}
+
 /** 兼容旧字段：无 usagePercent 时由 used/limit 推算 */
 export function resolveContextUsagePercent(usage: {
   usagePercent?: number

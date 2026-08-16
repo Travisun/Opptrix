@@ -128,13 +128,13 @@ Opptrix/
 ### 4.2 Agent 与 MCP
 
 ```
-用户消息 → AgentEngine → ToolPackResolver（播种 packs）
+用户消息 → AgentEngine → ensureFrozenSessionTools（全业务 pack + always-on，会话级一次）
                 ↓
-         activeNames = core+meta+workspace+播种+会话激活
+         冻结 openAiTools（稳定序）→ AggregatingToolBroker → LLM
                 ↓
-         AggregatingToolBroker（外部 MCP 优先级链 → 本地 McpToolBroker）→ LLM tools
+         resolveToolRoutePlan → 仅 turn-tail 选型卡（不改 tools 字节）
                 ↓
-         activate_tool_pack → 同会话累积 → 同轮刷新 Broker
+         activate_tool_pack → already_loaded no-op（不刷新 Broker）
                 ↓
          ToolRegistry / External MCP Client → ResearchHub / MarketDataService
 ```
@@ -151,16 +151,19 @@ Opptrix/
   - **后台终态续跑**：`mode=background` 且 `completed`/`failed`/`needs_parent_action` 时经 `SessionResumeBus`（`cause: subagent_terminal`）在父会话空闲时自动续跑通知父决定如何处理结果（可用 `get_subagent`；勿 poll）；`cancelled` 与 `foreground`（工具结果已回父）不 enqueue。父忙则沿用 bus 的 busy-defer。
   - **实现**：`packages/agent/src/subagents/`；单测 `tests/subagent-*.test.mjs`
 - 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
-- **工具包路由（Tool Pack Router）**：
+- **工具包路由（Tool Pack Router — 会话级冻结）**：
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
-  - 意图播种：`packages/agent/src/mcp/tool-pack-resolver.ts`（关键词/上下文 → ≤2 业务 pack）
-  - 会话激活：`list_tool_packs` / `activate_tool_pack`；同 session 累积 active packs
+  - **会话首次进入 chat**（含 subagent child）：激活**全部**业务 pack + always-on，经 `ensureFrozenSessionTools` 构建一次 `openAiTools` 并缓存；同会话后续轮 **字节不变**
+  - 意图播种 / `resolveToolRoutePlan`：仍每轮运行，但**只**影响 turn-tail「本轮工具选型卡」与档位提示，**不**裁剪或重排 tools
+  - `list_tool_packs` / `activate_tool_pack`：`activate` 为 **no-op**（`already_loaded`），仅记录/文案；勿指望 mid-loop 刷新 schema
+  - 稳定排序：`orderToolsStable`（remoteFirst + 名字典序）；**禁止** `preferredTools` 改变发给 LLM 的 tools 顺序
+  - MCP 运维（enable/disable/install…）若必须改 schema：冷启动重建冻结集 + `prompt_cache_key` generation 后缀
   - **工作流技能（Agent Skills）**：`@opptrix/agent-skills`（meta pack）；与专家「技能专长」persona、Tool Pack **正交**。规范见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)
     - **Meta 工具**：`list_agent_skills` / `activate_agent_skill` / `get_agent_skill` / `get_agent_skill_file`；写操作 `create_agent_skill` / `import_agent_skill` / `delete_agent_skill`（须 `ask_user` + `confirmed=true`）
-    - **激活**：同会话最多 3 个；正文 `` `@skill:name` `` 引用会**依赖自动激活**（循环检测 + 超限记入 `depNotes`）；若 frontmatter 声明 `allowed-tools`（空格分隔工具名）或 metadata `required-packs` / `requiredPacks`，会**自动 `activate` 对应 Tool Pack**（如 `create_web`/`create_canvas` → `artifacts`），返回 `activated_packs` / `tools_hint`，本轮即可调用，无需再手动 `activate_tool_pack`（`allowed-tools` **不是**硬白名单）
+    - **激活**：同会话最多 3 个；技能正文注入 **turn-tail**（非 stable system）；`allowed-tools` / `required-packs` 仅 bookkeeping，**不**触发 tools schema rebuild
     - **内置**（技能名用连字符，对齐工具下划线，如 `create-web` ↔ `create_web`）：`equity-deep-dive`；`multi-role-research-council`（多角色研讨 / 多空辩论，→ `fundamentals`/`market`/`news`/`instrument_analytics` + `artifacts`）；制品类 `create-canvas` / `create-web` / `create-mindmap`（→ `artifacts`）；策略 `run-backtest` / `strategy-report`（→ `strategy_extra`）；`etf-research`（→ `etf`）、`portfolio-review`（→ `portfolio`）、`news-digest`（→ `news`）、`browser-browse`（→ `browser`）、`scheduled-jobs`（→ `automation`）、`instrument-signals`（→ `instrument_analytics`）；`morning-market-brief`（v2 JSON）、`closing-market-brief`、`industry-chain`（`references/chain-knowledge.json`）、`earnings-quick-read`、`create-skill`（新建技能引导）。完整表见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)
     - **意图**：早报 / 收盘 / 产业链 → 激活对应工作流技能，再用 `market` / `fundamentals` 等 pack 取数；**多角色研讨 / 多空辩论 / 研究委员会** → `activate_agent_skill(multi-role-research-council)` 再 `run_subagent`；画布/网页/导图 → `create-canvas` / `create-web` / `create-mindmap`；**新建/定制技能** → 先 `activate_agent_skill(create-skill)` 再 `create_agent_skill`；**勿**再调用已删除的 `get_morning_brief` / `get_closing_report` / `industry_mining` / `industry_mermaid`；**勿**再用已更名的 `visual-report` / `web-page`
-  - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `AggregatingToolBroker`（内含本地 `McpToolBroker` + 外部 MCP 注册表）；激活后同轮刷新 tools
+  - 引擎会话级 `AggregatingToolBroker`：**首次 chat 全量工具子集并冻结**；subagent 继承父冻结快照再 `filterToolNamesForSubagent`
   - **外部 MCP（优先级故障转移）**：
     - 配置：`packages/shared/src/mcp-servers.ts`；持久化 user-store `mcp_servers`；设置页 **MCP 服务器** / REST `/api/mcp-servers*`
     - 运行时：`packages/agent/src/mcp/external/`（`ExternalMcpRegistry` / Health / AggregatingToolBroker）；hydrate 跨 server 有界并发（默认 2，`OPPTRIX_MCP_HYDRATE_CONCURRENCY` 可调、上限 3），工具 schema 在 hydrate 时缓存，catalog 优先读缓存避免每轮 `listTools` RPC
@@ -171,11 +174,11 @@ Opptrix/
       - `isMcpServerFailoverError`：`-32602`（structured content 不匹配）、`-32600`（声明 outputSchema 但未返回 structured content）、`Missing X-api-key` / 401 / 429 / 5xx / 网络超时等 → 可 failover；`invalid argument` 等业务参数错误不换源
       - 降级本地时 `_mcp.degraded=true`；若 `extractMcpConfigHint` 识别出缺 Key/鉴权问题，附带 `_mcp.configHint` 供 LLM 提示用户检查设置
     - 外部独有工具：`serverId__toolName` 命名空间注入 catalog
-    - **远程优先排序（三级优先，不可倒置）**：`AggregatingToolBroker.openAiTools()` 远程工具排前 + 同名本地不重复暴露；`orderToolsByPreference(..., { remoteFirst: true })` 进一步保证远程（命名空间）工具整体先于本地，preferred 排序仅在各自分组内生效。本地工具是最低优先级兜底。system 注入 `buildDataSourcingPolicy`：远程 MCP=最高优先、`_mcp.source=local` 视为降级须提示可信度受限
-    - meta 运维：`list_mcp_servers` / `enable_mcp_server` / `pause_mcp_server` / `reorder_mcp_servers`；`install_mcp_server` / `uninstall_mcp_server` **须 ask_user 后 `confirmed=true`**；禁止经 Agent 改已有 server 的 command/url/env
+    - **远程优先排序**：`AggregatingToolBroker.openAiTools()` 远程排前；`orderToolsStable` 保证会话内稳定序（**不用** preferred 重排）
+    - meta 运维：`list_mcp_servers` / `enable_mcp_server` / … — 变更外部 schema 时冷启动重建冻结 tools
     - 单测：`tests/external-mcp-failover.test.mjs`
-  - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
-  - **投研完备性闭环（`buildResearchCompletenessLoop`，仅 L2/L3 注入）**：出报告前强制「缺口自检 → 针对性补齐（换源重试 / activate_tool_pack / 远程重试降级项）→ 重新纳入分析 → 收敛输出」；同一缺口最多补 1 轮，取不到则如实标注缺口。L1 事实快答不注入，避免过度拉数
+  - **分层精排**：`resolveToolRoutePlan` 映射首选工具与研究档位；**选型卡 + 档位骨架**注入 turn-tail；tools 数组会话级冻结
+  - **投研完备性闭环**：L2/L3 注入 **turn-tail**（`buildResearchTierTurnTail`），非 stable system
   - **投研 Agent Loop 增强**（`packages/agent/src/loop/`，engine 仅编排）：
     1. **只读同轮并行**：连续只读工具可 `Promise.all`；`ask_user` / workspace 写删 / shell / secret / schedule 变更 / `activate_*` / MCP 变更 / browser 会话态 / 外部 `serverId__tool` **必须串行**；tool 消息写回仍按原 `tool_calls` 顺序；每 call 各自 `runInToolSession`
     2. **Checklist + 反空转**：会话内存 checklist（`update_research_checklist`，meta pack）；Skill 激活写入占位步骤；turn-tail 注入未完成项。同 fingerprint（工具名+规范化 args）成功重复 ≥3 或失败 ≥2 → 短路返回 `spin_guard`；`ensure_python` / `prepare_fuyao_dump` 对 `preparing`/`installing`/`running`/`pending` 轮询豁免（不计入 success/failure，有硬上限防死循环；终态 ready 重复仍拦）；`list_jobs` / `list_subagents` / `get_subagent` 对进行中结果只计 pollInFlight（协作硬限 24；`list_subagents` 无参 36）；`run_subagent` / `cancel_subagent` / `reclaim_subagent` 及 `cancel_job` / 会话密钥与 LAN 控制面工具不参与 success/failure 重复拦截；连续多轮无新指纹且无 checklist/轮询进展 → 强制收口提示。`deleteSession` / 归档旁路清理
@@ -183,7 +186,7 @@ Opptrix/
     4. **Soft steer**：`POST /api/sessions/:id/chat/steer`；仅有进行中 chat 时接受；不 abort；下一 `runLlmRound` 前写入可见 user「（补充）…」；cancel 清 pending；无人值守忽略
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
   - **消息正文插图（无需 pack，日常默认）**：L2/L3 有对比/趋势/占比/强弱矩阵等定量数据时，助手回复 Markdown 可用 ` ```chart ` / ` ```opptrix-chart ` 围栏（内容为 JSON，非 TSX）直接渲染 `@opptrix/canvas` 的 `Chart`（与画布同源），无需授权、无需 `artifacts`。「画个图」用围栏，勿误当成完整报告；**禁止**用 `opptrix_run` + Python（matplotlib/seaborn/plotly 等）出图再当聊天插图（用户明确要求导出图像文件到工作区时除外）。多折线/分组柱须 `data[].series`；单折线勿用每点不同 `color` 冒充多指标；类目密时建议 `showValues:false`、`showTooltip:true`。见 `buildResearchEpistemicPlaybook`。
-  - **画布、脑图与网页（`artifacts` pack）**：实现 `packages/agent/src/canvas-tools.ts` / `web-tools.ts`；非 always-on，意图播种（可视化报告/画布/脑图/思维导图/关系梳理/HTML 网页）或 `activate_tool_pack({ pack_ids: ["artifacts"] })`
+  - **画布、脑图与网页（`artifacts` pack）**：实现 `packages/agent/src/canvas-tools.ts` / `web-tools.ts`；会话级全量冻结后已含本 pack；意图播种只影响选型卡优先提示，无需再 `activate_tool_pack`
     - **工具**：`create_canvas` / `update_canvas` / `read_canvas` / `create_mindmap` / `update_mindmap` / `read_mindmap` / `create_web` / `update_web` / `read_web` / `list_web_vendor`
     - **何时用**：投研合适时机（对比表、走势图、结构化表、一页式结论 → `create_canvas` / 正文 chart；产业链/股东/主题关系梳理、流程示意 → `create_mindmap`，**禁止**虚构独立 knowledge-graph 工具；可交互 HTML/离线图表页 → `create_web`）。完整可视化报告仅当用户明确点名报告/画布，或 Agent 自感应值得交付完整多章节图文报告时以 `create_canvas` 为主交付；**禁止**先 `ask_user` 询问是否出报告。简单一句问答不必开 canvas/mindmap/web。日常定量表达优先正文 `chart` 围栏。更新先 `read_*` 再 `update_*`。插图 ≠ 报告：「画个图」用围栏，不必 `create_canvas`
     - **画布源码约束**：`source` 为 TSX 字符串。**UI**：使用 `@opptrix/canvas` curated 组件（`Surface` / `Stack` / `H1`–`H3` / `Text` / `Stat` / `Table` / `Chart` / `Callout` / `Quote` 等）；颜色用 `useCanvasTheme` 或组件默认；禁止渐变、大阴影、装饰 emoji。**语义配色**：文字层级用 `Text` tone（primary/secondary/tertiary）；涨跌默认红涨绿跌（`danger`/`success`）；tips/风险用 `Callout`（tone + 可选 variant）；原文/口径摘录用 `Quote`（`cite` 写来源），勿用 Callout 冒充引用；行内 `Pill` / `Code` / `Link`。**版面**：默认流体宽度 `Surface`；**默认机构调研报告版式**（H1→导语→H2 分章 + 正文与图表穿插；定量对比/变化/构成/强弱矩阵优先 `Chart`（`bar`/`line`/`pie`/`heatmap`）+ 主题配色，heatmap 用 `{ label, row, col, value }`，多折线/分组柱用 `{ label, value, series }`；`Table`/`Stat` 作明细与 KPI；**Chart 勿拉满全宽**（随内容宽自适应：稀疏≈紧凑 320/230/380，密集可增至父容器上限；勿写 `width:'100%'`；图注用 `Chart caption` 与图居中对齐；Chart 已含轴/网格/数值标注，勿手写假坐标）；章节靠标题与 Stack 间距，**避免 Divider**（勿用手写 hr/边框冒充），仅用户明确要求时例外；须含介绍/说明文字；勿用 Card 墙做面板分割；仅用户明确要面板/仪表盘时例外）。**仅允许** `import … from 'react'` 与 `import { … } from '@opptrix/canvas'`（公开导出）；禁止其它依赖（含 echarts）。返回 `attachment`（`kind=canvas`）供消息内点击预览。playbook：`buildArtifactsPlaybook()`
@@ -346,7 +349,7 @@ Opptrix/
   - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
   - **对话调试 JSONL**（`preference/chat_debug_logging`，默认 `enabled=false`）：开启后按会话写入 `logs/chat-debug/*.jsonl`；单文件超限 rotate 为 `.1`（截断更旧），目录有会话数/总字节软顶并 prune 最旧会话，避免无限 append。
   - **会话时钟 / 前缀缓存**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）写入**本轮 turn-tail**（messages 末尾 ephemeral user），**不**写入稳定 system，以免破坏 DeepSeek 等前缀缓存；选型卡同理。有 `sessionId` 时请求体带稳定 `prompt_cache_key=opptrix-session:{id}`，chat-debug 仅记录 key / `cacheWarmth`（warm|cold|unknown），**不**因命中与否改写上下文。`get_current_time` 仅在用户明确问时刻时调用。未显式定制时输出额度 ladder：普模 32k、推理 32k、`reasoningEffort=high` 为 64k（显式可选 64k / 128k / 384k；显式等于历史默认 4096 或旧 16k 会抬升；更低显式值仍尊重）。上游 `reasoning_content` 会累积；工具轮写入会话并在下一请求 wire 回传（含空串占位）；**整轮思考时间线**以 `turns.reasoningSegments` 结构化分段持久化，并派生 `reasoningContent`（`---` 拼接）兼容旧读；live 推送 segments（末段流式）；UI 竖轴展示「第 N 段思路」，旧仅字符串会话可降级分段；messages 终轮仍仅写本轮 reasoning（wire 不变）；重开会话可在气泡内折叠查看「思考过程」；空正文时提示思考占用输出上限。
-  - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示
+  - 调用未在本轮 tools 列表中的工具 → fail-closed，返回与冻结语义一致的提示（核对 tools / 选型卡，勿仪式 activate）
   - 准确率测试：`tests/mcp-tool-route-accuracy.test.mjs`（首推精确率 / 可见性召回 / 易混消歧 / 选型卡 / 过播种抑制）
 - **系统提示词分层（`assembleSystemPrompt`）**：实现 `packages/agent/src/experts/prompt-assembler.ts`；每轮由 `AgentEngine.buildRoundSystemPrompt` → `ToolRegistry.systemPrompt` 组装，结构固定为三层（空行分隔）：
   - **Layer 0 — 系统底线（不可覆盖）**：`buildLayer0Baseline()`。禁止具体买卖建议、禁止编造数据、须先调工具取数、区分事实与推断等。专家 `persona` 或用户消息若要求违反上述底线，Agent 须拒绝并说明原因；**Layer 0 优先级高于 Layer 1 角色设定**。

@@ -8,7 +8,7 @@ import { chatMessageContentToText } from '../content-parts.js'
 import type { ChatMessage } from '../llm/provider.js'
 import { repairToolCallSequences, tailMessagesForLlm } from '../llm/messages.js'
 import {
-  formatSessionMemoryForPrompt,
+  sessionMemoryAsUserBlock,
   type SessionMemory,
 } from './session-memory.js'
 
@@ -84,9 +84,9 @@ export function modelVisibleFromProjection(opts: {
 }): ChatMessage[] {
   const keepRecent = opts.keepRecent ?? opts.projection.keepRecent
   const out: ChatMessage[] = [{ role: 'system', content: opts.systemPrompt }]
-  const memoryText = formatSessionMemoryForPrompt(opts.sessionMemory)
+  const memoryText = sessionMemoryAsUserBlock(opts.sessionMemory)
   if (memoryText) {
-    out.push({ role: 'system', content: memoryText })
+    out.push({ role: 'user', content: memoryText })
   }
   if (opts.contextPrefix?.length) {
     out.push(...opts.contextPrefix)

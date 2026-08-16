@@ -10,6 +10,7 @@ import { resolveModelContextTokensAsync } from '../llm/models-dev-context.js'
 import {
   formatSessionMemoryForPrompt,
   parseSessionMemoryFromModelText,
+  sessionMemoryAsUserBlock,
   STRUCTURED_COMPACT_SYSTEM,
   type SessionMemory,
 } from './session-memory.js'
@@ -236,9 +237,9 @@ export function assembleModelView(opts: {
     })
   }
   const out: ChatMessage[] = [{ role: 'system', content: opts.systemPrompt }]
-  const memoryText = formatSessionMemoryForPrompt(opts.sessionMemory)
+  const memoryText = sessionMemoryAsUserBlock(opts.sessionMemory)
   if (memoryText) {
-    out.push({ role: 'system', content: memoryText })
+    out.push({ role: 'user', content: memoryText })
   }
   if (opts.contextPrefix?.length) {
     out.push(...opts.contextPrefix)
