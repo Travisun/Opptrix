@@ -1,0 +1,244 @@
+{
+  "meta": {
+    "skill": "factor-timing"
+  },
+  "bars": [],
+  "panels": {
+    "factor_returns": [
+      {
+        "date": "2024-01-01",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-02",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-03",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-04",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-05",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-06",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-07",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-08",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-09",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-10",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-11",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-12",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-13",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-14",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-15",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-16",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-17",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-18",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-19",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-20",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-21",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-22",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-23",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-24",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-01-25",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-26",
+        "factor": "MOM",
+        "ret": 0.01
+      },
+      {
+        "date": "2024-01-27",
+        "factor": "MOM",
+        "ret": -0.005
+      },
+      {
+        "date": "2024-02-01",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-02",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-03",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-04",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-05",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-06",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-07",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-08",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-09",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-10",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-11",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-12",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-13",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-14",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-15",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-16",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-17",
+        "factor": "MOM",
+        "ret": 0.008
+      },
+      {
+        "date": "2024-02-18",
+        "factor": "MOM",
+        "ret": -0.002
+      },
+      {
+        "date": "2024-02-19",
+        "factor": "MOM",
+        "ret": 0.008
+      }
+    ]
+  },
+  "params": {
+    "window": 10,
+    "threshold": 0.0
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "skill": "star-manager-alpha",
+    "asof": "2024-12-31"
+  },
+  "bars": [],
+  "panels": {
+    "holdings": [
+      {
+        "fund_id": "F001",
+        "symbol": "600519.SH",
+        "weight": 0.08,
+        "excess_ret": 0.12,
+        "period": "2024Q3"
+      },
+      {
+        "fund_id": "F001",
+        "symbol": "000858.SZ",
+        "weight": 0.05,
+        "excess_ret": 0.12,
+        "period": "2024Q3"
+      },
+      {
+        "fund_id": "F002",
+        "symbol": "600519.SH",
+        "weight": 0.06,
+        "excess_ret": 0.08,
+        "period": "2024Q3"
+      },
+      {
+        "fund_id": "F002",
+        "symbol": "601318.SH",
+        "weight": 0.04,
+        "excess_ret": 0.08,
+        "period": "2024Q3"
+      },
+      {
+        "fund_id": "F003",
+        "symbol": "000858.SZ",
+        "weight": 0.07,
+        "excess_ret": 0.15,
+        "period": "2024Q3"
+      }
+    ]
+  },
+  "params": {}
+}

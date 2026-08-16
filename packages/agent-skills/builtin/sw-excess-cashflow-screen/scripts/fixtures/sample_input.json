@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "skill": "sw-excess-cashflow-screen",
+    "asof": "2024-12-31"
+  },
+  "bars": [
+    {
+      "symbol": "A.SH",
+      "date": "2024-12-30",
+      "close": 10
+    },
+    {
+      "symbol": "B.SH",
+      "date": "2024-12-30",
+      "close": 20
+    },
+    {
+      "symbol": "C.SH",
+      "date": "2024-12-30",
+      "close": 15
+    },
+    {
+      "symbol": "D.SH",
+      "date": "2024-12-30",
+      "close": 8
+    }
+  ],
+  "panels": {
+    "financials": [
+      {
+        "symbol": "A.SH",
+        "pb": 1.5,
+        "pe_ttm": 8,
+        "dv_ttm": 0.04,
+        "borr2total": 0.2,
+        "fcff": 5
+      },
+      {
+        "symbol": "B.SH",
+        "pb": 4.0,
+        "pe_ttm": 30,
+        "dv_ttm": 0.01,
+        "borr2total": 0.5,
+        "fcff": 1
+      },
+      {
+        "symbol": "C.SH",
+        "pb": 2.0,
+        "pe_ttm": 10,
+        "dv_ttm": 0.035,
+        "borr2total": 0.25,
+        "fcff": 4
+      },
+      {
+        "symbol": "D.SH",
+        "pb": 1.2,
+        "pe_ttm": 6,
+        "dv_ttm": 0.05,
+        "borr2total": 0.15,
+        "fcff": 6
+      }
+    ]
+  },
+  "params": {}
+}
