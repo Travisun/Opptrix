@@ -40,29 +40,34 @@ jobs:
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#desktop-v}"
           PRERELEASE_FLAG=""
-          DRAFT_FLAG="--draft"
+          IS_DEV=0
           NOTES_FILE="$(mktemp)"
           if [[ "$TAG" == *-dev* ]]; then
             PRERELEASE_FLAG="--prerelease"
+            IS_DEV=1
           fi
 
           node scripts/assemble-release-notes.mjs "$VERSION" > "$NOTES_FILE"
+
+          # Notes-only GitHub Release. Do NOT upload installers / yml / blockmap / CMS.
+          # User downloads: https://opptrix.org/  |  Auto-update feed: R2 (update.opptrix.org).
+          # Formal tags (non *-dev*): published (non-draft). *-dev*: --prerelease, also non-draft.
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists"
             IS_DRAFT="$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || echo false)"
             echo "isDraft=$IS_DRAFT"
+            EDIT_ARGS=(--notes-file "$NOTES_FILE")
+            if [[ "$IS_DEV" -eq 0 && "$IS_DRAFT" == "true" ]]; then
+              EDIT_ARGS+=(--draft=false)
+            fi
+            gh release edit "$TAG" "${EDIT_ARGS[@]}"
             exit 0
           fi
 
-          # Notes-only GitHub Release (draft OK). Do NOT upload installers / yml /
-          # blockmap / CMS to GitHub — Linux AppImage exceeds the 2GB attachment
-          # limit. Distribution is Actions artifact → Cloudflare R2 (CDN).
-          # Draft only affects Release Notes page visibility on GitHub.
           gh release create "$TAG" \
             --title "Opptrix Desktop ${VERSION}" \
             --notes-file "$NOTES_FILE" \
-            $DRAFT_FLAG \
             $PRERELEASE_FLAG
 
   # Download SenseVoice / e5 / RapidOCR once (arch-independent); matrix jobs only restore.

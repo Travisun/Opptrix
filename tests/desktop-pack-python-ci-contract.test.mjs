@@ -3,6 +3,7 @@
  * on staged Python + ffmpeg executable checks.
  */
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
@@ -324,6 +325,47 @@ describe('desktop pack python / ffmpeg CI contract', () => {
       wf.includes('name: Sync experts to R2') && !wf.includes('Skipping experts R2 sync'),
       'experts R2 sync must run after sync-r2 (not skipped)',
     )
+  })
+
+  it('release-desktop.yml: formal tags create non-draft Notes-only Release (downloads → opptrix.org)', () => {
+    const wf = read('.github/workflows/release-desktop.yml')
+    const ensureIdx = wf.indexOf('Ensure GitHub Release exists')
+    assert.ok(ensureIdx >= 0, 'must have Ensure GitHub Release exists step')
+    const ensureSection = wf.slice(ensureIdx, ensureIdx + 2800)
+    assert.ok(
+      ensureSection.includes('opptrix.org'),
+      'prepare-release comments/notes path must mention opptrix.org downloads',
+    )
+    assert.ok(
+      !ensureSection.includes('DRAFT_FLAG'),
+      'must not use DRAFT_FLAG / default --draft on create',
+    )
+    assert.ok(
+      !/gh release create[\s\S]*?--draft(?!=false)/.test(ensureSection),
+      'gh release create must not pass --draft for formal or dev tags',
+    )
+    assert.ok(
+      ensureSection.includes('--prerelease'),
+      '*-dev* tags may use --prerelease',
+    )
+    assert.ok(
+      ensureSection.includes('--draft=false'),
+      'existing draft non-dev releases must be published with --draft=false',
+    )
+  })
+
+  it('assemble-release-notes: points downloads to opptrix.org (no GH assets)', () => {
+    const out = execFileSync(
+      process.execPath,
+      ['scripts/assemble-release-notes.mjs', '1.3.4'],
+      { encoding: 'utf8', cwd: repoRoot },
+    )
+    assert.ok(out.includes('https://opptrix.org/'), 'must include official download URL')
+    assert.ok(
+      /不在.*GitHub Release|GitHub Release 附件/.test(out),
+      'must state installers are not GitHub Release attachments',
+    )
+    assert.ok(out.includes('## 新功能') && out.includes('## 修复'))
   })
 
   it('resync-desktop-r2.yml: artifact bundle only (no GH Release download, R2-only)', () => {

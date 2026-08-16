@@ -33,7 +33,7 @@ alwaysApply: false
 
 ## 更新日志（Release Notes）— 硬性
 
-每次发版 **必须** 在仓库撰写更新日志，由 CI 组装后发布到 **GitHub Release 页面**（非事后手填为主路径）。
+每次发版 **必须** 在仓库撰写更新日志，由 CI 组装后发布到 **GitHub Release 页面**（Notes only，**无** Assets；用户下载 **https://opptrix.org/**；非事后手填为主路径）。正式 tag 创建为**非 draft**；`*-dev*` 为 prerelease。
 
 | 项 | 说明 |
 |----|------|
@@ -154,9 +154,9 @@ git push gitee desktop-v0.6.1
 | # | 检查项 | 验证方式 |
 |---|--------|----------|
 | E1 | GitHub Actions `release-desktop` workflow 各 job 成功 | `gh run list` / Actions UI |
-| E2 | R2 / Actions `desktop-release-bundle` 含 Mac x64+arm64（dmg/zip）、Windows exe、Linux AppImage/deb 及对应 **`latest-*.yml`**（GitHub Release **无**安装包附件） | CI artifact / R2；`gh release view` 仅 Notes |
+| E2 | R2 / Actions `desktop-release-bundle` 含 Mac x64+arm64（dmg/zip）、Windows exe、Linux AppImage/deb 及对应 **`latest-*.yml`**；GitHub Release **无** Assets；用户下载 **https://opptrix.org/** | CI artifact / R2；`gh release view` 仅 Notes |
 | E3 | `verify-packaged-updater` **与** `verify-packaged-runtime` 通过；release 开头 `audit-desktop-pack` 通过 | CI 日志 |
-| E4 | **GitHub Release 正文**含「新功能」「修复」及安装说明 | `gh release view desktop-v{version}` 或网页核对 |
+| E4 | **GitHub Release** 正式 tag **非 draft**；正文含官网下载说明（`opptrix.org`）、「新功能」「修复」及安装说明 | `gh release view desktop-v{version}` 或网页核对 |
 | E5 | R2 同步 job 成功 | CI `sync-r2`（硬失败；曾试 FTP 因带宽不稳已停用） |
 | E6 | Windows 安装包具备 Authenticode（自签或商业）；若用自签，应用内更新验签不依赖系统 Status=Valid | 产物 + 客户端日志 |
 

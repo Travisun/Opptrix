@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * 组装 GitHub Release 正文：更新日志 + 各平台安装说明。
+ * 组装 GitHub Release 正文：下载说明 + 更新日志 + 各平台安装说明。
  * 用法：node scripts/assemble-release-notes.mjs [version]
  * 默认 version 读取 apps/desktop/package.json。
+ *
+ * GitHub Release 仅承载 Notes，不挂安装包；用户下载见 https://opptrix.org/
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -42,20 +44,30 @@ function readChangelog(version) {
   return text
 }
 
+function downloadSection() {
+  return `## 下载
+
+安装包**不在**本 GitHub Release 附件中。请到 **https://opptrix.org/** 统一下载。`
+}
+
 function installSection(version) {
-  return `### macOS 安装说明
-- **Apple Silicon (M 系列)** 下载 \`Opptrix-${version}-MacOS-arm64-M-CPU.dmg\`
-- **Intel Mac** 下载 \`Opptrix-${version}-MacOS-x64-Intel-CPU.dmg\`
-- 若提示「已损坏，无法打开」（未签名/dev 包常见），在终端执行后重新打开：
+  return `### 安装说明（官网下载后）
+
+从官网下载后，按系统选用对应文件：
+
+#### macOS
+- **Apple Silicon (M 系列)**：\`Opptrix-${version}-MacOS-arm64-M-CPU.dmg\`
+- **Intel Mac**：\`Opptrix-${version}-MacOS-x64-Intel-CPU.dmg\`
+- 若提示「已损坏，无法打开」（未签名/开发版常见），在终端执行后重新打开：
   \`\`\`bash
   xattr -cr /Applications/Opptrix.app
   \`\`\`
 - 或在 Finder 中 **右键 → 打开** 一次
 
-### Windows
+#### Windows
 运行 \`Opptrix-${version}-Windows.exe\`；未签名包可能触发 SmartScreen，选「仍要运行」
 
-### Linux
+#### Linux
 \`chmod +x Opptrix-${version}-Linux.AppImage && ./Opptrix-${version}-Linux.AppImage\``
 }
 
@@ -68,6 +80,8 @@ if (!version) {
 const changelog = readChangelog(version)
 const body = [
   `## Opptrix Desktop ${version}`,
+  '',
+  downloadSection(),
   '',
   changelog,
   '',
