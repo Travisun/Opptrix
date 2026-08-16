@@ -1,0 +1,20 @@
+{
+  "instruments": [
+    {
+      "symbol": "KEEP1",
+      "pe": 18,
+      "roe": 0.22,
+      "ocf_ni": 0.95,
+      "debt_ratio": 0.35,
+      "moat_stars": 4
+    },
+    {
+      "symbol": "DROP1",
+      "pe": 80,
+      "roe": 0.05,
+      "ocf_ni": 0.3,
+      "debt_ratio": 0.85,
+      "moat_stars": 1
+    }
+  ]
+}

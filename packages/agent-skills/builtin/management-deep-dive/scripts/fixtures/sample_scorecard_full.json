@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "asof": "2026-08-16",
+    "skill": "management-deep-dive"
+  },
+  "info_richness": "A",
+  "dual_source": true,
+  "panels": {
+    "quotes": {
+      "price": 100,
+      "currency": "HKD"
+    },
+    "financials": {
+      "revenue": 1000,
+      "net_income": 100
+    },
+    "profile": {
+      "name": "DemoCo"
+    },
+    "notices_or_filings": true,
+    "dual_source": true,
+    "info_richness": "A"
+  },
+  "scores": {
+    "duan": 4.5,
+    "buffett": 4.0,
+    "munger": 3.5,
+    "li": 4.0
+  },
+  "gates": {
+    "integrity_veto": false,
+    "outside_circle": false,
+    "mirror_test_ok": true
+  }
+}

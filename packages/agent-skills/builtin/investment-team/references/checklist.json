@@ -1,0 +1,15 @@
+{
+  "title": "investment-team",
+  "items": [
+    {"id": "scope", "label": "确认标的与 A/B/C"},
+    {"id": "prefetch", "label": "父预检取数可达"},
+    {"id": "biz", "label": "business-analyst 完成并 reclaim"},
+    {"id": "fin", "label": "financial-analyst 完成并 reclaim"},
+    {"id": "ind", "label": "industry-researcher 完成并 reclaim"},
+    {"id": "risk", "label": "risk-assessor 完成并 reclaim"},
+    {"id": "cross", "label": "交叉验证与镜子测试"},
+    {"id": "score", "label": "scorecard 决策档位"},
+    {"id": "audit", "label": "report_audit 抽检"},
+    {"id": "web", "label": "create_web 交付"}
+  ]
+}

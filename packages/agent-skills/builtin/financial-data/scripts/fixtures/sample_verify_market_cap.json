@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "skill": "financial-data",
+    "asof": "2026-08-16",
+    "note": "单源 params 示例：期望 meta.data_mode=proxy"
+  },
+  "command": "verify-market-cap",
+  "params": {
+    "price": 510,
+    "shares": 9110000000,
+    "reported": 4650000000000,
+    "currency": "HKD"
+  },
+  "panels": {}
+}

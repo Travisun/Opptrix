@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "skill": "deep-company-series",
+    "asof": "2026-08-16",
+    "note": "双源 panels 示例：期望 meta.data_mode=full"
+  },
+  "command": "cross-validate",
+  "params": {
+    "field": "revenue",
+    "values": {
+      "opptrix_financials": 7518,
+      "institution_report": 7500
+    },
+    "unit": "亿",
+    "tolerance": 2.0
+  },
+  "panels": {
+    "primary": {
+      "source": "opptrix_financials",
+      "revenue": 7518
+    },
+    "secondary": {
+      "source": "institution_report",
+      "revenue": 7500
+    }
+  }
+}
