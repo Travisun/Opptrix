@@ -5,14 +5,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
+import {
+  playwrightChromiumDirMarker,
+  playwrightHostPlatformOverride,
+} from './playwright-host-platform.mjs'
 
 /**
  * @param {string} browsersDir - PLAYWRIGHT_BROWSERS_PATH (staged/packaged playwright-browsers)
  * @param {string[]} nodeModulesDirs - dirs that directly contain playwright-core/ (prefer staged)
  * @param {(msg: string) => never} fail
+ * @param {{ platform: string, arch: string } | null} [target] - packaging target (cross-build override)
  * @returns {string} absolute Chromium executable path
  */
-export function assertPlaywrightChromiumExecutable(browsersDir, nodeModulesDirs, fail) {
+export function assertPlaywrightChromiumExecutable(browsersDir, nodeModulesDirs, fail, target = null) {
   if (!fs.existsSync(browsersDir)) {
     fail(
       `missing ${browsersDir} — stage-runtime must install Playwright Chromium`,
@@ -26,8 +31,13 @@ export function assertPlaywrightChromiumExecutable(browsersDir, nodeModulesDirs,
     )
   }
 
-  const prev = process.env.PLAYWRIGHT_BROWSERS_PATH
+  const prevBrowsers = process.env.PLAYWRIGHT_BROWSERS_PATH
+  const prevOverride = process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
   process.env.PLAYWRIGHT_BROWSERS_PATH = browsersDir
+  const override = target ? playwrightHostPlatformOverride(target) : null
+  if (override) {
+    process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = override
+  }
   try {
     let chromium = null
     let lastErr = null
@@ -61,9 +71,19 @@ export function assertPlaywrightChromiumExecutable(browsersDir, nodeModulesDirs,
         + 'run stage-runtime to install the full Chromium binary.',
       )
     }
+    const marker = target ? playwrightChromiumDirMarker(target) : null
+    if (marker && !exe.includes(marker)) {
+      fail(
+        `Playwright Chromium path does not match packaging target `
+        + `${target.platform}-${target.arch}: expected path containing ${marker}, got ${exe}. `
+        + 'Cross-builds must set PLAYWRIGHT_HOST_PLATFORM_OVERRIDE during stage-runtime.',
+      )
+    }
     return exe
   } finally {
-    if (prev == null) delete process.env.PLAYWRIGHT_BROWSERS_PATH
-    else process.env.PLAYWRIGHT_BROWSERS_PATH = prev
+    if (prevBrowsers == null) delete process.env.PLAYWRIGHT_BROWSERS_PATH
+    else process.env.PLAYWRIGHT_BROWSERS_PATH = prevBrowsers
+    if (prevOverride == null) delete process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
+    else process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = prevOverride
   }
 }

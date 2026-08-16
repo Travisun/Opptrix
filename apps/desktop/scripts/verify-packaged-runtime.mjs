@@ -161,9 +161,13 @@ function assertFfmpegBinary(ffmpegBin, target) {
       windowsHide: true,
     })
     if (ver.error) {
+      const detail = ver.error instanceof Error ? ver.error.message : String(ver.error)
+      const hint = /ETIMEDOUT|ETIME/i.test(detail)
+        ? ` (often wrong-arch binary under Rosetta — ensure OPPTRIX_RUNTIME_ARCH=`
+          + `${target.arch} so hostMatchesTarget skips -version on cross builds)`
+        : ''
       fail(
-        `ffmpeg -version spawn failed for ${ffmpegBin}: `
-          + `${ver.error instanceof Error ? ver.error.message : ver.error}`,
+        `ffmpeg -version spawn failed for ${ffmpegBin}: ${detail}${hint}`,
       )
     }
     if (ver.status !== 0) {
@@ -202,6 +206,7 @@ function assertStage(stageDir, target) {
     // Prefer restored node_modules; deps/ should already be renamed after pack.
     [path.join(stageDir, 'node_modules'), path.join(stageDir, 'deps')],
     fail,
+    target,
   )
   // afterPack restores deps → node_modules; speech/media require bundled ffmpeg.
   const ffmpegDir = path.join(stageDir, 'node_modules', 'ffmpeg-static')

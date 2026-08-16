@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Upload current release assets to FTP (mirror of R2 desktop feed prefix).
+ * Upload current release assets to FTP (primary desktop distribution path).
  *
- * Upload order matches R2: binaries first, then latest-*.yml.
+ * Upload order: binaries first, then latest-*.yml.
  * Then prune obsolete release artifacts under the remote directory.
  *
  * Env:
- *   FTP_HOST (required to run; skip if unset)
+ *   FTP_HOST (required in CI; local may skip if unset)
  *   FTP_USERNAME / FTP_PASSWORD
  *   FTP_REMOTE_DIR (optional; default from OPPTRIX_UPDATE_BASE_URL path, e.g. /desktop)
  *   FTP_PORT (optional; default 21)

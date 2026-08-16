@@ -225,6 +225,7 @@ const chromiumExe = assertPlaywrightChromiumExecutable(
   playwrightBrowsers,
   [depsRoot, path.join(STAGE, 'node_modules')],
   fail,
+  target,
 )
 console.log(`verify-runtime: OK Chromium ${chromiumExe}`)
 

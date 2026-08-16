@@ -20,6 +20,10 @@ import {
   runNodeScript,
   runNpm,
 } from './lib/runtime-target.mjs'
+import {
+  playwrightChromiumDirMarker,
+  playwrightCrossEnv,
+} from './lib/playwright-host-platform.mjs'
 
 const require = createRequire(import.meta.url)
 const nodeAbi = require('node-abi')
@@ -479,7 +483,15 @@ function ensurePlaywrightChromium() {
   }
 
   fs.mkdirSync(PLAYWRIGHT_BROWSERS, { recursive: true })
-  console.log(`Installing Playwright Chromium for desktop runtime (${target.platform}-${target.arch})…`)
+  const pwCross = playwrightCrossEnv(target)
+  if (pwCross.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE) {
+    console.log(
+      `Installing Playwright Chromium for desktop runtime (${target.platform}-${target.arch})`
+      + ` via PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=${pwCross.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE}…`,
+    )
+  } else {
+    console.log(`Installing Playwright Chromium for desktop runtime (${target.platform}-${target.arch})…`)
+  }
 
   const install = spawnSync(
     process.execPath,
@@ -488,6 +500,7 @@ function ensurePlaywrightChromium() {
       cwd: STAGE,
       env: {
         ...process.env,
+        ...pwCross,
         PLAYWRIGHT_BROWSERS_PATH: PLAYWRIGHT_BROWSERS,
         NODE_PATH: STAGE_NM,
       },
@@ -503,8 +516,13 @@ function ensurePlaywrightChromium() {
   }
 
   // Same probe as runtime launch (`chromium.executablePath()`); empty dir must not pass.
+  // Keep the same host-platform override so executablePath resolves the target tree.
   const prevBrowsers = process.env.PLAYWRIGHT_BROWSERS_PATH
+  const prevOverride = process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
   process.env.PLAYWRIGHT_BROWSERS_PATH = PLAYWRIGHT_BROWSERS
+  if (pwCross.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE) {
+    process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = pwCross.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
+  }
   try {
     const pwPkg = path.join(STAGE_NM, 'playwright-core/package.json')
     if (!fs.existsSync(pwPkg)) {
@@ -520,6 +538,14 @@ function ensurePlaywrightChromium() {
       )
       process.exit(1)
     }
+    const marker = playwrightChromiumDirMarker(target)
+    if (marker && !exe.includes(marker)) {
+      console.error(
+        `Playwright Chromium arch mismatch for ${target.platform}-${target.arch}: `
+        + `expected path containing ${marker}, got ${exe}`,
+      )
+      process.exit(1)
+    }
     console.log(`Playwright Chromium ready: ${exe}`)
   } catch (err) {
     console.error(
@@ -529,6 +555,8 @@ function ensurePlaywrightChromium() {
   } finally {
     if (prevBrowsers == null) delete process.env.PLAYWRIGHT_BROWSERS_PATH
     else process.env.PLAYWRIGHT_BROWSERS_PATH = prevBrowsers
+    if (prevOverride == null) delete process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
+    else process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = prevOverride
   }
 }
 
