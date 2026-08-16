@@ -30,6 +30,12 @@ import {
   getSkill,
   resolveSkillDependencies,
 } from '@opptrix/agent-skills'
+import { ensureHarnessOverlayRegistered } from './harness/register-overlay.js'
+import { runWithHarnessModelRef } from './harness/model-context.js'
+import {
+  appendHarnessRouteHintToPlaybook,
+  buildHarnessRouteHintAppendix,
+} from './harness/route-hint.js'
 import {
   resolveToolRoutePlan,
   buildRoundRoutePlaybook,
@@ -456,31 +462,39 @@ export class AgentEngine {
     return resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier)
   }
 
-  /** 本轮动态尾注：时钟 + 选型卡 + 档位 + 技能正文 + checklist/反空转 */
+  /** 本轮动态尾注：时钟 + 选型卡(+route_hint) + 档位 + 技能正文 + checklist/反空转 */
   private buildRoundTurnTail(sessionId: string, activeNames: readonly string[]) {
     const record = this.sessions.get(sessionId)
-    const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
-      message: this.lastChatSeedMessage,
-      contextRef: record?.contextRef ?? null,
+    const modelRef = record?.model ?? null
+    return runWithHarnessModelRef(modelRef, () => {
+      const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
+        message: this.lastChatSeedMessage,
+        contextRef: record?.contextRef ?? null,
+      })
+      const expert = record?.expertId
+        ? getExpertCatalogService().getDefinitionSync(record.expertId)
+        : null
+      const tier = resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier) ?? 'L2'
+      const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
+      ensureHarnessOverlayRegistered()
+      const routePlaybook = appendHarnessRouteHintToPlaybook(
+        buildRoundRoutePlaybook(plan, activeNames),
+        buildHarnessRouteHintAppendix(modelRef),
+      )
+      const base = buildTurnTailPrompt({
+        sessionClock: buildSessionClockPlaybook(getCurrentTime()),
+        routePlaybook,
+      })
+      const extras = [
+        buildResearchTierTurnTail(tier),
+        this.buildTierDataSourcingTurnTail(tier),
+        buildActivatedSkillsPrompt(activatedSkills),
+        buildChecklistTurnTail(sessionId),
+        buildSpinGuardTurnTail(sessionId),
+      ].filter(Boolean)
+      if (!extras.length) return base
+      return [base, ...extras].filter(Boolean).join('\n\n')
     })
-    const expert = record?.expertId
-      ? getExpertCatalogService().getDefinitionSync(record.expertId)
-      : null
-    const tier = resolveEffectiveResearchTier(expert?.defaultResearchTier, plan.researchTier) ?? 'L2'
-    const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
-    const base = buildTurnTailPrompt({
-      sessionClock: buildSessionClockPlaybook(getCurrentTime()),
-      routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
-    })
-    const extras = [
-      buildResearchTierTurnTail(tier),
-      this.buildTierDataSourcingTurnTail(tier),
-      buildActivatedSkillsPrompt(activatedSkills),
-      buildChecklistTurnTail(sessionId),
-      buildSpinGuardTurnTail(sessionId),
-    ].filter(Boolean)
-    if (!extras.length) return base
-    return [base, ...extras].filter(Boolean).join('\n\n')
   }
 
   private clearLoopSessionState(sessionId: string) {

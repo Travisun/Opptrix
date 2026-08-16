@@ -37,4 +37,10 @@ export {
   toPublicIndexEntry,
   toPublicDetail,
 } from './registry.js'
-export { buildSkillCatalogPrompt, buildActivatedSkillsPrompt } from './prompt.js'
+export {
+  buildSkillCatalogPrompt,
+  buildActivatedSkillsPrompt,
+  setSkillBodyOverlay,
+  getSkillBodyOverlay,
+  type SkillBodyOverlay,
+} from './prompt.js'

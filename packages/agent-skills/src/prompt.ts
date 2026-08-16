@@ -1,6 +1,20 @@
 import { listSkillIndex, getSkill } from './registry.js'
 import { sanitizeSkillMarkdown, MAX_SKILL_BODY_CHARS } from './sanitize.js'
 
+/** 可选：冷启动时叠层技能正文（由 @opptrix/agent harness 注册；默认恒等） */
+export type SkillBodyOverlay = (skillName: string, body: string) => string
+
+let skillBodyOverlay: SkillBodyOverlay | null = null
+
+/** 注册 / 清空技能正文叠层；传 null 恢复内置行为 */
+export function setSkillBodyOverlay(fn: SkillBodyOverlay | null): void {
+  skillBodyOverlay = fn
+}
+
+export function getSkillBodyOverlay(): SkillBodyOverlay | null {
+  return skillBodyOverlay
+}
+
 /** Discovery layer: short name + description catalog for system prompt */
 export function buildSkillCatalogPrompt(): string {
   const index = listSkillIndex()
@@ -35,10 +49,16 @@ export function buildActivatedSkillsPrompt(skillNames: readonly string[]): strin
       blocks.push(`\n### ${name}\n（未找到该技能）`)
       continue
     }
-    const body = sanitizeSkillMarkdown(skill.body, { maxChars: MAX_SKILL_BODY_CHARS })
-    if (!body) {
+    const sanitized = sanitizeSkillMarkdown(skill.body, { maxChars: MAX_SKILL_BODY_CHARS })
+    if (!sanitized) {
       blocks.push(`\n### ${skill.name}\n（技能正文不可用）`)
       continue
+    }
+    let body = sanitized
+    if (skillBodyOverlay) {
+      const overlaid = skillBodyOverlay(skill.name, sanitized)
+      // 叠层后再消毒：危险叠层回退到 overlay 前已 sanitize 的正文，绝不可注入未消毒文
+      body = sanitizeSkillMarkdown(overlaid, { maxChars: MAX_SKILL_BODY_CHARS }) ?? sanitized
     }
     blocks.push(`\n### ${skill.name}\n${body}`)
   }

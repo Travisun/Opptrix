@@ -59,6 +59,27 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'models', title: '提供商', desc: '配置服务地址与密钥', keywords: ['大模型', 'LLM', 'OpenAI', '密钥', '提供商'] },
   { section: 'models', title: '添加提供商', keywords: ['新增', '添加', '大模型'] },
   { section: 'models', title: '编辑提供商', keywords: ['修改', '大模型'] },
+  {
+    section: 'models',
+    group: '此模型的分析习惯',
+    title: '此模型的分析习惯',
+    desc: '习惯版本来自本地已晋升的分析跑法；开关只控制离线合入是否允许。安全底线不会改。',
+    keywords: ['分析习惯', '习惯', '恢复默认', '离线合入', '自动合入', '当前模型'],
+  },
+  {
+    section: 'models',
+    group: '此模型的分析习惯',
+    title: '允许离线自动合入',
+    desc: '关闭后，离线实验室不会自动合入新习惯；你仍可手动恢复默认。',
+    keywords: ['离线合入', '自动合入', '分析习惯'],
+  },
+  {
+    section: 'models',
+    group: '此模型的分析习惯',
+    title: '恢复默认习惯',
+    desc: '清除此模型的自定义分析习惯',
+    keywords: ['恢复默认', '默认习惯'],
+  },
 
   // 数据源
   { section: 'data_providers', group: 'A 股', title: 'Tushare Pro', keywords: ['tushare', '行情源', 'token'] },
