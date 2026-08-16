@@ -355,6 +355,50 @@ function preSignHeavyMacTrees(context) {
   console.log(`afterPack: heavy-tree pre-sign done (signed=${signed}, skipped=${skipped})`)
 }
 
+/**
+ * Move pre-signed heavy trees out of the .app so @electron/osx-sign walkAsync
+ * (Promise.all + isBinaryFile on every file) does not hit EMFILE before signIgnore.
+ * afterSign restores them and re-seals the outer .app.
+ * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
+ * @param {string} identity
+ */
+function stashHeavyTreesForOsxSign(context, identity) {
+  if (context.electronPlatformName !== 'darwin') return
+  if (process.env.OPPTRIX_MAC_UNSIGNED === '1') return
+  if (!identity) return
+
+  const { STASH_DIRNAME, MANIFEST } = require('./after-sign-restore-heavy.cjs')
+  const appName = context.packager.appInfo.productFilename
+  const resources = path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources')
+  const stashRoot = path.join(context.appOutDir, STASH_DIRNAME)
+  if (fs.existsSync(stashRoot)) {
+    fs.rmSync(stashRoot, { recursive: true, force: true })
+  }
+  fs.mkdirSync(stashRoot, { recursive: true })
+
+  const items = []
+  for (const rel of ['python', 'runtime-stage/node_modules', 'runtime-stage/playwright-browsers']) {
+    const from = path.join(resources, rel)
+    if (!fs.existsSync(from)) continue
+    const stashName = rel.replace(/\//g, '__')
+    const to = path.join(stashRoot, stashName)
+    fs.renameSync(from, to)
+    items.push({ rel, stashName })
+    console.log(`afterPack: stashed ${rel} → ${STASH_DIRNAME}/${stashName} (avoid osx-sign EMFILE)`)
+  }
+
+  if (items.length === 0) {
+    fs.rmSync(stashRoot, { recursive: true, force: true })
+    return
+  }
+
+  fs.writeFileSync(
+    path.join(stashRoot, MANIFEST),
+    JSON.stringify({ identity, items }, null, 2),
+    'utf8',
+  )
+}
+
 function adhocSignMac(context) {
   if (process.env.OPPTRIX_MAC_UNSIGNED !== '1') return
   if (context.electronPlatformName !== 'darwin') return
@@ -396,7 +440,16 @@ exports.default = async function afterPack(context) {
   restoreMacBundleIcns(context)
   restoreSidecarNodeModules(context)
   ensurePackagedScheduleHelper(context)
+  const identity = resolveMacSigningIdentity()
   preSignHeavyMacTrees(context)
+  // Stash only when Developer ID signing will run (osx-sign walk EMFILE).
+  if (
+    context.electronPlatformName === 'darwin'
+    && process.env.OPPTRIX_MAC_UNSIGNED !== '1'
+    && identity
+  ) {
+    stashHeavyTreesForOsxSign(context, identity)
+  }
   adhocSignMac(context)
 }
 

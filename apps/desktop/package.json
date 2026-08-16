@@ -51,6 +51,7 @@
     "copyright": "Copyright © 2026 Opptrix contributors",
     "electronVersion": "42.6.1",
     "afterPack": "./scripts/after-pack-adhoc.cjs",
+    "afterSign": "./scripts/after-sign-restore-heavy.cjs",
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "detectUpdateChannel": false,

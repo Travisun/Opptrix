@@ -168,6 +168,16 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('playwright-browsers'), 'must pre-sign playwright (signIgnore + notary)')
     assert.ok(src.includes('collectNestedBundles'), 'must deep-sign nested Chrome .app/.framework')
     assert.ok(src.includes('--deep') || src.includes("deep: true"), 'nested bundles need --deep')
+    assert.ok(src.includes('stashHeavyTreesForOsxSign'), 'must stash heavy trees before osx-sign walk')
+  })
+
+  it('afterSign restores stashed heavy trees and re-seals outer app', () => {
+    const pkg = JSON.parse(read('apps/desktop/package.json'))
+    assert.equal(pkg.build?.afterSign, './scripts/after-sign-restore-heavy.cjs')
+    const src = read('apps/desktop/scripts/after-sign-restore-heavy.cjs')
+    assert.ok(src.includes('.opptrix-sign-stash'))
+    assert.ok(src.includes('re-sealing') || src.includes('re-seal'))
+    assert.ok(!src.includes("'--deep'") || src.includes('No --deep'), 'outer re-seal must not --deep')
   })
 
   it('release-desktop.yml: stage-shared-models once; matrix restores + skips re-stage', () => {
