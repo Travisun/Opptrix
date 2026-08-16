@@ -65,9 +65,70 @@ jobs:
             $DRAFT_FLAG \
             $PRERELEASE_FLAG
 
+  # Download SenseVoice / e5 / RapidOCR once (arch-independent); matrix jobs only restore.
+  stage-shared-models:
+    name: Stage shared models
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache shared model assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/desktop/resources/llms/rapidocr-ppocrv4-mobile
+            apps/desktop/resources/llms/multilingual-e5-small
+            apps/desktop/resources/sensevoice
+          key: desktop-shared-models-v1
+          restore-keys: |
+            desktop-shared-models-v1
+
+      - name: Stage SenseVoice / e5 / RapidOCR (foreign-first)
+        env:
+          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+          OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX: ${{ secrets.OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX }}
+        run: |
+          node apps/desktop/scripts/stage-sensevoice.mjs
+          node apps/desktop/scripts/stage-e5.mjs
+          node apps/desktop/scripts/stage-rapidocr.mjs
+
+      - name: Pack shared models for artifact
+        shell: bash
+        run: |
+          STAGING="$RUNNER_TEMP/desktop-shared-models"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING/llms"
+          cp -a apps/desktop/resources/llms/rapidocr-ppocrv4-mobile "$STAGING/llms/"
+          cp -a apps/desktop/resources/llms/multilingual-e5-small "$STAGING/llms/"
+          cp -a apps/desktop/resources/sensevoice "$STAGING/"
+          echo "Packed shared models into $STAGING"
+          find "$STAGING" -maxdepth 3 -type d | head -40
+
+      - name: Upload shared models artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-shared-models
+          path: ${{ runner.temp }}/desktop-shared-models
+          retention-days: 7
+          if-no-files-found: error
+
   release:
     name: ${{ matrix.label }}
-    needs: prepare-release
+    needs: [prepare-release, stage-shared-models]
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +150,9 @@ jobs:
             artifact: desktop-mac-x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    env:
+      # prebuild must not re-download shared models (restored from artifact below).
+      OPPTRIX_SKIP_SHARED_MODEL_STAGE: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -116,27 +180,19 @@ jobs:
       - name: Prepare UI fonts
         run: npm run prepare:fonts
 
-      # Cache staged models so ModelScope / HF jitter does not re-download every release job.
-      - name: Cache staged LLM / SenseVoice assets
-        uses: actions/cache@v4
+      - name: Download shared models artifact
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            apps/desktop/resources/llms/rapidocr-ppocrv4-mobile
-            apps/desktop/resources/llms/multilingual-e5-small
-            apps/desktop/resources/sensevoice
-          key: desktop-llms-v1-${{ runner.os }}-${{ matrix.electron_arch || 'x64' }}
-          restore-keys: |
-            desktop-llms-v1-${{ runner.os }}-
+          name: desktop-shared-models
+          path: apps/desktop/resources
 
-      # Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST (Node OCR; no Python wheels).
-      - name: Stage bundled SenseVoice models
-        run: node apps/desktop/scripts/stage-sensevoice.mjs
-
-      - name: Stage bundled e5 embedding model
-        run: node apps/desktop/scripts/stage-e5.mjs
-
-      - name: Stage bundled RapidOCR models
-        run: node apps/desktop/scripts/stage-rapidocr.mjs
+      - name: Verify shared models restored
+        shell: bash
+        run: |
+          test -d apps/desktop/resources/sensevoice
+          test -d apps/desktop/resources/llms/multilingual-e5-small
+          test -d apps/desktop/resources/llms/rapidocr-ppocrv4-mobile
+          echo "Shared models present under apps/desktop/resources"
 
       # Writes resources/engines/<plat-arch>/MANIFEST.json for audit / prebuild compat (no pip download).
       # Cross mac-x64 on arm64 runners must set OPPTRIX_RUNTIME_ARCH so MANIFEST lands under darwin-x64.

@@ -145,16 +145,79 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     }
   })
 
-  it('mac.signIgnore skips playwright-browsers (already signed Chrome for Testing)', () => {
+  it('mac.signIgnore skips playwright-browsers + python + node_modules (EMFILE)', () => {
     const pkg = JSON.parse(read('apps/desktop/package.json'))
     const signIgnore = pkg.build?.mac?.signIgnore
     assert.ok(Array.isArray(signIgnore), 'build.mac.signIgnore must be an array')
+    for (const needle of ['playwright-browsers', 'Contents/Resources/python', 'runtime-stage/node_modules']) {
+      assert.ok(
+        signIgnore.some((p) => String(p).includes(needle) || needle.includes(String(p))),
+        `signIgnore must cover ${needle}`,
+      )
+    }
+  })
+
+  it('afterPack serially pre-signs python + runtime-stage/node_modules Mach-O', () => {
+    const src = read('apps/desktop/scripts/after-pack-adhoc.cjs')
+    assert.ok(src.includes('preSignHeavyMacTrees'), 'must define preSignHeavyMacTrees')
+    assert.ok(src.includes('preSignHeavyMacTrees(context)'), 'afterPack must call pre-sign')
+    assert.ok(src.includes('--options'), 'pre-sign must use hardened runtime options')
+    assert.ok(src.includes("'runtime'"), 'pre-sign must pass runtime option')
+    assert.ok(src.includes('python'), 'must target python tree')
+    assert.ok(src.includes('node_modules'), 'must target node_modules tree')
+  })
+
+  it('release-desktop.yml: stage-shared-models once; matrix restores + skips re-stage', () => {
+    const wf = read('.github/workflows/release-desktop.yml')
+    assert.ok(wf.includes('stage-shared-models:'), 'must define stage-shared-models job')
+    assert.ok(wf.includes('desktop-shared-models'), 'must use desktop-shared-models artifact')
+    assert.ok(wf.includes('desktop-shared-models-v1'), 'must cache with desktop-shared-models-v1')
     assert.ok(
-      signIgnore.some((p) => String(p).includes('playwright-browsers')),
-      'signIgnore must include playwright-browsers',
+      wf.includes('OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope'),
+      'shared job must prefer foreign mirrors',
+    )
+    assert.ok(wf.includes('HF_TOKEN'), 'must optionally inject HF_TOKEN')
+    assert.ok(
+      wf.includes('OPPTRIX_SKIP_SHARED_MODEL_STAGE'),
+      'matrix must set OPPTRIX_SKIP_SHARED_MODEL_STAGE',
+    )
+    assert.ok(
+      wf.includes('needs: [prepare-release, stage-shared-models]'),
+      'release matrix must need stage-shared-models',
+    )
+    const releaseJobIdx = wf.indexOf('\n  release:')
+    assert.ok(releaseJobIdx >= 0)
+    const releaseSection = wf.slice(releaseJobIdx)
+    assert.ok(
+      !/name:\s*Stage bundled SenseVoice/.test(releaseSection),
+      'matrix must not Stage bundled SenseVoice (use artifact)',
+    )
+    assert.ok(
+      !/name:\s*Stage bundled e5/.test(releaseSection),
+      'matrix must not Stage bundled e5 (use artifact)',
+    )
+    assert.ok(
+      !/name:\s*Stage bundled RapidOCR/.test(releaseSection),
+      'matrix must not Stage bundled RapidOCR (use artifact)',
     )
   })
 
+  it('prebuild skips shared model stage when OPPTRIX_SKIP_SHARED_MODEL_STAGE=1', () => {
+    const src = read('apps/desktop/scripts/prebuild.mjs')
+    assert.ok(src.includes('OPPTRIX_SKIP_SHARED_MODEL_STAGE'))
+    assert.ok(src.includes('stage-sensevoice.mjs'))
+    assert.ok(src.includes('stage-e5.mjs'))
+    assert.ok(src.includes('stage-rapidocr.mjs'))
+  })
+
+  it('model-download lib resolves CI foreign-first order + HF auth', () => {
+    const src = read('apps/desktop/scripts/lib/model-download.mjs')
+    assert.ok(src.includes('resolveSourceOrder'))
+    assert.ok(src.includes("'huggingface'"))
+    assert.ok(src.includes('HF_TOKEN'))
+    assert.ok(src.includes('HUGGING_FACE_HUB_TOKEN'))
+    assert.ok(src.includes('downloadWithRetries'))
+  })
 
   it('release-desktop.yml sets OPPTRIX_RUNTIME_ARCH for stage-rag-engines cross mac-x64', () => {
     const wf = read('.github/workflows/release-desktop.yml')

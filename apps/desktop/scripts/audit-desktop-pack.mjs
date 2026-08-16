@@ -205,6 +205,7 @@ console.log('audit-desktop-pack: start')
   }
 
   const stageRapidocrSrc = read('scripts/stage-rapidocr.mjs')
+  const modelDownloadSrc = read('scripts/lib/model-download.mjs')
   if (
     !stageRapidocrSrc.includes('ch_PP-OCRv4_det_mobile.onnx')
     || !stageRapidocrSrc.includes('ch_PP-OCRv4_rec_mobile.onnx')
@@ -216,12 +217,14 @@ console.log('audit-desktop-pack: start')
     fail('stage-rapidocr.mjs must stage RapidOCR PP-OCRv4 mobile (3 ONNX + keys)')
   } else ok('stage-rapidocr.mjs stages required RapidOCR files')
   if (
-    !stageRapidocrSrc.includes('www.modelscope.cn')
-    || !stageRapidocrSrc.includes('RETRYABLE_HTTP')
-    || !stageRapidocrSrc.includes('download attempt')
+    !stageRapidocrSrc.includes('modelscopeBases')
+    || !stageRapidocrSrc.includes('downloadFromSources')
+    || !modelDownloadSrc.includes('www.modelscope.cn')
+    || !modelDownloadSrc.includes('RETRYABLE_HTTP')
+    || !modelDownloadSrc.includes('download attempt')
   ) {
-    fail('stage-rapidocr.mjs must retry 502/503/429 and include www.modelscope.cn sources')
-  } else ok('stage-rapidocr.mjs retries transient ModelScope failures + www host')
+    fail('stage-rapidocr must use model-download retries + www.modelscope.cn sources')
+  } else ok('stage-rapidocr retries via model-download + www ModelScope host')
 
   const enginesExtra = extra.find((e) => e?.from === 'resources/engines' && e?.to === 'engines')
   if (!enginesExtra) {
@@ -717,6 +720,12 @@ console.log('audit-desktop-pack: start')
   if (!releaseWf.includes('build:packages')) {
     fail('release-desktop.yml must run build:packages before stage-python / audit')
   } else ok('release-desktop.yml builds packages before stage-python')
+  if (!releaseWf.includes('stage-shared-models:') || !releaseWf.includes('desktop-shared-models')) {
+    fail('release-desktop.yml must stage-shared-models → desktop-shared-models artifact')
+  } else ok('release-desktop.yml stage-shared-models artifact')
+  if (!releaseWf.includes('OPPTRIX_SKIP_SHARED_MODEL_STAGE')) {
+    fail('release-desktop.yml matrix must set OPPTRIX_SKIP_SHARED_MODEL_STAGE')
+  } else ok('release-desktop.yml skips shared model re-stage in matrix')
   for (const [label, wf] of [
     ['ci.yml', ciWf],
     ['release-desktop.yml', releaseWf],
@@ -727,8 +736,8 @@ console.log('audit-desktop-pack: start')
       fail(`${label} must run stage-rag-engines.mjs`)
     } else if (!wf.includes('stage-e5.mjs') || !wf.includes('stage-rapidocr.mjs')) {
       fail(`${label} must stage e5 + RapidOCR before audit`)
-    } else if (!wf.includes('actions/cache@v4') || !wf.includes('desktop-llms-v1-')) {
-      fail(`${label} must cache staged llms/sensevoice before stage-* downloads`)
+    } else if (!wf.includes('actions/cache@v4') || !wf.includes('desktop-shared-models-v1')) {
+      fail(`${label} must cache staged llms/sensevoice (desktop-shared-models-v1)`)
     } else if (!wf.includes('stage-python.mjs')) {
       fail(`${label} must stage-python before audit`)
     } else {

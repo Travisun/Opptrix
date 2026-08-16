@@ -35,7 +35,7 @@ jobs:
       - name: Prepare UI fonts
         run: npm run prepare:fonts
 
-      # Cache staged models so ModelScope / HF jitter does not re-download every CI run.
+      # Cache staged models (single CI job; foreign-first mirrors on GitHub-hosted runners).
       - name: Cache staged LLM / SenseVoice assets
         uses: actions/cache@v4
         with:
@@ -43,18 +43,32 @@ jobs:
             apps/desktop/resources/llms/rapidocr-ppocrv4-mobile
             apps/desktop/resources/llms/multilingual-e5-small
             apps/desktop/resources/sensevoice
-          key: desktop-llms-v1-${{ runner.os }}-x64
+          key: desktop-shared-models-v1
           restore-keys: |
-            desktop-llms-v1-${{ runner.os }}-
+            desktop-shared-models-v1
 
       # Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST (Node OCR; no Python wheels).
       - name: Stage bundled SenseVoice models
+        env:
+          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+          OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX: ${{ secrets.OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX }}
         run: node apps/desktop/scripts/stage-sensevoice.mjs
 
       - name: Stage bundled e5 embedding model
+        env:
+          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
         run: node apps/desktop/scripts/stage-e5.mjs
 
       - name: Stage bundled RapidOCR models
+        env:
+          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+          OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX: ${{ secrets.OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX }}
         run: node apps/desktop/scripts/stage-rapidocr.mjs
 
       # Writes resources/engines/<plat-arch>/MANIFEST.json for audit / prebuild compat (no pip download).

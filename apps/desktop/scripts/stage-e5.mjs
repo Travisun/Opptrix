@@ -5,16 +5,18 @@
  * Target: apps/desktop/resources/llms/multilingual-e5-small/
  * Files: Xenova layout (config / tokenizer / onnx/model_quantized.onnx)
  *
- * Priority: copy from ~/.opptrix/llms/multilingual-e5-small if present,
- * else legacy ~/.opptrix/models/…, else download ModelScope → HF mirror → Hugging Face.
+ * Priority: copy from ~/.opptrix/llms/… if present, else legacy ~/.opptrix/models/…,
+ * else download (CI: Hugging Face first → ModelScope; local: ModelScope first → HF).
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { createWriteStream } from 'node:fs'
-import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
+import {
+  downloadFromSources,
+  modelscopeBases,
+  HF_MIRROR,
+} from './lib/model-download.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
@@ -23,16 +25,13 @@ const TARGET_DIR = path.join(DESKTOP_ROOT, 'resources/llms', MODEL_ID)
 const USER_LLM_DIR = path.join(os.homedir(), '.opptrix/llms', MODEL_ID)
 const LEGACY_USER_MODEL_DIR = path.join(os.homedir(), '.opptrix/models', MODEL_ID)
 
-const MODELSCOPE_BASE = String(
-  process.env.OPPTRIX_MODELSCOPE_BASE ?? 'https://modelscope.cn',
-).replace(/\/$/, '')
-const HF_MIRROR = String(
-  process.env.OPPTRIX_HF_MIRROR ?? 'https://hf-mirror.com',
-).replace(/\/$/, '')
 const MODELSCOPE_REPO = String(
   process.env.OPPTRIX_E5_MODELSCOPE_REPO ?? 'Xenova/multilingual-e5-small',
 ).replace(/^\/+|\/+$/g, '')
 const HF_REPO = String(
+  // Runtime needs Xenova layout incl. onnx/model_quantized.onnx (~118MB).
+  // Do not switch to nilay-sam-23/multilingual-e5-small-onnx — it only ships
+  // full onnx/model.onnx (~470MB) and breaks E5_MODEL_FILES checks.
   process.env.OPPTRIX_E5_HF_REPO ?? 'Xenova/multilingual-e5-small',
 ).replace(/^\/+|\/+$/g, '')
 
@@ -46,68 +45,32 @@ const STAGE_FILES = [
 ]
 
 const OPTIONAL_FILES = new Set(['special_tokens_map.json'])
-
 const REQUIRED_FILES = STAGE_FILES.filter((f) => !OPTIONAL_FILES.has(f))
 
 function sourcesFor(filename) {
-  return [
+  /** @type {import('./lib/model-download.mjs').DownloadSource[]} */
+  const sources = []
+  for (const base of modelscopeBases()) {
+    const host = base.includes('www.') ? 'www' : 'apex'
+    sources.push({
+      kind: 'modelscope',
+      label: `modelscope-${host}`,
+      url: `${base}/models/${MODELSCOPE_REPO}/resolve/master/${filename}`,
+    })
+  }
+  sources.push(
     {
-      label: 'modelscope',
-      url: `${MODELSCOPE_BASE}/models/${MODELSCOPE_REPO}/resolve/master/${filename}`,
-    },
-    {
-      label: 'hf-mirror',
-      url: `${HF_MIRROR}/${HF_REPO}/resolve/main/${filename}?download=true`,
-    },
-    {
+      kind: 'huggingface',
       label: 'huggingface',
       url: `https://huggingface.co/${HF_REPO}/resolve/main/${filename}?download=true`,
     },
-  ]
-}
-
-async function downloadToFile(url, destPath) {
-  const resp = await fetch(url, {
-    redirect: 'follow',
-    headers: { 'User-Agent': 'Opptrix-Desktop/1.0' },
-  })
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`)
-  }
-  if (!resp.body) {
-    throw new Error('empty body')
-  }
-
-  await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
-  const tempPath = `${destPath}.download`
-  try {
-    const nodeStream = Readable.fromWeb(resp.body)
-    await pipeline(nodeStream, createWriteStream(tempPath))
-    await fs.promises.rename(tempPath, destPath)
-  } catch (err) {
-    try {
-      await fs.promises.unlink(tempPath)
-    } catch {
-      /* ignore */
-    }
-    throw err
-  }
-}
-
-async function downloadFileFromSources(filename, dest) {
-  const errors = []
-  for (const source of sourcesFor(filename)) {
-    try {
-      console.log(`stage-e5: downloading ${filename} (${source.label}) …`)
-      await downloadToFile(source.url, dest)
-      console.log(`stage-e5: saved ${filename}`)
-      return
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      errors.push(`${source.label}: ${message}`)
-    }
-  }
-  throw new Error(`无法下载 ${filename}（${errors.join('; ')}）`)
+    {
+      kind: 'huggingface',
+      label: 'hf-mirror',
+      url: `${HF_MIRROR}/${HF_REPO}/resolve/main/${filename}?download=true`,
+    },
+  )
+  return sources
 }
 
 function findUserCopy(filename) {
@@ -134,7 +97,7 @@ async function stageFile(filename) {
   }
 
   try {
-    await downloadFileFromSources(filename, dest)
+    await downloadFromSources(sourcesFor(filename), dest, { logPrefix: 'stage-e5' })
   } catch (err) {
     if (OPTIONAL_FILES.has(filename)) {
       console.log(`stage-e5: optional ${filename} skipped`)

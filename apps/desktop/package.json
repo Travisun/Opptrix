@@ -142,7 +142,9 @@
       "entitlementsInherit": "resources/entitlements.mac.inherit.plist",
       "darkModeSupport": true,
       "signIgnore": [
-        "playwright-browsers"
+        "playwright-browsers",
+        "Contents/Resources/python",
+        "runtime-stage/node_modules"
       ],
       "extendInfo": {
         "CFBundleDisplayName": "Opptrix",

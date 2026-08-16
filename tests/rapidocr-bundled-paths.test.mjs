@@ -157,13 +157,20 @@ describe('rapidocr bundled path resolution', () => {
       path.join(ROOT, 'apps/desktop/scripts/stage-rapidocr.mjs'),
       'utf8',
     )
+    const downloadLib = fs.readFileSync(
+      path.join(ROOT, 'apps/desktop/scripts/lib/model-download.mjs'),
+      'utf8',
+    )
     assert.match(src, /ch_PP-OCRv4_det_mobile\.onnx/)
     assert.match(src, /rapidocr-ppocrv4-mobile/)
     assert.match(src, /RapidAI\/RapidOCR/)
-    assert.match(src, /MODELSCOPE/)
+    assert.match(src, /modelscope/)
     assert.match(src, /resources\/llms/)
-    assert.match(src, /www\.modelscope\.cn/)
-    assert.match(src, /RETRYABLE_HTTP/)
-    assert.match(src, /download attempt/)
+    assert.match(src, /downloadFromSources/)
+    assert.match(src, /modelscopeBases/)
+    assert.doesNotMatch(src, /huggingface\.co\/\$\{HF_REPO\}/)
+    assert.match(downloadLib, /RETRYABLE_HTTP/)
+    assert.match(downloadLib, /download attempt/)
+    assert.match(downloadLib, /www\.modelscope\.cn/)
   })
 })

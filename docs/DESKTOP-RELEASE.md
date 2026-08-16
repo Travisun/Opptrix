@@ -130,10 +130,29 @@ git push origin desktop-v0.6.1
 推送 `desktop-v*` 标签后，GitHub Actions 会：
 
 1. **prepare-release**：创建 **notes-only** GitHub Release（可 Draft；正文来自 `docs/releases/{version}.md`）。**不**上传任何安装包附件
-2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux），含 SenseVoice / e5 / RapidOCR / engines / Python 等预装 stage
-3. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-linux-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
-4. **finalize-release**：下载四端 artifact → 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
-5. **sync-r2**：下载 `desktop-release-bundle`，**始终**同步到 Cloudflare R2（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）
+2. **stage-shared-models**（ubuntu，只跑一次）：按国外优先源序拉取 SenseVoice / e5 / RapidOCR，写入 cache `desktop-shared-models-v1`，并上传 artifact `desktop-shared-models`
+3. **4 个并行 matrix job** 打包（macOS x64 / arm64、Windows、Linux）：`download-artifact` 复用共享模型（`OPPTRIX_SKIP_SHARED_MODEL_STAGE=1`，prebuild 不再重复 stage）；仍各自 stage engines / Python / Playwright 等架构相关资源
+4. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-linux-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
+5. **finalize-release**：下载四端 artifact → 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
+6. **sync-r2**：下载 `desktop-release-bundle`，**始终**同步到 Cloudflare R2（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）
+
+#### 共享模型源序与 Secrets
+
+| 项 | 说明 |
+|----|------|
+| 源序 | CI 默认 `OPPTRIX_MODEL_SOURCE_ORDER=huggingface,modelscope`（国外优先）；本地开发默认可 ModelScope 优先。**RapidOCR 例外**：仅 ModelScope（+ 可选 `OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX`），不走 HF |
+| `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN`（可选） | Hugging Face 读 token，提高 e5 / SenseVoice 限额、降低 401 |
+| `OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX`（可选） | RapidOCR ONNX 的稳定直链前缀（如自有 R2）；无则 ModelScope |
+| mac 签名 EMFILE | `afterPack` 串行预签 `python/` 与 `runtime-stage/node_modules/` 下 Mach-O，`build.mac.signIgnore` 跳过这些树与 `playwright-browsers` |
+
+**已确认可用的 HF 直链（SenseVoice）**
+
+- `https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/resolve/main/sensevoice-small-q8.gguf?download=true`
+- `https://huggingface.co/FunAudioLLM/fsmn-vad-GGUF/resolve/main/fsmn-vad.gguf?download=true`
+
+**e5**：打包/运行时需要 `Xenova/multilingual-e5-small` 的 `onnx/model_quantized.onnx`（约 118MB）。`nilay-sam-23/multilingual-e5-small-onnx` 仅有完整 `onnx/model.onnx`（约 470MB），**不能直接替换**。
+
+**RapidOCR**：继续只用 ModelScope（或自备 R2 直链）。
 
 #### 草稿 Release Notes
 

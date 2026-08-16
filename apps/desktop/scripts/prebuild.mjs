@@ -15,10 +15,15 @@ function run(cmd, args, cwd = REPO_ROOT) {
 run('npm', ['run', 'build:packages'])
 run('npm', ['run', 'build', '-w', 'opptrix-client'])
 run('node', ['scripts/prepare-icons.mjs'], DESKTOP_ROOT)
-// Static + updater staging gate (same script CI runs before electron-builder).
-run('node', ['scripts/stage-sensevoice.mjs'], DESKTOP_ROOT)
-run('node', ['scripts/stage-e5.mjs'], DESKTOP_ROOT)
-run('node', ['scripts/stage-rapidocr.mjs'], DESKTOP_ROOT)
+// Shared models (SenseVoice / e5 / RapidOCR): skip when CI already restored
+// them from the stage-shared-models artifact (OPPTRIX_SKIP_SHARED_MODEL_STAGE=1).
+if (process.env.OPPTRIX_SKIP_SHARED_MODEL_STAGE !== '1') {
+  run('node', ['scripts/stage-sensevoice.mjs'], DESKTOP_ROOT)
+  run('node', ['scripts/stage-e5.mjs'], DESKTOP_ROOT)
+  run('node', ['scripts/stage-rapidocr.mjs'], DESKTOP_ROOT)
+} else {
+  console.log('prebuild: skip shared model stage (artifact restore)')
+}
 run('node', ['scripts/stage-rag-engines.mjs'], DESKTOP_ROOT)
 // Bundled managed Python (after build:packages above). CI/release also stage before audit.
 run('node', ['scripts/stage-python.mjs'], DESKTOP_ROOT)

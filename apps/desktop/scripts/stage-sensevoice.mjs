@@ -5,24 +5,23 @@
  * Target: apps/desktop/resources/sensevoice/
  * Files: sensevoice-small-q8.gguf, fsmn-vad.gguf
  *
- * Priority: copy from ~/.opptrix/sensevoice/models if present, else download from ModelScope.
+ * Priority: copy from ~/.opptrix/sensevoice/models if present, else download
+ * (CI: Hugging Face first → ModelScope; local: ModelScope first → HF).
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { createWriteStream } from 'node:fs'
-import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
+import {
+  downloadFromSources,
+  modelscopeBases,
+  HF_MIRROR,
+} from './lib/model-download.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
 const TARGET_DIR = path.join(DESKTOP_ROOT, 'resources/sensevoice')
 const USER_MODELS_DIR = path.join(os.homedir(), '.opptrix/sensevoice/models')
-
-const MODELSCOPE_BASE = String(
-  process.env.OPPTRIX_MODELSCOPE_BASE ?? 'https://modelscope.cn',
-).replace(/\/$/, '')
 
 const STAGE_FILES = [
   {
@@ -33,29 +32,32 @@ const STAGE_FILES = [
     filename: 'fsmn-vad.gguf',
     repo: 'FunAudioLLM/fsmn-vad-GGUF',
   },
-] 
+]
 
-function buildModelScopeUrl(repo, filename) {
-  return `${MODELSCOPE_BASE}/models/${repo}/resolve/master/${filename}`
-}
-
-async function downloadToFile(url, destPath) {
-  const resp = await fetch(url, {
-    redirect: 'follow',
-    headers: { 'User-Agent': 'Opptrix-Desktop/1.0' },
-  })
-  if (!resp.ok) {
-    throw new Error(`下载失败 HTTP ${resp.status}: ${url}`)
+function sourcesFor(repo, filename) {
+  /** @type {import('./lib/model-download.mjs').DownloadSource[]} */
+  const sources = []
+  for (const base of modelscopeBases()) {
+    const host = base.includes('www.') ? 'www' : 'apex'
+    sources.push({
+      kind: 'modelscope',
+      label: `modelscope-${host}`,
+      url: `${base}/models/${repo}/resolve/master/${filename}`,
+    })
   }
-  if (!resp.body) {
-    throw new Error(`下载失败：无响应体 ${url}`)
-  }
-
-  await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
-  const tempPath = `${destPath}.download`
-  const nodeStream = Readable.fromWeb(resp.body)
-  await pipeline(nodeStream, createWriteStream(tempPath))
-  await fs.promises.rename(tempPath, destPath)
+  sources.push(
+    {
+      kind: 'huggingface',
+      label: 'huggingface',
+      url: `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`,
+    },
+    {
+      kind: 'huggingface',
+      label: 'hf-mirror',
+      url: `${HF_MIRROR}/${repo}/resolve/main/${filename}?download=true`,
+    },
+  )
+  return sources
 }
 
 async function stageFile({ filename, repo }) {
@@ -73,10 +75,9 @@ async function stageFile({ filename, repo }) {
     return
   }
 
-  const url = buildModelScopeUrl(repo, filename)
-  console.log(`stage-sensevoice: downloading ${filename} …`)
-  await downloadToFile(url, dest)
-  console.log(`stage-sensevoice: saved ${filename}`)
+  await downloadFromSources(sourcesFor(repo, filename), dest, {
+    logPrefix: 'stage-sensevoice',
+  })
 }
 
 async function main() {

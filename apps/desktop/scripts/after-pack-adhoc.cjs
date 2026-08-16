@@ -9,7 +9,10 @@
  *    relative path `node_modules` is skipped). Packaged Node ESM cannot resolve
  *    bare imports via NODE_PATH — only classic `node_modules` parent walks work.
  * 2) OpptrixSchedule helper generation retired (in-process schedule only).
- * 3) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
+ * 3) On signed mac builds: serially pre-sign Mach-O under `python/` and
+ *    `runtime-stage/node_modules/` so electron-osx-sign can skip those trees
+ *    via `build.mac.signIgnore` (avoids EMFILE from concurrent deep scans).
+ * 4) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
  */
 const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
@@ -129,6 +132,101 @@ function restoreSidecarNodeModules(context) {
   }
 }
 
+function isMachOCandidate(filePath) {
+  const base = path.basename(filePath)
+  return (
+    filePath.endsWith('.node')
+    || filePath.endsWith('.dylib')
+    || filePath.endsWith('.so')
+    || base === 'ffmpeg'
+    || base === 'python'
+    || /^python3(\.\d+)?$/.test(base)
+  )
+}
+
+/**
+ * Resolve Developer ID / Apple identity for pre-sign.
+ * Prefer CSC_NAME (set by electron-builder / CI); fall back to find-identity.
+ * @returns {string | null}
+ */
+function resolveMacSigningIdentity() {
+  const fromEnv = String(process.env.CSC_NAME ?? '').trim()
+  if (fromEnv) return fromEnv
+
+  try {
+    const out = execFileSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const developerId = out.match(/"(Developer ID Application:[^"]+)"/)
+    if (developerId) return developerId[1]
+    const appleDev = out.match(/"(Apple Development:[^"]+)"/)
+    if (appleDev) return appleDev[1]
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+/**
+ * Serially pre-sign heavy Mach-O trees that build.mac.signIgnore will skip.
+ * Must run after restoreSidecarNodeModules (deps → node_modules).
+ * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
+ */
+function preSignHeavyMacTrees(context) {
+  if (context.electronPlatformName !== 'darwin') return
+  if (process.env.OPPTRIX_MAC_UNSIGNED === '1') return
+  if (process.env.CSC_IDENTITY_AUTO_DISCOVERY === 'false' && !process.env.CSC_NAME) {
+    console.log('afterPack: skip heavy-tree pre-sign (no identity discovery)')
+    return
+  }
+
+  const identity = resolveMacSigningIdentity()
+  if (!identity) {
+    console.log('afterPack: skip heavy-tree pre-sign (no signing identity)')
+    return
+  }
+
+  const appName = context.packager.appInfo.productFilename
+  const resources = path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources')
+  const roots = [
+    path.join(resources, 'python'),
+    path.join(resources, 'runtime-stage', 'node_modules'),
+  ].filter((dir) => fs.existsSync(dir))
+
+  if (roots.length === 0) {
+    console.log('afterPack: no python/node_modules trees to pre-sign')
+    return
+  }
+
+  let signed = 0
+  let skipped = 0
+  console.log(`afterPack: pre-signing heavy Mach-O trees with identity: ${identity}`)
+
+  for (const root of roots) {
+    const files = walkFiles(root).filter(isMachOCandidate)
+    console.log(`afterPack: pre-sign ${files.length} binaries under ${path.relative(resources, root) || root}`)
+    for (const file of files) {
+      try {
+        // Serial: one codesign at a time — avoids EMFILE from electron-osx-sign fan-out.
+        execFileSync(
+          'codesign',
+          ['--force', '--options', 'runtime', '--timestamp', '--sign', identity, file],
+          { stdio: ['ignore', 'ignore', 'pipe'] },
+        )
+        signed += 1
+      } catch (err) {
+        skipped += 1
+        const message = err instanceof Error ? err.message : String(err)
+        // Non-Mach-O false positives (e.g. script named python) — warn and continue.
+        console.warn(`afterPack: pre-sign skipped ${file}: ${message.split('\n')[0]}`)
+      }
+    }
+  }
+
+  console.log(`afterPack: heavy-tree pre-sign done (signed=${signed}, skipped=${skipped})`)
+}
+
 function adhocSignMac(context) {
   if (process.env.OPPTRIX_MAC_UNSIGNED !== '1') return
   if (context.electronPlatformName !== 'darwin') return
@@ -170,9 +268,12 @@ exports.default = async function afterPack(context) {
   restoreMacBundleIcns(context)
   restoreSidecarNodeModules(context)
   ensurePackagedScheduleHelper(context)
+  preSignHeavyMacTrees(context)
   adhocSignMac(context)
 }
 
 // Exported for lightweight plist-strip smoke tests (not used by electron-builder).
 exports.stripMacBundleIconName = stripMacBundleIconName
 exports.ensurePackagedScheduleHelper = ensurePackagedScheduleHelper
+exports.preSignHeavyMacTrees = preSignHeavyMacTrees
+exports.isMachOCandidate = isMachOCandidate
