@@ -1,12 +1,12 @@
 ---
 name: multi-role-research-council
-description: 多角色研讨 / 多空辩论工作流。用户说「多角色研讨」「多空辩论」「研究委员会」「研讨链」「TradingAgents」「multi-role-research-council」「/多角色研讨」时使用。四类分析师并行取证 → Bull/Bear 辩论（默认 1 轮、最多 3 轮）→ 主席综合研究立场 → 风险三人互评 → create_web 综合研究报告。研究立场为看多/看空倾向（非买卖指令）；须附固定免责声明。
+description: 投资研讨团 / 多空辩论工作流。用户说「投资研讨团」「多角色研讨」「多空辩论」「研究委员会」「研讨链」「TradingAgents」「multi-role-research-council」「/投资研讨团」「/多角色研讨」时使用。四类分析师并行取证 → Bull/Bear 辩论（默认 1 轮、最多 3 轮）→ 主席综合研究立场 → 风险三人互评 → create_web 综合研究报告。研究立场为看多/看空倾向（非买卖指令）；报告须署名 Opptrix投资研讨团流程并附固定免责声明。
 license: Apache-2.0
 metadata:
   author: opptrix
   version: "1.0"
-  title: 多角色研讨
-  summary: 多空辩论与风险互评，交付综合研究报告
+  title: 投资研讨团
+  summary: Opptrix 投资研讨团：多空辩论与风险互评，报告署名本流程
   category: decision
   slash-rank: "42"
   default-deliverable: web
@@ -21,11 +21,11 @@ references:
   - references/cn-market-playbook.md
 ---
 
-# 多角色研讨
+# 投资研讨团
 
 ## 何时使用
 
-用户要对**单只股票/标的**做 **TradingAgents 式多角色互评**：多空辩论 + 风险视角交叉，最终交付**综合研究报告**（默认可预览网页）。触发词含：多角色研讨、多空辩论、研究委员会、研讨链、TradingAgents、`/多角色研讨`。
+用户要对**单只股票/标的**走 Opptrix **投资研讨团**多角色互评流程：多空辩论 + 风险视角交叉，最终交付**综合研究报告**（默认可预览网页）。触发词含：投资研讨团、多角色研讨、多空辩论、研究委员会、研讨链、TradingAgents、`/投资研讨团`、`/多角色研讨`。**用户若提到 TradingAgents，也走本技能**（仅作触发别名，不得作为报告品牌）。
 
 **边界（勿硬跳转其他技能）**：
 
@@ -34,6 +34,12 @@ references:
 - 只要现价/快照 → 不要激活本技能
 
 可引用 `` `@skill:create-web` `` 补齐 HTML 交付规范。
+
+## 交付与署名（硬性）
+
+- 报告**元信息**、**页眉/页脚**、**固定免责声明**须写 **「Opptrix投资研讨团流程」**（或「由 Opptrix 投资研讨团流程生成」）
+- **禁止**出现「TradingAgents研究会」「TradingAgents 研究会」，或把报告品牌写成 TradingAgents
+- 目录与免责声明全文见 `references/report-outline.md`
 
 ## 分析架构（投研方法）
 
@@ -114,7 +120,7 @@ references:
 
 ### S6 — 交付网页
 
-`list_web_vendor` → `create_web`（完整 HTML；图表仅用本地 vendor）。目录与**固定免责声明**见 `report-outline.md`。已有则 `read_web` / `update_web`。规范可参考 `` `@skill:create-web` ``。
+`list_web_vendor` → `create_web`（完整 HTML；图表仅用本地 vendor）。目录与**固定免责声明**见 `report-outline.md`；元信息/页眉页脚须署名 **Opptrix投资研讨团流程**。已有则 `read_web` / `update_web`。规范可参考 `` `@skill:create-web` ``。
 
 ### S7 — 收尾
 
@@ -122,7 +128,7 @@ checklist 全部完成或标注跳过原因；取消仍在跑的子任务（`can
 
 ## 网页报告建议目录
 
-见 `references/report-outline.md`（须含固定免责声明全文）。
+见 `references/report-outline.md`（须含固定免责声明全文与 Opptrix投资研讨团流程署名）。
 
 ## 禁止
 
@@ -132,4 +138,5 @@ checklist 全部完成或标注跳过原因；取消仍在跑的子任务（`can
 - 子 Agent 再 `run_subagent`；跳过 reclaim 导致会话堆积  
 - 辩论未审查首轮就强行多轮，或超过 3 轮仍继续  
 - 使用不存在的工具名（如 `get_instrument_news`）  
-- 在用户可见文案中暴露内部实现术语
+- 在用户可见文案中暴露内部实现术语  
+- 报告品牌写成 TradingAgents / TradingAgents研究会；须用 **Opptrix投资研讨团流程**

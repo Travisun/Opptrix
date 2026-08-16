@@ -196,7 +196,7 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
   },
   collaborationReadonlyBack: {
     display: 'inline-flex',

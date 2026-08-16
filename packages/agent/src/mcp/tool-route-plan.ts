@@ -204,9 +204,10 @@ const INTENT_RULES: IntentRule[] = [
     // 高于 news_browse(86) 等宽泛规则；patterns 足够具体，避免与资讯浏览冲突
     priority: 91,
     patterns: [
-      /多角色研讨|多空辩论|研究委员会|研讨链/,
+      /投资研讨团|多角色研讨|多空辩论|研究委员会|研讨链/,
       /TradingAgents/i,
       /multi-role-research-council/i,
+      /\/投资研讨团/,
       /\/多角色研讨/,
     ],
     preferredTools: [
@@ -217,7 +218,7 @@ const INTENT_RULES: IntentRule[] = [
     ],
     avoidTools: ['evaluate_instrument', 'list_news_articles'],
     confidence: 'high',
-    hint: '多角色研讨/多空辩论 → 先 activate_agent_skill(multi-role-research-council)，再 run_subagent（result_schema 须含 summary）编排角色链；勿用评分卡或仅刷资讯代替',
+    hint: '投资研讨团/多空辩论 → 先 activate_agent_skill(multi-role-research-council)，再 run_subagent（result_schema 须含 summary）编排角色链；报告署名 Opptrix投资研讨团流程；勿用评分卡或仅刷资讯代替',
   },
   {
     intent: 'news_article',

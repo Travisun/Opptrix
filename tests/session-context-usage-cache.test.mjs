@@ -104,3 +104,19 @@ test('deleteSession drops that session cache entry', async () => {
     assert.ok(engine.getCachedSessionContextUsage(b.id))
   })
 })
+
+test('chat emits done before resolving (no LLM configured path)', async () => {
+  await withTempStore(async () => {
+    const engine = makeEngine()
+    engine.setProviders([], undefined)
+    const session = await engine.createSession({ title: 'done-order' })
+    const order = []
+    await engine.chat(session.id, 'hello', undefined, {
+      onProgress: (e) => {
+        if (e.type === 'done') order.push('done')
+      },
+    })
+    order.push('resolved')
+    assert.deepEqual(order, ['done', 'resolved'])
+  })
+})
