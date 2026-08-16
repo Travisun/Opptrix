@@ -134,14 +134,46 @@ function restoreSidecarNodeModules(context) {
 
 function isMachOCandidate(filePath) {
   const base = path.basename(filePath)
-  return (
+  if (
     filePath.endsWith('.node')
     || filePath.endsWith('.dylib')
     || filePath.endsWith('.so')
     || base === 'ffmpeg'
+    || base === 'ffmpeg-mac'
     || base === 'python'
+    || base === 'chrome-headless-shell'
+    || base === 'chrome'
+    || base === 'Chromium'
+    || base === 'chrome_crashpad_handler'
     || /^python3(\.\d+)?$/.test(base)
-  )
+  ) {
+    return true
+  }
+  return looksLikeMachO(filePath)
+}
+
+/** @param {string} filePath */
+function looksLikeMachO(filePath) {
+  try {
+    const st = fs.statSync(filePath)
+    if (!st.isFile() || st.size < 4) return false
+    const fd = fs.openSync(filePath, 'r')
+    try {
+      const buf = Buffer.alloc(4)
+      if (fs.readSync(fd, buf, 0, 4, 0) !== 4) return false
+      const be = buf.readUInt32BE(0)
+      const le = buf.readUInt32LE(0)
+      // MH_* and FAT_* magics (both endians)
+      const magics = new Set([
+        0xfeedface, 0xcefaedfe, 0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca,
+      ])
+      return magics.has(be) || magics.has(le)
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -192,10 +224,12 @@ function preSignHeavyMacTrees(context) {
   const roots = [
     path.join(resources, 'python'),
     path.join(resources, 'runtime-stage', 'node_modules'),
+    // Must pre-sign: signIgnore skips electron-osx-sign, but notarytool still scans these.
+    path.join(resources, 'runtime-stage', 'playwright-browsers'),
   ].filter((dir) => fs.existsSync(dir))
 
   if (roots.length === 0) {
-    console.log('afterPack: no python/node_modules trees to pre-sign')
+    console.log('afterPack: no heavy trees to pre-sign')
     return
   }
 

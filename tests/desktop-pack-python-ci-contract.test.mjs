@@ -157,7 +157,7 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     }
   })
 
-  it('afterPack serially pre-signs python + runtime-stage/node_modules Mach-O', () => {
+  it('afterPack serially pre-signs python + node_modules + playwright-browsers Mach-O', () => {
     const src = read('apps/desktop/scripts/after-pack-adhoc.cjs')
     assert.ok(src.includes('preSignHeavyMacTrees'), 'must define preSignHeavyMacTrees')
     assert.ok(src.includes('preSignHeavyMacTrees(context)'), 'afterPack must call pre-sign')
@@ -165,6 +165,8 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes("'runtime'"), 'pre-sign must pass runtime option')
     assert.ok(src.includes('python'), 'must target python tree')
     assert.ok(src.includes('node_modules'), 'must target node_modules tree')
+    assert.ok(src.includes('playwright-browsers'), 'must pre-sign playwright (signIgnore + notary)')
+    assert.ok(src.includes('looksLikeMachO'), 'must detect Mach-O by magic for chrome/ffmpeg-mac')
   })
 
   it('release-desktop.yml: stage-shared-models once; matrix restores + skips re-stage', () => {
