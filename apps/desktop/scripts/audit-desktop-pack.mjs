@@ -215,6 +215,13 @@ console.log('audit-desktop-pack: start')
   ) {
     fail('stage-rapidocr.mjs must stage RapidOCR PP-OCRv4 mobile (3 ONNX + keys)')
   } else ok('stage-rapidocr.mjs stages required RapidOCR files')
+  if (
+    !stageRapidocrSrc.includes('www.modelscope.cn')
+    || !stageRapidocrSrc.includes('RETRYABLE_HTTP')
+    || !stageRapidocrSrc.includes('download attempt')
+  ) {
+    fail('stage-rapidocr.mjs must retry 502/503/429 and include www.modelscope.cn sources')
+  } else ok('stage-rapidocr.mjs retries transient ModelScope failures + www host')
 
   const enginesExtra = extra.find((e) => e?.from === 'resources/engines' && e?.to === 'engines')
   if (!enginesExtra) {
@@ -720,6 +727,8 @@ console.log('audit-desktop-pack: start')
       fail(`${label} must run stage-rag-engines.mjs`)
     } else if (!wf.includes('stage-e5.mjs') || !wf.includes('stage-rapidocr.mjs')) {
       fail(`${label} must stage e5 + RapidOCR before audit`)
+    } else if (!wf.includes('actions/cache@v4') || !wf.includes('desktop-llms-v1-')) {
+      fail(`${label} must cache staged llms/sensevoice before stage-* downloads`)
     } else if (!wf.includes('stage-python.mjs')) {
       fail(`${label} must stage-python before audit`)
     } else {

@@ -116,6 +116,18 @@ jobs:
       - name: Prepare UI fonts
         run: npm run prepare:fonts
 
+      # Cache staged models so ModelScope / HF jitter does not re-download every release job.
+      - name: Cache staged LLM / SenseVoice assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/desktop/resources/llms/rapidocr-ppocrv4-mobile
+            apps/desktop/resources/llms/multilingual-e5-small
+            apps/desktop/resources/sensevoice
+          key: desktop-llms-v1-${{ runner.os }}-${{ matrix.electron_arch || 'x64' }}
+          restore-keys: |
+            desktop-llms-v1-${{ runner.os }}-
+
       # Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST (Node OCR; no Python wheels).
       - name: Stage bundled SenseVoice models
         run: node apps/desktop/scripts/stage-sensevoice.mjs

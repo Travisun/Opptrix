@@ -162,5 +162,8 @@ describe('rapidocr bundled path resolution', () => {
     assert.match(src, /RapidAI\/RapidOCR/)
     assert.match(src, /MODELSCOPE/)
     assert.match(src, /resources\/llms/)
+    assert.match(src, /www\.modelscope\.cn/)
+    assert.match(src, /RETRYABLE_HTTP/)
+    assert.match(src, /download attempt/)
   })
 })
