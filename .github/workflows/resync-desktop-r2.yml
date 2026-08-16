@@ -1,0 +1,171 @@
+name: Resync Desktop R2
+
+# Re-upload installers from a prior Release Desktop Actions artifact to Cloudflare R2
+# without rebuilding. Use after fixing sync scripts, or when CDN/R2 is missing assets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. desktop-v1.2.6)
+        required: true
+        type: string
+      run_id:
+        description: Optional Release Desktop run id (overrides tag lookup)
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: resync-desktop-r2-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sync-r2:
+    name: Sync release to Cloudflare R2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release metadata policy
+        run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
+
+      - name: Download desktop-release-bundle artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          RUN_ID="${{ inputs.run_id }}"
+          if [[ ! "$TAG" =~ ^desktop-v ]]; then
+            echo "tag must start with desktop-v (got: $TAG)"
+            exit 1
+          fi
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "Looking up successful Release Desktop run for $TAG…"
+            RUN_ID="$(gh run list \
+              --workflow=release-desktop.yml \
+              --status=success \
+              --limit=100 \
+              --json databaseId,displayTitle,headBranch \
+              | jq -r --arg tag "$TAG" '
+                [.[] | select(
+                  .headBranch == $tag
+                  or (.displayTitle | contains($tag))
+                )] | .[0].databaseId // empty
+              ')"
+          fi
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "::error::No successful Release Desktop run found for $TAG with artifact desktop-release-bundle."
+            echo "Re-run workflow Release Desktop for this tag, or pass run_id explicitly."
+            exit 1
+          fi
+
+          echo "Using run_id=$RUN_ID"
+          WORK="$RUNNER_TEMP/r2-sync"
+          mkdir -p "$WORK"
+          if ! gh run download "$RUN_ID" -n desktop-release-bundle -D "$WORK"; then
+            echo "::error::Failed to download artifact desktop-release-bundle from run $RUN_ID."
+            echo "Artifact may have expired (~14 days) or the run predates this pipeline."
+            echo "Re-run Release Desktop for $TAG, or pass a run_id that still has the bundle."
+            exit 1
+          fi
+
+          echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          ls -la "$WORK"
+          echo "--- cms signatures ---"
+          ls -la "$WORK"/*.opptrix-cms 2>/dev/null || echo "(none in bundle — Linux CMS will stay optional)"
+
+      - name: Verify release coherence (tag, yml, assets)
+        run: node apps/desktop/scripts/verify-release-coherence.mjs "$TAG" "$ASSET_DIR"
+
+      - name: Verify R2 credentials
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node apps/desktop/scripts/verify-r2-credentials.mjs
+
+      - name: Sync to Cloudflare R2 (upload then prune obsolete)
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: node apps/desktop/scripts/sync-release-to-r2.mjs "$ASSET_DIR"
+
+      # Purge before public verify — edge may cache 404 from mid-upload probes.
+      - name: Purge Cloudflare CDN cache (yml + Linux installers/CMS)
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+          ASSET_DIR: ${{ env.ASSET_DIR }}
+        run: node apps/desktop/scripts/purge-update-cdn-cache.mjs "$ASSET_DIR"
+
+      - name: Verify public update metadata + Linux AppImage/CMS
+        shell: bash
+        env:
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: |
+          if [[ -z "${OPPTRIX_UPDATE_BASE_URL:-}" ]]; then
+            echo "OPPTRIX_UPDATE_BASE_URL not set — skip public verify"
+            exit 0
+          fi
+          BASE="${OPPTRIX_UPDATE_BASE_URL%/}/"
+          check_url() {
+            local url="$1"
+            local mode="${2:-full}"
+            local attempt=1
+            local max=8
+            while (( attempt <= max )); do
+              echo "Checking $url (attempt $attempt/$max)"
+              if [[ "$mode" == "range" ]]; then
+                if curl -fsSL --max-time 30 -r 0-0 --retry 2 --retry-delay 2 "$url" -o /dev/null; then
+                  return 0
+                fi
+              else
+                if curl -fsSL --max-time 30 --retry 2 --retry-delay 2 "$url" -o /dev/null; then
+                  return 0
+                fi
+              fi
+              sleep $(( attempt * 2 ))
+              attempt=$(( attempt + 1 ))
+            done
+            echo "::error::Public CDN still unreachable: $url"
+            echo "If R2 HeadObject passed but this fails, check Cloudflare WAF / custom domain rules for this extension."
+            return 1
+          }
+          for yml in latest-mac.yml latest.yml latest-linux.yml; do
+            check_url "${BASE}${yml}" full || exit 1
+          done
+          shopt -s nullglob
+          for appimage in "$ASSET_DIR"/*-Linux.AppImage; do
+            check_url "${BASE}$(basename "$appimage")" range || exit 1
+          done
+          for cms in "$ASSET_DIR"/*.opptrix-cms; do
+            check_url "${BASE}$(basename "$cms")" full || exit 1
+          done
+          echo "Public update metadata (+ Linux AppImage/CMS if any) reachable on R2"

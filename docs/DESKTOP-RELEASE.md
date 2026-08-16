@@ -1,6 +1,6 @@
 # Opptrix 桌面端发布指南
 
-本文说明 **Electron 桌面端** 如何版本化、构建、经 Actions artifact **同步到 FTP**，以及 **自动更新（electron-updater）** 对产物的要求。
+本文说明 **Electron 桌面端** 如何版本化、构建、经 Actions artifact 同步到 Cloudflare R2，以及 **自动更新（electron-updater）** 对产物的要求。
 
 适用对象：维护者、发布负责人。开发与架构背景见 [DESKTOP.md](./DESKTOP.md)。
 
@@ -11,8 +11,7 @@
 | 项目 | 说明 |
 |------|------|
 | 更新方式 | `electron-updater` 全量更新（按平台下载完整安装包，用户确认后重启安装） |
-| 安装包分发 | **FTP**（`sync-release-to-ftp.mjs`；`FTP_HOST` 必填；CI **不**再推 R2） |
-| 客户端更新检查 URL | `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml`（`generic` provider；可为历史 CDN 域名，与「上传改 FTP」解耦） |
+| 更新源 / 安装包分发 | **Cloudflare R2**（`generic` provider；CDN：`update.opptrix.org`） |
 | GitHub Release | **仅 Release Notes**（可保持 draft）；**不挂**安装包 / yml / blockmap / CMS 附件 |
 | 中转 | GitHub Actions artifact（`desktop-*-*` → `desktop-release-bundle`，约保留 14 天） |
 | 版本真源 | `apps/desktop/package.json` 的 `version` 字段 |
@@ -20,7 +19,7 @@
 | CI 工作流 | [.github/workflows/release-desktop.yml](../.github/workflows/release-desktop.yml) |
 | 输出目录 | `apps/desktop/release/`（本地构建） |
 
-**重要**：三端（macOS / Windows / Linux）共用 **同一套语义化版本号**（如 `0.6.1`），但各自产出 **不同格式** 的安装包。客户端只会拉取与当前操作系统匹配的文件。Linux AppImage 可能超过 GitHub Release 单附件 2GB 上限，因此安装包一律走 **FTP**（经 Actions artifact），不经 GitHub 附件。
+**重要**：三端（macOS / Windows / Linux）共用 **同一套语义化版本号**（如 `0.6.1`），但各自产出 **不同格式** 的安装包。客户端只会拉取与当前操作系统匹配的文件。Linux AppImage 可能超过 GitHub Release 单附件 2GB 上限，因此安装包一律走 R2，不经 GitHub 附件。曾试 FTP 镜像因带宽不稳已停用。
 
 ---
 
@@ -135,7 +134,7 @@ git push origin desktop-v0.6.1
 3. **4 个并行 matrix job** 打包（macOS x64 / arm64、Windows、Linux）：`download-artifact` 复用共享模型（`OPPTRIX_SKIP_SHARED_MODEL_STAGE=1`，prebuild 不再重复 stage）；仍各自 stage engines / Python / Playwright 等架构相关资源
 4. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-linux-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
 5. **finalize-release**：按平台分别下载 artifact（避免误收 `desktop-shared-models`）→ 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
-6. **sync-ftp**：下载 `desktop-release-bundle`，校验 coherence 后**必须**同步到 FTP（需 `FTP_HOST` / `FTP_USERNAME` / `FTP_PASSWORD` 等 secrets；未配置则 job 失败）。不再推送 Cloudflare R2。
+6. **sync-r2**：下载 `desktop-release-bundle`，校验 coherence → Verify R2 credentials → **硬失败**同步到 Cloudflare R2 → Purge CDN → Verify public update metadata（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）
 
 
 #### 共享模型源序与 Secrets
@@ -158,31 +157,31 @@ git push origin desktop-v0.6.1
 
 #### 草稿 Release Notes
 
-GitHub Release 可保持 Draft（便于先审 Notes 再公开）。自动更新与 QA 安装包以 **FTP 更新源**（`OPPTRIX_UPDATE_BASE_URL` 指向的公开 URL）为准；亦可从对应 Actions run 的 `desktop-release-bundle` 下载。
+GitHub Release 可保持 Draft（便于先审 Notes 再公开）。自动更新与 QA 安装包以 **R2 / CDN**（`update.opptrix.org`）为准；亦可从对应 Actions run 的 `desktop-release-bundle` 下载。
 
 ```bash
-# 仅公开 Release Notes 页（可选；与 FTP 是否已有安装包无关）
+# 仅公开 Release Notes 页（可选；与 R2 是否已有安装包无关）
 gh release edit desktop-v1.3.4 --draft=false
 ```
 
-#### Resync Desktop FTP（不重新打包）
+#### Resync Desktop R2（不重新打包）
 
-修复同步脚本、或 FTP 镜像缺文件时：
+修复同步脚本、或 CDN/R2 缺文件时：
 
 ```bash
-# Actions → 手动运行 「Resync Desktop FTP」
+# Actions → 手动运行 「Resync Desktop R2」
 # 输入 tag（如 desktop-v1.3.4）；可选 run_id 覆盖自动查找
 ```
 
-工作流按 tag 查找最近一次成功的 `Release Desktop` run，下载 artifact `desktop-release-bundle` 再传 FTP。若找不到或已过期（约 14 天）：请重跑 Release Desktop，或传入仍保留该 artifact 的 `run_id`。
+工作流按 tag 查找最近一次成功的 `Release Desktop` run，下载 artifact `desktop-release-bundle` 再传 R2（硬失败；无 FTP 镜像）。若找不到或已过期（约 14 天）：请重跑 Release Desktop，或传入仍保留该 artifact 的 `run_id`。
 
 Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名（并标记 GitHub prerelease）。
 
-CI 中 `electron-builder` 只本地产出安装包与 `latest-*.yml`（不 `--publish` 到 GitHub）。三端 job 全部成功且 `sync-ftp` 绿后，FTP 更新目录上应同时存在三套安装包与三份公开 yml。
+CI 中 `electron-builder` 只本地产出安装包与 `latest-*.yml`（不 `--publish` 到 GitHub）。三端 job 全部成功且 `sync-r2` 绿后，R2/CDN 上应同时存在三套安装包与三份公开 yml。
 
-### 4.3 核对产物（FTP / Actions）
+### 4.3 核对产物（R2 / CDN / Actions）
 
-打开 FTP 更新目录或 Actions，确认至少包含：
+打开 R2/CDN 或 Actions，确认至少包含：
 
 ```text
 # macOS（矩阵分架构 → finalize 合并 latest-mac.yml）
@@ -204,30 +203,32 @@ latest-linux.yml
 
 （另可有 `.blockmap`、Linux `*.opptrix-cms` 等。）
 
-- **公开下载 / 自动更新**：`OPPTRIX_UPDATE_BASE_URL`（默认示例 `https://update.opptrix.org/desktop/`，由 FTP 镜像对外提供）
+- **公开下载 / 自动更新**：`https://update.opptrix.org/desktop/`（及同前缀安装包）
 - **中转备份**：Actions → 对应 `Release Desktop` run → artifact `desktop-release-bundle`
 - **GitHub Release 页**：仅核对 **Release Notes**（新功能 / 修复 / 安装说明）；**无**安装包附件属预期
 
 Release 正文由 CI 从 **`docs/releases/{version}.md`** 组装。细则见 [`docs/releases/README.md`](./releases/README.md) 与 `.cursor/rules/desktop-release.mdc`。
 
-### 4.4 分发 = FTP（安装包 / 更新 yml）
+### 4.4 Cloudflare R2 + CDN（`update.opptrix.org`）
 
-桌面客户端的 **检查更新 / 下载更新 / 手动获取安装包** 均走 **FTP 镜像**（`sync-release-to-ftp.mjs`）；GitHub Release **只**承载 Release Notes。CI **不再**调用 `sync-release-to-r2.mjs`。
+桌面客户端的 **检查更新 / 下载更新 / 手动获取安装包** 均走 R2 + 自定义域名 CDN；GitHub Release **只**承载 Release Notes。（曾试 FTP 因带宽不稳已停用，CI **仅** `sync-release-to-r2.mjs`。）
 
-CI 在 `finalize-release` 成功后执行 **`sync-ftp`** job（**不因 Draft 跳过**）：
+CI 在 `finalize-release` 成功后执行 **`sync-r2`** job（**不因 Draft 跳过**；同步失败则 workflow 失败）：
 
 1. 下载 Actions artifact `desktop-release-bundle`（三端安装包、合并后的三份 `latest-*.yml`、CMS/blockmap 等）；
-2. 校验 release coherence（tag / yml / 资产一致）；
-3. **上传**到 FTP（安装包 / CMS / blockmap 优先，最后覆盖三份 `latest-*.yml`），再 prune 远端过期文件；
-4. **Require `FTP_HOST`**：未配置或同步失败则 job 失败。
+2. 校验 release coherence（tag / yml / 资产一致）并 Verify R2 credentials；
+3. **先上传** 到 R2（安装包 / CMS / blockmap 优先，最后覆盖三份 `latest-*.yml`，避免更新源空窗）；
+4. **再删除** `desktop/` 前缀下不属于本版的旧对象；
+5. **Purge** Cloudflare 边缘缓存，并校验 `update.opptrix.org` 上 yml（及本版 CMS）可访问。
 
-缺文件时可用手动工作流 **Resync Desktop FTP**（`.github/workflows/resync-desktop-ftp.yml`）从既有 artifact 重传，无需重新打包。
+缺文件时可用手动工作流 **Resync Desktop R2**（`.github/workflows/resync-desktop-r2.yml`）从既有 artifact 重传，无需重新打包。
 
-**远程专家市场（`experts/`）**
+**远程专家市场（`experts/` 前缀，与 `desktop/` 隔离）**
 
 - 静态 JSON 源文件：仓库根 [`experts/`](../experts/README.md)
-- 桌面发版路径下 **不再**推送 experts 到 R2（`sync-experts-r2` job 已 skip；尚无 FTP 专家同步）
-- 独立 `sync-experts.yml` 仍为历史 R2 路径；FTP-only 分发落地前请勿依赖其自动更新专家目录
+- `push` → `main` 且 `experts/**` 变更：`.github/workflows/sync-experts.yml` 同步 R2 前缀 `experts/` 并 purge CDN
+- 桌面发版 `release-desktop.yml`：若相对上一 `desktop-v*` 标签含 `experts/**` 变更，旁路执行同一脚本
+- 公开 URL：`https://update.opptrix.org/experts/catalog.json` 与各 `{id}.json`
 
 #### 自动更新链路不变量（dev / beta / 正式版通用）
 
@@ -235,23 +236,23 @@ CI 在 `finalize-release` 成功后执行 **`sync-ftp`** job（**不因 Draft �
 |------|------|------|
 | **版本号** | `apps/desktop/package.json` `version` **必须**与 tag `desktop-v{version}` 一致 | CI 首步校验 |
 | **更新通道** | 固定 `publish.channel: "latest"` + `detectUpdateChannel: false` | 避免 `0.6.0-dev.*` 生成 `dev-*.yml`、避免 `1.0.0-beta.1` 生成 `beta-*.yml` |
-| **公开 yml** | `latest-mac.yml` / `latest.yml` / `latest-linux.yml` | 客户端与更新源只认这三份 |
+| **公开 yml** | `latest-mac.yml` / `latest.yml` / `latest-linux.yml` | 客户端与 R2 CDN 只认这三份 |
 | **macOS 分架构** | 矩阵 job 上传 `latest-mac-arm64.yml` + `latest-mac-x64.yml` artifact → finalize 合并 | 合并后 yml 内须同时含 `arm64` 与 `x64` 的 `.zip` |
 | **安装包命名** | 仅字母、数字、连字符（如 `MacOS-arm64-M-CPU`） | 禁止空格/括号；须与 yml 中 `url` **逐字一致** |
-| **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认示例：`https://update.opptrix.org/desktop/`（由 FTP 对外提供） |
+| **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认：`https://update.opptrix.org/desktop/`（R2 + CDN） |
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
 | **Sidecar 依赖** | `stage-runtime.mjs` 安装后把 `runtime-stage/node_modules` **改名为** `runtime-stage/deps/`；主进程 `NODE_PATH` 指向 `deps` | 同理：`extraResources` 复制时相对路径恰为 `node_modules` 会被跳过，安装包会缺 Fastify 等；CI 用 `verify-packaged-runtime.mjs` 校验 |
 | **Sidecar ffmpeg** | `ensureFfmpegStatic` 下载/种子 `ffmpeg-static` 二进制；断言后 `chmod +x` + host 匹配时 `-version` 冒烟；rename 后与 `verify-packaged-runtime` **硬断言**存在且可执行（posix `X_OK`；Windows `.exe`） | 语音/媒体转写依赖；缺失/无执行位不得 warn 后继续；`audit-desktop-pack` 防软失败回归 |
 | **托管 Python** | `build:packages` → `stage-python.mjs` → `resources/python/`；`extraResources` → 安装包 `python/`；`OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` 审计硬门禁 | CI / release 在 audit 前显式 stage；打包后 `verify-packaged-runtime` 校验 `bundle-manifest.json` + 解释器。**翻译 GGUF 不打进包**（用户按需下载） |
 | **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD` / `_KEY_PEM`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
-| **FTP 分发** | 始终从 `desktop-release-bundle` 上传；`FTP_HOST` **必填**；远端目录默认取更新源 URL 路径（如 `/desktop`），可用 `FTP_REMOTE_DIR` 覆盖 | Draft 不阻止同步；旧客户端靠 semver 比较版本，不靠多通道 |
+| **R2 同步** | 始终从 `desktop-release-bundle` 上传；仅保留最新一版对象；含全部安装包 + 三份 yml + Linux `*.opptrix-cms` | Draft 不阻止同步；旧客户端靠 semver 比较版本，不靠多通道 |
 | **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` / `release-desktop.yml`：`build:packages` → `stage-python` → `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` + `OPPTRIX_AUDIT_STAGE_UPDATER=1`；本地打标签前至少 `OPPTRIX_AUDIT_STAGE_UPDATER=1`（无 python tree 时 warn；设 REQUIRE 则须先 stage） |
 
 **版本升级语义（electron-updater）**
 
 - `0.6.0-dev.17` → `0.6.0-dev.18`：正常增量更新  
 - `0.6.0-dev.*` → `1.0.0`：正式版号更大，dev 用户可收到正式版（`allowDowngrade: false`）  
-- 旧 GitHub Releases 源安装的客户端：需先手动装一版带当前更新源 feed 的包，之后走自动更新  
+- 旧 GitHub Releases 源安装的客户端：需先手动装一版带 R2 feed 的包，之后走 CDN 自动更新  
 - **仅系统验签、无自定义 CA 的旧 Windows 客户端**：无法信任自签更新包 → **须手动安装一次**带 `update-signature` 的新版，之后自动更新才恢复  
 
 **本地/CI 自检**
@@ -276,40 +277,34 @@ node apps/desktop/scripts/verify-release-coherence.mjs desktop-vX.Y.Z /path/to/r
 
 ---
 
-#### 第一步：GitHub Secrets（FTP 分发，必配）
+#### 第一步：Cloudflare R2（存储 + 自定义域名）
+
+1. **R2 → Create bucket**（名称示例：`opptrix-desktop-releases`）
+2. **Settings → Custom Domains → Connect Domain**：`update.opptrix.org`（等待 Active）
+3. **Manage R2 API Tokens → Create API token**（Object Read & Write）→ 填入 GitHub：
+   - `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` / `R2_BUCKET`
+4. **Zone Cache Purge** API Token + Zone ID → `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID`
+5. **`OPPTRIX_UPDATE_BASE_URL`**：公网更新根 URL，**末尾带 `/`**（示例 `https://update.opptrix.org/desktop/`）
 
 打开：**https://github.com/Travisun/Opptrix/settings/secrets/actions → New repository secret**
 
 | Secret 名称 | 填什么 | 示例 |
 |-------------|--------|------|
-| `FTP_HOST` | FTP 主机 | `ftp.example.com` |
-| `FTP_USERNAME` | FTP 用户名 | `opptrix` |
-| `FTP_PASSWORD` | FTP 密码 | （勿提交到仓库） |
-| `FTP_REMOTE_DIR` | （可选）远端目录；默认取 `OPPTRIX_UPDATE_BASE_URL` 路径 | `/desktop` |
-| `FTP_PORT` / `FTP_SECURE` | （可选）端口 / 显式 TLS | `21` / `true` |
+| `R2_ACCOUNT_ID` | Cloudflare Account ID | `a1b2c3d4e5f6...` |
+| `R2_ACCESS_KEY_ID` | R2 API Token Access Key ID | `abc123...` |
+| `R2_SECRET_ACCESS_KEY` | R2 API Token Secret Access Key | `xyz789...`（仅创建时可见） |
+| `R2_BUCKET` | Bucket 名称 | `opptrix-desktop-releases` |
+| `CLOUDFLARE_API_TOKEN` | Zone Cache Purge 权限 | （勿提交到仓库） |
+| `CLOUDFLARE_ZONE_ID` | `update.opptrix.org` 所在 Zone | （Dashboard → Overview） |
 | `OPPTRIX_UPDATE_BASE_URL` | 公网更新根 URL，**末尾带 `/`** | `https://update.opptrix.org/desktop/` |
 
 **已有、无需新增**（CI 自带）：`GITHUB_TOKEN`（创建 Release Notes、下载 artifact）。
 
 **构建阶段也会读** `OPPTRIX_UPDATE_BASE_URL`（写入安装包内 `app-update.yml`），因此 **打 `desktop-v*` 标签前** 必须已配置该 Secret。
 
-> 以下 Cloudflare R2 / CDN purge 步骤为**历史可选**文档（旧版曾推 R2）。当前 CI **仅 FTP**，不再需要 `R2_*` / `CLOUDFLARE_*` secrets 才能完成发版。
-
-#### （历史）Cloudflare R2 与 CDN
-
-<details>
-<summary>旧 R2 bucket / API Token 配置（已停用推送）</summary>
-
-1. **R2 → Create bucket**（名称示例：`opptrix-desktop-releases`）
-2. Custom Domain：`update.opptrix.org`
-3. R2 API Token → 曾对应 `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` / `R2_BUCKET`
-4. Zone Cache Purge Token → 曾对应 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID`
-
-</details>
-
 #### 验证配置
 
-Secrets 配好后，打 `desktop-v*` 标签，在 Actions 查看 **Sync release to FTP** job：coherence → Sync to FTP → Require FTP_HOST 均绿。缺文件时可手动跑 **Resync Desktop FTP**。
+Secrets 配好后，打 `desktop-v*` 标签，在 Actions 查看 **Sync release to Cloudflare R2** job：coherence → Verify R2 credentials → Sync to R2 → Purge CDN → Verify public metadata 均绿。缺文件时可手动跑 **Resync Desktop R2**。
 
 ---
 
@@ -317,22 +312,22 @@ Secrets 配好后，打 `desktop-v*` 标签，在 Actions 查看 **Sync release 
 
 | 未配置的 Secret | CI 行为 |
 |-----------------|---------|
-| `FTP_HOST`（或用户名/密码） | **sync-ftp 失败**（Require FTP_HOST） |
-| `OPPTRIX_UPDATE_BASE_URL` | 安装包用占位 URL；FTP 远端目录需另设 `FTP_REMOTE_DIR` |
+| `R2_ACCESS_KEY_ID` 等 R2 四项 | **sync-r2 失败**（硬失败，不跳过） |
+| `CLOUDFLARE_API_TOKEN` | 跳过 CDN purge（R2 上传仍成功；公开 verify 可能因边缘缓存失败） |
+| `OPPTRIX_UPDATE_BASE_URL` | 安装包用占位 URL；公开 verify 跳过 |
 
-#### 客户端如何指向更新源
+#### 客户端如何指向 R2
 
 - CI 构建时通过 `OPPTRIX_UPDATE_BASE_URL` 注入 `electron-builder` 的 `generic` publish URL；
 - 打包产物内嵌 `app-update.yml`，`electron-updater` 从该 URL 拉取 yml 与安装包；
-- **仍走 GitHub 更新源的旧客户端**，需先手动安装一版新包后，后续才走当前更新源。
+- **仍走 GitHub 更新源的旧客户端**，需先手动安装一版新包后，后续才走 R2/CDN。
 
-本地调试 FTP 同步：
+本地调试 R2 同步：
 
 ```bash
-export FTP_HOST=… FTP_USERNAME=… FTP_PASSWORD=…
+export R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=…
 export OPPTRIX_UPDATE_BASE_URL=https://update.opptrix.org/desktop/
-# 可选：FTP_REMOTE_DIR=/desktop
-node apps/desktop/scripts/sync-release-to-ftp.mjs /path/to/release-assets
+node apps/desktop/scripts/sync-release-to-r2.mjs /path/to/release-assets
 ```
 
 ---
@@ -376,7 +371,7 @@ npm run build:desktop -- --publish always
 
 已安装的打包版客户端（非 `npm run dev`）会：
 
-1. 启动约 10 秒后后台检查 **更新源上的 `latest-*.yml`**（URL 来自 `OPPTRIX_UPDATE_BASE_URL`；安装包由 CI **上传到 FTP**，再由该公开 URL 对外提供）；
+1. 启动约 10 秒后后台检查 **R2 上的 `latest-*.yml`**；
 2. 读取嵌入在安装包内的 `app-update.yml`（构建时由 `generic` publish + `OPPTRIX_UPDATE_BASE_URL` 生成）；
 3. 对比 `latest-*.yml` 中的 `version` 与本地 `apps/desktop/package.json` 版本；
 4. 若有新版本：`autoDownload` 后台下载 **当前平台** 整包；
@@ -491,8 +486,8 @@ open /Applications/Opptrix.app
 
 ### Q：客户端提示「无法连接更新服务器」
 
-- 本机网络能否访问 `OPPTRIX_UPDATE_BASE_URL` 指向的主机（安装包由 FTP 分发；公开检查 URL 仍由该 Secret 配置）；
-- 最近一次发版的 `sync-ftp` 是否成功，FTP 远端是否已有对应平台 `latest-*.yml`；
+- 本机网络能否访问 `update.opptrix.org`（R2 + CDN）；
+- 最近一次发版的 `sync-r2` 是否成功，CDN 上是否已有对应平台 `latest-*.yml`；
 - 安装包内 `app-update.yml` 是否指向正确的更新根 URL（非示例域或旧 GitHub 源）。
 
 ### Q：有新版但 Mac 不更新
@@ -534,9 +529,9 @@ open /Applications/Opptrix.app
 [ ] docs/releases/X.Y.Z.md 已撰写（新功能 + 修复）
 [ ] git tag desktop-vX.Y.Z 已推送
 [ ] CI macOS（x64 + arm64）/ Windows / Linux job 均成功
-[ ] finalize 产出 desktop-release-bundle；sync-ftp 成功（Require FTP_HOST）
+[ ] finalize 产出 desktop-release-bundle；sync-r2 成功
 [ ] verify-packaged-updater 通过（.app / win-unpacked 内含 electron-updater）
-[ ] FTP 更新目录（或 Actions artifact）含 Mac 双架构 dmg/zip + latest-mac.yml，以及 Win / Linux 产物与 yml
+[ ] R2/CDN（或 Actions artifact）含 Mac 双架构 dmg/zip + latest-mac.yml，以及 Win / Linux 产物与 yml
 [ ] GitHub Release Notes 已填写（无安装包附件属预期）
 [ ] 在目标平台安装旧版 → 检查更新 → 下载 → 重启验证
 ```
@@ -552,8 +547,8 @@ open /Applications/Opptrix.app
 | `scripts/assemble-release-notes.mjs` | 更新日志 + 安装说明 → Release 正文 |
 | `apps/desktop/electron/updater.cjs` | 自动检查、下载、重启安装 |
 | `apps/desktop/scripts/prebuild.mjs` | 构建前编译 packages、UI、打 runtime |
-| `.github/workflows/release-desktop.yml` | 标签触发三平台构建 → artifact → FTP |
-| `.github/workflows/resync-desktop-ftp.yml` | 从 `desktop-release-bundle` 再同步 FTP（不重建） |
+| `.github/workflows/release-desktop.yml` | 标签触发三平台构建 → artifact → R2 |
+| `.github/workflows/resync-desktop-r2.yml` | 从 `desktop-release-bundle` 再同步 R2（不重建） |
 | [DESKTOP.md](./DESKTOP.md) | 桌面架构与开发命令 |
 | [SECURITY.md](../SECURITY.md) | 安全问题反馈方式 |
 

@@ -266,7 +266,7 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(stage.includes('playwrightChromiumDirMarker'))
   })
 
-  it('release-desktop.yml: Actions artifact → FTP (no gh release upload of installers)', () => {
+  it('release-desktop.yml: Actions artifact → R2 (no gh release upload of installers)', () => {
     const wf = read('.github/workflows/release-desktop.yml')
     assert.equal(
       (wf.match(/gh release upload/g) || []).length,
@@ -293,37 +293,41 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(wf.includes('desktop-release-bundle'), 'must produce desktop-release-bundle')
     assert.ok(wf.includes('actions/download-artifact@v4'), 'finalize/sync must download-artifact')
     assert.ok(
-      wf.includes('sync-release-to-ftp.mjs') && wf.includes('FTP_HOST'),
-      'must sync release assets to FTP when FTP_HOST is configured',
+      wf.includes('sync-release-to-r2.mjs'),
+      'must sync release assets to Cloudflare R2',
     )
     assert.ok(
-      !wf.includes('sync-release-to-r2.mjs'),
-      'must not sync release assets to Cloudflare R2 (FTP-only)',
-    )
-    assert.ok(
-      wf.includes('Require FTP_HOST'),
-      'FTP distribution must hard-require FTP_HOST',
+      !wf.includes('sync-release-to-ftp.mjs') && !wf.includes('FTP_HOST'),
+      'must not use FTP as the release distribution path',
     )
     assert.ok(
       !wf.includes('Require R2 or FTP') && !wf.includes('continue-on-error: true'),
-      'R2 soft-fail path must be removed',
+      'R2 sync must hard-fail (no soft-fail / dual-path fallback)',
     )
-    const syncIdx = wf.indexOf('name: Sync release to FTP')
-    assert.ok(syncIdx >= 0, 'must have Sync release to FTP job')
-    const syncSection = wf.slice(syncIdx, syncIdx + 2500)
+    assert.ok(
+      !/Skip R2 sync for draft/i.test(wf) && !/skip=true.*[Dd]raft/.test(wf),
+      'draft must not skip R2 sync',
+    )
+    const syncIdx = wf.indexOf('name: Sync release to Cloudflare R2')
+    assert.ok(syncIdx >= 0, 'must have Sync release to Cloudflare R2 job')
+    const syncSection = wf.slice(syncIdx, syncIdx + 3500)
     assert.ok(
       syncSection.includes('desktop-release-bundle'),
-      'sync-ftp must download desktop-release-bundle',
+      'sync-r2 must download desktop-release-bundle',
     )
-    assert.ok(!syncSection.includes('gh release download'), 'sync-ftp must not download from GH Release')
+    assert.ok(!syncSection.includes('gh release download'), 'sync-r2 must not download from GH Release')
     assert.ok(
-      syncSection.includes('Sync experts (skipped') || wf.includes('Skipping experts R2 sync'),
-      'experts R2 sync must be skipped under FTP-only distro',
+      syncSection.includes('Verify R2 credentials') && syncSection.includes('sync-release-to-r2.mjs'),
+      'sync-r2 must verify credentials then sync-release-to-r2',
+    )
+    assert.ok(
+      wf.includes('name: Sync experts to R2') && !wf.includes('Skipping experts R2 sync'),
+      'experts R2 sync must run after sync-r2 (not skipped)',
     )
   })
 
-  it('resync-desktop-ftp.yml: artifact bundle only (no GH Release download, FTP-only)', () => {
-    const wf = read('.github/workflows/resync-desktop-ftp.yml')
+  it('resync-desktop-r2.yml: artifact bundle only (no GH Release download, R2-only)', () => {
+    const wf = read('.github/workflows/resync-desktop-r2.yml')
     assert.equal(
       (wf.match(/gh release upload/g) || []).length,
       0,
@@ -333,8 +337,8 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(wf.includes('gh run download'), 'resync must gh run download')
     assert.ok(wf.includes('desktop-release-bundle'), 'resync must use desktop-release-bundle')
     assert.ok(wf.includes('run_id'), 'resync should accept optional run_id override')
-    assert.ok(wf.includes('sync-release-to-ftp.mjs'), 'resync must sync to FTP')
-    assert.ok(!wf.includes('sync-release-to-r2.mjs'), 'resync must not sync to R2')
-    assert.ok(wf.includes('Require FTP_HOST'), 'resync must require FTP_HOST')
+    assert.ok(wf.includes('sync-release-to-r2.mjs'), 'resync must sync to R2')
+    assert.ok(!wf.includes('sync-release-to-ftp.mjs'), 'resync must not sync to FTP')
+    assert.ok(!wf.includes('continue-on-error: true'), 'R2 resync must hard-fail')
   })
 })
