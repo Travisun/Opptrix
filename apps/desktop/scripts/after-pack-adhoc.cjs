@@ -201,8 +201,74 @@ function resolveMacSigningIdentity() {
 }
 
 /**
+ * Collect nested .app / .framework bundle paths under dir (not the outer Opptrix.app).
+ * @param {string} dir
+ * @returns {{ apps: string[], frameworks: string[] }}
+ */
+function collectNestedBundles(dir) {
+  /** @type {string[]} */
+  const apps = []
+  /** @type {string[]} */
+  const frameworks = []
+  function walk(current) {
+    if (!fs.existsSync(current)) return
+    let entries
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const full = path.join(current, entry.name)
+      if (entry.name.endsWith('.app')) {
+        apps.push(full)
+        // Still walk: Chrome.app contains helper .apps and frameworks.
+        walk(full)
+        continue
+      }
+      if (entry.name.endsWith('.framework')) {
+        frameworks.push(full)
+        walk(full)
+        continue
+      }
+      walk(full)
+    }
+  }
+  walk(dir)
+  return { apps, frameworks }
+}
+
+/** @param {string} filePath @param {string[]} bundleRoots */
+function isInsideAny(filePath, bundleRoots) {
+  const resolved = path.resolve(filePath)
+  return bundleRoots.some((root) => {
+    const r = path.resolve(root)
+    return resolved === r || resolved.startsWith(`${r}${path.sep}`)
+  })
+}
+
+/**
+ * @param {string} target
+ * @param {string} identity
+ * @param {{ deep?: boolean }} [opts]
+ */
+function codesignTarget(target, identity, opts = {}) {
+  const args = ['--force', '--options', 'runtime', '--timestamp', '--sign', identity]
+  if (opts.deep) args.push('--deep')
+  args.push(target)
+  execFileSync('codesign', args, { stdio: ['ignore', 'ignore', 'pipe'] })
+}
+
+/**
  * Serially pre-sign heavy Mach-O trees that build.mac.signIgnore will skip.
  * Must run after restoreSidecarNodeModules (deps → node_modules).
+ *
+ * Playwright ships nested Google Chrome for Testing.app — signing leaf binaries
+ * inside that .app invalidates the bundle seal (notary: "signature … is invalid").
+ * For playwright-browsers: deep-sign nested .framework/.app (inside-out), then
+ * sign only loose Mach-O outside those bundles.
+ *
  * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
  */
 function preSignHeavyMacTrees(context) {
@@ -221,41 +287,69 @@ function preSignHeavyMacTrees(context) {
 
   const appName = context.packager.appInfo.productFilename
   const resources = path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources')
-  const roots = [
-    path.join(resources, 'python'),
-    path.join(resources, 'runtime-stage', 'node_modules'),
-    // Must pre-sign: signIgnore skips electron-osx-sign, but notarytool still scans these.
-    path.join(resources, 'runtime-stage', 'playwright-browsers'),
-  ].filter((dir) => fs.existsSync(dir))
-
-  if (roots.length === 0) {
-    console.log('afterPack: no heavy trees to pre-sign')
-    return
-  }
+  const pythonRoot = path.join(resources, 'python')
+  const nmRoot = path.join(resources, 'runtime-stage', 'node_modules')
+  const pwRoot = path.join(resources, 'runtime-stage', 'playwright-browsers')
 
   let signed = 0
   let skipped = 0
   console.log(`afterPack: pre-signing heavy Mach-O trees with identity: ${identity}`)
 
-  for (const root of roots) {
+  /** @param {string} file */
+  function signFile(file) {
+    try {
+      codesignTarget(file, identity)
+      signed += 1
+    } catch (err) {
+      skipped += 1
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`afterPack: pre-sign skipped ${file}: ${message.split('\n')[0]}`)
+    }
+  }
+
+  for (const root of [pythonRoot, nmRoot].filter((d) => fs.existsSync(d))) {
     const files = walkFiles(root).filter(isMachOCandidate)
-    console.log(`afterPack: pre-sign ${files.length} binaries under ${path.relative(resources, root) || root}`)
-    for (const file of files) {
+    console.log(`afterPack: pre-sign ${files.length} binaries under ${path.relative(resources, root)}`)
+    for (const file of files) signFile(file)
+  }
+
+  if (fs.existsSync(pwRoot)) {
+    const { apps, frameworks } = collectNestedBundles(pwRoot)
+    // Deepest first so helpers/frameworks seal before parents.
+    frameworks.sort((a, b) => b.length - a.length)
+    apps.sort((a, b) => b.length - a.length)
+    console.log(
+      `afterPack: playwright bundles frameworks=${frameworks.length} apps=${apps.length}`,
+    )
+    for (const fw of frameworks) {
       try {
-        // Serial: one codesign at a time — avoids EMFILE from electron-osx-sign fan-out.
-        execFileSync(
-          'codesign',
-          ['--force', '--options', 'runtime', '--timestamp', '--sign', identity, file],
-          { stdio: ['ignore', 'ignore', 'pipe'] },
-        )
+        codesignTarget(fw, identity, { deep: true })
         signed += 1
+        console.log(`afterPack: deep-signed framework ${path.relative(pwRoot, fw)}`)
       } catch (err) {
         skipped += 1
         const message = err instanceof Error ? err.message : String(err)
-        // Non-Mach-O false positives (e.g. script named python) — warn and continue.
-        console.warn(`afterPack: pre-sign skipped ${file}: ${message.split('\n')[0]}`)
+        console.warn(`afterPack: framework sign failed ${fw}: ${message.split('\n')[0]}`)
       }
     }
+    for (const nestedApp of apps) {
+      try {
+        codesignTarget(nestedApp, identity, { deep: true })
+        signed += 1
+        console.log(`afterPack: deep-signed app ${path.relative(pwRoot, nestedApp)}`)
+      } catch (err) {
+        skipped += 1
+        const message = err instanceof Error ? err.message : String(err)
+        console.warn(`afterPack: nested app sign failed ${nestedApp}: ${message.split('\n')[0]}`)
+      }
+    }
+
+    const bundleRoots = [...frameworks, ...apps]
+    const loose = walkFiles(pwRoot)
+      .filter(isMachOCandidate)
+      .filter((f) => !isInsideAny(f, bundleRoots))
+    console.log(`afterPack: pre-sign ${loose.length} loose Playwright binaries`)
+    for (const file of loose) signFile(file)
   }
 
   console.log(`afterPack: heavy-tree pre-sign done (signed=${signed}, skipped=${skipped})`)

@@ -166,7 +166,8 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('python'), 'must target python tree')
     assert.ok(src.includes('node_modules'), 'must target node_modules tree')
     assert.ok(src.includes('playwright-browsers'), 'must pre-sign playwright (signIgnore + notary)')
-    assert.ok(src.includes('looksLikeMachO'), 'must detect Mach-O by magic for chrome/ffmpeg-mac')
+    assert.ok(src.includes('collectNestedBundles'), 'must deep-sign nested Chrome .app/.framework')
+    assert.ok(src.includes('--deep') || src.includes("deep: true"), 'nested bundles need --deep')
   })
 
   it('release-desktop.yml: stage-shared-models once; matrix restores + skips re-stage', () => {
