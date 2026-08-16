@@ -11,10 +11,22 @@ import {
   resetSpinGuardForTests,
   SPIN_GUARD_LIMITS,
   SPIN_POLL_TOOLS,
+  SPIN_SUBAGENT_POLL_TOOLS,
+  SPIN_SUBAGENT_DELEGATE_TOOLS,
+  SPIN_CONTROL_EXEMPT_TOOLS,
+  SPIN_JOB_POLL_TOOLS,
+  SUBAGENT_POLL_IN_FLIGHT_HARD_LIMIT,
   SPIN_WAKE_SUCCESS_PROGRESS_TOOLS,
   isSpinPollTool,
+  isSpinSubagentPollTool,
+  isSpinSubagentDelegateTool,
+  isSpinControlExemptTool,
+  isSpinExemptFromRepeat,
+  isSpinJobPollTool,
   isSpinWakeSuccessProgressTool,
   isInProgressJobStatus,
+  isInProgressSubagentPollResult,
+  isInProgressListJobsResult,
   resolveMaxSafetyRounds,
   resolveSoftRemindRound,
   resolveSafetyStopReply,
@@ -252,4 +264,204 @@ test('pollInFlight hard limit blocks whitelist tool', () => {
   assert.ok(blocked)
   assert.equal(blocked.spin_guard, true)
   assert.match(blocked.hint, /卡住|轮询|进度/)
+})
+
+test('SPIN_SUBAGENT_POLL_TOOLS helpers', () => {
+  assert.ok(SPIN_SUBAGENT_POLL_TOOLS.has('list_subagents'))
+  assert.ok(SPIN_SUBAGENT_POLL_TOOLS.has('get_subagent'))
+  assert.equal(isSpinSubagentPollTool('list_subagents'), true)
+  assert.equal(isSpinSubagentPollTool('get_subagent'), true)
+  assert.equal(isSpinSubagentPollTool('run_subagent'), false)
+  assert.equal(isInProgressSubagentPollResult('get_subagent', { status: 'running' }), true)
+  assert.equal(isInProgressSubagentPollResult('get_subagent', { status: 'queued' }), true)
+  assert.equal(isInProgressSubagentPollResult('get_subagent', { status: 'completed' }), false)
+  assert.equal(
+    isInProgressSubagentPollResult('list_subagents', {
+      ok: true,
+      runs: [{ status: 'completed' }, { status: 'running' }],
+    }),
+    true,
+  )
+  assert.equal(
+    isInProgressSubagentPollResult('list_subagents', {
+      ok: true,
+      runs: [{ status: 'failed' }],
+    }),
+    false,
+  )
+})
+
+test('subagent pollInFlight hard limit blocks list/get while in flight', () => {
+  const sid = 'subagent-poll'
+  const listArgs = {}
+  const getArgs = { run_id: 'r1' }
+  const listLimit = 36
+  const getLimit = SUBAGENT_POLL_IN_FLIGHT_HARD_LIMIT
+  assert.ok(typeof getLimit === 'number' && getLimit >= 20 && getLimit <= 28)
+  for (let i = 0; i < listLimit; i++) {
+    assert.equal(checkSpinGuard(sid, 'list_subagents', listArgs), null)
+    recordSpinOutcome(sid, 'list_subagents', listArgs, {
+      ok: true,
+      runs: [{ status: 'running', run_id: 'r1' }],
+    })
+  }
+  const blockedList = checkSpinGuard(sid, 'list_subagents', listArgs)
+  assert.ok(blockedList)
+  assert.equal(blockedList.spin_guard, true)
+  assert.match(blockedList.hint, /协作任务|忙等|get_subagent|restart_run_id/i)
+
+  resetSpinGuardForTests()
+  const sid2 = 'subagent-poll-get'
+  for (let i = 0; i < getLimit; i++) {
+    assert.equal(checkSpinGuard(sid2, 'get_subagent', getArgs), null)
+    recordSpinOutcome(sid2, 'get_subagent', getArgs, { status: 'running' })
+  }
+  const blockedGet = checkSpinGuard(sid2, 'get_subagent', getArgs)
+  assert.ok(blockedGet)
+  assert.equal(blockedGet.spin_guard, true)
+})
+
+test('get_subagent terminal success still subject to SUCCESS_REPEAT_LIMIT', () => {
+  const sid = 'subagent-done-repeat'
+  const args = { run_id: 'r-done' }
+  for (let i = 0; i < SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT; i++) {
+    assert.equal(checkSpinGuard(sid, 'get_subagent', args), null)
+    recordSpinOutcome(sid, 'get_subagent', args, {
+      ok: true,
+      status: 'completed',
+      run_id: 'r-done',
+    })
+  }
+  const blocked = checkSpinGuard(sid, 'get_subagent', args)
+  assert.ok(blocked)
+  assert.equal(blocked.spin_guard, true)
+})
+
+test('run_subagent never blocked by failure/success repeat (delegate exempt)', () => {
+  assert.ok(SPIN_SUBAGENT_DELEGATE_TOOLS.has('run_subagent'))
+  assert.ok(SPIN_SUBAGENT_DELEGATE_TOOLS.has('cancel_subagent'))
+  assert.ok(SPIN_SUBAGENT_DELEGATE_TOOLS.has('reclaim_subagent'))
+  assert.equal(isSpinSubagentDelegateTool('run_subagent'), true)
+  assert.equal(isSpinSubagentDelegateTool('list_subagents'), false)
+
+  const sid = 'subagent-delegate-retry'
+  const args = {
+    role: { name: 'bull', instructions: '看多' },
+    task: '论证',
+    result_schema: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] },
+  }
+  const n = SPIN_GUARD_LIMITS.FAILURE_REPEAT_LIMIT + SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT + 5
+  for (let i = 0; i < n; i++) {
+    assert.equal(checkSpinGuard(sid, 'run_subagent', args), null)
+    recordSpinOutcome(sid, 'run_subagent', args, {
+      ok: false,
+      status: 'failed',
+      error: 'result_schema 校验失败',
+    })
+  }
+  assert.equal(checkSpinGuard(sid, 'run_subagent', args), null)
+  for (let i = 0; i < n; i++) {
+    assert.equal(checkSpinGuard(sid, 'cancel_subagent', { run_id: 'r1' }), null)
+    recordSpinOutcome(sid, 'cancel_subagent', { run_id: 'r1' }, { ok: true, status: 'cancelled' })
+  }
+  assert.equal(checkSpinGuard(sid, 'cancel_subagent', { run_id: 'r1' }), null)
+})
+
+test('SPIN_CONTROL_EXEMPT_TOOLS helpers', () => {
+  assert.ok(SPIN_CONTROL_EXEMPT_TOOLS.has('cancel_job'))
+  assert.ok(SPIN_CONTROL_EXEMPT_TOOLS.has('grant_session_secret'))
+  assert.ok(SPIN_CONTROL_EXEMPT_TOOLS.has('revoke_session_secret'))
+  assert.ok(SPIN_CONTROL_EXEMPT_TOOLS.has('request_session_lan_access'))
+  assert.ok(SPIN_CONTROL_EXEMPT_TOOLS.has('request_secret'))
+  assert.equal(isSpinControlExemptTool('cancel_job'), true)
+  assert.equal(isSpinControlExemptTool('list_jobs'), false)
+  assert.equal(isSpinExemptFromRepeat('run_subagent'), true)
+  assert.equal(isSpinExemptFromRepeat('request_secret'), true)
+  assert.equal(isSpinExemptFromRepeat('list_jobs'), false)
+})
+
+test('control exempt tools never blocked by failure/success repeat', () => {
+  const sid = 'control-exempt'
+  const n = SPIN_GUARD_LIMITS.FAILURE_REPEAT_LIMIT + SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT + 5
+  for (const tool of SPIN_CONTROL_EXEMPT_TOOLS) {
+    const args = tool === 'cancel_job' ? { job_id: 'j1' } : { name: 'api_key' }
+    for (let i = 0; i < n; i++) {
+      assert.equal(checkSpinGuard(sid, tool, args), null, `${tool} should not block`)
+      recordSpinOutcome(sid, tool, args, { ok: false, error: 'denied' })
+    }
+    assert.equal(checkSpinGuard(sid, tool, args), null, `${tool} still not blocked after failures`)
+  }
+})
+
+test('SPIN_JOB_POLL_TOOLS and isInProgressListJobsResult helpers', () => {
+  assert.ok(SPIN_JOB_POLL_TOOLS.has('list_jobs'))
+  assert.equal(isSpinJobPollTool('list_jobs'), true)
+  assert.equal(isSpinJobPollTool('list_subagents'), false)
+  assert.equal(
+    isInProgressListJobsResult({
+      ok: true,
+      jobs: [{ job_id: 'j1', state: 'running' }],
+    }),
+    true,
+  )
+  assert.equal(
+    isInProgressListJobsResult({
+      ok: true,
+      jobs: [{ job_id: 'j1', state: ' Accepted ' }],
+    }),
+    true,
+  )
+  assert.equal(
+    isInProgressListJobsResult({
+      ok: true,
+      jobs: [{ job_id: 'j1', state: 'completed' }],
+    }),
+    false,
+  )
+  assert.equal(isInProgressListJobsResult({ ok: true, jobs: [] }), false)
+})
+
+test('list_jobs in-flight pollInFlight hard limit blocks while running', () => {
+  const sid = 'list-jobs-poll'
+  const args = {}
+  const limit = SUBAGENT_POLL_IN_FLIGHT_HARD_LIMIT
+  for (let i = 0; i < limit; i++) {
+    assert.equal(checkSpinGuard(sid, 'list_jobs', args), null)
+    recordSpinOutcome(sid, 'list_jobs', args, {
+      ok: true,
+      jobs: [{ job_id: 'j1', state: 'preparing' }],
+    })
+  }
+  const blocked = checkSpinGuard(sid, 'list_jobs', args)
+  assert.ok(blocked)
+  assert.equal(blocked.spin_guard, true)
+  assert.match(blocked.hint, /后台任务|list_jobs/i)
+})
+
+test('list_jobs terminal success still subject to SUCCESS_REPEAT_LIMIT', () => {
+  const sid = 'list-jobs-done-repeat'
+  const args = {}
+  for (let i = 0; i < SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT; i++) {
+    assert.equal(checkSpinGuard(sid, 'list_jobs', args), null)
+    recordSpinOutcome(sid, 'list_jobs', args, {
+      ok: true,
+      jobs: [{ job_id: 'j1', state: 'completed' }],
+    })
+  }
+  const blocked = checkSpinGuard(sid, 'list_jobs', args)
+  assert.ok(blocked)
+  assert.equal(blocked.spin_guard, true)
+})
+
+test('list_jobs in-flight does not block via SUCCESS_REPEAT before hard limit', () => {
+  const sid = 'list-jobs-inflight-no-success-block'
+  const args = {}
+  for (let i = 0; i < SPIN_GUARD_LIMITS.SUCCESS_REPEAT_LIMIT + 2; i++) {
+    assert.equal(checkSpinGuard(sid, 'list_jobs', args), null)
+    recordSpinOutcome(sid, 'list_jobs', args, {
+      ok: true,
+      jobs: [{ job_id: 'j1', state: 'running' }],
+    })
+  }
+  assert.equal(checkSpinGuard(sid, 'list_jobs', args), null)
 })

@@ -1,16 +1,24 @@
 /**
- * 会话内协作 Tabs：主对话 + 各协作任务（只读进展入口）。
- * 无可见任务时不渲染。
+ * 会话内协作 Tabs：主对话 + 各协作任务（紧凑胶囊，单行横向滑动且隐藏滚动条）。
+ * 无可见任务时不渲染。对齐 segmented embedded：透明底 + 极淡 active，超长标签 HoverMarquee。
  */
 import { makeStyles, mergeClasses, Text } from '@fluentui/react-components'
-import { opptrixCssVars } from '../theme/tokens'
+import { CheckmarkRegular, WarningRegular } from '@fluentui/react-icons'
+import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { focusVisibleRing, motion } from '../theme/mixins'
+import HoverMarqueeText from './HoverMarqueeText'
+import OpptrixSpinner from '../components/opptrix/OpptrixSpinner'
 import {
+  isActiveCollaborationStatus,
   shouldShowCollaborationTask,
+  sortCollaborationTasksForTabs,
   type SessionCollaborationTask,
 } from './sessionCollaborationTasks'
 
 export type CollaborationViewTab = 'main' | string
+
+const PILL_H = 24
+const PILL_MAX_W = '8.25rem'
 
 const useStyles = makeStyles({
   root: {
@@ -20,29 +28,44 @@ const useStyles = makeStyles({
     width: '100%',
     boxSizing: 'border-box',
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
-    backgroundColor: opptrixCssVars.canvas,
+    backgroundColor: 'transparent',
+    padding: '4px 12px 6px',
   },
-  scroller: {
+  track: {
     display: 'flex',
-    alignItems: 'stretch',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
     gap: '2px',
     width: '100%',
+    boxSizing: 'border-box',
+    padding: '1px 0',
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    border: 'none',
     overflowX: 'auto',
     overflowY: 'hidden',
-    padding: '6px 0 0',
-    boxSizing: 'border-box',
-    scrollbarWidth: 'thin',
+    WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
+    '&::-webkit-scrollbar': {
+      display: 'none',
+      width: 0,
+      height: 0,
+    },
   },
-  tab: {
+  pill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
     flex: '0 0 auto',
-    maxWidth: '160px',
+    maxWidth: PILL_MAX_W,
     minWidth: 0,
-    height: '30px',
-    padding: '0 12px',
+    height: `${PILL_H}px`,
+    padding: '0 8px',
     margin: 0,
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    background: 'none',
+    border: '1px solid transparent',
+    borderRadius: opptrixTokens.radiusMd,
+    background: 'transparent',
     color: opptrixCssVars.textSecondary,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
@@ -51,27 +74,65 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    transitionProperty: 'color, border-color',
+    transitionProperty: 'color, background-color, border-color',
     transitionDuration: motion.fast,
     ...focusVisibleRing,
     ':hover': {
       color: opptrixCssVars.textPrimary,
+      backgroundColor: 'color-mix(in srgb, var(--opptrix-text-primary) 4%, transparent)',
     },
   },
-  tabActive: {
+  pillActive: {
     color: opptrixCssVars.textPrimary,
     fontWeight: 600,
-    borderBottomColor: opptrixCssVars.textPrimary,
+    backgroundColor: 'color-mix(in srgb, var(--opptrix-text-primary) 6%, transparent)',
+    border: `1px solid ${opptrixCssVars.separatorHairline}`,
+    boxShadow: 'none',
+  },
+  pillFailed: {
+    color: opptrixCssVars.error,
+  },
+  pillLabel: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  statusIcon: {
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
   },
   readonlyHint: {
     flexShrink: 0,
-    padding: '6px 0 8px',
+    padding: '4px 0 0',
     fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.4,
     color: opptrixCssVars.textTertiary,
   },
 })
+
+function TaskStatusIcon({ status }: { status: string }) {
+  const s = useStyles()
+  const st = status.trim().toLowerCase()
+  if (st === 'running' || st === 'queued' || st === 'needs_parent_action') {
+    return <OpptrixSpinner size="inline" className={s.statusIcon} />
+  }
+  if (st === 'failed') {
+    return (
+      <span className={s.statusIcon} aria-hidden>
+        <WarningRegular fontSize={11} />
+      </span>
+    )
+  }
+  if (st === 'completed') {
+    return (
+      <span className={s.statusIcon} aria-hidden>
+        <CheckmarkRegular fontSize={11} />
+      </span>
+    )
+  }
+  return null
+}
 
 interface Props {
   tasks: SessionCollaborationTask[]
@@ -90,34 +151,55 @@ export default function SessionCollaborationTabs({
   className,
 }: Props) {
   const s = useStyles()
-  const visible = tasks.filter(shouldShowCollaborationTask)
+  const visible = sortCollaborationTasksForTabs(tasks.filter(shouldShowCollaborationTask))
   if (visible.length === 0) return null
 
   return (
     <div className={mergeClasses(s.root, className)} data-collaboration-tabs>
-      <div className={mergeClasses(s.scroller, 'opptrix-scroll')} role="tablist" aria-label="协作任务">
+      <div
+        className={mergeClasses(s.track, 'opptrix-scroll-hidden')}
+        role="tablist"
+        aria-label="协作任务"
+      >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'main'}
-          className={mergeClasses(s.tab, activeTab === 'main' && s.tabActive, 'opptrix-focusable')}
+          className={mergeClasses(
+            s.pill,
+            'opptrix-hover-marquee-host',
+            activeTab === 'main' && s.pillActive,
+            'opptrix-focusable',
+          )}
           onClick={() => onChange('main')}
         >
-          主对话
+          <HoverMarqueeText text="主对话" className={s.pillLabel} />
         </button>
         {visible.map((task) => {
           const selected = activeTab === task.runId
+          const failed = task.status.trim().toLowerCase() === 'failed'
+          const titleParts = [task.label]
+          if (task.summary?.trim() && isActiveCollaborationStatus(task.status)) {
+            titleParts.push(task.summary.trim())
+          }
           return (
             <button
               key={task.runId}
               type="button"
               role="tab"
               aria-selected={selected}
-              title={task.label}
-              className={mergeClasses(s.tab, selected && s.tabActive, 'opptrix-focusable')}
+              title={titleParts.join(' · ')}
+              className={mergeClasses(
+                s.pill,
+                'opptrix-hover-marquee-host',
+                selected && s.pillActive,
+                failed && s.pillFailed,
+                'opptrix-focusable',
+              )}
               onClick={() => onChange(task.runId)}
             >
-              {task.label}
+              <TaskStatusIcon status={task.status} />
+              <HoverMarqueeText text={task.label} className={s.pillLabel} />
             </button>
           )
         })}

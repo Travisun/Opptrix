@@ -81,4 +81,8 @@ export interface SubagentToolResult {
   summary?: string
   needs_parent_action?: SubagentRun['needsParentAction']
   child_session_id?: string
+  /** 同 label/role 已有 queued|running 时复用，未新建 run */
+  deduped?: boolean
+  /** restart_run_id 成功排队/执行 */
+  restarted?: boolean
 }

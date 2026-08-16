@@ -4,6 +4,7 @@
 
 import type { SubagentRunRegistry } from './registry.js'
 import { getSubagentRunRegistry } from './registry.js'
+import { notifyParentOnBackgroundTerminal } from './runner.js'
 
 export interface CascadeDeleteHost {
   /** 取消子 chat / abort */
@@ -43,10 +44,13 @@ export function cascadeDeleteSubagents(
 
 /**
  * Stop 父：取消所有仍在 running/queued 的子（不删 session）。
+ * 终态会 emit（若提供）并经 ResumeBus 通知 background 父会话。
  */
 export function cancelRunningSubagentsForParent(
   parentSessionId: string,
-  host: Pick<CascadeDeleteHost, 'cancelChildChat'>,
+  host: Pick<CascadeDeleteHost, 'cancelChildChat'> & {
+    emit?: (event: import('../chat-progress.js').ChatProgressEvent) => void
+  },
   registry: SubagentRunRegistry = getSubagentRunRegistry(),
 ): number {
   const running = registry.listRunningByParent(parentSessionId)
@@ -56,6 +60,19 @@ export function cancelRunningSubagentsForParent(
       finishedAt: new Date().toISOString(),
       error: '父会话已停止',
     })
+    const cancelled = registry.get(run.id)
+    if (cancelled) {
+      host.emit?.({
+        type: 'subagent_done',
+        run_id: cancelled.id,
+        label: cancelled.label,
+        status: cancelled.status,
+        child_session_id: cancelled.childSessionId,
+        mode: cancelled.mode,
+        summary: cancelled.summary ?? cancelled.error ?? '已停止',
+      })
+      notifyParentOnBackgroundTerminal(cancelled)
+    }
   }
   return running.length
 }

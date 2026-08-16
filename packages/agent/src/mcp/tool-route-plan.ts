@@ -71,7 +71,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['run_subagent', 'list_subagents', 'get_subagent'],
     avoidTools: ['ask_user'],
     confidence: 'medium',
-    hint: '可独立完成的子任务 → run_subagent（role+task+result_schema）；查进度 list/get_subagent；勿让子再委派',
+    hint: '可独立完成的子任务 → run_subagent（role+task+result_schema，schema 须含 summary）；等终态续跑勿 poll；勿让子再委派',
   },
   {
     intent: 'session_documents',
@@ -217,7 +217,7 @@ const INTENT_RULES: IntentRule[] = [
     ],
     avoidTools: ['evaluate_instrument', 'list_news_articles'],
     confidence: 'high',
-    hint: '多角色研讨/多空辩论 → 先 activate_agent_skill(multi-role-research-council)，再 run_subagent 编排角色链；勿用评分卡或仅刷资讯代替',
+    hint: '多角色研讨/多空辩论 → 先 activate_agent_skill(multi-role-research-council)，再 run_subagent（result_schema 须含 summary）编排角色链；勿用评分卡或仅刷资讯代替',
   },
   {
     intent: 'news_article',

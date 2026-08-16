@@ -29,6 +29,61 @@ export const SPIN_POLL_TOOLS = new Set([
 ])
 
 /**
+ * 协作任务 list/get：进行中轮询计入 pollInFlight（硬限更紧）；
+ * 终态成功仍走 success 重复上限，禁止无限放行同一 fingerprint。
+ */
+export const SPIN_SUBAGENT_POLL_TOOLS = new Set([
+  'list_subagents',
+  'get_subagent',
+])
+
+/**
+ * 委派类工具：不参与 success/failure 重复硬拦。
+ * 多角色研讨常需在 schema 失败 / 子任务未成功后立刻再 run_subagent；
+ * 用通用「重复失败」短路会误伤高可用重试。
+ * list/get 仍走 SPIN_SUBAGENT_POLL_TOOLS 的进行中轮询限。
+ */
+export const SPIN_SUBAGENT_DELEGATE_TOOLS = new Set([
+  'run_subagent',
+  'cancel_subagent',
+  'reclaim_subagent',
+])
+
+/**
+ * 控制面工具：不参与 success/failure 重复硬拦。
+ * 取消任务、会话密钥/LAN 授权等需允许失败后立刻重试，勿被通用空转短路误伤。
+ */
+export const SPIN_CONTROL_EXEMPT_TOOLS = new Set([
+  'cancel_job',
+  'grant_session_secret',
+  'revoke_session_secret',
+  'request_session_lan_access',
+  'request_secret',
+])
+
+/**
+ * 后台 job list：进行中轮询计入 pollInFlight（硬限与协作 list/get 同值）；
+ * 终态/空列表仍走 success 重复上限，禁止无限放行同一 fingerprint。
+ */
+export const SPIN_JOB_POLL_TOOLS = new Set(['list_jobs'])
+
+/** 协作任务 / list_jobs 进行中轮询硬限（低于通用 ensure_python poll） */
+export const SUBAGENT_POLL_IN_FLIGHT_HARD_LIMIT = 24
+
+/** list_subagents 无参查询（创建前核对）单独更高限 */
+export const SUBAGENT_LIST_EMPTY_ARGS_POLL_LIMIT = 36
+
+function resolveSubagentPollHardLimit(
+  toolName: string,
+  args: Record<string, unknown>,
+): number {
+  if (toolName.trim() === 'list_subagents' && Object.keys(args).length === 0) {
+    return SUBAGENT_LIST_EMPTY_ARGS_POLL_LIMIT
+  }
+  return SUBAGENT_POLL_IN_FLIGHT_HARD_LIMIT
+}
+
+/**
  * 成功挂起/定时续跑：不计入 success 重复、不推进 stale。
  * 失败结果仍计 failure。不进入 pollInFlight。
  */
@@ -43,8 +98,41 @@ const IN_PROGRESS_JOB_STATUSES = new Set([
   'pending',
 ])
 
+const IN_PROGRESS_SUBAGENT_STATUSES = new Set([
+  'queued',
+  'running',
+])
+
+const IN_PROGRESS_LIST_JOB_STATUSES = new Set([
+  'queued',
+  'accepted',
+  'preparing',
+  'running',
+])
+
 export function isSpinPollTool(toolName: string): boolean {
   return SPIN_POLL_TOOLS.has(toolName.trim())
+}
+
+export function isSpinSubagentPollTool(toolName: string): boolean {
+  return SPIN_SUBAGENT_POLL_TOOLS.has(toolName.trim())
+}
+
+export function isSpinSubagentDelegateTool(toolName: string): boolean {
+  return SPIN_SUBAGENT_DELEGATE_TOOLS.has(toolName.trim())
+}
+
+export function isSpinControlExemptTool(toolName: string): boolean {
+  return SPIN_CONTROL_EXEMPT_TOOLS.has(toolName.trim())
+}
+
+/** 委派 + 控制面：永不因 success/failure 重复短路 */
+export function isSpinExemptFromRepeat(toolName: string): boolean {
+  return isSpinSubagentDelegateTool(toolName) || isSpinControlExemptTool(toolName)
+}
+
+export function isSpinJobPollTool(toolName: string): boolean {
+  return SPIN_JOB_POLL_TOOLS.has(toolName.trim())
 }
 
 export function isSpinWakeSuccessProgressTool(toolName: string): boolean {
@@ -57,6 +145,41 @@ export function isInProgressJobStatus(result: unknown): boolean {
   const status = (result as Record<string, unknown>).status
   if (typeof status !== 'string') return false
   return IN_PROGRESS_JOB_STATUSES.has(status.trim().toLowerCase())
+}
+
+/** get_subagent / list_subagents 返回是否仍含进行中任务 */
+export function isInProgressSubagentPollResult(toolName: string, result: unknown): boolean {
+  const name = toolName.trim()
+  if (!isSpinSubagentPollTool(name)) return false
+  if (result == null || typeof result !== 'object' || Array.isArray(result)) return false
+  const rec = result as Record<string, unknown>
+  if (name === 'get_subagent') {
+    const status = rec.status
+    if (typeof status !== 'string') return false
+    return IN_PROGRESS_SUBAGENT_STATUSES.has(status.trim().toLowerCase())
+  }
+  // list_subagents：{ runs: [...] }
+  const runs = rec.runs
+  if (!Array.isArray(runs)) return false
+  return runs.some((item) => {
+    if (item == null || typeof item !== 'object' || Array.isArray(item)) return false
+    const status = (item as Record<string, unknown>).status
+    if (typeof status !== 'string') return false
+    return IN_PROGRESS_SUBAGENT_STATUSES.has(status.trim().toLowerCase())
+  })
+}
+
+/** list_jobs：{ jobs: [{ state }] } 中任一条仍为进行中 */
+export function isInProgressListJobsResult(result: unknown): boolean {
+  if (result == null || typeof result !== 'object' || Array.isArray(result)) return false
+  const jobs = (result as Record<string, unknown>).jobs
+  if (!Array.isArray(jobs)) return false
+  return jobs.some((item) => {
+    if (item == null || typeof item !== 'object' || Array.isArray(item)) return false
+    const state = (item as Record<string, unknown>).state
+    if (typeof state !== 'string') return false
+    return IN_PROGRESS_LIST_JOB_STATUSES.has(state.trim().toLowerCase())
+  })
 }
 
 export type SpinGuardBlock = {
@@ -160,6 +283,25 @@ export function checkSpinGuard(
 
   const limits = resolveLimits()
 
+  if (
+    (isSpinSubagentPollTool(toolName) || isSpinJobPollTool(toolName)) &&
+    stats.pollInFlight >= (
+      isSpinSubagentPollTool(toolName)
+        ? resolveSubagentPollHardLimit(toolName, args)
+        : SUBAGENT_POLL_IN_FLIGHT_HARD_LIMIT
+    )
+  ) {
+    const hint = isSpinJobPollTool(toolName)
+      ? '已多次查询仍在进行中的后台任务。请停止 list_jobs 忙等轮询；等待终态自动续跑，或仅在需要时 cancel_job。'
+      : '已多次查询仍在进行中的协作任务。请勿 sleep/忙等轮询；等待终态自动续跑。创建前可用 list_subagents 核对一次；需要完整结果时调用一次 get_subagent。失败优先 run_subagent(restart_run_id=…)。'
+    state.lastBlockedHint = hint
+    return {
+      error: isSpinJobPollTool(toolName) ? '已拦截后台任务轮询' : '已拦截协作任务轮询',
+      spin_guard: true,
+      hint,
+    }
+  }
+
   if (isSpinPollTool(toolName) && stats.pollInFlight >= limits.POLL_IN_FLIGHT_HARD_LIMIT) {
     const hint =
       '同一任务轮询次数过多，可能已卡住。请换路径、说明进度异常，或基于已有材料继续，勿无限等待。'
@@ -169,6 +311,11 @@ export function checkSpinGuard(
       spin_guard: true,
       hint,
     }
+  }
+
+  // 委派 / 控制面：永不因 success/failure 重复短路
+  if (isSpinExemptFromRepeat(toolName)) {
+    return null
   }
 
   // 成功 wake 工具不走 success 重复拦截
@@ -235,8 +382,29 @@ export function recordSpinOutcome(
     return
   }
 
+  if (isSpinSubagentPollTool(toolName) && isInProgressSubagentPollResult(toolName, result)) {
+    stats.pollInFlight += 1
+    state.pollProgressThisRound = true
+    state.byFingerprint.set(fp, stats)
+    return
+  }
+
+  if (isSpinJobPollTool(toolName) && isInProgressListJobsResult(result)) {
+    stats.pollInFlight += 1
+    state.pollProgressThisRound = true
+    state.byFingerprint.set(fp, stats)
+    return
+  }
+
   if (isSpinPollTool(toolName) && isInProgressJobStatus(result)) {
     stats.pollInFlight += 1
+    state.pollProgressThisRound = true
+    state.byFingerprint.set(fp, stats)
+    return
+  }
+
+  // 委派 / 控制面：记 fingerprint 视为有进展，但不累计 success/failure（避免误伤重试）
+  if (isSpinExemptFromRepeat(toolName)) {
     state.pollProgressThisRound = true
     state.byFingerprint.set(fp, stats)
     return

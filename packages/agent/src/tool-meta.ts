@@ -592,14 +592,16 @@ export const TOOL_META: Record<string, ToolMeta> = {
   run_subagent: {
     miningEligible: false,
     usageGuide:
-      '将可独立完成的子任务委派给子 Agent：传入可定制 role（name/instructions）、task、result_schema；可选 context/label；mode=foreground 阻塞等待结构化结果，background 立即返回 run_id。',
+      '将可独立取证/多角色并行的子任务委派出去。必填 role{name,instructions}、task、result_schema（可校验 object，建议含 summary:string + required）。创建前可 list_subagents 一次；同 label/role 进行中自动 dedupe。失败优先 restart_run_id 复用同卡。mode=background 独立并行；foreground 强依赖上一步。终态自动续跑，禁止 list/get 忙等 poll。',
     compliance:
-      '仅父会话可调用；子不可嵌套委派。role/task/result_schema(object) 必填。子与父同权但无 ask_user/request_secret/LAN/grant 及委派工具；缺权经 needs_parent_action 交父。终态须通过 result_schema。',
+      '仅父会话。role.name/instructions、task、result_schema 必填；result_schema.type 须为 "object"，须有 properties+required，建议强制 summary。restart_run_id 仅用于 failed/cancelled/needs_parent_action，复用 run_id+child_session_id。role.model 仅当为已启用的 providerId:model 时才传。子不可再委派、无 ask_user/request_secret/LAN/grant；缺权经 needs_parent_action。成功后 reclaim_subagent。',
   },
   list_subagents: {
     miningEligible: false,
-    usageGuide: '列出当前父会话下的子任务运行记录（状态/摘要/run_id）。',
-    compliance: '只读；无参数；仅父会话上下文。',
+    usageGuide:
+      '创建协作任务前可调用一次核对是否已有同 label/role 进行中；或需要一览本父会话协作任务时调用。禁止 sleep/忙等轮询；后台终态会自动续跑汇报。',
+    compliance:
+      '只读；无参数；仅父会话。禁止为等进度反复忙等调用。需要读完整结果时对目标 run 调用一次 get_subagent。失败优先 run_subagent(restart_run_id=…)；亦可 reclaim 后再开。',
   },
   cancel_subagent: {
     miningEligible: false,
@@ -608,12 +610,14 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   get_subagent: {
     miningEligible: false,
-    usageGuide: '查询单个子任务状态与结构化结果。',
-    compliance: 'run_id 必填；只读。',
+    usageGuide:
+      '需要读某协作任务完整结果或当前状态时调用一次。后台终态会自动续跑汇报；禁止 sleep/忙等轮询。',
+    compliance:
+      'run_id 必填；只读。禁止为等进度反复忙等调用。失败/未成功后优先 run_subagent(restart_run_id=…)；亦可 reclaim 后再开。',
   },
   reclaim_subagent: {
     miningEligible: false,
-    usageGuide: '回收已结束的子任务记录（运行中须先 cancel）。',
+    usageGuide: '回收已结束的子任务记录（运行中须先 cancel）；失败后重开前可先 reclaim。',
     compliance: 'run_id 必填；running/queued 拒绝。',
   },
   list_enabled_providers: {

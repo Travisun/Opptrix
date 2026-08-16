@@ -158,6 +158,37 @@ export function applySubagentProgressToTasks(
   })
 }
 
+const ACTIVE_TAB_ORDER: Record<string, number> = {
+  running: 0,
+  queued: 1,
+  needs_parent_action: 2,
+}
+
+function tabSortKey(task: SessionCollaborationTask): [number, number, string] {
+  const status = task.status.trim().toLowerCase()
+  if (status === 'running' || status === 'queued') {
+    return [0, ACTIVE_TAB_ORDER[status] ?? 0, task.updatedAt ?? '']
+  }
+  if (status === 'needs_parent_action') {
+    return [1, 0, task.updatedAt ?? '']
+  }
+  return [2, 0, task.updatedAt ?? '']
+}
+
+/** Tabs 排序：主对话后 running/queued → needs_parent_action → 终态（updatedAt 降序） */
+export function sortCollaborationTasksForTabs(
+  tasks: SessionCollaborationTask[],
+): SessionCollaborationTask[] {
+  return [...tasks].sort((a, b) => {
+    const [ga, sa, ta] = tabSortKey(a)
+    const [gb, sb, tb] = tabSortKey(b)
+    if (ga !== gb) return ga - gb
+    if (sa !== sb) return sa - sb
+    // 同组内 updatedAt 降序（较新靠前）
+    return tb.localeCompare(ta)
+  })
+}
+
 export function mergeCollaborationTasksFromApi(
   prev: SessionCollaborationTask[],
   dtos: SessionCollaborationTaskDto[],

@@ -13,6 +13,7 @@ import {
   buildLocalDataCatalogIndexPrompt,
   buildUserInteractionPlaybook,
   buildArtifactsPlaybook,
+  buildCollaborationSubagentPlaybook,
 } from '../packages/shared/dist/agent-prompt-guide.js'
 import {
   buildTurnTailPrompt,
@@ -151,6 +152,36 @@ test('user interaction playbook forbids ask_user for report or chart authorizati
   assert.match(text, /禁止用 ask_user 询问是否生成可视化报告|是否画图/)
   assert.ok(!text.includes('是否出报告'))
   assert.ok(!/优先 ask_user 询问是否生成可视化/.test(text))
+})
+
+test('collaboration subagent playbook covers schema and lifecycle', () => {
+  const text = buildCollaborationSubagentPlaybook()
+  assert.match(text, /run_subagent/)
+  assert.match(text, /result_schema/)
+  assert.match(text, /summary/)
+  assert.match(text, /background/)
+  assert.match(text, /reclaim_subagent/)
+  assert.match(text, /list_subagents/)
+  assert.match(text, /restart_run_id/)
+  assert.match(text, /忙等|poll/)
+})
+
+test('system rules inject collaboration playbook when run_subagent available', () => {
+  const withTool = buildAgentSystemRules({
+    activePacks: ['core'],
+    activeToolNames: ['run_subagent', 'get_instrument_snapshot'],
+  })
+  assert.match(withTool, /协作任务 — run_subagent/)
+  assert.match(withTool, /建议强制 summary/)
+
+  const coreOnly = buildAgentSystemRules({ activePacks: ['core'] })
+  assert.match(coreOnly, /协作任务 — run_subagent/)
+
+  const withoutTool = buildAgentSystemRules({
+    activePacks: ['core'],
+    activeToolNames: ['get_instrument_snapshot'],
+  })
+  assert.ok(!withoutTool.includes('协作任务 — run_subagent'))
 })
 
 test('artifacts playbook report-priority without prior ask confirmation', () => {

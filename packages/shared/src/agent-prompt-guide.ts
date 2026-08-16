@@ -333,6 +333,28 @@ export function buildArtifactsPlaybook(): string {
   ].join('\n')
 }
 
+/**
+ * 协作任务委派 — run_subagent 高可用创建指引（仅当本轮可用 run_subagent / core 时注入）
+ */
+export function buildCollaborationSubagentPlaybook(): string {
+  return [
+    '【协作任务 — run_subagent 高可用创建】',
+    '1) 何时委派：可独立取证/多角色并行（如分线调研、多空辩论）时用 run_subagent；需用户确认/授权的事勿委派给子，由父 ask_user',
+    '2) 创建前：可 list_subagents 一次核对同 label/role 是否已有 queued|running；有则复用 run_id，勿重复建卡',
+    '3) 必填字段：role.name、role.instructions（写清角色纪律与禁止项）、task、result_schema',
+    '4) result_schema 硬性：type 必须为 "object"；须含 properties + required；**建议强制 summary:string**（短中文结论，父汇报用）',
+    '   · 好例：{"type":"object","properties":{"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"string"}}},"required":["summary"]}',
+    '   · 坏例：{} / 无 required / 无 summary / 嵌套过深（>2 层）/ type 非 object / properties 空',
+    '5) role.instructions：写清「只做取证与结构化输出；禁止编造数字；禁止荐股买卖建议；禁止再委派；禁止 ask_user」',
+    '6) mode：可独立并行 → background（立即返回 run_id，依赖终态自动续跑）；强依赖上一步结果 → foreground（阻塞拿结构化结果）',
+    '7) context：只传必要摘要（标的、时间窗、已确认事实），勿整篇堆叠对话',
+    '8) label：短中文展示名（用户可见，如「基本面取证」），勿用英文内部代号；同 label 进行中会自动 dedupe',
+    '9) 进度：等终态自动续跑；**禁止** list/get + sleep 忙等轮询；需读完整结果时对目标 run 调用一次 get_subagent',
+    '10) 失败 → 优先 run_subagent(restart_run_id=…) 复用同卡；勿堆新卡。亦可 reclaim_subagent 后再开。成功后 reclaim_subagent 回收记录',
+    '11) 子不可再委派、无 ask_user / request_secret；缺权经 needs_parent_action 交父处理',
+  ].join('\n')
+}
+
 /** 聊天 Agent — 用户交互确认（ask_user 工具） */
 export function buildUserInteractionPlaybook(): string {
   return [
@@ -579,6 +601,12 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   // core 能力路径始终相关
   if (packLoaded(packs, 'core')) {
     sections.push(buildStandardInstrumentApiPlaybook())
+  }
+  // 协作委派：本轮暴露 run_subagent，或未列 tool 名但 core 已加载时注入
+  const hasRunSubagentTool = opts?.activeToolNames?.includes('run_subagent') === true
+  const assumeCoreHasSubagent = opts?.activeToolNames == null && packLoaded(packs, 'core')
+  if (hasRunSubagentTool || assumeCoreHasSubagent) {
+    sections.push(buildCollaborationSubagentPlaybook())
   }
   if (packLoaded(packs, 'fundamentals')) {
     sections.push(buildFundamentalsPlaybook())

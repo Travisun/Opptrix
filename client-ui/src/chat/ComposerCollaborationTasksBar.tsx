@@ -3,9 +3,10 @@
  * 展示 running/done/failed；可取消进行中；终态可「知道了」dismiss。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { makeStyles, Text, Spinner } from '@fluentui/react-components'
+import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import OpptrixSpinner from '../components/opptrix/OpptrixSpinner'
 import ComposerTooltipMenu, {
   ComposerTooltipMenuItem,
   COMPOSER_MENU_WIDTH,
@@ -52,14 +53,6 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'inline-flex',
     alignItems: 'center',
-    fontSize: 'var(--opptrix-font-sm)',
-    width: '1em',
-    height: '1em',
-    '& .fui-Spinner__spinner': {
-      width: '1em',
-      height: '1em',
-      color: opptrixCssVars.textTertiary,
-    },
   },
   label: {
     flex: 1,
@@ -106,6 +99,21 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  taskMetaFailed: {
+    color: opptrixCssVars.error,
+  },
+  taskRowInner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+    width: '100%',
+  },
+  taskSpinner: {
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
   detail: {
     display: 'flex',
     flexDirection: 'column',
@@ -149,18 +157,24 @@ const useStyles = makeStyles({
 
 function taskMetaLine(task: SessionCollaborationTask): string {
   const parts = [collaborationStatusHint(task.status)]
-  if (task.summary?.trim() && isTerminalCollaborationStatus(task.status)) {
-    parts.push(task.summary.trim())
+  const summary = task.summary?.trim()
+  if (summary) {
+    parts.push(summary)
   }
   return parts.join(' · ')
 }
 
 function barLabelFor(tasks: SessionCollaborationTask[]): string {
   const active = tasks.filter((t) => isActiveCollaborationStatus(t.status))
-  if (active.length > 0) {
-    return active.length === 1
-      ? `1 个协作任务进行中`
-      : `${active.length} 个协作任务进行中`
+  if (active.length === 1) {
+    const t = active[0]
+    const progress = t.summary?.trim()
+    return progress
+      ? `${t.label} · ${progress}`
+      : `${t.label} · 进行中`
+  }
+  if (active.length > 1) {
+    return `${active.length} 个协作任务进行中`
   }
   const failed = tasks.filter((t) => t.status.trim().toLowerCase() === 'failed')
   if (failed.length > 0) {
@@ -258,9 +272,9 @@ export default function ComposerCollaborationTasksBar({
         onClick={() => setOpen((v) => !v)}
       >
         {hasActive ? (
-          <Spinner size="extra-tiny" className={s.spinner} />
+          <OpptrixSpinner size="status" className={s.spinner} />
         ) : (
-          <span className={s.spinner} aria-hidden />
+          <OpptrixSpinner size="status" className={s.spinner} placeholder />
         )}
         <Text className={s.label}>{barLabel}</Text>
         <span className={s.chevron} aria-hidden>
@@ -282,6 +296,8 @@ export default function ComposerCollaborationTasksBar({
         <div className={s.panelBody}>
           {visible.map((task) => {
             const active = selected?.runId === task.runId
+            const inFlight = isActiveCollaborationStatus(task.status)
+            const failed = task.status.trim().toLowerCase() === 'failed'
             return (
               <ComposerTooltipMenuItem
                 key={task.runId}
@@ -294,8 +310,15 @@ export default function ComposerCollaborationTasksBar({
                 }}
               >
                 <span className={s.taskRow}>
-                  <span className={s.taskTitle}>{task.label}</span>
-                  <span className={s.taskMeta}>{taskMetaLine(task)}</span>
+                  <span className={s.taskRowInner}>
+                    {inFlight ? (
+                      <OpptrixSpinner size="inline" className={s.taskSpinner} />
+                    ) : null}
+                    <span className={s.taskTitle}>{task.label}</span>
+                  </span>
+                  <span className={mergeClasses(s.taskMeta, failed && s.taskMetaFailed)}>
+                    {taskMetaLine(task)}
+                  </span>
                 </span>
               </ComposerTooltipMenuItem>
             )

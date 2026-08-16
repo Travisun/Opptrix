@@ -879,14 +879,30 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   const speechListening = speechBusy
   const speechListeningPhase = speechPhase !== 'idle' ? speechPhase : null
 
-  /** 右侧：loading 时 stop + 可发补充；非 loading 时 mic / send */
-  const showStop = loading
+  /** 右侧：loading 或有进行中协作任务时显示停止；非 stop 时 mic / send */
   const hasActiveCollaboration = collaborationTasks.some((t) => isActiveCollaborationStatus(t.status))
+  const showStop = loading || hasActiveCollaboration
   const stopAriaLabel = hasActiveCollaboration
-    ? '停止生成。停止后进行中的协作任务也会结束'
+    ? '停止生成与协作任务'
     : '停止生成'
-  const showMic = !loading && speechAvailable
+  const showMic = !showStop && speechAvailable
   const showSend = canSend
+
+  const handleStopClick = useCallback(async () => {
+    if (!onStop) return
+    if (hasActiveCollaboration) {
+      const ok = await confirm({
+        title: '结束协作任务？',
+        message: '将结束进行中的协作任务，结束后无法恢复。主对话若正在生成也会一并停止。',
+        confirmLabel: '结束任务',
+        cancelLabel: '继续等待',
+        confirmTone: 'danger',
+      })
+      if (!ok) return
+    }
+    onStop()
+  }, [confirm, hasActiveCollaboration, onStop])
+
   /** 空态仅麦 → primary 实心底；与发送并排 → ghost 透明图标 */
   const micSolo = showMic && !showSend && !speechListening
   const micBesideSend = showMic && showSend && !speechListening
@@ -1199,7 +1215,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                     variant="primary"
                     icon={<PauseFilled fontSize={14} />}
                     disabled={!onStop}
-                    onClick={() => onStop?.()}
+                    onClick={() => { void handleStopClick() }}
                     title={stopAriaLabel}
                     aria-label={stopAriaLabel}
                   />
