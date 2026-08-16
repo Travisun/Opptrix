@@ -355,7 +355,9 @@ test('agent system rules include analysis and news playbooks', async () => {
   assert.ok(rules.includes('【资讯调阅'))
   assert.ok(rules.includes('【标准 Instrument API'))
   assert.ok(rules.includes('【数据源扩展'))
-  assert.ok(rules.includes('仅使用当前会话已加载的 MCP 工具'))
+  // 产品语义：会话首次 chat 全量冻结 tools，仅调用本轮列表中的工具名（旧文案「仅使用当前会话已加载的 MCP 工具」已退役）
+  assert.ok(rules.includes('本会话 tools 列表已在首次 chat 全量加载并冻结'))
+  assert.ok(rules.includes('仅调用本轮 tools 列表中存在的工具名'))
   assert.doesNotMatch(rules, /screen_stocks/)
   // 允许 get_local_data_catalog / list_local_data_apis；禁止已退役本地筛股/行业工具名
   assert.doesNotMatch(rules, /get_local_(?:hk_|universe_|industry_|data_status)/)

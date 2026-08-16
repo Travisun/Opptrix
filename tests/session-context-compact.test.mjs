@@ -121,7 +121,8 @@ test('assembleModelView injects session memory and keeps system first', () => {
   })
   assert.equal(view[0].role, 'system')
   assert.equal(view[0].content, 'LAYER0')
-  assert.equal(view[1].role, 'system')
+  // 工作记忆刻意用 user 尾块注入，避免第二条 role:system 破坏前缀缓存
+  assert.equal(view[1].role, 'user')
   assert.match(String(view[1].content), /600519/)
   assert.match(String(view[1].content), /工作记忆/)
 })

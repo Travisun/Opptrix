@@ -99,12 +99,25 @@ function probeFfmpegVersion(binPath: string): boolean {
   ) {
     return versionProbeCache.ok
   }
+  // exists ≠ runnable：空 stub / 非文件不得标 ready
+  try {
+    const st = fs.statSync(binPath)
+    if (!st.isFile() || st.size === 0) {
+      versionProbeCache = { path: binPath, ok: false, at: now }
+      return false
+    }
+  } catch {
+    versionProbeCache = { path: binPath, ok: false, at: now }
+    return false
+  }
   const ver = spawnSync(binPath, ['-version'], {
     encoding: 'utf8',
     timeout: 8_000,
     windowsHide: true,
   })
-  const ok = ver.error == null && ver.status === 0
+  const out = `${ver.stdout ?? ''}${ver.stderr ?? ''}`
+  // 必须真正吐出版本行；禁止仅凭 exit 0（部分环境对空/坏二进制行为不一）
+  const ok = ver.error == null && ver.status === 0 && /ffmpeg\s+version/i.test(out)
   versionProbeCache = { path: binPath, ok, at: now }
   return ok
 }
