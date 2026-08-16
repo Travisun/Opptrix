@@ -154,7 +154,7 @@ git push gitee desktop-v0.6.1
 | # | 检查项 | 验证方式 |
 |---|--------|----------|
 | E1 | GitHub Actions `release-desktop` workflow 各 job 成功 | `gh run list` / Actions UI |
-| E2 | Release 附件含 Mac x64+arm64（dmg/zip）、Windows exe、Linux AppImage/deb 及对应 **`latest-*.yml`** | `gh release view desktop-v{version}` |
+| E2 | R2 / Actions `desktop-release-bundle` 含 Mac x64+arm64（dmg/zip）、Windows exe、Linux AppImage/deb 及对应 **`latest-*.yml`**（GitHub Release **无**安装包附件） | CI artifact / R2；`gh release view` 仅 Notes |
 | E3 | `verify-packaged-updater` **与** `verify-packaged-runtime` 通过；release 开头 `audit-desktop-pack` 通过 | CI 日志 |
 | E4 | **GitHub Release 正文**含「新功能」「修复」及安装说明 | `gh release view desktop-v{version}` 或网页核对 |
 | E5 | R2 同步 job 成功（若启用） | CI `sync-r2` |

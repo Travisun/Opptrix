@@ -678,10 +678,15 @@ console.log('audit-desktop-pack: start')
     'OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON',
     'OPPTRIX_CODE_SIGNING_P12',
     'verify-release-metadata-policy.mjs',
+    'actions/upload-artifact@v4',
+    'desktop-release-bundle',
   ]) {
     if (!releaseWf.includes(needle)) fail(`release-desktop.yml missing ${needle}`)
     else ok(`release workflow mentions ${needle}`)
   }
+  if (/gh release upload/.test(releaseWf)) {
+    fail('release-desktop.yml must not gh release upload installers (use Actions artifact → R2)')
+  } else ok('release-desktop.yml does not gh release upload')
 
   const ciWf = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf8')
   if (!ciWf.includes('audit-desktop-pack.mjs')) {

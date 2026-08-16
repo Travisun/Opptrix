@@ -135,4 +135,49 @@ describe('desktop pack python / ffmpeg CI contract', () => {
       'stage-rag-engines step must set OPPTRIX_RUNTIME_ARCH (darwin-x64 MANIFEST on arm64 runners)',
     )
   })
+
+  it('release-desktop.yml: Actions artifact → R2 (no gh release upload of installers)', () => {
+    const wf = read('.github/workflows/release-desktop.yml')
+    assert.equal(
+      (wf.match(/gh release upload/g) || []).length,
+      0,
+      'must not gh release upload installers/yml to GitHub Release',
+    )
+    assert.ok(
+      /actions:\s*write/.test(wf),
+      'must set permissions.actions: write (else upload/download-artifact get none)',
+    )
+    assert.ok(wf.includes('actions/upload-artifact@v4'), 'must upload-artifact platform staging')
+    assert.ok(wf.includes('desktop-win-x64'), 'must name win artifact')
+    assert.ok(wf.includes('desktop-linux-x64'), 'must name linux artifact')
+    assert.ok(wf.includes('desktop-mac-arm64'), 'must name mac-arm64 artifact')
+    assert.ok(wf.includes('desktop-mac-x64'), 'must name mac-x64 artifact')
+    assert.ok(wf.includes('desktop-release-bundle'), 'must produce desktop-release-bundle')
+    assert.ok(wf.includes('actions/download-artifact@v4'), 'finalize/sync must download-artifact')
+    assert.ok(
+      !/Skip R2 sync for draft/i.test(wf) && !/skip=true.*[Dd]raft/.test(wf),
+      'draft must not skip R2 sync',
+    )
+    const syncIdx = wf.indexOf('name: Sync release to Cloudflare R2')
+    assert.ok(syncIdx >= 0)
+    const syncSection = wf.slice(syncIdx, syncIdx + 2500)
+    assert.ok(
+      syncSection.includes('desktop-release-bundle'),
+      'sync-r2 must download desktop-release-bundle',
+    )
+    assert.ok(!syncSection.includes('gh release download'), 'sync-r2 must not download from GH Release')
+  })
+
+  it('resync-desktop-r2.yml: artifact bundle only (no GH Release download)', () => {
+    const wf = read('.github/workflows/resync-desktop-r2.yml')
+    assert.equal(
+      (wf.match(/gh release upload/g) || []).length,
+      0,
+      'resync must not gh release upload',
+    )
+    assert.ok(!wf.includes('gh release download'), 'resync must not gh release download')
+    assert.ok(wf.includes('gh run download'), 'resync must gh run download')
+    assert.ok(wf.includes('desktop-release-bundle'), 'resync must use desktop-release-bundle')
+    assert.ok(wf.includes('run_id'), 'resync should accept optional run_id override')
+  })
 })

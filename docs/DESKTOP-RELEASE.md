@@ -1,6 +1,6 @@
 # Opptrix 桌面端发布指南
 
-本文说明 **Electron 桌面端** 如何版本化、构建、上传到 GitHub Releases，以及 **自动更新（electron-updater）** 对产物的要求。
+本文说明 **Electron 桌面端** 如何版本化、构建、经 Actions artifact 同步到 Cloudflare R2，以及 **自动更新（electron-updater）** 对产物的要求。
 
 适用对象：维护者、发布负责人。开发与架构背景见 [DESKTOP.md](./DESKTOP.md)。
 
@@ -11,14 +11,15 @@
 | 项目 | 说明 |
 |------|------|
 | 更新方式 | `electron-updater` 全量更新（按平台下载完整安装包，用户确认后重启安装） |
-| 更新源 | **Cloudflare R2**（`generic` provider；CI 构建时写入 `app-update.yml`） |
-| 手动下载 | GitHub Releases（安装包与 Release Notes 仍发布在 GitHub） |
+| 更新源 / 安装包分发 | **Cloudflare R2**（`generic` provider；CDN：`update.opptrix.org`） |
+| GitHub Release | **仅 Release Notes**（可保持 draft）；**不挂**安装包 / yml / blockmap / CMS 附件 |
+| 中转 | GitHub Actions artifact（`desktop-*-*` → `desktop-release-bundle`，约保留 14 天） |
 | 版本真源 | `apps/desktop/package.json` 的 `version` 字段 |
 | Git 标签 | `desktop-v{version}`，例如 `desktop-v0.6.1` |
 | CI 工作流 | [.github/workflows/release-desktop.yml](../.github/workflows/release-desktop.yml) |
 | 输出目录 | `apps/desktop/release/`（本地构建） |
 
-**重要**：三端（macOS / Windows / Linux）共用 **同一套语义化版本号**（如 `0.6.1`），但各自上传 **不同格式** 的安装包。客户端只会拉取与当前操作系统匹配的文件。
+**重要**：三端（macOS / Windows / Linux）共用 **同一套语义化版本号**（如 `0.6.1`），但各自产出 **不同格式** 的安装包。客户端只会拉取与当前操作系统匹配的文件。Linux AppImage 可能超过 GitHub Release 单附件 2GB 上限，因此安装包一律走 R2，不经 GitHub 附件。
 
 ---
 
@@ -128,69 +129,73 @@ git push origin desktop-v0.6.1
 
 推送 `desktop-v*` 标签后，GitHub Actions 会：
 
-1. **prepare-release**：创建 **Draft** GitHub Release（`desktop-v{version}`），便于先测安装包、再转正，**无需重新打包**
+1. **prepare-release**：创建 **notes-only** GitHub Release（可 Draft；正文来自 `docs/releases/{version}.md`）。**不**上传任何安装包附件
 2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux），含 SenseVoice / e5 / RapidOCR / engines / Python 等预装 stage
-3. 各 job 用 `gh release upload` 上传安装包到该 Draft Release
-4. **finalize-release** 合并 macOS 双架构 `latest-mac.yml` 并校验附件一致
-5. **sync-r2**：若 Release 仍为 Draft → **跳过**（不把更新源推到 Cloudflare R2）；正式发布后再同步
+3. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-linux-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
+4. **finalize-release**：下载四端 artifact → 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
+5. **sync-r2**：下载 `desktop-release-bundle`，**始终**同步到 Cloudflare R2（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）
 
-#### 草稿 → 正式（不重新打标签 / 不重建）
+#### 草稿 Release Notes
 
-测试通过后，用**同一标签与同一批附件**转正：
+GitHub Release 可保持 Draft（便于先审 Notes 再公开）。自动更新与 QA 安装包以 **R2 / CDN**（`update.opptrix.org`）为准；亦可从对应 Actions run 的 `desktop-release-bundle` 下载。
 
 ```bash
+# 仅公开 Release Notes 页（可选；与 R2 是否已有安装包无关）
 gh release edit desktop-v1.3.4 --draft=false
-# Actions → 手动运行 「Resync Desktop R2」，输入标签 desktop-v1.3.4
 ```
 
-转正后客户端自动更新才会从 R2 拉到该版本。Draft 期间请从 GitHub Release 页面手动下载安装包测试。
+#### Resync Desktop R2（不重新打包）
+
+修复同步脚本、或 CDN/R2 缺文件时：
+
+```bash
+# Actions → 手动运行 「Resync Desktop R2」
+# 输入 tag（如 desktop-v1.3.4）；可选 run_id 覆盖自动查找
+```
+
+工作流按 tag 查找最近一次成功的 `Release Desktop` run，下载 artifact `desktop-release-bundle` 再传 R2。若找不到或已过期（约 14 天）：请重跑 Release Desktop，或传入仍保留该 artifact 的 `run_id`。
 
 Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名（并标记 GitHub prerelease）。
 
-`electron-builder` 会：
+CI 中 `electron-builder` 只本地产出安装包与 `latest-*.yml`（不 `--publish` 到 GitHub）。三端 job 全部成功且 `sync-r2` 绿后，R2/CDN 上应同时存在三套安装包与三份公开 yml。
 
-1. 构建当前平台安装包（Mac 为 **x64 与 arm64 各一包**）；
-2. 生成 `latest-mac.yml` / `latest.yml` / `latest-linux.yml`；
-3. 创建或更新 **同名 GitHub Release**（与标签 `desktop-v0.6.1` 关联）；
-4. 上传该平台产物与 yml。
+### 4.3 核对产物（R2 / CDN / Actions）
 
-三端 job 全部成功后，Release 上应同时存在三套安装包与三份 yml。
-
-### 4.3 在 GitHub 上核对 Release
-
-打开：`https://github.com/Travisun/Opptrix/releases/tag/desktop-v0.6.1`
-
-确认附件至少包含：
+打开 CDN 或 Actions，确认至少包含：
 
 ```text
-# macOS（CI 自动，分架构 → finalize 合并 latest-mac.yml）
+# macOS（矩阵分架构 → finalize 合并 latest-mac.yml）
 Opptrix-{version}-MacOS-x64-Intel-CPU.dmg
 Opptrix-{version}-MacOS-x64-Intel-CPU.zip
 Opptrix-{version}-MacOS-arm64-M-CPU.dmg
 Opptrix-{version}-MacOS-arm64-M-CPU.zip
 latest-mac.yml
 
-# Windows（CI 自动）
+# Windows
 Opptrix-{version}-Windows.exe
 latest.yml
 
-# Linux（CI 自动）
+# Linux
 Opptrix-{version}-Linux.AppImage
 opptrix_{version}_amd64.deb
 latest-linux.yml
 ```
 
-（另可有 `.blockmap` 等辅助文件。）
+（另可有 `.blockmap`、Linux `*.opptrix-cms` 等。）
 
-Release 正文由 CI 从 **`docs/releases/{version}.md`** 组装（含新功能/修复清单 + 安装说明）。细则见 [`docs/releases/README.md`](./releases/README.md) 与 `.cursor/rules/desktop-release.mdc`。
+- **公开下载 / 自动更新**：`https://update.opptrix.org/desktop/`（及同前缀安装包）
+- **中转备份**：Actions → 对应 `Release Desktop` run → artifact `desktop-release-bundle`
+- **GitHub Release 页**：仅核对 **Release Notes**（新功能 / 修复 / 安装说明）；**无**安装包附件属预期
+
+Release 正文由 CI 从 **`docs/releases/{version}.md`** 组装。细则见 [`docs/releases/README.md`](./releases/README.md) 与 `.cursor/rules/desktop-release.mdc`。
 
 ### 4.4 Cloudflare R2 + CDN（`update.opptrix.org`）
 
-桌面客户端的 **检查更新 / 下载更新** 走 R2 + 自定义域名 CDN；GitHub Release 仍用于手动下载与 Release Notes。
+桌面客户端的 **检查更新 / 下载更新 / 手动获取安装包** 均走 R2 + 自定义域名 CDN；GitHub Release **只**承载 Release Notes。
 
-CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
+CI 在 `finalize-release` 成功后执行 **`sync-r2`** job（**不因 Draft 跳过**）：
 
-1. 从 GitHub Release 下载当前标签的全部安装包、`latest-*.yml` 与 Linux `*.opptrix-cms`；
+1. 下载 Actions artifact `desktop-release-bundle`（三端安装包、合并后的三份 `latest-*.yml`、CMS/blockmap 等）；
 2. **先上传** 到 R2（安装包 / CMS / blockmap 优先，最后覆盖三份 `latest-*.yml`，避免更新源空窗）；
 3. **再删除** `desktop/` 前缀下不属于本版的旧对象；
 4. 校验 `update.opptrix.org` 上 yml（及本版 CMS）可访问；
@@ -210,7 +215,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **版本号** | `apps/desktop/package.json` `version` **必须**与 tag `desktop-v{version}` 一致 | CI 首步校验 |
 | **更新通道** | 固定 `publish.channel: "latest"` + `detectUpdateChannel: false` | 避免 `0.6.0-dev.*` 生成 `dev-*.yml`、避免 `1.0.0-beta.1` 生成 `beta-*.yml` |
 | **公开 yml** | `latest-mac.yml` / `latest.yml` / `latest-linux.yml` | 客户端与 R2 CDN 只认这三份 |
-| **macOS 分架构** | 矩阵 job 上传 `latest-mac-arm64.yml` + `latest-mac-x64.yml` → finalize 合并 | 合并后 yml 内须同时含 `arm64` 与 `x64` 的 `.zip` |
+| **macOS 分架构** | 矩阵 job 上传 `latest-mac-arm64.yml` + `latest-mac-x64.yml` artifact → finalize 合并 | 合并后 yml 内须同时含 `arm64` 与 `x64` 的 `.zip` |
 | **安装包命名** | 仅字母、数字、连字符（如 `MacOS-arm64-M-CPU`） | 禁止空格/括号；须与 yml 中 `url` **逐字一致** |
 | **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
@@ -218,7 +223,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **Sidecar ffmpeg** | `ensureFfmpegStatic` 下载/种子 `ffmpeg-static` 二进制；断言后 `chmod +x` + host 匹配时 `-version` 冒烟；rename 后与 `verify-packaged-runtime` **硬断言**存在且可执行（posix `X_OK`；Windows `.exe`） | 语音/媒体转写依赖；缺失/无执行位不得 warn 后继续；`audit-desktop-pack` 防软失败回归 |
 | **托管 Python** | `build:packages` → `stage-python.mjs` → `resources/python/`；`extraResources` → 安装包 `python/`；`OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` 审计硬门禁 | CI / release 在 audit 前显式 stage；打包后 `verify-packaged-runtime` 校验 `bundle-manifest.json` + 解释器。**翻译 GGUF 不打进包**（用户按需下载） |
 | **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD` / `_KEY_PEM`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
-| **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml + Linux `*.opptrix-cms` | 旧客户端靠 semver 比较版本，不靠多通道 |
+| **R2 同步** | 始终从 `desktop-release-bundle` 上传；仅保留最新一版对象；含全部安装包 + 三份 yml + Linux `*.opptrix-cms` | Draft 不阻止同步；旧客户端靠 semver 比较版本，不靠多通道 |
 | **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` / `release-desktop.yml`：`build:packages` → `stage-python` → `OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1` + `OPPTRIX_AUDIT_STAGE_UPDATER=1`；本地打标签前至少 `OPPTRIX_AUDIT_STAGE_UPDATER=1`（无 python tree 时 warn；设 REQUIRE 则须先 stage） |
 
 **版本升级语义（electron-updater）**
@@ -584,9 +589,10 @@ open /Applications/Opptrix.app
 [ ] docs/releases/X.Y.Z.md 已撰写（新功能 + 修复）
 [ ] git tag desktop-vX.Y.Z 已推送
 [ ] CI macOS（x64 + arm64）/ Windows / Linux job 均成功
+[ ] finalize 产出 desktop-release-bundle；sync-r2 成功
 [ ] verify-packaged-updater 通过（.app / win-unpacked 内含 electron-updater）
-[ ] Release 附件含 Mac 双架构 dmg/zip + latest-mac.yml，以及 Win / Linux 产物与 yml
-[ ] Release Notes 已填写
+[ ] R2/CDN（或 Actions artifact）含 Mac 双架构 dmg/zip + latest-mac.yml，以及 Win / Linux 产物与 yml
+[ ] GitHub Release Notes 已填写（无安装包附件属预期）
 [ ] 在目标平台安装旧版 → 检查更新 → 下载 → 重启验证
 ```
 
@@ -597,11 +603,12 @@ open /Applications/Opptrix.app
 | 文件 | 作用 |
 |------|------|
 | `apps/desktop/package.json` | 版本号、electron-builder 目标格式、GitHub publish 配置 |
-| `docs/releases/{version}.md` | 发版更新日志（新功能 / 修复）；CI 组装进 GitHub Release |
+| `docs/releases/{version}.md` | 发版更新日志（新功能 / 修复）；CI 组装进 GitHub Release Notes |
 | `scripts/assemble-release-notes.mjs` | 更新日志 + 安装说明 → Release 正文 |
 | `apps/desktop/electron/updater.cjs` | 自动检查、下载、重启安装 |
 | `apps/desktop/scripts/prebuild.mjs` | 构建前编译 packages、UI、打 runtime |
-| `.github/workflows/release-desktop.yml` | 标签触发三平台构建与上传 |
+| `.github/workflows/release-desktop.yml` | 标签触发三平台构建 → artifact → R2 |
+| `.github/workflows/resync-desktop-r2.yml` | 从 `desktop-release-bundle` 再同步 R2（不重建） |
 | [DESKTOP.md](./DESKTOP.md) | 桌面架构与开发命令 |
 | [SECURITY.md](../SECURITY.md) | 安全问题反馈方式 |
 

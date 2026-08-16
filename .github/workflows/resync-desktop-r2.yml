@@ -1,7 +1,7 @@
 name: Resync Desktop R2
 
-# Re-upload an existing GitHub Release (desktop-v*) to Cloudflare R2 without rebuilding.
-# Use after fixing sync scripts, or when CDN/R2 is missing assets (e.g. *.opptrix-cms).
+# Re-upload installers from a prior Release Desktop Actions artifact to Cloudflare R2
+# without rebuilding. Use after fixing sync scripts, or when CDN/R2 is missing assets.
 
 on:
   workflow_dispatch:
@@ -10,6 +10,11 @@ on:
         description: Release tag (e.g. desktop-v1.2.6)
         required: true
         type: string
+      run_id:
+        description: Optional Release Desktop run id (overrides tag lookup)
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: resync-desktop-r2-${{ inputs.tag }}
@@ -17,6 +22,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   sync-r2:
@@ -38,24 +44,54 @@ jobs:
       - name: Verify release metadata policy
         run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
 
-      - name: Download release assets
+      - name: Download desktop-release-bundle artifact
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.tag }}"
+          RUN_ID="${{ inputs.run_id }}"
           if [[ ! "$TAG" =~ ^desktop-v ]]; then
             echo "tag must start with desktop-v (got: $TAG)"
             exit 1
           fi
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "Looking up successful Release Desktop run for $TAG…"
+            RUN_ID="$(gh run list \
+              --workflow=release-desktop.yml \
+              --status=success \
+              --limit=100 \
+              --json databaseId,displayTitle,headBranch \
+              | jq -r --arg tag "$TAG" '
+                [.[] | select(
+                  .headBranch == $tag
+                  or (.displayTitle | contains($tag))
+                )] | .[0].databaseId // empty
+              ')"
+          fi
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "::error::No successful Release Desktop run found for $TAG with artifact desktop-release-bundle."
+            echo "Re-run workflow Release Desktop for this tag, or pass run_id explicitly."
+            exit 1
+          fi
+
+          echo "Using run_id=$RUN_ID"
           WORK="$RUNNER_TEMP/r2-sync"
           mkdir -p "$WORK"
-          gh release download "$TAG" -D "$WORK"
+          if ! gh run download "$RUN_ID" -n desktop-release-bundle -D "$WORK"; then
+            echo "::error::Failed to download artifact desktop-release-bundle from run $RUN_ID."
+            echo "Artifact may have expired (~14 days) or the run predates this pipeline."
+            echo "Re-run Release Desktop for $TAG, or pass a run_id that still has the bundle."
+            exit 1
+          fi
+
           echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           ls -la "$WORK"
           echo "--- cms signatures ---"
-          ls -la "$WORK"/*.opptrix-cms 2>/dev/null || echo "(none in release — Linux CMS will stay optional)"
+          ls -la "$WORK"/*.opptrix-cms 2>/dev/null || echo "(none in bundle — Linux CMS will stay optional)"
 
       - name: Verify release coherence (tag, yml, assets)
         run: node apps/desktop/scripts/verify-release-coherence.mjs "$TAG" "$ASSET_DIR"

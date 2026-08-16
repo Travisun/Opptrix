@@ -17,6 +17,9 @@ concurrency:
 
 permissions:
   contents: write
+  # Restricted permissions set omitted scopes to none — need Actions RW for
+  # upload-artifact / download-artifact (installers no longer go to GH Release).
+  actions: write
 
 jobs:
   prepare-release:
@@ -52,10 +55,10 @@ jobs:
             exit 0
           fi
 
-          # Always create as GitHub draft first so QA can install from Release assets
-          # without publishing auto-update to R2. Promote later with:
-          #   gh release edit "$TAG" --draft=false
-          # then run workflow "Resync Desktop R2" (no retag / rebuild).
+          # Notes-only GitHub Release (draft OK). Do NOT upload installers / yml /
+          # blockmap / CMS to GitHub — Linux AppImage exceeds the 2GB attachment
+          # limit. Distribution is Actions artifact → Cloudflare R2 (CDN).
+          # Draft only affects Release Notes page visibility on GitHub.
           gh release create "$TAG" \
             --title "Opptrix Desktop ${VERSION}" \
             --notes-file "$NOTES_FILE" \
@@ -72,14 +75,18 @@ jobs:
           # windows-latest is VS2026 / MSVC 14.51+; duckdb@1.4.x cannot compile there.
           - os: windows-2022
             label: Windows x64
+            artifact: desktop-win-x64
           - os: ubuntu-latest
             label: Linux x64
+            artifact: desktop-linux-x64
           - os: macos-latest
             label: macOS arm64
             electron_arch: arm64
+            artifact: desktop-mac-arm64
           - os: macos-latest
             label: macOS x64
             electron_arch: x64
+            artifact: desktop-mac-x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -378,13 +385,13 @@ jobs:
           fi
           node apps/desktop/scripts/sign-update-artifact.mjs apps/desktop/release
 
-      - name: Upload artifacts to GitHub Release
+      - name: Stage release artifacts for Actions
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
           RELEASE_DIR="apps/desktop/release"
+          STAGING="apps/desktop/release-staging"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
 
           if [[ "${{ runner.os }}" == "macOS" && -n "${{ matrix.electron_arch }}" ]]; then
             if [[ -f "$RELEASE_DIR/latest-mac.yml" ]]; then
@@ -408,9 +415,18 @@ jobs:
             exit 1
           fi
 
-          echo "Uploading ${#files[@]} file(s) to release $TAG:"
+          echo "Staging ${#files[@]} file(s) for artifact ${{ matrix.artifact }}:"
           printf '  - %s\n' "${files[@]}"
-          gh release upload "$TAG" "${files[@]}" --clobber
+          cp "${files[@]}" "$STAGING/"
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: apps/desktop/release-staging/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
 
   finalize-release:
     name: Finalize macOS update metadata
@@ -433,25 +449,27 @@ jobs:
       - name: Verify release metadata policy
         run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
 
-      - name: Merge latest-mac.yml for both CPU architectures
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # Matches desktop-win-x64 / desktop-linux-x64 / desktop-mac-arm64 / desktop-mac-x64.
+          # (finalize uploads desktop-release-bundle after this step.)
+          pattern: desktop-*
+          path: ${{ runner.temp }}/desktop-bundle
+          merge-multiple: true
+
+      - name: Merge latest-mac.yml and verify asset list
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
-          WORK="$RUNNER_TEMP/mac-yml"
-          mkdir -p "$WORK"
+          WORK="${{ runner.temp }}/desktop-bundle"
+          ls -la "$WORK"
 
-          gh release view "$TAG" --json assets --jq '.assets[].name' | sort > "$WORK/release-assets.txt"
-          echo "Release assets:"
-          cat "$WORK/release-assets.txt"
-
-          if ! gh release download "$TAG" -p 'latest-mac-arm64.yml' -D "$WORK"; then
-            echo "::error::Missing latest-mac-arm64.yml on release $TAG"
+          if [[ ! -f "$WORK/latest-mac-arm64.yml" ]]; then
+            echo "::error::Missing latest-mac-arm64.yml in platform artifacts"
             exit 1
           fi
-          if ! gh release download "$TAG" -p 'latest-mac-x64.yml' -D "$WORK"; then
-            echo "::error::Missing latest-mac-x64.yml on release $TAG"
+          if [[ ! -f "$WORK/latest-mac-x64.yml" ]]; then
+            echo "::error::Missing latest-mac-x64.yml in platform artifacts"
             exit 1
           fi
 
@@ -460,22 +478,36 @@ jobs:
             "$WORK/latest-mac-x64.yml" \
             "$WORK/latest-mac.yml"
 
-          gh release view "$TAG" --json assets --jq '.assets[].name' | sort > "$WORK/release-assets.txt"
+          # Local asset name list (verify-release-yml-on-github only checks names).
+          ASSET_LIST="$RUNNER_TEMP/release-assets.txt"
+          find "$WORK" -maxdepth 1 -type f -printf '%f\n' | sort > "$ASSET_LIST"
+          echo "Bundle assets:"
+          cat "$ASSET_LIST"
 
           node apps/desktop/scripts/verify-release-yml-on-github.mjs \
             "$WORK/latest-mac.yml" \
-            "$WORK/release-assets.txt"
+            "$ASSET_LIST"
 
           for yml in latest.yml latest-linux.yml; do
-            if gh release download "$TAG" -p "$yml" -D "$WORK" --clobber 2>/dev/null; then
+            if [[ -f "$WORK/$yml" ]]; then
               node apps/desktop/scripts/verify-release-yml-on-github.mjs \
                 "$WORK/$yml" \
-                "$WORK/release-assets.txt"
+                "$ASSET_LIST"
             fi
           done
 
-          gh release upload "$TAG" "$WORK/latest-mac.yml" --clobber
-          echo "Published merged latest-mac.yml to $TAG"
+          # Do not upload installers/yml to GitHub Release — R2 is the distribution path.
+          echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
+          echo "Merged latest-mac.yml into desktop-release-bundle staging"
+
+      - name: Upload desktop-release-bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-bundle
+          path: ${{ env.ASSET_DIR }}
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
 
   sync-r2:
     name: Sync release to Cloudflare R2
@@ -486,56 +518,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Skip R2 sync for draft releases
-        id: draft
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          IS_DRAFT="$(gh release view "$TAG" --json isDraft -q .isDraft)"
-          echo "isDraft=$IS_DRAFT"
-          if [[ "$IS_DRAFT" == "true" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Draft release $TAG — skip Cloudflare R2 sync (promote with gh release edit --draft=false, then Resync Desktop R2)."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Setup Node
-        if: steps.draft.outputs.skip != 'true'
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
-        if: steps.draft.outputs.skip != 'true'
         run: npm ci
 
       - name: Verify release metadata policy
-        if: steps.draft.outputs.skip != 'true'
         run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
 
-      - name: Download release assets
-        if: steps.draft.outputs.skip != 'true'
+      - name: Download desktop-release-bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-release-bundle
+          path: ${{ runner.temp }}/r2-sync
+
+      - name: Set asset directory
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
-          WORK="$RUNNER_TEMP/r2-sync"
-          mkdir -p "$WORK"
-          gh release download "$TAG" -D "$WORK"
+          WORK="${{ runner.temp }}/r2-sync"
           echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
           ls -la "$WORK"
 
       - name: Verify release coherence (tag, yml, assets)
-        if: steps.draft.outputs.skip != 'true'
         run: node apps/desktop/scripts/verify-release-coherence.mjs "${{ github.ref_name }}" "$ASSET_DIR"
 
       - name: Verify R2 credentials
-        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -545,7 +556,6 @@ jobs:
         run: node apps/desktop/scripts/verify-r2-credentials.mjs
 
       - name: Sync to Cloudflare R2 (upload then prune obsolete)
-        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -557,7 +567,6 @@ jobs:
 
       # Purge before public verify — edge may cache 404 from mid-upload probes.
       - name: Purge Cloudflare CDN cache (yml + Linux installers/CMS)
-        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -567,7 +576,6 @@ jobs:
         run: node apps/desktop/scripts/purge-update-cdn-cache.mjs "$ASSET_DIR"
 
       - name: Verify public update metadata
-        if: steps.draft.outputs.skip != 'true'
         shell: bash
         env:
           OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
