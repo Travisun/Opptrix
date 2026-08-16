@@ -131,10 +131,10 @@ git push origin desktop-v0.6.1
 
 1. **prepare-release**：创建 **notes-only** GitHub Release（可 Draft；正文来自 `docs/releases/{version}.md`）。**不**上传任何安装包附件
 2. **stage-shared-models**（ubuntu，只跑一次）：按国外优先源序拉取 SenseVoice / e5 / RapidOCR，写入 cache `desktop-shared-models-v1`，并上传 artifact `desktop-shared-models`
-3. **3 个并行 matrix job** 打包（macOS x64 / arm64、Windows；**暂不打 Linux**）：`download-artifact` 复用共享模型（`OPPTRIX_SKIP_SHARED_MODEL_STAGE=1`，prebuild 不再重复 stage）；仍各自 stage engines / Python / Playwright 等架构相关资源
-4. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
-5. **finalize-release**：下载 Win+Mac artifact → 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
-6. **sync-r2**：下载 `desktop-release-bundle`，**始终**同步到 Cloudflare R2（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）。`latest-linux.yml` 若不在包内则跳过公开校验；Linux 用户暂无本版自动更新。
+3. **4 个并行 matrix job** 打包（macOS x64 / arm64、Windows、Linux）：`download-artifact` 复用共享模型（`OPPTRIX_SKIP_SHARED_MODEL_STAGE=1`，prebuild 不再重复 stage）；仍各自 stage engines / Python / Playwright 等架构相关资源
+4. 各 job 将产物写入 staging，以稳定名上传 Actions artifact：`desktop-win-x64` / `desktop-linux-x64` / `desktop-mac-arm64` / `desktop-mac-x64`（**禁止** `gh release upload`）
+5. **finalize-release**：按平台分别下载 artifact（避免误收 `desktop-shared-models`）→ 合并 macOS `latest-mac.yml` → 校验本地资产名列表 → 上传完整包 `desktop-release-bundle`
+6. **sync-r2**：下载 `desktop-release-bundle`，**始终**同步到 Cloudflare R2（Draft 只影响 GitHub Notes 页可见性，**不**阻止 R2）
 
 #### 共享模型源序与 Secrets
 
@@ -586,7 +586,7 @@ open /Applications/Opptrix.app
 
 ### Q：能否只发 Windows、暂不发 Linux？
 
-- 可以。当前 Release Desktop 矩阵已临时去掉 Linux（只打 Windows + macOS 双架构）。`latest-linux.yml` 为可选；未构建时 Linux 用户收不到本版自动更新。恢复时在 `release-desktop.yml` matrix 加回 `ubuntu-latest` / `desktop-linux-x64` 即可。
+- 可以临时改 workflow 矩阵去掉 `ubuntu-latest` / `desktop-linux-x64`；未构建时 Linux 用户收不到自动更新。默认矩阵仍包含 Linux。
 
 ### Q：版本号写错怎么办
 

@@ -137,7 +137,9 @@ jobs:
           - os: windows-2022
             label: Windows x64
             artifact: desktop-win-x64
-          # Linux temporarily omitted (Win + Mac only). Re-add ubuntu + desktop-linux-x64 when needed.
+          - os: ubuntu-latest
+            label: Linux x64
+            artifact: desktop-linux-x64
           - os: macos-latest
             label: macOS arm64
             electron_arch: arm64
@@ -524,6 +526,13 @@ jobs:
           path: ${{ runner.temp }}/desktop-bundle
           merge-multiple: true
 
+      - name: Download Linux platform artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-linux-*
+          path: ${{ runner.temp }}/desktop-bundle
+          merge-multiple: true
+
       - name: Download macOS platform artifacts
         uses: actions/download-artifact@v4
         with:
@@ -681,14 +690,9 @@ jobs:
             echo "If R2 HeadObject passed but this fails, check Cloudflare WAF / custom domain rules for this extension."
             return 1
           }
-          for yml in latest-mac.yml latest.yml; do
+          for yml in latest-mac.yml latest.yml latest-linux.yml; do
             check_url "${BASE}${yml}" full || exit 1
           done
-          if [[ -f "$ASSET_DIR/latest-linux.yml" ]]; then
-            check_url "${BASE}latest-linux.yml" full || exit 1
-          else
-            echo "latest-linux.yml not in bundle — skip public Linux feed check"
-          fi
           shopt -s nullglob
           for appimage in "$ASSET_DIR"/*-Linux.AppImage; do
             check_url "${BASE}$(basename "$appimage")" range || exit 1
