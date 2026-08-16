@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "skill": "ht-ffscore",
+    "asof": "2024-12-31"
+  },
+  "bars": [],
+  "panels": {
+    "financials": [
+      {
+        "symbol": "600519.SH",
+        "report_date": "2024-12-31",
+        "roe": 0.28,
+        "roe_prev": 0.25,
+        "roa": 12.0,
+        "roa_prev": 11.0,
+        "operating_revenue": 150000000000.0,
+        "operating_revenue_yoy": 140000000000.0,
+        "total_operating_revenue": 150000000000.0,
+        "total_operating_revenue_yoy": 140000000000.0,
+        "total_assets": 250000000000.0,
+        "total_assets_prev_q": 240000000000.0,
+        "total_assets_yoy": 220000000000.0,
+        "total_assets_yoy_prev_q": 210000000000.0,
+        "total_current_assets": 120000000000.0,
+        "total_current_assets_prev_q": 115000000000.0,
+        "total_current_assets_yoy": 100000000000.0,
+        "total_current_assets_yoy_prev_q": 95000000000.0,
+        "total_current_liability": 50000000000.0,
+        "total_current_liability_yoy": 48000000000.0,
+        "total_non_current_liability": 20000000000.0,
+        "total_non_current_liability_yoy": 22000000000.0,
+        "total_non_current_assets": 130000000000.0,
+        "total_non_current_assets_yoy": 120000000000.0,
+        "net_operate_cash_flow": 60000000000.0,
+        "gross_profit_margin": 0.9,
+        "gross_profit_margin_yoy": 0.88,
+        "paidin_capital": 1250000000.0,
+        "paidin_capital_yoy": 1250000000.0
+      },
+      {
+        "symbol": "000001.SZ",
+        "report_date": "2024-12-31",
+        "roe": 0.08,
+        "roe_prev": 0.09,
+        "roa": 0.6,
+        "roa_prev": 0.7,
+        "operating_revenue": 100000000000.0,
+        "operating_revenue_yoy": 105000000000.0,
+        "total_operating_revenue": 100000000000.0,
+        "total_operating_revenue_yoy": 105000000000.0,
+        "total_assets": 5000000000000.0,
+        "total_assets_prev_q": 4900000000000.0,
+        "total_assets_yoy": 4500000000000.0,
+        "total_assets_yoy_prev_q": 4400000000000.0,
+        "total_current_assets": 3000000000000.0,
+        "total_current_assets_prev_q": 2900000000000.0,
+        "total_current_assets_yoy": 2700000000000.0,
+        "total_current_assets_yoy_prev_q": 2600000000000.0,
+        "total_current_liability": 4000000000000.0,
+        "total_current_liability_yoy": 3800000000000.0,
+        "total_non_current_liability": 500000000000.0,
+        "total_non_current_liability_yoy": 400000000000.0,
+        "total_non_current_assets": 2000000000000.0,
+        "total_non_current_assets_yoy": 1800000000000.0,
+        "net_operate_cash_flow": 20000000000.0,
+        "gross_profit_margin": 0.3,
+        "gross_profit_margin_yoy": 0.32,
+        "paidin_capital": 20000000000.0,
+        "paidin_capital_yoy": 19000000000.0
+      }
+    ]
+  },
+  "params": {
+    "mode": "both"
+  }
+}

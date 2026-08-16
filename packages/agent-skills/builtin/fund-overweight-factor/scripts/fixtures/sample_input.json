@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "skill": "fund-overweight-factor"
+  },
+  "bars": [],
+  "panels": {
+    "fund_holdings": [
+      {
+        "fund_id": "F1",
+        "symbol": "A.SH",
+        "weight": 0.1
+      },
+      {
+        "fund_id": "F1",
+        "symbol": "B.SH",
+        "weight": 0.05
+      },
+      {
+        "fund_id": "F2",
+        "symbol": "A.SH",
+        "weight": 0.08
+      },
+      {
+        "fund_id": "F2",
+        "symbol": "C.SH",
+        "weight": 0.06
+      }
+    ],
+    "benchmark_weights": [
+      {
+        "symbol": "A.SH",
+        "weight": 0.05
+      },
+      {
+        "symbol": "B.SH",
+        "weight": 0.04
+      },
+      {
+        "symbol": "C.SH",
+        "weight": 0.03
+      },
+      {
+        "symbol": "D.SH",
+        "weight": 0.02
+      }
+    ]
+  },
+  "params": {}
+}
