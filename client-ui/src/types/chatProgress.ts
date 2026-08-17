@@ -80,7 +80,13 @@ export type ChatProgressEvent =
   | { type: 'tool_done'; step: ChatToolStep }
   | { type: 'user_prompt'; prompt: ChatUserPromptPayload }
   | { type: 'steer_applied'; message: string }
-  | { type: 'reply'; content?: string; estimatedTokens?: number }
+  | {
+    type: 'reply'
+    content?: string
+    estimatedTokens?: number
+    /** 流式 delta 预览片段；终答勿带 true */
+    draft?: boolean
+  }
   | {
     type: 'done'
     reply: string
@@ -165,7 +171,12 @@ export type ChatProgressEvent =
       }
       | { type: 'tool_start'; step: ChatToolStep }
       | { type: 'tool_done'; step: ChatToolStep }
-      | { type: 'reply'; content?: string; estimatedTokens?: number }
+      | {
+        type: 'reply'
+        content?: string
+        estimatedTokens?: number
+        draft?: boolean
+      }
     /** 兼容字段名：event / progress / child_progress */
     event?: ChatProgressEvent
     progress?: ChatProgressEvent
@@ -183,5 +194,7 @@ export interface ChatLiveTrace {
   thinkingSnippet?: string
   /** 结构化思考分段（竖轴） */
   thinkingSegments?: ReasoningSegment[]
+  /** 「正在整理消息」时未渲染的原始回复草稿预览 */
+  replyDraft?: string
   steps: ChatToolStep[]
 }

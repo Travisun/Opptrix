@@ -126,7 +126,13 @@ export type ChatProgressEvent =
   | { type: 'tool_done'; step: ChatToolStep }
   | { type: 'user_prompt'; prompt: ChatUserPromptPayload }
   | { type: 'steer_applied'; message: string }
-  | { type: 'reply'; content?: string; estimatedTokens?: number }
+  | {
+    type: 'reply'
+    content?: string
+    estimatedTokens?: number
+    /** 流式 delta 预览片段；终答勿带 true */
+    draft?: boolean
+  }
   | {
     type: 'done'
     /** Agent 最终回复文本 */
@@ -218,7 +224,12 @@ export type ChatProgressEvent =
       }
       | { type: 'tool_start'; step: ChatToolStep }
       | { type: 'tool_done'; step: ChatToolStep }
-      | { type: 'reply'; content?: string; estimatedTokens?: number }
+      | {
+        type: 'reply'
+        content?: string
+        estimatedTokens?: number
+        draft?: boolean
+      }
   }
 
 /**

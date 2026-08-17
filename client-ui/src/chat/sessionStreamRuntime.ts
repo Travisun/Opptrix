@@ -61,6 +61,8 @@ function rebuildLiveTrace(
     clearEstimatedTokens?: boolean
     thinkingSnippet?: string | undefined
     thinkingSegments?: ReasoningSegment[] | undefined
+    replyDraft?: string | undefined
+    clearReplyDraft?: boolean
   },
 ): ChatLiveTrace {
   const steps = patch.steps ?? prev?.steps ?? []
@@ -76,12 +78,16 @@ function rebuildLiveTrace(
     : (thinkingSegments?.length
       ? joinReasoningSegments(thinkingSegments)
       : prev?.thinkingSnippet)
+  const replyDraft = patch.clearReplyDraft
+    ? undefined
+    : ('replyDraft' in patch ? patch.replyDraft : prev?.replyDraft)
   return {
     steps,
     phaseLabel: phaseLabel || undefined,
     estimatedTokens,
     thinkingSnippet,
     thinkingSegments,
+    replyDraft,
     thinkingLabel: formatLiveThinkingStatus(
       phaseLabel || undefined,
       estimatedTokens,
@@ -130,11 +136,15 @@ export function applyChatProgressEvent(
         thinkingSegments = snapshot.liveTrace?.thinkingSegments
       }
       const segmentsOrUndef = thinkingSegments?.length ? thinkingSegments : undefined
+      const phaseLabel = stripPhaseEllipsis(event.label)
+      // 新一轮思考（非「正在整理消息」）清空回复草稿预览
+      const clearReplyDraft = phaseLabel !== '正在整理消息'
       return {
         ...snapshot,
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
-          phaseLabel: stripPhaseEllipsis(event.label),
+          phaseLabel,
           clearEstimatedTokens: true,
+          clearReplyDraft,
           thinkingSegments: segmentsOrUndef,
           thinkingSnippet: event.snippet
             ?? (segmentsOrUndef ? joinReasoningSegments(segmentsOrUndef) : undefined)
@@ -167,6 +177,7 @@ export function applyChatProgressEvent(
         ...snapshot,
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
           steps: [...(snapshot.liveTrace?.steps ?? []), event.step],
+          clearReplyDraft: true,
         }),
       }
     case 'tool_done':
@@ -181,10 +192,16 @@ export function applyChatProgressEvent(
         }),
       }
     case 'reply': {
-      // 与思考态同位文案；多轮工具后若已是「整理」态则保持，避免回跳
-      const prevPhase = resolvePhaseLabel(snapshot.liveTrace, '')
-      const consolidating = prevPhase.includes('整理')
-      const phaseLabel = prevPhase || (consolidating ? '模型正在整理结果' : '模型正在思考')
+      // 终答有 content →「正在整理消息」；仅 estimatedTokens 流式进度则保持思考/工具后整理态
+      const hasContent = typeof event.content === 'string' && event.content.length > 0
+      let phaseLabel: string
+      if (hasContent) {
+        phaseLabel = '正在整理消息'
+      } else {
+        const prevPhase = resolvePhaseLabel(snapshot.liveTrace, '')
+        const consolidating = prevPhase.includes('整理')
+        phaseLabel = prevPhase || (consolidating ? '模型正在整理结果' : '模型正在思考')
+      }
       return {
         ...snapshot,
         liveTrace: rebuildLiveTrace(snapshot.liveTrace, {
@@ -192,6 +209,9 @@ export function applyChatProgressEvent(
           // reply 无估算时清空，与旧行为一致（不残留假数字）
           estimatedTokens: event.estimatedTokens,
           clearEstimatedTokens: event.estimatedTokens == null,
+          ...(hasContent
+            ? { replyDraft: event.content }
+            : {}),
         }),
       }
     }

@@ -21,6 +21,7 @@ import ChatComposer from './ChatComposer'
 import type { ChatComposerHandle } from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
 import ChatProcessTrace from './ChatProcessTrace'
+import ChatReplyDraftPreview from './ChatReplyDraftPreview'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixSpinner from '../components/opptrix/OpptrixSpinner'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
@@ -1183,6 +1184,9 @@ function ChatView({
                     thinkingSegments={collaborationChildLiveTrace?.thinkingSegments}
                     live
                   />
+                  {collaborationChildLiveTrace?.replyDraft ? (
+                    <ChatReplyDraftPreview draft={collaborationChildLiveTrace.replyDraft} />
+                  ) : null}
                 </div>
               )}
 
@@ -1217,6 +1221,9 @@ function ChatView({
                     thinkingSegments={liveTrace.thinkingSegments}
                     live
                   />
+                  {liveTrace.replyDraft ? (
+                    <ChatReplyDraftPreview draft={liveTrace.replyDraft} />
+                  ) : null}
                 </div>
               )}
               {!collaborationReadonly && loading && !liveTrace && (

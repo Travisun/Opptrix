@@ -1884,7 +1884,12 @@ export class AgentEngine {
           lastEmitAt = Date.now()
           lastTokens = n
           pendingTokens = null
-          emit({ type: 'reply', estimatedTokens: n })
+          emit({
+            type: 'reply',
+            estimatedTokens: n,
+            content: accumulated,
+            draft: true,
+          })
         }
         const turn = await llm.chat(modelView, roundTools, signal, {
           sessionId,
@@ -2347,11 +2352,12 @@ export class AgentEngine {
         .map(s => ({ ...s, content: s.content.trim() }))
         .filter(s => s.content)
       // 与工具轮对称：stop 前再推一次完整时间线，保证 live 末态与历史一致
+      // 终答后勿再推「模型正在思考」，避免 UI 从「正在整理消息」被盖回思考态
       if (turnTimeline) {
         emit({
           type: 'thinking',
           round: round + 1,
-          label: '模型正在思考…',
+          label: '正在整理消息…',
           snippet: turnTimeline,
           segments: persistedSegments,
         })

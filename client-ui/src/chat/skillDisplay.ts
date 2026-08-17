@@ -132,16 +132,26 @@ export function compareSkillsForSlash(a: SkillLike, b: SkillLike): number {
   return skillDisplayTitle(a).localeCompare(skillDisplayTitle(b), 'zh')
 }
 
+/** `/` 筛选：把 `_` / `-` / `.` 视作同一分隔符，便于 `create_web` 命中 `create-web` */
+function normalizeSlashSeparators(value: string): string {
+  return value.replace(/[_.-]+/g, '-')
+}
+
 export function skillMatchesSlashQuery(skill: SkillLike, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
+  const qNorm = normalizeSlashSeparators(q)
   const haystacks = [
     skill.name,
     skillDisplayTitle(skill),
     skill.metadata?.summary ?? '',
     skill.description ?? '',
   ]
-  return haystacks.some(h => h.toLowerCase().includes(q))
+  return haystacks.some(h => {
+    const lower = h.toLowerCase()
+    if (lower.includes(q)) return true
+    return normalizeSlashSeparators(lower).includes(qNorm)
+  })
 }
 
 /** 消息气泡：`@skill:name` → 中文短标题（无则原 name） */
