@@ -125,22 +125,107 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
     assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 128 tokens…')
   })
 
-  it('prefers estimatedTokens label even when content is present', () => {
+  it('uses composing phase when reply has content (even with estimatedTokens)', () => {
     const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
       type: 'reply',
       content: '最终正文',
       estimatedTokens: 1500,
     })
-    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 1.5k tokens…')
+    assert.equal(next.liveTrace?.phaseLabel, '正在整理消息')
+    assert.equal(next.liveTrace?.thinkingLabel, '正在整理消息 · 约 1.5k tokens…')
+    assert.equal(next.liveTrace?.replyDraft, '最终正文')
   })
 
-  it('falls back to thinking label when reply has no estimatedTokens', () => {
+  it('uses composing phase when reply has content and no estimatedTokens', () => {
     const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
       type: 'reply',
       content: '正文',
     })
     assert.equal(next.liveTrace?.estimatedTokens, undefined)
-    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考…')
+    assert.equal(next.liveTrace?.phaseLabel, '正在整理消息')
+    assert.equal(next.liveTrace?.thinkingLabel, '正在整理消息…')
+    assert.equal(next.liveTrace?.replyDraft, '正文')
+  })
+
+  it('writes replyDraft and composing phase for draft reply stream', () => {
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '草稿片段一二三',
+      estimatedTokens: 42,
+      draft: true,
+    })
+    assert.equal(next.liveTrace?.phaseLabel, '正在整理消息')
+    assert.equal(next.liveTrace?.replyDraft, '草稿片段一二三')
+    assert.equal(next.liveTrace?.estimatedTokens, 42)
+  })
+
+  it('clears replyDraft on tool_start', () => {
+    const withDraft = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '将清空的草稿',
+      draft: true,
+    })
+    assert.equal(withDraft.liveTrace?.replyDraft, '将清空的草稿')
+    const next = applyChatProgressEvent(withDraft, {
+      type: 'tool_start',
+      step: {
+        id: 't1',
+        tool: 'search',
+        label: '搜索',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+      },
+    })
+    assert.equal(next.liveTrace?.replyDraft, undefined)
+  })
+
+  it('clears replyDraft on new thinking round but keeps when composing', () => {
+    const withDraft = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '草稿',
+      draft: true,
+    })
+    const cleared = applyChatProgressEvent(withDraft, {
+      type: 'thinking',
+      round: 2,
+      label: '模型正在思考…',
+    })
+    assert.equal(cleared.liveTrace?.replyDraft, undefined)
+
+    const kept = applyChatProgressEvent(withDraft, {
+      type: 'thinking',
+      round: 1,
+      label: '正在整理消息…',
+      snippet: '时间线摘要',
+    })
+    assert.equal(kept.liveTrace?.replyDraft, '草稿')
+    assert.equal(kept.liveTrace?.phaseLabel, '正在整理消息')
+  })
+
+  it('final reply content without draft still writes replyDraft', () => {
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '终答全文',
+      estimatedTokens: 200,
+    })
+    assert.equal(next.liveTrace?.replyDraft, '终答全文')
+    assert.equal(next.liveTrace?.phaseLabel, '正在整理消息')
+  })
+
+  it('post-reply timeline thinking keeps composing phase (not thinking)', () => {
+    const withReply = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '终答正文',
+    })
+    const next = applyChatProgressEvent(withReply, {
+      type: 'thinking',
+      round: 1,
+      label: '正在整理消息…',
+      snippet: '时间线摘要',
+    })
+    assert.equal(next.liveTrace?.phaseLabel, '正在整理消息')
+    assert.match(next.liveTrace?.thinkingLabel ?? '', /^正在整理消息/)
+    assert.equal(next.liveTrace?.replyDraft, '终答正文')
   })
 
   it('keeps consolidating label after tools when reply streams tokens', () => {
