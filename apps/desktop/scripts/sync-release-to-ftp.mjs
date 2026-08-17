@@ -2,12 +2,19 @@
 /**
  * Upload current release assets to FTP (primary desktop distribution path).
  *
- * Upload order: binaries first (partitionUploadBatches), then latest-*.yml.
+ * Upload order (avoids update-feed windows):
+ *   1) binaries / CMS / blockmaps
+ *   2) LIST feed root → log installers (keep / obsolete)
+ *   3) force-overwrite the three public latest-*.yml (feed flips to new packages)
+ *   4) prune obsolete installers + stale release files (incl. per-arch yml)
+ *   5) LIST + assertYmlsAtRemoteRoot + SIZE
+ *   6) log final kept installers
+ *
+ * Yml is overwritten *before* deleting old installers so the public feed never
+ * points at files we just removed.
  * Files land in FTP_REMOTE_DIR / feed prefix root (e.g. /desktop/): after
  * `cd(remoteDir)`, STOR uses basename only so cwd drift / absolute-path
  * double-prefix cannot bury yml in a subdirectory.
- * After uploads, hard-assert the three public yml files exist at that root
- * (LIST + SIZE). Then prune obsolete release artifacts under the root only.
  *
  * Env:
  *   FTP_HOST (required in CI; local may skip if unset)
@@ -22,12 +29,18 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from 'basic-ftp'
 import { r2KeyPrefixFromFeedUrl, resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
-import { UPDATE_YML_PUBLIC } from './lib/release-metadata-policy.mjs'
+import {
+  UPDATE_YML_MAC_PER_ARCH,
+  UPDATE_YML_PUBLIC,
+} from './lib/release-metadata-policy.mjs'
 import {
   compareUploadOrder,
   partitionUploadBatches,
   shouldUpload,
 } from './sync-release-to-r2.mjs'
+
+const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage|deb)$/i
+const STALE_PER_ARCH_YML = new Set(UPDATE_YML_MAC_PER_ARCH)
 
 function usage() {
   console.error('Usage: sync-release-to-ftp.mjs <release-assets-dir>')
@@ -92,6 +105,83 @@ export function assertYmlsAtRemoteRoot(listing, required = UPDATE_YML_PUBLIC) {
   }
 }
 
+/** Installer packages only (dmg/zip/exe/AppImage/deb) — not yml/blockmap/cms. */
+export function isRemoteInstallerName(name) {
+  const raw = String(name ?? '')
+  // Root listing only — reject path-like names before basename stripping.
+  if (!raw || raw.includes('/') || raw.includes('\\')) return false
+  const base = path.posix.basename(raw)
+  if (!base || base !== raw) return false
+  return INSTALLER_EXT.test(base)
+}
+
+/**
+ * Whether a root-level remote name should be deleted after this upload's keep set.
+ * Keep names are never pruned. Stale per-arch mac yml always prune.
+ * Other release artifacts prune when `shouldUpload` would accept them and they
+ * are not in keep (covers obsolete installers, blockmaps, cms, public yml).
+ * @param {string} name
+ * @param {ReadonlySet<string> | Iterable<string>} keepNames
+ */
+export function shouldPruneRemoteName(name, keepNames) {
+  const raw = String(name ?? '')
+  if (!raw || raw.includes('/') || raw.includes('\\')) return false
+  const base = path.posix.basename(raw)
+  if (!base || base !== raw) return false
+  const keep = keepNames instanceof Set ? keepNames : new Set(keepNames)
+  if (keep.has(base)) return false
+  if (STALE_PER_ARCH_YML.has(base)) return true
+  return shouldUpload(base)
+}
+
+/**
+ * Classify feed-root listing against this release's keep set.
+ * @param {Array<{ name?: string, isFile?: boolean, isDirectory?: boolean, type?: number }>} listing
+ * @param {ReadonlySet<string> | Iterable<string>} keepNames
+ * @returns {{
+ *   installersKept: string[],
+ *   installersObsolete: string[],
+ *   releaseObsolete: string[],
+ *   ymlsPresent: string[],
+ * }}
+ */
+export function classifyRemoteRootListing(listing, keepNames) {
+  const keep = keepNames instanceof Set ? keepNames : new Set(keepNames)
+  const installersKept = []
+  const installersObsolete = []
+  const releaseObsolete = []
+  const ymlsPresent = []
+
+  for (const entry of listing ?? []) {
+    const name = entry?.name
+    if (typeof name !== 'string' || !name) continue
+    if (name.includes('/') || name.includes('\\')) continue
+    const isFile = typeof entry.isFile === 'boolean'
+      ? entry.isFile
+      : !(entry.isDirectory === true || entry.type === 2)
+    if (!isFile) continue
+
+    if (UPDATE_YML_PUBLIC.includes(name)) {
+      ymlsPresent.push(name)
+    }
+
+    if (isRemoteInstallerName(name)) {
+      if (keep.has(name)) installersKept.push(name)
+      else installersObsolete.push(name)
+    }
+
+    if (shouldPruneRemoteName(name, keep)) {
+      releaseObsolete.push(name)
+    }
+  }
+
+  installersKept.sort()
+  installersObsolete.sort()
+  releaseObsolete.sort()
+  ymlsPresent.sort()
+  return { installersKept, installersObsolete, releaseObsolete, ymlsPresent }
+}
+
 function collectUploadFiles(dir) {
   const names = fs.readdirSync(dir).filter(shouldUpload).sort(compareUploadOrder)
   if (names.length === 0) {
@@ -142,7 +232,7 @@ async function main() {
   console.log(`[ftp] remote dir: ${remoteDir}`)
   console.log(`[ftp] uploading ${files.length} file(s), ${formatBytes(totalBytes)} total`)
   console.log(
-    `[ftp] upload batches: ${binaries.length} binary/other, then ${ymls.length} yml`,
+    `[ftp] upload batches: ${binaries.length} binary/other, then yml overwrite, then prune`,
   )
 
   const client = new Client(60 * 60 * 1000)
@@ -163,26 +253,61 @@ async function main() {
      * `/desktop` (some FTP servers would nest or double-prefix the path).
      * `remotePathFor` is the canonical public path used only for logs/checks.
      */
-    async function uploadBatch(batch) {
+    async function uploadBatch(batch, { overwrite = false } = {}) {
       await client.cd(remoteDir)
       for (const file of batch) {
         const canonical = remotePathFor(remoteDir, file.name)
         const remoteName = path.posix.basename(file.name)
-        console.log(`[ftp] uploading ${canonical} (${formatBytes(file.size)})…`)
+        const label = overwrite ? 'overwrite yml' : 'uploading'
+        console.log(`[ftp] ${label}: ${canonical} (${formatBytes(file.size)})…`)
         await client.uploadFrom(file.filePath, remoteName)
-        console.log(`[ftp] uploaded ${canonical}`)
+        console.log(`[ftp] ${overwrite ? 'overwrote' : 'uploaded'} ${canonical}`)
       }
     }
 
-    // All non-yml must succeed before any public feed yml is published.
+    // 1) New installers / CMS / blockmaps first.
     await uploadBatch(binaries)
-    await uploadBatch(ymls)
 
+    // 2) LIST → classify keep / obsolete installers (+ other release orphans).
     await client.cd(remoteDir)
-    const listing = await client.list()
-    assertYmlsAtRemoteRoot(listing)
+    const listingBeforePrune = await client.list()
+    const classified = classifyRemoteRootListing(listingBeforePrune, keepNames)
+    const installerNames = [
+      ...classified.installersKept,
+      ...classified.installersObsolete,
+    ].sort()
+    console.log(
+      `[ftp] remote installers (${installerNames.length}): ${
+        installerNames.length > 0 ? installerNames.join(', ') : '(none)'
+      }`,
+    )
+    if (classified.installersKept.length > 0) {
+      console.log(`[ftp] installers keep: ${classified.installersKept.join(', ')}`)
+    }
+    if (classified.installersObsolete.length > 0) {
+      console.log(`[ftp] installers obsolete: ${classified.installersObsolete.join(', ')}`)
+    }
+
+    // 3) Force-overwrite public latest-*.yml *before* deleting old packages
+    //    so the feed never points at files we are about to remove.
+    await uploadBatch(ymls, { overwrite: true })
+
+    // 4) Delete obsolete installers and stale release files (incl. per-arch yml).
+    await client.cd(remoteDir)
+    for (const name of classified.releaseObsolete) {
+      if (isRemoteInstallerName(name)) {
+        console.log(`[ftp] removing obsolete installer: ${name}`)
+      } else {
+        console.log(`[ftp] removing obsolete ${name}`)
+      }
+      await client.remove(name)
+    }
+
+    // 5) LIST + assert + SIZE (yml must still be at feed root after prune)
+    await client.cd(remoteDir)
+    const listingFinal = await client.list()
+    assertYmlsAtRemoteRoot(listingFinal)
     for (const yml of UPDATE_YML_PUBLIC) {
-      // Confirm each yml is a retrievable root file (not only present in LIST).
       const size = await client.size(yml)
       if (!(size > 0)) {
         throw new Error(`FTP feed root yml empty or missing: ${remotePathFor(remoteDir, yml)}`)
@@ -190,14 +315,15 @@ async function main() {
       console.log(`[ftp] yml root: ${remotePathFor(remoteDir, yml)} (${formatBytes(size)})`)
     }
 
-    // Prune only root-level release files under remoteDir (never recurse into subdirs).
-    const obsolete = listing
-      .filter((entry) => entry.isFile && shouldUpload(entry.name) && !keepNames.has(entry.name))
-      .map((entry) => entry.name)
-    for (const name of obsolete) {
-      console.log(`[ftp] removing obsolete ${name}`)
-      await client.remove(name)
-    }
+    // 6) Final kept installers
+    const finalClassified = classifyRemoteRootListing(listingFinal, keepNames)
+    console.log(
+      `[ftp] kept installers (${finalClassified.installersKept.length}): ${
+        finalClassified.installersKept.length > 0
+          ? finalClassified.installersKept.join(', ')
+          : '(none)'
+      }`,
+    )
 
     console.log(`[ftp] sync complete — ${files.length} file(s) under ${remoteDir}`)
   } finally {
