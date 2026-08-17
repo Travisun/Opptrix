@@ -132,26 +132,51 @@ export function compareSkillsForSlash(a: SkillLike, b: SkillLike): number {
   return skillDisplayTitle(a).localeCompare(skillDisplayTitle(b), 'zh')
 }
 
+/**
+ * 检测 `/query` 触发：`/` 前须为行首或空白，避免 URL `http://` 误触。
+ * 允许空格（英文多词 / IME）；仅第二个 `/` 关闭面板。
+ */
+export function findSlashTrigger(text: string, cursor: number) {
+  const slice = text.slice(0, cursor)
+  const slashIndex = slice.lastIndexOf('/')
+  if (slashIndex < 0) return null
+  if (slashIndex > 0 && !/\s/.test(slice[slashIndex - 1]!)) return null
+  const query = slice.slice(slashIndex + 1)
+  if (query.includes('/')) return null
+  return { query, startIndex: slashIndex }
+}
+
 /** `/` 筛选：把 `_` / `-` / `.` 视作同一分隔符，便于 `create_web` 命中 `create-web` */
 function normalizeSlashSeparators(value: string): string {
   return value.replace(/[_.-]+/g, '-')
 }
 
+/** 去掉分隔符与空白，便于 `createweb` 命中 `create-web` */
+function compactSlashText(value: string): string {
+  return value.replace(/[_.\-\s]+/g, '')
+}
+
+function slashQueryHitsHaystack(haystackLower: string, q: string): boolean {
+  if (haystackLower.includes(q)) return true
+  if (normalizeSlashSeparators(haystackLower).includes(normalizeSlashSeparators(q))) return true
+  return compactSlashText(haystackLower).includes(compactSlashText(q))
+}
+
 export function skillMatchesSlashQuery(skill: SkillLike, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  const qNorm = normalizeSlashSeparators(q)
   const haystacks = [
     skill.name,
     skillDisplayTitle(skill),
     skill.metadata?.summary ?? '',
     skill.description ?? '',
-  ]
-  return haystacks.some(h => {
-    const lower = h.toLowerCase()
-    if (lower.includes(q)) return true
-    return normalizeSlashSeparators(lower).includes(qNorm)
-  })
+  ].map(h => h.toLowerCase())
+  // 多 token（AND）：按空白与 `_.-` 切分；每个 token 须在任一 haystack 上命中
+  const tokens = q.split(/[\s_.-]+/).filter(Boolean)
+  if (!tokens.length) {
+    return haystacks.some(h => slashQueryHitsHaystack(h, q))
+  }
+  return tokens.every(token => haystacks.some(h => slashQueryHitsHaystack(h, token)))
 }
 
 /** 消息气泡：`@skill:name` → 中文短标题（无则原 name） */

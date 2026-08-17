@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useAgentSkillsCatalog } from './agentSkillsCatalog'
-import { skillMatchesSlashQuery } from './skillDisplay'
+import { findSlashTrigger, skillMatchesSlashQuery } from './skillDisplay'
+
+export { findSlashTrigger } from './skillDisplay'
 
 export interface SkillSlashState {
   open: boolean
@@ -14,19 +16,6 @@ const CLOSED: SkillSlashState = {
   query: '',
   startIndex: -1,
   activeIndex: 0,
-}
-
-/**
- * 检测 `/query` 触发：`/` 前须为行首或空白，避免 URL `http://` 误触。
- */
-export function findSlashTrigger(text: string, cursor: number) {
-  const slice = text.slice(0, cursor)
-  const slashIndex = slice.lastIndexOf('/')
-  if (slashIndex < 0) return null
-  if (slashIndex > 0 && !/\s/.test(slice[slashIndex - 1]!)) return null
-  const query = slice.slice(slashIndex + 1)
-  if (/[\s/]/.test(query)) return null
-  return { query, startIndex: slashIndex }
 }
 
 export function useSkillSlash() {
