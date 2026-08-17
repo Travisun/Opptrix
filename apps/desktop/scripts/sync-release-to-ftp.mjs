@@ -12,17 +12,17 @@
  *
  * Yml is overwritten *before* deleting old installers so the public feed never
  * points at files we just removed.
- * Files land in FTP_REMOTE_DIR / feed prefix root (e.g. /desktop/): after
- * `cd(remoteDir)`, STOR uses basename only so cwd drift / absolute-path
- * double-prefix cannot bury yml in a subdirectory.
+ * Files land under /desktop/ (FTP feed root, same as update CDN path):
+ * e.g. /desktop/latest-mac.yml, /desktop/Opptrix-….dmg. Never upload yml to FTP /.
+ * After cd(/desktop), STOR uses basename only so cwd drift cannot bury files.
  *
  * Env:
  *   FTP_HOST (required in CI; local may skip if unset)
  *   FTP_USERNAME / FTP_PASSWORD
- *   FTP_REMOTE_DIR (optional; default from OPPTRIX_UPDATE_BASE_URL path, e.g. /desktop)
+ *   FTP_REMOTE_DIR (optional; must resolve to …/desktop, default `/desktop`)
  *   FTP_PORT (optional; default 21)
  *   FTP_SECURE (optional; "true" / "1" for explicit TLS)
- *   OPPTRIX_UPDATE_BASE_URL (optional; used for default remote dir)
+ *   OPPTRIX_UPDATE_BASE_URL (optional; used when FTP_REMOTE_DIR unset)
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -42,6 +42,9 @@ import {
 const INSTALLER_EXT = /\.(dmg|zip|exe|AppImage|deb)$/i
 const STALE_PER_ARCH_YML = new Set(UPDATE_YML_MAC_PER_ARCH)
 
+/** FTP / CDN feed directory — installers and latest-*.yml must live here (not FTP `/`). */
+export const DEFAULT_FTP_FEED_DIR = '/desktop'
+
 function usage() {
   console.error('Usage: sync-release-to-ftp.mjs <release-assets-dir>')
   process.exit(1)
@@ -54,13 +57,49 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`
 }
 
-function resolveRemoteDir() {
-  const raw = String(process.env.FTP_REMOTE_DIR ?? '').trim()
+/**
+ * Resolve FTP feed root. Public yml + installers must be under `/desktop`
+ * (same as `https://update.opptrix.org/desktop/`). Never use bare `/`.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function resolveRemoteDir(env = process.env) {
+  const raw = String(env.FTP_REMOTE_DIR ?? '').trim()
+  let dir
   if (raw) {
-    return raw.startsWith('/') ? raw.replace(/\/+$/, '') || '/' : `/${raw.replace(/\/+$/, '')}`
+    dir = raw.startsWith('/') ? raw.replace(/\/+$/, '') || '/' : `/${raw.replace(/\/+$/, '')}`
+  } else {
+    const prefix = r2KeyPrefixFromFeedUrl(resolveUpdateFeedUrl())
+    dir = `/${prefix}`
   }
-  const prefix = r2KeyPrefixFromFeedUrl(resolveUpdateFeedUrl())
-  return `/${prefix}`
+  return ensureDesktopFeedDir(dir)
+}
+
+/**
+ * Coerce / validate that the remote dir is the desktop feed root (…/desktop).
+ * @param {string} dir
+ */
+export function ensureDesktopFeedDir(dir) {
+  const normalized = String(dir ?? '').replace(/\/+$/, '') || '/'
+  const segments = normalized.split('/').filter(Boolean)
+  if (normalized === '/' || !segments.includes('desktop')) {
+    if (normalized !== DEFAULT_FTP_FEED_DIR) {
+      console.warn(
+        `[ftp] remote dir "${normalized}" is not under /desktop — `
+          + `using ${DEFAULT_FTP_FEED_DIR} so latest-*.yml and installers share the feed root`,
+      )
+    }
+    return DEFAULT_FTP_FEED_DIR
+  }
+  // Prefer canonical `/desktop` when the last segment is desktop
+  if (segments[segments.length - 1] === 'desktop') {
+    return `/${segments.join('/')}`
+  }
+  // e.g. /desktop/archives → still require trailing desktop feed; use /desktop
+  console.warn(
+    `[ftp] remote dir "${normalized}" has non-desktop leaf — using ${DEFAULT_FTP_FEED_DIR}`,
+  )
+  return DEFAULT_FTP_FEED_DIR
 }
 
 /**
@@ -223,6 +262,12 @@ async function main() {
 
   const ftp = requireFtpEnv()
   const remoteDir = resolveRemoteDir()
+  if (remoteDir !== DEFAULT_FTP_FEED_DIR && !remoteDir.endsWith('/desktop')) {
+    throw new Error(
+      `FTP remote dir must be under /desktop (got ${remoteDir}); `
+        + `public yml must be at ${DEFAULT_FTP_FEED_DIR}/latest-*.yml`,
+    )
+  }
   const files = collectUploadFiles(sourceDir)
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
   const keepNames = new Set(files.map((f) => f.name))

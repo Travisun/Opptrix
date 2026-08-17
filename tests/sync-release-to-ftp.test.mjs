@@ -7,8 +7,11 @@ import { UPDATE_YML_PUBLIC } from '../apps/desktop/scripts/lib/release-metadata-
 import {
   assertYmlsAtRemoteRoot,
   classifyRemoteRootListing,
+  DEFAULT_FTP_FEED_DIR,
+  ensureDesktopFeedDir,
   isRemoteInstallerName,
   remotePathFor,
+  resolveRemoteDir,
   shouldPruneRemoteName,
 } from '../apps/desktop/scripts/sync-release-to-ftp.mjs'
 import { partitionUploadBatches } from '../apps/desktop/scripts/sync-release-to-r2.mjs'
@@ -22,9 +25,27 @@ test('remotePathFor joins feed root + basename (absolute)', () => {
   assert.equal(remotePathFor('/desktop', 'latest-mac.yml'), '/desktop/latest-mac.yml')
   assert.equal(remotePathFor('/desktop/', 'latest.yml'), '/desktop/latest.yml')
   assert.equal(remotePathFor('desktop', 'latest-linux.yml'), '/desktop/latest-linux.yml')
-  assert.equal(remotePathFor('/', 'latest.yml'), '/latest.yml')
   assert.equal(
     remotePathFor('/desktop', 'subdir/latest-mac.yml'),
+    '/desktop/latest-mac.yml',
+  )
+})
+
+test('ensureDesktopFeedDir / resolveRemoteDir keep yml under /desktop', () => {
+  assert.equal(DEFAULT_FTP_FEED_DIR, '/desktop')
+  assert.equal(ensureDesktopFeedDir('/'), '/desktop')
+  assert.equal(ensureDesktopFeedDir('/releases'), '/desktop')
+  assert.equal(ensureDesktopFeedDir('/desktop'), '/desktop')
+  assert.equal(ensureDesktopFeedDir('/desktop/'), '/desktop')
+  assert.equal(ensureDesktopFeedDir('/mirror/desktop'), '/mirror/desktop')
+  assert.equal(ensureDesktopFeedDir('/desktop/archives'), '/desktop')
+
+  assert.equal(resolveRemoteDir({ FTP_REMOTE_DIR: '/' }), '/desktop')
+  assert.equal(resolveRemoteDir({ FTP_REMOTE_DIR: '' }), '/desktop')
+  assert.equal(resolveRemoteDir({ FTP_REMOTE_DIR: 'desktop' }), '/desktop')
+  assert.equal(resolveRemoteDir({ FTP_REMOTE_DIR: '/desktop' }), '/desktop')
+  assert.equal(
+    remotePathFor(resolveRemoteDir({ FTP_REMOTE_DIR: '/' }), 'latest-mac.yml'),
     '/desktop/latest-mac.yml',
   )
 })
@@ -158,9 +179,10 @@ test('partitionUploadBatches (shared) puts yml after binaries for FTP', () => {
 
 test('sync-release-to-ftp contract: binaries → list → overwrite yml → prune → assert', () => {
   const src = fs.readFileSync(scriptPath, 'utf8')
+  assert.ok(src.includes('DEFAULT_FTP_FEED_DIR'), 'must define /desktop feed dir')
+  assert.ok(src.includes('ensureDesktopFeedDir'), 'must coerce remote dir under /desktop')
+  assert.ok(src.includes('/desktop'), 'yml+installers live under /desktop')
   assert.ok(src.includes('partitionUploadBatches'), 'must partition binary vs yml')
-  assert.ok(src.includes('remotePathFor'), 'must use absolute remote paths')
-  assert.ok(src.includes('assertYmlsAtRemoteRoot'), 'must hard-assert yml at feed root')
   assert.ok(src.includes('classifyRemoteRootListing'), 'must classify remote listing')
   assert.ok(src.includes('shouldPruneRemoteName'), 'must use prune helper')
   assert.ok(src.includes('[ftp] remote installers'), 'must log installer inventory')
