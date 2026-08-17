@@ -2,8 +2,12 @@
 /**
  * Upload current release assets to FTP (primary desktop distribution path).
  *
- * Upload order: binaries first, then latest-*.yml.
- * Then prune obsolete release artifacts under the remote directory.
+ * Upload order: binaries first (partitionUploadBatches), then latest-*.yml.
+ * Files land in FTP_REMOTE_DIR / feed prefix root (e.g. /desktop/): after
+ * `cd(remoteDir)`, STOR uses basename only so cwd drift / absolute-path
+ * double-prefix cannot bury yml in a subdirectory.
+ * After uploads, hard-assert the three public yml files exist at that root
+ * (LIST + SIZE). Then prune obsolete release artifacts under the root only.
  *
  * Env:
  *   FTP_HOST (required in CI; local may skip if unset)
@@ -19,7 +23,11 @@ import { fileURLToPath } from 'node:url'
 import { Client } from 'basic-ftp'
 import { r2KeyPrefixFromFeedUrl, resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
 import { UPDATE_YML_PUBLIC } from './lib/release-metadata-policy.mjs'
-import { compareUploadOrder, shouldUpload } from './sync-release-to-r2.mjs'
+import {
+  compareUploadOrder,
+  partitionUploadBatches,
+  shouldUpload,
+} from './sync-release-to-r2.mjs'
 
 function usage() {
   console.error('Usage: sync-release-to-ftp.mjs <release-assets-dir>')
@@ -40,6 +48,48 @@ function resolveRemoteDir() {
   }
   const prefix = r2KeyPrefixFromFeedUrl(resolveUpdateFeedUrl())
   return `/${prefix}`
+}
+
+/**
+ * Absolute remote path under the feed root (never relative to a drifted cwd).
+ * @param {string} remoteDir e.g. `/desktop`
+ * @param {string} name basename only, e.g. `latest-mac.yml`
+ */
+export function remotePathFor(remoteDir, name) {
+  const base = path.posix.basename(String(name ?? ''))
+  if (!base || base === '.' || base === '..') {
+    throw new Error(`Invalid remote file name: ${name}`)
+  }
+  const dir = String(remoteDir ?? '').replace(/\/+$/, '') || '/'
+  if (dir === '/') return `/${base}`
+  const normalized = dir.startsWith('/') ? dir : `/${dir}`
+  return path.posix.join(normalized, base)
+}
+
+/**
+ * Assert public latest-*.yml appear as root-level files in an FTP listing
+ * (after `cd(remoteDir)` — entry.name is basename, not a nested path).
+ * @param {Array<{ name?: string, isFile?: boolean, isDirectory?: boolean, type?: number }>} listing
+ * @param {readonly string[]} [required]
+ */
+export function assertYmlsAtRemoteRoot(listing, required = UPDATE_YML_PUBLIC) {
+  const rootFiles = new Set()
+  for (const entry of listing ?? []) {
+    const name = entry?.name
+    if (typeof name !== 'string' || !name) continue
+    if (name.includes('/') || name.includes('\\')) continue
+    const isFile = typeof entry.isFile === 'boolean'
+      ? entry.isFile
+      : !(entry.isDirectory === true || entry.type === 2)
+    if (!isFile) continue
+    rootFiles.add(name)
+  }
+  const missing = [...required].filter((yml) => !rootFiles.has(yml))
+  if (missing.length > 0) {
+    throw new Error(
+      `Public update yml missing at FTP feed root: ${missing.join(', ')}`,
+    )
+  }
 }
 
 function collectUploadFiles(dir) {
@@ -86,10 +136,14 @@ async function main() {
   const files = collectUploadFiles(sourceDir)
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
   const keepNames = new Set(files.map((f) => f.name))
+  const { binaries, ymls } = partitionUploadBatches(files)
 
   console.log(`[ftp] host: ${ftp.host}:${ftp.port} secure=${ftp.secure}`)
   console.log(`[ftp] remote dir: ${remoteDir}`)
   console.log(`[ftp] uploading ${files.length} file(s), ${formatBytes(totalBytes)} total`)
+  console.log(
+    `[ftp] upload batches: ${binaries.length} binary/other, then ${ymls.length} yml`,
+  )
 
   const client = new Client(60 * 60 * 1000)
   client.ftp.verbose = process.env.FTP_VERBOSE === '1'
@@ -102,15 +156,41 @@ async function main() {
       secure: ftp.secure,
     })
     await client.ensureDir(remoteDir)
-    await client.cd(remoteDir)
 
-    for (const file of files) {
-      console.log(`[ftp] uploading ${file.name} (${formatBytes(file.size)})…`)
-      await client.uploadFrom(file.filePath, file.name)
-      console.log(`[ftp] uploaded ${file.name}`)
+    /**
+     * Upload into feed root. Always `cd(remoteDir)` first, then STOR by
+     * **basename only** — never pass `/desktop/foo.yml` while cwd is already
+     * `/desktop` (some FTP servers would nest or double-prefix the path).
+     * `remotePathFor` is the canonical public path used only for logs/checks.
+     */
+    async function uploadBatch(batch) {
+      await client.cd(remoteDir)
+      for (const file of batch) {
+        const canonical = remotePathFor(remoteDir, file.name)
+        const remoteName = path.posix.basename(file.name)
+        console.log(`[ftp] uploading ${canonical} (${formatBytes(file.size)})…`)
+        await client.uploadFrom(file.filePath, remoteName)
+        console.log(`[ftp] uploaded ${canonical}`)
+      }
     }
 
+    // All non-yml must succeed before any public feed yml is published.
+    await uploadBatch(binaries)
+    await uploadBatch(ymls)
+
+    await client.cd(remoteDir)
     const listing = await client.list()
+    assertYmlsAtRemoteRoot(listing)
+    for (const yml of UPDATE_YML_PUBLIC) {
+      // Confirm each yml is a retrievable root file (not only present in LIST).
+      const size = await client.size(yml)
+      if (!(size > 0)) {
+        throw new Error(`FTP feed root yml empty or missing: ${remotePathFor(remoteDir, yml)}`)
+      }
+      console.log(`[ftp] yml root: ${remotePathFor(remoteDir, yml)} (${formatBytes(size)})`)
+    }
+
+    // Prune only root-level release files under remoteDir (never recurse into subdirs).
     const obsolete = listing
       .filter((entry) => entry.isFile && shouldUpload(entry.name) && !keepNames.has(entry.name))
       .map((entry) => entry.name)

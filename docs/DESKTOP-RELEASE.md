@@ -223,7 +223,7 @@ Release 正文由 CI 从 **`docs/releases/{version}.md`** 组装。细则见 [`d
 
 ### 4.4 Cloudflare R2 + CDN（`update.opptrix.org`）
 
-桌面客户端的 **检查更新 / 应用内下载更新** 走 R2 + 自定义域名 CDN；**用户首次/手动安装包** 以官网 **https://opptrix.org/** 为准。GitHub Release **只**承载 Release Notes，**永不挂**附件。（曾试 FTP 因带宽不稳已停用，CI **仅** `sync-release-to-r2.mjs`。）
+桌面客户端的 **检查更新 / 应用内下载更新** 走 R2 + 自定义域名 CDN；**用户首次/手动安装包** 以官网 **https://opptrix.org/** 为准。GitHub Release **只**承载 Release Notes，**永不挂**附件。（曾试 FTP 因带宽不稳已停用，CI **仅** `sync-release-to-r2.mjs`。若手动跑 `sync-release-to-ftp.mjs`，三份公开 `latest-*.yml` **必须**落在 FTP 更新源根目录 `FTP_REMOTE_DIR` / feed prefix，如 `/desktop`，不得进子目录。）
 
 CI 在 `finalize-release` 成功后执行 **`sync-r2`** job（同步失败则 workflow 失败）：
 
