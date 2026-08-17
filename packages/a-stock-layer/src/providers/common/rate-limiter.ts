@@ -3,6 +3,7 @@
  *
  * 所有 Provider 共享同一实例，确保对同一主机名的请求间隔 >= intervalMs。
  * 每 host 等待队列有界（maxQueued）；空闲 host 定期 prune，避免 Map 无限增长。
+ * 默认 maxQueued=512，与 Hub 批量快照上限（200）全开并发排队对齐，仍保持每 host 单在途。
  *
  * 使用方法：
  *   await hostnameLimiter.acquire(hostname)
@@ -15,7 +16,7 @@
 export interface HostnameRateLimiterOptions {
   /** 同 host 两次请求最小间隔（ms） */
   intervalMs?: number
-  /** 每 host 等待队列上限；超限 acquire 立即 reject（默认 128） */
+  /** 每 host 等待队列上限；超限 acquire 立即 reject（默认 512） */
   maxQueued?: number
   /** 空闲 host 保留时长（ms）；busy/有排队时不 prune（默认 5min） */
   idleTtlMs?: number
@@ -42,7 +43,7 @@ export class HostnameRateLimiter {
         ? { intervalMs: intervalMsOrOpts }
         : intervalMsOrOpts
     this.intervalMs = opts.intervalMs ?? 1000
-    this.maxQueued = opts.maxQueued ?? 128
+    this.maxQueued = opts.maxQueued ?? 512
     this.idleTtlMs = opts.idleTtlMs ?? 5 * 60 * 1000
     const pruneEvery = opts.pruneIntervalMs ?? 60_000
     if (pruneEvery > 0) {
@@ -157,10 +158,14 @@ export class HostnameRateLimiter {
   }
 }
 
-/** 全局单例 — 所有 Provider 共享，默认 1s 间隔、每 host 等待队列 ≤128 */
+/**
+ * 全局单例 — 所有 Provider 共享，默认 1s 间隔、每 host 单在途。
+ * maxQueued=512：覆盖 Hub 批量快照上限（BATCH_INSTRUMENT_SNAPSHOTS_MAX=200）全开并发排队，
+ * 并为同 host 其它在途请求留余量；仍禁止同 host 多在途。
+ */
 export const hostnameLimiter = new HostnameRateLimiter({
   intervalMs: 1000,
-  maxQueued: 128,
+  maxQueued: 512,
 })
 
 export function extractHostname(url: string): string {

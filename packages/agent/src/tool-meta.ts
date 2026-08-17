@@ -63,7 +63,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'instrument_batch_snapshots',
     miningEligible: true,
     usageGuide: `对已有候选代码批量拉取在线聚合快照（行情/概况等）。${INSTRUMENT_REF_USAGE}`,
-    compliance: 'instruments 或 codes 一次传入，建议 ≤ 80；禁止对同一列表重复调用。',
+    compliance: 'instruments 或 codes 一次传入，硬上限 200；允许部分失败（看 failed[] / attempted_count）；禁止对同一列表重复调用。',
   },
   get_watchlist: {
     hubFeature: 'watchlist_list',

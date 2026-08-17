@@ -62,7 +62,7 @@
 
 **热缓存（`Cache`，`@opptrix/market-data-core`）**：内存 LRU 有界（默认约 1024 条 / 粗估 64MB，可用 `OPPTRIX_CACHE_MAX_ENTRIES`、`OPPTRIX_CACHE_MAX_BYTES` 覆盖）；条目 `approxBytes` 用类型/采样粗估（避免每次全量 `JSON.stringify`），`set*` 经 debounce（约 1.5s）落盘为紧凑 JSON，`clear*` 立即 flush；单条过大仅留内存、不写入 `cache.json`；TTL=0 仍不缓存。淘汰后调用方走网络重拉，命中时返回完整 `data`。遗留 `MemoryCache` 已 deprecate 且带硬顶 LRU（默认 128），请改用 `Cache`。自选 `WatchlistStore` 对 SQLite 写短防抖合并，`flush()` 退出/测试落盘。Provider 进程内 `nameCache`（同花顺 / Tushare / BaoStock / Zzshare 等）经共享 `LruMap` 硬顶（默认 8000）；日线 `snapshotCache` 仍按交易日单槽，不堆积多日。
 
-**有界队列（突发防 OOM）**：`HostnameRateLimiter` 每 host 等待队列有上限（默认 128，超限 reject）并定期 prune 空闲 host；本地推理 `InferenceJobQueue` pending 有界（默认 48）；研报 Lance `LanceOpScheduler` pending 有界（默认 256，超限丢弃最旧尚未开始的 write，读优先与 running 不受影响）；Duck `DuckCliPool` / Neo 读队列 pending 有界（默认 128，可用 `OPPTRIX_DUCK_MAX_PENDING` 覆盖，超限 reject 并打日志；`close` 会 settle 等待中的任务）。
+**有界队列（突发防 OOM）**：`HostnameRateLimiter` 每 host 等待队列有上限（默认 **512**，超限 reject）并定期 prune 空闲 host（与 Hub 批量快照上限 200 全开排队对齐，仍每 host 单在途；设计见 [FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md)）；本地推理 `InferenceJobQueue` pending 有界（默认 48）；研报 Lance `LanceOpScheduler` pending 有界（默认 256，超限丢弃最旧尚未开始的 write，读优先与 running 不受影响）；Duck `DuckCliPool` / Neo 读队列 pending 有界（默认 128，可用 `OPPTRIX_DUCK_MAX_PENDING` 覆盖，超限 reject 并打日志；`close` 会 settle 等待中的任务）。
 
 ### 2.3 主要瓶颈（多市场前必须解决）
 

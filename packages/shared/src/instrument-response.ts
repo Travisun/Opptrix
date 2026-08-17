@@ -46,6 +46,13 @@ export interface UnifiedInstrumentChart {
   chart_time_zone?: string
 }
 
+/** 批量快照单只失败项 — code（CN）或 symbol（跨市场）二选一或并存 */
+export interface UnifiedInstrumentBatchFailure {
+  code?: string
+  symbol?: string
+  reason: string
+}
+
 export interface UnifiedInstrumentBatchResult {
   trade_date?: string | null
   count: number
@@ -54,6 +61,12 @@ export interface UnifiedInstrumentBatchResult {
   discover_items?: Array<Record<string, unknown>>
   /** @deprecated 与 discover_items 相同，保留供 legacy Agent 工具读取 */
   items?: Array<Record<string, unknown>>
+  /** 调用方请求的标的数（截断上限前） */
+  requested_count?: number
+  /** 实际尝试拉取的标的数（截断后） */
+  attempted_count?: number
+  /** 单只失败列表；整批仍可为 success（部分成功） */
+  failed?: UnifiedInstrumentBatchFailure[]
 }
 
 export interface UnifiedInstrumentSearchHit {

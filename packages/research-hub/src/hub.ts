@@ -100,6 +100,7 @@ import {
   type InstrumentAnalyticsRouteHandlers,
 } from './instrument-analytics-router.js'
 import {
+  collectParallelCnBatchItems,
   routeInstrumentBatchSnapshots,
   type InstrumentBatchRouteHandlers,
 } from './instrument-batch-router.js'
@@ -597,19 +598,34 @@ export class ResearchHub {
   }
 
   private async batchStockSnapshots(params: Record<string, unknown>, t0: number) {
-    const codes = Array.isArray(params.codes) ? (params.codes as string[]).map(String) : []
-    const slice = codes.slice(0, 80)
-    const items: Record<string, unknown>[] = []
-    for (const code of slice) {
-      const snap = await this.instrumentSnapshot(
-        normalizeInstrumentHubParams({ code, market: 'CN' }),
-        t0,
-      )
-      if (snap.success && snap.data && typeof snap.data === 'object') {
-        items.push(snap.data as Record<string, unknown>)
-      }
-    }
-    return ok({ trade_date: null, items }, `批量快照 ${items.length} 只`, t0)
+    const codes = Array.isArray(params.codes)
+      ? (params.codes as string[]).map(String).filter(Boolean)
+      : []
+    // Hub 批内全开并发；免费源仍由 HostnameRateLimiter（每 host 单在途 + 间隔）全局硬门槛。
+    const { items, failed, requested_count, attempted_count } = await collectParallelCnBatchItems(
+      codes,
+      async (code) => {
+        const snap = await this.instrumentSnapshot(
+          normalizeInstrumentHubParams({ code, market: 'CN' }),
+          t0,
+        )
+        return {
+          success: snap.success,
+          data: snap.data && typeof snap.data === 'object'
+            ? snap.data as Record<string, unknown>
+            : undefined,
+          message: snap.message,
+        }
+      },
+    )
+    const msg = failed.length === 0
+      ? `批量快照 ${items.length} 只`
+      : `批量快照成功 ${items.length} 只，失败 ${failed.length} 只`
+    return ok(
+      { trade_date: null, items, requested_count, attempted_count, failed },
+      msg,
+      t0,
+    )
   }
 
   private instrumentBatchHandlers(t0: number): InstrumentBatchRouteHandlers {

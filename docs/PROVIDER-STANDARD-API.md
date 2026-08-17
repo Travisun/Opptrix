@@ -72,11 +72,13 @@ bindingsFor: () => []
 
 适用：manifest **无**必填 `secret` 字段的免费行情源（tencent / sinafinance / eastmoney / akshare / baostock 等）。
 
-引擎已有两层保护：
+> **设计全文**（分层、批内全开、主机闸门、不变量与常数）：[FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md)。
+
+引擎已有两层保护（Hub 批内可不限并发；硬门槛在主机闸门）：
 
 | 层 | 机制 | 职责 |
 |----|------|------|
-| **预防** | `hostnameLimiter`（`ProviderHttpClient`，同主机约 1s 间隔） | 降低触发反爬/封禁概率 |
+| **预防** | `hostnameLimiter`（`ProviderHttpClient`，每 host 单在途 + 约 1s 间隔，`maxQueued=512`） | 降低触发反爬/封禁概率 |
 | **封禁后** | `FreeProviderThrottle` 阶梯冷却（5min → … → 24h+） | 冷却期内跳过该 Provider，换源 / 等待 |
 
 实现要求：

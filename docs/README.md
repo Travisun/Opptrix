@@ -29,8 +29,9 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 
 1. [DATA-LAYER.md](./DATA-LAYER.md) — Engine、InstrumentRef、Provider 演进
 2. [PROVIDER-STANDARD-API.md](./PROVIDER-STANDARD-API.md) — `queryInstrumentData` 标准 API（**必读**）
-3. [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md) — 多市场能力与边界
-4. [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md) — 迁移进度
+3. [FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md) — 免费源主机闸门与批内全开设计
+4. [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md) — 多市场能力与边界
+5. [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md) — 迁移进度
 
 ### 前端 / UI
 
@@ -62,6 +63,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 | [DATA-LAYER.md](./DATA-LAYER.md) | 数据层设计（Provider / Instrument） |
 | [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md) | 多市场 V2 架构 |
 | [PROVIDER-STANDARD-API.md](./PROVIDER-STANDARD-API.md) | 标准数据 API 规范 |
+| [FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md) | 免费源串行保护（主机闸门 / 批内全开） |
 | [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md) | 数据层落地进度 |
 | [DESKTOP.md](./DESKTOP.md) | Electron 桌面开发 |
 | [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) | 桌面发布与自动更新 |
