@@ -612,7 +612,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       return body
     }
 
-    const timeoutSignal = AbortSignal.timeout(this.cfg.timeout ?? 120_000)
+    /** 单次 LLM 请求默认 10 分钟（长思考 / 流式输出）；可经 LlmConfig.timeout 覆盖 */
+    const timeoutSignal = AbortSignal.timeout(this.cfg.timeout ?? 600_000)
     const requestSignal = signal
       ? AbortSignal.any([signal, timeoutSignal])
       : timeoutSignal
@@ -732,6 +733,11 @@ export class OpenAiCompatibleProvider implements LlmProvider {
             noteAbort()
             const msg = '已取消'
             return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: 'cancelled' }
+          }
+          // 超时 abort：勿用同一已 abort 的 signal 做非流式 fallback（会二次失败并泄漏英文 TimeoutError）
+          if (timeoutSignal.aborted || requestSignal.aborted) {
+            const msg = `⚠️ ${formatOutboundFetchError(streamErr)}`
+            return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: msg }
           }
           // 尚未开始读流时回退非流式；中途失败不再重放整轮
           if (!streamConsumeStarted) {

@@ -48,7 +48,7 @@ export {
   type OutboundFamilyMode,
   type OutboundNetworkStatus,
 } from './outbound-network.js'
-export { outboundFetch, formatOutboundFetchError } from './outbound-fetch.js'
+export { outboundFetch, formatOutboundFetchError, isOutboundTimeoutError } from './outbound-fetch.js'
 export { ok, fail, elapsedSince } from './result.js'
 export {
   resolveUserDataRoot,

@@ -28,7 +28,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 const REQUEST_TIMEOUT = 10000 // 10s — quick reads / mutations
 /** 本机重活（语义模型卸载、深度整理卸载、大附件上传等）；勿抬高全局 REQUEST_TIMEOUT。 */
 const LOCAL_HEAVY_TIMEOUT = 180_000
-/** Agent chat: multiple LLM + tool rounds (server LLM timeout up to 120s per round). */
+/** Agent chat: multiple LLM + tool rounds (server LLM timeout up to 10m per round). */
 const CHAT_REQUEST_TIMEOUT = 300_000
 
 async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {

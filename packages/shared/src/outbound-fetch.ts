@@ -1,5 +1,6 @@
 import http from 'node:http'
 import https from 'node:https'
+import { Readable } from 'node:stream'
 import {
   ensureOutboundNetworkReady,
   getConnectFamiliesForHost,
@@ -34,6 +35,27 @@ function bodyBytes(body: RequestInit['body']): Buffer | undefined {
   throw new Error('unsupported request body type')
 }
 
+function responseHeadersFromIncoming(res: http.IncomingMessage): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(res.headers).flatMap(([key, value]) =>
+      value == null ? [] : [[key, Array.isArray(value) ? value.join(', ') : value]],
+    ),
+  )
+}
+
+/** TimeoutError / AbortSignal.timeout 原文勿直接展示给用户 */
+export function isOutboundTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === 'TimeoutError') return true
+  return error.message.toLowerCase().includes('aborted due to timeout')
+}
+
+function abortRejectReason(signal: AbortSignal | null | undefined): Error {
+  const reason = signal?.reason
+  if (reason instanceof Error) return reason
+  return new DOMException('Aborted', 'AbortError')
+}
+
 function outboundFetchOnce(
   url: string,
   init: RequestInit,
@@ -49,8 +71,20 @@ function outboundFetchOnce(
   return new Promise((resolve, reject) => {
     const signal = init.signal
     if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+      reject(abortRejectReason(signal))
       return
+    }
+
+    let settled = false
+    const settleReject = (error: unknown) => {
+      if (settled) return
+      settled = true
+      reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    const settleResolve = (response: Response) => {
+      if (settled) return
+      settled = true
+      resolve(response)
     }
 
     const req = lib.request(
@@ -63,27 +97,26 @@ function outboundFetchOnce(
         family,
       },
       (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', chunk => chunks.push(chunk))
-        res.on('end', () => {
-          resolve(new Response(Buffer.concat(chunks), {
-            status: res.statusCode ?? 500,
-            statusText: res.statusMessage,
-            headers: Object.fromEntries(
-              Object.entries(res.headers).flatMap(([key, value]) =>
-                value == null ? [] : [[key, Array.isArray(value) ? value.join(', ') : value]],
-              ),
-            ),
-          }))
-        })
-        res.on('error', reject)
+        // 响应头到达即 resolve，body 用可读流 — 禁止整包缓冲后再给调用方
+        const webBody = Readable.toWeb(res) as ReadableStream<Uint8Array>
+        settleResolve(new Response(webBody, {
+          status: res.statusCode ?? 500,
+          statusText: res.statusMessage,
+          headers: responseHeadersFromIncoming(res),
+        }))
       },
     )
 
-    req.on('error', reject)
+    req.on('error', (error) => {
+      // 已 resolve（流式读 body）后 destroy/abort 只影响 body，勿再 reject Promise
+      settleReject(error)
+    })
 
     const onAbort = () => {
-      req.destroy(new DOMException('Aborted', 'AbortError'))
+      const reason = abortRejectReason(signal)
+      req.destroy(reason)
+      // 尚未拿到响应头：以 abort reason 结束（含 TimeoutError，由 formatOutboundFetchError 转中文）
+      settleReject(reason)
     }
     signal?.addEventListener('abort', onAbort, { once: true })
     req.on('close', () => signal?.removeEventListener('abort', onAbort))
@@ -95,6 +128,7 @@ function outboundFetchOnce(
 
 /**
  * Outbound HTTP(S) fetch: IPv4 first per host; retry IPv6 only after v4 connect/DNS failure.
+ * 一旦响应头到达并开始流式 body，不再换栈重放。
  */
 export async function outboundFetch(url: string, init: RequestInit = {}): Promise<Response> {
   await ensureOutboundNetworkReady()
@@ -122,6 +156,9 @@ export function formatOutboundFetchError(error: unknown): string {
   if (!(error instanceof Error)) return String(error)
   if (isOutboundConnectError(error)) {
     return '无法连接远程服务，请检查网络与代理设置'
+  }
+  if (isOutboundTimeoutError(error)) {
+    return '请求超时，请稍后重试'
   }
   if (error.name === 'AbortError' || error.message === 'Aborted') {
     return '请求超时，请稍后重试'
