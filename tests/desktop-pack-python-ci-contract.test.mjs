@@ -167,9 +167,34 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('python'), 'must target python tree')
     assert.ok(src.includes('node_modules'), 'must target node_modules tree')
     assert.ok(src.includes('playwright-browsers'), 'must pre-sign playwright (signIgnore + notary)')
-    assert.ok(src.includes('collectNestedBundles'), 'must deep-sign nested Chrome .app/.framework')
-    assert.ok(src.includes('--deep') || src.includes("deep: true"), 'nested bundles need --deep')
+    assert.ok(src.includes('collectNestedBundles'), 'must seal nested Chrome .app/.framework')
     assert.ok(src.includes('stashHeavyTreesForOsxSign'), 'must stash heavy trees before osx-sign walk')
+
+    // Playwright: leaf Mach-O first (Libraries/*.dylib), then bundle seal — not --deep alone.
+    assert.ok(
+      src.includes('leaf-first') || src.includes('leafMachOs'),
+      'playwright must leaf-first sign all Mach-O (incl. framework Libraries)',
+    )
+    assert.ok(
+      src.includes('libEGL') && src.includes('libGLESv2') && src.includes('libvk_swiftshader'),
+      'must explicitly cover critical CFT Libraries dylibs',
+    )
+    assert.ok(
+      src.includes('assertDeveloperIdSigned') || src.includes('Developer ID Application'),
+      'must verify Developer ID Authority after playwright leaf sign',
+    )
+    assert.ok(
+      src.includes('hardFail') || /playwright pre-sign failed/.test(src),
+      'playwright sign failures must hard-fail (not silent skip)',
+    )
+    // Soft-skip remains for python/node_modules; playwright path must throw.
+    const pwLeafIdx = src.indexOf('leaf-first')
+    const pwBlock = pwLeafIdx >= 0 ? src.slice(pwLeafIdx, pwLeafIdx + 2500) : src
+    assert.ok(
+      !/codesignTarget\([^)]*deep:\s*true/.test(pwBlock)
+        && !pwBlock.includes("deep: true"),
+      'playwright branch must not rely on codesign --deep for Libraries',
+    )
   })
 
   it('afterSign restores stashed heavy trees and re-seals outer app', () => {

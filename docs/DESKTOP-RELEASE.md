@@ -145,7 +145,7 @@ git push origin desktop-v0.6.1
 | 源序 | CI 默认 `OPPTRIX_MODEL_SOURCE_ORDER=huggingface,modelscope`（国外优先）；本地开发默认可 ModelScope 优先。**RapidOCR 例外**：仅 ModelScope（+ 可选 `OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX`），不走 HF |
 | `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN`（可选） | Hugging Face 读 token，提高 e5 / SenseVoice 限额、降低 401 |
 | `OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX`（可选） | RapidOCR ONNX 的稳定直链前缀（如自有 R2）；无则 ModelScope |
-| mac 签名 EMFILE | `afterPack` 串行预签 `python/` 与 `runtime-stage/node_modules/` 下 Mach-O，`build.mac.signIgnore` 跳过这些树与 `playwright-browsers` |
+| mac 签名 EMFILE | `afterPack` 串行预签 `python/` 与 `runtime-stage/node_modules/` 下 Mach-O，`build.mac.signIgnore` 跳过这些树与 `playwright-browsers`；Playwright Chrome 的 `*.framework/.../Libraries/*.dylib`（如 libEGL）须**叶子先签** Developer ID + timestamp，不可只靠 `codesign --deep` |
 
 **已确认可用的 HF 直链（SenseVoice）**
 

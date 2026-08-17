@@ -18,7 +18,7 @@
  *    afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize) → dmg
  * 4) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
  */
-const { execFileSync } = require('node:child_process')
+const { execFileSync, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -243,15 +243,6 @@ function collectNestedBundles(dir) {
   return { apps, frameworks }
 }
 
-/** @param {string} filePath @param {string[]} bundleRoots */
-function isInsideAny(filePath, bundleRoots) {
-  const resolved = path.resolve(filePath)
-  return bundleRoots.some((root) => {
-    const r = path.resolve(root)
-    return resolved === r || resolved.startsWith(`${r}${path.sep}`)
-  })
-}
-
 /**
  * @param {string} target
  * @param {string} identity
@@ -265,13 +256,47 @@ function codesignTarget(target, identity, opts = {}) {
 }
 
 /**
+ * Notary rejects Google's nested Chrome Libraries (libEGL etc.) unless each leaf
+ * Mach-O is re-signed with our Developer ID + secure timestamp. `--deep` alone
+ * often leaves framework Libraries/* with the original Google seal.
+ *
+ * @param {string} filePath
+ */
+function assertDeveloperIdSigned(filePath) {
+  const verify = spawnSync('codesign', ['--verify', '--strict', filePath], {
+    encoding: 'utf8',
+  })
+  if (verify.status !== 0) {
+    const detail = `${verify.stderr || verify.stdout || ''}`.trim().split('\n')[0]
+    throw new Error(
+      `codesign --verify failed for ${filePath}${detail ? `: ${detail}` : ''}`,
+    )
+  }
+  const probed = spawnSync('codesign', ['-dv', '--verbose=2', filePath], {
+    encoding: 'utf8',
+  })
+  // codesign -dv writes Authority lines to stderr; status is typically 0.
+  const authDump = `${probed.stdout || ''}${probed.stderr || ''}`
+  if (!/Authority=Developer ID Application:/.test(authDump)) {
+    throw new Error(
+      `${filePath} is not signed with Developer ID Application `
+        + `(codesign -dv Authority missing). Notary will reject nested Chrome Libraries.`,
+    )
+  }
+}
+
+/** Critical CFT framework Libraries that notarization historically rejected. */
+const PLAYWRIGHT_CRITICAL_DYLIB_RE = /(?:^|\/)(?:libEGL|libGLESv2|libvk_swiftshader)\.dylib$/
+
+/**
  * Serially pre-sign heavy Mach-O trees that build.mac.signIgnore will skip.
  * Must run after restoreSidecarNodeModules (deps → node_modules).
  *
- * Playwright ships nested Google Chrome for Testing.app — signing leaf binaries
- * inside that .app invalidates the bundle seal (notary: "signature … is invalid").
- * For playwright-browsers: deep-sign nested .framework/.app (inside-out), then
- * sign only loose Mach-O outside those bundles.
+ * Playwright Chrome for Testing: **leaf-first** — sign every Mach-O under
+ * playwright-browsers (including `*.framework/.../Libraries/*.dylib`, Helpers,
+ * main binaries), then seal `.framework` / `.app` deepest-first. Do **not** rely
+ * on `codesign --deep` alone; nested Libraries often keep Google's seal + no
+ * secure timestamp, which fails notarization.
  *
  * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
  */
@@ -299,14 +324,35 @@ function preSignHeavyMacTrees(context) {
   let skipped = 0
   console.log(`afterPack: pre-signing heavy Mach-O trees with identity: ${identity}`)
 
-  /** @param {string} file */
-  function signFile(file) {
+  /**
+   * @param {string} file
+   * @param {{ hardFail?: boolean }} [opts]
+   */
+  function signFile(file, opts = {}) {
     try {
+      // Python ships versioned symlinks (python3.1 → …); soft-skip those only.
+      // Playwright critical path must not silently skip — hardFail throws below.
+      if (!opts.hardFail) {
+        try {
+          if (fs.lstatSync(file).isSymbolicLink()) {
+            skipped += 1
+            console.warn(`afterPack: pre-sign skipped symlink ${file}`)
+            return
+          }
+        } catch {
+          /* fall through to codesign */
+        }
+      }
       codesignTarget(file, identity)
       signed += 1
     } catch (err) {
-      skipped += 1
       const message = err instanceof Error ? err.message : String(err)
+      if (opts.hardFail) {
+        throw new Error(
+          `afterPack: playwright pre-sign failed for ${file}: ${message.split('\n')[0]}`,
+        )
+      }
+      skipped += 1
       console.warn(`afterPack: pre-sign skipped ${file}: ${message.split('\n')[0]}`)
     }
   }
@@ -318,42 +364,57 @@ function preSignHeavyMacTrees(context) {
   }
 
   if (fs.existsSync(pwRoot)) {
-    const { apps, frameworks } = collectNestedBundles(pwRoot)
-    // Deepest first so helpers/frameworks seal before parents.
-    frameworks.sort((a, b) => b.length - a.length)
-    apps.sort((a, b) => b.length - a.length)
+    // 1) Leaf Mach-O first (Libraries/*.dylib, Helpers, chrome, …) — never rely on --deep.
+    const leafMachOs = walkFiles(pwRoot).filter(isMachOCandidate)
     console.log(
-      `afterPack: playwright bundles frameworks=${frameworks.length} apps=${apps.length}`,
+      `afterPack: playwright leaf-first pre-sign ${leafMachOs.length} Mach-O under playwright-browsers`,
     )
-    for (const fw of frameworks) {
+    for (const file of leafMachOs) signFile(file, { hardFail: true })
+
+    // 2) Seal nested bundles deepest-first (Helpers → Framework → Chrome.app).
+    // Leaves already signed; do not use --deep. Sealing frameworks *before* helper
+    // .apps would invalidate the framework seal when helpers are re-signed after.
+    const { apps, frameworks } = collectNestedBundles(pwRoot)
+    const bundles = [
+      ...frameworks.map((p) => ({ path: p, kind: 'framework' })),
+      ...apps.map((p) => ({ path: p, kind: 'app' })),
+    ].sort((a, b) => b.path.length - a.path.length)
+    console.log(
+      `afterPack: playwright seal bundles frameworks=${frameworks.length} apps=${apps.length} (deepest-first)`,
+    )
+    for (const bundle of bundles) {
       try {
-        codesignTarget(fw, identity, { deep: true })
+        codesignTarget(bundle.path, identity)
         signed += 1
-        console.log(`afterPack: deep-signed framework ${path.relative(pwRoot, fw)}`)
+        console.log(`afterPack: sealed ${bundle.kind} ${path.relative(pwRoot, bundle.path)}`)
       } catch (err) {
-        skipped += 1
         const message = err instanceof Error ? err.message : String(err)
-        console.warn(`afterPack: framework sign failed ${fw}: ${message.split('\n')[0]}`)
-      }
-    }
-    for (const nestedApp of apps) {
-      try {
-        codesignTarget(nestedApp, identity, { deep: true })
-        signed += 1
-        console.log(`afterPack: deep-signed app ${path.relative(pwRoot, nestedApp)}`)
-      } catch (err) {
-        skipped += 1
-        const message = err instanceof Error ? err.message : String(err)
-        console.warn(`afterPack: nested app sign failed ${nestedApp}: ${message.split('\n')[0]}`)
+        throw new Error(
+          `afterPack: playwright ${bundle.kind} sign failed ${bundle.path}: ${message.split('\n')[0]}`,
+        )
       }
     }
 
-    const bundleRoots = [...frameworks, ...apps]
-    const loose = walkFiles(pwRoot)
-      .filter(isMachOCandidate)
-      .filter((f) => !isInsideAny(f, bundleRoots))
-    console.log(`afterPack: pre-sign ${loose.length} loose Playwright binaries`)
-    for (const file of loose) signFile(file)
+    // 3) Hard-fail if critical CFT Libraries still lack Developer ID + valid seal.
+    const critical = leafMachOs.filter((f) => PLAYWRIGHT_CRITICAL_DYLIB_RE.test(f))
+    console.log(
+      `afterPack: verifying Developer ID on ${critical.length} critical Playwright dylibs`,
+    )
+    for (const dylib of critical) {
+      try {
+        assertDeveloperIdSigned(dylib)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        throw new Error(
+          `afterPack: Playwright critical dylib verify failed for ${dylib}: ${message.split('\n')[0]}`,
+        )
+      }
+    }
+    if (critical.length === 0) {
+      console.warn(
+        'afterPack: no libEGL/libGLESv2/libvk_swiftshader under playwright-browsers — skip critical verify',
+      )
+    }
   }
 
   console.log(`afterPack: heavy-tree pre-sign done (signed=${signed}, skipped=${skipped})`)
