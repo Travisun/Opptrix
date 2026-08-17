@@ -26,6 +26,10 @@ describe('mac-sign-checklist lib', () => {
     const checklist = loadMacSignChecklist()
     assert.equal(checklist.version, 1)
     assert.ok(checklist.mustVerify.some((e) => e.id === 'cft-libEGL'))
+    assert.ok(
+      checklist.updateWhen.some((s) => /skip symlink|depth-sort/i.test(s)),
+      'updateWhen should document leaf collect skip symlink + depth-sort',
+    )
   })
 
   it('matchGlob supports ** and single-segment *', () => {

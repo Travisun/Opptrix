@@ -15,7 +15,8 @@
  *    alone is not enough — walkAsync still opens every file). afterSign
  *    restores + re-seals, then notarizes+staples the final .app
  *    (`build.mac.notarize: false` so builder does not notarize before restore).
- *    Pipeline: afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize) → dmg
+ *    Pipeline: afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize+spctl) → dmg
+ *    Leaf collect: skip symlink + realpath dedupe + depth-sort (Libraries before framework tip).
  *    **When bumping Playwright / Chromium (CFT), native .node/.dylib, or python
  *    layout — update `mac-sign-checklist.json` (mustVerify + signTrees).**
  * 4) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
@@ -250,6 +251,70 @@ function collectNestedBundles(dir) {
 }
 
 /**
+ * Path segment count for deepest-first leaf ordering (Libraries before framework binary).
+ * @param {string} filePath
+ */
+function pathSegmentCount(filePath) {
+  return filePath.split(path.sep).filter((s) => s.length > 0).length
+}
+
+/**
+ * Collect real (non-symlink) Mach-O leaves under root.
+ * - Skips symlinks via lstat (framework top-level binaries are often symlinks to Versions/*)
+ * - Dedupes by fs.realpathSync
+ * - Sorts by path segment count desc, then path.length desc (Libraries before framework main)
+ *
+ * @param {string} root
+ * @returns {string[]} absolute realpaths
+ */
+function collectSignableLeafMachOs(root) {
+  /** @type {string[]} */
+  const candidates = []
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name)
+      // Never follow / collect symlinks — codesign on framework tip symlink hard-fails.
+      if (entry.isSymbolicLink()) continue
+      if (entry.isDirectory()) {
+        walk(full)
+        continue
+      }
+      if (entry.isFile() && isMachOCandidate(full)) {
+        candidates.push(full)
+      }
+    }
+  }
+  walk(root)
+
+  /** @type {Map<string, string>} */
+  const byReal = new Map()
+  for (const file of candidates) {
+    let real
+    try {
+      real = fs.realpathSync(file)
+    } catch {
+      continue
+    }
+    if (!byReal.has(real)) byReal.set(real, real)
+  }
+
+  const unique = [...byReal.values()]
+  unique.sort((a, b) => {
+    const depthDiff = pathSegmentCount(b) - pathSegmentCount(a)
+    if (depthDiff !== 0) return depthDiff
+    return b.length - a.length
+  })
+  return unique
+}
+
+/**
  * @param {string} target
  * @param {string} identity
  * @param {{ deep?: boolean }} [opts]
@@ -258,7 +323,19 @@ function codesignTarget(target, identity, opts = {}) {
   const args = ['--force', '--options', 'runtime', '--timestamp', '--sign', identity]
   if (opts.deep) args.push('--deep')
   args.push(target)
-  execFileSync('codesign', args, { stdio: ['ignore', 'ignore', 'pipe'] })
+  try {
+    execFileSync('codesign', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
+  } catch (err) {
+    const stderr =
+      err && typeof err === 'object' && 'stderr' in err
+        ? String(/** @type {{ stderr?: Buffer | string }} */ (err).stderr ?? '').trim()
+        : ''
+    const base = err instanceof Error ? err.message : String(err)
+    throw new Error(`codesign failed for ${target}: ${stderr || base}`)
+  }
 }
 
 /**
@@ -298,7 +375,9 @@ function assertDeveloperIdSigned(filePath) {
  * Driven by `resources/mac-sign-checklist.json` (single source of truth):
  * - `leaf-macho`: sign Mach-O leaves (python / node_modules; soft-fail by default)
  * - `leaf-then-bundles`: Playwright Chrome for Testing — **leaf-first** then seal
- *   nested .framework / .app deepest-first. Do **not** rely on `codesign --deep`.
+ *   nested .framework / .app deepest-first. Leaf collect skips symlinks, dedupes
+ *   by realpath, depth-sorts (Libraries before framework tip). Do **not** rely on
+ *   `codesign --deep`.
  * After signing, `mustVerify` entries (libEGL / GLESv2 / swiftshader / Chrome.app / …)
  * are hard-checked for Developer ID — missing required globs throw (stale checklist
  * or incomplete stage).
@@ -337,18 +416,16 @@ function preSignHeavyMacTrees(context) {
    */
   function signFile(file, opts = {}) {
     try {
-      // Python ships versioned symlinks (python3.1 → …); soft-skip those only.
-      // Playwright critical path must not silently skip — hardFail throws below.
-      if (!opts.hardFail) {
-        try {
-          if (fs.lstatSync(file).isSymbolicLink()) {
-            skipped += 1
-            console.warn(`afterPack: pre-sign skipped symlink ${file}`)
-            return
-          }
-        } catch {
-          /* fall through to codesign */
+      // Always skip symlinks (incl. hardFail / Playwright): framework tip binaries
+      // are often symlinks to Versions/* — codesigning the link hard-fails on x64.
+      try {
+        if (fs.lstatSync(file).isSymbolicLink()) {
+          skipped += 1
+          console.warn(`afterPack: pre-sign skipped symlink ${file}`)
+          return
         }
+      } catch {
+        /* fall through to codesign */
       }
       codesignTarget(file, identity)
       signed += 1
@@ -369,7 +446,7 @@ function preSignHeavyMacTrees(context) {
    * @param {{ hardFail?: boolean }} opts
    */
   function signLeafMachOs(root, opts = {}) {
-    const files = walkFiles(root).filter(isMachOCandidate)
+    const files = collectSignableLeafMachOs(root)
     console.log(
       `afterPack: pre-sign ${files.length} binaries under ${path.relative(resources, root)}`,
     )
@@ -535,8 +612,11 @@ exports.default = async function afterPack(context) {
   adhocSignMac(context)
 }
 
-// Exported for lightweight plist-strip smoke tests (not used by electron-builder).
+// Exported for lightweight plist-strip / leaf-collect smoke tests (not used by electron-builder).
 exports.stripMacBundleIconName = stripMacBundleIconName
+exports.collectSignableLeafMachOs = collectSignableLeafMachOs
+exports.assertDeveloperIdSigned = assertDeveloperIdSigned
+exports.pathSegmentCount = pathSegmentCount
 exports.ensurePackagedScheduleHelper = ensurePackagedScheduleHelper
 exports.preSignHeavyMacTrees = preSignHeavyMacTrees
 exports.isMachOCandidate = isMachOCandidate

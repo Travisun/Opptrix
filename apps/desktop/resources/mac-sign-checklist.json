@@ -5,7 +5,8 @@
     "Playwright / Chromium (CFT) version bump",
     "New nested .app / .framework under playwright-browsers",
     "New native .node/.dylib under runtime-stage/node_modules",
-    "Bundled python layout change"
+    "Bundled python layout change",
+    "Leaf Mach-O collect must skip symlink + depth-sort (Libraries before framework tip)"
   ],
   "signTrees": [
     { "id": "python", "rel": "python", "mode": "leaf-macho", "hardFail": false },

@@ -5,16 +5,22 @@
  * races our restore/re-seal). We set `build.mac.notarize: false` and notarize
  * here on the *final* .app instead:
  *
- *   sign → afterSign(restore + re-seal) → notarize + staple → dmg/zip
+ *   sign → afterSign(restore + re-seal) → notarize + staple → Gatekeeper gate → dmg/zip
  *
  * Restores heavy Resources trees that afterPack stashed so @electron/osx-sign's
  * walkAsync + isBinaryFile does not EMFILE on python / node_modules / playwright.
  * Then re-seals the outer .app (nested trees already Developer-ID signed).
- * Finally notarizes + staples when Apple credentials are present.
+ * Finally notarizes + staples when Apple credentials are present, then hard-fails
+ * unless mustVerify seals still hold and spctl reports Notarized Developer ID.
  */
-const { execFileSync } = require('node:child_process')
+const { execFileSync, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
+
+const {
+  loadMacSignChecklist,
+  assertMustVerifySigned,
+} = require('./lib/mac-sign-checklist.cjs')
 
 const STASH_DIRNAME = '.opptrix-sign-stash'
 const MANIFEST = 'manifest.json'
@@ -78,8 +84,53 @@ function resolveNotarizeAuth(appPath) {
 }
 
 /**
+ * Hard Gatekeeper gate: spctl must accept as Notarized Developer ID.
+ * Also runs codesign --deep --strict as supplemental diagnostics before throw.
+ * @param {string} appPath
+ */
+function assertSpctlNotarizedDeveloperId(appPath) {
+  const assessed = spawnSync('spctl', ['--assess', '-vv', '--type', 'execute', appPath], {
+    encoding: 'utf8',
+  })
+  const dump = `${assessed.stdout || ''}${assessed.stderr || ''}`
+  const accepted = /\baccepted\b/i.test(dump)
+  const notarizedDevId =
+    /Notarized Developer ID/i.test(dump) || /source=Notarized Developer ID/i.test(dump)
+  if (accepted && notarizedDevId) {
+    console.log('afterSign: spctl Gatekeeper OK (Notarized Developer ID)')
+    return
+  }
+
+  // Supplemental seal check for CI diagnostics (network-less spctl may still fail).
+  const deep = spawnSync('codesign', ['-vv', '--deep', '--strict', appPath], {
+    encoding: 'utf8',
+  })
+  const deepDump = `${deep.stdout || ''}${deep.stderr || ''}`.trim()
+  throw new Error(
+    `afterSign: spctl Gatekeeper failed for ${appPath} `
+      + `(expected accepted + Notarized Developer ID).\n`
+      + `spctl status=${assessed.status}\n${dump.trim() || '(empty spctl output)'}\n`
+      + `codesign --deep --strict status=${deep.status}\n${deepDump || '(empty)'}`,
+  )
+}
+
+/**
+ * Re-check mustVerify seals after restore+reseal+notarize (catch restore breaking seals).
+ * @param {string} appPath
+ */
+function assertPostNotarizeMustVerify(appPath) {
+  const resources = path.join(appPath, 'Contents', 'Resources')
+  const checklist = loadMacSignChecklist()
+  // Lazy require avoids circular load with after-pack (which lazy-requires this module).
+  const { assertDeveloperIdSigned } = require('./after-pack-adhoc.cjs')
+  const { checked } = assertMustVerifySigned(resources, checklist, assertDeveloperIdSigned)
+  console.log(`afterSign: post-notarize mustVerify OK (checked=${checked})`)
+}
+
+/**
  * Notarize + staple the final .app. `@electron/notarize` already staples on success;
  * we still verify with `xcrun stapler validate` and throw on failure.
+ * Then hard-gate mustVerify + spctl Notarized Developer ID.
  * @param {string} appPath
  */
 async function notarizeAndStapleFinalApp(appPath) {
@@ -106,6 +157,10 @@ async function notarizeAndStapleFinalApp(appPath) {
   // notarize() staples internally; validate so we never ship Unnotarized Developer ID.
   execFileSync('xcrun', ['stapler', 'validate', appPath], { stdio: 'inherit' })
   console.log('afterSign: notarize + staple OK')
+
+  // Formal path with Apple credentials: seal + Gatekeeper hard gates.
+  assertPostNotarizeMustVerify(appPath)
+  assertSpctlNotarizedDeveloperId(appPath)
 }
 
 /**
@@ -178,3 +233,5 @@ exports.default = async function afterSign(context) {
 
 exports.STASH_DIRNAME = STASH_DIRNAME
 exports.MANIFEST = MANIFEST
+exports.assertSpctlNotarizedDeveloperId = assertSpctlNotarizedDeveloperId
+exports.assertPostNotarizeMustVerify = assertPostNotarizeMustVerify
