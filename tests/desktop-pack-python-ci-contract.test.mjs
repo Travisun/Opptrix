@@ -169,15 +169,15 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('playwright-browsers'), 'must pre-sign playwright (signIgnore + notary)')
     assert.ok(src.includes('collectNestedBundles'), 'must seal nested Chrome .app/.framework')
     assert.ok(src.includes('stashHeavyTreesForOsxSign'), 'must stash heavy trees before osx-sign walk')
+    assert.ok(
+      src.includes('mac-sign-checklist') && src.includes('assertMustVerifySigned'),
+      'afterPack must drive mustVerify from mac-sign-checklist',
+    )
 
     // Playwright: leaf Mach-O first (Libraries/*.dylib), then bundle seal — not --deep alone.
     assert.ok(
-      src.includes('leaf-first') || src.includes('leafMachOs'),
+      src.includes('leaf-first') || src.includes('leafMachOs') || src.includes('leaf-then-bundles'),
       'playwright must leaf-first sign all Mach-O (incl. framework Libraries)',
-    )
-    assert.ok(
-      src.includes('libEGL') && src.includes('libGLESv2') && src.includes('libvk_swiftshader'),
-      'must explicitly cover critical CFT Libraries dylibs',
     )
     assert.ok(
       src.includes('assertDeveloperIdSigned') || src.includes('Developer ID Application'),
@@ -188,13 +188,49 @@ describe('desktop pack python / ffmpeg CI contract', () => {
       'playwright sign failures must hard-fail (not silent skip)',
     )
     // Soft-skip remains for python/node_modules; playwright path must throw.
-    const pwLeafIdx = src.indexOf('leaf-first')
+    const pwLeafIdx = Math.max(src.indexOf('leaf-first'), src.indexOf('leaf-then-bundles'))
     const pwBlock = pwLeafIdx >= 0 ? src.slice(pwLeafIdx, pwLeafIdx + 2500) : src
     assert.ok(
       !/codesignTarget\([^)]*deep:\s*true/.test(pwBlock)
         && !pwBlock.includes("deep: true"),
       'playwright branch must not rely on codesign --deep for Libraries',
     )
+  })
+
+  it('mac-sign-checklist is the single source of truth for CFT mustVerify', () => {
+    const checklistPath = 'apps/desktop/resources/mac-sign-checklist.json'
+    assert.ok(fs.existsSync(path.join(repoRoot, checklistPath)), 'mac-sign-checklist.json must exist')
+    const checklist = JSON.parse(read(checklistPath))
+    assert.equal(checklist.version, 1)
+    assert.ok(Array.isArray(checklist.signTrees) && checklist.signTrees.length >= 3)
+    assert.ok(Array.isArray(checklist.mustVerify) && checklist.mustVerify.length >= 4)
+
+    const blob = JSON.stringify(checklist)
+    for (const needle of ['libEGL', 'libGLESv2', 'libvk_swiftshader', 'Google Chrome for Testing.app']) {
+      assert.ok(blob.includes(needle), `checklist mustVerify must cover ${needle}`)
+    }
+    const required = checklist.mustVerify.filter((e) => e.required !== false)
+    assert.ok(
+      required.some((e) => String(e.glob).includes('libEGL')),
+      'libEGL must be required',
+    )
+    assert.ok(
+      required.some((e) => String(e.glob).includes('libGLESv2')),
+      'libGLESv2 must be required',
+    )
+    assert.ok(
+      required.some((e) => String(e.glob).includes('libvk_swiftshader')),
+      'libvk_swiftshader must be required',
+    )
+    assert.ok(
+      required.some((e) => String(e.glob).includes('Google Chrome for Testing.app')),
+      'Chrome for Testing.app must be required',
+    )
+
+    const afterPack = read('apps/desktop/scripts/after-pack-adhoc.cjs')
+    assert.ok(afterPack.includes("require('./lib/mac-sign-checklist.cjs')"))
+    assert.ok(afterPack.includes('assertMustVerifySigned'))
+    assert.ok(afterPack.includes('loadMacSignChecklist'))
   })
 
   it('afterSign restores stashed heavy trees and re-seals outer app', () => {

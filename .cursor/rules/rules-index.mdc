@@ -25,6 +25,7 @@ alwaysApply: true
 |------|----------|----------|
 | **改 `client-ui`** | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc` | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
 | **桌面发版** | `desktop-release.mdc`、`onboarding.mdc` | `docs/DESKTOP-RELEASE.md`、`docs/releases/` |
+| **macOS 签名 / 公证** | `desktop-mac-signing.mdc` | `docs/DESKTOP-RELEASE.md`；清单 `apps/desktop/resources/mac-sign-checklist.json` |
 | **SQLite / 数据库** | `backward-compatibility.mdc`、`schema-migration.mdc` | `.cursor/rules/backward-compatibility.mdc` |
 | **行情 / 数据层** | `data-layer-standard-api.mdc` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
 | **Provider 实现** | `provider-standard-api.mdc`、`data-provider-docs.mdc` | `.cursor/rules/provider-standard-api.mdc` |
@@ -151,4 +152,5 @@ alwaysApply: true
 | Agent / MCP 路由 | `.cursor/rules/mcp-tool-pack-routing.mdc` |
 | **Agent 命令隔离 / SRT** | `.cursor/rules/agent-shell-sandbox.mdc` |
 | 桌面发版 | `.cursor/rules/desktop-release.mdc` |
+| **macOS 签名 / 公证** | `.cursor/rules/desktop-mac-signing.mdc` |
 | Onboarding | `.cursor/rules/onboarding.mdc` |

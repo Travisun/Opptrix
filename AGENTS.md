@@ -275,6 +275,7 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 | 探索代码 / 定位符号 | `codegraph` | `codegraph explore` |
 | 改 `client-ui` | `client-ui` | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
 | 桌面发版 / 打标签 | `desktop-release` | `docs/DESKTOP-RELEASE.md` |
+| macOS 签名 / 公证 / 防漏签清单 | —（读规则） | `.cursor/rules/desktop-mac-signing.mdc`、`docs/DESKTOP-RELEASE.md` |
 | SQLite / 数据库 | `schema-migration` | `.cursor/rules/backward-compatibility.mdc` |
 | 行情 / Hub / 研究 API | `data-layer` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
 | Agent / MCP 工具接入 | —（读规则） | `.cursor/rules/mcp-tool-pack-routing.mdc`、`docs/AGENT-GUIDE.md` |

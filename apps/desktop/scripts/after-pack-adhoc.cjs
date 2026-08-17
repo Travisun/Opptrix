@@ -9,13 +9,15 @@
  *    relative path `node_modules` is skipped). Packaged Node ESM cannot resolve
  *    bare imports via NODE_PATH — only classic `node_modules` parent walks work.
  * 2) OpptrixSchedule helper generation retired (in-process schedule only).
- * 3) On signed mac builds: serially pre-sign Mach-O under `python/` and
- *    `runtime-stage/node_modules/` / playwright, then stash those trees so
- *    osx-sign does not EMFILE (`build.mac.signIgnore` alone is not enough —
- *    walkAsync still opens every file). afterSign restores + re-seals, then
- *    notarizes+staples the final .app (`build.mac.notarize: false` so builder
- *    does not notarize before restore). Pipeline:
- *    afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize) → dmg
+ * 3) On signed mac builds: serially pre-sign Mach-O trees listed in
+ *    `resources/mac-sign-checklist.json` (python / node_modules / playwright),
+ *    then stash those trees so osx-sign does not EMFILE (`build.mac.signIgnore`
+ *    alone is not enough — walkAsync still opens every file). afterSign
+ *    restores + re-seals, then notarizes+staples the final .app
+ *    (`build.mac.notarize: false` so builder does not notarize before restore).
+ *    Pipeline: afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize) → dmg
+ *    **When bumping Playwright / Chromium (CFT), native .node/.dylib, or python
+ *    layout — update `mac-sign-checklist.json` (mustVerify + signTrees).**
  * 4) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
  */
 const { execFileSync, spawnSync } = require('node:child_process')
@@ -23,6 +25,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { RUNTIME_DEPS_DIR } = require('../electron/runtime-deps.cjs')
+const {
+  loadMacSignChecklist,
+  assertMustVerifySigned,
+} = require('./lib/mac-sign-checklist.cjs')
 
 function walkFiles(dir, acc = []) {
   if (!fs.existsSync(dir)) return acc
@@ -285,18 +291,20 @@ function assertDeveloperIdSigned(filePath) {
   }
 }
 
-/** Critical CFT framework Libraries that notarization historically rejected. */
-const PLAYWRIGHT_CRITICAL_DYLIB_RE = /(?:^|\/)(?:libEGL|libGLESv2|libvk_swiftshader)\.dylib$/
-
 /**
  * Serially pre-sign heavy Mach-O trees that build.mac.signIgnore will skip.
  * Must run after restoreSidecarNodeModules (deps → node_modules).
  *
- * Playwright Chrome for Testing: **leaf-first** — sign every Mach-O under
- * playwright-browsers (including `*.framework/.../Libraries/*.dylib`, Helpers,
- * main binaries), then seal `.framework` / `.app` deepest-first. Do **not** rely
- * on `codesign --deep` alone; nested Libraries often keep Google's seal + no
- * secure timestamp, which fails notarization.
+ * Driven by `resources/mac-sign-checklist.json` (single source of truth):
+ * - `leaf-macho`: sign Mach-O leaves (python / node_modules; soft-fail by default)
+ * - `leaf-then-bundles`: Playwright Chrome for Testing — **leaf-first** then seal
+ *   nested .framework / .app deepest-first. Do **not** rely on `codesign --deep`.
+ * After signing, `mustVerify` entries (libEGL / GLESv2 / swiftshader / Chrome.app / …)
+ * are hard-checked for Developer ID — missing required globs throw (stale checklist
+ * or incomplete stage).
+ *
+ * When bumping Playwright / Chromium (CFT), native .node/.dylib, or python layout,
+ * update `mac-sign-checklist.json`.
  *
  * @param {{ electronPlatformName: string; appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
  */
@@ -316,9 +324,8 @@ function preSignHeavyMacTrees(context) {
 
   const appName = context.packager.appInfo.productFilename
   const resources = path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources')
-  const pythonRoot = path.join(resources, 'python')
-  const nmRoot = path.join(resources, 'runtime-stage', 'node_modules')
-  const pwRoot = path.join(resources, 'runtime-stage', 'playwright-browsers')
+  // Checklist is the inventory for must-sign / must-verify.
+  const checklist = loadMacSignChecklist()
 
   let signed = 0
   let skipped = 0
@@ -357,24 +364,34 @@ function preSignHeavyMacTrees(context) {
     }
   }
 
-  for (const root of [pythonRoot, nmRoot].filter((d) => fs.existsSync(d))) {
+  /**
+   * @param {string} root
+   * @param {{ hardFail?: boolean }} opts
+   */
+  function signLeafMachOs(root, opts = {}) {
     const files = walkFiles(root).filter(isMachOCandidate)
-    console.log(`afterPack: pre-sign ${files.length} binaries under ${path.relative(resources, root)}`)
-    for (const file of files) signFile(file)
+    console.log(
+      `afterPack: pre-sign ${files.length} binaries under ${path.relative(resources, root)}`,
+    )
+    for (const file of files) signFile(file, opts)
+    return files
   }
 
-  if (fs.existsSync(pwRoot)) {
+  /**
+   * Leaf Mach-O first, then deepest-first nested .framework / .app seals.
+   * @param {string} root
+   */
+  function signLeafThenBundles(root) {
     // 1) Leaf Mach-O first (Libraries/*.dylib, Helpers, chrome, …) — never rely on --deep.
-    const leafMachOs = walkFiles(pwRoot).filter(isMachOCandidate)
+    const leafMachOs = signLeafMachOs(root, { hardFail: true })
     console.log(
-      `afterPack: playwright leaf-first pre-sign ${leafMachOs.length} Mach-O under playwright-browsers`,
+      `afterPack: playwright leaf-first pre-sign ${leafMachOs.length} Mach-O under ${path.relative(resources, root)}`,
     )
-    for (const file of leafMachOs) signFile(file, { hardFail: true })
 
     // 2) Seal nested bundles deepest-first (Helpers → Framework → Chrome.app).
     // Leaves already signed; do not use --deep. Sealing frameworks *before* helper
     // .apps would invalidate the framework seal when helpers are re-signed after.
-    const { apps, frameworks } = collectNestedBundles(pwRoot)
+    const { apps, frameworks } = collectNestedBundles(root)
     const bundles = [
       ...frameworks.map((p) => ({ path: p, kind: 'framework' })),
       ...apps.map((p) => ({ path: p, kind: 'app' })),
@@ -386,7 +403,7 @@ function preSignHeavyMacTrees(context) {
       try {
         codesignTarget(bundle.path, identity)
         signed += 1
-        console.log(`afterPack: sealed ${bundle.kind} ${path.relative(pwRoot, bundle.path)}`)
+        console.log(`afterPack: sealed ${bundle.kind} ${path.relative(root, bundle.path)}`)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         throw new Error(
@@ -394,28 +411,27 @@ function preSignHeavyMacTrees(context) {
         )
       }
     }
+  }
 
-    // 3) Hard-fail if critical CFT Libraries still lack Developer ID + valid seal.
-    const critical = leafMachOs.filter((f) => PLAYWRIGHT_CRITICAL_DYLIB_RE.test(f))
-    console.log(
-      `afterPack: verifying Developer ID on ${critical.length} critical Playwright dylibs`,
-    )
-    for (const dylib of critical) {
-      try {
-        assertDeveloperIdSigned(dylib)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        throw new Error(
-          `afterPack: Playwright critical dylib verify failed for ${dylib}: ${message.split('\n')[0]}`,
-        )
-      }
+  for (const tree of checklist.signTrees) {
+    const root = path.join(resources, ...String(tree.rel).split('/'))
+    if (!fs.existsSync(root)) {
+      console.log(`afterPack: skip signTree "${tree.id}" (missing ${tree.rel})`)
+      continue
     }
-    if (critical.length === 0) {
-      console.warn(
-        'afterPack: no libEGL/libGLESv2/libvk_swiftshader under playwright-browsers — skip critical verify',
-      )
+    const hardFail = Boolean(tree.hardFail)
+    if (tree.mode === 'leaf-then-bundles') {
+      signLeafThenBundles(root)
+    } else {
+      // Default / "leaf-macho"
+      signLeafMachOs(root, { hardFail })
     }
   }
+
+  // 3) Checklist-driven hard verify (libEGL / GLESv2 / swiftshader / Chrome.app / …).
+  // required:true with 0 hits → throw (do not soft-skip like the old regex path).
+  const { checked } = assertMustVerifySigned(resources, checklist, assertDeveloperIdSigned)
+  console.log(`afterPack: mustVerify Developer ID checks passed (checked=${checked})`)
 
   console.log(`afterPack: heavy-tree pre-sign done (signed=${signed}, skipped=${skipped})`)
 }

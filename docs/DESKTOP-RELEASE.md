@@ -146,6 +146,17 @@ git push origin desktop-v0.6.1
 | `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN`（可选） | Hugging Face 读 token，提高 e5 / SenseVoice 限额、降低 401 |
 | `OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX`（可选） | RapidOCR ONNX 的稳定直链前缀（如自有 R2）；无则 ModelScope |
 | mac 签名 EMFILE | `afterPack` 串行预签 `python/` 与 `runtime-stage/node_modules/` 下 Mach-O，`build.mac.signIgnore` 跳过这些树与 `playwright-browsers`；Playwright Chrome 的 `*.framework/.../Libraries/*.dylib`（如 libEGL）须**叶子先签** Developer ID + timestamp，不可只靠 `codesign --deep` |
+| mac 签名清单 | 见下节「macOS 签名清单」：`apps/desktop/resources/mac-sign-checklist.json` 为 must-sign / must-verify 单一事实源 |
+
+#### macOS 签名清单（must-sign / must-verify）
+
+路径：`apps/desktop/resources/mac-sign-checklist.json`（相对 `Opptrix.app/Contents/Resources/`）。
+
+| 项 | 说明 |
+|----|------|
+| **何时更新** | Playwright / Chromium (CFT) 升版；`playwright-browsers` 下新增嵌套 `.app` / `.framework`；`runtime-stage/node_modules` 新增原生 `.node` / `.dylib`；内置 python 目录布局变更 |
+| **与 afterPack 关系** | `after-pack-adhoc.cjs` → `preSignHeavyMacTrees` 按 `signTrees` 预签（`leaf-macho` / `leaf-then-bundles`），结束后用 `mustVerify` 做 Developer ID 硬校验；实现见 `apps/desktop/scripts/lib/mac-sign-checklist.cjs` |
+| **硬失败** | `mustVerify` 中 `required: true` 且 glob **0 命中** → 打包失败（清单过期或 stage 漏拷），禁止再靠软 warn 漏签 Libraries |
 
 **已确认可用的 HF 直链（SenseVoice）**
 

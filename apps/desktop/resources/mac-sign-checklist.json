@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "description": "macOS Developer ID must-sign / must-verify inventory for Opptrix.app",
+  "updateWhen": [
+    "Playwright / Chromium (CFT) version bump",
+    "New nested .app / .framework under playwright-browsers",
+    "New native .node/.dylib under runtime-stage/node_modules",
+    "Bundled python layout change"
+  ],
+  "signTrees": [
+    { "id": "python", "rel": "python", "mode": "leaf-macho", "hardFail": false },
+    { "id": "node_modules", "rel": "runtime-stage/node_modules", "mode": "leaf-macho", "hardFail": false },
+    {
+      "id": "playwright",
+      "rel": "runtime-stage/playwright-browsers",
+      "mode": "leaf-then-bundles",
+      "hardFail": true
+    }
+  ],
+  "mustVerify": [
+    {
+      "id": "cft-libEGL",
+      "glob": "runtime-stage/playwright-browsers/**/Libraries/libEGL.dylib",
+      "requireDeveloperId": true,
+      "required": true
+    },
+    {
+      "id": "cft-libGLESv2",
+      "glob": "runtime-stage/playwright-browsers/**/Libraries/libGLESv2.dylib",
+      "requireDeveloperId": true,
+      "required": true
+    },
+    {
+      "id": "cft-libvk_swiftshader",
+      "glob": "runtime-stage/playwright-browsers/**/Libraries/libvk_swiftshader.dylib",
+      "requireDeveloperId": true,
+      "required": true
+    },
+    {
+      "id": "cft-chrome-app",
+      "glob": "runtime-stage/playwright-browsers/**/Google Chrome for Testing.app",
+      "requireDeveloperId": true,
+      "required": true,
+      "kind": "bundle"
+    },
+    {
+      "id": "cft-crashpad",
+      "glob": "runtime-stage/playwright-browsers/**/chrome_crashpad_handler",
+      "requireDeveloperId": true,
+      "required": true
+    },
+    {
+      "id": "cft-ffmpeg-mac",
+      "glob": "runtime-stage/playwright-browsers/**/ffmpeg-mac",
+      "requireDeveloperId": true,
+      "required": true
+    },
+    {
+      "id": "cft-chrome-framework",
+      "glob": "runtime-stage/playwright-browsers/**/Google Chrome for Testing Framework.framework",
+      "requireDeveloperId": true,
+      "required": true,
+      "kind": "bundle"
+    }
+  ]
+}
