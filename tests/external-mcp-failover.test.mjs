@@ -76,9 +76,15 @@ test('ExternalMcpHealth does not trip on business errors', () => {
   assert.equal(h.shouldSkip('s1', false), false)
 })
 
-test('quota error opens circuit immediately', () => {
+test('rate_limited error does not open circuit immediately', () => {
   const h = new ExternalMcpHealth()
   h.recordFailure('s1', new Error('quota exceeded 429'))
+  assert.equal(h.getState('s1', false), 'degraded')
+  assert.equal(h.shouldSkip('s1', false), false)
+  // 连续 timeout 仍可 open（保持阈值行为）
+  h.recordFailure('s1', new Error('timeout'))
+  h.recordFailure('s1', new Error('timeout'))
+  h.recordFailure('s1', new Error('timeout'))
   assert.equal(h.getState('s1', false), 'open')
   assert.equal(h.shouldSkip('s1', false), true)
 })

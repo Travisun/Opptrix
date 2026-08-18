@@ -29,10 +29,18 @@ import {
 
 const TUSHARE_ENV = process.env.TUSHARE_TOKEN ?? ''
 
-/** 设置页 / 行情回退链：至少绑定一项标准能力；纯自定义方法源（如 akshare）不展示 */
+/**
+ * 设置页 / 行情回退链：
+ * - 有标准 binding 的行情源；或
+ * - 带密钥/测试连接的扩展源（无标准 realtime binding）
+ */
 function isMarketDataCatalogProvider(registry: DriverRegistry, providerId: string): boolean {
   const driver = registry.get(providerId)
-  return !!driver && driver.bindings().length > 0
+  if (!driver) return false
+  if (driver.bindings().length > 0) return true
+  const manifest = getProviderManifest(providerId)
+  const fields = manifest?.settings?.fields ?? []
+  return providerRequiresApiKey(fields) || Boolean(manifest?.settings?.supportsTest)
 }
 
 function maskSecretFields(

@@ -409,3 +409,56 @@ test('system rules include local programming playbook and catalog index', () => 
   assert.match(rules, /本地数据目录/)
   assert.match(rules, /root_id=shared|公共复用区/)
 })
+
+test('assembleSystemPrompt embeds dataSourcingPolicy with remote MCP priority', () => {
+  const policy = [
+    '【数据源优先级策略 — 必须严格遵守】',
+    '0. 三级优先，不可倒置：远程 MCP 工具（命名空间 server__tool）= 最高优先，永远先用；本地工具 = 最低优先，仅作兜底。',
+  ].join('\n')
+  const prompt = assembleSystemPrompt({ dataSourcingPolicy: policy })
+  assert.match(prompt, /远程 MCP|MCP/)
+  assert.match(prompt, /数据源优先级策略/)
+})
+
+test('search_instruments TOOL_META is MCP-first; only ambiguity or MCP failure', async () => {
+  const { TOOL_META } = await import('../packages/agent/dist/tool-meta.js')
+  const guide = TOOL_META.search_instruments?.usageGuide ?? ''
+  const compliance = TOOL_META.search_instruments?.compliance ?? ''
+  assert.ok(guide)
+  assert.ok(!/唯一搜索入口/.test(guide), 'must not claim unique search entry')
+  assert.match(guide, /MCP|namespaced|远程/)
+  assert.match(guide, /歧义/)
+  assert.match(guide, /未启用|失败|报错/)
+  assert.match(guide, /禁止.*名称搜索|禁止用于名称搜索/)
+  assert.match(compliance, /歧义|未启用|失败/)
+})
+
+test('instrument playbooks prefer MCP over unique search_instruments entry', async () => {
+  const {
+    buildStandardInstrumentApiPlaybook,
+    buildMarketContextPlaybook,
+    buildNewsRetrievalPlaybook,
+  } = await import('../packages/shared/dist/agent-prompt-guide.js')
+  const api = buildStandardInstrumentApiPlaybook()
+  assert.ok(!/唯一搜索入口/.test(api))
+  assert.match(api, /MCP|远程|namespaced|server__tool/)
+  assert.match(api, /歧义/)
+  assert.match(api, /未启用|失败/)
+  const market = buildMarketContextPlaybook()
+  assert.ok(!/唯一入口 search_instruments/.test(market))
+  assert.match(market, /MCP|namespaced/)
+  const news = buildNewsRetrievalPlaybook()
+  assert.match(news, /MCP|namespaced/)
+  assert.match(news, /get_instrument_notices|list_news/)
+})
+
+test('external MCP sourcing appendix is generic when none enabled', async () => {
+  const { buildExternalMcpSourcingAppendix, getExternalMcpRegistry } =
+    await import('../packages/agent/dist/mcp/external/index.js')
+  const appendix = buildExternalMcpSourcingAppendix(getExternalMcpRegistry())
+  assert.match(appendix, /MCP|namespaced|serverId__tool/)
+  // 无启用时不应假装有问财硬编码映射行（可能仍提到通用规则）
+  if (!/本会话已启用/.test(appendix) || /当前无已启用/.test(appendix)) {
+    assert.ok(!/优先 `iwencai__query2data`/.test(appendix))
+  }
+})

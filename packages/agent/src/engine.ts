@@ -10,7 +10,7 @@ import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './l
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
-import { AggregatingToolBroker } from './mcp/external/index.js'
+import { AggregatingToolBroker, buildDisabledMcpTurnTail, buildExternalMcpSourcingAppendix, clearMcpSessionQuarantine } from './mcp/external/index.js'
 import { getExternalMcpRegistry } from './mcp/external/registry.js'
 import {
   ToolPackSessionStore,
@@ -408,12 +408,12 @@ export class AgentEngine {
     })
   }
 
-  /** 稳定数据源策略（无按轮档位分支） */
+  /** 稳定数据源策略（无按轮档位分支；hydrate 后可附带已启用 MCP 目录） */
   private buildStaticDataSourcingPolicy(): string {
     const lines = [
       '【数据源优先级策略 — 必须严格遵守】',
-      '0. 三级优先，不可倒置：远程 MCP 工具（命名空间 server__tool）= 最高优先，永远先用；本地工具 = 最低优先，仅作兜底。工具列表中远程工具已排在最前，同名能力优先取远程。',
-      '1. 数据获取一律先调远程 MCP：同一能力若远程可用，禁止绕过远程直接调本地工具。',
+      '0. 三级优先，不可倒置：外部 MCP（命名空间 server__tool）优先级与稳定性优于本地 MCP/本地工具；同一能力先远程，远程失败/熔断再本地。工具列表中远程工具已排在最前。',
+      '1. 数据获取一律先调远程 MCP：同一能力若远程可用，禁止绕过远程直接调本地工具。search_instruments、get_instrument_snapshot、get_instrument_quotes 及财务/概况类本地工具仅当外部 MCP 未启用/失败（search_instruments 另含标的代码歧义）时才允许；search_instruments 禁止用于名称搜索/选股/问数。外部 MCP 按优先级轮询；精确工具优先于问数；不足再本地。榜单/全景/日历开盘/情绪市况/板块目录与筹码同此。评分/策略/回测/风格评级与关注列表/持仓仅本地。',
       '2. 充分性自检：若远程返回缺字段、缺记录或数据陈旧，系统会自动补充本地数据后合并返回，无需你手动重复调用。',
       '3. 结果已标注 _mcp.source 和 _mcp.sufficient，据此判断可信度：',
       '   - source="external" + sufficient=true → 远程数据已完备，直接采用，勿重复调用',
@@ -421,7 +421,8 @@ export class AgentEngine {
       '   - source="local" + degraded=true → 远程不可用，本地兜底降级，结果可能不完整：须在答复中提示该维度为降级数据、可信度受限，并在其它远程工具可用时尝试交叉补全',
       '4. 投研答复引用数据时体现数据源：远程权威源优于本地缓存；降级数据须显式标注不确定性。',
     ]
-    return lines.join('\n')
+    const appendix = buildExternalMcpSourcingAppendix(getExternalMcpRegistry())
+    return appendix ? `${lines.join('\n')}\n\n${appendix}` : lines.join('\n')
   }
 
   /** L3 档位交叉验证提示 — 仅 turn-tail */
@@ -492,6 +493,7 @@ export class AgentEngine {
         buildActivatedSkillsPrompt(activatedSkills),
         buildChecklistTurnTail(sessionId),
         buildSpinGuardTurnTail(sessionId),
+        buildDisabledMcpTurnTail(sessionId),
       ].filter(Boolean)
       if (!extras.length) return base
       return [base, ...extras].filter(Boolean).join('\n\n')
@@ -502,6 +504,7 @@ export class AgentEngine {
     clearResearchChecklistSession(sessionId)
     clearSpinGuardSession(sessionId)
     this.steerBridge.clear(sessionId)
+    clearMcpSessionQuarantine(sessionId)
   }
 
   /** Soft steer：仅由 API 在有进行中 chat 时调用；写入 pending，下一 LLM 轮前注入 */

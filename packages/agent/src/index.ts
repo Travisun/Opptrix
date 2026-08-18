@@ -147,11 +147,19 @@ export {
 export { createMcpServer, runMcpStdio } from './mcp/server.js'
 export { McpToolBroker } from './mcp/broker.js'
 export {
+  resolveIwencaiMcpStdioTransport,
+  buildIwencaiHeaders,
+  buildQuery2DataBody,
+  buildComprehensiveSearchBody,
+  IWENCAI_MCP_TOOLS,
+} from './mcp/builtin/iwencai/index.js'
+export {
   AggregatingToolBroker,
   getExternalMcpRegistry,
   resetExternalMcpRegistry,
   ExternalMcpRegistry,
   ExternalMcpHealth,
+  buildExternalMcpSourcingAppendix,
 } from './mcp/external/index.js'
 export {
   ToolPackSessionStore,

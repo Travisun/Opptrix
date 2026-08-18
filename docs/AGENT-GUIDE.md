@@ -168,17 +168,22 @@ Opptrix/
   - 引擎会话级 `AggregatingToolBroker`：**首次 chat 全量工具子集并冻结**；subagent 继承父冻结快照再 `filterToolNamesForSubagent`
   - **外部 MCP（优先级故障转移）**：
     - 配置：`packages/shared/src/mcp-servers.ts`；持久化 user-store `mcp_servers`；设置页 **MCP 服务器** / REST `/api/mcp-servers*`
-    - 运行时：`packages/agent/src/mcp/external/`（`ExternalMcpRegistry` / Health / AggregatingToolBroker）；hydrate 跨 server 有界并发（默认 2，`OPPTRIX_MCP_HYDRATE_CONCURRENCY` 可调、上限 3），工具 schema 在 hydrate 时缓存，catalog 优先读缓存避免每轮 `listTools` RPC
+    - **内置预设**：扶摇（HTTP）、东方财富妙想（HTTP）、**问财**（本机 stdio，`IWENCAI_API_KEY` → secrets；入口 `packages/agent/src/mcp/builtin/iwencai/`，工具 `query2data` / `news_search` / `announcement_search` / `report_search`（能力边界：`query2data`=问数/选股；三个 search=资讯/公告/研报），经 `ExternalMcpRegistry` 以 `iwencai__*` 命名空间注入；**不是**行情 Provider）
+    - 运行时：`packages/agent/src/mcp/external/`（`ExternalMcpRegistry` / Health / AggregatingToolBroker / **Capability Orchestrator**）；hydrate 跨 server 有界并发（默认 2，`OPPTRIX_MCP_HYDRATE_CONCURRENCY` 可调、上限 3），工具 schema 在 hydrate 时缓存，catalog 优先读缓存避免每轮 `listTools` RPC
+    - **能力编排（L1→L2）**：稳定能力清单（单一事实源 `EXTERNAL_MCP_CAPABILITY_GUIDE`）：问数/选股、搜码、行情/资金流向、快照/ETF净值持仓、K线、概况、财务/股东/分红、新闻、公告、研报、宏观、成分/板块目录、指标、龙虎榜/涨跌停/连板热榜/市场全景/日历开盘/情绪市况、**筹码**。均为外部优先。L1 **先精确能力**（各家 MCP 按 `sortOrder` 轮询），再 **问数互备**（`relatedCapabilities`，同样按 `sortOrder`，不含已试过的 server+tool），最后 L2 本地。问数↔搜码、行情↔快照仍互备；除 `search_nl` 外取数能力（含筹码/榜单/日历/情绪/板块目录）均可走到问数。参数 `query`↔`keyword`/`instrument.symbol`；榜单/日历等无 query 时合成中文问句；筹码转到问数时 query 须带「筹码/获利盘」语义（裸代码不够）。catalog 除缓存工具名启发式外，合并 `capabilityBindings`（localTool → remoteTool），去重 `serverId::remoteTool`。不充分则继续下一外部，全部失败或不充分后再 L2 本地。无能力映射或 fake 未实现 `listCapabilityCandidates` 时降级旧绑定链 / `callNamespaced`。**评分/策略/回测/风格评级与关注列表/持仓本地独有**（不映射 evaluate / strategy_* / backtest / institution_rating|report / watchlist / portfolio_*）。
+    - **会话隔离 `disabled_list`**：同一 `currentToolSessionId` 下硬错误（401/403/缺钥/握手失败等）追加 serverId；引擎 **hard-skip** 该 server；**仅**写入 turn-tail（`buildDisabledMcpTurnTail`），**不**从冻结 `tools[]` / `openAiTools()` 删除 namespaced 名（熔断 `health.shouldSkip` 同样只在**调用**时 skip，不从 catalog 摘工具）。429/限流短重试（可注入 wait，须尊重 AbortSignal）**不**进隔离、**不**立刻熔断。密钥或 enabled/paused 变更时 `health.reset` + 清该 server 会话隔离；`deleteSession` / 归档经 `clearLoopSessionState` 清会话隔离；删除 MCP Server 时 `clearSessionQuarantineServer`
     - 传输：stdio + Streamable HTTP；LLM 仍见稳定本地工具名；有 `capabilityBindings` 时按 `sortOrder` 试外部再本地兜底
     - **Client 与 failover 判定**（`packages/agent/src/mcp/external/connection.ts`、`packages/shared/src/mcp-servers.ts`）：
       - SDK Client 注入 permissive `jsonSchemaValidator`，不强制校验远程 `outputSchema`，避免上游 schema 漂移导致 `callTool` 直接失败
       - `parseToolResult` 优先取 `structuredContent`；若载荷为鉴权/业务错误形态（如 `{ data: null, message }`、`{ error: ... }`）则抛错，由绑定链换源或降级本地
-      - `isMcpServerFailoverError`：`-32602`（structured content 不匹配）、`-32600`（声明 outputSchema 但未返回 structured content）、`Missing X-api-key` / 401 / 429 / 5xx / 网络超时等 → 可 failover；`invalid argument` 等业务参数错误不换源
+      - `classifyMcpServerError`：429/quota → `rate_limited`；401/403/缺钥/`handshake failed`/`握手失败` → `hard_unavailable`（会话隔离）；超时/5xx/ECONN/`无法连接 MCP Server`/`Connection refused`/`ECONNRESET`/`socket hang up`/`connect failed` → `transient`（换下一外部 + L2，不得当 business 停链）；`invalid argument` → `business`。`isMcpServerFailoverError` ≡ `classify !== 'business'`（429/401 仍为 true）
+      - `callExternal`：`callTool` / `parseToolResult` 失败会 `health.recordFailure` 再抛（`ensureConnected` 失败已 record，不重复）；429 走 classify 不立刻 open，需连续 transient（如 3 次 timeout）才 process 熔断
       - 降级本地时 `_mcp.degraded=true`；若 `extractMcpConfigHint` 识别出缺 Key/鉴权问题，附带 `_mcp.configHint` 供 LLM 提示用户检查设置
     - 外部独有工具：`serverId__toolName` 命名空间注入 catalog
     - **远程优先排序**：`AggregatingToolBroker.openAiTools()` 远程排前；`orderToolsStable` 保证会话内稳定序（**不用** preferred 重排）
+    - **聊天提示词**：外部 MCP 按优先级轮询；精确工具优先于问数；不足再本地。行情/快照/财务/公告/研报/问数/榜单全景/日历开盘/情绪市况/板块目录/筹码等优先 namespaced MCP；本地 `search_instruments` / `get_instrument_snapshot` / 其它 `get_instrument_*` / `list_news_*` 为不足或消歧时的补充；`evaluate_instrument` / 策略 / 回测 / 风格评级与关注列表/持仓仅本地（见 `dataSourcingPolicy` + 动态已启用 MCP 目录）
     - meta 运维：`list_mcp_servers` / `enable_mcp_server` / … — 变更外部 schema 时冷启动重建冻结 tools
-    - 单测：`tests/external-mcp-failover.test.mjs`
+    - 单测：`tests/external-mcp-failover.test.mjs`、`tests/mcp-capability-orchestrator.test.mjs`、`tests/iwencai-mcp-preset.test.mjs`
   - **分层精排**：`resolveToolRoutePlan` 映射首选工具与研究档位；**选型卡 + 档位骨架**注入 turn-tail；tools 数组会话级冻结
   - **投研完备性闭环**：L2/L3 注入 **turn-tail**（`buildResearchTierTurnTail`），非 stable system
   - **投研 Agent Loop 增强**（`packages/agent/src/loop/`，engine 仅编排）：
@@ -197,7 +202,7 @@ Opptrix/
     - **意图精排**：`create_canvas` → 首选 `create_canvas`；`create_mindmap` → 首选 `create_mindmap`；`create_web` → 首选 `create_web`；勿用 `workspace_write` 代替制品工具
     - **REST**：列表/下载见会话附件 API；预览写回见 `PUT /api/sessions/:id/attachments/:attachmentId`（仅 canvas/mindmap）；网页相对资源见 `/web/*`；离线库见 `/api/opptrix-vendor`
   - **基本面事实表（`fundamentals` pack）**：`get_instrument_profile` / `get_instrument_financials` / `get_instrument_income_statement` / `get_instrument_balance_sheet` / `get_instrument_cash_flow` / `get_instrument_financial_indicators` / `get_instrument_shareholders` / `get_instrument_institution_holdings` / `get_instrument_dividend`
-  - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
+  - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`。榜单/全景/日历开盘/情绪市况与筹码均为外部 MCP 优先（L1 精确 → L1 问数互备 → L2 本地）；评分/策略/回测/风格评级与关注列表/持仓本地独有
   - **资讯与订阅（`news` pack）**：
     - **只读浏览**：`get_news_center_status` → `list_news_groups` / `list_news_sources` → `list_news_articles` → `get_news_article`；标的公告 `get_instrument_notices` → `get_notice_content`
     - **RSS 路由目录（内置 curated schema v3，三级漏斗）**：`list_rsshub_categories` → `list_rsshub_domains` → `get_rsshub_domain_routes`（返回路由+频道**拉平**后的可订阅叶子，`ask_user(allow_multiple=true)` 直接多选；禁止再先选路由再选频道；叶子过多用 `q` 缩小）→ 拼短名单基址 + `add_news_source`；`search_rsshub_routes` 仅用户已点名媒体时捷径；不依赖 GitHub docs / 全量 radar
@@ -374,11 +379,11 @@ Opptrix/
 - **`schedule_turn_wake`**（`core`）：无 Job 事件时的纯延时续跑；见上文。异步 preparing+job_id 通常自动挂起并终态续跑；禁止传 `job_id`；勿 poll/sleep。
 - **`list_jobs`**（`core`）：查看本对话后台任务（标题/进度/是否可取消）；见上文。
 - **`cancel_job`**（`core`）：显式取消（仅 cancelable）；见上文。勿使用已移除的 `wait_job`。
-- **行业 / 产业链**：激活工作流技能 `industry-chain`（读 `references/chain-knowledge.json`）→ 代表公司用 `get_sector_list` / `get_sector_constituents` / `search_instruments` + `get_instrument_*`
+- **行业 / 产业链**：激活工作流技能 `industry-chain`（读 `references/chain-knowledge.json`）→ 代表公司优先 namespaced MCP 搜码/问数，不足再用 `search_instruments` + `get_instrument_*`
 - **早报 / 收盘**：激活 `morning-market-brief` / `closing-market-brief` → 用 `get_market_dynamics`、`get_limit_updown`、`get_watchlist` 等取数后按技能 Schema 输出 JSON
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack（提供事实表；开闭市叙事走工作流技能，非独立报告工具）
-- **跨市场搜索**：唯一入口 `search_instruments`（`core` pack，始终可用；`markets` 可过滤 CN/US/HK/CRYPTO）
-- 勿再调用已移除工具：`get_morning_brief` / `get_closing_report` / `industry_mining` / `industry_mermaid` / `search_etfs` / `screen_*_universe` / `get_etf_scorecard` / `get_etf_snapshot` / `get_watchlist_radar` / `institution_rating` 等；统一用工作流技能 + `search_instruments` / `get_instrument_*` / `evaluate_instrument`
+- **跨市场搜索**：优先已启用 namespaced MCP；快照/行情/财务本地工具均 MCP 优先；本地补充 `search_instruments`（`core` pack，始终可用；`markets` 可过滤 CN/US/HK/CRYPTO；仅歧义或 MCP 未启用/失败）
+- 勿再调用已移除工具：`get_morning_brief` / `get_closing_report` / `industry_mining` / `industry_mermaid` / `search_etfs` / `screen_*_universe` / `get_etf_scorecard` / `get_etf_snapshot` / `get_watchlist_radar` / `institution_rating` 等；统一用工作流技能 + namespaced MCP（优先）/ `search_instruments` / `get_instrument_*` / `evaluate_instrument`（本地补充）
 - **A 股股票 Discover 自动选股策略已移除**；可用 A 股 ETF / 美港股 / Crypto 等在线初选策略，或直接指定代码研究
 - Discover 挖掘仍按 profile 固定工具子集（`discoverMiningToolNamesForProfile`）；与聊天 Tool Pack 共享 `TOOL_PACK_*` 常量，一期不强改 Discover 主路径
 
@@ -396,7 +401,7 @@ Opptrix/
 **本地层** `@opptrix/market-data`（缓存/兼容，非选股主路径）：
 
 - Schema / 历史数据可保留（向后兼容）；本地因子选股管道已移除
-- 请用在线 `search_instruments` / `evaluate_instrument` / `get_instrument_chart`
+- 请优先已启用 namespaced MCP；本地补充用 `search_instruments` / `evaluate_instrument` / `get_instrument_chart`
 
 ### 4.4 前端主界面
 

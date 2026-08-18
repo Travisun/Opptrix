@@ -621,6 +621,11 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | DELETE | `/api/mcp-servers/:id` | 删除配置并断开 |
 | POST | `/api/mcp-servers/:id/test` | 探活（`tools/list`）；超时较长 |
 | POST | `/api/mcp-servers/reorder` | `{ server_ids: string[] }` 重排优先级 |
+| GET | `/api/mcp-servers/presets` | 内置预设（扶摇 / 东方财富 / **问财**）；`configured` = 对应 server 存在且 enabled |
+| POST | `/api/mcp-servers/apply-preset` | `{ presetId, apiKey }`：HTTP 预设写 `streamable-http` + header secrets；问财写 **stdio**（`node` + 绝对入口）+ `secrets.IWENCAI_API_KEY`（勿与扶摇 `X-api-key` 混用） |
+| POST | `/api/mcp-servers/remove-preset` | `{ presetId }`：停用预设对应 server（enabled=false, paused=true） |
+
+问财为本机 MCP（`serverId=iwencai`），工具经命名空间 `iwencai__query2data` 等暴露给 Agent，**不是** a-stock-layer 行情 Provider。
 
 ### 工作流技能 / Agent Skills
 

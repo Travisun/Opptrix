@@ -371,7 +371,7 @@ export function buildToolPackCatalogPrompt(): string {
   lines.push('### 调用纪律')
   lines.push('- 仅调用本轮 tools 列表中存在的工具名；勿虚构未加载工具')
   lines.push('- 同一任务对同一工具最多调用 2 次')
-  lines.push('- 用户已明确代码时跳过搜索直接分析；跨市场先 search_instruments')
+  lines.push('- 用户已明确代码时跳过搜索直接分析；跨市场优先已启用 MCP 搜码/问数/行情/快照，不足再用 search_instruments / 本地 get_instrument_*')
   lines.push('- A 股专用工具（机构评级、筹码等）勿用于非 A 股')
   lines.push('- 标准 API 可用时禁止用自定义 Provider 方法替代；标准工具能做的禁止先上沙盒瞎写')
   lines.push(

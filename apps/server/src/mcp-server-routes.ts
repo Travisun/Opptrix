@@ -6,10 +6,12 @@
 import type { FastifyInstance } from 'fastify'
 import {
   getExternalMcpRegistry,
+  resolveIwencaiMcpStdioTransport,
   type ExternalMcpRegistry,
 } from '@opptrix/agent'
 import type {
   McpCapabilityBindings,
+  McpPresetServiceDef,
   McpServerCreateInput,
   McpServerPatch,
   McpServerRecord,
@@ -17,7 +19,7 @@ import type {
 } from '@opptrix/shared'
 import {
   isValidMcpServerId,
-  maskSecretPreview,
+  mcpPresetSecretKey,
   MCP_BUILTIN_PRESETS,
 } from '@opptrix/shared'
 
@@ -160,6 +162,33 @@ function parseBindings(raw: unknown): McpCapabilityBindings | undefined {
 
 function publicList(reg: ExternalMcpRegistry) {
   return { servers: reg.listPublic() }
+}
+
+/** 按预设服务定义构造 transport + secrets（stdio 在此 resolve 绝对路径） */
+function buildPresetServiceRecord(
+  svc: McpPresetServiceDef,
+  apiKey: string,
+): { transportConfig: McpTransportConfig; secrets: Record<string, string> } {
+  const isStdio = svc.transport === 'stdio' || Boolean(svc.apiKeyEnv && !svc.url)
+  if (isStdio) {
+    const secretKey = mcpPresetSecretKey(svc)
+    if (!secretKey) throw new Error(`预设服务 ${svc.serverId} 缺少 apiKeyEnv`)
+    if (svc.serverId !== 'iwencai') {
+      throw new Error(`暂不支持的本机预设: ${svc.serverId}`)
+    }
+    return {
+      transportConfig: resolveIwencaiMcpStdioTransport(),
+      secrets: { [secretKey]: apiKey },
+    }
+  }
+  const url = (svc.url ?? '').trim()
+  const header = (svc.apiKeyHeader ?? '').trim()
+  if (!url) throw new Error(`预设服务 ${svc.serverId} 缺少 url`)
+  if (!header) throw new Error(`预设服务 ${svc.serverId} 缺少 apiKeyHeader`)
+  return {
+    transportConfig: { transport: 'streamable-http', url },
+    secrets: { [header]: apiKey },
+  }
 }
 
 export async function registerMcpServerRoutes(app: FastifyInstance) {
@@ -454,12 +483,15 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
       ...p,
       services: p.services.map(s => {
         const rec = recordsById.get(s.serverId)
-        const apiKey = rec?.secrets?.[s.apiKeyHeader]
+        const secretKey = mcpPresetSecretKey(s)
+        const apiKey = secretKey ? rec?.secrets?.[secretKey] : undefined
         return {
           serverId: s.serverId,
           title: s.title,
-          url: s.url,
-          apiKeyHeader: s.apiKeyHeader,
+          url: s.url ?? '',
+          apiKeyHeader: s.apiKeyHeader ?? s.apiKeyEnv ?? '',
+          apiKeyEnv: s.apiKeyEnv,
+          transport: s.transport ?? 'streamable-http',
           configured: rec != null && rec.enabled,
           apiKeyPreview: apiKey ?? undefined,
         }
@@ -479,22 +511,31 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
     if (!preset) return reply.status(400).send({ error: `未知预设: ${presetId}` })
     const reg = getExternalMcpRegistry()
     await reg.hydrate()
-    for (const svc of preset.services) {
-      const existing = reg.getRecord(svc.serverId)
-      const tc: McpTransportConfig = { transport: 'streamable-http', url: svc.url }
-      const sc: Record<string, string> = { [svc.apiKeyHeader]: apiKey }
-      if (existing) {
-        reg.save(svc.serverId, { transportConfig: tc, secrets: sc, enabled: true, paused: false })
-      } else {
-        reg.create({
-          id: svc.serverId,
-          title: svc.title,
-          enabled: true,
-          transportConfig: tc,
-          secrets: sc,
-          installSource: 'registry',
-        })
+    try {
+      for (const svc of preset.services) {
+        const existing = reg.getRecord(svc.serverId)
+        const { transportConfig, secrets } = buildPresetServiceRecord(svc, apiKey)
+        if (existing) {
+          reg.save(svc.serverId, {
+            transportConfig,
+            secrets,
+            enabled: true,
+            paused: false,
+          })
+        } else {
+          reg.create({
+            id: svc.serverId,
+            title: svc.title,
+            enabled: true,
+            transportConfig,
+            secrets,
+            installSource: 'registry',
+          })
+        }
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return reply.status(400).send({ error: msg })
     }
     await reg.hydrate()
     return reply.send({ ok: true })

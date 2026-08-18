@@ -32,37 +32,48 @@ export interface ToolMeta {
   packId?: ToolPackId
 }
 
+const MCP_FIRST_LOCAL_FALLBACK =
+  'tools 中若有对应 [MCP:…] / namespaced（server__tool）工具，必须先调外部（含快照/行情/财务/概况等同能力）；本工具仅 MCP 未启用/失败或需精确事实表核验时用。'
+
+const LOCAL_ONLY_ANALYTICS =
+  '本机评分/策略/风格共识，勿用问财代替。'
+
 const INSTRUMENT_REF_USAGE = [
   '标的标识（Stock-index 命名空间）：',
-  '首选 search_instruments 返回的 instrument 对象（market + symbol + exchange）或 code/ref_label（如 CN:SZ.000009）',
+  '有 MCP 搜码/问数能力时先用远程（如 iwencai__query2data 等）；search_instruments 仅标的代码歧义或外部 MCP 未启用/失败时才允许，',
+  '快照/行情同样先 namespaced MCP，本地 get_instrument_snapshot / get_instrument_quotes 为补充；',
+  '使用其返回的 instrument 对象（market + symbol + exchange）或 code/ref_label（如 CN:SZ.000009）',
   'A 股 CN 须带 exchange 消歧：{market:"CN", symbol:"000009", exchange:"SZ"} 或 code:"CN:SZ.000009"',
   '美股 US:AAPL / 港股 HK:00700 / Crypto CRYPTO:BINANCE.BTC/USDT',
-  'instrument.symbol 为裸代码，勿写入 CN:SZ.xxx 命名空间；不熟悉时先 search_instruments。',
+  'instrument.symbol 为裸代码，勿写入 CN:SZ.xxx 命名空间。',
 ].join(' ')
 
 export const TOOL_META: Record<string, ToolMeta> = {
   get_market_regime: {
     hubFeature: 'market_regime',
     miningEligible: true,
-    usageGuide: '判断 A 股/美股宏观环境（牛熊、风险偏好）；挖掘或组合分析前先了解大盘背景。',
+    usageGuide: '判断 A 股/美股宏观环境（牛熊、风险偏好）；挖掘或组合分析前先了解大盘背景。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '只读；profile_scope 默认 cn；us 需 TickFlow/在线 K 线可用；勿重复调用。',
   },
   get_market_dynamics: {
     hubFeature: 'market_dynamics',
     miningEligible: true,
-    usageGuide: '需要市场全景（指数、全球市场、涨跌榜、龙虎榜）时使用；适合开盘/收盘复盘或解释板块异动背景。',
+    usageGuide: '需要市场全景（指数、全球市场、涨跌榜、龙虎榜）时使用；适合开盘/收盘复盘或解释板块异动背景。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '只读；无参数；响应较大，同一轮对话调用一次即可。',
   },
   get_trend_brief: {
     hubFeature: 'trend_brief',
     miningEligible: true,
-    usageGuide: 'A 股单股趋势一句话研判（均线、相对沪深300、可选持仓盈亏）；用户问「走势怎么看」且已有代码时使用。',
+    usageGuide: 'A 股单股趋势一句话研判（均线、相对沪深300、可选持仓盈亏）；用户问「走势怎么看」且已有代码时使用。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '仅 CN 股票；code 必填；holding_cost 可选；深度分析仍须 get_instrument_snapshot / evaluate_instrument。',
   },
   batch_instrument_snapshots: {
     hubFeature: 'instrument_batch_snapshots',
     miningEligible: true,
-    usageGuide: `对已有候选代码批量拉取在线聚合快照（行情/概况等）。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `对已有候选代码批量拉取在线聚合快照（行情/概况等）。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: 'instruments 或 codes 一次传入，硬上限 200；允许部分失败（看 failed[] / attempted_count）；禁止对同一列表重复调用。',
   },
   get_watchlist: {
@@ -74,50 +85,58 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_etf_list: {
     hubFeature: 'etf_list',
     miningEligible: true,
-    usageGuide: '获取 A 股 ETF 全量列表或按 code 验证；定位标的后优先 search_instruments（markets=["CN"]）或直接用代码。',
+    usageGuide: '获取 A 股 ETF 全量列表或按 code 验证；定位标的优先 MCP 搜码/问数，不足再用 search_instruments（markets=["CN"]）或直接用代码。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '只读；可选 code 过滤；列表结果用 code 调用 get_instrument_snapshot / get_etf_nav / get_etf_holdings。',
   },
   get_etf_nav: {
     hubFeature: 'etf_nav',
     miningEligible: true,
-    usageGuide: 'ETF 历史净值与溢价率序列；判断折溢价、净值趋势时使用。',
+    usageGuide: 'ETF 历史净值与溢价率序列；判断折溢价、净值趋势时使用。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '单只 code；在线拉取。',
   },
   get_etf_holdings: {
     hubFeature: 'etf_holdings',
     miningEligible: true,
-    usageGuide: 'ETF 最新披露持仓与权重；了解底层资产或行业暴露时使用。',
+    usageGuide: 'ETF 最新披露持仓与权重；了解底层资产或行业暴露时使用。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '单只 code；持仓按季报更新，勿臆造成分股。',
   },
   get_etf_profile: {
     hubFeature: 'etf_profile',
     miningEligible: true,
-    usageGuide: 'ETF 档案（跟踪指数、费率、规模等）；与净值/持仓区分。',
+    usageGuide: 'ETF 档案（跟踪指数、费率、规模等）；与净值/持仓区分。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '单只 InstrumentRef/code；经标准 etf_profile；无数据时声明缺口。',
   },
   get_sector_list: {
     hubFeature: 'sector_list',
     miningEligible: true,
-    usageGuide: '板块或行业目录；拿 board_key/industry_code 后再 get_sector_constituents；产业链叙事激活工作流技能 industry-chain。',
+    usageGuide: '板块或行业目录；拿 board_key/industry_code 后再 get_sector_constituents；产业链叙事激活工作流技能 industry-chain。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '只读；market/kind/plate_type 可选；勿与产业链技能混淆。',
   },
   get_sector_constituents: {
     hubFeature: 'sector_constituents',
     miningEligible: true,
-    usageGuide: '板块或行业成分股；须先有 board_key 或 industry_code（来自 get_sector_list）。',
+    usageGuide: '板块或行业成分股；须先有 board_key 或 industry_code（来自 get_sector_list）。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: 'board_key 与 industry_code 二选一；分页 page/page_size；勿编造成分。',
   },
   get_cn_market_special: {
     hubFeature: 'cn_market_special',
     miningEligible: true,
     usageGuide:
-      '同花顺独有专题：连板天梯 / 飙升榜 / 历史热股 / 热榜走势 / 异动 / 概念指数目录(ths_index_list)。须 kind。指数成分→get_index_constituents；财务指标→get_instrument_financial_indicators；全景复盘→get_market_dynamics。',
+      '同花顺独有专题：连板天梯 / 飙升榜 / 历史热股 / 热榜走势 / 异动 / 概念指数目录(ths_index_list)。须 kind。指数成分→get_index_constituents；财务指标→get_instrument_financial_indicators；全景复盘→get_market_dynamics。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '依赖 tonghuashun（富耀）Key；勿用于美股港股；勿替代 dynamics 全景；勿用本工具拉成分/财务指标。',
   },
   get_trade_calendar: {
     hubFeature: 'trade_calendar',
     miningEligible: true,
-    usageGuide: 'A 股交易日历（按年）；问休市日/下一交易日时首选；勿用 get_market_session 代替。',
+    usageGuide: 'A 股交易日历（按年）；问休市日/下一交易日时首选；勿用 get_market_session 代替。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: 'year 可选，默认当年；只读。',
   },
   get_macro_series: {
@@ -125,45 +144,55 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: true,
     usageGuide:
       '宏观序列：scope=cn|foreign|industry|oil|catalog；中国常用 kind=cpi/ppi/gdp/社零；'
-      + '先 catalog 再取数。市况叙事用 get_market_regime，勿混用。',
+      + '先 catalog 再取数。市况叙事用 get_market_regime，勿混用。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance:
       '中国首页优先 MACRO_INDICATOR；翻页/国外/行业/油价依赖 eastmoney；无数据声明缺口；勿编造数值。',
   },
   get_dragon_tiger: {
     hubFeature: 'dragon_tiger',
     miningEligible: true,
-    usageGuide: '龙虎榜明细/指定日上榜列表。与涨跌榜一起的全景复盘用 get_market_dynamics（已含龙虎榜摘要）。',
+    usageGuide: '龙虎榜明细/指定日上榜列表。与涨跌榜一起的全景复盘用 get_market_dynamics（已含龙虎榜摘要）。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '主要 CN；可带 date；空数据声明缺口；勿与 dynamics 同轮各调一遍做同一件事。',
   },
   get_limit_updown: {
     hubFeature: 'limit_updown',
     miningEligible: true,
-    usageGuide: '涨跌停池列表；连板天梯用 get_cn_market_special(kind=limit_up_ladder)。dynamics 不含涨跌停池。',
+    usageGuide: '涨跌停池列表；连板天梯用 get_cn_market_special(kind=limit_up_ladder)。dynamics 不含涨跌停池。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '主要 CN；date 可选。',
   },
   get_market_sentiment: {
     hubFeature: 'market_sentiment',
     miningEligible: true,
-    usageGuide: '全市场情绪或个股热度；飙升/热股榜用 get_cn_market_special。dynamics 不含情绪分。',
+    usageGuide: '全市场情绪或个股热度；飙升/热股榜用 get_cn_market_special。dynamics 不含情绪分。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '主要 CN；勿编造分数。',
   },
   get_index_constituents: {
     hubFeature: 'index_constituents',
     miningEligible: true,
-    usageGuide: '指数成分（如沪深300）或同花顺概念/板块成分；index_code 必填。目录用 get_cn_market_special(kind=ths_index_list) 或 get_sector_list。',
+    usageGuide: '指数成分（如沪深300）或同花顺概念/板块成分；index_code 必填。目录用 get_cn_market_special(kind=ths_index_list) 或 get_sector_list。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '主要 CN；无数据时声明；勿与 get_sector_constituents / get_cn_market_special 混用拉成分。',
   },
   get_market_session: {
     hubFeature: 'market_session',
     miningEligible: true,
-    usageGuide: '问是否开盘/交易时段时使用；精确交易日/休市用 get_trade_calendar。',
+    usageGuide: '问是否开盘/交易时段时使用；精确交易日/休市用 get_trade_calendar。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: '只读；market 默认 CN；勿当作完整 calendar。',
   },
   search_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,
-    usageGuide: '跨市场按代码或名称搜索标的（在线名录）；不熟悉代码或需美股/港股/Crypto/A 股检索时的首选且唯一搜索入口。',
-    compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤（CN/US/HK/CRYPTO）；命中后用返回的 instrument 或 code 调用 get_instrument_*。',
+    usageGuide:
+      '禁止用于名称搜索/选股/问数。仅当标的代码歧义（同码多市场/多交易所需消歧），或外部 MCP 未启用、连接失败、调用报错时才允许。'
+      + ' tools 中若有 [MCP:]/namespaced（server__tool）搜码/问数工具须先调远程。',
+    compliance:
+      'keyword 必填 ≥1 字符；可用 markets 数组过滤（CN/US/HK/CRYPTO）。'
+      + ' 禁止名称搜索/选股主路径；仅代码歧义或外部 MCP 未启用/失败。命中后用返回的 instrument 或 code 调用 get_instrument_*。',
   },
   get_instrument_capabilities: {
     hubFeature: 'instrument_capabilities',
@@ -174,49 +203,49 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_snapshot: {
     hubFeature: 'instrument_snapshot',
     miningEligible: true,
-    usageGuide: `单只标的聚合快照（概况、行情、关键序列）；跨市场深度分析首选入口。需要可核验财务/股东事实表时改用 get_instrument_financials / get_instrument_profile。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `单只标的聚合快照（概况、行情、关键序列）；有问数/行情 MCP 须先远程，本工具为本地聚合快照补充。需要可核验财务/股东事实表时再用 get_instrument_financials / get_instrument_profile。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；capabilities 不含 snapshot 时勿调用；勿对 20+ 只批量 snapshot。',
   },
   get_instrument_profile: {
     hubFeature: 'instrument_profile',
     miningEligible: true,
-    usageGuide: `公司/标的概况事实表（主业、行业、概念、上市信息）；问「做什么的/所属概念」时首选。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `公司/标的概况事实表（主业、行业、概念、上市信息）；问「做什么的/所属概念」时可用。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；经标准 profile capability；勿用 invoke_provider_custom_method 替代；无数据时声明缺口。',
   },
   get_instrument_financials: {
     hubFeature: 'instrument_financials',
     miningEligible: true,
-    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；资产负债/现金流明细改用 get_instrument_balance_sheet / get_instrument_cash_flow。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时可用；资产负债/现金流明细改用 get_instrument_balance_sheet / get_instrument_cash_flow。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；report_type 默认 all；引用具体 reportDate；无数据时声明缺口，禁止编造。',
   },
   get_instrument_balance_sheet: {
     hubFeature: 'instrument_balance_sheet',
     miningEligible: true,
-    usageGuide: `资产负债表多期事实表；问总资产/负债/权益、资产负债率明细时首选。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `资产负债表多期事实表；问总资产/负债/权益、资产负债率明细时可用。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；经标准 balance_sheet；勿用 evaluate 或自定义方法替代；无数据时声明缺口。',
   },
   get_instrument_cash_flow: {
     hubFeature: 'instrument_cash_flow',
     miningEligible: true,
-    usageGuide: `现金流量表多期事实表；问经营/投资/筹资现金流时首选。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `现金流量表多期事实表；问经营/投资/筹资现金流时可用。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；经标准 cash_flow；勿用财务摘要的 operatingCashFlow 单字段敷衍完整表。',
   },
   get_instrument_income_statement: {
     hubFeature: 'instrument_income_statement',
     miningEligible: true,
-    usageGuide: `利润表多期事实表；问营收/成本/费用明细时首选，勿仅用财务摘要代替。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `利润表多期事实表；问营收/成本/费用明细时可用，勿仅用财务摘要代替。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；经标准 income_statement；勿用 evaluate 替代。',
   },
   get_instrument_financial_indicators: {
     hubFeature: 'instrument_financial_indicators',
     miningEligible: true,
-    usageGuide: `同花顺财务指标树；须 report=2024Q3 等。三表明细用 income/balance/cash 专用工具。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `同花顺财务指标树；须 report=2024Q3 等。三表明细用 income/balance/cash 专用工具。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '须启用 tonghuashun；report 必填；无 Key 时声明缺口。',
   },
   get_instrument_shareholders: {
     hubFeature: 'instrument_shareholders',
     miningEligible: true,
-    usageGuide: `股东结构事实表；问十大股东、股权集中度时使用。季报机构持仓（基金/QFII Tab）用 get_instrument_institution_holdings。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `股东结构事实表；问十大股东、股权集中度时使用。季报机构持仓（基金/QFII Tab）用 get_instrument_institution_holdings。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；部分市场可能无数据；勿编造股东名单。',
   },
   get_instrument_institution_holdings: {
@@ -224,85 +253,95 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: true,
     usageGuide:
       'A 股季报机构持仓：scope=overview 一览；scope=detail+org_type 明细 Tab；scope=dates 报告期。'
-      + `勿与十大股东混淆。${INSTRUMENT_REF_USAGE}`,
+      + `勿与十大股东混淆。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '仅 CN；依赖 eastmoney；空类型声明缺口（一/三季报可能无 QFII 等）；勿编造持仓。',
   },
   get_instrument_dividend: {
     hubFeature: 'instrument_dividend',
     miningEligible: true,
-    usageGuide: `分红派息历史事实表；问分红政策、历史派息时使用。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `分红派息历史事实表；问分红政策、历史派息时使用。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；港股可带 page；无记录时声明，勿臆造股息率时间序列。',
   },
   get_instrument_money_flow: {
     hubFeature: 'instrument_money_flow',
     miningEligible: true,
-    usageGuide: `个股资金流向事实表；问主力/北向/资金进出时首选；勿用 get_market_dynamics 笼统代替。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `个股资金流向事实表；问主力/北向/资金进出时可用；勿用 get_market_dynamics 笼统代替。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；主要支持 CN；空数据时声明缺口，禁止编造净流入数字。',
   },
   get_instrument_notices: {
     hubFeature: 'instrument_notices',
     miningEligible: false,
-    usageGuide: `按标的拉官方公告/披露列表；用户问公告、年报披露列表时首选。正文用 get_notice_content(url)。${INSTRUMENT_REF_USAGE}`,
+    usageGuide:
+      `按标的拉官方公告/披露列表；用户问公告、年报披露列表时可用。正文用 get_notice_content(url)。`
+      + ` ${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；page/page_size 可选；列表无正文；url 必须来自本工具返回再调 get_notice_content。',
   },
   get_instrument_quotes: {
     hubFeature: 'instrument_quotes',
     miningEligible: true,
-    usageGuide: `批量最新价、涨跌幅、量比等；初选后快速更新多只候选行情。${INSTRUMENT_REF_USAGE}`,
+    usageGuide:
+      `批量最新价、涨跌幅、量比等；初选后快速更新多只候选行情。`
+      + ` ${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: 'instruments 数组一次传入，建议 ≤ 30；禁止逐只循环调用。',
   },
   get_instrument_chart: {
     hubFeature: 'instrument_chart',
     miningEligible: true,
-    usageGuide: `验证趋势、动量、技术形态；A 股日 K 优先读本地 DuckDB，在线 Provider 补充实时；策略含动量/突破/均线逻辑时使用。${INSTRUMENT_REF_USAGE}`,
+    usageGuide:
+      `验证趋势、动量、技术形态；A 股日 K 优先读本地 DuckDB，在线 Provider 补充实时；策略含动量/突破/均线逻辑时使用。`
+      + ` ${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；count ≤ 240；仅对 shortlisted 标的调用；本地无 K 线时会尝试在线拉取。',
   },
   evaluate_instrument: {
     hubFeature: 'instrument_evaluation',
     miningEligible: true,
-    usageGuide: `单只标的在线评估：A 股股票为评分卡，CN ETF 与外盘为技术分析 bundle；已有代码且需要量化依据时使用。${INSTRUMENT_REF_USAGE}`,
+    usageGuide:
+      `单只标的在线评估：A 股股票为评分卡，CN ETF 与外盘为技术分析 bundle；已有代码且需要量化依据时使用。${LOCAL_ONLY_ANALYTICS}`
+      + ` ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；A 股股票可指定 scorecard；非 CN 股票市场先 get_instrument_capabilities 确认支持。',
   },
   get_instrument_strategy_signal: {
     hubFeature: 'instrument_strategy_signal',
     miningEligible: true,
-    usageGuide: `9 策略融合方向信号，辅助判断多空倾向。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `9 策略融合方向信号，辅助判断多空倾向。${LOCAL_ONLY_ANALYTICS} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；信号为研究参考，非买卖指令。',
   },
   get_instrument_indicators: {
     hubFeature: 'instrument_indicators',
     miningEligible: true,
-    usageGuide: `读取技术指标 bundle（均线、动量、波动等），辅助趋势与形态判断。${INSTRUMENT_REF_USAGE}`,
+    usageGuide:
+      `读取技术指标 bundle（均线、动量、波动等），辅助趋势与形态判断。`
+      + ` ${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；仅对 shortlisted 候选调用；计算较轻于完整 evaluate_instrument。',
   },
   verify_instrument_strategy: {
     hubFeature: 'instrument_strategy_verify',
     miningEligible: false,
-    usageGuide: `验证历史策略信号胜率与 forward 收益，支撑 thesis 可信度。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `验证历史策略信号胜率与 forward 收益，支撑 thesis 可信度。${LOCAL_ONLY_ANALYTICS} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；计算较重；仅对核心 1–3 只候选使用。',
   },
   get_instrument_latest_evaluation: {
     hubFeature: 'latest_evaluation',
     miningEligible: false,
-    usageGuide: `读取已缓存的最近一次评估，避免重复 evaluate_instrument。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `读取已缓存的最近一次评估，避免重复 evaluate_instrument。${LOCAL_ONLY_ANALYTICS} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只只读；无缓存时再调用 evaluate_instrument。',
   },
   get_instrument_cyq: {
     hubFeature: INSTRUMENT_HUB_FEATURE.cyq,
     miningEligible: true,
-    usageGuide: `A 股筹码分布（获利盘、成本区）；仅 CN 市场。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `A 股筹码分布（获利盘、成本区）；仅 CN 市场。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；market 须为 CN；仅对最终 3–8 只候选调用。',
   },
   get_instrument_institution_rating: {
     hubFeature: INSTRUMENT_HUB_FEATURE.institution_rating,
     miningEligible: true,
-    usageGuide: `28 家机构风格共识；基本面/估值研究需外部观点时使用；仅 A 股。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `28 家机构风格共识；基本面/估值研究需外部观点时使用；仅 A 股。${LOCAL_ONLY_ANALYTICS} 网上卖方研报优先 MCP report_search。 ${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；market 须为 CN；可选 groups 过滤；勿编造机构观点。',
   },
   get_instrument_institution_report: {
     hubFeature: INSTRUMENT_HUB_FEATURE.institution_report,
     miningEligible: false,
-    usageGuide: `机构评级完整文本报告；仅 A 股。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `机构评级完整文本报告；仅 A 股。${LOCAL_ONLY_ANALYTICS} ${INSTRUMENT_REF_USAGE}`,
     compliance: '长文本；仅用户明确要求深度报告时调用；market 须为 CN。',
   },
   analyze_portfolio: {
@@ -314,13 +353,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
   run_backtest: {
     hubFeature: 'backtest',
     miningEligible: true,
-    usageGuide: '对已知代码列表做评分卡 IC 回测。',
+    usageGuide: `对已知代码列表做评分卡 IC 回测。${LOCAL_ONLY_ANALYTICS}`,
     compliance: 'codes 必填；小样本验证；计算密集，非挖掘必经路径。',
   },
   strategy_report: {
     hubFeature: 'strategy_report',
     miningEligible: true,
-    usageGuide: '单股 T 策略综合分析长文（A 股 CN code）。',
+    usageGuide: `单股 T 策略综合分析长文（A 股 CN code）。${LOCAL_ONLY_ANALYTICS}`,
     compliance: '文本报告；非结构化挖掘首选；跨市场策略验证用 verify_instrument_strategy。',
   },
   get_portfolio_holdings: {
@@ -362,13 +401,16 @@ export const TOOL_META: Record<string, ToolMeta> = {
   list_news_articles: {
     hubFeature: 'news_articles_list',
     miningEligible: false,
-    usageGuide: '标的相关资讯：优先 view=group + 最匹配 group_id；信息不足时交叉调阅 MACRO/GLOBAL 分组或 view=timeline 兜底。',
+    usageGuide:
+      '标的相关资讯：优先 view=group + 最匹配 group_id；信息不足时交叉调阅 MACRO/GLOBAL 分组或 view=timeline 兜底。'
+      + ' tools 中若有对应 [MCP:…] / namespaced 新闻工具，必须先调外部；本工具为本机 RSS 订阅补充。',
     compliance: '只读；limit ≤50；view=group 须 group_id，view=source 须 subscription_id；列表无正文，禁止臆造 article_id。',
   },
   get_news_article: {
     hubFeature: 'news_article_detail',
     miningEligible: false,
-    usageGuide: '仅对 list 筛出的最相关 1–3 篇拉正文做深度解读；用户点名某条资讯时使用。',
+    usageGuide: '仅对 list 筛出的最相关 1–3 篇拉正文做深度解读；用户点名某条资讯时使用。'
+      + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance: 'article_id 必填且须来自 list_news_articles；只读；正文已压缩空白。',
   },
   add_news_source: {
@@ -506,7 +548,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   search_library: {
     miningEligible: false,
     usageGuide:
-      '跨会话检索本机研报库/资讯。研报走文档库（可混合关键词与语义）；资讯走本机资讯全文检索（与统一搜索同源、无向量）——查资讯时用股票代码、公司简称、主题、事件等具体词，可一次多词组合，避免空泛「相关报道」。用户问「哪些研报提到某标的」「跨研报找主题」或「本机库里某公司资讯」时首选；研报命中后 read_document(document_id) 精读；资讯命中以摘录为准。',
+      '跨会话检索本机研报库/资讯。研报走文档库（可混合关键词与语义）；资讯走本机资讯全文检索（与统一搜索同源、无向量）——查资讯时用股票代码、公司简称、主题、事件等具体词，可一次多词组合，避免空泛「相关报道」。'
+      + ' 网上研报若 tools 有 namespaced MCP（如 iwencai__report_search）须先调远程；本工具仅跨会话已入库文档补充。'
+      + ' 用户问「哪些研报提到某标的」「跨研报找主题」或「本机库里某公司资讯」时可用；研报命中后 read_document(document_id) 精读；资讯命中以摘录为准。',
     compliance:
       '只读；query 必填；可选 source_type=report|news、limit≤20；source_type=news 时勿依赖语义/向量，勿对资讯 document_id 调用 read_document；研报引用须带文档名与页码；勿编造未读内容。',
   },

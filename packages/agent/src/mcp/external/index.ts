@@ -4,11 +4,10 @@
  * 改造要点（对齐"外部优先 + 投研完备性"目标）：
  * 1. openAiTools() 返回 [外部工具(排前), 本地过滤工具(排后)]
  *    外部已有的同名工具，本地不再重复暴露
- * 2. call() 外部优先，调用后做充分性校验：
- *    - 充分 → 直接返回（标记 sufficient=true）
- *    - 不充分 → 自动补充本地数据，按策略合并后返回
- *    - 外部不可用 → 降级本地（标记 degraded=true）
+ * 2. call() 优先 Capability Orchestrator（按能力跨名 L1→L2）；
+ *    fake/无 catalog 时降级绑定链 / callNamespaced
  * 3. 所有结果都带 _mcp 标记，告知 LLM 数据来源和充分性
+ * 4. 不从冻结 tools[] 删除 MCP 工具；会话隔离仅 turn-tail + hard-skip
  */
 
 import {
@@ -18,6 +17,7 @@ import {
 } from '@opptrix/shared'
 import type { OpenAiTool } from '../../tools.js'
 import { McpToolBroker, type McpToolCallOptions } from '../broker.js'
+import { dispatchCapabilityCall } from './capability-orchestrator.js'
 import {
   annotateMcpResult,
   getExternalMcpRegistry,
@@ -66,7 +66,23 @@ export class AggregatingToolBroker {
     args: Record<string, unknown> = {},
     opts?: McpToolCallOptions,
   ): Promise<unknown> {
-    // ── 命名空间工具：直接走外部 ──
+    const orchestrated = await dispatchCapabilityCall(
+      {
+        local: this.local,
+        external: this.external,
+        sufficiency: this.sufficiency,
+        supplementWithLocal: (n, a, o, er, check, src) =>
+          this.supplementWithLocal(n, a, o, er, check, src),
+        callLocalWithFallback: (n, a, o, tried, hint) =>
+          this.callLocalWithFallback(n, a, o, tried, hint),
+      },
+      name,
+      args,
+      opts,
+    )
+    if (orchestrated !== null) return orchestrated
+
+    // ── 命名空间工具：直接走外部（无能力映射时） ──
     if (parseNamespacedMcpTool(name)) {
       return this.callNamespaced(name, args, opts)
     }
@@ -95,7 +111,7 @@ export class AggregatingToolBroker {
   /* 内部实现                                                                */
   /* ---------------------------------------------------------------------- */
 
-  /** 调用命名空间工具（外部） */
+  /** 调用命名空间工具（外部）；无编排器时保留旧行为 */
   private async callNamespaced(
     name: string,
     args: Record<string, unknown>,
@@ -103,12 +119,15 @@ export class AggregatingToolBroker {
   ): Promise<unknown> {
     try {
       const result = await this.external.callNamespaced(name, args, opts)
-      const parsed = parseNamespacedMcpTool(name)!
+      const parsed = parseNamespacedMcpTool(name)
+      if (!parsed) {
+        return { error: `非命名空间 MCP 工具: ${name}` }
+      }
       const check = this.sufficiency.check(name, result)
       if (check.sufficient) {
         return annotateMcpResult(result, parsed.serverId, { sufficient: true })
       }
-      // 不充分 → 补充本地
+      // 不充分 → 补充本地（同名；无映射时可能失败则带回外部结果）
       return this.supplementWithLocal(name, args, opts, result, check, parsed.serverId)
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
@@ -241,5 +260,31 @@ export {
 export { ExternalMcpHealth } from './health.js'
 export { createSdkConnection, parseToolResult, toOpenAiTool, type SdkConnection } from './connection.js'
 export { mapPool, resolveMcpHydrateConcurrency } from './pool.js'
-export { SufficiencyChecker, TOOL_SUFFICIENCY_SPECS } from './sufficiency.js'
+export { SufficiencyChecker, TOOL_SUFFICIENCY_SPECS, extractTabular } from './sufficiency.js'
 export { mergeResults, extendResults, replaceResults } from './supplement.js'
+export { buildExternalMcpSourcingAppendix } from './sourcing-prompt.js'
+export {
+  buildDisabledMcpTurnTail,
+  clearServer as clearMcpSessionQuarantineServer,
+  clearSession as clearMcpSessionQuarantine,
+  disableHard as disableMcpServerHard,
+  isDisabled as isMcpServerSessionDisabled,
+  listDisabled as listMcpSessionDisabled,
+  resetSessionMcpQuarantineForTests,
+} from './session-quarantine.js'
+export {
+  adaptCapabilityArgs,
+  EXTERNAL_MCP_CAPABILITY_GUIDE,
+  LOCAL_OFFLINE_ASSET_TOOLS,
+  LOCAL_ONLY_TOOL_NAMES,
+  localToolsForCapability,
+  relatedCapabilities,
+  resolveToolCapability,
+  synthesizeMarketListQuery,
+  type McpCapability,
+} from './capability-catalog.js'
+export {
+  dispatchCapabilityCall,
+  resetMcpRateLimitWaitForTests,
+  setMcpRateLimitWaitForTests,
+} from './capability-orchestrator.js'

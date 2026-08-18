@@ -256,6 +256,33 @@ test('D4 route playbook only names loaded tools', () => {
   assert.match(noPreferredCard, /勿直接声称无法完成|勿空转/)
 })
 
+test('D4b playbook puts namespaced MCP ahead of search_instruments', () => {
+  const searchPlan = resolveToolRoutePlan({ message: '搜一下浪潮信息代码' })
+  assert.equal(searchPlan.preferredTools[0], 'search_instruments')
+  const withMcp = buildRoundRoutePlaybook(searchPlan, [
+    'iwencai__query2data',
+    'search_instruments',
+    'get_instrument_snapshot',
+  ])
+  assert.match(withMcp, /首选调用顺序：iwencai__query2data/)
+  const orderLine = withMcp.split('\n').find(l => l.includes('首选调用顺序：')) ?? ''
+  const mcpIdx = orderLine.indexOf('iwencai__query2data')
+  const searchIdx = orderLine.indexOf('search_instruments')
+  assert.ok(mcpIdx >= 0, 'MCP must appear in preferred order')
+  assert.ok(searchIdx < 0, 'search_instruments must not appear in preferred when MCP present')
+  assert.match(withMcp, /本轮勿优先：.*search_instruments/)
+  assert.match(withMcp, /歧义/)
+  assert.match(withMcp, /失败|未启用/)
+  assert.match(withMcp, /外部 MCP 优先/)
+
+  const noMcp = buildRoundRoutePlaybook(searchPlan, [
+    'search_instruments',
+    'get_instrument_snapshot',
+  ])
+  assert.match(noMcp, /首选调用顺序：search_instruments/)
+  assert.ok(!/搜索\/问数\/选股必须先调外部 MCP/.test(noMcp))
+})
+
 test('D5 conditional playbooks — unloaded packs omitted from system rules', () => {
   const routeCard = '【本轮工具选型卡】\n- 测试卡'
   const slim = buildAgentSystemRules({

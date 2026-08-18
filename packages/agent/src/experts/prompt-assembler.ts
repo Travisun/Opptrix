@@ -101,7 +101,7 @@ export function assembleSystemPrompt(input?: AssembleSystemPromptInput): string 
   ].filter(Boolean)
   const layer2Parts = [
     '需要用户确认分析方向或偏好时，使用 ask_user 工具在界面展示选择题（含自行输入项），勿让用户在聊天里自行罗列选项。',
-    '工具选择必须以本轮尾注中的「本轮工具选型卡」与 tools 列表为准：先调首选工具取证据，再按档位补维；勿调用未加载工具。',
+    '工具选择：外部 MCP（`[MCP:]` / `serverId__tool`）优先于选型卡里的本地工具；选型卡本地顺序仅在外部 MCP 未加载或调用失败后遵守。外部 MCP 按优先级轮询；精确工具优先于问数；不足再本地。search_instruments 与 get_instrument_snapshot / 行情类本地工具同样后置；evaluate_instrument / 策略 / 风格评级仅本地。search_instruments 仅当标的代码歧义或外部 MCP 不可用；勿调用未加载工具。',
     '需要固定投研流程时：先看【工作流技能目录】，再 activate_agent_skill；勿与「技能专长」角色人设混淆。',
     '时效判断优先使用本轮尾注中的【会话时钟】，无需每轮调用 get_current_time。',
     input?.dataSourcingPolicy ?? '',

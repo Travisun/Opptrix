@@ -106,7 +106,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['search_library', 'read_document'],
     avoidTools: ['list_news_articles', 'workspace_read', 'list_session_documents', 'search_document'],
     confidence: 'high',
-    hint: '跨会话/跨研报 → 先 search_library 找片段；查资讯用 source_type=news + 多具体关键词（代码/公司/主题/事件），走本机资讯全文检索非语义向量，以摘录为准；研报命中后 read_document(document_id) 精读；可换关键词多跳；勿灌全文',
+    hint: '跨会话/跨研报 → 先 namespaced MCP 研报检索（若有），不足再用 search_library 找片段；查资讯用 source_type=news + 多具体关键词（代码/公司/主题/事件），走本机资讯全文检索非语义向量，以摘录为准；研报命中后 read_document(document_id) 精读；可换关键词多跳；勿灌全文',
   },
   {
     intent: 'etf_profile',
@@ -115,7 +115,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_etf_profile', 'get_etf_nav', 'get_instrument_snapshot'],
     avoidTools: ['get_etf_holdings', 'get_instrument_profile'],
     confidence: 'high',
-    hint: '问 ETF 档案/跟踪指数/费率 → get_etf_profile；净值用 get_etf_nav，成分用 get_etf_holdings',
+    hint: '问 ETF 档案/跟踪指数/费率 → 先 namespaced MCP 问数/概况（若有），不足再用 get_etf_profile；净值用 get_etf_nav，成分用 get_etf_holdings',
   },
   {
     intent: 'etf_nav',
@@ -124,7 +124,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_etf_nav', 'get_instrument_snapshot'],
     avoidTools: ['get_etf_holdings', 'evaluate_instrument', 'get_instrument_quotes'],
     confidence: 'high',
-    hint: '问净值/溢价 → 首选 get_etf_nav；勿用持仓权重或仅用实时价代替净值序列',
+    hint: '问净值/溢价 → 先 namespaced MCP 问数/概况（若有），不足再用 get_etf_nav；勿用持仓权重或仅用实时价代替净值序列',
   },
   {
     intent: 'etf_holdings',
@@ -133,7 +133,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_etf_holdings', 'get_etf_list'],
     avoidTools: ['get_portfolio_holdings', 'get_etf_nav'],
     confidence: 'high',
-    hint: '问 ETF 成分/权重 → 首选 get_etf_holdings；勿与用户个人持仓 get_portfolio_holdings 混淆',
+    hint: '问 ETF 成分/权重 → 先 namespaced MCP 问数/概况（若有），不足再用 get_etf_holdings；勿与用户个人持仓 get_portfolio_holdings 混淆',
   },
   {
     intent: 'portfolio_holdings',
@@ -380,7 +380,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['list_news_articles', 'list_news_groups', 'get_news_center_status'],
     avoidTools: ['get_instrument_snapshot', 'evaluate_instrument'],
     confidence: 'high',
-    hint: '浏览资讯 → list_news_groups/list_news_articles；深度分析标的勿替代资讯工具',
+    hint: '浏览资讯 → 先 namespaced MCP 新闻/公告/研报（若有），不足再用 list_news_groups/list_news_articles；深度分析标的勿替代资讯工具',
   },
   {
     intent: 'schedule_create',
@@ -846,7 +846,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_trend_brief', 'get_instrument_chart'],
     avoidTools: ['get_market_regime'],
     confidence: 'high',
-    hint: 'A 股单股趋势快评 → get_trend_brief；深度评分再用 evaluate_instrument',
+    hint: 'A 股单股趋势快评 → 先 namespaced MCP 行情/问数，不足再用 get_trend_brief；深度评分再用 evaluate_instrument',
   },
   {
     intent: 'sector_constituents',
@@ -882,7 +882,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['activate_agent_skill', 'list_agent_skills', 'get_sector_list'],
     avoidTools: ['search_instruments'],
     confidence: 'high',
-    hint: '产业链/上下游 → 激活工作流技能 industry-chain（含内置知识库）；代表公司再用 search_instruments',
+    hint: '产业链/上下游 → 激活工作流技能 industry-chain（含内置知识库）；代表公司先 namespaced MCP 搜码/问数，不足再用 search_instruments',
   },
   {
     intent: 'cyq',
@@ -918,7 +918,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_indicators', 'get_instrument_chart'],
     avoidTools: ['get_instrument_quotes'],
     confidence: 'high',
-    hint: '具体技术指标 → get_instrument_indicators；配 K 线用 get_instrument_chart',
+    hint: '具体技术指标 → 先 namespaced MCP（若有），不足再用 get_instrument_indicators；配 K 线用 get_instrument_chart',
   },
   {
     intent: 'backtest',
@@ -936,7 +936,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_balance_sheet', 'get_instrument_financials', 'get_instrument_snapshot'],
     avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '资产负债表 → 首选 get_instrument_balance_sheet；勿只用摘要 financials 代替完整表',
+    hint: '资产负债表 → 先 namespaced MCP 问数（若有），不足再用 get_instrument_balance_sheet；勿只用摘要 financials 代替完整表',
   },
   {
     intent: 'cash_flow_statement',
@@ -945,7 +945,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_cash_flow', 'get_instrument_financials', 'get_instrument_snapshot'],
     avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '现金流量表 → 首选 get_instrument_cash_flow',
+    hint: '现金流量表 → 先 namespaced MCP 问数（若有），不足再用 get_instrument_cash_flow',
   },
   {
     intent: 'income_statement',
@@ -959,7 +959,7 @@ const INTENT_RULES: IntentRule[] = [
     ],
     avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '利润表/三表 → get_instrument_income_statement（及资产负债/现金流）；摘要不够时勿只调 financials',
+    hint: '利润表/三表 → 先 namespaced MCP 问数（若有），不足再用 get_instrument_income_statement（及资产负债/现金流）；摘要不够时勿只调 financials',
   },
   {
     intent: 'financial_indicators',
@@ -1045,7 +1045,7 @@ const INTENT_RULES: IntentRule[] = [
     ],
     avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '财务摘要 → get_instrument_financials；明细三表与指标用专用工具',
+    hint: '财务摘要 → 先 namespaced MCP 问数（若有），不足再用 get_instrument_financials；明细三表与指标用专用工具',
   },
   {
     intent: 'profile',
@@ -1054,7 +1054,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_profile', 'get_instrument_snapshot'],
     avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '公司概况/概念 → get_instrument_profile',
+    hint: '公司概况/概念 → 先 namespaced MCP 问数（若有），不足再用 get_instrument_profile',
   },
   {
     intent: 'shareholders',
@@ -1084,7 +1084,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_money_flow', 'get_instrument_snapshot', 'get_market_dynamics'],
     avoidTools: ['evaluate_instrument'],
     confidence: 'high',
-    hint: '个股资金流向 → get_instrument_money_flow；全市场资金概况才用 get_market_dynamics',
+    hint: '个股资金流向 → 先 namespaced MCP 问数/行情（若有），不足再用 get_instrument_money_flow；全市场资金概况才用 get_market_dynamics',
   },
   {
     intent: 'instrument_notices',
@@ -1093,7 +1093,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_notices', 'get_notice_content', 'get_instrument_snapshot'],
     avoidTools: ['list_news_articles', 'evaluate_instrument'],
     confidence: 'high',
-    hint: '标的公告列表 → get_instrument_notices；读全文再用 get_notice_content(url)',
+    hint: '标的公告 → 先 namespaced MCP 公告检索（若有），不足再用 get_instrument_notices；读全文再用 get_notice_content(url)',
   },
   {
     intent: 'dividend',
@@ -1111,7 +1111,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_quotes', 'get_instrument_snapshot'],
     avoidTools: ['evaluate_instrument', 'get_instrument_chart', 'get_instrument_indicators'],
     confidence: 'high',
-    hint: '只需现价/涨跌 → 首选 get_instrument_quotes；勿一上来 evaluate',
+    hint: '只需现价/涨跌 → 先 namespaced MCP 行情/问数（若有），不足再用本地 get_instrument_quotes / get_instrument_snapshot；勿一上来 evaluate',
   },
   {
     intent: 'chart',
@@ -1120,7 +1120,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_instrument_chart', 'get_instrument_quotes'],
     avoidTools: ['evaluate_instrument'],
     confidence: 'high',
-    hint: '要 K 线/走势图 → get_instrument_chart',
+    hint: '要 K 线/走势图 → 先 namespaced MCP（若有），不足再用 get_instrument_chart',
   },
   {
     intent: 'search',
@@ -1129,7 +1129,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['search_instruments', 'get_instrument_snapshot'],
     avoidTools: ['evaluate_instrument'],
     confidence: 'high',
-    hint: '不确定代码 → 必须先 search_instruments',
+    hint: '不确定代码 → 搜索/问数必须先调外部 MCP（server__tool）；search_instruments 仅当标的代码歧义或外部 MCP 未启用/失败',
   },
   {
     intent: 'capabilities',
@@ -1166,7 +1166,7 @@ const INTENT_RULES: IntentRule[] = [
     ],
     avoidTools: ['get_instrument_quotes'],
     confidence: 'medium',
-    hint: '深度分析：snapshot → 三表/摘要/profile 事实表 → evaluate',
+    hint: '深度分析：代码未定时搜索/问数必须先调外部 MCP；search_instruments 仅歧义或 MCP 未启用/失败；已有代码则先 namespaced MCP 问数/行情，不足再用本地 snapshot / 三表/摘要/profile 事实表 → evaluate',
   },
   {
     intent: 'etf_general',
@@ -1175,7 +1175,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['search_instruments', 'get_instrument_snapshot', 'get_etf_profile', 'get_etf_nav', 'get_etf_holdings'],
     avoidTools: ['get_portfolio_holdings'],
     confidence: 'medium',
-    hint: 'ETF 综合：search/snapshot/profile；明确净值用 get_etf_nav，成分用 get_etf_holdings',
+    hint: 'ETF 综合：搜码/问数必须先调外部 MCP；search_instruments 仅歧义或 MCP 未启用/失败；再先 MCP 问数/概况，不足再用 snapshot/profile；明确净值用 get_etf_nav，成分用 get_etf_holdings',
   },
 ]
 
@@ -1224,8 +1224,8 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   { prefer: 'get_market_regime', avoid: 'get_macro_series', when: '问牛熊/风险偏好而非具体宏观指标数字' },
   { prefer: 'get_market_regime', avoid: 'get_trend_brief', when: '问大盘牛熊而非单股' },
   { prefer: 'list_news_articles', avoid: 'get_instrument_snapshot', when: '主任务是读资讯而非个股快照' },
-  { prefer: 'activate_agent_skill', avoid: 'search_instruments', when: '先做产业链（industry-chain 技能），再搜代表公司' },
-  { prefer: 'search_instruments', avoid: 'evaluate_instrument', when: '代码未确认时禁止先评估' },
+  { prefer: 'activate_agent_skill', avoid: 'search_instruments', when: '先做产业链（industry-chain 技能），代表公司再 MCP/本地搜码' },
+  { prefer: 'search_instruments', avoid: 'evaluate_instrument', when: '代码未确认时禁止先评估（优先 MCP 搜码；search_instruments 仅歧义或 MCP 未启用/失败）' },
   { prefer: 'list_workspace_grants', avoid: 'get_project_info', when: '问可访问目录/授权工作区而非运行环境' },
   { prefer: 'list_workspace_grants', avoid: 'get_system_info', when: '问文件访问范围而非系统信息' },
   { prefer: 'browser_navigate', avoid: 'list_news_articles', when: '用户给出外部 URL 而非读订阅资讯' },
@@ -1394,7 +1394,7 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
         seedPacks,
         confidence: 'medium',
         intent: 'instrument_cue',
-        routeHint: '已识别标的线索：优先 get_instrument_snapshot，需要评分再 evaluate_instrument；代码不确定时先 search_instruments',
+        routeHint: '已识别标的线索：先 namespaced MCP 行情/问数，不足再用本地 get_instrument_snapshot；需要评分再 evaluate_instrument；代码不确定时先外部 MCP 搜码/问数；search_instruments 仅歧义或 MCP 未启用/失败',
       })
     }
     if (input.contextRef?.kind === 'article') {
@@ -1417,12 +1417,12 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
       seedPacks: seeded,
       confidence: 'low',
       intent: 'general',
-      routeHint: '意图不明确：可 search_instruments 澄清标的，或 list_tool_packs / ask_user；勿盲目 evaluate',
+      routeHint: '意图不明确：可先外部 MCP 搜码/问数澄清标的（search_instruments 仅歧义或 MCP 未启用/失败），或 list_tool_packs / ask_user；勿盲目 evaluate',
     })
   }
 
   let preferredTools = [...matched.preferredTools]
-  // 深度分析且代码未知 → 确保 search 在前
+  // 深度分析且代码未知 → 本地 search 进 preferred（冻结不按 preferred 重排；选型卡 hint 已要求先 MCP）
   if (matched.intent === 'depth_analysis' && !hasInstrumentCue(message)) {
     preferredTools = ['search_instruments', ...preferredTools.filter(t => t !== 'search_instruments')]
   }
@@ -1494,20 +1494,29 @@ function mergePackBudget(
 
 /**
  * 生成本轮选型卡（仅引用已加载工具，避免提示未暴露工具）。
+ * 外部 MCP（server__tool）若已加载，展示首选须排在本地 preferred 之前，且 search_instruments 降为勿优先。
  */
 export function buildRoundRoutePlaybook(
   plan: ToolRoutePlan,
   activeToolNames: readonly string[],
 ): string {
   const loaded = new Set(activeToolNames)
-  const preferred = plan.preferredTools.filter(t => loaded.has(t))
-  const avoid = plan.avoidTools.filter(t => loaded.has(t))
+  const mcpNames = activeToolNames.filter(n => parseNamespacedMcpTool(n))
+  const localPreferred = plan.preferredTools.filter(t => loaded.has(t))
+  const preferred = mcpNames.length > 0
+    ? [...mcpNames, ...localPreferred.filter(t => t !== 'search_instruments')]
+    : localPreferred
+  const avoidSet = new Set(plan.avoidTools.filter(t => loaded.has(t)))
+  if (mcpNames.length > 0 && loaded.has('search_instruments')) {
+    avoidSet.add('search_instruments')
+  }
+  const avoid = [...avoidSet]
   const confusions = TOOL_CONFUSION_PAIRS.filter(
     p => loaded.has(p.prefer) && loaded.has(p.avoid),
   )
 
   const lines = [
-    '【本轮工具选型卡 — 必须优先遵守】',
+    '【本轮工具选型卡 — 必须优先遵守】（外部 MCP 优先于本卡本地顺序；稳定性：远程失败再本地）',
     `- 意图标签：${plan.intent}（置信度 ${plan.confidence}）`,
     `- 研究档位：${plan.researchTier}`,
     `- 选型说明：${plan.routeHint}`,
@@ -1515,6 +1524,11 @@ export function buildRoundRoutePlaybook(
 
   if (preferred.length) {
     lines.push(`- 首选调用顺序：${preferred.join(' → ')}`)
+    if (mcpNames.length > 0) {
+      lines.push(
+        '- 搜索/问数/选股必须先调外部 MCP（上列 server__tool）。search_instruments 仅当标的代码歧义或外部 MCP 未启用/失败时才允许。',
+      )
+    }
     lines.push('- 首选工具已在本轮 tools 中：直接调用，勿仅为开工再 activate_tool_pack；结果不够再扩业务 pack，或 activate workspace 用沙盒编程补齐')
     if (plan.researchTier === 'L1') {
       lines.push('- L1：证据足够即停，禁止为「看起来专业」继续堆工具')

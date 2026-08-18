@@ -2597,8 +2597,12 @@ export async function importMcpServers(mcpServers: Record<string, McpServerFlatC
 export interface McpPresetServiceDef {
   serverId: string
   title: string
+  /** HTTP URL；stdio 预设可为空字符串 */
   url: string
+  /** HTTP header 名，或 stdio 时回填为 apiKeyEnv */
   apiKeyHeader: string
+  apiKeyEnv?: string
+  transport?: 'stdio' | 'streamable-http'
   configured: boolean
   apiKeyPreview?: string
 }

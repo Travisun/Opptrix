@@ -19,12 +19,20 @@ import {
   type ExternalToolDef,
   type SdkConnection,
 } from './connection.js'
+import { resolveToolCapability, type McpCapability } from './capability-catalog.js'
 import { ExternalMcpHealth } from './health.js'
 import { mapPool, resolveMcpHydrateConcurrency } from './pool.js'
+import { clearServer as clearSessionQuarantineServer } from './session-quarantine.js'
 
 export interface BindingCandidate {
   serverId: string
   remoteTool: string
+}
+
+export interface CapabilityCandidate {
+  serverId: string
+  remoteTool: string
+  sortOrder: number
 }
 
 type ListedMcpTool = {
@@ -168,25 +176,83 @@ export class ExternalMcpRegistry {
     }))
   }
 
+  /** hydrate 后缓存的裸工具名（非 namespaced）；未缓存返回 []，不触发 listTools RPC */
+  cachedToolNames(serverId: string): string[] {
+    const set = this.toolNames.get(serverId)
+    return set ? [...set] : []
+  }
+
   create(input: McpServerCreateInput): McpServerRecord {
     return this.repo.create(input)
   }
 
   save(id: string, patch: McpServerPatch): McpServerRecord {
+    const prev = this.repo.get(id)
     const row = this.repo.save(id, patch)
+    const secretsChanged =
+      Boolean(prev)
+      && JSON.stringify(prev?.secrets) !== JSON.stringify(row.secrets)
+    const enabledPausedChanged =
+      Boolean(prev)
+      && (prev?.enabled !== row.enabled || prev?.paused !== row.paused)
+
+    if (secretsChanged || enabledPausedChanged) {
+      this.health.reset(id)
+      clearSessionQuarantineServer(id)
+    }
+
     if (!row.enabled || row.paused) {
       void this.connections.get(id)?.client.close().then(() => {
         this.dropConnection(id)
       })
-      this.health.reset(id)
+    } else if (secretsChanged) {
+      // 仍启用但密钥变更：丢连接，下次用新密钥重连
+      void this.connections.get(id)?.client.close().then(() => {
+        this.dropConnection(id)
+      })
     }
     return row
+  }
+
+  /**
+   * 按能力列出外部候选（enabled && !paused，按 sortOrder）。
+   * 含缓存工具名启发式 + `capabilityBindings`（localTool → remoteTool）。
+   * 不在此做 health.shouldSkip（交给编排器）。
+   */
+  listCapabilityCandidates(capability: McpCapability): CapabilityCandidate[] {
+    const rows = this.repo.listAll()
+      .filter(r => r.enabled && !r.paused)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const out: CapabilityCandidate[] = []
+    const seen = new Set<string>()
+    const push = (serverId: string, remoteTool: string, sortOrder: number) => {
+      const key = `${serverId}::${remoteTool}`
+      if (seen.has(key) || !remoteTool) return
+      seen.add(key)
+      out.push({ serverId, remoteTool, sortOrder })
+    }
+    for (const row of rows) {
+      const schemas = this.toolSchemas.get(row.id)
+      const names = this.cachedToolNames(row.id)
+      for (const toolName of names) {
+        const desc = schemas?.find(t => t.name === toolName)?.description
+        const cap = resolveToolCapability(toolName, desc)
+        if (cap !== capability) continue
+        push(row.id, toolName, row.sortOrder)
+      }
+      for (const [localTool, remoteTool] of Object.entries(row.capabilityBindings ?? {})) {
+        if (resolveToolCapability(localTool) !== capability) continue
+        push(row.id, remoteTool, row.sortOrder)
+      }
+    }
+    return out
   }
 
   delete(id: string): boolean {
     void this.connections.get(id)?.client.close()
     this.dropConnection(id)
     this.health.reset(id)
+    clearSessionQuarantineServer(id)
     return this.repo.delete(id)
   }
 
@@ -195,7 +261,8 @@ export class ExternalMcpRegistry {
   }
 
   /**
-   * 已启用且健康的服务器上的 namespaced 独有工具（未出现在 bindings 值中的）。
+   * 已启用且未暂停的服务器上的 namespaced 独有工具（未出现在 bindings 值中的）。
+   * 隔离/熔断只在调用时 skip，不从 catalog 摘工具；未连上则无法拿 schema。
    * 优先读 hydrate 缓存的 tools schema，仅缓存未命中时才 listTools RPC。
    */
   async listNamespacedOpenAiTools(): Promise<OpenAiTool[]> {
@@ -205,7 +272,6 @@ export class ExternalMcpRegistry {
       .sort((a, b) => a.sortOrder - b.sortOrder)
 
     for (const row of rows) {
-      if (this.health.shouldSkip(row.id, row.paused)) continue
       const conn = this.connections.get(row.id)
       if (!conn) continue
       const boundRemotes = new Set(Object.values(row.capabilityBindings))
@@ -279,17 +345,25 @@ export class ExternalMcpRegistry {
     let entry = this.connections.get(serverId) ?? null
     if (!entry) {
       entry = await this.ensureConnected(row)
-      if (!entry) throw new Error(`无法连接 MCP Server ${serverId}`)
+      if (!entry) {
+        const last = this.health.lastError(serverId)
+        throw new Error(last || `无法连接 MCP Server ${serverId}`)
+      }
     }
     const timeout = opts?.timeoutMs ?? 120_000
-    const result = await entry.client.callTool(
-      { name: toolName, arguments: args },
-      undefined,
-      { timeout, maxTotalTimeout: timeout * 2, signal: opts?.signal },
-    )
-    const parsed = parseToolResult(serverId, toolName, result)
-    this.health.recordSuccess(serverId)
-    return parsed
+    try {
+      const result = await entry.client.callTool(
+        { name: toolName, arguments: args },
+        undefined,
+        { timeout, maxTotalTimeout: timeout * 2, signal: opts?.signal },
+      )
+      const parsed = parseToolResult(serverId, toolName, result)
+      this.health.recordSuccess(serverId)
+      return parsed
+    } catch (e) {
+      this.health.recordFailure(serverId, e)
+      throw e
+    }
   }
 
   async callNamespaced(

@@ -12,9 +12,9 @@ export function buildInstrumentNamespacePlaybook(): string {
     '【标的命名空间 — Stock-index 全局唯一 ID，查询时必须遵循】',
     '- 格式：CN:交易所.代码（如 CN:SZ.000009、CN:SH.600519）、US:AAPL、HK:00700、CRYPTO:BINANCE.BTC/USDT',
     '- 命名空间仅含 market + exchange + symbol，不含 INDEX/ETF 等业务分类；同码异名靠 exchange 区分（例：CN:SZ.000977=浪潮信息，CN:SH.000977=内地低碳）',
-    '- 不熟悉代码时：先 search_instruments → 使用返回的 instrument 对象（market/symbol/exchange）或 code/ref_label 命名空间调用 get_instrument_*',
+    '- 不熟悉代码时：优先 tools 中已启用的 namespaced MCP 搜码/问数；不足或需 Stock-index 消歧时再 search_instruments → 使用返回的 instrument 对象（market/symbol/exchange）或 code/ref_label 命名空间调用 get_instrument_*',
     '- 推荐传参：instrument:{market,symbol,exchange}（symbol 为裸代码）；或平铺 code:"CN:SZ.000009"',
-    '- A 股禁止仅用裸 6 位码（如 000977）调用快照/行情，须先搜索拿到带 exchange 的命中',
+    '- A 股禁止仅用裸 6 位码（如 000977）调用快照/行情，须先拿到带 exchange 的命中',
     '- 勿把命名空间字符串塞进 instrument.symbol 字段；symbol 始终是裸代码，exchange 单独字段',
   ].join('\n')
 }
@@ -30,14 +30,14 @@ export const STANDARD_INSTRUMENT_API_CAPABILITIES = [
 /** Agent 工具与标准能力的映射提示 */
 export function buildStandardInstrumentApiPlaybook(): string {
   return [
-    '【标准 Instrument API — 优先使用，对应 get_instrument_* / search_instruments】',
+    '【标准 Instrument API — 本地补充路径；tools 有对应 [MCP:]/namespaced 时必须先远程】',
     `- 能力：${STANDARD_INSTRUMENT_API_CAPABILITIES.join('、')}`,
-    '- 搜索：search_instruments（在线名录，唯一搜索入口）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
+    '- 搜索：必须先调已启用外部 MCP（server__tool）问数/搜码；search_instruments 仅当标的代码歧义或外部 MCP 未启用/失败，禁止用其做名称搜索/选股/问数；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
-    '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（优先在线 Provider）',
+    '- 行情：优先扶摇/妙想/问数等 MCP（含快照）；本地 get_instrument_quotes / get_instrument_snapshot 仅 MCP 未启用/失败或需精确核验；K 线：get_instrument_chart（MCP 不足时再用本地）',
     '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_income_statement / get_instrument_balance_sheet / get_instrument_cash_flow / get_instrument_financial_indicators / get_instrument_shareholders / get_instrument_institution_holdings / get_instrument_dividend',
-    '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
-    '- ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot / get_etf_list / get_etf_nav / get_etf_holdings；评估用 evaluate_instrument（技术分析）',
+    '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal（本机独有，勿用问财代替）',
+    '- ETF：优先 MCP 问数/概况；不足再用 search_instruments（markets=["CN"]）或本地 get_etf_list / get_etf_nav / get_etf_holdings / get_instrument_snapshot；评估用 evaluate_instrument（技术分析）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
   ].join('\n')
 }
@@ -46,13 +46,14 @@ export function buildStandardInstrumentApiPlaybook(): string {
 export function buildFundamentalsPlaybook(): string {
   return [
     '【基本面事实表 — profile / financials / 三表 / financial_indicators / shareholders / institution_holdings / dividend】',
+    '0) 有问数 MCP 先远程，本地事实表为明细核验',
     '1) 公司概况/概念/主业：get_instrument_profile（单只 InstrumentRef）',
     '2) 营收利润/ROE/同比：get_instrument_financials（report_type 默认 all）；引用具体 reportDate',
     '2b) 利润表：get_instrument_income_statement；资产负债表：get_instrument_balance_sheet；现金流量表：get_instrument_cash_flow',
     '2c) 财务指标树：get_instrument_financial_indicators（须 report，如 2024Q3；依赖同花顺）',
-    '3) 十大股东/股本：get_instrument_shareholders',
-    '3b) 季报机构持仓（基金/QFII/社保/券商等）：get_instrument_institution_holdings(scope=overview|detail)；勿与十大股东混淆',
-    '4) 分红派息史：get_instrument_dividend',
+    '3) 十大股东/股本：先 MCP 问数，不足再用 get_instrument_shareholders 本地核验',
+    '3b) 季报机构持仓（基金/QFII/社保/券商等）：先 MCP 问数，不足再用 get_instrument_institution_holdings(scope=overview|detail)；勿与十大股东混淆',
+    '4) 分红派息史：先 MCP 问数，不足再用 get_instrument_dividend 本地核验',
     '5) 禁止：用 evaluate_instrument 黑盒代替财务核实；禁止 invoke_provider_custom_method 调 sinaFinancialPivot 等重复标准能力',
     '6) 深度备忘录（L3）：至少覆盖「概况或财务」一维；不可用时声明缺口而非跳过',
   ].join('\n')
@@ -75,13 +76,13 @@ export function buildProviderCustomMethodPlaybook(): string {
 /** 聊天 Agent — 按标的类型的分析工具路径（由浅入深） */
 export function buildInstrumentAnalysisPlaybook(): string {
   return [
-    '【标的分析路径 — 先识别 market + assetClass，再选工具】',
-    '0) 不确定时：search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
-    '1) CN 股票（EQUITY）：search_instruments 定位 → get_instrument_snapshot → get_instrument_financials / get_instrument_profile（事实表）→ get_instrument_chart → evaluate_instrument（评分卡）→ get_instrument_strategy_signal → get_instrument_institution_rating → get_instrument_cyq',
-    '2) CN ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings',
-    '3) 美股/港股：search_instruments → get_instrument_snapshot / get_instrument_financials（若可用）/ get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
+    '【标的分析路径 — 先识别 market + assetClass，再选工具；有 MCP 先远程】',
+    '0) 不确定时：优先 namespaced MCP 搜码/问数 → 不足再用 search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
+    '1) CN 股票（EQUITY）：定位后 → 外部 MCP 按优先级轮询（精确工具优先于问数，含行情/财务/筹码），不足再用 get_instrument_snapshot / get_instrument_financials / get_instrument_profile（事实表）→ K线/指标优先 MCP，不足再用 get_instrument_chart → 再本地 evaluate_instrument（评分卡）→ get_instrument_strategy_signal → get_instrument_institution_rating；本地 get_instrument_cyq 仅 MCP 不足时',
+    '2) CN ETF：定位后 → 先 MCP 问数/概况，不足再用 get_instrument_snapshot → 再本地 evaluate_instrument（技术分析，勿用问财代替）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings',
+    '3) 美股/港股：定位后 → 先 MCP 问数/行情，不足再用 get_instrument_snapshot / get_instrument_financials（若可用）/ get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
     '4) 日股/韩股（JP/KR）：暂未接入行情与快照；可读相关资讯，勿调用 get_instrument_* 行情类工具',
-    '5) Crypto：search_instruments → get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
+    '5) Crypto：定位后 → 先 MCP 问数/行情，不足再用本地 get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
     '6) 禁止对非 CN 股票调用 get_instrument_institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股专用工具',
   ].join('\n')
 }
@@ -93,14 +94,14 @@ export function instrumentAnalysisStepsForRef(ref: InstrumentRef): string {
   }
   const profile = resolveInstrumentAnalyticsProfile(ref)
   if (profile.mode === 'cn_factor_scorecard') {
-    return '建议顺序：get_instrument_snapshot → get_instrument_financials / get_instrument_profile → evaluate_instrument → get_instrument_strategy_signal → get_instrument_institution_rating（可选）→ get_instrument_cyq（可选）'
+    return '建议顺序：外部 MCP 按优先级轮询（精确工具优先于问数，含行情/筹码），不足再用 get_instrument_snapshot → get_instrument_financials / get_instrument_profile → 再本地 evaluate_instrument → get_instrument_strategy_signal → get_instrument_institution_rating（可选）；本地 get_instrument_cyq 仅 MCP 不足时'
   }
   if (profile.mode === 'cn_etf_scorecard') {
-    return '建议顺序：get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings'
+    return '建议顺序：先 MCP 问数/概况，不足再用 get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings'
   }
   if (profile.mode === 'technical_bundle') {
     const limit = profile.limitation ? `（${profile.limitation}）` : ''
-    return `建议顺序：get_instrument_snapshot → get_instrument_indicators → evaluate_instrument${limit} → get_instrument_strategy_signal`
+    return `建议顺序：先 namespaced MCP 问数/行情，不足再用 get_instrument_snapshot → get_instrument_indicators → evaluate_instrument${limit} → get_instrument_strategy_signal`
   }
   return '该标的类型能力有限，先 get_instrument_capabilities 确认可用工具'
 }
@@ -108,16 +109,17 @@ export function instrumentAnalysisStepsForRef(ref: InstrumentRef): string {
 /** 聊天 Agent — 资讯中心聪明调阅规则 */
 export function buildNewsRetrievalPlaybook(): string {
   return [
-    '【资讯调阅 — 与标的类型联动，优先最相关来源】',
+    '【资讯调阅 — 与标的类型联动；MCP 新闻/公告/研报优先】',
     '0) 有明确标的时：先确定其 market（CN/US/HK/JP/KR/CRYPTO）与 assetClass，再选资讯；纯宏观/综合问题可跳过标的绑定',
+    '0b) tools 中若有 namespaced 新闻/公告/研报 MCP（如 iwencai__news_search / announcement_search / report_search），必须先调远程；本机 RSS 与 get_instrument_notices 为订阅缓存与精确公告正文补充',
     '1) get_news_center_status：stale=true 时告知用户数据可能不是最新，仍可读本地缓存',
-    '1b) 个股官方公告列表：get_instrument_notices（InstrumentRef）→ 对条目 url 调 get_notice_content；勿与 RSS list_news_articles 混淆',
+    '1b) 个股官方公告列表（本地补充）：get_instrument_notices（InstrumentRef）→ 对条目 url 调 get_notice_content；勿与 RSS list_news_articles 混淆；有 MCP 公告检索时先远程',
     '2) list_news_groups：阅读各分组 title 与返回的 market_hints / match_score（若有）；优先选与标的 market 一致或 match_score 最高的分组',
     '   - 标题含「A股/沪深/上证」→ CN；「美股/Nasdaq/美联储」→ US；「港股/恒生」→ HK；「日股/日经」→ JP；「韩股/Kospi」→ KR；「Crypto/BTC/币圈」→ CRYPTO',
     '   - 「宏观/央行/利率/政策」→ MACRO 分组（交叉调阅）；「全球/要闻/综合」→ GLOBAL 兜底',
     '   - sort_order 越小通常越靠前，同分时优先 sort_order 小的分组',
     '3) list_news_sources：在目标分组内按 market_hints / title 关键词筛选 enabled 来源；view=source 时传 subscription_id',
-    '4) list_news_articles：',
+    '4) list_news_articles（本机订阅补充）：',
     '   - 标的相关：优先 view=group + 最匹配 group_id，limit 10–20，读标题/摘要筛相关度',
     '   - 同一分组信息不足：交叉调阅 MACRO 或 GLOBAL 分组（宏观影响），或 HK 标的可补充 CN 分组（联动）',
     '   - 仍不足：view=timeline + date=今日/近日 兜底，但须在回复中说明「来自综合时间线」',
@@ -382,16 +384,16 @@ export function buildUserInteractionPlaybook(): string {
 export function buildMarketContextPlaybook(): string {
   return [
     '【市场与关注 — get_market_regime / get_macro_series / get_market_dynamics / get_trade_calendar / get_dragon_tiger / get_limit_updown / get_market_sentiment / get_cn_market_special / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
-    '1) 宏观背景叙事：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
+    '1) 宏观背景叙事：先 MCP 问数/市况，不足再用 get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
     '1b) 宏观事实序列：get_macro_series(scope=cn|foreign|industry|oil|catalog, kind=…, page?/page_size?) → 可引用数字；中国首页经 MACRO_INDICATOR；翻页/国外/行业/油价经 eastmoney；勿用 regime 代替、勿直接 invoke emMacro*',
-    '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜摘要；适合复盘或解释板块轮动；勿再同轮重复拉 get_dragon_tiger',
-    '2a) 专项：交易日历 get_trade_calendar；仅龙虎榜明细/指定日 get_dragon_tiger；涨跌停池 get_limit_updown；情绪 get_market_sentiment',
-    '2b) 同花顺独有专题（连板天梯/飙升/热股/异动/概念目录）：get_cn_market_special(kind=…)；成分股改 get_index_constituents；财务指标改 get_instrument_financial_indicators',
+    '2) 市场全景：先 MCP 问数（主要指数、涨跌家数）；不足再用 get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜摘要；适合复盘或解释板块轮动；勿再同轮重复拉 get_dragon_tiger',
+    '2a) 专项：交易日历/开盘/情绪先 MCP 问数，不足再用 get_trade_calendar / get_market_session / get_market_sentiment；龙虎榜/涨跌停池先 MCP 问数，不足再用 get_dragon_tiger / get_limit_updown',
+    '2b) 同花顺独有专题（连板天梯/飙升/热股/异动/概念目录）：先 MCP 问数，不足再用 get_cn_market_special(kind=…)；成分股改 get_index_constituents；财务指标改 get_instrument_financial_indicators',
     '2c) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
-    '2d) 是否开盘/交易时段：get_market_session；精确休市用 get_trade_calendar',
-    '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
+    '2d) 是否开盘/交易时段：先 MCP，不足再用 get_market_session；精确休市用 get_trade_calendar',
+    '3) 关注池（本地）：get_watchlist → 对重点标的先 MCP 行情，不足再用 get_instrument_quotes / get_instrument_snapshot；评分用本地 evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
-    '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用工作流技能 industry-chain + search_instruments',
+    '5) 跨市场搜索：优先已启用 namespaced MCP；search_instruments 仅标的代码歧义或 MCP 未启用/失败（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用工作流技能 industry-chain + MCP/search_instruments（后者仅歧义或 MCP 失败）',
   ].join('\n')
 }
 
@@ -400,10 +402,10 @@ export function buildIndustryAnalysisPlaybook(): string {
   return [
     '【行业与板块 — 工作流技能 industry-chain / get_sector_list / get_sector_constituents / get_index_constituents】',
     '1) 产业链与代表公司叙事：激活工作流技能 industry-chain（含内置知识库 references/chain-knowledge.json），按行业名匹配上下游节点',
-    '2) 板块/行业目录：get_sector_list（kind=industries|boards）→ 拿到 board_key / industry_code',
-    '3) 板块成分：get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
+    '2) 板块/行业目录：先 MCP 问数，不足再用 get_sector_list（kind=industries|boards）→ 拿到 board_key / industry_code',
+    '3) 板块成分：先 MCP，不足再用 get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
     '3b) 指数成分（沪深300/同花顺概念等）：get_index_constituents(index_code)',
-    '4) 核实代表公司：search_instruments → get_instrument_snapshot / evaluate_instrument',
+    '4) 核实代表公司：先 MCP 搜码/问数，不足再用 search_instruments → 再 MCP 行情或本地 get_instrument_snapshot / evaluate_instrument',
     '5) 宏观/板块背景：get_market_regime / get_market_dynamics',
     '6) 不依赖本地行业库：本 playbook 仅用 industry-chain 技能 / get_sector_* / get_index_*，不调用任何已废弃的本地行业工具',
   ].join('\n')

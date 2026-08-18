@@ -54,7 +54,7 @@ const INSTRUMENT_OBJECT_PROPERTIES: Record<string, { type: string; description?:
 export const INSTRUMENT_REF_SCHEMA: JsonSchema['properties'] = {
   instrument: {
     type: 'object',
-    description: 'InstrumentRef（推荐）：search_instruments 返回的 instrument；含 market、symbol、exchange',
+    description: 'InstrumentRef（推荐）：含 market、symbol、exchange；可由 MCP 搜码/问数或本地 search_instruments 得到，非唯一来源',
     properties: INSTRUMENT_OBJECT_PROPERTIES,
     required: ['market', 'symbol'],
   },
@@ -128,7 +128,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'search_instruments',
       category: '跨市场标的',
-      description: '按代码或名称在线搜索标的（唯一搜索入口）；可用 markets 过滤 CN/US/HK/CRYPTO',
+      description: '按代码或名称在线搜索标的（本地名录补充；有 MCP 搜码/问数时先远程）；可用 markets 过滤 CN/US/HK/CRYPTO',
       parameters: S({
         keyword: { type: 'string', description: '搜索关键词' },
         markets: { type: 'array', description: '可选市场过滤，如 CN、US、HK、CRYPTO' },

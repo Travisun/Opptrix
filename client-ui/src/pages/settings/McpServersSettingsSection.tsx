@@ -402,7 +402,7 @@ export default function McpServersSettingsSection() {
       {mode === 'preset' && (
         <>
           <Text className={s.tabHint} block>
-            选用预置服务，填入数据密钥后打开开关即可使用。同花顺（扶摇）一次配置可覆盖多项能力。
+            选用预置服务，填入数据密钥后打开开关即可使用。问财支持自然语言选股与资讯检索；同花顺（扶摇）一次配置可覆盖多项行情能力。
           </Text>
           <SettingsSectionLabel spaced>预置服务</SettingsSectionLabel>
 
