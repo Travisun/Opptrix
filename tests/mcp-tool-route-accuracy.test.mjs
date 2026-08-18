@@ -122,6 +122,15 @@ const PRIMARY_CASES = [
   { message: 'MACD 和 RSI 怎么样', expectPrimary: 'get_instrument_indicators', intent: 'indicators' },
   { message: '做一下评分卡回测', expectPrimary: 'run_backtest', intent: 'backtest' },
   { message: '搜一下浪潮信息代码', expectPrimary: 'search_instruments', intent: 'search' },
+  { message: '搜 600519', expectPrimary: 'search_instruments', intent: 'search' },
+  { message: '网上搜公开网页资料', expectPrimary: 'web_search', intent: 'web_search', skipRecall: true },
+  { message: '用网页检索查公开资料', expectPrimary: 'web_search', intent: 'web_search', skipRecall: true },
+  { message: 'site:gov.cn 搜索政策原文', expectPrimary: 'web_search', intent: 'web_search', skipRecall: true },
+  { message: '搜一下 React 官方文档', expectPrimary: 'web_search', intent: 'web_search', skipRecall: true },
+  { message: '查维基 Python', expectPrimary: 'web_search', intent: 'web_search', skipRecall: true },
+  { message: '贵州茅台最新价', expectPrimary: 'get_instrument_quotes', intent: 'price_only' },
+  { message: '茅台公告', expectPrimary: 'list_news_articles', intent: 'news_browse' },
+  { message: '茅台研报', expectPrimary: 'list_news_articles', intent: 'news_browse' },
   { message: '开盘早报', expectPrimary: 'activate_agent_skill', intent: 'morning_brief' },
   { message: '收盘报告', expectPrimary: 'activate_agent_skill', intent: 'closing_report' },
   {
@@ -144,6 +153,14 @@ const PRIMARY_CASES = [
   { message: '委派子任务做并行调研', expectPrimary: 'run_subagent', intent: 'run_subagent' },
 ]
 
+test('D1 stock queries never primary web_search', () => {
+  for (const message of ['贵州茅台最新价', '茅台公告', '茅台研报', '搜一下茅台', '茅台现价多少']) {
+    const plan = resolveToolRoutePlan({ message })
+    assert.notEqual(plan.preferredTools[0], 'web_search', `${message} must not prefer web_search`)
+    assert.ok(plan.avoidTools.includes('web_search') || plan.intent !== 'web_search')
+  }
+})
+
 test('D1 primary tool precision across intent goldens', () => {
   let hit = 0
   for (const c of PRIMARY_CASES) {
@@ -159,6 +176,7 @@ test('D1 primary tool precision across intent goldens', () => {
 test('D2 preferred tool visibility recall — activeNames contains primary', () => {
   const store = new ToolPackSessionStore()
   for (const c of PRIMARY_CASES) {
+    if (c.skipRecall) continue
     const packs = resolveActivePackIds(store, `d2-${c.intent}`, { message: c.message })
     const names = toolNamesForPacks(packs)
     assert.ok(
@@ -209,6 +227,41 @@ test('D3 confusion pairs — prefer wins over avoid in route plan', () => {
       message: '画个脑图',
       prefer: 'create_mindmap',
       avoid: 'create_canvas',
+    },
+    {
+      message: '网上搜公开网页资料',
+      prefer: 'web_search',
+      avoid: 'search_instruments',
+    },
+    {
+      message: '打开 https://example.com 看看内容',
+      prefer: 'browser_navigate',
+      avoid: 'web_search',
+    },
+    {
+      message: '搜 600519',
+      prefer: 'search_instruments',
+      avoid: 'web_search',
+    },
+    {
+      message: '贵州茅台最新价',
+      prefer: 'get_instrument_quotes',
+      avoid: 'web_search',
+    },
+    {
+      message: '茅台公告',
+      prefer: 'list_news_articles',
+      avoid: 'web_search',
+    },
+    {
+      message: '茅台研报',
+      prefer: 'list_news_articles',
+      avoid: 'web_search',
+    },
+    {
+      message: '搜一下 React 官方文档',
+      prefer: 'web_search',
+      avoid: 'search_instruments',
     },
   ]
 
@@ -396,14 +449,17 @@ test('D1+D2 aggregate accuracy score ≥ 95% on goldens', () => {
   const store = new ToolPackSessionStore()
   let primaryOk = 0
   let recallOk = 0
+  let recallN = 0
   for (const c of PRIMARY_CASES) {
     const plan = resolveToolRoutePlan({ message: c.message })
     if (plan.preferredTools[0] === c.expectPrimary) primaryOk++
+    if (c.skipRecall) continue
+    recallN++
     const names = toolNamesForPacks(resolveActivePackIds(store, `agg-${c.intent}`, { message: c.message }))
     if (names.includes(c.expectPrimary)) recallOk++
   }
   const primaryRate = primaryOk / PRIMARY_CASES.length
-  const recallRate = recallOk / PRIMARY_CASES.length
+  const recallRate = recallOk / recallN
   assert.ok(primaryRate >= 0.95, `primary precision ${primaryRate}`)
   assert.ok(recallRate >= 0.95, `visibility recall ${recallRate}`)
 })

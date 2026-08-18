@@ -154,12 +154,24 @@ export {
   IWENCAI_MCP_TOOLS,
 } from './mcp/builtin/iwencai/index.js'
 export {
+  resolveWebsearchMcpStdioTransport,
+  WEBSEARCH_MCP_TOOLS,
+  callWebsearchMcpTool,
+  setWebsearchFetchForTests,
+  runWebSearch,
+  buildSearchUrl,
+  parseEngineHtml,
+  assertAllowedSearchUrl,
+} from './mcp/builtin/websearch/index.js'
+export { resolveBuiltinStdioTransport } from './mcp/builtin/resolve-builtin-stdio.js'
+export {
   AggregatingToolBroker,
   getExternalMcpRegistry,
   resetExternalMcpRegistry,
   ExternalMcpRegistry,
   ExternalMcpHealth,
   buildExternalMcpSourcingAppendix,
+  ensureDefaultKeylessMcpServers,
 } from './mcp/external/index.js'
 export {
   ToolPackSessionStore,

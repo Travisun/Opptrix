@@ -621,11 +621,13 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | DELETE | `/api/mcp-servers/:id` | 删除配置并断开 |
 | POST | `/api/mcp-servers/:id/test` | 探活（`tools/list`）；超时较长 |
 | POST | `/api/mcp-servers/reorder` | `{ server_ids: string[] }` 重排优先级 |
-| GET | `/api/mcp-servers/presets` | 内置预设（扶摇 / 东方财富 / **问财**）；`configured` = 对应 server 存在且 enabled |
-| POST | `/api/mcp-servers/apply-preset` | `{ presetId, apiKey }`：HTTP 预设写 `streamable-http` + header secrets；问财写 **stdio**（`node` + 绝对入口）+ `secrets.IWENCAI_API_KEY`（勿与扶摇 `X-api-key` 混用） |
+| GET | `/api/mcp-servers/presets` | 内置预设（扶摇 / 东方财富 / **问财** / **网页搜索**）；`configured` = 对应 server 存在且 enabled |
+| POST | `/api/mcp-servers/apply-preset` | `{ presetId, apiKey? }`：HTTP 预设写 `streamable-http` + header secrets；问财写 **stdio**（`node` + 绝对入口）+ `secrets.IWENCAI_API_KEY`（勿与扶摇 `X-api-key` 混用）；网页搜索写 **stdio** + `secrets: {}`（无密钥，`apiKey` 可省略）。**仅当预设任一 service 有 `apiKeyEnv` / `apiKeyHeader` 时 `apiKey` 必填** |
 | POST | `/api/mcp-servers/remove-preset` | `{ presetId }`：停用预设对应 server（enabled=false, paused=true） |
 
 问财为本机 MCP（`serverId=iwencai`），工具经命名空间 `iwencai__query2data` 等暴露给 Agent，**不是** a-stock-layer 行情 Provider。
+
+网页搜索为本机 MCP（`serverId=websearch`），无密钥；**首次 hydrate 无记录时默认启用**，设置中关闭后保持关闭。工具经命名空间 `websearch__web_search` 暴露给 Agent。`POST /api/mcp-servers/apply-preset` 对 `presetId=websearch` 不要求 `apiKey`。
 
 ### 工作流技能 / Agent Skills
 

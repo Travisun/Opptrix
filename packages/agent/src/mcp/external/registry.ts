@@ -21,6 +21,7 @@ import {
 } from './connection.js'
 import { resolveToolCapability, type McpCapability } from './capability-catalog.js'
 import { ExternalMcpHealth } from './health.js'
+import { ensureDefaultKeylessMcpServers } from './ensure-default-keyless.js'
 import { mapPool, resolveMcpHydrateConcurrency } from './pool.js'
 import { clearServer as clearSessionQuarantineServer } from './session-quarantine.js'
 
@@ -100,6 +101,11 @@ export class ExternalMcpRegistry {
   }
 
   private async doHydrate(): Promise<void> {
+    // 先落库再连，GET /presets 才能立刻看到默认已开
+    ensureDefaultKeylessMcpServers({
+      get: id => this.repo.get(id),
+      create: input => this.create(input),
+    })
     const rows = this.repo.listAll().filter(r => r.enabled && !r.paused)
     const want = new Set(rows.map(r => r.id))
     for (const id of [...this.connections.keys()]) {

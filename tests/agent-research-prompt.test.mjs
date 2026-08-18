@@ -414,10 +414,12 @@ test('assembleSystemPrompt embeds dataSourcingPolicy with remote MCP priority', 
   const policy = [
     '【数据源优先级策略 — 必须严格遵守】',
     '0. 三级优先，不可倒置：远程 MCP 工具（命名空间 server__tool）= 最高优先，永远先用；本地工具 = 最低优先，仅作兜底。',
+    '网页搜索不是投研数据源：仅一般公开资料；行情/公告/研报禁止首选；专用工具失败后才可兜底，且须标明内容可能不真实或过期。',
   ].join('\n')
   const prompt = assembleSystemPrompt({ dataSourcingPolicy: policy })
   assert.match(prompt, /远程 MCP|MCP/)
   assert.match(prompt, /数据源优先级策略/)
+  assert.match(prompt, /可能不真实或过期|可能不实或过期/)
 })
 
 test('search_instruments TOOL_META is MCP-first; only ambiguity or MCP failure', async () => {
@@ -460,5 +462,17 @@ test('external MCP sourcing appendix is generic when none enabled', async () => 
   // 无启用时不应假装有问财硬编码映射行（可能仍提到通用规则）
   if (!/本会话已启用/.test(appendix) || /当前无已启用/.test(appendix)) {
     assert.ok(!/优先 `iwencai__query2data`/.test(appendix))
+    assert.ok(!/`websearch__web_search`/.test(appendix))
   }
+})
+
+test('engine static sourcing in dist mentions web search may be untrue or stale', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const engineJs = fs.readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../packages/agent/dist/engine.js'),
+    'utf8',
+  )
+  assert.match(engineJs, /可能不真实或过期/)
 })

@@ -62,6 +62,7 @@ export function buildExternalMcpSourcingAppendix(registry: ExternalMcpRegistry):
         'news_search',
         'announcement_search',
         'report_search',
+        'web_search',
       ])
       const sampleText = samples.length
         ? `；示例：${samples.join('、')}`
@@ -108,6 +109,18 @@ export function buildExternalMcpSourcingAppendix(registry: ExternalMcpRegistry):
       const remote = [fuyaoHint, mxHint].filter(Boolean).join(' 与 ')
       lines.push(
         `- 行情/价格/K线/指标/成分/快照 → 优先已启用 ${remote} 中对应工具；本地 get_instrument_quotes/snapshot/chart/indicators 仅 MCP 无该能力或失败后`,
+      )
+    }
+    const hasWebsearch = byId.has('websearch')
+    if (hasWebsearch) {
+      lines.push(
+        '- 广域公开网页（百科/文档/政策原文/技术资料/非投研网页）→ `websearch__web_search`；打开具体页用 browser_navigate',
+      )
+      lines.push(
+        '- 行情/公告/研报/选股/财务问数 **禁止首选** 网页搜索；须用问数/公告/研报/资讯专用工具或本地 get_instrument_* / get_instrument_notices / search_library',
+      )
+      lines.push(
+        '- 仅当上述专用工具不可用、失败或确认无对应能力时，才可用网页搜索作一般公开网页兜底；引用时必须声明：来自公开网页检索，内容可能不真实或过期，不能作为行情、公告或研报依据',
       )
     }
     lines.push(MCP_FIRST_GENERIC)

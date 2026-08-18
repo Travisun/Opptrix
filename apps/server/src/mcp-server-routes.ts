@@ -6,7 +6,7 @@
 import type { FastifyInstance } from 'fastify'
 import {
   getExternalMcpRegistry,
-  resolveIwencaiMcpStdioTransport,
+  resolveBuiltinStdioTransport,
   type ExternalMcpRegistry,
 } from '@opptrix/agent'
 import type {
@@ -19,6 +19,7 @@ import type {
 } from '@opptrix/shared'
 import {
   isValidMcpServerId,
+  mcpPresetRequiresApiKey,
   mcpPresetSecretKey,
   MCP_BUILTIN_PRESETS,
 } from '@opptrix/shared'
@@ -165,20 +166,22 @@ function publicList(reg: ExternalMcpRegistry) {
 }
 
 /** 按预设服务定义构造 transport + secrets（stdio 在此 resolve 绝对路径） */
-function buildPresetServiceRecord(
+export function buildPresetServiceRecord(
   svc: McpPresetServiceDef,
   apiKey: string,
 ): { transportConfig: McpTransportConfig; secrets: Record<string, string> } {
   const isStdio = svc.transport === 'stdio' || Boolean(svc.apiKeyEnv && !svc.url)
   if (isStdio) {
-    const secretKey = mcpPresetSecretKey(svc)
-    if (!secretKey) throw new Error(`预设服务 ${svc.serverId} 缺少 apiKeyEnv`)
-    if (svc.serverId !== 'iwencai') {
+    const transportConfig = resolveBuiltinStdioTransport(svc.serverId)
+    if (!transportConfig) {
       throw new Error(`暂不支持的本机预设: ${svc.serverId}`)
     }
+    const secretKey = mcpPresetSecretKey(svc)
+    const secrets: Record<string, string> = {}
+    if (secretKey) secrets[secretKey] = apiKey
     return {
-      transportConfig: resolveIwencaiMcpStdioTransport(),
-      secrets: { [secretKey]: apiKey },
+      transportConfig,
+      secrets,
     }
   }
   const url = (svc.url ?? '').trim()
@@ -506,9 +509,11 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
     const presetId = String(req.body?.presetId ?? '').trim()
     const apiKey = String(req.body?.apiKey ?? '').trim()
     if (!presetId) return reply.status(400).send({ error: 'presetId 必填' })
-    if (!apiKey) return reply.status(400).send({ error: 'apiKey 必填' })
     const preset = MCP_BUILTIN_PRESETS.find(p => p.id === presetId)
     if (!preset) return reply.status(400).send({ error: `未知预设: ${presetId}` })
+    if (mcpPresetRequiresApiKey(preset) && !apiKey) {
+      return reply.status(400).send({ error: 'apiKey 必填' })
+    }
     const reg = getExternalMcpRegistry()
     await reg.hydrate()
     try {

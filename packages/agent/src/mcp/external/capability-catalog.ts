@@ -88,6 +88,12 @@ export const LOCAL_OFFLINE_ASSET_TOOLS = [
   'get_current_time',
 ] as const
 
+/**
+ * 外部独有工具（不映射行情能力；勿被 Capability Orchestrator 当成 search_nl / news）。
+ * 例：web_search 为公开网页检索，与问数/选股无关。
+ */
+export const EXTERNAL_ONLY_UNMAPPED_TOOLS = ['web_search'] as const
+
 /** 本地工具名 → 能力 */
 const LOCAL_TOOL_CAP: Record<string, McpCapability> = {
   search_instruments: 'search_symbol',
@@ -232,6 +238,7 @@ function heuristicCapability(bare: string, description?: string): McpCapability 
 const LOCAL_UNMAPPED = new Set<string>([
   ...LOCAL_ONLY_TOOL_NAMES,
   ...LOCAL_OFFLINE_ASSET_TOOLS,
+  ...EXTERNAL_ONLY_UNMAPPED_TOOLS,
 ])
 
 /** 先剥 server__，再查表/启发式；本地独有/离线资产与未知返回 null */

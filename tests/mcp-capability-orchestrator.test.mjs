@@ -118,6 +118,9 @@ test('resolveToolCapability maps query2data and search_instruments', () => {
   assert.equal(resolveToolCapability('get_watchlist'), null)
   assert.equal(resolveToolCapability('ext__snapshot_quote'), 'snapshot')
   assert.equal(resolveToolCapability('ext__special'), null)
+  assert.equal(resolveToolCapability('web_search'), null)
+  assert.equal(resolveToolCapability('websearch__web_search'), null)
+  assert.equal(resolveToolCapability('iwencai__query2data'), 'search_nl')
   assert.notEqual(resolveToolCapability('foo_symbol_meta'), 'search_symbol')
 })
 

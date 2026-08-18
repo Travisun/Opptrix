@@ -6,6 +6,7 @@ import {
   buildChatDoneNotification,
   isAttendingChat,
   isAwayFromForeground,
+  isChatTurnCompleteEvent,
   shouldNotify,
   truncateNotificationText,
 } from '../client-ui/src/platform/chatNotifications.ts'
@@ -53,6 +54,36 @@ describe('chat notification attention', () => {
     assert.equal(isAwayFromForeground({ documentVisible: true, windowFocused: true }), false)
     assert.equal(isAwayFromForeground({ documentVisible: false, windowFocused: true }), true)
     assert.equal(isAwayFromForeground({ documentVisible: true, windowFocused: false }), true)
+  })
+})
+
+describe('isChatTurnCompleteEvent', () => {
+  it('treats draft reply with content as incomplete', () => {
+    assert.equal(
+      isChatTurnCompleteEvent({ type: 'reply', content: 'hello', draft: true }),
+      false,
+    )
+  })
+
+  it('treats final reply without draft as incomplete', () => {
+    assert.equal(
+      isChatTurnCompleteEvent({ type: 'reply', content: 'hello' }),
+      false,
+    )
+  })
+
+  it('treats uncancelled done as complete', () => {
+    assert.equal(isChatTurnCompleteEvent({ type: 'done' }), true)
+    assert.equal(isChatTurnCompleteEvent({ type: 'done', cancelled: false }), true)
+  })
+
+  it('treats cancelled done as incomplete', () => {
+    assert.equal(isChatTurnCompleteEvent({ type: 'done', cancelled: true }), false)
+  })
+
+  it('treats user_prompt and thinking as incomplete', () => {
+    assert.equal(isChatTurnCompleteEvent({ type: 'user_prompt' }), false)
+    assert.equal(isChatTurnCompleteEvent({ type: 'thinking' }), false)
   })
 })
 

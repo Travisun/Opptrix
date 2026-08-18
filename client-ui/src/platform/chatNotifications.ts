@@ -46,6 +46,19 @@ export function isAwayFromForeground(state: {
   return !state.documentVisible || !state.windowFocused
 }
 
+/**
+ * 流式过程/草稿不算完成；仅未取消的 done 表示本轮终答已产出。
+ * 不依赖 ChatApp / ChatProgressEvent，避免循环引用。
+ */
+export function isChatTurnCompleteEvent(event: {
+  type: string
+  cancelled?: boolean
+  content?: string
+  draft?: boolean
+}): boolean {
+  return event.type === 'done' && event.cancelled !== true
+}
+
 /** 失焦 / 非 chat 页 / 其他会话 / 生成期间曾离开 → 应发通知 */
 export function shouldNotify(
   targetSessionId: string,

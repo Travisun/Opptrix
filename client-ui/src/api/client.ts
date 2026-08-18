@@ -2620,12 +2620,18 @@ export async function getMcpPresets() {
   return jsonFetch<{ presets: McpPresetDef[] }>('/mcp-servers/presets')
 }
 
-export async function applyMcpPreset(presetId: string, apiKey: string) {
+export async function applyMcpPreset(presetId: string, apiKey?: string) {
+  const key = (apiKey ?? '').trim()
   return jsonFetch<{ ok: boolean }>('/mcp-servers/apply-preset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ presetId, apiKey }),
+    body: JSON.stringify(key ? { presetId, apiKey: key } : { presetId }),
   })
+}
+
+/** 预设是否需要填写数据密钥（HTTP header 或 stdio env） */
+export function mcpPresetNeedsSecret(preset: McpPresetDef): boolean {
+  return preset.services.some(s => Boolean((s.apiKeyEnv ?? s.apiKeyHeader ?? '').trim()))
 }
 
 export async function removeMcpPreset(presetId: string) {
