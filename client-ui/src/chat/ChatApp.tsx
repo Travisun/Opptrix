@@ -110,6 +110,7 @@ import {
   buildChatAskNotification,
   buildChatDoneNotification,
   isAwayFromForeground,
+  isChatTurnCompleteEvent,
   maybeShowChatLocalNotification,
   resolveWindowFocused,
 } from '../platform/chatNotifications'
@@ -150,6 +151,17 @@ function findFirstSessionArtifact(
     }
   }
   return null
+}
+
+/** 等一帧绘制后再回调；无 rAF 时同步执行。 */
+function afterNextPaint(callback: () => void): void {
+  if (typeof requestAnimationFrame !== 'function') {
+    callback()
+    return
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(callback)
+  })
 }
 
 const useStyles = makeStyles({
@@ -952,9 +964,13 @@ export default function ChatApp() {
     setError('桌面通知未开启。可在系统设置中允许 Opptrix 发送通知，以免错过对话完成提醒。')
   }, [])
 
-  const maybeNotifyChatDone = useCallback((targetSessionId: string, sessionTitle?: string) => {
-    const streamGen = sessionStreamGenRef.current.get(targetSessionId) ?? 0
-    const dedupeKey = `${targetSessionId}:${streamGen}`
+  const maybeNotifyChatDone = useCallback((
+    targetSessionId: string,
+    sessionTitle?: string,
+    streamGen?: number,
+  ) => {
+    const gen = streamGen ?? sessionStreamGenRef.current.get(targetSessionId) ?? 0
+    const dedupeKey = `${targetSessionId}:${gen}`
     if (doneNotifiedGensRef.current.has(dedupeKey)) return
     doneNotifiedGensRef.current.add(dedupeKey)
     playChatCueSound()
@@ -1137,19 +1153,6 @@ export default function ChatApp() {
       }
     }
 
-    // 内容已落定：优先在最终 reply（含 content）触发完成通知，避免进度计数误触
-    if (event.type === 'reply' && event.content) {
-      maybeNotifyChatDone(targetSessionId, resolveSessionTitle(targetSessionId))
-    }
-
-    // done 作为兜底（无 reply 的路径）；同轮已通知则去重跳过
-    if (event.type === 'done' && !event.cancelled) {
-      maybeNotifyChatDone(
-        targetSessionId,
-        resolveSessionTitle(targetSessionId, event.title),
-      )
-    }
-
     if (event.type === 'user_prompt') {
       const promptSummary = event.prompt.title || event.prompt.prompt
       playChatCueSound()
@@ -1175,9 +1178,7 @@ export default function ChatApp() {
     bumpChildLiveTrace,
     clearChildLiveTrace,
     handleNotificationResult,
-    maybeNotifyChatDone,
     patchSessionCollaborationTasks,
-    resolveSessionTitle,
   ])
 
   const resolveStreamSnapshot = useCallback((id: string | null) => {
@@ -1302,7 +1303,12 @@ export default function ChatApp() {
     const ac = new AbortController()
     let cancelled = false
 
-    const finishWakeResume = async (sid: string) => {
+    const finishWakeResume = async (sid: string, event: ChatProgressEvent) => {
+      const completedGen = sessionStreamGenRef.current.get(sid) ?? 0
+      const shouldNotifyDone = isChatTurnCompleteEvent(event)
+      const sessionTitle = event.type === 'done'
+        ? resolveSessionTitle(sid, event.title)
+        : resolveSessionTitle(sid)
       const pendingWake = pendingWakeRef.current.get(sid)
       markSessionStreaming(sid, false)
       if (pendingWake) {
@@ -1313,18 +1319,27 @@ export default function ChatApp() {
       }
       try {
         const fresh = await getSession(sid)
-        if (cancelled || activeIdRef.current !== sid) return
-        setActiveSessionMeta(fresh.session)
-        setMessages(fresh.messages)
-        setContextRef(fresh.contextRef ?? null)
-        setSessionModelState(fresh.session.model)
-        setSessionLlmParamsState(fresh.session.llmParams)
-        if (fresh.contextUsage) {
-          setContextUsage(fresh.contextUsage)
-        } else {
-          resetContextUsageForSession(sid)
+        if (!cancelled && activeIdRef.current === sid) {
+          setActiveSessionMeta(fresh.session)
+          setMessages(fresh.messages)
+          setContextRef(fresh.contextRef ?? null)
+          setSessionModelState(fresh.session.model)
+          setSessionLlmParamsState(fresh.session.llmParams)
+          if (fresh.contextUsage) {
+            setContextUsage(fresh.contextUsage)
+          } else {
+            resetContextUsageForSession(sid)
+          }
         }
-        await refreshSessions()
+        if (shouldNotifyDone) {
+          afterNextPaint(() => {
+            if ((sessionStreamGenRef.current.get(sid) ?? 0) !== completedGen) return
+            maybeNotifyChatDone(sid, sessionTitle, completedGen)
+          })
+        }
+        if (!cancelled) {
+          await refreshSessions()
+        }
       } catch {
         /* keep current */
       }
@@ -1367,7 +1382,7 @@ export default function ChatApp() {
       pushStreamEvent(sessionId, event)
 
       if (event.type === 'done' || event.type === 'error') {
-        void finishWakeResume(sessionId)
+        void finishWakeResume(sessionId, event)
       }
     }
 
@@ -1425,10 +1440,12 @@ export default function ChatApp() {
     markSessionStreaming,
     patchSessionBackgroundJobs,
     patchSessionCollaborationTasks,
+    maybeNotifyChatDone,
     pushStreamEvent,
     refreshContextUsage,
     resetContextUsageForSession,
     refreshSessions,
+    resolveSessionTitle,
     startWakeCountdown,
   ])
 
@@ -2046,9 +2063,9 @@ export default function ChatApp() {
 
     const isStreamStale = () => streamGen !== (sessionStreamGenRef.current.get(sessionId) ?? 0)
 
-    const applyFreshSession = async (sid: string) => {
+    const applyFreshSession = async (sid: string): Promise<boolean> => {
       const fresh = await getSession(sid)
-      if (isStreamStale()) return
+      if (isStreamStale()) return false
       if (activeIdRef.current === sid) {
         setActiveSessionMeta(fresh.session)
         setMessages(fresh.messages)
@@ -2062,15 +2079,24 @@ export default function ChatApp() {
         }
       }
       const list = await refreshSessions()
-      if (isStreamStale()) return
+      if (isStreamStale()) return false
       setSessions(list)
+      return true
     }
 
     try {
+      let turnComplete = false
+      let doneTitle: string | undefined
       await streamSessionChat(sessionId, msg, (event) => {
         pushStreamEvent(sessionId, event)
         if (event.type === 'done') {
           resolvedSessionId = event.session_id || resolvedSessionId
+        }
+        if (isChatTurnCompleteEvent(event)) {
+          turnComplete = true
+          if (event.type === 'done') {
+            doneTitle = event.title
+          }
         }
       }, sessionModelRef.current, abortController.signal, ids.length ? ids : undefined)
 
@@ -2080,7 +2106,15 @@ export default function ChatApp() {
           activeIdRef.current = sid
           setActiveId(sid)
         }
-        await applyFreshSession(sid)
+        const applied = await applyFreshSession(sid)
+        if (turnComplete && applied) {
+          const completedGen = streamGen
+          const sessionTitle = resolveSessionTitle(sid, doneTitle)
+          afterNextPaint(() => {
+            if ((sessionStreamGenRef.current.get(sessionId) ?? 0) !== completedGen) return
+            maybeNotifyChatDone(sid, sessionTitle, completedGen)
+          })
+        }
       }
     } catch (e) {
       const aborted = (
