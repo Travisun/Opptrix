@@ -19,6 +19,7 @@ import {
   applyMcpPreset,
   removeMcpPreset,
   testMcpServer,
+  mcpPresetNeedsSecret,
   type McpPresetDef,
 } from '../../api/client'
 import type { McpServerFlatConfig } from '../../api/client'
@@ -260,16 +261,18 @@ export default function McpServersSettingsSection() {
 
   /** Switch 切换：开→启用，关→停用 */
   const handleTogglePreset = async (presetId: string, enabled: boolean) => {
+    const preset = presets.find(p => p.id === presetId)
     if (enabled) {
+      const needsKey = preset ? mcpPresetNeedsSecret(preset) : true
       const apiKey = (apiKeys[presetId] ?? '').trim()
-      if (!apiKey || apiKey.length < 4) {
+      if (needsKey && (!apiKey || apiKey.length < 4)) {
         showToast('请先填写有效的数据密钥', 'warning')
         return
       }
       setApplying(prev => ({ ...prev, [presetId]: true }))
       try {
-        await applyMcpPreset(presetId, apiKey)
-        showToast(`${presets.find(p => p.id === presetId)?.title ?? presetId} 已启用`, 'success')
+        await applyMcpPreset(presetId, needsKey ? apiKey : undefined)
+        showToast(`${preset?.title ?? presetId} 已启用`, 'success')
         await loadPresets()
       } catch (e) {
         showToast(e instanceof Error ? e.message : '启用失败', 'error')
@@ -318,6 +321,7 @@ export default function McpServersSettingsSection() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     const targets: Array<{ id: string; key: string }> = []
     for (const p of presets) {
+      if (!mcpPresetNeedsSecret(p)) continue
       const k = (apiKeys[p.id] ?? '').trim()
       if (k.length >= 4) targets.push({ id: p.id, key: k })
     }
@@ -334,11 +338,13 @@ export default function McpServersSettingsSection() {
 
   /** 失焦立即保存 */
   const handleSavePresetKey = useCallback(async (presetId: string) => {
+    const preset = presets.find(p => p.id === presetId)
+    if (preset && !mcpPresetNeedsSecret(preset)) return
     const k = (apiKeys[presetId] ?? '').trim()
     if (k.length >= 4) {
       try { await applyMcpPreset(presetId, k) } catch {}
     }
-  }, [apiKeys])
+  }, [apiKeys, presets])
 
   // ── JSON 操作 ──
   const validationError = useMemo(() => {
@@ -402,7 +408,7 @@ export default function McpServersSettingsSection() {
       {mode === 'preset' && (
         <>
           <Text className={s.tabHint} block>
-            选用预置服务，填入数据密钥后打开开关即可使用。问财支持自然语言选股与资讯检索；同花顺（扶摇）一次配置可覆盖多项行情能力。
+            部分服务需要数据密钥，填好后打开开关即可使用；网页搜索用于一般公开资料，不是行情或公告来源，无需数据密钥。问财支持自然语言选股与资讯检索；同花顺（扶摇）一次配置可覆盖多项行情能力。
           </Text>
           <SettingsSectionLabel spaced>预置服务</SettingsSectionLabel>
 
@@ -419,6 +425,7 @@ export default function McpServersSettingsSection() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {presets.map(preset => {
                 const configured = isPresetConfigured(preset)
+                const needsSecret = mcpPresetNeedsSecret(preset)
                 const serviceHint = preset.services.length > 1
                   ? preset.services.map(svc => svc.title).join('、')
                   : null
@@ -455,19 +462,21 @@ export default function McpServersSettingsSection() {
                         />
                       )}
                     />
-                    <SettingsStaticBlock>
-                      <div className={s.keyBlock}>
-                        <McpApiKeyField
-                          value={apiKeys[preset.id] ?? ''}
-                          configured={configured}
-                          testing={testing[preset.id]}
-                          onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
-                          onBlur={() => { void handleSavePresetKey(preset.id) }}
-                          onTest={() => { void handleTestPreset(preset) }}
-                          placeholder={preset.services.length > 1 ? '输入共用数据密钥' : '输入数据密钥'}
-                        />
-                      </div>
-                    </SettingsStaticBlock>
+                    {needsSecret && (
+                      <SettingsStaticBlock>
+                        <div className={s.keyBlock}>
+                          <McpApiKeyField
+                            value={apiKeys[preset.id] ?? ''}
+                            configured={configured}
+                            testing={testing[preset.id]}
+                            onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
+                            onBlur={() => { void handleSavePresetKey(preset.id) }}
+                            onTest={() => { void handleTestPreset(preset) }}
+                            placeholder={preset.services.length > 1 ? '输入共用数据密钥' : '输入数据密钥'}
+                          />
+                        </div>
+                      </SettingsStaticBlock>
+                    )}
                   </SettingsGroup>
                 )
               })}

@@ -297,7 +297,7 @@ export function isMcpServerFailoverError(error: unknown): boolean {
 }
 
 // ────────────────────────────────────────────
-// 内置 MCP 预设 — 开箱即用，只需 API Key
+// 内置 MCP 预设 — HTTP/问财需数据密钥；网页搜索等本机 stdio 可无密钥
 // ────────────────────────────────────────────
 
 /** 预设中单个底层 MCP 服务的定义（HTTP 或本机 stdio） */
@@ -308,25 +308,31 @@ export interface McpPresetServiceDef {
   title: string
   /**
    * 传输类型；缺省 `streamable-http`（兼容旧预设）。
-   * `stdio` 时由 apply-preset 解析本机 command/args，密钥写入 secrets[apiKeyEnv]。
+   * `stdio` 时由 apply-preset 解析本机 command/args；
+   * 有 `apiKeyEnv` 时密钥写入 secrets[apiKeyEnv]，无密钥预设写 `secrets: {}`。
    */
   transport?: 'stdio' | 'streamable-http'
   /** Streamable HTTP URL（HTTP 预设必填） */
   url?: string
   /** HTTP：API Key 所在 header（勿与问财 env 混用） */
   apiKeyHeader?: string
-  /** stdio：密钥写入 secrets 的环境变量名（如 IWENCAI_API_KEY） */
+  /** stdio：密钥写入 secrets 的环境变量名（如 IWENCAI_API_KEY）；无密钥预设省略 */
   apiKeyEnv?: string
 }
 
-/** 预设服务用于读写 secrets 的 key（env 名或 header 名） */
+/** 预设服务用于读写 secrets 的 key（env 名或 header 名）；无密钥时为空串 */
 export function mcpPresetSecretKey(svc: Pick<McpPresetServiceDef, 'apiKeyEnv' | 'apiKeyHeader'>): string {
   return (svc.apiKeyEnv ?? svc.apiKeyHeader ?? '').trim()
 }
 
+/** 预设是否要求 apply-preset 提交 apiKey（任一 service 有 secret key） */
+export function mcpPresetRequiresApiKey(preset: Pick<McpPresetDef, 'services'>): boolean {
+  return preset.services.some(s => Boolean(mcpPresetSecretKey(s)))
+}
+
 /** 一个预设的定义（UI 展示为一个卡片，可能对应多个底层服务） */
 export interface McpPresetDef {
-  /** 预设 id（用于 API 调用，如 'fuyao' / 'eastmoney' / 'iwencai'） */
+  /** 预设 id（用于 API 调用，如 'fuyao' / 'eastmoney' / 'iwencai' / 'websearch'） */
   id: string
   /** UI 标题 */
   title: string
@@ -396,6 +402,19 @@ export const MCP_BUILTIN_PRESETS: McpPresetDef[] = [
         title: '问财',
         transport: 'stdio',
         apiKeyEnv: 'IWENCAI_API_KEY',
+      },
+    ],
+  },
+  {
+    id: 'websearch',
+    title: '网页搜索',
+    description: '检索一般公开资料，不是行情或公告来源。无需数据密钥。中文优先国内来源，其他语言走国际来源。',
+    sortOrder: 3,
+    services: [
+      {
+        serverId: 'websearch',
+        title: '网页搜索',
+        transport: 'stdio',
       },
     ],
   },

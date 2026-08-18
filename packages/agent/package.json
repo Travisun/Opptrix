@@ -13,12 +13,14 @@
   },
   "bin": {
     "opptrix-mcp": "./dist/mcp/stdio-entry.js",
-    "opptrix-mcp-iwencai": "./dist/mcp/builtin/iwencai/stdio-entry.js"
+    "opptrix-mcp-iwencai": "./dist/mcp/builtin/iwencai/stdio-entry.js",
+    "opptrix-mcp-websearch": "./dist/mcp/builtin/websearch/stdio-entry.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync,mkdirSync})=>{mkdirSync('dist/experts',{recursive:true});cpSync('src/experts/catalog.mock.json','dist/experts/catalog.mock.json');mkdirSync('dist/rsshub',{recursive:true});cpSync('src/rsshub/rsshub_routes_schema.json','dist/rsshub/rsshub_routes_schema.json')})\"",
     "mcp": "node dist/mcp/stdio-entry.js",
-    "mcp:iwencai": "node dist/mcp/builtin/iwencai/stdio-entry.js"
+    "mcp:iwencai": "node dist/mcp/builtin/iwencai/stdio-entry.js",
+    "mcp:websearch": "node dist/mcp/builtin/websearch/stdio-entry.js"
   },
   "dependencies": {
     "@opptrix/agent-browser": "*",

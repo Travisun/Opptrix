@@ -5,6 +5,7 @@ import {
   applyMcpPreset,
   getMcpPresets,
   removeMcpPreset,
+  mcpPresetNeedsSecret,
   type McpPresetDef,
 } from '../api/client'
 import McpApiKeyField from '../components/opptrix/McpApiKeyField'
@@ -125,12 +126,13 @@ export function OnboardingMcpPanel() {
     setApplying(prev => ({ ...prev, [preset.id]: true }))
     try {
       if (enabled) {
+        const needsKey = mcpPresetNeedsSecret(preset)
         const apiKey = (apiKeys[preset.id] ?? '').trim()
-        if (!apiKey || apiKey.length < 4) {
-          showToast('请先填写有效的密钥', 'warning')
+        if (needsKey && (!apiKey || apiKey.length < 4)) {
+          showToast('请先填写有效的数据密钥', 'warning')
           return
         }
-        await applyMcpPreset(preset.id, apiKey)
+        await applyMcpPreset(preset.id, needsKey ? apiKey : undefined)
         showToast(`${preset.title} 已启用`, 'success')
       } else {
         await removeMcpPreset(preset.id)
@@ -194,16 +196,17 @@ export function OnboardingMcpPanel() {
                     />
                   </div>
                 </div>
-                <McpApiKeyField
-                  value={apiKeys[preset.id] ?? ''}
-                  configured={configured}
-                  testing={false}
-                  onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
-                  onBlur={() => { void handleBlur(preset.id) }}
-                  onTest={() => {}}
-                   placeholder="输入密钥"
-
-                />
+                {mcpPresetNeedsSecret(preset) && (
+                  <McpApiKeyField
+                    value={apiKeys[preset.id] ?? ''}
+                    configured={configured}
+                    testing={false}
+                    onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
+                    onBlur={() => { void handleBlur(preset.id) }}
+                    onTest={() => {}}
+                    placeholder="输入数据密钥"
+                  />
+                )}
               </div>
             )
           })

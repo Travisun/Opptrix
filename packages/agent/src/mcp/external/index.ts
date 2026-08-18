@@ -252,6 +252,11 @@ export class AggregatingToolBroker {
 }
 
 export {
+  ensureDefaultKeylessMcpServers,
+  type EnsureDefaultKeylessMcpDeps,
+  type BuiltinStdioResolver,
+} from './ensure-default-keyless.js'
+export {
   annotateMcpResult,
   getExternalMcpRegistry,
   resetExternalMcpRegistry,

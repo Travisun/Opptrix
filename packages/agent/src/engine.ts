@@ -420,6 +420,7 @@ export class AgentEngine {
       '   - source="external+local" + supplemented=true → 远程不足已补本地，合并后完备，可采用',
       '   - source="local" + degraded=true → 远程不可用，本地兜底降级，结果可能不完整：须在答复中提示该维度为降级数据、可信度受限，并在其它远程工具可用时尝试交叉补全',
       '4. 投研答复引用数据时体现数据源：远程权威源优于本地缓存；降级数据须显式标注不确定性。',
+      '网页搜索不是投研数据源：仅一般公开资料；行情/公告/研报禁止首选；专用工具失败后才可兜底，且须标明内容可能不真实或过期。',
     ]
     const appendix = buildExternalMcpSourcingAppendix(getExternalMcpRegistry())
     return appendix ? `${lines.join('\n')}\n\n${appendix}` : lines.join('\n')
