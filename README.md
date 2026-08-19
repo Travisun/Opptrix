@@ -17,6 +17,10 @@
 </table>
 
 <p align="center">
+  <strong>加入 <a href="https://opptrix.net/">Opptrix 量化投研交流社区</a></strong> — 与同路人一起讨论策略、分享研究、跟上产品节奏；注册邀请码：<code>A8SA8</code>
+</p>
+
+<p align="center">
   <img src="screenshot.webp" alt="Opptrix 主界面：对话投研、工作流技能与右侧个股行情面板" width="920" />
 </p>
 
