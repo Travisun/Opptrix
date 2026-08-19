@@ -46,7 +46,7 @@ export function desktopToolbarWidth(): number {
     + (DESKTOP_TOOLBAR_TOOL_COUNT - 1) * DESKTOP_TOOL_GAP
 }
 
-export type DesktopViewMode = 'chat' | 'settings' | 'news' | 'market' | 'experts'
+export type DesktopViewMode = 'chat' | 'settings' | 'news' | 'market' | 'community' | 'experts'
 
 export function desktopTitleLeft(
   sidebarInline: boolean,

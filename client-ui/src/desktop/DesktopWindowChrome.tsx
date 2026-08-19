@@ -258,8 +258,9 @@ export default function DesktopWindowChrome({
   const isSettings = viewMode === 'settings'
   const isNews = viewMode === 'news'
   const isMarket = viewMode === 'market'
+  const isCommunity = viewMode === 'community'
   const isExperts = viewMode === 'experts'
-  const isStandalonePanel = isNews || isMarket || isExperts
+  const isStandalonePanel = isNews || isMarket || isCommunity || isExperts
   const frameTitlebarHeight = desktopFrameTitlebarHeight()
   const chromeTop = desktopChromeTopOffset()
   const chromeBand = desktopChromeBandHeight()

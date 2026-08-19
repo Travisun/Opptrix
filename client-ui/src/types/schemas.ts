@@ -625,6 +625,41 @@ export interface ValidateFeedResult {
   error?: string
 }
 
+// ─── Community feed (Discourse proxy) ───
+
+export type CommunityCategoryFeedKind = 'research_strategy' | 'lounge'
+export type CommunityFeedKind = 'latest' | 'hot' | CommunityCategoryFeedKind
+
+export interface CommunityTopic {
+  id: number
+  title: string
+  excerpt: string | null
+  url: string
+  categoryId: number | null
+  categoryName: string | null
+  categoryColor: string | null
+  authorUsername: string | null
+  postsCount: number
+  replyCount: number
+  likeCount: number
+  views: number
+  tags: string[]
+  pinned: boolean
+  lastPostedAt: string | null
+  createdAt: string | null
+}
+
+export interface CommunityFeedResponse {
+  success: boolean
+  kind: CommunityFeedKind
+  topics: CommunityTopic[]
+  page: number
+  perPage: number
+  hasMore: boolean
+  fetchedAt: string
+  error?: string
+}
+
 // ─── Unified API response ───
 export interface ApiResponse<T = any> {
   success: boolean

@@ -299,6 +299,12 @@ POST /api/research
 | POST | `/api/news/articles/:id/enrich` | 触发 enrichment；返回 `{ job_id }` |
 | GET | `/api/news/enrichment/jobs/:jobId` | 查询 enrichment 任务进度 |
 
+### 社区讨论（Discourse 代理）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/community/feed` | `?kind=latest\|hot\|research_strategy\|lounge&page=0` — 只读聚合 [opptrix.net](https://opptrix.net/) 帖子；**无需 Discourse API Key**（公开 JSON）；`page` 从 0 起，每页约 30 条；响应含 `hasMore`；**首页**（`page=0`）客户端预加载并缓存约 2 小时，翻页按需请求；服务端按 `kind:page` 缓存约 2 小时 |
+
 **新闻 enrichment 音视频**
 
 - 转写引擎：**SenseVoice q8**（设置字段 `offline_whisper_model` 保留兼容；旧值 `tiny`/`base`/… 归一化为 `q8`）。

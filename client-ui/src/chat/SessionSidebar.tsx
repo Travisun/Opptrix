@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback, memo } from 'react'
+import { useState, useRef, useCallback, memo, useEffect } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, GlobeRegular, PeopleTeamRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, GlobeRegular, CommentMultipleRegular, PeopleTeamRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -20,6 +20,7 @@ import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ExpertSessionIcon from './ExpertSessionIcon'
 import HoverMarqueeText from './HoverMarqueeText'
+import ComposerTooltipMenu, { ComposerTooltipMenuItem } from './ComposerTooltipMenu'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 export type SidebarListTab = 'chat' | 'experts' | 'archive'
@@ -276,6 +277,10 @@ const useStyles = makeStyles({
     padding: '8px',
     marginTop: 'auto',
   },
+  settingsBtnWrap: {
+    display: 'block',
+    width: '100%',
+  },
   settingsBtn: {
     width: '100%',
     justifyContent: 'flex-start',
@@ -317,7 +322,7 @@ interface SessionSidebarProps {
   drawerOpen?: boolean
   sessions: SessionMeta[]
   activeId: string | null
-  activeRoute?: 'chat' | 'news' | 'market' | 'experts'
+  activeRoute?: 'chat' | 'news' | 'market' | 'community' | 'experts'
   /** ids of sessions currently streaming a response (shows thinking dot) */
   busySessionIds?: readonly string[]
   onSelect: (id: string) => void
@@ -325,10 +330,11 @@ interface SessionSidebarProps {
   onDelete: (id: string) => void
   onArchive: (id: string, folderId: string) => void
   onOpenSearch?: () => void
-  onOpenSettings: () => void
+  onOpenExpertCenter: () => void
+  onOpenSystemSettings: () => void
   onOpenNewsCenter: () => void
   onOpenMarketDynamics: () => void
-  onOpenExpertMarket: () => void
+  onOpenCommunityFeed: () => void
   onClose?: () => void
   listTab?: SidebarListTab
   onListTabChange?: (tab: SidebarListTab) => void
@@ -347,7 +353,8 @@ function formatDate(iso: string) {
 function SessionSidebar({
   mode, width, isDragging = false, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat', busySessionIds = [],
-  onSelect, onNew, onDelete, onArchive, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onOpenExpertMarket, onClose,
+  onSelect, onNew, onDelete, onArchive, onOpenExpertCenter, onOpenSystemSettings,
+  onOpenNewsCenter, onOpenMarketDynamics, onOpenCommunityFeed, onClose,
   listTab: listTabProp,
   onListTabChange,
   archivedGroups = [],
@@ -376,6 +383,8 @@ function SessionSidebar({
     onListTabChange?.(tab)
   }, [listTabProp, onListTabChange])
   const [archiveMenu, setArchiveMenu] = useState<{ sessionId: string; anchor: HTMLElement } | null>(null)
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
+  const settingsBtnRef = useRef<HTMLSpanElement>(null)
   const archiveAnchorRef = useRef<HTMLElement | null>(null)
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
 
@@ -406,6 +415,10 @@ function SessionSidebar({
       action()
     }
   }, [releaseSidebarFocus])
+
+  useEffect(() => {
+    setSettingsMenuOpen(false)
+  }, [activeRoute])
 
   const sidebarBody = (
     <>
@@ -439,19 +452,6 @@ function SessionSidebar({
         className={mergeClasses(
           s.menuRow,
           'opptrix-focusable',
-          activeRoute === 'experts' && s.menuRowActive,
-        )}
-        onClick={handleTopMenuClick(onOpenExpertMarket)}
-      >
-        <PeopleTeamRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
-        <span>专家</span>
-      </button>
-
-      <button
-        type="button"
-        className={mergeClasses(
-          s.menuRow,
-          'opptrix-focusable',
           activeRoute === 'news' && s.menuRowActive,
         )}
         onClick={handleTopMenuClick(onOpenNewsCenter)}
@@ -471,6 +471,19 @@ function SessionSidebar({
       >
         <GlobeRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>市场动态</span>
+      </button>
+
+      <button
+        type="button"
+        className={mergeClasses(
+          s.menuRow,
+          'opptrix-focusable',
+          activeRoute === 'community' && s.menuRowActive,
+        )}
+        onClick={handleTopMenuClick(onOpenCommunityFeed)}
+      >
+        <CommentMultipleRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
+        <span>社区讨论</span>
       </button>
       </div>
 
@@ -494,7 +507,7 @@ function SessionSidebar({
         {sessions.length === 0 && (
           <div className={s.empty}>
             {listTab === 'experts'
-              ? '还没有专家对话\n去「专家」挑选一位，开始专属研讨'
+              ? '还没有专家对话\n去「专家中心」挑选一位，开始专属研讨'
               : '暂无历史对话'}
           </div>
         )}
@@ -575,9 +588,48 @@ function SessionSidebar({
 
       <div className={s.footer}>
         <AppUpdateNotice />
-        <OpptrixButton className={s.settingsBtn} variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
+        <span ref={settingsBtnRef} className={s.settingsBtnWrap}>
+        <OpptrixButton
+          className={s.settingsBtn}
+          variant="ghost"
+          icon={<SettingsRegular />}
+          onClick={() => setSettingsMenuOpen(open => !open)}
+          aria-expanded={settingsMenuOpen}
+          aria-haspopup="menu"
+        >
           设置
         </OpptrixButton>
+        </span>
+        <ComposerTooltipMenu
+          open={settingsMenuOpen}
+          anchorRef={settingsBtnRef}
+          align="start"
+          width={220}
+          maxHeight={160}
+          ariaLabel="设置菜单"
+          onClose={() => setSettingsMenuOpen(false)}
+        >
+          <div className="opptrix-session-tools-menu">
+          <ComposerTooltipMenuItem
+            onClick={() => {
+              setSettingsMenuOpen(false)
+              onOpenExpertCenter()
+            }}
+          >
+            <PeopleTeamRegular fontSize={16} />
+            <span>专家中心</span>
+          </ComposerTooltipMenuItem>
+          <ComposerTooltipMenuItem
+            onClick={() => {
+              setSettingsMenuOpen(false)
+              onOpenSystemSettings()
+            }}
+          >
+            <SettingsRegular fontSize={16} />
+            <span>系统设置</span>
+          </ComposerTooltipMenuItem>
+          </div>
+        </ComposerTooltipMenu>
       </div>
 
       <SessionArchiveFolderMenu

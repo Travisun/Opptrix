@@ -22,6 +22,8 @@ import {
   isAppUpdateCheckBusy,
 } from '../../utils/appUpdateUi'
 import {
+  OPPTRIX_COMMUNITY,
+  OPPTRIX_COMMUNITY_INVITE_CODE,
   OPPTRIX_DISCLAIMER,
   OPPTRIX_GITHUB_HOME,
   OPPTRIX_GITHUB_ISSUES,
@@ -431,6 +433,12 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>法律与官网</Text>
         <SettingsGroup>
+          <SettingsExternalLinkRow
+            title="投研交流社区"
+            desc={`与同好讨论策略与方法 · 邀请码 ${OPPTRIX_COMMUNITY_INVITE_CODE}`}
+            icon={<GlobeRegular className={s.linkIcon} />}
+            onClick={() => openExternalUrl(OPPTRIX_COMMUNITY)}
+          />
           <SettingsExternalLinkRow
             title="官方网站"
             desc="产品动态与使用指南"

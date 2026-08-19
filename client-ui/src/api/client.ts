@@ -7,6 +7,8 @@ import type {
   NewsGroupedFeed,
   NewsSettings,
   ValidateFeedResult,
+  CommunityFeedKind,
+  CommunityFeedResponse,
 } from '../types/schemas'
 import type { ChatProgressEvent } from '../types/chatProgress'
 import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel, ChatAttachmentMeta, SessionAttachmentListItem } from '../types/chat'
@@ -2515,6 +2517,13 @@ export const news = {
       has_more: boolean
       total: number
     }>('/news/refresh', { method: 'POST' }),
+}
+
+export async function fetchCommunityFeed(kind: CommunityFeedKind, page = 0): Promise<CommunityFeedResponse> {
+  const q = new URLSearchParams()
+  q.set('kind', kind)
+  q.set('page', String(Math.max(0, page)))
+  return jsonFetch<CommunityFeedResponse>(`/community/feed?${q.toString()}`)
 }
 
 // ─── External MCP Servers ───

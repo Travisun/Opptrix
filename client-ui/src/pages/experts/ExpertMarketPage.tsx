@@ -376,7 +376,7 @@ export default function ExpertMarketPage({
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron, 'opptrix-experts')}>
       {electronChrome ? (
         <StandaloneElectronTitleBar
-          title="专家"
+          title="专家中心"
           chromeToolbarReserve={chromeToolbarReserve}
           className="opptrix-experts-title-bar"
           dragRegionClassName="opptrix-experts-title-drag"
@@ -384,7 +384,7 @@ export default function ExpertMarketPage({
         />
       ) : (
         <div className={s.webHead}>
-          <Text className={s.webTitle}>专家</Text>
+          <Text className={s.webTitle}>专家中心</Text>
           <div className={s.webActions}>{refreshAction}</div>
         </div>
       )}
@@ -393,7 +393,7 @@ export default function ExpertMarketPage({
         <div className={s.contentColumn}>
           <div className={s.pageHeader}>
             {electronChrome && (
-              <Text className={s.pageTitle} block>专家</Text>
+              <Text className={s.pageTitle} block>专家中心</Text>
             )}
             <Text className={s.pageSubtitle} block>
               选一位助手聊聊行情与想法；也可以自己创建一个更合口味的。

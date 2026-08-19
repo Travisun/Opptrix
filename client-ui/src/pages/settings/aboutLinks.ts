@@ -1,5 +1,8 @@
 /** Public project & legal URLs — keep aligned with README.md and apps/desktop/electron/app-meta.cjs */
 export const OPPTRIX_WEBSITE = 'https://www.opptrix.org'
+/** Opptrix 量化投研交流社区（Discourse） */
+export const OPPTRIX_COMMUNITY = 'https://opptrix.net/'
+export const OPPTRIX_COMMUNITY_INVITE_CODE = 'A8SA8'
 /** 外链打开（关于页等） */
 export const OPPTRIX_USER_AGREEMENT = 'https://www.opptrix.org/user-agreement.html'
 /** 引导内嵌 iframe — 与站点路由一致 */

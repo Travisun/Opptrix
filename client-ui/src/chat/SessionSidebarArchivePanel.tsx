@@ -361,7 +361,7 @@ export interface ArchiveFolderGroup {
 interface Props {
   groups: ArchiveFolderGroup[]
   activeId: string | null
-  activeRoute?: 'chat' | 'news' | 'market' | 'experts'
+  activeRoute?: 'chat' | 'news' | 'market' | 'community' | 'experts'
   busySessionIds?: readonly string[]
   onSelect: (id: string) => void
   onDeleteSession: (id: string) => void | Promise<void>

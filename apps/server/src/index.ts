@@ -34,6 +34,7 @@ import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
 import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveOpptrixAppVersion, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
+import { registerCommunityRoutes } from './community-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
@@ -2005,6 +2006,7 @@ async function bootstrap() {
   void getModelsDevCatalog().catch(() => {})
 
   await registerNewsRoutes(app)
+  registerCommunityRoutes(app)
   registerSandboxSettingsRoutes(app)
   registerScheduleRoutes(app, scheduleService)
   registerPythonSettingsRoutes(app)

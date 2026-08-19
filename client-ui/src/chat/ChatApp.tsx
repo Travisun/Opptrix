@@ -62,6 +62,8 @@ import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import ExpertMarketPage from '../pages/experts/ExpertMarketPage'
 import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
+import CommunityFeedPage from '../pages/community/CommunityFeedPage'
+import { startCommunityFeedBackgroundRefresh } from '../pages/community/communityFeedCache'
 import type { SettingsSection } from '../pages/settings/SettingsSidebar'
 import { normalizeSettingsSection } from '../pages/settings/settingsTypes'
 import RightPanel from './RightPanel'
@@ -1237,6 +1239,7 @@ export default function ChatApp() {
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
   const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
   const [marketDynamicsMounted, setMarketDynamicsMounted] = useState(() => view === 'market')
+  const [communityFeedMounted, setCommunityFeedMounted] = useState(() => view === 'community')
   const [expertMarketMounted, setExpertMarketMounted] = useState(() => view === 'experts')
 
   const refreshModels = useCallback(async () => {
@@ -1518,15 +1521,26 @@ export default function ChatApp() {
   }, [refreshHealth, refreshSessions, loadSession])
 
   useEffect(() => {
+    if (!backendOk) return
+    return startCommunityFeedBackgroundRefresh()
+  }, [backendOk])
+
+  useEffect(() => {
     if (view === 'news') setNewsCenterMounted(true)
     if (view === 'market') setMarketDynamicsMounted(true)
+    if (view === 'community') setCommunityFeedMounted(true)
     if (view === 'experts') setExpertMarketMounted(true)
   }, [view])
 
-  const openSettings = useCallback((section?: SettingsSection) => {
+  const openSystemSettings = useCallback((section?: SettingsSection) => {
     closeDrawer()
     setSettingsInitialSection(normalizeSettingsSection(section))
     navigate('settings')
+  }, [closeDrawer, navigate])
+
+  const openExpertCenter = useCallback(() => {
+    closeDrawer()
+    navigate('experts')
   }, [closeDrawer, navigate])
 
   const openNewsCenter = useCallback(() => {
@@ -1539,14 +1553,14 @@ export default function ChatApp() {
     navigate('market')
   }, [closeDrawer, navigate])
 
-  const openExpertMarket = useCallback(() => {
+  const openCommunityFeed = useCallback(() => {
     closeDrawer()
-    navigate('experts')
+    navigate('community')
   }, [closeDrawer, navigate])
 
   const openNewsSettings = useCallback(() => {
-    openSettings('news_feed')
-  }, [openSettings])
+    openSystemSettings('news_feed')
+  }, [openSystemSettings])
 
   const handleExitSettings = useCallback(() => {
     navigate('chat')
@@ -1587,7 +1601,7 @@ export default function ChatApp() {
 
   useDesktopShell({
     openChat: handleProtocolChat,
-    openSettings: openSettings,
+    openSettings: openSystemSettings,
     openNews: handleProtocolNews,
   })
 
@@ -2467,10 +2481,20 @@ export default function ChatApp() {
   const isSettings = view === 'settings'
   const isNews = view === 'news'
   const isMarket = view === 'market'
+  const isCommunity = view === 'community'
   const isExperts = view === 'experts'
-  const isStandaloneView = isNews || isMarket || isExperts
-  const chromeTitle = isNews ? '新闻中心' : isMarket ? '市场动态' : isExperts ? '专家' : (activeSession?.title ?? '新对话')
-  const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : isMarket ? 'market' : isExperts ? 'experts' : 'chat'
+  const isStandaloneView = isNews || isMarket || isCommunity || isExperts
+  const chromeTitle = isNews ? '新闻中心'
+    : isMarket ? '市场动态'
+      : isCommunity ? '社区讨论'
+        : isExperts ? '专家中心'
+          : (activeSession?.title ?? '新对话')
+  const chromeViewMode = isSettings ? 'settings'
+    : isNews ? 'news'
+      : isMarket ? 'market'
+        : isCommunity ? 'community'
+          : isExperts ? 'experts'
+            : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
 
   useEffect(() => {
@@ -2559,7 +2583,11 @@ export default function ChatApp() {
     setSidebarVisible(false)
   }, [setSidebarVisible])
 
-  const sidebarActiveRoute = isNews ? 'news' as const : isMarket ? 'market' as const : isExperts ? 'experts' as const : 'chat' as const
+  const sidebarActiveRoute = isNews ? 'news' as const
+    : isMarket ? 'market' as const
+      : isCommunity ? 'community' as const
+        : isExperts ? 'experts' as const
+          : 'chat' as const
   const sidebarProps = useMemo(() => ({
     sessions: sidebarSessions,
     activeId,
@@ -2570,10 +2598,11 @@ export default function ChatApp() {
     onDelete: handleDelete,
     onArchive: handleArchive,
     onOpenSearch: handleOpenSearch,
-    onOpenSettings: openSettings,
+    onOpenExpertCenter: openExpertCenter,
+    onOpenSystemSettings: openSystemSettings,
     onOpenNewsCenter: openNewsCenter,
     onOpenMarketDynamics: openMarketDynamics,
-    onOpenExpertMarket: openExpertMarket,
+    onOpenCommunityFeed: openCommunityFeed,
     listTab: sidebarListTab,
     onListTabChange: handleSidebarListTabChange,
     archivedGroups,
@@ -2592,10 +2621,11 @@ export default function ChatApp() {
     handleDelete,
     handleArchive,
     handleOpenSearch,
-    openSettings,
+    openExpertCenter,
+    openSystemSettings,
     openNewsCenter,
     openMarketDynamics,
-    openExpertMarket,
+    openCommunityFeed,
     sidebarListTab,
     handleSidebarListTabChange,
     archivedGroups,
@@ -2770,6 +2800,40 @@ export default function ChatApp() {
           </div>
         )}
 
+        {communityFeedMounted && (
+          <div
+            className={mergeClasses(
+              s.contentWorkspace,
+              isMobile && s.contentWorkspaceMobile,
+              electronChrome && s.contentWorkspaceElectron,
+              electronChrome && 'opptrix-app-main',
+              !isCommunity && s.viewHidden,
+            )}
+            aria-hidden={!isCommunity}
+          >
+            {isMobile && isCommunity && (
+              <SessionSidebar
+                mode="drawer"
+                width={sidebarWidth}
+                drawerOpen={drawerOpen}
+                onClose={closeDrawer}
+                {...sidebarProps}
+              />
+            )}
+            <div
+              className={mergeClasses(
+                s.chatColumn,
+                electronChrome && s.chatColumnElectron,
+              )}
+            >
+              <CommunityFeedPage
+                electronChrome={electronChrome}
+                chromeToolbarReserve={chromeToolbarReserve}
+              />
+            </div>
+          </div>
+        )}
+
         {expertMarketMounted && (
           <div
             className={mergeClasses(
@@ -2906,7 +2970,7 @@ export default function ChatApp() {
                   onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
                   onOpenSidebar={openDrawer}
                   onNewChat={handleNew}
-                  onOpenSettings={openSettings}
+                  onOpenSettings={openSystemSettings}
                   rightPanelOpen={rightPanelVisible}
                   chatColumnVisible={chatVisible}
                   onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
