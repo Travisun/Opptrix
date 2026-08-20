@@ -21,7 +21,7 @@ import {
   buildBuiltinNodeTransportSentinel,
   materializeBuiltinStdioTransport,
 } from '../packages/agent/dist/mcp/builtin/resolve-builtin-stdio.js'
-import { buildPresetServiceRecord } from '../apps/server/dist/mcp-server-routes.js'
+import { buildPresetServiceRecord, flatToCreateInput, splitStdioEnvSecrets } from '../apps/server/dist/mcp-server-routes.js'
 
 test('MCP_BUILTIN_PRESETS includes iwencai stdio with IWENCAI_API_KEY', () => {
   const preset = MCP_BUILTIN_PRESETS.find(p => p.id === 'iwencai')
@@ -136,10 +136,31 @@ test('buildPresetServiceRecord persists builtin-node sentinel (not absolute path
   assert.equal(transportConfig.env, undefined)
 })
 
-test('materializeBuiltinStdioTransport heals sentinel and legacy absolute paths', () => {
+test('import peels IWENCAI_API_KEY from env into secrets (not transportConfig.env)', () => {
+  const peeled = splitStdioEnvSecrets({
+    IWENCAI_API_KEY: 'secret-key',
+    FOO: 'bar',
+  })
+  assert.deepEqual(peeled.secrets, { IWENCAI_API_KEY: 'secret-key' })
+  assert.deepEqual(peeled.env, { FOO: 'bar' })
+
+  const input = flatToCreateInput('iwencai', {
+    type: 'stdio',
+    command: BUILTIN_NODE_COMMAND,
+    args: [],
+    env: { IWENCAI_API_KEY: 'from-export', DEBUG: '1' },
+  })
+  assert.ok(input)
+  assert.equal(input.transportConfig.transport, 'stdio')
+  assert.equal(input.transportConfig.command, BUILTIN_NODE_COMMAND)
+  assert.deepEqual(input.transportConfig.env, { DEBUG: '1' })
+  assert.equal(input.secrets?.IWENCAI_API_KEY, 'from-export')
+})
+
+test('materializeBuiltinStdioTransport heals sentinel and legacy absolute paths', async () => {
   const expected = resolveIwencaiMcpStdioTransport()
 
-  const fromSentinel = materializeBuiltinStdioTransport(
+  const fromSentinel = await materializeBuiltinStdioTransport(
     'iwencai',
     buildBuiltinNodeTransportSentinel(),
   )
@@ -152,7 +173,7 @@ test('materializeBuiltinStdioTransport heals sentinel and legacy absolute paths'
     command: '/opt/homebrew/Cellar/node/22.0.0/bin/node',
     args: ['/Users/someone/.opptrix/old/stdio-entry.js'],
   }
-  const healed = materializeBuiltinStdioTransport('iwencai', legacy)
+  const healed = await materializeBuiltinStdioTransport('iwencai', legacy)
   assert.equal(healed.command, process.execPath)
   assert.ok(path.isAbsolute(healed.args[healed.args.length - 1]))
   assert.match(healed.args[healed.args.length - 1], /stdio-entry\.(js|ts)$/)
@@ -160,9 +181,9 @@ test('materializeBuiltinStdioTransport heals sentinel and legacy absolute paths'
   assert.notDeepEqual(healed.args, legacy.args)
 })
 
-test('materializeBuiltinStdioTransport keeps custom args when builtin-node has user path', () => {
+test('materializeBuiltinStdioTransport keeps custom args when builtin-node has user path', async () => {
   const customArgs = ['/Users/someone/local-mcp/server.mjs', '--port', '0']
-  const materialized = materializeBuiltinStdioTransport('my-local-mcp', {
+  const materialized = await materializeBuiltinStdioTransport('my-local-mcp', {
     transport: 'stdio',
     command: BUILTIN_NODE_COMMAND,
     args: customArgs,
@@ -174,7 +195,7 @@ test('materializeBuiltinStdioTransport keeps custom args when builtin-node has u
   assert.equal(materialized.cwd, '/Users/someone/local-mcp')
   assert.deepEqual(materialized.env, { FOO: 'bar' })
 
-  const passthrough = materializeBuiltinStdioTransport('custom-node', {
+  const passthrough = await materializeBuiltinStdioTransport('custom-node', {
     transport: 'stdio',
     command: '/usr/local/bin/node',
     args: ['/abs/path/to/mcp.js'],

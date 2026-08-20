@@ -165,12 +165,16 @@ export {
 } from './mcp/builtin/websearch/index.js'
 export {
   BUILTIN_NODE_COMMAND,
+  BUILTIN_PYTHON_COMMAND,
   buildBuiltinNodeTransportSentinel,
+  clearBuiltinPythonPathCacheForTests,
   isBuiltinNodeCommand,
+  isBuiltinPythonCommand,
   isBuiltinStdioServerId,
   looksLikeBuiltinStdioEntryArgs,
   materializeBuiltinStdioTransport,
   resolveBuiltinStdioTransport,
+  setResolvePythonRuntimeForTests,
 } from './mcp/builtin/resolve-builtin-stdio.js'
 export {
   AggregatingToolBroker,

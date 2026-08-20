@@ -618,6 +618,15 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 用户可配置的外部 MCP（stdio / Streamable HTTP）。列表与写操作**永不回传明文密钥**（仅 `secretsConfigured` 布尔掩码）。执行路由：已启用且未 pause 的外部源按 `sortOrder` 优先；熔断/超时/429、远程 outputSchema 校验失败（如 JSON-RPC `-32602`）、缺 API Key 等鉴权错误后 failover 至下一外部源或本地 ToolRegistry（最终兜底）；降级结果可含 `_mcp.configHint` 指向设置页补密钥。
 
+**stdio 运行时哨兵（可移植落盘）**
+
+| `command` | 含义 | 连接时展开 |
+|-----------|------|------------|
+| `builtin-node` | 使用本机 Opptrix 自带的 Node | 空 `args`：按已知内置 id（如 `iwencai` / `websearch`）解析入口；非空 `args`：仅把 `command` 换成当前 Node 可执行文件，保留脚本路径与 `cwd`/`env` |
+| `builtin-python` | 使用当前可用的 Python（托管或系统） | **须**提供非空 `args`（脚本绝对路径等）；展开为探测到的 Python 路径。空 `args` 会报错（尚无按服务编号的内置 Python 入口）。未检测到 Python 时提示在设置中安装/准备 |
+
+导出时：问财/网页搜索等内置 id 仍写 `builtin-node`（不泄露本机绝对路径）；用户自定义的 `builtin-python` 配置原样导出。导入接受 `builtin-node` / `builtin-python`；导出内联在 `env` 里的密钥（如 `IWENCAI_API_KEY`）导入时会剥回 `secrets`，**不会**写入 `transportConfig.env`。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/mcp-servers` | `{ servers: PublicMcpServer[] }` |
@@ -628,12 +637,14 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | POST | `/api/mcp-servers/:id/test` | 探活（`tools/list`）；超时较长 |
 | POST | `/api/mcp-servers/reorder` | `{ server_ids: string[] }` 重排优先级 |
 | GET | `/api/mcp-servers/presets` | 内置预设（扶摇 / 东方财富 / **问财** / **网页搜索**）；`configured` = 对应 server 存在且 enabled |
-| POST | `/api/mcp-servers/apply-preset` | `{ presetId, apiKey? }`：HTTP 预设写 `streamable-http` + header secrets；问财写 **stdio**（`node` + 绝对入口）+ `secrets.IWENCAI_API_KEY`（勿与扶摇 `X-api-key` 混用）；网页搜索写 **stdio** + `secrets: {}`（无密钥，`apiKey` 可省略）。**仅当预设任一 service 有 `apiKeyEnv` / `apiKeyHeader` 时 `apiKey` 必填** |
+| POST | `/api/mcp-servers/apply-preset` | `{ presetId, apiKey? }`：HTTP 预设写 `streamable-http` + header secrets；问财 / 网页搜索落盘 **stdio** 哨兵 `builtin-node`（连接时再 materialize），问财另写 `secrets.IWENCAI_API_KEY`（勿与扶摇 `X-api-key` 混用）；网页搜索 `secrets: {}`（无密钥，`apiKey` 可省略）。**仅当预设任一 service 有 `apiKeyEnv` / `apiKeyHeader` 时 `apiKey` 必填** |
 | POST | `/api/mcp-servers/remove-preset` | `{ presetId }`：停用预设对应 server（enabled=false, paused=true） |
 
 问财为本机 MCP（`serverId=iwencai`），工具经命名空间 `iwencai__query2data` 等暴露给 Agent，**不是** a-stock-layer 行情 Provider。
 
 网页搜索为本机 MCP（`serverId=websearch`），无密钥；**首次 hydrate 无记录时默认启用**，设置中关闭后保持关闭。工具经命名空间 `websearch__web_search` 暴露给 Agent。`POST /api/mcp-servers/apply-preset` 对 `presetId=websearch` 不要求 `apiKey`。
+
+自定义 Python MCP 示例（`transportConfig`）：`{ "transport": "stdio", "command": "builtin-python", "args": ["/abs/path/to/server.py"] }`。
 
 ### 工作流技能 / Agent Skills
 

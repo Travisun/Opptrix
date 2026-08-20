@@ -141,7 +141,7 @@ export class ExternalMcpRegistry {
       await entry.client.close().catch(() => {})
       this.dropConnection(row.id)
     }
-    const conn = createSdkConnection(row)
+    const conn = await createSdkConnection(row)
     try {
       await conn.client.connect(conn.transport)
       this.connections.set(row.id, conn)
@@ -392,7 +392,7 @@ export class ExternalMcpRegistry {
   }> {
     const row = this.repo.get(id)
     if (!row) return { ok: false, message: `未知服务器: ${id}` }
-    const { client, transport } = createSdkConnection(row)
+    const { client, transport } = await createSdkConnection(row)
     try {
       await client.connect(transport)
       const caps = client.getServerCapabilities()
@@ -443,7 +443,7 @@ export class ExternalMcpRegistry {
   async ping(id: string): Promise<{ ok: boolean; message: string }> {
     const row = this.repo.get(id)
     if (!row) return { ok: false, message: `未知服务器: ${id}` }
-    const { client, transport } = createSdkConnection(row)
+    const { client, transport } = await createSdkConnection(row)
     const start = Date.now()
     try {
       await client.connect(transport)

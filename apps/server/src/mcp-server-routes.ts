@@ -66,8 +66,31 @@ function recordToFlat(rec: McpServerRecord): McpServerFlatConfig {
 
 const SECRET_HEADER_RE = /^(authorization|x-api-key|api-key|x-auth-token|token)$/i
 
+/** stdio env 中疑似密钥的 key → 应进 secrets，禁止落盘到 transportConfig.env */
+const STDIO_SECRET_ENV_RE = /(api[_-]?key|token|secret|password|passwd|authorization|bearer|credential)/i
+
+/**
+ * 将扁平/请求里的 stdio env 拆成非密钥 env + secrets。
+ * 导出会把 secrets 内联进 env；导入与 POST/PATCH 须剥回 secrets。
+ */
+export function splitStdioEnvSecrets(
+  env: Record<string, string> | undefined,
+): { env?: Record<string, string>; secrets: Record<string, string> } {
+  if (!env || !Object.keys(env).length) return { secrets: {} }
+  const kept: Record<string, string> = {}
+  const secrets: Record<string, string> = {}
+  for (const [k, v] of Object.entries(env)) {
+    if (STDIO_SECRET_ENV_RE.test(k)) secrets[k] = v
+    else kept[k] = v
+  }
+  return {
+    env: Object.keys(kept).length ? kept : undefined,
+    secrets,
+  }
+}
+
 /** 扁平 mcpServers 格式 → McpServerCreateInput；返回 null 表示结构无效 */
-function flatToCreateInput(id: string, flat: McpServerFlatConfig): McpServerCreateInput | null {
+export function flatToCreateInput(id: string, flat: McpServerFlatConfig): McpServerCreateInput | null {
   const type = flat.type && ['stdio', 'http', 'sse'].includes(flat.type)
     ? flat.type
     : (flat.command ? 'stdio' : 'http')
@@ -75,11 +98,15 @@ function flatToCreateInput(id: string, flat: McpServerFlatConfig): McpServerCrea
   const secrets: Record<string, string> = {}
   if (type === 'stdio') {
     if (!flat.command) return null
+    const peeled = splitStdioEnvSecrets(
+      flat.env && Object.keys(flat.env).length ? { ...flat.env } : undefined,
+    )
+    Object.assign(secrets, peeled.secrets)
     transport = {
       transport: 'stdio',
       command: flat.command,
       args: flat.args?.length ? [...flat.args] : undefined,
-      env: flat.env && Object.keys(flat.env).length ? { ...flat.env } : undefined,
+      env: peeled.env,
     }
   } else {
     if (!flat.url) return null
@@ -234,13 +261,21 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
   }>('/api/mcp-servers', async (req, reply) => {
     const title = String(req.body?.title ?? '').trim()
     if (!title) return reply.status(400).send({ error: 'title 必填' })
-    const transportConfig = parseTransportConfig(req.body?.transportConfig)
+    let transportConfig = parseTransportConfig(req.body?.transportConfig)
     if (!transportConfig) {
       return reply.status(400).send({ error: 'transportConfig 无效（stdio 需 command，http 需 url）' })
     }
     const id = req.body?.id != null ? String(req.body.id).trim().toLowerCase() : undefined
     if (id && !isValidMcpServerId(id)) {
       return reply.status(400).send({ error: '无效的 id（须小写字母开头，仅 a-z0-9_-）' })
+    }
+    const bodySecrets = parseSecrets(req.body?.secrets) ?? {}
+    let secrets = bodySecrets
+    if (transportConfig.transport === 'stdio') {
+      const peeled = splitStdioEnvSecrets(transportConfig.env)
+      transportConfig = { ...transportConfig, env: peeled.env }
+      // 显式 secrets 覆盖从 env 剥出的同名 key
+      secrets = { ...peeled.secrets, ...bodySecrets }
     }
     const input: McpServerCreateInput = {
       id,
@@ -249,7 +284,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
       paused: req.body?.paused,
       sortOrder: req.body?.sortOrder,
       transportConfig,
-      secrets: parseSecrets(req.body?.secrets),
+      secrets: Object.keys(secrets).length ? secrets : undefined,
       capabilityBindings: parseBindings(req.body?.capabilityBindings),
       installSource: req.body?.installSource === 'registry' ? 'registry' : 'manual',
     }
@@ -287,11 +322,19 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
     if (req.body?.paused !== undefined) patch.paused = Boolean(req.body.paused)
     if (req.body?.sortOrder !== undefined) patch.sortOrder = Number(req.body.sortOrder)
     if (req.body?.transportConfig !== undefined) {
-      const cfg = parseTransportConfig(req.body.transportConfig)
+      let cfg = parseTransportConfig(req.body.transportConfig)
       if (!cfg) return reply.status(400).send({ error: 'transportConfig 无效' })
+      if (cfg.transport === 'stdio') {
+        const peeled = splitStdioEnvSecrets(cfg.env)
+        cfg = { ...cfg, env: peeled.env }
+        if (Object.keys(peeled.secrets).length) {
+          const bodySecrets = parseSecrets(req.body?.secrets) ?? {}
+          patch.secrets = { ...peeled.secrets, ...bodySecrets }
+        }
+      }
       patch.transportConfig = cfg
     }
-    if (req.body?.secrets !== undefined) {
+    if (req.body?.secrets !== undefined && patch.secrets === undefined) {
       const secrets = parseSecrets(req.body.secrets)
       if (secrets) patch.secrets = secrets
     }

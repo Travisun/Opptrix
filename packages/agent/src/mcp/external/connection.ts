@@ -1,6 +1,6 @@
 /**
  * MCP SDK 标准 Client 工具函数：
- * - createSdkConnection: 按 record 构造 SDK Client + Transport（stdio / streamable-http / sse）
+ * - createSdkConnection: 按 record 构造 SDK Client + Transport（stdio / streamable-http / sse；stdio 哨兵 async materialize）
  * - parseToolResult: 解析 SDK CallToolResult（保留现有错误处理语义）
  * - toOpenAiTool: MCP tool schema → OpenAI function-calling 格式
  */
@@ -80,8 +80,8 @@ function buildHeaders(record: McpServerRecord): Record<string, string> {
   return headers
 }
 
-/** 按 record 构造 SDK Client + Transport（尚未 connect） */
-export function createSdkConnection(record: McpServerRecord): SdkConnection {
+/** 按 record 构造 SDK Client + Transport（尚未 connect；stdio 哨兵需 async materialize） */
+export async function createSdkConnection(record: McpServerRecord): Promise<SdkConnection> {
   const client = new Client(
     { name: 'opptrix-host', version: '1.2.0' },
     { jsonSchemaValidator: PERMISSIVE_VALIDATOR },
@@ -89,8 +89,8 @@ export function createSdkConnection(record: McpServerRecord): SdkConnection {
   const cfg = record.transportConfig
   let transport: AnyTransport
   if (cfg.transport === 'stdio') {
-    // 哨兵 / 旧绝对路径 → 按 serverId 解析真实 execPath + entry
-    const stdio = materializeBuiltinStdioTransport(record.id, cfg)
+    // 哨兵 / 旧绝对路径 → 按 serverId 解析真实 execPath / Python + entry
+    const stdio = await materializeBuiltinStdioTransport(record.id, cfg)
     const env: Record<string, string> = {
       ...Object.fromEntries(
         Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'),

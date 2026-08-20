@@ -104,11 +104,11 @@ test('empty repo seeds websearch with builtin-node sentinel (not absolute path)'
   assert.equal(store.has('fuyao-a-share'), false)
 })
 
-test('materializeBuiltinStdioTransport heals websearch sentinel and legacy paths', () => {
+test('materializeBuiltinStdioTransport heals websearch sentinel and legacy paths', async () => {
   const expected = resolveBuiltinStdioTransport('websearch')
   assert.ok(expected)
 
-  const fromSentinel = materializeBuiltinStdioTransport(
+  const fromSentinel = await materializeBuiltinStdioTransport(
     'websearch',
     buildBuiltinNodeTransportSentinel(),
   )
@@ -121,15 +121,15 @@ test('materializeBuiltinStdioTransport heals websearch sentinel and legacy paths
     command: '/Users/mac/.nvm/versions/node/v22.0.0/bin/node',
     args: ['/Users/mac/Library/Caches/old/stdio-entry.js'],
   }
-  const healed = materializeBuiltinStdioTransport('websearch', legacy)
+  const healed = await materializeBuiltinStdioTransport('websearch', legacy)
   assert.equal(healed.command, process.execPath)
   assert.match(healed.args[healed.args.length - 1], /stdio-entry\.(js|ts)$/)
   assert.notEqual(healed.command, legacy.command)
 })
 
-test('materializeBuiltinStdioTransport keeps custom args when builtin-node has user path', () => {
+test('materializeBuiltinStdioTransport keeps custom args when builtin-node has user path', async () => {
   const customArgs = ['/opt/custom/mcp-entry.mjs']
-  const materialized = materializeBuiltinStdioTransport('websearch', {
+  const materialized = await materializeBuiltinStdioTransport('websearch', {
     transport: 'stdio',
     command: BUILTIN_NODE_COMMAND,
     args: customArgs,
