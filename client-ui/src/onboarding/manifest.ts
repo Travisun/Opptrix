@@ -730,6 +730,32 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.3.5': {
+    welcomeTitle: '社区、问财与网页参考，资料更全',
+    welcomeSubtitle:
+      '这一版可在侧栏浏览投研社区讨论；设置中可启用问财用自然语言查数；助手也可检索公开网页作背景参考。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '替你查数',
+        title: '启用问财，用自然语言查数',
+        desc: '在设置中接入问财数据服务，用日常说法查行情与财务，并综搜新闻、公告与研报。',
+        note: '自行配置数据密钥后即可使用。',
+      },
+      {
+        kicker: '一起交流',
+        title: '侧栏即可浏览投研社区',
+        desc: '最新、本周热议、投研策略与茶馆闲聊分区浏览，点开帖子可在浏览器阅读全文。',
+        note: '灵感与讨论，少切应用。',
+      },
+      {
+        kicker: '更有据',
+        title: '公开网页可作背景参考',
+        desc: '助手可检索公开网页补充背景；行情、公告与研报仍走专用通道，引用时会提示可能不实或过期。',
+        note: '专用通道与公开网页，各司其职。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
