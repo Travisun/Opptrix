@@ -17,6 +17,7 @@ import type {
 } from '@modelcontextprotocol/sdk/validation/types.js'
 import type { McpServerRecord } from '@opptrix/shared'
 import type { OpenAiTool, JsonSchema } from '../../tools.js'
+import { materializeBuiltinStdioTransport } from '../builtin/resolve-builtin-stdio.js'
 
 /** 外部 Client 禁用 outputSchema 校验，避免上游 schema 不匹配导致 callTool 抛错 */
 const PERMISSIVE_VALIDATOR: jsonSchemaValidator = {
@@ -88,17 +89,19 @@ export function createSdkConnection(record: McpServerRecord): SdkConnection {
   const cfg = record.transportConfig
   let transport: AnyTransport
   if (cfg.transport === 'stdio') {
+    // 哨兵 / 旧绝对路径 → 按 serverId 解析真实 execPath + entry
+    const stdio = materializeBuiltinStdioTransport(record.id, cfg)
     const env: Record<string, string> = {
       ...Object.fromEntries(
         Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'),
       ),
-      ...(cfg.env ?? {}),
+      ...(stdio.env ?? {}),
       ...record.secrets,
     }
     transport = new StdioClientTransport({
-      command: cfg.command,
-      args: cfg.args ?? [],
-      cwd: cfg.cwd,
+      command: stdio.command,
+      args: stdio.args ?? [],
+      cwd: stdio.cwd,
       env,
       stderr: 'pipe',
     })

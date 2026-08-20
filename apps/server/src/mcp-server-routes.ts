@@ -5,7 +5,10 @@
 
 import type { FastifyInstance } from 'fastify'
 import {
+  BUILTIN_NODE_COMMAND,
+  buildBuiltinNodeTransportSentinel,
   getExternalMcpRegistry,
+  isBuiltinStdioServerId,
   resolveBuiltinStdioTransport,
   type ExternalMcpRegistry,
 } from '@opptrix/agent'
@@ -40,8 +43,14 @@ function recordToFlat(rec: McpServerRecord): McpServerFlatConfig {
     type: transport === 'streamable-http' ? 'http' : transport,
   }
   if (transport === 'stdio') {
-    flat.command = rec.transportConfig.command
-    if (rec.transportConfig.args?.length) flat.args = [...rec.transportConfig.args]
+    // 内置 id 导出哨兵，不泄露本机绝对路径（含旧库残留）
+    if (isBuiltinStdioServerId(rec.id)) {
+      flat.command = BUILTIN_NODE_COMMAND
+      flat.args = []
+    } else {
+      flat.command = rec.transportConfig.command
+      if (rec.transportConfig.args?.length) flat.args = [...rec.transportConfig.args]
+    }
     const env: Record<string, string> = { ...(rec.transportConfig.env ?? {}) }
     for (const [k, v] of Object.entries(rec.secrets)) env[k] = v
     if (Object.keys(env).length) flat.env = env
@@ -165,22 +174,23 @@ function publicList(reg: ExternalMcpRegistry) {
   return { servers: reg.listPublic() }
 }
 
-/** 按预设服务定义构造 transport + secrets（stdio 在此 resolve 绝对路径） */
+/** 按预设服务定义构造 transport + secrets（stdio 校验可解析后落盘哨兵） */
 export function buildPresetServiceRecord(
   svc: McpPresetServiceDef,
   apiKey: string,
 ): { transportConfig: McpTransportConfig; secrets: Record<string, string> } {
   const isStdio = svc.transport === 'stdio' || Boolean(svc.apiKeyEnv && !svc.url)
   if (isStdio) {
-    const transportConfig = resolveBuiltinStdioTransport(svc.serverId)
-    if (!transportConfig) {
+    // 校验入口可解析；落盘写哨兵，连接时再 materialize
+    const resolved = resolveBuiltinStdioTransport(svc.serverId)
+    if (!resolved) {
       throw new Error(`暂不支持的本机预设: ${svc.serverId}`)
     }
     const secretKey = mcpPresetSecretKey(svc)
     const secrets: Record<string, string> = {}
     if (secretKey) secrets[secretKey] = apiKey
     return {
-      transportConfig,
+      transportConfig: buildBuiltinNodeTransportSentinel(),
       secrets,
     }
   }

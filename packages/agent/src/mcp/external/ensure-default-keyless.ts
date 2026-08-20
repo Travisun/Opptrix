@@ -10,7 +10,10 @@ import {
   type McpServerRecord,
   type McpStdioTransportConfig,
 } from '@opptrix/shared'
-import { resolveBuiltinStdioTransport } from '../builtin/resolve-builtin-stdio.js'
+import {
+  buildBuiltinNodeTransportSentinel,
+  resolveBuiltinStdioTransport,
+} from '../builtin/resolve-builtin-stdio.js'
 
 export type BuiltinStdioResolver = (serverId: string) => McpStdioTransportConfig | null
 
@@ -49,6 +52,7 @@ export function ensureDefaultKeylessMcpServers(
     for (const svc of preset.services) {
       if (svc.transport !== 'stdio') continue
       if (deps.get(svc.serverId)) continue
+      // 仅校验入口可解析；落盘写哨兵，禁止冻死本机绝对路径
       const transport = tryResolveStdio(resolveStdio, svc.serverId)
       if (!transport || transport.transport !== 'stdio') continue
       try {
@@ -57,7 +61,7 @@ export function ensureDefaultKeylessMcpServers(
           title: svc.title,
           enabled: true,
           paused: false,
-          transportConfig: transport,
+          transportConfig: buildBuiltinNodeTransportSentinel(),
           secrets: {},
           installSource: 'registry',
         })

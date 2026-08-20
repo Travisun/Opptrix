@@ -163,7 +163,15 @@ export {
   parseEngineHtml,
   assertAllowedSearchUrl,
 } from './mcp/builtin/websearch/index.js'
-export { resolveBuiltinStdioTransport } from './mcp/builtin/resolve-builtin-stdio.js'
+export {
+  BUILTIN_NODE_COMMAND,
+  buildBuiltinNodeTransportSentinel,
+  isBuiltinNodeCommand,
+  isBuiltinStdioServerId,
+  looksLikeBuiltinStdioEntryArgs,
+  materializeBuiltinStdioTransport,
+  resolveBuiltinStdioTransport,
+} from './mcp/builtin/resolve-builtin-stdio.js'
 export {
   AggregatingToolBroker,
   getExternalMcpRegistry,
