@@ -133,17 +133,25 @@ export function compareSkillsForSlash(a: SkillLike, b: SkillLike): number {
 }
 
 /**
- * 检测 `/query` 触发：`/` 前须为行首或空白，避免 URL `http://` 误触。
- * 允许空格（英文多词 / IME）；仅第二个 `/` 关闭面板。
+ * 检测 `/query` 触发（从光标向前找最后一个合法 `/`）：
+ * - 行首、空白或任意非 `:`/`/` 字符后的 `/` 可触发（含中文无空格：`看看茅台/`）
+ * - 前一字符为 `:` 或 `/` 不触发（挡住 `http://`、`https://`、双斜杠）
+ * - 该触发后的 query 内再出现 `/` 则关闭；允许空格（英文多词 / IME）
+ * - 前文可有路径/URL，不影响末尾新的 `/技能` 触发
  */
 export function findSlashTrigger(text: string, cursor: number) {
   const slice = text.slice(0, cursor)
-  const slashIndex = slice.lastIndexOf('/')
-  if (slashIndex < 0) return null
-  if (slashIndex > 0 && !/\s/.test(slice[slashIndex - 1]!)) return null
-  const query = slice.slice(slashIndex + 1)
-  if (query.includes('/')) return null
-  return { query, startIndex: slashIndex }
+  for (let i = slice.length - 1; i >= 0; i--) {
+    if (slice[i] !== '/') continue
+    if (i > 0) {
+      const prev = slice[i - 1]!
+      if (prev === ':' || prev === '/') continue
+    }
+    const query = slice.slice(i + 1)
+    if (query.includes('/')) return null
+    return { query, startIndex: i }
+  }
+  return null
 }
 
 /** `/` 筛选：把 `_` / `-` / `.` 视作同一分隔符，便于 `create_web` 命中 `create-web` */
