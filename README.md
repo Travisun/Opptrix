@@ -437,10 +437,12 @@ npm run test:ci          # 仅跑测试（CI 在 build 之后）
 
 ## 参与贡献
 
+向本仓库提交贡献即视为同意 [贡献者许可协议 CLA](docs/CLA.md)（[English](docs/CLA.en.md)）与 [CONTRIBUTING](docs/CONTRIBUTING.md)。
+
 1. Fork 仓库，从 `main` 创建分支（`feat/`、`fix/`、`docs/` …）  
 2. 让 AI 助手先读 [AGENT-GUIDE.md](docs/AGENT-GUIDE.md)  
 3. `npm run build && npm run test`  
-4. 提交 PR，说明动机与测试方式  
+4. 提交 PR，说明动机与测试方式，并勾选同意 CLA  
 
 细则：[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 
@@ -454,7 +456,7 @@ Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Electron ·
 
 ## 许可证
 
-本仓库采用 **[Apache License 2.0](LICENSE)** 发布（Copyright © 2026 Opptrix contributors）。  
+本仓库采用 **[Apache License 2.0](LICENSE)** 发布（Copyright © 2026 Opptrix Team）。  
 在遵守许可证条款的前提下，可自由使用、修改与分发本软件（含商业用途）；再分发时请保留版权声明与许可证全文。
 
 ---

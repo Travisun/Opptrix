@@ -5,7 +5,7 @@
   "description": "Opptrix 投研工作台",
   "homepage": "https://www.opptrix.org",
   "author": {
-    "name": "Opptrix contributors",
+    "name": "Opptrix Team",
     "email": "imsorich@foxmail.com",
     "url": "https://www.opptrix.org"
   },
@@ -48,7 +48,7 @@
   "build": {
     "appId": "com.cuishushu.app.opptrix.desktop",
     "productName": "Opptrix",
-    "copyright": "Copyright © 2026 Opptrix contributors",
+    "copyright": "Copyright © 2026 Opptrix Team",
     "electronVersion": "42.6.1",
     "afterPack": "./scripts/after-pack-adhoc.cjs",
     "afterSign": "./scripts/after-sign-restore-heavy.cjs",
@@ -153,7 +153,7 @@
         "CFBundleName": "Opptrix",
         "CFBundleSpokenName": "Opptrix",
         "CFBundleGetInfoString": "Opptrix — 全球多市场投研数据助手",
-        "NSHumanReadableCopyright": "Copyright © 2026 Opptrix contributors",
+        "NSHumanReadableCopyright": "Copyright © 2026 Opptrix Team",
         "NSUserNotificationUsageDescription": "Opptrix 需要在后台向你发送版本更新、任务完成等本地通知。",
         "NSMicrophoneUsageDescription": "Opptrix 需要使用麦克风，以便你用语音输入投研问题。",
         "NSHighResolutionCapable": true,

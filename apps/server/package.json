@@ -5,7 +5,7 @@
   "description": "Opptrix 本地 API 服务（Fastify + Agent 投研引擎）",
   "homepage": "https://www.opptrix.org",
   "license": "Apache-2.0",
-  "author": "Opptrix contributors",
+  "author": "Opptrix Team",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Travisun/Opptrix.git",

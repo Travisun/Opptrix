@@ -20,22 +20,35 @@ export const OPPTRIX_SECURITY_REPORT = 'https://github.com/Travisun/Opptrix/issu
 /** Opptrix 项目启动年份 — 版权与关于页元数据保持一致 */
 export const OPPTRIX_PROJECT_START_YEAR = 2026
 
-export const OPPTRIX_CONTRIBUTORS_EN = 'Opptrix contributors'
-export const OPPTRIX_CONTRIBUTORS_ZH = 'Opptrix 贡献者'
+/** 版权人 / 项目所有者（关于页与元数据） */
+export const OPPTRIX_COPYRIGHT_HOLDER_EN = 'Opptrix Team'
+export const OPPTRIX_COPYRIGHT_HOLDER_ZH = 'Opptrix Team'
+
+/** @deprecated 使用 OPPTRIX_COPYRIGHT_HOLDER_EN */
+export const OPPTRIX_CONTRIBUTORS_EN = OPPTRIX_COPYRIGHT_HOLDER_EN
+/** @deprecated 使用 OPPTRIX_COPYRIGHT_HOLDER_ZH */
+export const OPPTRIX_CONTRIBUTORS_ZH = OPPTRIX_COPYRIGHT_HOLDER_ZH
 
 /** npm / 安装包等英文元数据沿用此常量 */
-export const OPPTRIX_CONTRIBUTORS = OPPTRIX_CONTRIBUTORS_EN
+export const OPPTRIX_COPYRIGHT_HOLDER = OPPTRIX_COPYRIGHT_HOLDER_EN
+/** @deprecated 使用 OPPTRIX_COPYRIGHT_HOLDER */
+export const OPPTRIX_CONTRIBUTORS = OPPTRIX_COPYRIGHT_HOLDER
 
 export function isChineseUiLocale(locale = typeof navigator !== 'undefined' ? navigator.language : 'zh-CN'): boolean {
   return locale.toLowerCase().startsWith('zh')
 }
 
+export function getOpptrixCopyrightHolderLabel(locale?: string): string {
+  return isChineseUiLocale(locale) ? OPPTRIX_COPYRIGHT_HOLDER_ZH : OPPTRIX_COPYRIGHT_HOLDER_EN
+}
+
+/** @deprecated 使用 getOpptrixCopyrightHolderLabel */
 export function getOpptrixContributorsLabel(locale?: string): string {
-  return isChineseUiLocale(locale) ? OPPTRIX_CONTRIBUTORS_ZH : OPPTRIX_CONTRIBUTORS_EN
+  return getOpptrixCopyrightHolderLabel(locale)
 }
 
 export function formatAboutCopyrightLine(locale?: string): string {
-  const holder = getOpptrixContributorsLabel(locale)
+  const holder = getOpptrixCopyrightHolderLabel(locale)
   if (isChineseUiLocale(locale)) {
     return `Copyright © ${OPPTRIX_PROJECT_START_YEAR} ${holder} · Apache License 2.0 开源`
   }
