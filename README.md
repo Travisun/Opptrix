@@ -437,7 +437,7 @@ npm run test:ci          # 仅跑测试（CI 在 build 之后）
 
 ## 参与贡献
 
-向本仓库提交贡献即视为同意 [贡献者许可协议 CLA](docs/CLA.md)（[English](docs/CLA.en.md)）与 [CONTRIBUTING](docs/CONTRIBUTING.md)。
+向本仓库提交贡献即视为同意 [贡献者许可协议 CLA](docs/CLA.md)（[English](docs/CLA-EN.md)）与 [CONTRIBUTING](docs/CONTRIBUTING.md)。
 
 1. Fork 仓库，从 `main` 创建分支（`feat/`、`fix/`、`docs/` …）  
 2. 让 AI 助手先读 [AGENT-GUIDE.md](docs/AGENT-GUIDE.md)  

@@ -72,7 +72,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 | [AGENT-GUIDE.md](./AGENT-GUIDE.md) | AI 协作指南 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 贡献流程 |
 | [CLA.md](./CLA.md) | 贡献者许可协议（中文，以本版为准） |
-| [CLA.en.md](./CLA.en.md) | Contributor License Agreement (English) |
+| [CLA-EN.md](./CLA-EN.md) | Contributor License Agreement (English) |
 | [RIGHT-PANEL-RESEARCH-PLAN.md](./RIGHT-PANEL-RESEARCH-PLAN.md) | 右侧面板规划 |
 | [AKSHARE-COVERAGE-AUDIT.md](./AKSHARE-COVERAGE-AUDIT.md) | AkShare 覆盖审计 |
 
