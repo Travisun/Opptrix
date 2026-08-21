@@ -10,7 +10,7 @@
 > - [Contributor License Agreement (English)](CLA-EN.md)
 > - 本文（本贡献指南）
 >
-> CLA 版本：`2026-08-21`。若 CLA 有重大更新，维护者会在此提示；继续贡献视为接受新版。
+> CLA 版本：`2026-08-21.1`。若 CLA 有重大更新，维护者会在此提示；继续贡献视为接受新版。
 
 > **使用 AI 编程助手？** 请先让 Agent 阅读 [AGENT-GUIDE.md](./AGENT-GUIDE.md)，其中包含目录地图、架构约束与 UI 规范摘要。
 
@@ -152,7 +152,7 @@ npm run test        # 或 CI 等价：npm run build && npm run test:ci
 ## 7. 许可证与贡献者协议
 
 - 本仓库采用 **[Apache License 2.0](../LICENSE)** 对外发布；著作权人 / 项目所有者为 **Opptrix Team**。
-- 向本仓库贡献须遵守 **[CLA（中文）](CLA.md)**（英文对照：[CLA-EN.md](CLA-EN.md)；冲突时以中文为准）。依 CLA：你向 Opptrix Team 授予不可撤销的著作权财产权许可（含再许可及为项目需要更换或实行双许可的权利）；你保留署名权；你同意为项目目的对贡献进行修改与演绎，且不据此主张侵犯修改权或保护作品完整权；项目整体权利由 Opptrix Team 控制。
+- 向本仓库贡献须遵守 **[CLA（中文）](CLA.md)**（英文对照：[CLA-EN.md](CLA-EN.md)；版本 `2026-08-21.1`；冲突时以中文为准）。依 CLA：你向 Opptrix Team 授予不可撤销的著作权财产权许可（含再许可及为项目需要更换或实行双许可的权利）；你保留署名权；你同意为项目目的对贡献进行发表、修改与演绎，且不就项目目的之修改主张侵犯修改权或保护作品完整权；项目整体权利由 Opptrix Team 控制。
 - 提交 Issue / PR 即表示同意 CLA 与本文（详见 CLA 第 1 条）。
 - 若贡献含第三方材料，须在 PR 中披露来源与许可证，且不得引入与 Apache-2.0 不兼容的许可证（除非事先书面同意）。功能相关第三方许可摘要见 **[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)**。
 
