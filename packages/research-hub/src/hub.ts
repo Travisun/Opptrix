@@ -4003,7 +4003,7 @@ export class ResearchHub {
       name: hit.name ?? hit.code,
       market: hit.market,
     }))
-    const source = hits[0]?.source === 'tencent' ? 'tencent' : 'stock_index'
+    const source = hits[0]?.source ?? 'stock_index'
     return ok({ items, count: items.length, source }, `美股搜索 ${items.length} 条`, t0)
   }
 
