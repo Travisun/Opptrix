@@ -7,7 +7,10 @@ import { loadTickflowConfig } from '../dist/providers/tickflow/config.js'
 
 const CN = '600519.SH'
 const CN2 = '000001.SZ'
+const US = 'AAPL.US'
+const HK = '00700.HK'
 const OFFICIAL_PATH_COUNT = 19
+const OFFICIAL_OP_COUNT = 21
 
 const cfg = loadTickflowConfig()
 if (!cfg.apiKey) {
@@ -52,19 +55,31 @@ async function run(name, fn) {
     detail = e instanceof Error ? e.message.slice(0, 100) : String(e).slice(0, 100)
   }
   results[status]++
-  console.log(`${status.padEnd(12)} ${name.padEnd(28)} ${Date.now() - t0}ms ${detail}`)
+  console.log(`${status.padEnd(12)} ${name.padEnd(32)} ${Date.now() - t0}ms ${detail}`)
   return status
 }
 
-console.log('=== TickFlow OpenAPI (19 paths) ===\n')
+console.log('=== TickFlow OpenAPI (19 paths / 21 ops) ===\n')
 
 const tests = [
   ['getExchanges', () => client.getExchanges()],
-  ['getQuotes', () => client.getQuotes({ symbols: CN })],
-  ['postQuotes', () => client.postQuotes({ symbols: [CN, CN2] })],
+  ['getQuotes CN', () => client.getQuotes({ symbols: CN })],
+  ['getQuotes US', () => client.getQuotes({ symbols: US })],
+  ['getQuotes HK', () => client.getQuotes({ symbols: HK })],
+  ['postQuotes', () => client.postQuotes({ symbols: [CN, CN2, US] })],
+  ['getQuotes universes', async () => {
+    const list = await client.getUniverses()
+    const ids = (Array.isArray(list.data) ? list.data : []).slice(0, 1).map(u => String(u.id ?? '')).filter(Boolean)
+    if (!ids.length) return { data: null }
+    return client.getQuotes({ universes: ids.join(',') })
+  }],
   ['getDepth', () => client.getDepth(CN)],
   ['getDepthBatch', () => client.getDepthBatch(`${CN},${CN2}`)],
-  ['getKlines', () => client.getKlines({ symbol: CN, period: '1d', count: 5 })],
+  ['getKlines 1d', () => client.getKlines({ symbol: CN, period: '1d', count: 5 })],
+  ['getKlines 1w US', () => client.getKlines({ symbol: US, period: '1w', count: 10 })],
+  ['getKlines 1M CN', () => client.getKlines({ symbol: CN, period: '1M', count: 5 })],
+  ['getKlines 1Q US', () => client.getKlines({ symbol: US, period: '1Q', count: 5 })],
+  ['getKlines 1Y HK', () => client.getKlines({ symbol: HK, period: '1Y', count: 5 })],
   ['getKlinesBatch', () => client.getKlinesBatch({ symbols: `${CN},${CN2}`, period: '1d', count: 5 })],
   ['getKlinesIntraday', () => client.getKlinesIntraday({ symbol: CN, period: '1m' })],
   ['getKlinesIntradayBatch', () => client.getKlinesIntradayBatch({ symbols: `${CN},${CN2}`, period: '1m' })],
@@ -96,6 +111,6 @@ const tests = [
 for (const [name, fn] of tests) await run(name, fn)
 
 console.log('\n=== Summary ===')
-console.log(`tests=${tests.length} paths=${OFFICIAL_PATH_COUNT}`)
+console.log(`live_tests=${tests.length} official_paths=${OFFICIAL_PATH_COUNT} official_ops=${OFFICIAL_OP_COUNT}`)
 console.log(`OK=${results.OK} EMPTY=${results.EMPTY} SUBSCRIPTION=${results.SUBSCRIPTION} UPSTREAM=${results.UPSTREAM} ERROR=${results.ERROR}`)
 process.exit(results.ERROR > 0 ? 1 : 0)

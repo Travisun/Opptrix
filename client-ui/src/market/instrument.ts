@@ -37,7 +37,7 @@ const CN_DOT_SUFFIX = /^(\d{6})\.(SH|SZ|BJ)$/i
 const CN_NAMESPACE = /^CN:(SH|SZ|BJ)[.:](\d{6})$/i
 const CN_FUND_NAMESPACE = /^CN:(?:PF|OF)[.:](\d{6})$/i
 const US_NAMESPACE = /^US:(?:(NYSE|NASDAQ|AMEX)\.)?([A-Z0-9.-]+)$/i
-const HK_NAMESPACE = /^HK:(\d{5})$/i
+const HK_NAMESPACE = /^HK:(?:HK\.)?(\d{1,5})$/i
 const CRYPTO_NAMESPACE = /^CRYPTO:(?:(BINANCE|OKX)\.)?([A-Z0-9]+)\/([A-Z0-9]+)$/i
 
 /** Stock-index 统一命名空间 — 与 @opptrix/shared buildInstrumentNamespace 对齐 */
@@ -95,7 +95,9 @@ function parseInstrumentNamespaceLocal(raw: string): InstrumentRef | null {
   }
   const hk = HK_NAMESPACE.exec(text)
   if (hk) {
-    return { market: 'HK', assetClass: 'EQUITY', symbol: hk[1]!, exchange: 'HK' }
+    const digits = hk[1]!.replace(/\D/g, '')
+    const symbol = digits.length > 5 ? digits.slice(-5) : digits.padStart(5, '0')
+    return { market: 'HK', assetClass: 'EQUITY', symbol, exchange: 'HK' }
   }
   const crypto = CRYPTO_NAMESPACE.exec(text)
   if (crypto) {

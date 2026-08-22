@@ -1,6 +1,17 @@
 import type { StockKline } from '@opptrix/shared'
-import type { CompactKlineData } from '../api/client.js'
+import type { CompactKlineData, TickflowPeriod } from '../api/client.js'
 import { parseTickflowSymbol, type TickflowRegion } from '../api/symbols.js'
+
+const YEAR1_BARS = 260
+const YEAR3_BARS = 780
+const YEAR5_BARS = 1300
+const FIVEDAY_MINUTE_BARS = 2000
+const INTRADAY_MINUTE_BARS = 400
+
+export type ResolvedTickflowKlineQuery = {
+  tfPeriod: TickflowPeriod
+  count?: number
+}
 
 function num(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -9,6 +20,15 @@ function num(v: unknown): number | null {
 }
 
 const INTRADAY_PERIODS = new Set(['1m', '5m', '10m', '15m', '30m', '60m'])
+
+/** 券商图表周期 → TickFlow `GET /v1/klines` 的 period（免费档实测 1d/1w/1M/1Q/1Y 可用）。 */
+export const BROKER_CHART_PERIOD_TO_TICKFLOW: Readonly<Record<string, TickflowPeriod>> = {
+  daily: '1d',
+  weekly: '1w',
+  monthly: '1M',
+  quarterly: '1Q',
+  yearly: '1Y',
+}
 
 /** Opptrix period → TickFlow period */
 export function opptrixPeriodToTickflow(period: string): string | null {
@@ -43,6 +63,46 @@ export function opptrixPeriodToTickflow(period: string): string | null {
     year: '1Y',
   }
   return map[p] ?? null
+}
+
+/**
+ * Opptrix 图表 / Engine 周期 → TickFlow `GET /v1/klines` 的 period + count。
+ * 官方周期：1m,5m,10m,15m,30m,60m,1d,1w,1M,1Q,1Y（均经 klines 接口传入 period）。
+ */
+export function resolveTickflowKlineQuery(
+  period: string,
+  count?: number,
+): ResolvedTickflowKlineQuery | null {
+  const p = period.trim().toLowerCase()
+  if (p === 'intraday' || p === 'minute') {
+    const want = count != null && count > 0 ? Math.max(count, INTRADAY_MINUTE_BARS) : INTRADAY_MINUTE_BARS
+    return { tfPeriod: '1m', count: want }
+  }
+  if (p === '5day' || p === 'fdays' || p === 'five') {
+    return {
+      tfPeriod: '1m',
+      count: Math.max(count ?? 0, FIVEDAY_MINUTE_BARS),
+    }
+  }
+  if (p === 'year1' || p === '1y') {
+    return { tfPeriod: '1d', count: Math.max(count ?? 0, YEAR1_BARS) }
+  }
+  if (p === 'year3' || p === '3y') {
+    return { tfPeriod: '1d', count: Math.max(count ?? 0, YEAR3_BARS) }
+  }
+  if (p === 'year5' || p === '5y') {
+    return { tfPeriod: '1d', count: Math.max(count ?? 0, YEAR5_BARS) }
+  }
+  const tfPeriod = opptrixPeriodToTickflow(period) as TickflowPeriod | null
+  if (!tfPeriod) return null
+  const resolvedCount = count != null && count > 0 ? count : undefined
+  return { tfPeriod, count: resolvedCount }
+}
+
+/** 图表 UI 周期是否直接对应 TickFlow klines period（非日 K 根数窗口）。 */
+export function isBrokerOhlcTickflowPeriod(period: string): boolean {
+  const p = period.trim().toLowerCase()
+  return p in BROKER_CHART_PERIOD_TO_TICKFLOW
 }
 
 export function isIntradayTickflowPeriod(period: string): boolean {

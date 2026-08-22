@@ -15,6 +15,7 @@ import { isTickflowFeatureAllowed } from '../api/permissions.js'
 import { MarketHandlerShell } from '../../common/driver-factory.js'
 import {
   expandCompactKlines,
+  inferMarketFromBareCode,
   mapTickflowInstrumentListItems,
   mapTickflowInstrumentProfiles,
   mergeFinancialSummary,
@@ -25,6 +26,9 @@ import {
   rowsForSymbol,
   mapTickflowDepth,
   mapTickflowQuotes,
+  resolveTickflowKlineQuery,
+  ymdToMs,
+  type ResolvedTickflowKlineQuery,
   type TickflowMarketDepth,
 } from '../normalize/index.js'
 import {
@@ -134,12 +138,70 @@ function buildFinancialsQuery(symbol: string, reportDate = '') {
   }
 }
 
+function normalizeYmdTickflow(input: string): string {
+  const raw = input.trim()
+  if (!raw) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length === 8) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+  return raw.slice(0, 10)
+}
+
 /** Metadata, financials, depth, and intraday helpers shared by TickflowMarketHandler. */
 export abstract class TickflowCommonHandler extends MarketHandlerShell {
   protected abstract client(): TickflowClient | null
 
   protected tickflowSymbol(code: string): string {
-    return toTickflowSymbol(code)
+    const raw = code.trim()
+    if (/\.(SH|SZ|BJ|US|HK)$/i.test(raw)) return toTickflowSymbol(raw)
+    const bare = raw.replace(/^(US|NYSE|NASDAQ|AMEX|HK):/i, '').trim()
+    const market = inferMarketFromBareCode(bare)
+    return toTickflowSymbol(market, bare)
+  }
+
+  /**
+   * 统一 `GET /v1/klines` — 通过 query.period 指定周期（官方支持 1m…1Y）。
+   */
+  protected async fetchKlinesResolved(
+    code: string,
+    resolved: ResolvedTickflowKlineQuery,
+    start = '',
+    end = '',
+    countOverride?: number,
+  ): Promise<StockKline[] | null> {
+    const client = this.client()
+    if (!client) return null
+    const symbol = this.tickflowSymbol(code)
+    const region = tickflowRegion(symbol)
+    if (!region) return null
+
+    const tfPeriod = resolved.tfPeriod
+    const effectiveCount = countOverride ?? resolved.count
+    const query = {
+      symbol,
+      period: tfPeriod,
+      adjust: region === 'CN' ? 'forward_additive' as const : undefined,
+      count: undefined as number | undefined,
+      start_time: undefined as number | undefined,
+      end_time: undefined as number | undefined,
+    }
+    if (effectiveCount != null && effectiveCount > 0) query.count = Math.min(effectiveCount, 10000)
+    const startYmd = normalizeYmdTickflow(start)
+    const endYmd = normalizeYmdTickflow(end)
+    if (startYmd) query.start_time = ymdToMs(startYmd)
+    if (endYmd) query.end_time = ymdToMs(endYmd, true)
+
+    try {
+      const json = await client.getKlines(query)
+      const data = json.data as CompactKlineData | undefined
+      if (!data) return null
+      let rows = expandCompactKlines(symbol, data, tfPeriod, region)
+      const cap = effectiveCount
+      if (cap && rows.length > cap) rows = rows.slice(-cap)
+      return rows.length ? rows : null
+    } catch {
+      return null
+    }
   }
 
   async stockList(market = 'CN', keyword = ''): Promise<StockListItem[] | null> {
@@ -332,7 +394,7 @@ export abstract class TickflowCommonHandler extends MarketHandlerShell {
     }
   }
 
-  /** Optional research helper — TickFlow five-level depth. */
+  /** TickFlow 五档盘口 — `GET /v1/depth` */
   async fetchDepth(code: string): Promise<Record<string, unknown> | null> {
     if (!isTickflowFeatureAllowed('depth')) return null
     const client = this.client()
@@ -348,21 +410,28 @@ export abstract class TickflowCommonHandler extends MarketHandlerShell {
     }
   }
 
-  /** Intraday sessions via TickFlow /v1/klines/intraday (API: 当日分钟 K，不含历史多日). */
+  /** 分时多日 — `GET /v1/klines` period=1m，按日拆 session（非 intraday 专用端点）。 */
   async fetchIntradaySessions(
     code: string,
-    _ndays = 5,
+    ndays = 5,
     _market?: StockMarket,
   ): Promise<IntradayTrendFetchResult | null> {
-    if (!isTickflowFeatureAllowed('intraday')) return null
+    const uiPeriod = ndays >= 5 ? '5day' : 'intraday'
+    const resolved = resolveTickflowKlineQuery(uiPeriod)
+    if (!resolved) return null
     const client = this.client()
     if (!client) return null
     const symbol = this.tickflowSymbol(code)
     try {
-      const json = await client.getKlinesIntraday({ symbol, period: '1m' })
+      const json = await client.getKlines({
+        symbol,
+        period: resolved.tfPeriod,
+        count: resolved.count,
+        adjust: tickflowRegion(symbol) === 'CN' ? 'forward_additive' : undefined,
+      })
       const data = json.data as CompactKlineData | undefined
       if (!data) return null
-      return compactKlineToIntradaySessions(symbol, data, '1m')
+      return compactKlineToIntradaySessions(symbol, data, resolved.tfPeriod)
     } catch {
       return null
     }
@@ -370,42 +439,25 @@ export abstract class TickflowCommonHandler extends MarketHandlerShell {
 
   async minuteTrendKline(
     code: string,
-    _ndays = 1,
+    ndays = 1,
     count = 0,
     _market?: StockMarket,
   ): Promise<StockKline[] | null> {
-    if (!isTickflowFeatureAllowed('intraday')) return null
-    const client = this.client()
-    if (!client) return null
-    const symbol = this.tickflowSymbol(code)
-    const region = tickflowRegion(symbol)
-    if (!region) return null
-    try {
-      const json = await client.getKlinesIntraday({
-        symbol,
-        period: '1m',
-        count: count > 0 ? count : undefined,
-      })
-      const data = json.data as CompactKlineData | undefined
-      if (!data) return null
-      let rows = expandCompactKlines(symbol, data, '1m', region)
-      if (count > 0 && rows.length > count) rows = rows.slice(-count)
-      return rows.length ? rows : null
-    } catch {
-      return null
-    }
+    const uiPeriod = ndays >= 5 ? '5day' : 'intraday'
+    const resolved = resolveTickflowKlineQuery(uiPeriod, count > 0 ? count : undefined)
+    if (!resolved) return null
+    return this.fetchKlinesResolved(code, resolved, '', '', count > 0 ? count : undefined)
   }
 
   /**
    * 当日分时逐条记录 — Capability `INTRADAY_TICK` 标准方法。
    *
-   * TickFlow 仅提供当日分钟 K；`date` 参数保留与引擎接口一致。
+   * 数据来自 `GET /v1/klines` + period=1m；`date` 参数保留与引擎接口一致。
    *
    * @param code 6 位股票代码
-   * @param _date 保留参数（TickFlow 仅当日）
+   * @param _date 保留参数
    */
   async intradayTick(code: string, _date = ''): Promise<Record<string, unknown>[] | null> {
-    if (!isTickflowFeatureAllowed('intraday')) return null
     const rows = await this.minuteTrendKline(code, 1, 0)
     if (!rows) return null
     return rows.map(bar => ({

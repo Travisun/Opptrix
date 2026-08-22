@@ -1,5 +1,5 @@
 import type { ChartPeriod, IntradayChartBar, OhlcChartBar, StockChartData } from '../types/market'
-import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, chartTimeForPeriod } from './chartTime'
+import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, chartTimeForPeriod, isValidChartTime } from './chartTime'
 import { MARKET_DOWN, MARKET_UP, getMaColors } from './chartTheme'
 import type { ColorScheme } from '../theme/tokens'
 import { getOpptrixTokens } from '../theme/tokens'
@@ -122,6 +122,10 @@ function isLineChartPeriod(period: string, bars: StockChartData['bars']): boolea
   return false
 }
 
+export function isLineChartView(period: string, bars: StockChartData['bars']): boolean {
+  return isLineChartPeriod(period, bars)
+}
+
 /** Normalize API payload → chart-ready series (sorted, deduped, validated). */
 export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'light'): ChartSeriesBundle {
   const intraday = isLineChartPeriod(data.period, data.bars)
@@ -167,12 +171,25 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
   }
 
   const bars = data.bars as OhlcChartBar[]
-  const candles = dedupeByTime(bars.map(bar => normalizeOhlc(bar, data.period, tz)))
-  const volume = dedupeByTime(bars.map(bar => ({
-    time: chartTime(bar.time, data.period, tz),
-    value: bar.volume,
-    color: volumeColor(bar.changePct, scheme),
-  })))
+  const candles = dedupeByTime(
+    bars
+      .map(bar => normalizeOhlc(bar, data.period, tz))
+      .filter(c => isValidChartTime(c.time)),
+  )
+  if (candles.length === 0 && bars.length > 0) {
+    throw new Error(`${periodLabel(data.period)} 时间格式无法解析，请稍后重试`)
+  }
+  const volume = dedupeByTime(
+    bars.flatMap(bar => {
+      const time = chartTime(bar.time, data.period, tz)
+      if (!isValidChartTime(time)) return []
+      return [{
+        time,
+        value: bar.volume,
+        color: volumeColor(bar.changePct, scheme),
+      }]
+    }),
+  )
   const macd = dedupeByTime(
     data.indicators
       .filter(row => row.macdHist != null && row.macd != null && row.macdSignal != null)
@@ -231,10 +248,12 @@ const PERIOD_LABELS: Record<ChartPeriod, string> = {
   '30m': '30分',
   '60m': '60分',
   daily: '日K',
-  '5day': '5日K',
+  '5day': '5日',
   weekly: '周K',
   monthly: '月K',
-  year1: '1年',
-  year3: '3年',
-  year5: '5年',
+  quarterly: '季K',
+  yearly: '年K',
+  year1: '近1年日K',
+  year3: '近3年日K',
+  year5: '近5年日K',
 }

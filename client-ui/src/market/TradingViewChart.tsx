@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
 import { instrumentKey, parseInstrumentInput } from './instrument'
@@ -6,9 +6,10 @@ import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
-import { buildChartSeries, periodLabel } from './chartSeries'
+import { buildChartSeries, isLineChartView, periodLabel } from './chartSeries'
+import { buildChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOptions'
 import { initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
-import { isIntradayPeriod, isMinuteOhlcPeriod } from './chartTime'
+import { isLineChartPaneLabel } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
 import CyqProfileStrip from './CyqProfileStrip'
 import { computeCyqPriceSpan, isCyqChartPeriod } from './cyqUtils'
@@ -17,28 +18,6 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { ghostInteractive } from '../theme/mixins'
 import { isUnifiedChart, unifiedChartToStockChart } from './instrument-adapters'
-
-const PERIODS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
-  { id: 'intraday', label: '分时', tradingOnly: true },
-  { id: '1m', label: '1分' },
-  { id: '5m', label: '5分' },
-  { id: '15m', label: '15分' },
-  { id: '30m', label: '30分' },
-  { id: '60m', label: '60分' },
-  { id: 'daily', label: '日K' },
-  { id: 'weekly', label: '周K' },
-  { id: 'monthly', label: '月K' },
-]
-
-const CROSS_MARKET_PERIOD_OPTIONS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
-  { id: 'daily', label: '日K' },
-  { id: '5day', label: '5日' },
-  { id: 'weekly', label: '周K' },
-  { id: 'monthly', label: '月K' },
-  { id: 'year1', label: '1年' },
-  { id: 'year3', label: '3年' },
-  { id: 'year5', label: '5年' },
-]
 
 const useStyles = makeStyles({
   root: {
@@ -323,26 +302,10 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
   const canChart = cnEquityChart || crossMarketChart
-  const cnIntraday = cnEquityChart
-    && hasApplicationCapability(instrumentRef, 'chart_intraday')
-  const crossMarketIntraday = crossMarketChart
-    && hasApplicationCapability(instrumentRef, 'chart_intraday')
-  const periodOptions = useMemo(() => {
-    if (cnEquityChart) {
-      if (cnIntraday) return PERIODS
-      // CN ETF 等仅有日 K：不展示分时/分钟周期，避免整图报「不支持」
-      return PERIODS.filter(item => item.id === 'daily' || item.id === 'weekly' || item.id === 'monthly')
-    }
-    if (crossMarketChart) {
-      const options: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = []
-      if (hasApplicationCapability(instrumentRef, 'chart_intraday')) {
-        options.push({ id: 'intraday', label: '分时', tradingOnly: true })
-      }
-      options.push(...CROSS_MARKET_PERIOD_OPTIONS)
-      return options
-    }
-    return PERIODS.filter(item => item.id === 'daily' || item.id === 'weekly' || item.id === 'monthly')
-  }, [cnEquityChart, cnIntraday, crossMarketChart, instrumentRef])
+  const periodOptions = useMemo(
+    () => buildChartPeriodOptions(instrumentRef, { cnEquityChart, crossMarketChart }),
+    [instrumentRef, cnEquityChart, crossMarketChart],
+  )
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
   const [period, setPeriod] = useState<ChartPeriod>('daily')
@@ -350,7 +313,6 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
-  const [intradayAvailable, setIntradayAvailable] = useState(true)
 
   const mainRef = useRef<HTMLDivElement>(null)
   const volumeRef = useRef<HTMLDivElement>(null)
@@ -408,9 +370,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         return
       }
 
-      const useStockApi = cnEquityChart
-        && (isIntradayPeriod(nextPeriod) || isMinuteOhlcPeriod(nextPeriod)
-          || nextPeriod === 'daily' || nextPeriod === 'weekly' || nextPeriod === 'monthly')
+      const useStockApi = cnEquityChart && CN_STOCK_CHART_PERIODS.has(nextPeriod)
 
       const resp = useStockApi
         ? await research.stockChart(
@@ -440,15 +400,6 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         if (!hasChart) setData(null)
         return
       }
-      if (nextPeriod === 'intraday') {
-        const ok = resp.data.bars.length > 0
-        setIntradayAvailable(ok)
-        if (!ok) {
-          setError(resp.message || '暂无分时数据')
-          if (!hasChart) setData(null)
-          return
-        }
-      }
       if (opts?.append && prevBarCountRef.current > 0) {
         addedBarsRef.current = resp.data.bars.length - prevBarCountRef.current
       } else if (!opts?.append && !isLive) {
@@ -458,10 +409,10 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         addedBarsRef.current = 0
       }
       fetchCountRef.current = count
-      const chartData = isUnifiedChart(resp.data)
+      const rawChart = isUnifiedChart(resp.data)
         ? unifiedChartToStockChart(resp.data, instrumentRef.symbol)
         : resp.data
-      setData(chartData)
+      setData({ ...rawChart, period: nextPeriod })
     } catch (e) {
       if (seq !== loadSeqRef.current || signal?.aborted) return
       if (e instanceof Error && e.name !== 'AbortError') {
@@ -500,20 +451,30 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
   const handleNeedHistoryRef = useRef(handleNeedHistory)
   handleNeedHistoryRef.current = handleNeedHistory
 
-  useEffect(() => {
-    setPeriod('daily')
-    setData(null)
-    setError('')
-    fetchCountRef.current = initialFetchCount('daily')
-    loadSeqRef.current += 1
-  }, [code])
+  const prevInstrumentIdentityRef = useRef(instrumentIdentity)
 
   useEffect(() => {
-    fetchCountRef.current = initialFetchCount(period)
+    const instrumentChanged = prevInstrumentIdentityRef.current !== instrumentIdentity
+    prevInstrumentIdentityRef.current = instrumentIdentity
+
+    if (instrumentChanged) {
+      setPeriod('daily')
+      loadSeqRef.current += 1
+    }
+
+    dataRef.current = null
+    hasDataRef.current = false
+    setData(null)
+    setLoading(true)
+    setRefreshing(false)
+    setError('')
+
+    const loadPeriod: ChartPeriod = instrumentChanged ? 'daily' : period
+    fetchCountRef.current = initialFetchCount(loadPeriod)
     const controller = new AbortController()
-    void loadChart(period, fetchCountRef.current, controller.signal)
+    void loadChart(loadPeriod, fetchCountRef.current, controller.signal)
     return () => { controller.abort() }
-  }, [code, period, loadChart])
+  }, [instrumentIdentity, period, loadChart])
 
   useEffect(() => {
     const tradingDay = data?.isTradingDay
@@ -540,27 +501,9 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     return () => { window.clearInterval(id) }
   }, [period, active, data?.isTradingDay, loadChart])
 
-  useEffect(() => {
-    if (!cnIntraday && !crossMarketIntraday) {
-      setIntradayAvailable(false)
-      if (isIntradayPeriod(period) || isMinuteOhlcPeriod(period)) setPeriod('daily')
-      return undefined
-    }
-    const controller = new AbortController()
-    const probe = cnIntraday
-      ? research.stockChart(instrumentRef, 'intraday', undefined, controller.signal)
-      : research.instrumentChart(instrumentRef, 'intraday', 1, controller.signal)
-    probe
-      .then(resp => {
-        if (controller.signal.aborted || !resp.success || !resp.data) return
-        setIntradayAvailable(resp.data.bars.length > 0)
-      })
-      .catch(() => {})
-    return () => { controller.abort() }
-  }, [code, instrumentRef, cnIntraday, crossMarketIntraday, period])
-
-  useEffect(() => {
-    if (!data || !mainRef.current || !volumeRef.current || !macdRef.current) return undefined
+  useLayoutEffect(() => {
+    if (!data || data.bars.length === 0 || data.period !== period) return undefined
+    if (!mainRef.current || !volumeRef.current) return undefined
 
     const workspace = workspaceRef.current
     const preserveRange = preserveRangeRef.current
@@ -578,15 +521,15 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         },
         series,
         {
-          period: data.period,
+          period,
           colorScheme: resolvedScheme,
           chartTimeZone: data.chartTimeZone,
           preserveRange,
           addedBars,
-          // 经 ref 取最新回调，避免 handleNeedHistory 身份变化时 destroy/remount
           onNeedHistory: () => { handleNeedHistoryRef.current() },
         },
       )
+      requestAnimationFrame(() => { workspace.resize() })
       setError(prev => (prev.startsWith('K线') || prev.includes('渲染') || prev.includes('时间轴') ? '' : prev))
     } catch (e) {
       workspace.destroy()
@@ -594,7 +537,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     }
 
     return () => { workspace.destroy() }
-  }, [data, resolvedScheme])
+  }, [data, period, resolvedScheme])
 
   useEffect(() => {
     if (!active || !data) return undefined
@@ -604,16 +547,17 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     return () => { cancelAnimationFrame(id) }
   }, [active, data, expanded])
 
+  const paneMainLabel = isLineChartPaneLabel(period) ? '分' : 'K'
+  const lineChartView = Boolean(data && data.period === period && isLineChartView(period, data.bars))
   const showMacd = Boolean(
-    data && !isIntradayPeriod(data.period) && !isMinuteOhlcPeriod(data.period)
+    data && !lineChartView
     && data.indicators.some(row => row.macd != null),
   )
-  const intraday = data ? isIntradayPeriod(data.period) : isIntradayPeriod(period)
 
   useEffect(() => () => { workspaceRef.current.destroy() }, [])
 
-  const legendIntraday = intraday && data
-  const legendOhlc = !intraday && data
+  const legendLine = lineChartView
+  const legendOhlc = !lineChartView && data
   const cyqLatest = data?.cyqLatest ?? null
   const cyqProfile = data?.cyqProfile ?? null
   const showCyq = Boolean(
@@ -630,9 +574,9 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
 
   const resetZoom = () => { workspaceRef.current.resetView() }
 
-  const chartLegend = (legendIntraday || legendOhlc) && (
+  const chartLegend = (legendLine || legendOhlc) && (
     <div className={mergeClasses(s.legend, s.chartLegend)}>
-      {legendIntraday && (
+      {legendLine && (
         <>
           <span className={s.legendItem}><i className={s.dot} style={{ background: '#FF3B30' }} />价格</span>
           <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.avg }} />均价</span>
@@ -666,8 +610,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
       <div className={s.toolbar}>
         <div className={s.periodGroup}>
           {periodOptions.map(item => {
-            const disabled = (!cnEquityChart && !crossMarketChart && (isIntradayPeriod(item.id) || isMinuteOhlcPeriod(item.id)))
-              || (item.tradingOnly && !intradayAvailable && item.id === 'intraday')
+            const disabled = !cnEquityChart && !crossMarketChart
             const activeTab = period === item.id
             return (
               <button
@@ -686,11 +629,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
 
       <div className={s.zoomRow}>
         <Text className={s.hint}>
-          {intraday
-            ? (data?.sessionDate && !data.isTradingDay
-              ? `${data.sessionDate} 收盘分时 · 滚轮缩放 · 左拖查看更早`
-              : '默认显示最新时段 · 滚轮缩放 · 左拖查看更早')
-            : `默认显示最新 ${periodLabel(period)} · 滚轮缩放 · 左拖加载历史`}
+          默认显示最新 {periodLabel(period)} · 滚轮缩放 · 左拖加载历史
         </Text>
         <button type="button" className={s.zoomBtn} onClick={resetZoom} disabled={!data}>
           最近视图
@@ -742,7 +681,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         <div className={mergeClasses(s.empty, expanded && s.emptyExpanded)}>{error}</div>
       )}
 
-      <div className={mergeClasses(s.chartArea, expanded && s.chartAreaExpanded, !data && s.paneHidden)}>
+      <div className={mergeClasses(s.chartArea, expanded && s.chartAreaExpanded, !canChart && s.paneHidden)}>
         <div className={mergeClasses(s.chartFrame, expanded && s.chartFrameExpanded)}>
           {refreshing && (
             <div className={s.chartOverlay}>
@@ -752,7 +691,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
 
           <div className={mergeClasses(s.chartStack, expanded && s.chartStackExpanded)}>
             <div className={mergeClasses(s.paneRow, expanded && s.paneRowExpanded)}>
-              <span className={s.paneLabel}>{intraday ? '分' : 'K'}</span>
+              <span className={s.paneLabel}>{paneMainLabel}</span>
               <div className={s.paneKSplit}>
                 <div className={mergeClasses(s.panePlot, expanded ? s.paneMainExpanded : s.paneMain)} ref={mainRef} />
                 {showCyq && cyqProfile && cyqLatest && cyqPriceSpan && (

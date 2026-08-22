@@ -7,6 +7,7 @@ import {
   instrumentRefsFromList,
   normalizeInstrumentChart,
   normalizeInstrumentSnapshot,
+  canonicalSymbolForMarket,
   parseInstrumentRef,
   quoteFromProviderRow,
   resolveInstrumentCapabilities,
@@ -85,14 +86,20 @@ function wrapChart(ref: InstrumentRef, period: string, resp: ResearchResult): Re
   return { ...resp, data: chart }
 }
 
+function quoteRowMatchesRef(row: Record<string, unknown>, ref: InstrumentRef): boolean {
+  const code = String(row.code ?? '')
+  if (!code) return false
+  if (code === ref.symbol) return true
+  return canonicalSymbolForMarket(ref.market, code) === ref.symbol
+}
+
 /** Match a quote row to ref by symbol (+ exchange). Never trust sparse/filtered array index. */
 function findQuoteRowForRef(
   rows: Record<string, unknown>[],
   ref: InstrumentRef,
 ): Record<string, unknown> | undefined {
   return rows.find(r => {
-    const code = String(r.code ?? '')
-    if (code !== ref.symbol) return false
+    if (!quoteRowMatchesRef(r, ref)) return false
     if (!ref.exchange || r.exchange == null || r.exchange === '') return true
     return String(r.exchange).toUpperCase() === ref.exchange.toUpperCase()
   })

@@ -101,13 +101,14 @@ export function toInstrumentRef(
  *  不在这里武断归 CN；返回 'CN' 仅作为兜底，上层应优先经 parseCanonicalInstrumentInput
  *  与 instrument_search 消歧后再构造 InstrumentRef。 */
 export function inferMarketFromSymbol(raw: string): Market {
-  if (/^(US|NYSE|NASDAQ|AMEX):/i.test(raw.trim())) return 'US'
-  if (/^(CRYPTO|BINANCE|OKX):/i.test(raw.trim())) return 'CRYPTO'
-  if (isCryptoPairNotation(raw)) return 'CRYPTO'
   const s = raw.trim()
+  if (/^(US|NYSE|NASDAQ|AMEX):/i.test(s)) return 'US'
+  if (/^(CRYPTO|BINANCE|OKX):/i.test(s)) return 'CRYPTO'
+  // 美股代码优先于「裸字母 = 加密货币 base」启发式（如 AAPL 不应解析为 AAPL/USDT）
+  if (isValidUsSymbol(s)) return 'US'
+  if (isCryptoPairNotation(raw)) return 'CRYPTO'
   // 仅 6 位纯数字可无歧义判为 A 股；短数字码交由上层搜索消歧。
   if (/^\d{6}$/.test(s)) return 'CN'
-  if (isValidUsSymbol(s)) return 'US'
   return 'CN'
 }
 

@@ -1,4 +1,5 @@
 import { TickMarkType, type Time } from 'lightweight-charts'
+import type { ChartPeriod } from '../types/market'
 import { CN_TIMEZONE } from '../utils/cnTime'
 
 function timeToDate(time: Time): Date | null {
@@ -10,13 +11,20 @@ function timeToDate(time: Time): Date | null {
   return null
 }
 
-function businessDayLabel(time: Time): string | null {
+function businessDay(time: Time): { year: number; month: number; day: number } | null {
   if (typeof time !== 'object' || time === null || !('year' in time)) return null
-  const t = time as { year: number; month: number; day: number }
-  return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
+  return time as { year: number; month: number; day: number }
 }
 
-export function createChartAxisFormatters(timeZone = CN_TIMEZONE) {
+function quarterOf(month: number): number {
+  return Math.floor((month - 1) / 3) + 1
+}
+
+function isMultiYearRange(period?: string): boolean {
+  return period === 'year3' || period === 'year5'
+}
+
+export function createChartAxisFormatters(timeZone = CN_TIMEZONE, chartPeriod?: ChartPeriod) {
   const formatClock = (d: Date, withSeconds: boolean) =>
     new Intl.DateTimeFormat('zh-CN', {
       timeZone,
@@ -40,16 +48,73 @@ export function createChartAxisFormatters(timeZone = CN_TIMEZONE) {
     new Intl.DateTimeFormat('zh-CN', { timeZone, year: 'numeric' }).format(d)
 
   const timeFormatter = (time: Time) => {
-    const day = businessDayLabel(time)
-    if (day) return day
+    const t = businessDay(time)
+    if (t) {
+      if (chartPeriod === 'yearly' || isMultiYearRange(chartPeriod)) {
+        return String(t.year)
+      }
+      if (chartPeriod === 'quarterly') {
+        return `${t.year}Q${quarterOf(t.month)}`
+      }
+      if (chartPeriod === 'year1') {
+        return `${t.year}-${String(t.month).padStart(2, '0')}`
+      }
+      if (chartPeriod === 'monthly') {
+        return `${t.year}-${String(t.month).padStart(2, '0')}`
+      }
+      return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
+    }
     const d = timeToDate(time)
     return d ? formatClock(d, false) : String(time)
   }
 
   const tickMarkFormatter = (time: Time, tickMarkType: TickMarkType, _locale: string) => {
-    const day = businessDayLabel(time)
-    if (day) {
-      const t = time as { year: number; month: number; day: number }
+    const t = businessDay(time)
+    if (t) {
+      if (chartPeriod === 'yearly' || isMultiYearRange(chartPeriod)) {
+        return String(t.year)
+      }
+      if (chartPeriod === 'quarterly') {
+        const q = quarterOf(t.month)
+        switch (tickMarkType) {
+          case TickMarkType.Year:
+            return String(t.year)
+          case TickMarkType.Month:
+            return `Q${q}`
+          default:
+            return `${t.year}Q${q}`
+        }
+      }
+      if (chartPeriod === 'year1') {
+        switch (tickMarkType) {
+          case TickMarkType.Year:
+            return String(t.year)
+          case TickMarkType.Month:
+            return `${t.month}月`
+          default:
+            return `${t.month}/${t.day}`
+        }
+      }
+      if (chartPeriod === 'monthly') {
+        switch (tickMarkType) {
+          case TickMarkType.Year:
+            return String(t.year)
+          case TickMarkType.Month:
+            return `${t.year}-${String(t.month).padStart(2, '0')}`
+          default:
+            return `${t.month}月`
+        }
+      }
+      if (chartPeriod === 'weekly') {
+        switch (tickMarkType) {
+          case TickMarkType.Year:
+            return String(t.year)
+          case TickMarkType.Month:
+            return `${t.month}月`
+          default:
+            return `${t.month}/${t.day}`
+        }
+      }
       switch (tickMarkType) {
         case TickMarkType.Year:
           return String(t.year)
@@ -64,6 +129,9 @@ export function createChartAxisFormatters(timeZone = CN_TIMEZONE) {
 
     const d = timeToDate(time)
     if (!d) return null
+    if (chartPeriod === 'yearly' || isMultiYearRange(chartPeriod)) {
+      return formatYear(d)
+    }
     switch (tickMarkType) {
       case TickMarkType.Year:
         return formatYear(d)

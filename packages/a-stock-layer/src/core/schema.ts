@@ -211,6 +211,8 @@ export interface StockProfile {
   orgTel?: string
   /** 证券类型（如"主板"、"创业板"、"科创板"） */
   securityType?: string
+  /** 总股本（股） */
+  totalShares?: number
   /** 公司曾用名（如有） */
   formerName?: string
   /** 首次发行价（元） */

@@ -60,13 +60,13 @@ driver.ts + manifest.ts → applyManifestSpec + bindingsFor
 | Capability | Handler 方法 | 市场 | 备注 |
 |---|---|---|---|
 | `STOCK_REALTIME` | `realtime()` / `batchRealtime()` | CN / US / HK | GET/POST quotes |
-| `STOCK_KLINE` | `kline()` | CN / US / HK | `/v1/klines`；A 股默认前复权加法 |
+| `STOCK_KLINE` | `kline()` | CN / US / HK | `GET /v1/klines` + **period**（1m…1Y）；A 股默认前复权加法 |
 | `STOCK_LIST` | `stockList()` | CN / US / HK | 交易所列表或 Universe |
 | `STOCK_BASIC` | `stockBasic()` | CN / US / HK | `/v1/instruments` |
 | `STOCK_PROFILE` | `profile()` | CN / US / HK | `/v1/instruments` |
 | `INDEX_REALTIME` | `indexRealtime()` | CN | 复用 quotes |
 | `INDEX_KLINE` | `indexKline()` | CN | 复用 klines |
-| `INTRADAY_TICK` | `intradayTick()` / `fetchIntradaySessions()` | CN | 当日 `/v1/klines/intraday` |
+| `INTRADAY_TICK` | `intradayTick()` / `fetchIntradaySessions()` | CN / US / HK | `GET /v1/klines` + `period=1m` |
 | `FINANCIAL_SUMMARY` | `financials()` | CN | metrics + income |
 | `BALANCE_SHEET` | `balanceSheet()` | CN | |
 | `INCOME_STMT` | `incomeStatement()` | CN | |
@@ -84,9 +84,13 @@ driver.ts + manifest.ts → applyManifestSpec + bindingsFor
 | `fetchDepth` | `GET /v1/depth` | 五档盘口 |
 | `tfDepthBatch` | `GET /v1/depth/batch` | 批量五档 |
 | `tfListUniverses` | `GET /v1/universes` | 标的池列表 |
+| `tfGetUniverse` | `GET /v1/universes/{id}` | 单个标的池 |
 | `tfUniverseBatch` | `POST /v1/universes/batch` | 批量标的池 |
 | `tfExFactors` | `GET /v1/klines/ex-factors` | 除权因子 |
-| `tfIntradayBatch` | `GET /v1/klines/intraday/batch` | 批量当日分时 |
+| `tfKlinesBatch` | `GET /v1/klines/batch` | 批量历史 K 线 |
+| `tfQuotesUniverses` | `GET /v1/quotes`（`universes`） | 标的池实时行情 |
+| `tfKlinesIntraday` | `GET /v1/klines/intraday` | 单标的当日分钟 K |
+| `tfIntradayBatch` | `GET /v1/klines/intraday/batch` | 批量当日分钟 K |
 
 ---
 
@@ -100,7 +104,7 @@ driver.ts + manifest.ts → applyManifestSpec + bindingsFor
 |---|---|
 | `GET /v1/exchanges` | 交易所列表 |
 | `GET/POST /v1/quotes` | 实时行情（单只/批量） |
-| `GET /v1/klines` | 日/周/月 K 线（单标的） |
+| `GET /v1/klines` | 日/周/月/季/年 K 线（单标的，`period`：1d/1w/1M/1Q/1Y） |
 | `GET/POST /v1/instruments` | 标的基础信息 |
 | `GET /v1/exchanges/{exchange}/instruments` | 交易所成分列表 |
 | `GET /v1/universes` / `{id}` / `batch` | 标的池 |
@@ -139,7 +143,8 @@ driver.ts + manifest.ts → applyManifestSpec + bindingsFor
 |---|---|
 | **API Key 必填** | 未配置时 `fromConfig()` 返回 `null`，驱动静默跳过 |
 | **财务 / 股本** | 主要为 A 股；manifest 仅绑定 CN/EQUITY |
-| **分时** | `/v1/klines/intraday` 仅**当日**分钟 K，不含历史多日 |
+| **分时** | 统一 `GET /v1/klines` + `period=1m`（免费档可用）；`/v1/klines/intraday` 仅扩展方法 `tfIntradayBatch` 等可选路径 |
+| **图表周期** | `resolveTickflowKlineQuery`：UI 周期 → klines `period` + `count` |
 | **指数路由** | 引擎 `indexRealtime` / `indexKline` 使用 `CN/INDEX` scope |
 
 ---

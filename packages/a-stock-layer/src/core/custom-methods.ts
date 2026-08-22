@@ -173,40 +173,72 @@ const BAOSTOCK_CUSTOM: CustomMethodDef[] = [
 const TICKFLOW_CUSTOM: CustomMethodDef[] = [
   {
     method: 'fetchDepth',
-    description: 'TickFlow 五档盘口深度',
+    description: 'TickFlow 五档盘口深度（GET /v1/depth）',
     params: [
       { name: 'code', type: 'string', description: '股票代码', required: true },
     ],
   },
   {
     method: 'tfDepthBatch',
-    description: 'TickFlow 批量五档盘口',
+    description: 'TickFlow 批量五档盘口（GET /v1/depth/batch）',
     params: [
       { name: 'codes', type: 'string', description: '股票代码数组（invoke 时传 JSON 数组）', required: true },
     ],
   },
   {
     method: 'tfListUniverses',
-    description: 'TickFlow 标的池列表',
+    description: 'TickFlow 标的池列表（GET /v1/universes）',
     params: [],
   },
   {
+    method: 'tfGetUniverse',
+    description: 'TickFlow 单个标的池详情（GET /v1/universes/{id}）',
+    params: [
+      { name: 'id', type: 'string', description: '标的池 ID', required: true },
+    ],
+  },
+  {
     method: 'tfUniverseBatch',
-    description: 'TickFlow 批量标的池详情',
+    description: 'TickFlow 批量标的池详情（POST /v1/universes/batch）',
     params: [
       { name: 'ids', type: 'string', description: '标的池 ID 数组', required: true },
     ],
   },
   {
     method: 'tfExFactors',
-    description: 'TickFlow 除权因子',
+    description: 'TickFlow 除权因子（GET /v1/klines/ex-factors）',
     params: [
       { name: 'code', type: 'string', description: '股票代码', required: true },
     ],
   },
   {
+    method: 'tfKlinesBatch',
+    description: 'TickFlow 批量历史 K 线（GET /v1/klines/batch）',
+    params: [
+      { name: 'codes', type: 'string', description: '股票代码数组', required: true },
+      { name: 'period', type: 'string', description: '周期 1m…1Y，默认 1d' },
+      { name: 'count', type: 'number', description: '根数，默认 120' },
+    ],
+  },
+  {
+    method: 'tfQuotesUniverses',
+    description: 'TickFlow 标的池实时行情（GET /v1/quotes universes=）',
+    params: [
+      { name: 'universeIds', type: 'string', description: '标的池 ID 数组', required: true },
+    ],
+  },
+  {
+    method: 'tfKlinesIntraday',
+    description: 'TickFlow 单标的当日分钟 K（GET /v1/klines/intraday）',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+      { name: 'period', type: 'string', description: '分钟周期，默认 1m' },
+      { name: 'count', type: 'number', description: '返回条数' },
+    ],
+  },
+  {
     method: 'tfIntradayBatch',
-    description: 'TickFlow 批量当日分钟 K',
+    description: 'TickFlow 批量当日分钟 K（GET /v1/klines/intraday/batch）',
     params: [
       { name: 'codes', type: 'string', description: '股票代码数组', required: true },
     ],
