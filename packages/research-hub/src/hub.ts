@@ -2321,7 +2321,7 @@ export class ResearchHub {
     const ref = resolveInstrumentFromParams(params)
     if (!ref) return fail('instrument 或 code 必填', t0)
     if (ref.assetClass !== 'FUND') {
-      return fail('仅支持 assetClass=FUND 的场外基金标的', t0)
+      return fail('仅支持 assetClass=FUND 的公募基金标的', t0)
     }
     const labels = {
       fund_nav: '基金净值',
@@ -2369,9 +2369,9 @@ export class ResearchHub {
         exchange: 'PF',
       })
     const r = await this.de.queryInstrumentData(ref, 'fund_list', code ? { keyword: code } : {})
-    if (!r.success) return fail(instrumentQueryError(r, '场外基金列表获取失败'), t0)
+    if (!r.success) return fail(instrumentQueryError(r, '公募基金列表获取失败'), t0)
     const data = instrumentQueryData<unknown[]>(r) ?? []
-    return ok(data, `场外基金列表 ${data.length} 条`, t0)
+    return ok(data, `公募基金列表 ${data.length} 条`, t0)
   }
 
   private async localFundList(params: Record<string, unknown>, t0: number) {

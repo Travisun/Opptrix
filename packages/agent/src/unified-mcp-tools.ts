@@ -389,8 +389,8 @@ export function buildUnifiedInstrumentTools(
     },
     {
       name: 'get_fund_list',
-      category: '场外基金',
-      description: '场外开放式基金列表或关键词检索；单码查询返回匹配基金',
+      category: '公募基金',
+      description: '公募基金列表或关键词检索；单码查询返回匹配基金',
       parameters: S({
         keyword: { type: 'string', description: '基金代码或名称关键词，可选' },
         code: { type: 'string', description: '同 keyword' },
@@ -399,22 +399,22 @@ export function buildUnifiedInstrumentTools(
     },
     {
       name: 'get_fund_profile',
-      category: '场外基金',
+      category: '公募基金',
       description: '公募基金档案（类型、经理、规模、费率等）；须 assetClass=FUND / CN:PF 命名空间',
       parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
       handler: (a) => d('fund_profile', resolveInstrumentParams(a)),
     },
     {
       name: 'get_fund_nav',
-      category: '场外基金',
-      description: '场外基金历史净值序列；勿用实时价代替净值',
+      category: '公募基金',
+      description: '公募基金历史净值序列；勿用实时价代替净值',
       parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
       handler: (a) => d('fund_nav', resolveInstrumentParams(a)),
     },
     {
       name: 'get_fund_holdings',
-      category: '场外基金',
-      description: '场外基金季报重仓股/资产配置',
+      category: '公募基金',
+      description: '公募基金季报重仓股/资产配置',
       parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
       handler: (a) => d('fund_holdings', resolveInstrumentParams(a)),
     },

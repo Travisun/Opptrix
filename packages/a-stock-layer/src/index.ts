@@ -141,6 +141,7 @@ export {
   CN_PUBLIC_FUND_EXCHANGE,
   isCnListedFundSymbol,
   inferCnPublicFundListingExchange,
+  stockIndexItemLooksLikeCnPublicFund,
   resolveCnPublicFundBareCode,
   isCnOtcFundRef,
   toCnOtcFundRef,

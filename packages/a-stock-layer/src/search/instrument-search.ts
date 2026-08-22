@@ -1,5 +1,6 @@
 /**
- * 跨市场标的搜索 — 标准 instrument_search 主路径，腾讯 CN 搜索为自定义备用。
+ * 跨市场标的搜索 — 唯一在线源：StockIndex `/api/v1/search`。
+ * Engine / 腾讯 / fund_list 补路已移除；normalize 在 stockIndexItemToInstrumentRef。
  */
 
 import type { AssetClass, InstrumentRef, Market, StockListItem } from '@opptrix/shared'
@@ -10,9 +11,7 @@ import {
   instrumentRefKey,
   normalizeInstrumentRef,
 } from '@opptrix/shared'
-import { exchangeFromTencentSecSymbol } from '../core/provider-wire.js'
 import type { MarketDataEngine } from '../engine.js'
-import type { StockIndexItem } from '../providers/stockindex/api/client.js'
 import { stockIndexSearch } from '../providers/stockindex/api/client.js'
 import {
   stockIndexItemToInstrumentRef,
@@ -27,10 +26,12 @@ export interface InstrumentSearchHit {
   exchange: string | null
   instrument: InstrumentRef
   refLabel: string
-  source: 'stock_index' | 'tencent'
+  source: 'stock_index'
 }
 
 const SEARCH_CACHE_MS = 5 * 60 * 1000
+/** bump 后丢弃旧缓存（StockIndex 单源 + CN:PF 对齐） */
+const SEARCH_CACHE_VERSION = 3
 const searchCache = new Map<string, { expires: number; items: InstrumentSearchHit[] }>()
 
 function equityListRef(market: Market): InstrumentRef {
@@ -39,13 +40,13 @@ function equityListRef(market: Market): InstrumentRef {
 }
 
 function cacheKey(keyword: string, limit: number, markets?: Market[]): string {
-  return `${keyword.toLowerCase()}|${limit}|${(markets ?? []).join(',')}`
+  return `v${SEARCH_CACHE_VERSION}|${keyword.toLowerCase()}|${limit}|${(markets ?? []).join(',')}`
 }
 
-function hitFromStockIndexItem(item: StockIndexItem): InstrumentSearchHit | null {
+function hitFromStockIndexItem(item: Parameters<typeof stockIndexItemToInstrumentRef>[0]): InstrumentSearchHit | null {
   const instrument = stockIndexItemToInstrumentRef(item)
   if (!instrument) return null
-  const ns = item.instrumentId?.trim() || buildInstrumentNamespace(instrument)
+  const ns = buildInstrumentNamespace(instrument)
   return {
     code: ns,
     name: item.nameCn ?? item.code,
@@ -58,14 +59,35 @@ function hitFromStockIndexItem(item: StockIndexItem): InstrumentSearchHit | null
   }
 }
 
-function exchangeFromTencentCode(raw: string): 'SH' | 'SZ' | 'BJ' | undefined {
-  return exchangeFromTencentSecSymbol(raw)
+function isCnFundListRow(row: StockListItem): boolean {
+  const m = String(row.market ?? '').toUpperCase()
+  const ind = String(row.industry ?? '')
+  return row.industry === 'FUND' || m === 'PF' || m === 'OF' || ind === 'FUND' || /基金/.test(ind)
 }
 
 function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSearchHit | null {
   const rawCode = String(row.code ?? '').trim()
   if (!rawCode) return null
   const code = market === 'CN' ? canonicalCnSymbol(rawCode) : rawCode
+  if (market === 'CN' && isCnFundListRow(row)) {
+    const instrument = normalizeInstrumentRef({
+      market: 'CN',
+      assetClass: 'FUND',
+      symbol: code,
+      exchange: 'PF',
+    })
+    const ns = buildInstrumentNamespace(instrument)
+    return {
+      code: ns,
+      name: row.name ?? code,
+      market: 'CN',
+      assetClass: 'FUND',
+      exchange: 'PF',
+      instrument,
+      refLabel: ns,
+      source: 'stock_index',
+    }
+  }
   const exchange = market === 'HK'
     ? 'HK'
     : row.market === 'SH' || row.market === 'SZ' || row.market === 'BJ'
@@ -90,7 +112,7 @@ function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSea
   }
 }
 
-async function searchMarketDirect(
+async function searchMarketViaStockIndex(
   market: Market,
   keyword: string,
   limit: number,
@@ -99,67 +121,14 @@ async function searchMarketDirect(
   return (resp.items ?? [])
     .map(hitFromStockIndexItem)
     .filter((h): h is InstrumentSearchHit => h != null)
+    .slice(0, limit)
 }
 
-async function searchMarketViaStandardApi(
-  de: MarketDataEngine,
-  market: Market,
-  keyword: string,
-  limit: number,
-): Promise<InstrumentSearchHit[]> {
-  const r = await de.queryInstrumentData(equityListRef(market), 'instrument_search', {
-    keyword,
-    pageSize: Math.min(limit, 50),
-  })
-  if (r.success && 'data' in r && Array.isArray(r.data) && r.data.length) {
-    const hits = (r.data as StockListItem[])
-      .map(row => hitFromStockListItem(row, market))
-      .filter((h): h is InstrumentSearchHit => h != null)
-    if (hits.length) return hits.slice(0, limit)
-  }
-  return searchMarketDirect(market, keyword, limit)
-}
-
-/** 腾讯 stock 搜索 — 自定义方法，仅作 CN 空结果备用 */
-async function tencentCnSearchFallback(
-  de: MarketDataEngine,
-  keyword: string,
-  limit: number,
-): Promise<InstrumentSearchHit[]> {
-  const resp = await de.invokeCustomMethod('tencent', 'tencentStockSearch', [keyword])
-  if (!resp.success || !Array.isArray(resp.data) || !resp.data.length) return []
-  const rows = resp.data as Record<string, unknown>[]
-  const out: InstrumentSearchHit[] = []
-  for (const r of rows) {
-    const rawCode = String(r.code ?? r.symbol ?? r.stockCode ?? '')
-    const exchange = exchangeFromTencentCode(rawCode)
-    const code = canonicalCnSymbol(rawCode.replace(/^(sh|sz|bj)/i, ''))
-    if (!code || code === '000000') continue
-    const instrument = normalizeInstrumentRef({
-      market: 'CN',
-      assetClass: inferCnAssetClassFromSymbol(code, exchange),
-      symbol: code,
-      exchange,
-    })
-    const ns = buildInstrumentNamespace(instrument)
-    out.push({
-      code: ns,
-      name: String(r.name ?? r.stockName ?? r.shortname ?? code),
-      market: 'CN',
-      assetClass: instrument.assetClass,
-      exchange: instrument.exchange ?? null,
-      instrument,
-      refLabel: ns,
-      source: 'tencent',
-    })
-    if (out.length >= limit) break
-  }
-  return out
-}
-
-/** 关键词搜索 — 标准 instrument_search，CN 空结果时腾讯自定义方法备用 */
+/**
+ * 关键词搜索 — 仅 StockIndex；`de` 保留签名兼容，不再经 Engine 或其他 Provider。
+ */
 export async function searchInstrumentsOnline(
-  de: MarketDataEngine,
+  _de: MarketDataEngine,
   keyword: string,
   limit = 30,
   markets?: Market[],
@@ -180,27 +149,14 @@ export async function searchInstrumentsOnline(
 
   for (const market of targetMarkets) {
     try {
-      for (const hit of await searchMarketViaStandardApi(de, market, kw, limit)) {
+      for (const hit of await searchMarketViaStockIndex(market, kw, limit)) {
         const key = instrumentRefKey(hit.instrument)
         if (seen.has(key)) continue
         seen.add(key)
         hits.push(hit)
       }
     } catch {
-      // try next market / fallback
-    }
-  }
-
-  if (!hits.length && (!markets?.length || markets.includes('CN'))) {
-    try {
-      for (const hit of await tencentCnSearchFallback(de, kw, limit)) {
-        const key = instrumentRefKey(hit.instrument)
-        if (seen.has(key)) continue
-        seen.add(key)
-        hits.push(hit)
-      }
-    } catch {
-      // ignore
+      // 单市场失败不阻断其他市场
     }
   }
 
@@ -209,7 +165,7 @@ export async function searchInstrumentsOnline(
   return result
 }
 
-/** Discover 初选 — 标准 stock_list（含板块过滤） */
+/** Discover 初选 — 标准 stock_list（StockIndex handler，经 Engine 路由） */
 export async function listInstrumentsOnline(
   de: MarketDataEngine,
   market: 'CN' | 'US' | 'HK',

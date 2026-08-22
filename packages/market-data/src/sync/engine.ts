@@ -769,7 +769,7 @@ export class MarketDataSyncEngine {
     if (mode === 'incremental' && cfg.ttlDays) {
       const last = this.store.getCursorLastSuccess('fund_list')
       if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, 'fund_list', options, '场外基金列表在 TTL 内，跳过')
+        this.finishJobEmpty(runId, 'fund_list', options, '公募基金列表在 TTL 内，跳过')
         return
       }
     }
@@ -814,7 +814,7 @@ export class MarketDataSyncEngine {
       mode === 'incremental' && !shouldRefresh(this.store.fundNavSyncedAt(code), cfg.ttlDays, mode),
     )
     if (codes.length === 0) {
-      this.finishJobEmpty(runId, 'fund_nav', options, '场外基金净值均在 TTL 内，跳过')
+      this.finishJobEmpty(runId, 'fund_nav', options, '公募基金净值均在 TTL 内，跳过')
       return
     }
     let success = 0

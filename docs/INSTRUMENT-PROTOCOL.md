@@ -58,6 +58,10 @@ interface InstrumentRef {
 
 禁止仅用裸码 `000977` 做详情/行情主路径（搜索命中除外，须尽快消歧为完整 Ref）。
 
+### 2.3 在线标的搜索（StockIndex）
+
+UI 关注列表、顶栏、`instrument_search` / `search_instruments` 的**在线关键词搜索**唯一数据源为 StockIndex `GET /api/v1/search`（CN / US / HK）。命中行经 `stockIndexItemToInstrumentRef` 映射为 `InstrumentRef`：**优先解析远程 `instrumentId`**（如 `CN:PF.009049`）；`assetType=fund`、`board=fund` 等为辅助信号。不经 Engine 二次路由、腾讯自定义搜索或 `fund_list` 补路。公募基金净值/档案等数据能力仍由各行情 Provider 提供。
+
 ---
 
 ## 3. 标准 API 入口

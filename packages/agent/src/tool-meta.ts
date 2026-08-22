@@ -113,25 +113,25 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_fund_list: {
     hubFeature: 'fund_list',
     miningEligible: true,
-    usageGuide: '场外基金列表或关键词检索；返回须带 assetClass=FUND。',
+    usageGuide: '公募基金列表或关键词检索；返回须带 assetClass=FUND。',
     compliance: '关键词可选；勿与 ETF 列表混用。',
   },
   get_fund_profile: {
     hubFeature: 'fund_profile',
     miningEligible: true,
-    usageGuide: '场外基金档案（类型、经理、规模、费率）；净值用 get_fund_nav。',
+    usageGuide: '公募基金档案（类型、经理、规模、费率）；净值用 get_fund_nav。',
     compliance: '须 FUND / CN:PF 命名空间；勿用 get_instrument_profile 代替。',
   },
   get_fund_nav: {
     hubFeature: 'fund_nav',
     miningEligible: true,
-    usageGuide: '场外基金历史净值；勿用实时价或 ETF 净值工具代替。',
+    usageGuide: '公募基金历史净值；勿用实时价或 ETF 净值工具代替。',
     compliance: '单只基金 code；按交易日更新。',
   },
   get_fund_holdings: {
     hubFeature: 'fund_holdings',
     miningEligible: true,
-    usageGuide: '场外基金季报重仓；按披露期更新。',
+    usageGuide: '公募基金季报重仓；按披露期更新。',
     compliance: '单只基金 code；勿与用户持仓混淆。',
   },
   get_sector_list: {

@@ -1,5 +1,5 @@
 import type { InstrumentRef } from '@opptrix/shared'
-import { instrumentDisplayCode } from '@opptrix/shared'
+import { instrumentDisplayCode, parseCanonicalInstrumentInput } from '@opptrix/shared'
 import { inferCnAssetClass, instrumentId, toInstrumentRef } from '../core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from '../utils/helpers.js'
 import type { WatchlistItem } from './models.js'
@@ -19,6 +19,8 @@ export function legacyToInstrument(code: string): InstrumentRef {
   if (!raw) {
     return { market: 'CN', assetClass: 'EQUITY', symbol: '000000' }
   }
+  const parsed = parseCanonicalInstrumentInput(raw)
+  if (parsed) return parsed
   if (/^(US|NYSE|NASDAQ|AMEX|CRYPTO|BINANCE|OKX|HK):/i.test(raw)) {
     return toInstrumentRef(raw)
   }
