@@ -13,6 +13,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { isDesktopRuntime } from '@opptrix/shared'
+import { ensureDarwinBundledChromiumHealed } from './chromium-darwin-heal.js'
 
 const require = createRequire(import.meta.url)
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -23,6 +24,7 @@ export const PLAYWRIGHT_BROWSERS_DIR_NAME = 'playwright-browsers'
 const DEFAULT_INSTALL_TIMEOUT_MS = 120_000
 
 let ensureInFlight: Promise<boolean> | null = null
+let healInFlight: Promise<string | null> | null = null
 
 export function resolvePackagedBrowsersPath(): string | null {
   if (!isDesktopRuntime()) return null
@@ -30,13 +32,40 @@ export function resolvePackagedBrowsersPath(): string | null {
   return fs.existsSync(packaged) ? packaged : null
 }
 
+function applyPlaywrightBrowsersPath(browsersPath: string): void {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = browsersPath
+}
+
 /** Apply PLAYWRIGHT_BROWSERS_PATH for packaged desktop before Playwright resolves executables. */
 export function configurePlaywrightBrowsersPath(): void {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()) return
   const packaged = resolvePackagedBrowsersPath()
   if (packaged) {
-    process.env.PLAYWRIGHT_BROWSERS_PATH = packaged
+    applyPlaywrightBrowsersPath(packaged)
   }
+}
+
+async function ensurePlaywrightBrowsersPathConfigured(): Promise<void> {
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()) return
+  const packaged = resolvePackagedBrowsersPath()
+  if (!packaged) return
+
+  if (process.platform === 'darwin' && isDesktopRuntime()) {
+    if (!healInFlight) {
+      healInFlight = ensureDarwinBundledChromiumHealed(packaged)
+        .then((healed) => {
+          applyPlaywrightBrowsersPath(healed)
+          return healed
+        })
+        .finally(() => {
+          healInFlight = null
+        })
+    }
+    await healInFlight
+    return
+  }
+
+  applyPlaywrightBrowsersPath(packaged)
 }
 
 /** True when the full Chromium executable exists (same path used at launch). */
@@ -100,6 +129,7 @@ export async function ensureChromiumAvailable(
   opts?: { timeoutMs?: number },
 ): Promise<boolean> {
   if (process.env.OPPTRIX_SKIP_PLAYWRIGHT_BROWSER === '1') return false
+  await ensurePlaywrightBrowsersPathConfigured()
   if (isChromiumAvailable()) return true
   if (!ensureInFlight) {
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_INSTALL_TIMEOUT_MS

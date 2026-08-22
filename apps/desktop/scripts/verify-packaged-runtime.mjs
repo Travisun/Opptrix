@@ -185,6 +185,45 @@ function assertFfmpegBinary(ffmpegBin, target) {
   }
 }
 
+function assertChromiumEntitlements(playwrightBrowsers: string, chromiumExe: string) {
+  if (process.platform !== 'darwin') return
+
+  const stack = [playwrightBrowsers]
+  let chromeApp = null
+  while (stack.length > 0) {
+    const dir = stack.pop()
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const full = path.join(dir, entry.name)
+      if (entry.name === 'Google Chrome for Testing.app') {
+        chromeApp = full
+        break
+      }
+      stack.push(full)
+    }
+    if (chromeApp) break
+  }
+
+  const probeTarget = chromeApp ?? chromiumExe
+  const ent = spawnSync('codesign', ['-d', '--entitlements', '-', '--xml', probeTarget], {
+    encoding: 'utf8',
+  })
+  const entXml = `${ent.stdout ?? ''}${ent.stderr ?? ''}`
+  if (!entXml.includes('com.apple.security.cs.disable-library-validation')) {
+    fail(
+      `${probeTarget} missing com.apple.security.cs.disable-library-validation `
+        + '(Playwright pre-sign must pass --entitlements with --options runtime)',
+    )
+  }
+  console.log(`verify-packaged-runtime: OK Chromium entitlements (${probeTarget})`)
+}
+
 function assertStage(stageDir, target) {
   const nmFastify = path.join(stageDir, 'node_modules', 'fastify')
   const depsFastify = path.join(stageDir, 'deps', 'fastify')
@@ -222,6 +261,7 @@ function assertStage(stageDir, target) {
     )
   }
   assertFfmpegBinary(ffmpegBin, target)
+  assertChromiumEntitlements(playwrightBrowsers, chromiumExe)
   console.log(`verify-packaged-runtime: OK ${nmFastify}`)
   console.log(`verify-packaged-runtime: OK Chromium ${chromiumExe}`)
   console.log(`verify-packaged-runtime: OK ffmpeg ${ffmpegBin}`)
