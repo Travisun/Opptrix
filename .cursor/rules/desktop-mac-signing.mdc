@@ -33,7 +33,8 @@ afterPack（叶子 Mach-O 预签 + heavy trees stash）
 
 Playwright / Chrome nested `*.framework/.../Libraries/*.dylib`（如 libEGL、libGLESv2、libvk_swiftshader）等：
 
-- **必须**叶子 Mach-O 先 `codesign`（Developer ID + timestamp），再 deepest-first 封嵌套 bundle。
+- **必须**叶子 Mach-O 先 `codesign`（Developer ID + timestamp + **entitlements**），再 deepest-first 封嵌套 bundle。
+- **禁止** `--options runtime` 裸签 Playwright Chromium（无 entitlements 时 `browser.newPage()` 会永久挂起）。
 - **禁止**只靠 `codesign --deep` 指望嵌套 Libraries 被正确签上。
 - **collectSignableLeafMachOs**：`lstat` **跳过 symlink**（framework 顶层主二进制常为指向 `Versions/*` 的符号链接；hardFail 也不得对其 codesign）；`realpath` 去重后按 **path 段数降序、再 path.length 降序**（Libraries 先于 framework tip）。
 

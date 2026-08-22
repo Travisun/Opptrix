@@ -164,6 +164,11 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('preSignHeavyMacTrees(context)'), 'afterPack must call pre-sign')
     assert.ok(src.includes('--options'), 'pre-sign must use hardened runtime options')
     assert.ok(src.includes("'runtime'"), 'pre-sign must pass runtime option')
+    assert.ok(src.includes('--entitlements'), 'pre-sign must pass entitlements with runtime')
+    assert.ok(
+      src.includes('entitlements.mac.plist'),
+      'pre-sign must use entitlements.mac.plist (runtime-only seals hang Chromium newPage)',
+    )
     assert.ok(src.includes('python'), 'must target python tree')
     assert.ok(src.includes('node_modules'), 'must target node_modules tree')
     assert.ok(src.includes('playwright-browsers'), 'must pre-sign playwright (signIgnore + notary)')

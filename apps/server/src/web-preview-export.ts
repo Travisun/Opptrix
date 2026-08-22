@@ -25,8 +25,37 @@ export const EXPORT_DEVICE_SCALE_FACTOR = 3
 
 const NAV_TIMEOUT_MS = 45_000
 const SCREENSHOT_TIMEOUT_MS = 60_000
+/** launch + newPage + goto + screenshot 总上限，避免 UI 永久「正在导出…」 */
+const CAPTURE_TOTAL_TIMEOUT_MS = 120_000
 /** 图表等异步绘制的短暂等待 */
 const SETTLE_MS = 400
+
+function chromiumLaunchEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith('ELECTRON_')) continue
+    if (value !== undefined) env[key] = value
+  }
+  return env
+}
+
+function withCaptureTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timeout`))
+    }, CAPTURE_TOTAL_TIMEOUT_MS)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
 
 export type WebPreviewExportFailure = {
   ok: false
@@ -122,11 +151,20 @@ export async function captureWebPreviewFullPagePng(
     }
   }
 
+  try {
+    return await withCaptureTimeout(runCapture(trimmed), 'Web preview export')
+  } catch (err) {
+    return userFacingCaptureError(err)
+  }
+}
+
+async function runCapture(trimmed: string): Promise<WebPreviewExportResult> {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null
   try {
     browser = await chromium.launch({
       headless: true,
       executablePath: chromium.executablePath(),
+      env: chromiumLaunchEnv(),
     })
     const context = await browser.newContext({
       viewport: {

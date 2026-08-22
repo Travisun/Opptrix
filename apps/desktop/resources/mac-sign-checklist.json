@@ -6,7 +6,8 @@
     "New nested .app / .framework under playwright-browsers",
     "New native .node/.dylib under runtime-stage/node_modules",
     "Bundled python layout change",
-    "Leaf Mach-O collect must skip symlink + depth-sort (Libraries before framework tip)"
+    "Leaf Mach-O collect must skip symlink + depth-sort (Libraries before framework tip)",
+    "Playwright pre-sign must pass --entitlements with --options runtime (else Chromium newPage hangs)"
   ],
   "signTrees": [
     { "id": "python", "rel": "python", "mode": "leaf-macho", "hardFail": false },

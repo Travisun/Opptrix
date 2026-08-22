@@ -17,6 +17,8 @@
  *    (`build.mac.notarize: false` so builder does not notarize before restore).
  *    Pipeline: afterPack(pre-sign+stash) → sign → afterSign(restore+reseal+notarize+spctl) → dmg
  *    Leaf collect: skip symlink + realpath dedupe + depth-sort (Libraries before framework tip).
+ *    Playwright pre-sign **must** pass `--entitlements` with `--options runtime`; runtime-only
+ *    seals hang Chromium `newPage()` in packaged desktop builds.
  *    **When bumping Playwright / Chromium (CFT), native .node/.dylib, or python
  *    layout — update `mac-sign-checklist.json` (mustVerify + signTrees).**
  * 4) Optional ad-hoc mac codesign when OPPTRIX_MAC_UNSIGNED=1.
@@ -30,6 +32,10 @@ const {
   loadMacSignChecklist,
   assertMustVerifySigned,
 } = require('./lib/mac-sign-checklist.cjs')
+
+/** Hardened runtime without entitlements breaks Playwright Chromium newPage() — always pass these. */
+const MAC_ENTITLEMENTS = path.join(__dirname, '..', 'resources', 'entitlements.mac.plist')
+const MAC_ENTITLEMENTS_INHERIT = path.join(__dirname, '..', 'resources', 'entitlements.mac.inherit.plist')
 
 function walkFiles(dir, acc = []) {
   if (!fs.existsSync(dir)) return acc
@@ -317,10 +323,17 @@ function collectSignableLeafMachOs(root) {
 /**
  * @param {string} target
  * @param {string} identity
- * @param {{ deep?: boolean }} [opts]
+ * @param {{ deep?: boolean; inheritEntitlements?: boolean }} [opts]
  */
 function codesignTarget(target, identity, opts = {}) {
-  const args = ['--force', '--options', 'runtime', '--timestamp', '--sign', identity]
+  const entitlements = opts.inheritEntitlements ? MAC_ENTITLEMENTS_INHERIT : MAC_ENTITLEMENTS
+  const args = ['--force', '--options', 'runtime', '--timestamp']
+  if (fs.existsSync(entitlements)) {
+    args.push('--entitlements', entitlements)
+  } else {
+    throw new Error(`afterPack: missing entitlements plist at ${entitlements}`)
+  }
+  args.push('--sign', identity)
   if (opts.deep) args.push('--deep')
   args.push(target)
   try {
@@ -377,7 +390,8 @@ function assertDeveloperIdSigned(filePath) {
  * - `leaf-then-bundles`: Playwright Chrome for Testing — **leaf-first** then seal
  *   nested .framework / .app deepest-first. Leaf collect skips symlinks, dedupes
  *   by realpath, depth-sorts (Libraries before framework tip). Do **not** rely on
- *   `codesign --deep`.
+ *   `codesign --deep`. Every leaf Mach-O and bundle seal uses `--entitlements` with
+ *   `--options runtime` (missing entitlements → Chromium newPage hangs at runtime).
  * After signing, `mustVerify` entries (libEGL / GLESv2 / swiftshader / Chrome.app / …)
  * are hard-checked for Developer ID — missing required globs throw (stale checklist
  * or incomplete stage).
@@ -427,7 +441,7 @@ function preSignHeavyMacTrees(context) {
       } catch {
         /* fall through to codesign */
       }
-      codesignTarget(file, identity)
+      codesignTarget(file, identity, { inheritEntitlements: false })
       signed += 1
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -478,7 +492,9 @@ function preSignHeavyMacTrees(context) {
     )
     for (const bundle of bundles) {
       try {
-        codesignTarget(bundle.path, identity)
+        const inheritEntitlements =
+          bundle.kind === 'app' && /Helper\.app$/i.test(bundle.path)
+        codesignTarget(bundle.path, identity, { inheritEntitlements })
         signed += 1
         console.log(`afterPack: sealed ${bundle.kind} ${path.relative(root, bundle.path)}`)
       } catch (err) {
@@ -620,3 +636,5 @@ exports.pathSegmentCount = pathSegmentCount
 exports.ensurePackagedScheduleHelper = ensurePackagedScheduleHelper
 exports.preSignHeavyMacTrees = preSignHeavyMacTrees
 exports.isMachOCandidate = isMachOCandidate
+exports.codesignTarget = codesignTarget
+exports.MAC_ENTITLEMENTS = MAC_ENTITLEMENTS
