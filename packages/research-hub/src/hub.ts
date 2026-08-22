@@ -2321,7 +2321,7 @@ export class ResearchHub {
     const ref = resolveInstrumentFromParams(params)
     if (!ref) return fail('instrument 或 code 必填', t0)
     if (ref.assetClass !== 'FUND') {
-      return fail('仅支持 assetClass=FUND 的公募基金标的', t0)
+      return fail('当前标的不是公募基金，请重新搜索并选择基金', t0)
     }
     const labels = {
       fund_nav: '基金净值',

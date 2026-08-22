@@ -192,11 +192,11 @@ export default function FundDetailTab({ stock }: Props) {
   )
 
   useEffect(() => {
-    if (!stockCode || tab !== 'chart') return undefined
+    if (!instrumentRef || tab !== 'chart') return undefined
     if (navRows.length) return undefined
     let cancelled = false
     setNavLoading(true)
-    research.fundNav(stockCode)
+    research.fundNav(instrumentRef)
       .then(resp => {
         if (cancelled) return
         const raw = resp.data as { items?: FundNavPoint[] } | FundNavPoint[] | null | undefined
@@ -206,12 +206,12 @@ export default function FundDetailTab({ stock }: Props) {
         if (!cancelled) setNavLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode, tab, navRows.length])
+  }, [instrumentRef, tab, navRows.length])
 
   const profile = useMemo(() => mergeProfile(snapshot), [snapshot])
 
   useEffect(() => {
-    if (!stockCode) {
+    if (!instrumentRef) {
       setSnapshot(null)
       setNavRows([])
       setHoldings([])
@@ -222,7 +222,7 @@ export default function FundDetailTab({ stock }: Props) {
     setTab('overview')
     setLoading(true)
     setError('')
-    research.fundSnapshot(stockCode)
+    research.fundSnapshot(instrumentRef)
       .then(resp => {
         if (cancelled) return
         if (!resp.success || !resp.data) {
@@ -242,13 +242,13 @@ export default function FundDetailTab({ stock }: Props) {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode])
+  }, [instrumentRef])
 
   useEffect(() => {
-    if (!stockCode || tab !== 'nav') return undefined
+    if (!instrumentRef || tab !== 'nav') return undefined
     let cancelled = false
     setNavLoading(true)
-    research.fundNav(stockCode)
+    research.fundNav(instrumentRef)
       .then(resp => {
         if (cancelled) return
         const raw = resp.data as { items?: FundNavPoint[] } | FundNavPoint[] | null | undefined
@@ -261,13 +261,13 @@ export default function FundDetailTab({ stock }: Props) {
         if (!cancelled) setNavLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode, tab])
+  }, [instrumentRef, tab])
 
   useEffect(() => {
-    if (!stockCode || tab !== 'holdings') return undefined
+    if (!instrumentRef || tab !== 'holdings') return undefined
     let cancelled = false
     setHoldingsLoading(true)
-    research.fundHoldings(stockCode)
+    research.fundHoldings(instrumentRef)
       .then(resp => {
         if (cancelled) return
         const raw = resp.data as { items?: FundHoldingRow[] } | FundHoldingRow[] | null | undefined
@@ -280,7 +280,7 @@ export default function FundDetailTab({ stock }: Props) {
         if (!cancelled) setHoldingsLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode, tab])
+  }, [instrumentRef, tab])
 
   const displayName = resolveDisplayStockName(stockCode ?? '', profile?.name, stock?.name)
   const unitNav = profile?.unitNav
