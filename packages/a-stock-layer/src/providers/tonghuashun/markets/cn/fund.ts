@@ -1,0 +1,127 @@
+import { assertCnPublicFundCode } from '../../../../core/fund-instrument.js'
+import { FuyaoClient } from '../../api/client.js'
+import { resolveFuyaoFundRoute } from '../../api/fund-symbols.js'
+import { isTonghuashunEnabled } from '../../config.js'
+import {
+  mapFundHoldersToProfileFields,
+  mapFundHoldingsToFundRows,
+  mapFundNavRowsForFund,
+  mapFundProfileToFundProfileRow,
+} from '../../normalize/fund.js'
+import type { TonghuashunMarketHandler } from './handler.js'
+
+type Handler = TonghuashunMarketHandler & Record<string, unknown>
+
+async function withFuyaoClient<T>(fn: (client: FuyaoClient) => Promise<T>): Promise<T | null> {
+  if (!isTonghuashunEnabled()) return null
+  const client = FuyaoClient.fromConfig()
+  if (!client) return null
+  try {
+    return await fn(client)
+  } catch {
+    return null
+  }
+}
+
+function msToYmd(ms: unknown): string {
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  const d = new Date(n)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** 同花顺 Fuyao 公募基金标准 Capability（fundProfile / fundNav / fundHoldings / fundQuote） */
+export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler }) {
+  const p = Driver.prototype as Handler
+
+  p.fundProfile = async function fundProfile(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const [profileData, navData, returnsData, holdersData] = await Promise.all([
+        client.fundProfileDetail(fundType, thscode),
+        client.fundPerformanceNav(fundType, thscode, { nav_type: 'unit,adj' }),
+        client.fundPerformanceReturns(fundType, thscode),
+        client.fundHoldersDetail(fundType, thscode).catch(() => ({ item: [] })),
+      ])
+      const profile = profileData.item?.[0]
+      if (!profile) return null
+      const row = mapFundProfileToFundProfileRow(bare, profile, {
+        navItems: navData.item ?? [],
+        returns: returnsData.item?.[0] ?? null,
+        holders: mapFundHoldersToProfileFields(holdersData.item ?? []),
+      })
+      return [row]
+    })
+  }
+
+  p.fundNav = async function fundNav(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const navData = await client.fundPerformanceNav(fundType, thscode, {
+        range: 'year',
+        nav_type: 'unit,adj',
+      })
+      const rows = mapFundNavRowsForFund(bare, navData.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  p.fundQuote = async function fundQuote(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const [navData, profileData] = await Promise.all([
+        client.fundPerformanceNav(fundType, thscode, { nav_type: 'unit,adj' }),
+        client.fundProfileDetail(fundType, thscode).catch(() => ({ item: [] })),
+      ])
+      const items = navData.item ?? []
+      if (!items.length) return null
+      const sorted = [...items].sort((a, b) => Number(b.nav_date) - Number(a.nav_date))
+      const latest = sorted[0]
+      const prev = sorted[1]
+      const unitNav = Number(latest.unit_nav)
+      const prevNav = prev ? Number(prev.unit_nav) : null
+      const changePct = Number.isFinite(unitNav) && prevNav != null && prevNav > 0
+        ? ((unitNav - prevNav) / prevNav) * 100
+        : null
+      const profile = profileData.item?.[0]
+      return [{
+        code: bare,
+        name: String(profile?.fund_name ?? '').trim() || undefined,
+        unitNav: Number.isFinite(unitNav) ? unitNav : null,
+        accNav: Number(latest.adj_nav) || null,
+        prevNav: prevNav != null && Number.isFinite(prevNav) ? prevNav : null,
+        changePct,
+        navDate: msToYmd(latest.nav_date),
+        source: 'tonghuashun',
+      }]
+    })
+  }
+
+  p.fundHoldings = async function fundHoldings(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundPortfolioHoldings(fundType, thscode)
+      const rows = mapFundHoldingsToFundRows(bare, data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+}
