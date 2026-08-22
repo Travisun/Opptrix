@@ -135,6 +135,12 @@ export {
 export { instrumentRefKey } from '@opptrix/shared'
 export { isCnEtfCode, toInstrumentRef, inferCnAssetClass, inferMarketFromSymbol, instrumentId } from './core/instrument.js'
 export {
+  isCnOtcFundRef,
+  toCnOtcFundRef,
+  assertCnOtcFundCode,
+  CN_OTC_FUND_EXCHANGE,
+} from './core/fund-instrument.js'
+export {
   normalizeUsSymbol,
   isValidUsSymbol,
   usTodayString,

@@ -307,6 +307,7 @@ export function resolveStockContextInstrument(
 }
 
 export function detailPanelKind(ref: InstrumentRef): DetailPanelKind {
+  if (ref.market === 'CN' && ref.assetClass === 'FUND') return 'cn-fund'
   if (ref.market === 'CN' && ref.assetClass === 'ETF') return 'cn-etf'
   if (ref.market === 'CN') return 'cn-equity'
   if (ref.market === 'CRYPTO') return 'crypto'

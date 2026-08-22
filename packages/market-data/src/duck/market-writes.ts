@@ -24,6 +24,8 @@ export type DuckWriteOp =
   | { op: 'rebuildIndustryStats'; tradeDate: string; syncedAt: string }
   | { op: 'replaceEtfNav'; code: string; rows: Array<{ date: string; nav?: number | null; accNav?: number | null; changePct?: number | null; premiumRate?: number | null }>; syncedAt: string }
   | { op: 'replaceEtfHoldings'; code: string; rows: Array<{ reportDate: string; holdingSymbol: string; holdingName?: string | null; weight?: number | null; shares?: number | null; marketValue?: number | null }>; syncedAt: string }
+  | { op: 'upsertFundProfile'; code: string; profile: Record<string, unknown>; syncedAt: string }
+  | { op: 'replaceFundNav'; code: string; rows: Array<{ date: string; nav?: number | null; accNav?: number | null; changePct?: number | null }>; syncedAt: string }
   | { op: 'exec'; sql: string; params?: unknown[] }
 
 export async function applyDuckWriteOps(conn: DuckConnection, ops: DuckWriteOp[]): Promise<number> {
@@ -322,6 +324,26 @@ export async function applyDuckWriteOps(conn: DuckConnection, ops: DuckWriteOp[]
             INSERT INTO etf_holdings (code, report_date, holding_symbol, holding_name, weight, shares, market_value, synced_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           `, item.code, rd, sym, r.holdingName ?? null, r.weight ?? null, r.shares ?? null, r.marketValue ?? null, item.syncedAt)
+        }
+        applied++
+        break
+      }
+      case 'upsertFundProfile': {
+        await duckRun(conn, `
+          INSERT OR REPLACE INTO fund_profiles (code, profile_json, updated_at) VALUES (?, ?, ?)
+        `, item.code, JSON.stringify(item.profile), item.syncedAt)
+        applied++
+        break
+      }
+      case 'replaceFundNav': {
+        await duckRun(conn, `DELETE FROM fund_nav_daily WHERE code = ?`, item.code)
+        for (const r of item.rows) {
+          const d = String(r.date ?? '').slice(0, 10)
+          if (!d) continue
+          await duckRun(conn, `
+            INSERT INTO fund_nav_daily (code, trade_date, nav, acc_nav, change_pct, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, item.code, d, r.nav ?? null, r.accNav ?? null, r.changePct ?? null, item.syncedAt)
         }
         applied++
         break

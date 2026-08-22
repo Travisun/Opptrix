@@ -3,6 +3,8 @@ import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { cnEquityEtfIndex } from '../common/bindings.js'
 import { SINA_CN_ETF_CAPABILITIES } from '../common/etf-capabilities.js'
+import { SINA_CN_FUND_CAPABILITIES } from '../common/fund-capabilities.js'
+import { cnFundBindings } from '../../core/bindings.js'
 import { SINAFINANCE_SETTINGS } from './settings.js'
 
 /** 新浪财经 F10 + 行情中心公开接口 */
@@ -32,6 +34,7 @@ export const SINAFINANCE_CAPS = [
   Capability.MARGIN_TRADE,
   Capability.PERF_FORECAST,
   ...SINA_CN_ETF_CAPABILITIES,
+  ...SINA_CN_FUND_CAPABILITIES,
 ]
 
 const INDEX_CAPS = [
@@ -48,26 +51,29 @@ export const SINAFINANCE_SPEC: ProviderManifestSpec = {
   marketGroup: 'CN',
   defaultPriority: 56,
   capabilities: SINAFINANCE_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
-    EQUITY_CAPS.filter(c => ![
-      Capability.GLOBAL_INDEX,
-      Capability.MARKET_BREADTH,
-    ].includes(c)),
-    INDEX_CAPS,
-    p,
-    [
-      Capability.STOCK_REALTIME,
-      Capability.STOCK_KLINE,
-      Capability.NEWS,
-      Capability.STOCK_PROFILE,
-      Capability.STOCK_MONEY_FLOW,
-      Capability.SHAREHOLDER,
-      Capability.FINANCIAL_SUMMARY,
-      Capability.DIVIDEND,
-      ...SINA_CN_ETF_CAPABILITIES,
-    ],
-    maxConcurrent,
-  ),
+  bindingsFor: (p, maxConcurrent) => [
+    ...cnEquityEtfIndex(
+      EQUITY_CAPS.filter(c => ![
+        Capability.GLOBAL_INDEX,
+        Capability.MARKET_BREADTH,
+      ].includes(c)),
+      INDEX_CAPS,
+      p,
+      [
+        Capability.STOCK_REALTIME,
+        Capability.STOCK_KLINE,
+        Capability.NEWS,
+        Capability.STOCK_PROFILE,
+        Capability.STOCK_MONEY_FLOW,
+        Capability.SHAREHOLDER,
+        Capability.FINANCIAL_SUMMARY,
+        Capability.DIVIDEND,
+        ...SINA_CN_ETF_CAPABILITIES,
+      ],
+      maxConcurrent,
+    ),
+    ...cnFundBindings(p, maxConcurrent),
+  ],
   settings: SINAFINANCE_SETTINGS,
   supportsTest: true,
 }

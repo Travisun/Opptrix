@@ -294,6 +294,22 @@ CREATE TABLE IF NOT EXISTS etf_nav_daily (
   PRIMARY KEY (code, trade_date)
 );
 
+CREATE TABLE IF NOT EXISTS fund_profiles (
+  code VARCHAR PRIMARY KEY,
+  profile_json VARCHAR NOT NULL,
+  updated_at VARCHAR NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fund_nav_daily (
+  code VARCHAR NOT NULL,
+  trade_date VARCHAR NOT NULL,
+  nav DOUBLE,
+  acc_nav DOUBLE,
+  change_pct DOUBLE,
+  synced_at VARCHAR NOT NULL,
+  PRIMARY KEY (code, trade_date)
+);
+
 CREATE TABLE IF NOT EXISTS etf_holdings (
   id INTEGER PRIMARY KEY,
   code VARCHAR NOT NULL,

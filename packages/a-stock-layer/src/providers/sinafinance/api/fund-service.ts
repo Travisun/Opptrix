@@ -2,6 +2,7 @@ import { normalizeCode } from '../../../utils/helpers.js'
 import { SINA_SOURCE } from '../types/responses.js'
 import {
   SINA_ETF_HQ_NODE,
+  SINA_OTC_FUND_HQ_NODE,
   SINA_FUND_BALANCE_SHEET_FIELDS,
   SINA_FUND_FINANCIAL_INDICATOR_FIELDS,
   SINA_FUND_INCOME_STATEMENT_FIELDS,
@@ -52,6 +53,59 @@ export async function fetchSinaEtfListAll(opts: {
     }
     if (!result.hasNext || result.items.length < pageSize) break
     page += 1
+  }
+  return all
+}
+
+/** 场外开放式基金列表（分页） */
+export async function fetchSinaOtcFundList(opts: {
+  page?: number
+  pageSize?: number
+  node?: SinaFundMarketNode
+  sort?: string
+  asc?: boolean
+} = {}) {
+  const page = await fetchSinaFundHqPage({
+    node: opts.node ?? SINA_OTC_FUND_HQ_NODE,
+    page: opts.page,
+    pageSize: opts.pageSize,
+    sort: opts.sort,
+    asc: opts.asc,
+  })
+  return {
+    node: opts.node ?? SINA_OTC_FUND_HQ_NODE,
+    total: page.total,
+    page: page.page,
+    pageSize: page.pageSize,
+    hasNext: page.hasNext,
+    items: page.items.map(row => ({
+      code: normalizeCode(String(row.code ?? '')),
+      symbol: row.symbol,
+      name: row.name,
+      source: SINA_SOURCE,
+    })),
+    source: SINA_SOURCE,
+  }
+}
+
+/** 场外开放式基金列表全量（自动分页） */
+export async function fetchSinaOtcFundListAll(opts: {
+  pageSize?: number
+  node?: SinaFundMarketNode
+} = {}): Promise<Array<{ code: string; name?: string; symbol?: string }>> {
+  const pageSize = Math.min(Math.max(opts.pageSize ?? 80, 20), 200)
+  const all: Array<{ code: string; name?: string; symbol?: string }> = []
+  let page = 1
+  for (;;) {
+    const result = await fetchSinaOtcFundList({ ...opts, page, pageSize })
+    for (const item of result.items) {
+      const code = normalizeCode(String(item.code ?? ''))
+      if (!code) continue
+      all.push({ code, name: item.name, symbol: item.symbol })
+    }
+    if (!result.hasNext || result.items.length < pageSize) break
+    page += 1
+    if (page > 200) break
   }
   return all
 }

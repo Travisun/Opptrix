@@ -20,6 +20,8 @@ const MERGE_KEY_MAP: Record<string, string> = {
   // ETF 净值：按日期合并
   get_etf_nav: 'navDate',
   get_etf_holdings: 'symbol',
+  get_fund_nav: 'navDate',
+  get_fund_holdings: 'symbol',
   // 技术指标 / K 线
   get_instrument_indicators: 'date',
   get_instrument_chart: 'date',

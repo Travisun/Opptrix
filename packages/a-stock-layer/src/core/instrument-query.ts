@@ -61,6 +61,12 @@ export type InstrumentDataCapability =
   | 'etf_nav'
   | 'etf_holdings'
   | 'etf_snapshot'
+  | 'fund_list'
+  | 'fund_profile'
+  | 'fund_nav'
+  | 'fund_holdings'
+  | 'fund_snapshot'
+  | 'fund_quote'
   | 'dividend'
   | 'news'
   | 'notices'
@@ -206,6 +212,15 @@ function detailNewsPlan(
   )
 }
 
+function instrumentSearchPlanForFund(
+  opts: InstrumentQueryOpts,
+): InstrumentQueryPlan | null {
+  const keyword = (opts.keyword ?? '').trim()
+  if (!keyword) return null
+  const limit = Math.min(opts.pageSize ?? 30, 100)
+  return registryPlan('CN', 'FUND', Capability.FUND_LIST, 'fundList', true, [keyword, keyword, limit])
+}
+
 function instrumentSearchPlan(
   market: Market,
   opts: InstrumentQueryOpts,
@@ -240,6 +255,37 @@ export function resolveInstrumentQueryPlan(
     const symbol = normalized.symbol
     const assetClass = normalized.assetClass
     const exchange = normalized.exchange
+
+    if (assetClass === 'FUND') {
+      switch (dataCap) {
+        case 'snapshot':
+        case 'fund_snapshot':
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'FUND' }
+        case 'fund_profile':
+        case 'profile':
+          return registryPlan('CN', 'FUND', Capability.FUND_PROFILE, 'fundProfile', true, [symbol], normalized)
+        case 'fund_nav':
+          return registryPlan('CN', 'FUND', Capability.FUND_NAV, 'fundNav', true, [symbol], normalized)
+        case 'fund_holdings':
+          return registryPlan('CN', 'FUND', Capability.FUND_HOLDINGS, 'fundHoldings', true, [symbol], normalized)
+        case 'fund_quote':
+        case 'quote':
+        case 'realtime':
+          return registryPlan('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, [symbol], normalized)
+        case 'fund_list':
+          return registryPlan('CN', 'FUND', Capability.FUND_LIST, 'fundList', true, [
+            'CN', opts.keyword ?? '',
+          ])
+        case 'instrument_search':
+          return instrumentSearchPlanForFund(opts)
+        case 'news':
+        case 'notices':
+          return detailNewsPlan('CN', normalized, symbol, opts, opts.newsType ?? 'all')
+        default:
+          return null
+      }
+    }
+
     switch (dataCap) {
       case 'realtime':
         return { kind: 'cn_realtime', symbol, exchange }

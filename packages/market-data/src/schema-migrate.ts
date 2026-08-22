@@ -13,6 +13,7 @@ import {
   MIGRATION_V11_SQL,
   MIGRATION_V12_SQL,
   MIGRATION_V13_SQL,
+  MIGRATION_V14_SQL,
   SCHEMA_VERSION,
 } from './schema.js'
 import {
@@ -236,6 +237,12 @@ export const MIGRATION_STEPS: SchemaMigrationStep[] = [
     description: 'DuckDB primary storage one-shot migration gate',
     isApplied: (db) => isDuckPrimaryMigrationMarked(db),
     up: (db) => { db.exec(MIGRATION_V13_SQL) },
+  },
+  {
+    version: 14,
+    description: 'OTC fund profiles and nav tables',
+    isApplied: (db) => tableExists(db, 'fund_profiles') && tableExists(db, 'fund_nav_daily'),
+    up: (db) => { db.exec(MIGRATION_V14_SQL) },
   },
 ]
 

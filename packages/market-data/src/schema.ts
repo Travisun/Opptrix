@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 /**
  * 版本迁移注册表见 `schema-migrate.ts`（MIGRATION_STEPS）。
@@ -410,6 +410,24 @@ CREATE TABLE IF NOT EXISTS etf_holdings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_etf_holdings_code ON etf_holdings(code, report_date DESC);
+
+CREATE TABLE IF NOT EXISTS fund_profiles (
+  code TEXT PRIMARY KEY,
+  profile_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fund_nav_daily (
+  code TEXT NOT NULL,
+  trade_date TEXT NOT NULL,
+  nav REAL,
+  acc_nav REAL,
+  change_pct REAL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (code, trade_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fund_nav_code_date ON fund_nav_daily(code, trade_date DESC);
 `
 
 /** v6 — instruments/stocks unified views + backfill CN EQUITY */
@@ -789,4 +807,25 @@ VALUES ('market_data_storage', datetime('now'), '{"backend":"duckdb","primary":t
 export const MIGRATION_V13_SQL = `
 INSERT OR REPLACE INTO sync_cursor (job_name, last_success_at, meta_json)
 VALUES ('duck_primary_migration', NULL, '{"status":"pending","version":1}');
+`
+
+/** v14 — 场外基金本地档案与净值表 */
+export const MIGRATION_V14_SQL = `
+CREATE TABLE IF NOT EXISTS fund_profiles (
+  code TEXT PRIMARY KEY,
+  profile_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fund_nav_daily (
+  code TEXT NOT NULL,
+  trade_date TEXT NOT NULL,
+  nav REAL,
+  acc_nav REAL,
+  change_pct REAL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (code, trade_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fund_nav_code_date ON fund_nav_daily(code, trade_date DESC);
 `

@@ -3185,6 +3185,124 @@ export class MarketDataStore {
     })
   }
 
+  upsertFundProfile(code: string, profile: Record<string, unknown>): void {
+    const normalized = normalizeStockCode(code)
+    const now = nowIso()
+    this.queueMarketWrite({
+      op: 'upsertFundProfile',
+      code: normalized,
+      profile,
+      syncedAt: now,
+    }, () => {
+      this.db.prepare(`
+        INSERT INTO fund_profiles (code, profile_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(code) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at
+      `).run(normalized, JSON.stringify(profile), now)
+    })
+  }
+
+  getFundProfile(code: string): Record<string, unknown> | null {
+    const normalized = normalizeStockCode(code)
+    const row = this.duckRead<{ profile_json: string } | undefined>(
+      'SELECT profile_json FROM fund_profiles WHERE code = ? LIMIT 1',
+      [normalized],
+      () => this.db.prepare('SELECT profile_json FROM fund_profiles WHERE code = ?').get(normalized) as
+        { profile_json: string } | undefined,
+    )
+    if (!row?.profile_json) return null
+    try {
+      return JSON.parse(row.profile_json) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  listFundCodes(activeOnly = true): string[] {
+    const sql = activeOnly
+      ? `SELECT code FROM instruments WHERE asset_class = 'FUND' AND market = 'CN' AND status = 'active' ORDER BY code`
+      : `SELECT code FROM instruments WHERE asset_class = 'FUND' AND market = 'CN' ORDER BY code`
+    return this.duckReadAll<{ code: string }>(
+      sql,
+      [],
+      () => this.db.prepare(sql).all() as { code: string }[],
+    ).map(r => r.code)
+  }
+
+  fundNavSyncedAt(code: string): string | null {
+    const normalized = normalizeStockCode(code)
+    const row = this.duckRead<{ synced_at: string } | undefined>(
+      'SELECT MAX(synced_at) AS synced_at FROM fund_nav_daily WHERE code = ?',
+      [normalized],
+      () => this.db.prepare(
+        'SELECT MAX(synced_at) AS synced_at FROM fund_nav_daily WHERE code = ?',
+      ).get(normalized) as { synced_at: string } | undefined,
+    )
+    return row?.synced_at ?? null
+  }
+
+  replaceFundNav(code: string, rows: Array<{
+    date: string
+    nav?: number | null
+    accNav?: number | null
+    changePct?: number | null
+  }>): number {
+    const normalized = normalizeStockCode(code)
+    const ts = nowIso()
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck({ op: 'replaceFundNav', code: normalized, rows, syncedAt: ts })
+      return rows.length
+    }
+    const del = this.db.prepare('DELETE FROM fund_nav_daily WHERE code = ?').run(normalized)
+    const stmt = this.db.prepare(`
+      INSERT INTO fund_nav_daily (code, trade_date, nav, acc_nav, change_pct, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    const tx = this.db.transaction((batch: typeof rows) => {
+      for (const r of batch) {
+        const d = String(r.date ?? '').slice(0, 10)
+        if (!d) continue
+        stmt.run(normalized, d, r.nav ?? null, r.accNav ?? null, r.changePct ?? null, ts)
+      }
+    })
+    tx(rows)
+    return del.changes + rows.length
+  }
+
+  getFundNavHistory(code: string, limit = 120): Array<{
+    date: string
+    nav: number | null
+    accNav: number | null
+    changePct: number | null
+  }> {
+    const normalized = normalizeStockCode(code)
+    const rows = this.duckReadAll<{
+      trade_date: string
+      nav: number | null
+      acc_nav: number | null
+      change_pct: number | null
+    }>(
+      `SELECT trade_date, nav, acc_nav, change_pct
+       FROM fund_nav_daily WHERE code = ? ORDER BY trade_date DESC LIMIT ?`,
+      [normalized, limit],
+      () => this.db.prepare(`
+        SELECT trade_date, nav, acc_nav, change_pct
+        FROM fund_nav_daily WHERE code = ? ORDER BY trade_date DESC LIMIT ?
+      `).all(normalized, limit) as Array<{
+        trade_date: string
+        nav: number | null
+        acc_nav: number | null
+        change_pct: number | null
+      }>,
+    )
+    return rows.map(r => ({
+      date: r.trade_date,
+      nav: r.nav,
+      accNav: r.acc_nav,
+      changePct: r.change_pct,
+    }))
+  }
+
   listEtfInstruments(limit = 5000): { code: string; name: string | null; market: string }[] {
     return this.duckReadAll<{ code: string; name: string | null; market: string }>(
       `SELECT code, name, market FROM instruments

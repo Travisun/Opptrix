@@ -716,6 +716,50 @@ export class MarketDataEngine {
     return this.qScoped('CN', 'ETF', Capability.ETF_HOLDINGS, 'etfHoldings', true, etfCode)
   }
 
+  fundList(fundCode = '') {
+    return this.qScoped('CN', 'FUND', Capability.FUND_LIST, 'fundList', true, 'CN', fundCode)
+  }
+
+  fundProfile(fundCode: string) {
+    return this.qScoped('CN', 'FUND', Capability.FUND_PROFILE, 'fundProfile', true, fundCode)
+  }
+
+  fundNav(fundCode: string) {
+    return this.qScoped('CN', 'FUND', Capability.FUND_NAV, 'fundNav', true, fundCode)
+  }
+
+  fundHoldings(fundCode: string) {
+    return this.qScoped('CN', 'FUND', Capability.FUND_HOLDINGS, 'fundHoldings', true, fundCode)
+  }
+
+  fundQuote(fundCode: string) {
+    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, fundCode)
+  }
+
+  async fundSnapshot(fundCode: string) {
+    const code = normalizeCode(fundCode)
+    const [profile, nav, quote] = await Promise.all([
+      this.fundProfile(code),
+      this.fundNav(code),
+      this.fundQuote(code),
+    ])
+    const navRows = nav.data as Record<string, unknown>[] | undefined
+    const latestNav = navRows?.length
+      ? pickLatestNavRow(navRows)
+      : null
+    const quoteRow = quote.data?.[0] as Record<string, unknown> | undefined
+    return {
+      success: profile.success || nav.success || quote.success,
+      data: {
+        code,
+        profile: profile.data?.[0] ?? null,
+        nav: latestNav ?? null,
+        quote: quoteRow ?? null,
+      },
+      source: profile.source ?? nav.source ?? quote.source,
+    }
+  }
+
   async etfSnapshot(etfCode: string) {
     const code = normalizeCode(etfCode)
     const exchange = resolveStockMarketCode(code)
@@ -870,6 +914,7 @@ export class MarketDataEngine {
         if (plan.market === 'US') return this.usSnapshot(plan.symbol)
         if (plan.market === 'CRYPTO') return this.cryptoSnapshot(plan.symbol)
         if (plan.market === 'CN' && plan.assetClass === 'ETF') return this.etfSnapshot(plan.symbol)
+        if (plan.market === 'CN' && plan.assetClass === 'FUND') return this.fundSnapshot(plan.symbol)
         if (isRegionalEquityMarket(plan.market)) {
           return this.regionalSnapshot(plan.market, plan.symbol)
         }

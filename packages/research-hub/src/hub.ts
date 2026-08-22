@@ -360,6 +360,18 @@ export class ResearchHub {
         case 'etf_nav': return await this.queryEtfInstrumentData(params, 'etf_nav', t0)
         case 'etf_holdings': return await this.queryEtfInstrumentData(params, 'etf_holdings', t0)
         case 'etf_profile': return await this.queryEtfInstrumentData(params, 'etf_profile', t0)
+        case 'fund_list': return await this.fundList(params, t0)
+        case 'fund_snapshot': {
+          const ref = resolveInstrumentFromParams(params)
+          if (!ref) return fail('instrument 或 code 必填', t0)
+          return await this.queryFundInstrumentData({ ...params, instrument: ref }, 'fund_snapshot', t0)
+        }
+        case 'fund_nav': return await this.queryFundInstrumentData(params, 'fund_nav', t0)
+        case 'fund_holdings': return await this.queryFundInstrumentData(params, 'fund_holdings', t0)
+        case 'fund_profile': return await this.queryFundInstrumentData(params, 'fund_profile', t0)
+        case 'local_fund_list': return await this.localFundList(params, t0)
+        case 'local_fund_nav': return await this.localFundNav(String(params.code ?? ''), params, t0)
+        case 'local_fund_holdings': return await this.localFundHoldings(String(params.code ?? ''), params, t0)
         case 'sector_list': return await this.sectorList(params, t0)
         case 'sector_constituents': return await this.sectorConstituents(params, t0)
         case 'market_session': return await this.marketSession(params, t0)
@@ -2299,6 +2311,87 @@ export class ResearchHub {
   /** @deprecated Use cnInstrumentRef */
   private cnEquityRef(input: string | InstrumentRef): InstrumentRef {
     return this.cnInstrumentRef(input)
+  }
+
+  private async queryFundInstrumentData(
+    params: Record<string, unknown>,
+    capability: 'fund_nav' | 'fund_holdings' | 'fund_snapshot' | 'fund_profile',
+    t0: number,
+  ) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    if (ref.assetClass !== 'FUND') {
+      return fail('仅支持 assetClass=FUND 的场外基金标的', t0)
+    }
+    const labels = {
+      fund_nav: '基金净值',
+      fund_holdings: '基金持仓',
+      fund_snapshot: '基金快照',
+      fund_profile: '基金档案',
+    } as const
+    const r = await this.de.queryInstrumentData(ref, capability)
+    if (!r.success) return fail(instrumentQueryError(r, `${labels[capability]}获取失败`), t0)
+    const data = instrumentQueryData(r)
+    if (capability === 'fund_snapshot') return ok(data, labels[capability], t0)
+    if (capability === 'fund_profile') {
+      const row = Array.isArray(data) ? (data[0] ?? null) : data ?? null
+      return ok(
+        { instrument: ref, profile: row, source: 'queryInstrumentData' },
+        labels.fund_profile,
+        t0,
+      )
+    }
+    const rows = Array.isArray(data) ? data : []
+    return ok(
+      {
+        code: ref.symbol,
+        items: rows,
+        source: 'queryInstrumentData',
+      },
+      `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async fundList(params: Record<string, unknown>, t0: number) {
+    const code = params.code != null ? String(params.code) : ''
+    const ref = code
+      ? normalizeInstrumentRef({
+        market: 'CN',
+        assetClass: 'FUND',
+        symbol: code.replace(/\D/g, '').padStart(6, '0').slice(-6),
+        exchange: 'OF',
+      })
+      : normalizeInstrumentRef({
+        market: 'CN',
+        assetClass: 'FUND',
+        symbol: '000001',
+        exchange: 'OF',
+      })
+    const r = await this.de.queryInstrumentData(ref, 'fund_list', code ? { keyword: code } : {})
+    if (!r.success) return fail(instrumentQueryError(r, '场外基金列表获取失败'), t0)
+    const data = instrumentQueryData<unknown[]>(r) ?? []
+    return ok(data, `场外基金列表 ${data.length} 条`, t0)
+  }
+
+  private async localFundList(params: Record<string, unknown>, t0: number) {
+    return this.fundList(params, t0)
+  }
+
+  private async localFundNav(code: string, params: Record<string, unknown>, t0: number) {
+    const local = this.marketData.getFundNavHistory(code, Number(params.limit ?? 120))
+    if (local.length) {
+      return ok(
+        { code, items: local, source: 'local' },
+        `本地基金净值 ${local.length} 条`,
+        t0,
+      )
+    }
+    return this.queryFundInstrumentData({ ...params, code }, 'fund_nav', t0)
+  }
+
+  private async localFundHoldings(code: string, params: Record<string, unknown>, t0: number) {
+    return this.queryFundInstrumentData({ ...params, code }, 'fund_holdings', t0)
   }
 
   private async queryEtfInstrumentData(

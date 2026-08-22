@@ -4,6 +4,7 @@ import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
 import EtfDetailTab from './EtfDetailTab'
+import FundDetailTab from './FundDetailTab'
 import CryptoDetailTab from './CryptoDetailTab'
 import CrossMarketDetailTab from './CrossMarketDetailTab'
 import type { StockDiscussPayload } from './StockDecisionCard'
@@ -282,7 +283,7 @@ function RightMarketPanel({
   detailStockRef.current = detailStock
 
   useEffect(() => {
-    if (!detailStockKey || detailKind === 'cn-equity' || detailKind === 'cn-etf') {
+    if (!detailStockKey || detailKind === 'cn-equity' || detailKind === 'cn-etf' || detailKind === 'cn-fund') {
       setLocalIndexed(null)
       setLocalIndexLoading(false)
       return
@@ -510,7 +511,9 @@ function RightMarketPanel({
             onSelect={handlePortfolioSelect}
           />
         </div>
-        {tab === 'detail' && detailStock && detailKind === 'cn-etf' ? (
+        {tab === 'detail' && detailStock && detailKind === 'cn-fund' ? (
+          <FundDetailTab stock={detailStock} />
+        ) : tab === 'detail' && detailStock && detailKind === 'cn-etf' ? (
           <EtfDetailTab stock={detailStock} />
         ) : tab === 'detail' && detailStock && detailKind === 'crypto' ? (
           <CryptoDetailTab

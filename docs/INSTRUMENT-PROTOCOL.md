@@ -38,6 +38,7 @@ interface InstrumentRef {
 | `CN:SZ.000977` | 深市个股「浪潮信息」 |
 | `CN:SH.000977` | 上证指数「内地低碳」 |
 | `CN:SH.600519` | 沪市「贵州茅台」 |
+| `CN:OF.000001` | 场外开放式基金（`assetClass=FUND`，`exchange=OF`） |
 | `US:AAPL` | 美股 Apple（无交易所段时省略） |
 | `HK:00700` | 港股腾讯 |
 
@@ -51,6 +52,8 @@ interface InstrumentRef {
 
 - `exchange: 'SZ'` + `assetClass: 'EQUITY'` → 浪潮信息
 - `exchange: 'SH'` + `assetClass: 'INDEX'` → 内地低碳
+
+场外开放式基金与场内 ETF **硬分离**：场外须 `exchange: 'OF'` + `assetClass: 'FUND'` → 命名空间 `CN:OF.{6位}`；禁止用裸码或 ETF 路径查询场外净值/档案。
 
 禁止仅用裸码 `000977` 做详情/行情主路径（搜索命中除外，须尽快消歧为完整 Ref）。
 

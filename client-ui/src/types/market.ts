@@ -461,6 +461,49 @@ export interface EtfHoldingRow {
   assetType?: string
 }
 
+export interface FundProfileData {
+  code: string
+  name?: string
+  fullName?: string
+  unitNav?: number | null
+  accNav?: number | null
+  navDate?: string
+  changePct?: number | null
+  fundType?: string
+  manager?: string
+  company?: string
+  custodian?: string
+  expenseRatio?: number | null
+  scale?: number | null
+  benchmark?: string
+  establishDate?: string
+  source?: string
+}
+
+export interface FundNavPoint {
+  date: string
+  nav?: number | null
+  accNav?: number | null
+  changePct?: number | null
+}
+
+export interface FundHoldingRow {
+  reportDate: string
+  holdingSymbol: string
+  holdingName?: string
+  weight?: number | null
+  shares?: number | null
+  marketValue?: number | null
+  assetType?: string
+}
+
+export interface FundSnapshotData {
+  code: string
+  profile: FundProfileData | Record<string, unknown> | null
+  nav: FundNavPoint | Record<string, unknown> | null
+  quote: Record<string, unknown> | null
+}
+
 export interface EtfSnapshotData {
   code: string
   profile: EtfProfileData | null

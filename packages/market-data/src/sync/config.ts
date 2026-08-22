@@ -77,6 +77,8 @@ export const DEEP_SYNC_JOBS = [
   'etf_list',
   'etf_nav',
   'etf_holdings',
+  'fund_list',
+  'fund_nav',
   'us_list',
   'us_quotes',
   'crypto_list',
@@ -275,6 +277,8 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   etf_list: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   etf_nav: { concurrency: 2, delayMs: 280, ttlDays: 7 },
   etf_holdings: { concurrency: 2, delayMs: 320, ttlDays: 30 },
+  fund_list: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  fund_nav: { concurrency: 2, delayMs: 280, ttlDays: 7 },
   /** @deprecated ETF 静态日 K 写库已下线 */
   etf_kline_bootstrap: { concurrency: 2, delayMs: 200, ttlDays: 1 },
   us_list: { concurrency: 1, delayMs: 300, ttlDays: 7 },

@@ -5,12 +5,14 @@ export { WATCHLIST_INSTRUMENT_TTL, watchlistCacheTtl } from './core/watchlist-ca
 export {
   cnEquityBindings,
   cnEtfBindings,
+  cnFundBindings,
   cnIndexBindings,
   usEquityBindings,
   cryptoSpotBindings,
   regionalEquityBindings,
   bindingKey,
   CN_ETF_CAPABILITIES,
+  CN_FUND_CAPABILITIES,
 } from './core/bindings.js'
 export type { BindingKey } from './core/bindings.js'
 export { DriverRegistry } from './core/registry.js'

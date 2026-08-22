@@ -6,6 +6,8 @@ import { SINA_REFERER } from './types.js'
 
 export const SINA_ETF_HQ_NODE = 'etf_hq_fund'
 export const SINA_LOF_HQ_NODE = 'lof_hq_fund'
+/** 场外开放式基金列表 — 新浪基金行情中心节点 */
+export const SINA_OTC_FUND_HQ_NODE = 'f_jj_fund'
 export const SINA_FUND_OPENAPI_BASE = 'https://stock.finance.sina.com.cn/fundInfo/api/openapi.php'
 export const SINA_FUND_DETAIL_BASE = 'https://finance.sina.com.cn/fund/quotes'
 export const SINA_FUND_GG_DETAIL_BASE = 'https://stock.finance.sina.com.cn/fundInfo/view/FundGG_Info.php'

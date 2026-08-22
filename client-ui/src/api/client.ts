@@ -477,6 +477,40 @@ export const research = {
       20000,
     ),
 
+  fundSnapshot: async (code: string, signal?: AbortSignal): Promise<
+    import('../types/schemas').ApiResponse<import('../types/market').FundSnapshotData>
+  > => {
+    const fallback: import('../types/market').FundSnapshotData = {
+      code,
+      profile: null,
+      nav: null,
+      quote: null,
+    }
+    const resp = await apiCall<import('../types/market').FundSnapshotData>(
+      'fund_snapshot',
+      { code },
+      { signal },
+      20000,
+    )
+    return toApiResponse('fund_snapshot', resp, fallback, resp.data ?? undefined)
+  },
+
+  fundNav: (code: string, signal?: AbortSignal) =>
+    apiCall<{ code: string; items: import('../types/market').FundNavPoint[]; source?: string }>(
+      'local_fund_nav',
+      { code },
+      { signal },
+      20000,
+    ),
+
+  fundHoldings: (code: string, signal?: AbortSignal) =>
+    apiCall<{ code: string; items: import('../types/market').FundHoldingRow[]; source?: string }>(
+      'local_fund_holdings',
+      { code },
+      { signal },
+      20000,
+    ),
+
   etfScorecard: (code: string, signal?: AbortSignal) =>
     apiCall<import('../types/market').EtfScorecardData>(
       'etf_scorecard',
