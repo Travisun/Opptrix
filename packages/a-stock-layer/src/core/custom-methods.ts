@@ -15,6 +15,7 @@ import { SINA_CUSTOM } from '../providers/sinafinance/custom-method-docs.js'
 import { AKSHARE_CUSTOM } from '../providers/akshare/custom-method-docs.js'
 import { TONGHUASHUN_CUSTOM } from '../providers/tonghuashun/custom-method-docs.js'
 import { EASTMONEY_CUSTOM } from '../providers/eastmoney/custom-method-docs.js'
+import { TUSHARE_CUSTOM } from '../providers/tushare/custom-method-docs.js'
 
 /**
  * Provider 自定义方法参数定义 — 描述单个参数的名称、类型、描述和默认值。
@@ -273,6 +274,7 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'akshare', methods: AKSHARE_CUSTOM },
   { providerId: 'tonghuashun', methods: TONGHUASHUN_CUSTOM },
   { providerId: 'eastmoney', methods: EASTMONEY_CUSTOM },
+  { providerId: 'tushare', methods: TUSHARE_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {

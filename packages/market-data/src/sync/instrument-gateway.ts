@@ -39,7 +39,7 @@ export function cnFundRef(code: string): InstrumentRef {
     market: 'CN',
     assetClass: 'FUND',
     symbol,
-    exchange: 'OF',
+    exchange: 'PF',
   })
 }
 

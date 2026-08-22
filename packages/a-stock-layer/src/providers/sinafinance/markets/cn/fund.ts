@@ -1,6 +1,5 @@
 import type { StockListItem } from '../../../../core/schema.js'
-import { assertCnOtcFundCode, isCnOtcFundRef } from '../../../../core/fund-instrument.js'
-import { isCnEtfCode } from '../../../../core/instrument.js'
+import { assertCnPublicFundCode, isCnPublicFundRef, resolveCnPublicFundBareCode } from '../../../../core/fund-instrument.js'
 import { normalizeCode, safeFloat } from '../../../../utils/helpers.js'
 import {
   mapSinaFundNavRows,
@@ -19,18 +18,18 @@ import { fetchSinaFundNavPage } from '../../api/fund.js'
 import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import type { SinafinanceCnHandler } from './handler.js'
 
-function mapOtcFundListItems(
+function mapPublicFundListItems(
   items: Array<{ code?: string; name?: string }>,
 ): StockListItem[] {
   return items
     .map(item => {
       const code = normalizeCode(String(item.code ?? ''))
-      if (!code || isCnEtfCode(code)) return null
+      if (!code || !/^\d{6}$/.test(code)) return null
       return {
         code,
         name: String(item.name ?? ''),
         industry: 'FUND',
-        market: 'OF',
+        market: 'PF',
       }
     })
     .filter(Boolean) as StockListItem[]
@@ -38,7 +37,7 @@ function mapOtcFundListItems(
 
 type Handler = SinafinanceCnHandler & Record<string, unknown>
 
-/** 挂载 sinafinance 标准场外基金 Capability 方法 */
+/** 挂载 sinafinance 标准公募基金 Capability 方法 */
 export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) {
   const p = Driver.prototype as Handler
 
@@ -49,8 +48,8 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
   ): Promise<StockListItem[] | null> {
     const kw = String(keyword ?? '').trim()
     if (kw) {
-      const bare = normalizeCode(kw)
-      if (!bare || isCnEtfCode(bare)) return null
+      const bare = resolveCnPublicFundBareCode(kw)
+      if (!bare || !/^\d{6}$/.test(bare)) return null
       const profile = await fetchSinaFundProfile(bare)
       const quote = await fetchSinaFundQuote(bare).catch((e) => {
         rethrowIfFreeProviderThrottleTrigger(e)
@@ -66,20 +65,20 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
         code: bare,
         name: name || bare,
         industry: 'FUND',
-        market: 'OF',
+        market: 'PF',
       }]
     }
     const limit = Math.min(Math.max(Number(pageSize) || 30, 1), 200)
     const pageResult = await fetchSinaOtcFundList({ page: 1, pageSize: limit })
-    const items = mapOtcFundListItems(pageResult.items)
+    const items = mapPublicFundListItems(pageResult.items)
     if (items.length) return items
     const all = await fetchSinaOtcFundListAll({ pageSize: 80 })
-    const fallback = mapOtcFundListItems(all)
+    const fallback = mapPublicFundListItems(all)
     return fallback.length ? fallback : null
   }
 
   p.fundProfile = async function fundProfile(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnOtcFundCode(fundCode)
+    const bare = assertCnPublicFundCode(fundCode)
     if (!bare) return null
     const [profile, quote] = await Promise.all([
       fetchSinaFundProfile(bare),
@@ -90,7 +89,7 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
   }
 
   p.fundNav = async function fundNav(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnOtcFundCode(fundCode)
+    const bare = assertCnPublicFundCode(fundCode)
     if (!bare) return null
     const allRows: Array<Record<string, unknown>> = []
     let page = 1
@@ -109,7 +108,7 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
   }
 
   p.fundQuote = async function fundQuote(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnOtcFundCode(fundCode)
+    const bare = assertCnPublicFundCode(fundCode)
     if (!bare) return null
     const quote = await fetchSinaFundQuote(bare)
     const row = mapSinaQuoteToFundQuoteRow(bare, quote as Record<string, unknown> | null)
@@ -117,7 +116,7 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
   }
 
   p.fundHoldings = async function fundHoldings(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnOtcFundCode(fundCode)
+    const bare = assertCnPublicFundCode(fundCode)
     if (!bare) return null
     try {
       const raw = await fetchSinaFundTopHoldService(bare)
@@ -132,8 +131,8 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
   }
 }
 
-/** Provider registry 门禁 — 仅接受 CN 场外基金 Ref */
+/** Provider registry 门禁 — CN 公募基金 Ref */
 export function sinafinanceFundGate(ref: unknown): boolean {
   if (!ref || typeof ref !== 'object') return false
-  return isCnOtcFundRef(ref as import('@opptrix/shared').InstrumentRef)
+  return isCnPublicFundRef(ref as import('@opptrix/shared').InstrumentRef)
 }

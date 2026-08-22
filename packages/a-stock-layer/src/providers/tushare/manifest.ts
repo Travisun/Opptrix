@@ -3,8 +3,10 @@ import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { TUSHARE_SETTINGS } from './settings.js'
 import {
-  cnEquityBindings, cnEtfBindings, cnIndexBindings, usEquityBindings, cryptoSpotBindings, cnEquityEtfIndex, cnFullSplit,
+  cnEquityEtfIndex,
 } from '../common/bindings.js'
+import { cnFundBindings } from '../../core/bindings.js'
+import { TUSHARE_CN_FUND_CAPABILITIES } from './fund-capabilities.js'
 
 export const TUSHARE_CAPS = [
       Capability.STOCK_BASIC,
@@ -23,6 +25,7 @@ export const TUSHARE_CAPS = [
       Capability.BUYBACK,
       Capability.MAIN_BUSINESS,
       Capability.TRADE_CALENDAR,
+      ...TUSHARE_CN_FUND_CAPABILITIES,
     ]
 
 export const TUSHARE_SPEC: ProviderManifestSpec = {
@@ -33,10 +36,12 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
   defaultPriority: 110,
   maxConcurrent: 5,
   capabilities: TUSHARE_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => [
+    ...cnEquityEtfIndex(
       TUSHARE_CAPS.filter(c => ![
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
         Capability.GLOBAL_INDEX, Capability.EXCHANGE_RATE, Capability.MACRO_INDICATOR,
+        ...TUSHARE_CN_FUND_CAPABILITIES,
       ].includes(c)),
       TUSHARE_CAPS.filter(c => [
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE,
@@ -45,6 +50,8 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
       [],
       maxConcurrent,
     ),
+    ...cnFundBindings(p, maxConcurrent),
+  ],
   settings: TUSHARE_SETTINGS,
   supportsTest: true,
 }

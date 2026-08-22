@@ -400,7 +400,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'get_fund_profile',
       category: '场外基金',
-      description: '场外基金档案（类型、经理、规模、费率等）；须 assetClass=FUND / CN:OF 命名空间',
+      description: '公募基金档案（类型、经理、规模、费率等）；须 assetClass=FUND / CN:PF 命名空间',
       parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
       handler: (a) => d('fund_profile', resolveInstrumentParams(a)),
     },
