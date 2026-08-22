@@ -14,7 +14,6 @@ import { openExternalUrl } from '../platform/openUrl'
 import type {
   CryptoSnapshotData,
   CrossMarketRelatedStock,
-  FinancialSummaryData,
   RevenueBreakdownBlock,
   SeniorTradeItem,
   StockDividendItem,
@@ -50,7 +49,7 @@ import { listRowKey } from '../utils/listRowKey'
 const CONTENT_PAD = '15px'
 
 type EquityDetail = UsSnapshotData
-type DetailTab = 'chart' | 'basic' | 'company' | 'notices' | 'articles' | 'f10' | 'dividends' | 'holders'
+type DetailTab = 'chart' | 'basic' | 'company' | 'articles' | 'dividends' | 'holders'
 
 const useStyles = makeStyles({
   root: {
@@ -705,33 +704,6 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
   )
 }
 
-function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
-  const s = useStyles()
-  if (!rows.length) {
-    return <Text className={s.emptyHint}>暂无历史财务数据</Text>
-  }
-  return (
-    <div className={s.flatList}>
-      <div className={s.tableHeadWide}>
-        <span className={s.tableHeadCell}>报告期</span>
-        <span className={s.tableHeadCell}>类型</span>
-        <span className={s.tableHeadCell}>营收</span>
-        <span className={s.tableHeadCell}>净利</span>
-        <span className={s.tableHeadCell}>负债率</span>
-      </div>
-      {rows.slice(0, 12).map((row, index) => (
-        <div key={listRowKey(index, row.reportDate, row.reportType)} className={s.tableRowWide}>
-          <span className={s.tableCell}>{row.reportDate || '—'}</span>
-          <span className={s.tableCell}>{row.reportType || '—'}</span>
-          <span className={s.tableCell}>{formatCompactNumber(row.revenue)}</span>
-          <span className={s.tableCell}>{formatCompactNumber(row.netProfit)}</span>
-          <span className={s.tableCell}>{row.debtRatio != null ? `${row.debtRatio.toFixed(2)}%` : '—'}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function MiniKline({
   bars,
   formatPriceLabel,
@@ -823,9 +795,6 @@ export default function CrossMarketSnapshotDetail({
   const crypto = isCrypto ? (snapshot as CryptoSnapshotData | null) : null
   const quote = equity?.quote ?? crypto?.quote ?? null
   const profile = asProfile(equity?.profile ?? null)
-  const financial = equity?.financial ?? null
-  const financialHistory = equity?.financialHistory ?? (financial ? [financial] : [])
-  const notices = equity?.notices ?? equity?.news ?? []
   const articles = equity?.articles ?? []
   const dividends = equity?.dividends ?? []
   const shareholders = equity?.shareholders ?? null
@@ -860,8 +829,8 @@ export default function CrossMarketSnapshotDetail({
     : ref.market === 'US'
       ? (quote && 'quoteSession' in quote && (quote.quoteSession === 'pre' || quote.quoteSession === 'post')
         ? '当前为延长交易时段报价；盘中以常规时段为准。'
-        : '行情、公告、资讯与财务摘要来自腾讯公开接口，约每 1–2 分钟刷新。')
-      : '行情、公告、资讯、分红与业绩展望来自腾讯公开接口，约每 1–2 分钟刷新。'
+        : '行情约每 1–2 分钟刷新；深度资料请通过助手查询。')
+      : '行情与业绩展望约每 1–2 分钟刷新；深度资料请通过助手查询。'
 
   if (isCrypto) {
     return (
@@ -967,9 +936,7 @@ export default function CrossMarketSnapshotDetail({
           <Tab value="chart">走势</Tab>
           <Tab value="basic">概况</Tab>
           <Tab value="company">公司</Tab>
-          <Tab value="notices">公告</Tab>
           <Tab value="articles">资讯</Tab>
-          <Tab value="f10">财务</Tab>
           {showDividendsTab ? <Tab value="dividends">分红</Tab> : null}
           {showHoldersTab ? <Tab value="holders">股东</Tab> : null}
         </TabList>
@@ -1016,18 +983,6 @@ export default function CrossMarketSnapshotDetail({
                 ) : null}
               </div>
             </MetricSection>
-            {financial ? (
-              <MetricSection title="最新财务摘要">
-                <div className={s.metricGrid3}>
-                  <Metric label="报告期" value={financial.reportDate || '—'} />
-                  <Metric label="营收" value={formatCompactNumber(financial.revenue)} />
-                  <Metric label="净利润" value={formatCompactNumber(financial.netProfit)} />
-                  <Metric label="净利率" value={financial.netMargin != null ? `${financial.netMargin.toFixed(2)}%` : '—'} />
-                  <Metric label="负债率" value={financial.debtRatio != null ? `${financial.debtRatio.toFixed(2)}%` : '—'} />
-                  <Metric label="经营现金流" value={formatCompactNumber(financial.operatingCashFlow)} />
-                </div>
-              </MetricSection>
-            ) : null}
             {ref.market === 'HK' && tradingDistribution ? (
               <MetricSection title="今日成交分布">
                 <TradingDistributionPanel data={tradingDistribution} formatPrice={v => fmtPrice(v)} />
@@ -1105,37 +1060,9 @@ export default function CrossMarketSnapshotDetail({
           </div>
         </div>
 
-        <div className={mergeClasses(s.tabPanel, detailTab !== 'notices' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
-            <NewsPanel items={notices} emptyHint="暂无官方公告" />
-          </div>
-        </div>
-
         <div className={mergeClasses(s.tabPanel, detailTab !== 'articles' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             <NewsPanel items={articles} emptyHint="暂无相关资讯" />
-          </div>
-        </div>
-
-        <div className={mergeClasses(s.tabPanel, detailTab !== 'f10' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
-            {financial ? (
-              <MetricSection title="最新财报摘要">
-                <div className={s.metricGrid3}>
-                  <Metric label="营收" value={formatCompactNumber(financial.revenue)} />
-                  <Metric label="净利润" value={formatCompactNumber(financial.netProfit)} />
-                  <Metric label="净利率" value={financial.netMargin != null ? `${financial.netMargin.toFixed(2)}%` : '—'} />
-                  <Metric label="总资产" value={formatCompactNumber(financial.totalAssets ?? null)} />
-                  <Metric label="总负债" value={formatCompactNumber(financial.totalLiabilities ?? null)} />
-                  <Metric label="负债率" value={financial.debtRatio != null ? `${financial.debtRatio.toFixed(2)}%` : '—'} />
-                  <Metric label="经营现金流" value={formatCompactNumber(financial.operatingCashFlow)} />
-                  <Metric label="报告期" value={financial.reportDate || '—'} />
-                </div>
-              </MetricSection>
-            ) : null}
-            <MetricSection title="历史财务">
-              <FinancialHistoryPanel rows={financialHistory} />
-            </MetricSection>
           </div>
         </div>
 

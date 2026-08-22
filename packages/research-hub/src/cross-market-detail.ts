@@ -1,4 +1,4 @@
-/** 美股 / 港股详情 — 将腾讯自定义方法响应规范为与 A 股 stockDetail 对齐的结构 */
+/** 美股 / 港股详情 — 将标准层响应规范为与 A 股 stockDetail 对齐的结构 */
 
 function num(v: unknown): number | null {
   if (v == null || v === '') return null

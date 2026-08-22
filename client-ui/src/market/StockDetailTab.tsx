@@ -3,13 +3,11 @@ import { Link, Spinner, Tab, TabList, Text, Badge, makeStyles, mergeClasses } fr
 import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
 import type {
-  FinancialSummaryData,
   ProfileInstitutionRating,
   ProfilePlateItem,
   StockDetailData,
   StockDividendItem,
   StockMoneyFlowItem,
-  StockNewsItem,
   StockProfileData,
   StockShareholderData,
   WatchlistItem,
@@ -37,7 +35,7 @@ import type { HoldingSnapshot } from './useFollowPortfolio'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
-type DetailTab = 'analysis' | 'chart' | 'trend' | 'basic' | 'company' | 'news' | 'f10'
+type DetailTab = 'analysis' | 'chart' | 'trend' | 'basic' | 'company'
 
 const CONTENT_PAD = '15px'
 
@@ -482,35 +480,6 @@ function MetricSection({ title, children }: { title: string; children: ReactNode
   )
 }
 
-function NewsPanel({ items }: { items: StockNewsItem[] }) {
-  const s = useStyles()
-  if (!items.length) {
-    return <Text className={s.emptyHint}>暂无公告信息</Text>
-  }
-  return (
-    <div className={s.flatList}>
-      {items.map((item, index) => (
-        <div key={listRowKey(index, item.date, item.title, item.url)} className={s.annRow}>
-          <span className={s.listDate}>{item.date || '—'}</span>
-          {item.url ? (
-            <Link
-              className={s.listTitle}
-              href={item.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={event => openExternalUrl(item.url!, event)}
-            >
-              {item.title}
-            </Link>
-          ) : (
-            <span className={s.listTitle}>{item.title}</span>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function DividendPanel({ items }: { items: StockDividendItem[] }) {
   const s = useStyles()
   if (!items.length) {
@@ -686,33 +655,6 @@ function InstitutionRatingPanel({ rating }: { rating: ProfileInstitutionRating }
   )
 }
 
-function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
-  const s = useStyles()
-  if (!rows.length) {
-    return <Text className={s.emptyHint}>暂无历史财务数据</Text>
-  }
-  return (
-    <div className={s.flatList}>
-      <div className={s.tableHeadWide}>
-        <span className={s.tableHeadCell}>报告期</span>
-        <span className={s.tableHeadCell}>类型</span>
-        <span className={s.tableHeadCell}>营收</span>
-        <span className={s.tableHeadCell}>净利</span>
-        <span className={s.tableHeadCell}>ROE</span>
-      </div>
-      {rows.slice(0, 12).map((row, index) => (
-        <div key={listRowKey(index, row.reportDate, row.reportType)} className={s.tableRowWide}>
-          <span className={s.tableCell}>{row.reportDate || '—'}</span>
-          <span className={s.tableCell}>{row.reportType || '—'}</span>
-          <span className={s.tableCell}>{formatCompactNumber(row.revenue)}</span>
-          <span className={s.tableCell}>{formatCompactNumber(row.netProfit)}</span>
-          <span className={s.tableCell}>{row.roe != null ? `${row.roe.toFixed(2)}%` : '—'}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function StockDetailTab({
   stock,
   isHolding = false,
@@ -814,7 +756,6 @@ function StockDetailTab({
 
   const quote = detail.quote
   const profile = detail.profile
-  const financial = detail.financial
   const displayName = detail.name && detail.name !== detail.code
     ? detail.name
     : (stock.name && stock.name !== stock.code ? stock.name : (profile?.name || profile?.orgName || detail.code))
@@ -876,8 +817,6 @@ function StockDetailTab({
           <Tab value="analysis">分析</Tab>
           <Tab value="basic">概况</Tab>
           <Tab value="company">公司</Tab>
-          <Tab value="news">公告</Tab>
-          <Tab value="f10">财务</Tab>
         </TabList>
       </div>
 
@@ -947,9 +886,6 @@ function StockDetailTab({
                 <Metric label="总市值" value={formatCompactNumber(profile?.totalMarketCap ?? quote?.marketCap ?? null)} />
                 <Metric label="流通市值" value={formatCompactNumber(profile?.circulatingMarketCap ?? null)} />
                 <Metric label="所属行业" value={formatIndustryLine(profile, stock.industry)} />
-                <Metric label="EPS" value={financial?.eps != null ? financial.eps.toFixed(2) : '—'} />
-                <Metric label="每股净资产" value={financial?.bps != null ? financial.bps.toFixed(2) : '—'} />
-                <Metric label="报告类型" value={financial?.reportType ?? '—'} />
               </div>
             </MetricSection>
 
@@ -975,23 +911,6 @@ function StockDetailTab({
                 </div>
               </MetricSection>
             ) : null}
-
-            {financial && (
-              <MetricSection title="盈利能力">
-                <div className={s.metricGrid3}>
-                  <Metric label="营收" value={formatCompactNumber(financial.revenue)} />
-                  <Metric label="营收同比" value={formatPct(financial.revenueYoy)} />
-                  <Metric label="净利润" value={formatCompactNumber(financial.netProfit)} />
-                  <Metric label="净利同比" value={formatPct(financial.netProfitYoy)} />
-                  <Metric label="ROE" value={financial.roe != null ? `${financial.roe.toFixed(2)}%` : '—'} />
-                  <Metric label="毛利率" value={financial.grossMargin != null ? `${financial.grossMargin.toFixed(2)}%` : '—'} />
-                  <Metric label="净利率" value={financial.netMargin != null ? `${financial.netMargin.toFixed(2)}%` : '—'} />
-                  <Metric label="资产负债率" value={financial.debtRatio != null ? `${financial.debtRatio.toFixed(2)}%` : '—'} />
-                  <Metric label="每股现金流" value={financial.operatingCashFlow != null ? financial.operatingCashFlow.toFixed(2) : '—'} />
-                  <Metric label="报告期" value={financial.reportDate || '—'} />
-                </div>
-              </MetricSection>
-            )}
           </div>
         </div>
 
@@ -1114,39 +1033,6 @@ function StockDetailTab({
                 <Text className={s.prose} block>{profile.businessScope}</Text>
               </MetricSection>
             )}
-          </div>
-        </div>
-
-        <div className={mergeClasses(s.tabPanel, detailTab !== 'news' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
-            <NewsPanel items={detail.news ?? []} />
-          </div>
-        </div>
-
-        <div className={mergeClasses(s.tabPanel, detailTab !== 'f10' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
-            {financial && (
-              <MetricSection title="最新财报摘要">
-                <div className={s.metricGrid3}>
-                  <Metric label="营收" value={formatCompactNumber(financial.revenue)} />
-                  <Metric label="营收同比" value={formatPct(financial.revenueYoy)} />
-                  <Metric label="净利润" value={formatCompactNumber(financial.netProfit)} />
-                  <Metric label="净利同比" value={formatPct(financial.netProfitYoy)} />
-                  <Metric label="ROE" value={financial.roe != null ? `${financial.roe.toFixed(2)}%` : '—'} />
-                  <Metric label="毛利率" value={financial.grossMargin != null ? `${financial.grossMargin.toFixed(2)}%` : '—'} />
-                  <Metric label="净利率" value={financial.netMargin != null ? `${financial.netMargin.toFixed(2)}%` : '—'} />
-                  <Metric label="资产负债率" value={financial.debtRatio != null ? `${financial.debtRatio.toFixed(2)}%` : '—'} />
-                  <Metric label="每股现金流" value={financial.operatingCashFlow != null ? financial.operatingCashFlow.toFixed(2) : '—'} />
-                  <Metric label="每股净资产" value={financial.bps != null ? financial.bps.toFixed(2) : '—'} />
-                  <Metric label="EPS" value={financial.eps != null ? financial.eps.toFixed(2) : '—'} />
-                  <Metric label="报告期" value={`${financial.reportDate || '—'} ${financial.reportType ?? ''}`.trim()} />
-                </div>
-              </MetricSection>
-            )}
-
-            <MetricSection title="财务历史">
-              <FinancialHistoryPanel rows={detail.financialHistory ?? []} />
-            </MetricSection>
 
             <MetricSection title="分红送转">
               <DividendPanel items={detail.dividends ?? []} />
