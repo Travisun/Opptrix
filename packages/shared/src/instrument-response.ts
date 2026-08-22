@@ -154,6 +154,8 @@ export function quoteFromProviderRow(
     week52_high: num(row.week52High ?? row.week52_high),
     week52_low: num(row.week52Low ?? row.week52_low),
     currency: str(row.currency) || null,
+    quote_session: str(row.quoteSession ?? row.quote_session) || null,
+    session_label: str(row.sessionLabel ?? row.session_label) || null,
   }
 }
 

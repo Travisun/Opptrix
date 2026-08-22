@@ -15,6 +15,7 @@ import { isTickflowFeatureAllowed } from '../api/permissions.js'
 import { MarketHandlerShell } from '../../common/driver-factory.js'
 import {
   expandCompactKlines,
+  inferMarketFromBareCode,
   mapTickflowInstrumentListItems,
   mapTickflowInstrumentProfiles,
   mergeFinancialSummary,
@@ -139,7 +140,11 @@ export abstract class TickflowCommonHandler extends MarketHandlerShell {
   protected abstract client(): TickflowClient | null
 
   protected tickflowSymbol(code: string): string {
-    return toTickflowSymbol(code)
+    const raw = code.trim()
+    if (/\.(SH|SZ|BJ|US|HK)$/i.test(raw)) return toTickflowSymbol(raw)
+    const bare = raw.replace(/^(US|NYSE|NASDAQ|AMEX|HK):/i, '').trim()
+    const market = inferMarketFromBareCode(bare)
+    return toTickflowSymbol(market, bare)
   }
 
   async stockList(market = 'CN', keyword = ''): Promise<StockListItem[] | null> {

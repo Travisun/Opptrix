@@ -89,12 +89,13 @@ export function normalizeCrossMarketProfile(
     code,
     name,
     orgName: str(raw.orgName ?? raw.name) || undefined,
-    industry: str(raw.industry) || undefined,
+    industry: str(raw.industry ?? raw.sector) || undefined,
     listingDate: str(raw.listingDate) || undefined,
     website: str(raw.website) || undefined,
-    orgProfile: str(raw.orgProfile) || undefined,
+    orgProfile: str(raw.orgProfile ?? raw.description) || undefined,
     mainBusiness: str(raw.mainBusiness) || undefined,
     securityType: str(raw.securityType ?? raw.exchange) || undefined,
+    chairman: str(raw.chairman) || undefined,
     totalShares: num(raw.totalShares),
     market: market,
   }
@@ -166,7 +167,7 @@ export function normalizeHkTencentProfile(
   }
 }
 
-/** 合并腾讯 US quote enrich（52 周高低、币种等）到 snapshot quote */
+/** 合并实时 enrich（52 周高低、币种、估值等）到 snapshot quote */
 export function mergeCrossMarketQuote(
   base: Record<string, unknown> | null | undefined,
   enrich: Record<string, unknown> | null | undefined,
@@ -174,13 +175,15 @@ export function mergeCrossMarketQuote(
   if (!base && !enrich) return null
   const out = { ...(base ?? {}) }
   if (enrich) {
-    if (enrich.week52High != null) out.week52High = enrich.week52High
-    if (enrich.week52Low != null) out.week52Low = enrich.week52Low
-    if (enrich.currency != null) out.currency = enrich.currency
-    if (out.turnoverRate == null && enrich.turnoverRate != null) out.turnoverRate = enrich.turnoverRate
-    if (out.pe == null && enrich.pe != null) out.pe = enrich.pe
-    if (out.pb == null && enrich.pb != null) out.pb = enrich.pb
-    if (out.marketCap == null && enrich.marketCap != null) out.marketCap = enrich.marketCap
+    const fillKeys = [
+      'code', 'name', 'price', 'changePct', 'change', 'open', 'high', 'low', 'preClose',
+      'volume', 'amount', 'turnoverRate', 'amplitude', 'volumeRatio', 'pe', 'pb',
+      'marketCap', 'circulatingMarketCap', 'week52High', 'week52Low', 'currency',
+      'quoteSession', 'sessionLabel', 'preMarketPrice', 'postMarketPrice',
+    ] as const
+    for (const key of fillKeys) {
+      if (out[key] == null && enrich[key] != null) out[key] = enrich[key]
+    }
   }
   return Object.keys(out).length ? out : null
 }

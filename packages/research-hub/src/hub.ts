@@ -3733,9 +3733,12 @@ export class ResearchHub {
     ])
 
     const profileRaw = profileR.data?.[0] ?? null
-    const profile = profileRaw
-      ? normalizeCrossMarketProfile(market, symbol, profileRaw)
-      : (snap?.profile as Record<string, unknown> | null) ?? null
+    const profileSource = profileRaw
+      ?? (snap?.profile as Record<string, unknown> | null)
+      ?? null
+    const profile = profileSource
+      ? normalizeCrossMarketProfile(market, symbol, profileSource)
+      : null
 
     const notices = normalizeCrossMarketNoticesFromNews(symbol, noticeR.data ?? null)
     const articles = normalizeCrossMarketArticlesFromNews(symbol, articleR.data ?? null)

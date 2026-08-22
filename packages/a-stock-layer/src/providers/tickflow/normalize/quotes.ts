@@ -1,4 +1,5 @@
 import type { StockRealtime } from '@opptrix/shared'
+import { usQuoteSessionLabel, type UsQuoteSession } from '../../../utils/us-market.js'
 import { parseTickflowSymbol } from '../api/symbols.js'
 
 function num(v: unknown): number | null {
@@ -12,6 +13,12 @@ function pctFromDecimal(v: unknown): number | null {
   const n = num(v)
   if (n == null) return null
   return n * 100
+}
+
+function strField(v: unknown): string | null {
+  if (v == null || v === '') return null
+  const s = String(v).trim()
+  return s || null
 }
 
 function quoteExt(quote: Record<string, unknown>): Record<string, unknown> {
@@ -34,11 +41,20 @@ function mapSession(session: unknown): StockRealtime['quoteSession'] | undefined
   }
 }
 
+function sessionLabelForMarket(
+  market: string,
+  session: StockRealtime['quoteSession'] | undefined,
+): string | undefined {
+  if (!session) return undefined
+  if (market === 'US') return usQuoteSessionLabel(session as UsQuoteSession)
+  return undefined
+}
+
 export function mapTickflowQuote(quote: Record<string, unknown>): StockRealtime | null {
   const symbol = String(quote.symbol ?? '')
   if (!symbol) return null
 
-  const { code } = parseTickflowSymbol(symbol)
+  const { code, market } = parseTickflowSymbol(symbol)
   const ext = quoteExt(quote)
   const price = num(quote.last_price)
   const preClose = num(quote.prev_close)
@@ -48,16 +64,18 @@ export function mapTickflowQuote(quote: Record<string, unknown>): StockRealtime 
   }
 
   const session = mapSession(quote.session)
-  const name = String(ext.name ?? code)
+  const name = String(ext.name ?? quote.name ?? code)
 
   return {
     code,
     name,
     price,
     changePct,
-    pe: null,
-    pb: null,
+    pe: num(ext.pe ?? ext.pe_ttm ?? ext.pe_ratio),
+    pb: num(ext.pb ?? ext.pb_ratio),
     turnoverRate: pctFromDecimal(ext.turnover_rate),
+    marketCap: num(ext.market_cap ?? ext.market_capitalization ?? ext.total_market_cap),
+    circulatingMarketCap: num(ext.float_market_cap ?? ext.circulating_market_cap),
     open: num(quote.open),
     high: num(quote.high),
     low: num(quote.low),
@@ -68,7 +86,13 @@ export function mapTickflowQuote(quote: Record<string, unknown>): StockRealtime 
     amplitude: pctFromDecimal(ext.amplitude),
     timestamp: quote.timestamp != null ? String(quote.timestamp) : undefined,
     quoteSession: session,
-  }
+    sessionLabel: sessionLabelForMarket(market, session),
+    preMarketPrice: num(ext.pre_market_price ?? ext.premarket_price),
+    postMarketPrice: num(ext.post_market_price ?? ext.after_hours_price),
+    week52High: num(ext.week52_high ?? ext.week_52_high ?? ext['52w_high'] ?? ext.high_52w),
+    week52Low: num(ext.week52_low ?? ext.week_52_low ?? ext['52w_low'] ?? ext.low_52w),
+    currency: strField(ext.currency) ?? (market === 'US' ? 'USD' : market === 'HK' ? 'HKD' : null),
+  } as StockRealtime
 }
 
 export function mapTickflowQuotes(rows: unknown): StockRealtime[] {

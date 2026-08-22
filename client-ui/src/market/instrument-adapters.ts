@@ -46,6 +46,8 @@ export interface UnifiedInstrumentQuoteDto {
   week52_high?: number | null
   week52_low?: number | null
   currency?: string | null
+  quote_session?: string | null
+  session_label?: string | null
 }
 
 export interface UnifiedChartBarDto {
@@ -170,6 +172,8 @@ function quoteDtoToCrossMarket(q: UnifiedInstrumentQuoteDto): CrossMarketQuote {
     week52High: q.week52_high ?? null,
     week52Low: q.week52_low ?? null,
     currency: q.currency ?? null,
+    quoteSession: (q.quote_session as CrossMarketQuote['quoteSession']) ?? undefined,
+    sessionLabel: q.session_label ?? undefined,
   }
 }
 
