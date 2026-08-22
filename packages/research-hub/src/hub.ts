@@ -1492,122 +1492,28 @@ export class ResearchHub {
   private async stockDetail(ref: InstrumentRef, t0: number) {
     const cnRef = resolveCnInstrumentRef(ref)
     const code = cnRef.symbol
-    const [quoteR, profileR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR, holderHistoryR] = await Promise.all([
-      this.stockDetailQuote(cnRef),
-      this.stockDetailOptional(
-        this.stockDetailProfile(cnRef).then(profile => ({
-          success: !!profile,
-          data: profile ? [profile] : null,
-        })),
-        25000,
-      ),
-      this.stockDetailOptional(
-        (async () => {
-          const fast = await this.callDetailProviderMethod<FinancialSummary>(
-            ['tushare', 'tonghuashun'],
-            'financials',
-            [code, '', 'all'],
-            cnRef,
-          )
-          if (fast?.length) return { success: true, data: fast }
-          return this.de.queryInstrumentData(cnRef, 'financials', {
-            reportDate: '',
-            reportType: 'all',
-          }) as Promise<{ success: boolean; data?: Array<{ reportType?: string }> | null }>
-        })(),
-        25000,
-      ),
-      this.stockDetailOptional(
-        this.stockDetailNotices(cnRef).then(data => ({ success: data.length > 0, data })),
-      ),
-      this.stockDetailOptional(
-        (async () => {
-          const engineR = await this.de.queryInstrumentData(cnRef, 'dividend')
-          const engineRows = instrumentQueryData<Dividend[]>(engineR)
-          if (engineRows?.length) return { success: true, data: engineRows }
-          const preferred = await this.callDetailProviderMethod<Dividend>(
-            ['tushare'],
-            'dividend',
-            [code],
-            cnRef,
-          )
-          if (preferred?.length) return { success: true, data: preferred }
-          const fallback = await this.callDetailProviderMethod<Dividend>(
-            ['baostock', 'tonghuashun'],
-            'dividend',
-            [code],
-            cnRef,
-          )
-          return fallback?.length ? { success: true, data: fallback } : { success: false }
-        })(),
-      ),
-      this.stockDetailOptional(
-        (async () => {
-          const engineR = await this.de.queryInstrumentData(cnRef, 'money_flow')
-          const engineRows = instrumentQueryData<MoneyFlow[]>(engineR)
-          if (engineRows?.length) return { success: true, data: engineRows }
-          const fallback = await this.callDetailProviderMethod<MoneyFlow>(
-            ['zzshare'],
-            'moneyFlow',
-            [code],
-            cnRef,
-          )
-          return fallback?.length ? { success: true, data: fallback } : { success: false }
-        })(),
-      ),
-      this.stockDetailOptional(
-        this.stockDetailShareholders(cnRef).then(data => ({
-          success: !!data?.length,
-          data,
-        })),
-      ),
-      this.stockDetailOptional(
-        this.stockDetailHolderHistory(cnRef).then(history => ({
-          success: history.length > 0,
-          data: history,
-        })),
-        25000,
-      ),
-    ])
+    const quoteR = await this.stockDetailQuote(cnRef)
+    const quote = quoteR ? this.enrichQuote(quoteR) : null
+    if (!quote) return fail('获取行情失败', t0)
 
-    const quoteRaw = quoteR
-    const quote = quoteRaw ? this.enrichQuote(quoteRaw) : null
-    const profileRow = enrichDetailProfileFromQuote(
-      instrumentQueryData<Array<Record<string, unknown>>>(profileR)?.[0] ?? null,
-      quote as Record<string, unknown> | null,
-    )
-    const shareholderBase = shareholdersR.data?.[0] as import('./stock-detail-normalize.js').StockDetailShareholderView | null ?? null
-    const shareholders = enrichShareholderView(shareholderBase, {
-      price: quote?.price ?? null,
-      circulatingMarketCap: (quote as Record<string, unknown> | null)?.circulatingMarketCap as number | null
-        ?? (profileRow?.circulatingMarketCap as number | null | undefined)
-        ?? null,
-      holderHistory: holderHistoryR.data ?? [],
-    })
-    const financialHistory = financialAllR.data ?? []
-    const financial = financialHistory.find(row => row.reportType === 'annual')
-      ?? financialHistory[0]
-      ?? null
     const name = this.resolveStockName(
       code,
       cnRef.exchange ?? null,
-      quote?.name,
-      profileRow?.name as string | undefined,
-      profileRow?.orgName as string | undefined,
+      quote.name,
     )
 
     return ok({
       code: buildInstrumentNamespace(cnRef),
       name,
       quote,
-      profile: profileRow,
-      financial,
-      financialHistory,
-      news: newsR.data ?? [],
-      dividends: dividendR.data ?? [],
-      moneyFlow: moneyFlowR.data ?? [],
-      shareholders,
-    }, `${name}(${code}) 详情`, t0)
+      profile: null,
+      financial: null,
+      financialHistory: [],
+      news: [],
+      dividends: [],
+      moneyFlow: [],
+      shareholders: null,
+    }, `${name}(${code}) 行情`, t0)
   }
 
   private mergeQuoteWithLocal(
@@ -3673,121 +3579,44 @@ export class ResearchHub {
     const snapshotR = await this.de.queryInstrumentData(ref, 'snapshot')
     const snap = instrumentQueryData<Record<string, unknown>>(snapshotR)
 
-    const [
-      profileR,
-      noticeR,
-      articleR,
-      financialR,
-      dividendR,
-      shareholderR,
-      quoteR,
-    ] = await Promise.all([
-      this.stockDetailOptional(
-        this.de.queryInstrumentData(ref, 'profile').then(r => {
-          const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
-          return { success: r.success && !!(data?.length), data }
-        }),
-      ),
-      this.stockDetailOptional(
-        this.de.queryInstrumentData(ref, 'notices', { page: 1, pageSize: 30 }).then(r => {
-          const data = instrumentQueryData<NewsItem[]>(r)
-          return { success: r.success && !!(data?.length), data }
-        }),
-      ),
-      this.stockDetailOptional(
-        this.de.queryInstrumentData(ref, 'news', { page: 1, pageSize: 30 }).then(r => {
-          const data = instrumentQueryData<NewsItem[]>(r)
-          return { success: r.success && !!(data?.length), data }
-        }),
-      ),
-      this.stockDetailOptional(
-        this.de.queryInstrumentData(ref, 'financials', { reportDate: '', reportType: 'annual' }).then(r => {
-          const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
-          return { success: r.success && !!(data?.length), data }
-        }),
-      ),
-      market === 'HK'
-        ? this.stockDetailOptional(
-          this.de.queryInstrumentData(ref, 'dividend', { page: 1, pageSize: 10 }).then(r => {
-            const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
-            return { success: r.success && !!(data?.length), data }
-          }),
-        )
-        : Promise.resolve({ success: false as const, data: null as Array<Record<string, unknown>> | null }),
-      market === 'US'
-        ? this.stockDetailOptional(
-          this.de.queryInstrumentData(ref, 'shareholders', { page: 1 }).then(r => {
-            const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
-            return { success: r.success && !!(data?.length), data }
-          }),
-        )
-        : Promise.resolve({ success: false as const, data: null as Array<Record<string, unknown>> | null }),
-      this.stockDetailOptional(
-        (async () => {
-          const engineR = await this.de.queryInstrumentData(ref, 'realtime')
-          const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(engineR)?.[0]
-          if (row) return { success: true as const, data: [row as unknown as Record<string, unknown>] }
-          return { success: false as const, data: null as Record<string, unknown>[] | null }
-        })(),
-      ),
-    ])
+    const quoteR = await this.stockDetailOptional(
+      (async () => {
+        const engineR = await this.de.queryInstrumentData(ref, 'realtime')
+        const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(engineR)?.[0]
+        if (row) return { success: true as const, data: [row as unknown as Record<string, unknown>] }
+        return { success: false as const, data: null as Record<string, unknown>[] | null }
+      })(),
+    )
 
-    const profileRaw = profileR.data?.[0] ?? null
-    const profileSource = profileRaw
-      ?? (snap?.profile as Record<string, unknown> | null)
-      ?? null
-    const profile = profileSource
-      ? normalizeCrossMarketProfile(market, symbol, profileSource)
+    const snapProfile = snap?.profile as Record<string, unknown> | null
+    const profile = snapProfile
+      ? normalizeCrossMarketProfile(market, symbol, snapProfile)
       : null
 
-    const notices = normalizeCrossMarketNoticesFromNews(symbol, noticeR.data ?? null)
-    const articles = normalizeCrossMarketArticlesFromNews(symbol, articleR.data ?? null)
     const quote = mergeCrossMarketQuote(
       (snap?.quote ?? null) as Record<string, unknown> | null,
       quoteR.data?.[0] ?? null,
     )
 
-    const financialRows = financialR.data ?? []
-    const financialHistory = financialRows.length
-      ? normalizeCrossMarketFinancialHistory(symbol, financialRows)
-      : market === 'US'
-        ? normalizeUsFinancialHistory(symbol, null)
-        : normalizeHkFinancialHistory(symbol, null, null)
-
-    const hkDividendRows = dividendR.data ?? null
-    const dividends = market === 'HK'
-      ? (() => {
-        const fromStandard = normalizeCrossMarketDividends(symbol, hkDividendRows)
-        if (fromStandard.length) return fromStandard
-        return normalizeHkDividends(symbol, hkDividendRows?.[0] ?? null)
-      })()
-      : []
-
-    const shareholders = market === 'US'
-      ? normalizeCrossMarketShareholdersFromRows(symbol, shareholderR.data ?? null)
-        ?? normalizeUsShareholders(symbol, shareholderR.data?.[0] ?? null)
-      : null
-
     const payload = buildCrossMarketDetailPayload(market, symbol, snap ?? null, {
       profile,
       quote,
-      notices,
-      articles,
-      financialHistory,
-      dividends,
-      shareholders,
+      notices: [],
+      articles: [],
+      financialHistory: [],
+      dividends: [],
+      shareholders: null,
       reviewProspect: null,
       relatedStocks: [],
       seniorTrades: [],
       tradingDistribution: null,
     })
 
-    if (!payload.quote && !payload.profile && !(payload.recentKlines as unknown[])?.length
-      && !notices.length && !articles.length) {
+    if (!payload.quote && !(payload.recentKlines as unknown[])?.length) {
       return fail(`${market === 'US' ? '美股' : '港股'}详情获取失败`, t0)
     }
 
-    return ok(payload, `${market === 'US' ? '美股' : '港股'}详情`, t0)
+    return ok(payload, `${market === 'US' ? '美股' : '港股'}行情`, t0)
   }
 
   private async usSnapshot(symbol: string, t0: number) {
