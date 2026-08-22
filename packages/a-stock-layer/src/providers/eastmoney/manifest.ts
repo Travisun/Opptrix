@@ -14,15 +14,34 @@ export const EASTMONEY_CAPS = [
   Capability.INST_HOLDING,
 ]
 
+/** 天天基金 F10 公募基金档案（概况 / 净值 / 持仓 / 快照） */
+export const EASTMONEY_FUND_CAPS = [
+  Capability.FUND_PROFILE,
+  Capability.FUND_NAV,
+  Capability.FUND_HOLDINGS,
+  Capability.FUND_QUOTE,
+] as const
+
+const EASTMONEY_FUND_BINDING_PRIORITY_OFFSET = 37
+
 export const EASTMONEY_SPEC: ProviderManifestSpec = {
   id: 'eastmoney',
   title: '东方财富',
-  subtitle: '资金流 / 两融 / 宏观 cjsj / 机构持仓 zlsj',
+  subtitle: '资金流 / 两融 / 宏观 cjsj / 机构持仓 zlsj / 天天基金 F10',
   marketGroup: 'CN',
   defaultPriority: 75,
   maxConcurrent: 4,
-  capabilities: EASTMONEY_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnEquityBindings(EASTMONEY_CAPS, p, maxConcurrent),
+  capabilities: [...EASTMONEY_CAPS, ...EASTMONEY_FUND_CAPS],
+  bindingsFor: (p, maxConcurrent) => [
+    ...cnEquityBindings(EASTMONEY_CAPS, p, maxConcurrent),
+    ...EASTMONEY_FUND_CAPS.map(capability => ({
+      market: 'CN' as const,
+      assetClass: 'FUND' as const,
+      capability,
+      defaultPriority: p + EASTMONEY_FUND_BINDING_PRIORITY_OFFSET,
+      ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    })),
+  ],
   settings: EASTMONEY_SETTINGS,
   supportsTest: true,
 }
@@ -30,7 +49,7 @@ export const EASTMONEY_SPEC: ProviderManifestSpec = {
 export const EASTMONEY_MANIFEST = providerManifestEntry(
   'eastmoney',
   '东方财富',
-  '资金流、融资融券、宏观与机构持仓公开接口（data.eastmoney.com）',
+  '资金流、融资融券、宏观与机构持仓公开接口（data.eastmoney.com）；天天基金 F10 公募基金档案',
   'CN',
   75,
   EASTMONEY_SETTINGS,

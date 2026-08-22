@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
 import type { WatchlistItem } from '../types/market'
-import type { FundHoldingRow, FundNavPoint, FundProfileData, FundSnapshotData } from '../types/market'
+import type { FundHoldingRow, FundProfileData, FundSnapshotData } from '../types/market'
 import {
   formatCompactNumber,
   formatPct,
@@ -10,11 +10,11 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
-import { displayCodeFromInstrument, resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
+import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { listRowKey } from '../utils/listRowKey'
 
-type FundTab = 'overview' | 'chart' | 'nav' | 'holdings'
+type FundTab = 'overview' | 'holdings'
 
 const CONTENT_PAD = '15px'
 
@@ -105,11 +105,6 @@ const useStyles = makeStyles({
     gap: '8px',
     marginBottom: '12px',
   },
-  sectionTitle: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textSecondary,
-  },
   grid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -151,9 +146,7 @@ type Props = {
   stock: WatchlistItem
 }
 
-function mergeProfile(
-  snapshot: FundSnapshotData | null,
-): FundProfileData | null {
+function mergeProfile(snapshot: FundSnapshotData | null): FundProfileData | null {
   if (!snapshot) return null
   const base = (snapshot.profile ?? {}) as FundProfileData
   const quote = snapshot.quote as Record<string, unknown> | null
@@ -173,11 +166,9 @@ export default function FundDetailTab({ stock }: Props) {
   const s = useStyles()
   const [tab, setTab] = useState<FundTab>('overview')
   const [snapshot, setSnapshot] = useState<FundSnapshotData | null>(null)
-  const [navRows, setNavRows] = useState<FundNavPoint[]>([])
   const [holdings, setHoldings] = useState<FundHoldingRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [navLoading, setNavLoading] = useState(false)
   const [holdingsLoading, setHoldingsLoading] = useState(false)
 
   const instrumentRef = useMemo(
@@ -186,34 +177,12 @@ export default function FundDetailTab({ stock }: Props) {
   )
   const stockCode = instrumentRef?.symbol ?? stock?.code ?? null
   const displayCode = instrumentRef ? displayCodeFromInstrument(instrumentRef) : (stock?.code ?? '')
-  const stockKey = useMemo(
-    () => (stock ? watchlistItemKey(normalizeWatchlistItem(stock)) : null),
-    [stock],
-  )
-
-  useEffect(() => {
-    if (!instrumentRef || tab !== 'chart') return undefined
-    if (navRows.length) return undefined
-    let cancelled = false
-    setNavLoading(true)
-    research.fundNav(instrumentRef)
-      .then(resp => {
-        if (cancelled) return
-        const raw = resp.data as { items?: FundNavPoint[] } | FundNavPoint[] | null | undefined
-        setNavRows(Array.isArray(raw) ? raw : (raw?.items ?? []))
-      })
-      .finally(() => {
-        if (!cancelled) setNavLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [instrumentRef, tab, navRows.length])
 
   const profile = useMemo(() => mergeProfile(snapshot), [snapshot])
 
   useEffect(() => {
     if (!instrumentRef) {
       setSnapshot(null)
-      setNavRows([])
       setHoldings([])
       setError('')
       return undefined
@@ -243,25 +212,6 @@ export default function FundDetailTab({ stock }: Props) {
       })
     return () => { cancelled = true }
   }, [instrumentRef])
-
-  useEffect(() => {
-    if (!instrumentRef || tab !== 'nav') return undefined
-    let cancelled = false
-    setNavLoading(true)
-    research.fundNav(instrumentRef)
-      .then(resp => {
-        if (cancelled) return
-        const raw = resp.data as { items?: FundNavPoint[] } | FundNavPoint[] | null | undefined
-        setNavRows(Array.isArray(raw) ? raw : (raw?.items ?? []))
-      })
-      .catch(() => {
-        if (!cancelled) setNavRows([])
-      })
-      .finally(() => {
-        if (!cancelled) setNavLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [instrumentRef, tab])
 
   useEffect(() => {
     if (!instrumentRef || tab !== 'holdings') return undefined
@@ -321,8 +271,6 @@ export default function FundDetailTab({ stock }: Props) {
         size="small"
       >
         <Tab value="overview">概览</Tab>
-        <Tab value="chart">走势</Tab>
-        <Tab value="nav">净值</Tab>
         <Tab value="holdings">持仓</Tab>
       </TabList>
       <div className={s.body}>
@@ -357,41 +305,6 @@ export default function FundDetailTab({ stock }: Props) {
               </div>
             </div>
           </div>
-        ) : null}
-        {tab === 'chart' ? (
-          navLoading ? (
-            <div className={s.center}><Spinner size="small" label="正在加载净值走势..." /></div>
-          ) : navRows.length ? (
-            <div className={s.list}>
-              <Text size={200} className={s.meta}>公募基金按交易日公布净值，以下为近期走势</Text>
-              {navRows.slice(0, 60).map((row, index) => (
-                <div key={listRowKey(index, row.date, row.nav)} className={s.row}>
-                  <span>{row.date}</span>
-                  <span>{formatPrice(row.nav)}</span>
-                  <span className={pctTone(row.changePct)}>{formatPct(row.changePct)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className={s.center}>暂时无法加载净值走势，请稍后再试</div>
-          )
-        ) : null}
-        {tab === 'nav' ? (
-          navLoading ? (
-            <div className={s.center}><Spinner size="small" label="正在加载净值历史..." /></div>
-          ) : navRows.length ? (
-            <div className={s.list}>
-              {navRows.map((row, index) => (
-                <div key={listRowKey(index, row.date, row.nav)} className={s.row}>
-                  <span>{row.date}</span>
-                  <span>{formatPrice(row.nav)}</span>
-                  <span className={pctTone(row.changePct)}>{formatPct(row.changePct)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className={s.center}>还没有净值记录，稍后再来看看</div>
-          )
         ) : null}
         {tab === 'holdings' ? (
           holdingsLoading ? (

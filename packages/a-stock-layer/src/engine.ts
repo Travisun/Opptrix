@@ -738,25 +738,34 @@ export class MarketDataEngine {
 
   async fundSnapshot(fundCode: string) {
     const code = normalizeCode(fundCode)
-    const [profile, nav, quote] = await Promise.all([
-      this.fundProfile(code),
-      this.fundNav(code),
-      this.fundQuote(code),
-    ])
-    const navRows = nav.data as Record<string, unknown>[] | undefined
-    const latestNav = navRows?.length
-      ? pickLatestNavRow(navRows)
+    // 右侧面板仅展示最新净值与档案字段，一次 fundProfile 即可（内含 lsjz 首条）
+    const profile = await this.fundProfile(code)
+    const profileRow = profile.data?.[0] as Record<string, unknown> | undefined
+    const latestNav = profileRow
+      ? {
+          date: String(profileRow.navDate ?? '').slice(0, 10),
+          nav: profileRow.unitNav,
+          accNav: profileRow.accNav,
+          changePct: profileRow.changePct,
+        }
       : null
-    const quoteRow = quote.data?.[0] as Record<string, unknown> | undefined
     return {
-      success: profile.success || nav.success || quote.success,
+      success: profile.success,
       data: {
         code,
-        profile: profile.data?.[0] ?? null,
+        profile: profileRow ?? null,
         nav: latestNav ?? null,
-        quote: quoteRow ?? null,
+        quote: profileRow
+          ? {
+              unitNav: profileRow.unitNav,
+              accNav: profileRow.accNav,
+              changePct: profileRow.changePct,
+              navDate: profileRow.navDate,
+              name: profileRow.name,
+            }
+          : null,
       },
-      source: profile.source ?? nav.source ?? quote.source,
+      source: profile.source,
     }
   }
 
