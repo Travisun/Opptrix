@@ -1,35 +1,71 @@
 import type { AssetClass, InstrumentRef } from '@opptrix/shared'
-import { canonicalCnSymbol, normalizeInstrumentRef } from '@opptrix/shared'
-import { isCnEtfCode } from './instrument.js'
+import { canonicalCnSymbol, inferCnExchangeFromSymbol, normalizeInstrumentRef } from '@opptrix/shared'
 
-export const CN_OTC_FUND_EXCHANGE = 'OF' as const
+/** 公募基金命名空间交易所标识 — Public Funding（场内 + 场外） */
+export const CN_PUBLIC_FUND_EXCHANGE = 'PF' as const
 
-/** 场外开放式基金 — 须显式 assetClass=FUND 或 exchange=OF，禁止裸码推断 */
-export function isCnOtcFundRef(ref: InstrumentRef): boolean {
-  const n = normalizeInstrumentRef(ref)
-  return n.market === 'CN' && n.assetClass === 'FUND' && !isCnEtfCode(n.symbol)
+/** @deprecated 使用 CN_PUBLIC_FUND_EXCHANGE */
+export const CN_OTC_FUND_EXCHANGE = CN_PUBLIC_FUND_EXCHANGE
+
+/** 场内上市基金代码段（ETF / LOF 等） */
+export function isCnListedFundSymbol(symbol: string): boolean {
+  const c = canonicalCnSymbol(symbol)
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return true
+  if (c.startsWith('159') || c.startsWith('16')) return true
+  return false
 }
 
-export function toCnOtcFundRef(code: string): InstrumentRef {
+export function isCnPublicFundRef(ref: InstrumentRef): boolean {
+  const n = normalizeInstrumentRef(ref)
+  return n.market === 'CN' && n.assetClass === 'FUND'
+}
+
+/** @deprecated 使用 isCnPublicFundRef */
+export const isCnOtcFundRef = isCnPublicFundRef
+
+export function toCnPublicFundRef(code: string): InstrumentRef {
   const symbol = canonicalCnSymbol(code)
   return normalizeInstrumentRef({
     market: 'CN',
     assetClass: 'FUND',
     symbol,
-    exchange: CN_OTC_FUND_EXCHANGE,
+    exchange: CN_PUBLIC_FUND_EXCHANGE,
   })
 }
 
-export function assertCnOtcFundCode(
+/** @deprecated 使用 toCnPublicFundRef */
+export const toCnOtcFundRef = toCnPublicFundRef
+
+export function resolveCnPublicFundBareCode(input: string): string | null {
+  let raw = String(input ?? '').trim().toUpperCase()
+  const ns = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(raw)
+  if (ns) return ns[1]!
+  raw = raw.replace(/\.(OF|SH|SZ|BJ|PF)$/i, '')
+  const bare = canonicalCnSymbol(raw)
+  if (!bare || !/^\d{6}$/.test(bare)) return null
+  return bare
+}
+
+export function assertCnPublicFundCode(
   input: string | InstrumentRef,
   assetClass?: AssetClass,
 ): string | null {
   if (typeof input === 'object' && input != null) {
-    if (!isCnOtcFundRef(input)) return null
+    if (!isCnPublicFundRef(input)) return null
     return canonicalCnSymbol(input.symbol)
   }
-  const symbol = canonicalCnSymbol(input)
-  if (!symbol || isCnEtfCode(symbol)) return null
   if (assetClass && assetClass !== 'FUND') return null
-  return symbol
+  return resolveCnPublicFundBareCode(input)
+}
+
+/** @deprecated 使用 assertCnPublicFundCode */
+export const assertCnOtcFundCode = assertCnPublicFundCode
+
+/** Provider 线格式：场内 SH/SZ/BJ；场外无上市交易所 */
+export function inferCnPublicFundListingExchange(symbol: string): 'SH' | 'SZ' | 'BJ' | null {
+  if (!isCnListedFundSymbol(symbol)) return null
+  const ex = inferCnExchangeFromSymbol(symbol)
+  if (ex === 'SH' || ex === 'SZ' || ex === 'BJ') return ex
+  return null
 }

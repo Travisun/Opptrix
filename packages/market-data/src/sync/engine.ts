@@ -794,7 +794,7 @@ export class MarketDataSyncEngine {
         market: 'CN',
         assetClass: 'FUND',
         name: String(item.name ?? ''),
-        exchange: 'OF',
+        exchange: 'PF',
         status: 'active',
       })
       this.store.upsertFundProfile(code, item as unknown as Record<string, unknown>)

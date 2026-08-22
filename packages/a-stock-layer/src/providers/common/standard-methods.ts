@@ -25,6 +25,16 @@ export const STANDARD_DRIVER_METHODS = [
   'maEvents', 'employeeComposition', 'institutionalVisits', 'peerCompanies',
   'managerInfo', 'shareholderPlans', 'buyback',
   'etfData', 'etfList', 'etfProfile', 'etfNav', 'etfHoldings',
+  'fundList', 'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote',
+] as const
+
+/** CN 场外基金五件套 */
+export const CN_FUND_STANDARD_METHODS = [
+  'fundList',
+  'fundProfile',
+  'fundNav',
+  'fundHoldings',
+  'fundQuote',
 ] as const
 
 /** CN ETF 四件套 — 本地 sync / EtfDetailTab / localEtfScreen 依赖 */
@@ -54,6 +64,11 @@ export const PROVIDER_ETF_COVERAGE: Record<string, readonly string[]> = {
   tickflow: ['etfList', 'etfProfile'],
   sinafinance: ['etfList', 'etfProfile', 'etfNav', 'etfHoldings'],
   tencent: ['etfList', 'etfProfile', 'etfNav', 'etfHoldings'],
+}
+
+export const PROVIDER_FUND_COVERAGE: Record<string, readonly string[]> = {
+  sinafinance: [...CN_FUND_STANDARD_METHODS],
+  tushare: [...CN_FUND_STANDARD_METHODS],
 }
 
 /** 建议新增的 Capability（DATA-LAYER Phase-2） */

@@ -123,7 +123,7 @@ const INTENT_RULES: IntentRule[] = [
     patterns: [
       /场外基金.*(?:档案|概况|费率|规模|经理)|(?:档案|概况|费率).*场外基金/,
       /开放式基金.*(?:档案|概况|费率|经理)/,
-      /CN:OF|assetClass.*FUND/i,
+      /CN:PF|CN:OF|assetClass.*FUND/i,
     ],
     preferredTools: ['get_fund_profile', 'get_fund_nav', 'get_fund_list'],
     avoidTools: ['get_etf_profile', 'get_instrument_profile', 'get_etf_nav'],

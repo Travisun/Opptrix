@@ -17,6 +17,7 @@ import {
   parseStockMarket,
   type StockMarket,
 } from '../utils/helpers.js'
+import { fundTsCode } from '../providers/tushare/codes.js'
 
 const QUOTE_METHODS = new Set([
   'realtime',
@@ -78,6 +79,13 @@ export function wireProviderSymbolArg(
     const sym = canonicalCnSymbol(n.symbol)
     const ex = cnExchange(n)
 
+    if (n.assetClass === 'FUND') {
+      if (CN_DOT_SUFFIX_PROVIDERS.has(providerId)) {
+        return fundTsCode(sym)
+      }
+      return sym
+    }
+
     if (CN_DOT_SUFFIX_PROVIDERS.has(providerId)) {
       return cnTsCode(sym, ex)
     }
@@ -111,6 +119,11 @@ export function wireRegistryMethodArgs(
   if (!args.length) return args
   const copy = [...args]
   const paramName = method === 'batchRealtime' ? 'codes' : 'code'
+
+  // fundList 首参为市场常量 CN，勿按标的重写
+  if (method === 'fundList' && typeof copy[0] === 'string' && copy[0].toUpperCase() === 'CN') {
+    return copy
+  }
 
   if (Array.isArray(copy[0])) {
     copy[0] = (copy[0] as unknown[]).map(item =>

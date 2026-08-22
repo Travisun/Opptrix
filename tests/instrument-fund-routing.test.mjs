@@ -3,14 +3,34 @@ import test from 'node:test'
 import { buildInstrumentNamespace, normalizeInstrumentRef, parseInstrumentNamespace } from '@opptrix/shared'
 import { resolveInstrumentQueryPlan } from '@opptrix/a-stock-layer'
 
-test('CN:OF namespace parses to FUND assetClass', () => {
-  const ref = parseInstrumentNamespace('CN:OF.110022')
+test('CN:PF namespace parses to FUND assetClass', () => {
+  const ref = parseInstrumentNamespace('CN:PF.110022')
   assert.ok(ref)
   assert.equal(ref.market, 'CN')
   assert.equal(ref.assetClass, 'FUND')
   assert.equal(ref.symbol, '110022')
-  assert.equal(ref.exchange, 'OF')
-  assert.equal(buildInstrumentNamespace(ref), 'CN:OF.110022')
+  assert.equal(ref.exchange, 'PF')
+  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.110022')
+})
+
+test('CN:OF legacy namespace maps to CN:PF', () => {
+  const ref = parseInstrumentNamespace('CN:OF.110022')
+  assert.ok(ref)
+  assert.equal(ref.exchange, 'PF')
+  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.110022')
+})
+
+test('listed fund code routes under CN:PF', () => {
+  const ref = normalizeInstrumentRef({
+    market: 'CN',
+    assetClass: 'FUND',
+    symbol: '510330',
+    exchange: 'PF',
+  })
+  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.510330')
+  const navPlan = resolveInstrumentQueryPlan(ref, 'fund_nav')
+  assert.ok(navPlan)
+  assert.equal(navPlan?.kind, 'registry')
 })
 
 test('resolveInstrumentQueryPlan routes FUND capabilities', () => {
@@ -18,7 +38,7 @@ test('resolveInstrumentQueryPlan routes FUND capabilities', () => {
     market: 'CN',
     assetClass: 'FUND',
     symbol: '110022',
-    exchange: 'OF',
+    exchange: 'PF',
   })
   const navPlan = resolveInstrumentQueryPlan(ref, 'fund_nav')
   assert.ok(navPlan)
@@ -32,7 +52,7 @@ test('resolveInstrumentQueryPlan routes FUND capabilities', () => {
   assert.equal(snapPlan?.kind, 'composite_snapshot')
 })
 
-test('ETF code does not route as FUND', () => {
+test('ETF assetClass does not route as FUND', () => {
   const ref = normalizeInstrumentRef({
     market: 'CN',
     assetClass: 'ETF',

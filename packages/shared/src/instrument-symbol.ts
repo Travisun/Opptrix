@@ -126,7 +126,7 @@ export function isCnIndexSymbolByExchange(symbol: string, exchange?: string | nu
 }
 
 /** A 股交易所 — CN 标的内部身份的一部分，与 symbol 共同消歧 */
-export type CnExchange = 'SH' | 'SZ' | 'BJ' | 'OF'
+export type CnExchange = 'SH' | 'SZ' | 'BJ' | 'OF' | 'PF'
 
 /**
  * 无 exchange 时从代码段推断交易所（兜底，非权威）。
@@ -155,8 +155,8 @@ export function inferCnExchangeFromSymbol(symbol: string): CnExchange {
 export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
   const symbol = canonicalCnSymbol(ref.symbol)
   const exRaw = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase()
-  if (ref.assetClass === 'FUND' || exRaw === 'OF') {
-    return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'OF' }
+  if (ref.assetClass === 'FUND' || exRaw === 'PF' || exRaw === 'OF') {
+    return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }
   }
   const exchange = exRaw as CnExchange
   const assetClass = inferCnAssetClassFromSymbol(symbol, exchange)
@@ -244,8 +244,9 @@ export function buildInstrumentNamespace(ref: InstrumentRef): string {
   const n = normalizeInstrumentRef(ref)
   switch (n.market) {
     case 'CN': {
-      if (n.assetClass === 'FUND' || n.exchange?.toUpperCase() === 'OF') {
-        return `CN:OF.${n.symbol}`
+      const exUp = n.exchange?.toUpperCase()
+      if (n.assetClass === 'FUND' || exUp === 'PF' || exUp === 'OF') {
+        return `CN:PF.${n.symbol}`
       }
       const ex = (n.exchange ?? inferCnExchangeFromSymbol(n.symbol)).toUpperCase()
       return `CN:${ex}.${n.symbol}`
@@ -289,12 +290,22 @@ export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
     })
   }
 
+  const cnPf = /^CN:PF[.:](\d{6})$/i.exec(text)
+  if (cnPf) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      symbol: cnPf[1]!,
+      exchange: 'PF',
+      assetClass: 'FUND',
+    })
+  }
+
   const cnOf = /^CN:OF[.:](\d{6})$/i.exec(text)
   if (cnOf) {
     return normalizeInstrumentRef({
       market: 'CN',
       symbol: cnOf[1]!,
-      exchange: 'OF',
+      exchange: 'PF',
       assetClass: 'FUND',
     })
   }

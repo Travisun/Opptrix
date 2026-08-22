@@ -120,7 +120,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'fund_profile',
     miningEligible: true,
     usageGuide: '场外基金档案（类型、经理、规模、费率）；净值用 get_fund_nav。',
-    compliance: '须 FUND / CN:OF 命名空间；勿用 get_instrument_profile 代替。',
+    compliance: '须 FUND / CN:PF 命名空间；勿用 get_instrument_profile 代替。',
   },
   get_fund_nav: {
     hubFeature: 'fund_nav',

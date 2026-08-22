@@ -2360,13 +2360,13 @@ export class ResearchHub {
         market: 'CN',
         assetClass: 'FUND',
         symbol: code.replace(/\D/g, '').padStart(6, '0').slice(-6),
-        exchange: 'OF',
+        exchange: 'PF',
       })
       : normalizeInstrumentRef({
         market: 'CN',
         assetClass: 'FUND',
         symbol: '000001',
-        exchange: 'OF',
+        exchange: 'PF',
       })
     const r = await this.de.queryInstrumentData(ref, 'fund_list', code ? { keyword: code } : {})
     if (!r.success) return fail(instrumentQueryError(r, '场外基金列表获取失败'), t0)
