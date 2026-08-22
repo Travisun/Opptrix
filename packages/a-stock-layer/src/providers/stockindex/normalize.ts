@@ -1,12 +1,16 @@
 import type { InstrumentRef, Market, StockListItem } from '@opptrix/shared'
 import {
+  canonicalSymbolForMarket,
   inferCnAssetClassFromSymbol,
   instrumentRefLabel,
   normalizeInstrumentRef,
+  parseInstrumentNamespace,
 } from '@opptrix/shared'
 import type { StockIndexItem } from './api/client.js'
+import { stockIndexItemLooksLikeCnPublicFund } from '../../core/fund-instrument.js'
 
-function cnExchangeFromInstrumentId(instrumentId: string): 'SH' | 'SZ' | 'BJ' | undefined {
+function cnExchangeFromInstrumentId(instrumentId: string): 'SH' | 'SZ' | 'BJ' | 'PF' | undefined {
+  if (/^CN:(?:PF|OF)\./i.test(instrumentId)) return 'PF'
   const m = instrumentId.match(/^CN:(SH|SZ|BJ)\./i)
   return m ? m[1]!.toUpperCase() as 'SH' | 'SZ' | 'BJ' : undefined
 }
@@ -16,9 +20,24 @@ export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentR
   const code = String(item.code ?? '').trim()
   if (!code) return null
 
+  const instrumentIdStr = String(item.instrumentId ?? '').trim()
+  const fromId = instrumentIdStr ? parseInstrumentNamespace(instrumentIdStr) : null
+
   if (market === 'CN') {
+    if (fromId && (fromId.assetClass === 'FUND' || String(fromId.exchange ?? '').toUpperCase() === 'PF')) {
+      return normalizeInstrumentRef(fromId)
+    }
+    if (stockIndexItemLooksLikeCnPublicFund(item)) {
+      return normalizeInstrumentRef({
+        market: 'CN',
+        assetClass: 'FUND',
+        symbol: code,
+        exchange: 'PF',
+      })
+    }
+    if (fromId) return normalizeInstrumentRef(fromId)
     const exchange = item.exchange?.toUpperCase()
-      ?? cnExchangeFromInstrumentId(item.instrumentId)
+      ?? cnExchangeFromInstrumentId(instrumentIdStr)
     return normalizeInstrumentRef({
       market: 'CN',
       assetClass: item.assetType === 'etf' ? 'ETF' : inferCnAssetClassFromSymbol(code, exchange ?? null),
@@ -28,10 +47,14 @@ export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentR
   }
 
   if (market === 'US' || market === 'HK') {
+    const codeSym = canonicalSymbolForMarket(market, code)
+    if (fromId && canonicalSymbolForMarket(market, fromId.symbol) === codeSym) {
+      return normalizeInstrumentRef(fromId)
+    }
     return normalizeInstrumentRef({
       market,
       assetClass: 'EQUITY',
-      symbol: code,
+      symbol: codeSym,
       exchange: item.exchange ?? (market === 'HK' ? 'HK' : undefined),
     })
   }
@@ -46,11 +69,12 @@ export function refLabelFromInstrument(ref: InstrumentRef): string {
 export function stockIndexItemToListRow(item: StockIndexItem): StockListItem | null {
   const ref = stockIndexItemToInstrumentRef(item)
   if (!ref) return null
+  const isFund = ref.assetClass === 'FUND'
   return {
-    code: ref.market === 'CN' ? ref.symbol : ref.symbol,
+    code: ref.symbol,
     name: item.nameCn ?? item.code,
-    industry: item.industryName ?? '',
-    market: ref.market,
+    industry: isFund ? 'FUND' : (item.industryName ?? ''),
+    market: isFund ? 'PF' : (ref.exchange ?? ref.market),
   }
 }
 

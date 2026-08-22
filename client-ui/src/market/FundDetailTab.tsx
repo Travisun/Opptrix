@@ -10,7 +10,7 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
-import { resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
+import { displayCodeFromInstrument, resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { listRowKey } from '../utils/listRowKey'
 
@@ -180,7 +180,12 @@ export default function FundDetailTab({ stock }: Props) {
   const [navLoading, setNavLoading] = useState(false)
   const [holdingsLoading, setHoldingsLoading] = useState(false)
 
-  const stockCode = stock?.code ?? null
+  const instrumentRef = useMemo(
+    () => (stock ? resolveWatchlistInstrument(stock) : null),
+    [stock],
+  )
+  const stockCode = instrumentRef?.symbol ?? stock?.code ?? null
+  const displayCode = instrumentRef ? displayCodeFromInstrument(instrumentRef) : (stock?.code ?? '')
   const stockKey = useMemo(
     () => (stock ? watchlistItemKey(normalizeWatchlistItem(stock)) : null),
     [stock],
@@ -287,9 +292,9 @@ export default function FundDetailTab({ stock }: Props) {
         <div className={s.titleRow}>
           <div className={s.titleMain}>
             <span className={s.name}>{displayName}</span>
-            <span className={s.code}>{stockCode}</span>
+            <span className={s.code}>{displayCode}</span>
           </div>
-          <span className={s.badge}>场外基金</span>
+          <span className={s.badge}>公募基金</span>
         </div>
         {loading ? (
           <Spinner size="tiny" label="正在获取基金净值..." />
@@ -358,7 +363,7 @@ export default function FundDetailTab({ stock }: Props) {
             <div className={s.center}><Spinner size="small" label="正在加载净值走势..." /></div>
           ) : navRows.length ? (
             <div className={s.list}>
-              <Text size={200} className={s.meta}>场外基金按交易日公布净值，以下为近期走势</Text>
+              <Text size={200} className={s.meta}>公募基金按交易日公布净值，以下为近期走势</Text>
               {navRows.slice(0, 60).map((row, index) => (
                 <div key={listRowKey(index, row.date, row.nav)} className={s.row}>
                   <span>{row.date}</span>

@@ -28,7 +28,7 @@ export const STANDARD_DRIVER_METHODS = [
   'fundList', 'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote',
 ] as const
 
-/** CN 场外基金五件套 */
+/** CN 公募基金五件套 */
 export const CN_FUND_STANDARD_METHODS = [
   'fundList',
   'fundProfile',

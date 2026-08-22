@@ -21,6 +21,30 @@ export function isCnPublicFundRef(ref: InstrumentRef): boolean {
   return n.market === 'CN' && n.assetClass === 'FUND'
 }
 
+/** StockIndex / 搜索命中行是否应落成 CN:PF 公募基金 */
+export function stockIndexItemLooksLikeCnPublicFund(item: {
+  code?: string
+  nameCn?: string | null
+  industryName?: string | null
+  assetType?: string
+  instrumentId?: string
+  board?: string | null
+  boards?: string[]
+}): boolean {
+  const instrumentId = String(item.instrumentId ?? '')
+  if (/^CN:(?:PF|OF)\./i.test(instrumentId)) return true
+  const board = String(item.board ?? '').toLowerCase()
+  if (board === 'fund') return true
+  if (item.boards?.some(b => String(b).toLowerCase() === 'fund')) return true
+  const at = String(item.assetType ?? '').toLowerCase()
+  if (at === 'fund' || at === 'mutual_fund' || at === 'public_fund') return true
+  const text = `${item.nameCn ?? ''}${item.industryName ?? ''}`
+  if (/基金/.test(text)) return true
+  const code = canonicalCnSymbol(String(item.code ?? ''))
+  if (code.length === 6 && isCnListedFundSymbol(code)) return true
+  return false
+}
+
 /** @deprecated 使用 isCnPublicFundRef */
 export const isCnOtcFundRef = isCnPublicFundRef
 
