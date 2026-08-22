@@ -171,7 +171,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
       + '先 catalog 再取数。市况叙事用 get_market_regime，勿混用。'
       + ` ${MCP_FIRST_LOCAL_FALLBACK}`,
     compliance:
-      '中国首页优先 MACRO_INDICATOR；翻页/国外/行业/油价依赖 eastmoney；无数据声明缺口；勿编造数值。',
+      '中国首页优先 MACRO_INDICATOR（baostock/zzshare）；翻页/国外/行业/油价经标准 macro_series；无数据声明缺口；勿编造数值。',
   },
   get_dragon_tiger: {
     hubFeature: 'dragon_tiger',
@@ -278,7 +278,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       'A 股季报机构持仓：scope=overview 一览；scope=detail+org_type 明细 Tab；scope=dates 报告期。'
       + `勿与十大股东混淆。${MCP_FIRST_LOCAL_FALLBACK} ${INSTRUMENT_REF_USAGE}`,
-    compliance: '仅 CN；依赖 eastmoney；空类型声明缺口（一/三季报可能无 QFII 等）；勿编造持仓。',
+    compliance: '仅 CN；经标准 institution_holdings capability；空类型声明缺口（一/三季报可能无 QFII 等）；勿编造持仓。',
   },
   get_instrument_dividend: {
     hubFeature: 'instrument_dividend',
@@ -697,8 +697,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   list_provider_custom_methods: {
     hubFeature: 'provider_custom_methods',
     miningEligible: false,
-    usageGuide: '查找非标准 API（板块、宏观扩展、情绪、龙虎榜等）；须带 provider_id 或 keyword，akshare 禁止无过滤全量拉取。',
-    compliance: '只读；provider_id 如 eastmoney、baostock、zzshare、stockindex、akshare；keyword 如 emMacro、macro；limit 默认 40。',
+    usageGuide: '查找非标准 API（板块、宏观扩展、情绪、龙虎榜等）；须带 provider_id 或 keyword，禁止无过滤全量拉取。',
+    compliance: '只读；provider_id 如 baostock、zzshare、stockindex、tonghuashun；keyword 如 macro、concept；limit 默认 40。',
   },
   invoke_provider_custom_method: {
     hubFeature: 'provider_invoke_custom',

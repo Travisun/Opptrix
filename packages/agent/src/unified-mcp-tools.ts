@@ -461,8 +461,8 @@ export function buildUnifiedInstrumentTools(
       name: 'get_macro_series',
       category: '市场资金',
       description:
-        '宏观事实序列（东财 cjsj）：中国 CPI/PPI/GDP/社零/货币供应等；国外宏观；行业指数；油价。'
-        + '标准路由 MACRO_INDICATOR（Baostock→eastmoney→AkShare）；翻页/国外/行业/油价走 eastmoney。'
+        '宏观事实序列：中国 CPI/PPI/GDP/社零/货币供应等；国外宏观；行业指数；油价。'
+        + '标准路由 MACRO_INDICATOR（baostock/zzshare 等）；翻页/国外/行业/油价经 macro_series。'
         + '市况叙事仍用 get_market_regime',
       parameters: S({
         scope: {
@@ -475,7 +475,7 @@ export function buildUnifiedInstrumentTools(
           description:
             '指标：cpi/ppi/gdp/社零/m2…；国外 foreign_0_0 或指标名；行业 EMI…；油价 adjust|province|quote；空+scope=cn 返回核心摘要',
         },
-        page: { type: 'number', description: '页码，默认 1（中国第 2 页起走 eastmoney 翻页）' },
+        page: { type: 'number', description: '页码，默认 1（中国翻页时递增 page）' },
         page_size: { type: 'number', description: '每页条数，默认 36，最大 200' },
         limit: { type: 'number', description: '同 page_size（兼容旧参数）' },
       }),
@@ -690,7 +690,7 @@ export function buildUnifiedInstrumentTools(
       parameters: S({
         provider_id: {
           type: 'string',
-          description: '数据源 ID，如 baostock、zzshare、stockindex、akshare；大数据源建议必填',
+          description: '数据源 ID，如 baostock、zzshare、stockindex、tonghuashun；大数据源建议必填',
         },
         keyword: {
           type: 'string',
@@ -714,7 +714,7 @@ export function buildUnifiedInstrumentTools(
       parameters: S({
         provider_id: {
           type: 'string',
-          description: '数据源 ID（如 baostock、zzshare、akshare）',
+          description: '数据源 ID（如 baostock、zzshare、stockindex）',
         },
         method: {
           type: 'string',

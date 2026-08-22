@@ -64,8 +64,8 @@ export function buildProviderCustomMethodPlaybook(): string {
   return [
     '【数据源扩展 — 仅当标准 API 无覆盖时使用】',
     '0) 板块概念、宏观序列、情绪榜单、龙虎榜等「非标准能力」→ 自定义方法',
-    '1) list_enabled_providers：确认 baostock / zzshare / stockindex / akshare 等是否可用',
-    '2) list_provider_custom_methods：必须带 provider_id 或 keyword；akshare 方法多，禁止无过滤全量拉取',
+    '1) list_enabled_providers：确认 baostock / zzshare / stockindex / tonghuashun 等是否可用',
+    '2) list_provider_custom_methods：必须带 provider_id 或 keyword；禁止无过滤全量拉取',
     '3) invoke_provider_custom_method：provider_id + method + args（JSON 数组，顺序与 params 一致）',
     '4) args 中的 code/symbol 可传命名空间（CN:SZ.000009）、InstrumentRef、600519.SH、sh600519 等；引擎自动转为 Provider 裸代码格式',
     '5) 禁止用自定义方法替代已有标准能力（如 ETF 净值用 get_etf_nav；财务用 get_instrument_financials；概况用 get_instrument_profile）',
@@ -385,7 +385,7 @@ export function buildMarketContextPlaybook(): string {
   return [
     '【市场与关注 — get_market_regime / get_macro_series / get_market_dynamics / get_trade_calendar / get_dragon_tiger / get_limit_updown / get_market_sentiment / get_cn_market_special / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
     '1) 宏观背景叙事：先 MCP 问数/市况，不足再用 get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
-    '1b) 宏观事实序列：get_macro_series(scope=cn|foreign|industry|oil|catalog, kind=…, page?/page_size?) → 可引用数字；中国首页经 MACRO_INDICATOR；翻页/国外/行业/油价经 eastmoney；勿用 regime 代替、勿直接 invoke emMacro*',
+    '1b) 宏观事实序列：get_macro_series(scope=cn|foreign|industry|oil|catalog, kind=…, page?/page_size?) → 可引用数字；中国首页经 MACRO_INDICATOR；翻页/国外/行业/油价经标准 macro_series；勿用 regime 代替、勿直接 invoke 自定义 macro 方法',
     '2) 市场全景：先 MCP 问数（主要指数、涨跌家数）；不足再用 get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜摘要；适合复盘或解释板块轮动；勿再同轮重复拉 get_dragon_tiger',
     '2a) 专项：交易日历/开盘/情绪先 MCP 问数，不足再用 get_trade_calendar / get_market_session / get_market_sentiment；龙虎榜/涨跌停池先 MCP 问数，不足再用 get_dragon_tiger / get_limit_updown',
     '2b) 同花顺独有专题（连板天梯/飙升/热股/异动/概念目录）：先 MCP 问数，不足再用 get_cn_market_special(kind=…)；成分股改 get_index_constituents；财务指标改 get_instrument_financial_indicators',

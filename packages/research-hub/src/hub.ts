@@ -2,7 +2,6 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode, inferCnAssetClass,
-  formatProviderMethodArgs,
   wireRegistryMethodArgs,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
   cnMarketNow, isCnMarketOpen, isCnTradingWeekday, isCnBeforeMarketOpen, isCnAfterMarketClose,
@@ -106,7 +105,6 @@ import {
 } from './instrument-batch-router.js'
 import {
   dedupeStockNewsItems,
-  enrichCnStockProfile,
   enrichDetailProfileFromQuote,
   enrichShareholderView,
   holderHistoryFromRows,
@@ -122,17 +120,16 @@ import {
 import {
   buildCrossMarketDetailPayload,
   mergeCrossMarketQuote,
-  normalizeCrossMarketArticles,
-  normalizeCrossMarketNotices,
-  normalizeCrossMarketRelatedStocks,
-  normalizeHkDividends,
+  normalizeCrossMarketArticlesFromNews,
+  normalizeCrossMarketDividends,
+  normalizeCrossMarketFinancialHistory,
+  normalizeCrossMarketNoticesFromNews,
+  normalizeCrossMarketProfile,
+  normalizeCrossMarketShareholdersFromRows,
   normalizeHkFinancialHistory,
-  normalizeHkTencentProfile,
-  normalizeHkTradingDistribution,
+  normalizeHkDividends,
   normalizeUsFinancialHistory,
-  normalizeUsSeniorTrades,
   normalizeUsShareholders,
-  normalizeUsTencentProfile,
 } from './cross-market-detail.js'
 import { searchInstrumentsUnified } from './instrument-search-unified.js'
 import type { LocalInstrumentInsights } from '@opptrix/shared'
@@ -838,7 +835,91 @@ export class ResearchHub {
     return ok(data, `组合 ${holdings.length} 只`, t0)
   }
 
+  private async fetchCnIndexMarketItems(
+    indices: Array<{ code: string; name?: string }>,
+  ) {
+    const items = await Promise.all(indices.map(async entry => {
+      const ref = resolveCnInstrumentRef({
+        market: 'CN',
+        assetClass: 'INDEX',
+        symbol: entry.code,
+      })
+      const r = await this.de.queryInstrumentData(ref, 'realtime')
+      const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
+      if (!row) return null
+      const market = entry.code.startsWith('399') ? 'SZ' : 'SH'
+      return {
+        code: entry.code,
+        name: String(row.name ?? entry.name ?? entry.code).trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        change_amt: typeof row.change === 'number' ? row.change : null,
+        market,
+      }
+    }))
+    return items.filter((item): item is NonNullable<typeof item> => item != null)
+  }
+
+  private async fetchGlobalIndexProxyItems(
+    proxies: Array<{
+      ref: import('@opptrix/shared').InstrumentRef
+      outCode: string
+      displayName: string
+      location: string
+    }>,
+  ) {
+    const items = await Promise.all(proxies.map(async proxy => {
+      const r = await this.de.queryInstrumentData(proxy.ref, 'realtime')
+      const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
+      if (!row) return null
+      return {
+        code: proxy.outCode,
+        name: proxy.displayName,
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        market: proxy.ref.market,
+        location: proxy.location,
+      }
+    }))
+    return items.filter((item): item is NonNullable<typeof item> => item != null)
+  }
+
+  private async fetchCnLimitMovers() {
+    try {
+      const r = await this.de.limitUpdown()
+      if (!r.success || !Array.isArray(r.data)) return { gainers: [], losers: [] }
+      const mapMover = (row: { code: string; name: string; changePct?: number | null; type: string }) => ({
+        code: row.code,
+        name: row.name,
+        price: null as number | null,
+        change_pct: row.changePct ?? null,
+        change_amt: null as number | null,
+      })
+      const gainers = r.data.filter(row => row.type === 'limit_up').slice(0, 30).map(mapMover)
+      const losers = r.data.filter(row => row.type === 'limit_down').slice(0, 30).map(mapMover)
+      return { gainers, losers }
+    } catch {
+      return { gainers: [], losers: [] }
+    }
+  }
+
   private async marketDynamics(t0: number) {
+    const CN_CORE_INDICES = [
+      { code: '000001', name: '上证指数' },
+      { code: '399001', name: '深证成指' },
+      { code: '399006', name: '创业板指' },
+      { code: '000300', name: '沪深300' },
+    ]
+    const ASIA_PROXIES = [
+      { ref: { market: 'HK', assetClass: 'ETF', symbol: '02800' } as import('@opptrix/shared').InstrumentRef, outCode: 'HSI', displayName: '恒生指数', location: '香港' },
+      { ref: { market: 'JP', assetClass: 'ETF', symbol: '1321' } as import('@opptrix/shared').InstrumentRef, outCode: 'N225', displayName: '日经225', location: '日本' },
+    ]
+    const AMERICA_PROXIES = [
+      { ref: { market: 'US', assetClass: 'ETF', symbol: 'SPY' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', location: '美国' },
+      { ref: { market: 'US', assetClass: 'ETF', symbol: 'DIA' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', location: '美国' },
+      { ref: { market: 'US', assetClass: 'ETF', symbol: 'QQQ' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', location: '美国' },
+    ]
+
     const fetchEmotionLimitUp = async () => {
       try {
         const r = await this.de.limitUpdown()
@@ -870,72 +951,26 @@ export class ResearchHub {
     }
 
     const [
-      homeR,
-      majorR,
-      asiaR,
-      europeR,
-      americaR,
-      gainersR,
-      losersR,
+      cnSpotlight,
+      cnMajor,
+      asiaItems,
+      americaItems,
+      cnMovers,
       dragonR,
       cnLimitUp,
       cnSkyrocket,
       cnLimitLadder,
     ] = await Promise.all([
-      this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['mstats_home', false]),
-      this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['major', false]),
-      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AS', 1, 40, 2, 'desc']),
-      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['EU', 1, 40, 2, 'desc']),
-      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AM', 1, 40, 2, 'desc']),
-      this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'desc']),
-      this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'asc']),
+      this.fetchCnIndexMarketItems(CN_CORE_INDICES),
+      this.fetchCnIndexMarketItems(CN_CORE_INDICES),
+      this.fetchGlobalIndexProxyItems(ASIA_PROXIES),
+      this.fetchGlobalIndexProxyItems(AMERICA_PROXIES),
+      this.fetchCnLimitMovers(),
       this.de.dragonTiger(),
       fetchEmotionLimitUp(),
       fetchEmotionSkyrocket(),
       fetchEmotionLadder(),
     ])
-
-    const mapCnItems = (resp: { success: boolean; data?: unknown }) => {
-      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
-      const block = resp.data[0] as { items?: Record<string, unknown>[] }
-      return (block.items ?? []).map(row => ({
-        code: String(row.code ?? '').trim(),
-        qt_code: String(row.qtCode ?? '').trim() || undefined,
-        name: String(row.name ?? row.code ?? '').trim(),
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
-        change_amt: typeof row.changeAmt === 'number' ? row.changeAmt : null,
-        market: String(row.market ?? '').trim() || undefined,
-        quote_time: String(row.quoteTime ?? '').trim() || undefined,
-      })).filter(item => item.code || item.name)
-    }
-
-    const mapGlobalItems = (resp: { success: boolean; data?: unknown }) => {
-      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
-      const block = resp.data[0] as { items?: Record<string, unknown>[] }
-      return (block.items ?? []).map(row => ({
-        code: String(row.code ?? '').trim(),
-        qt_code: String(row.qtCode ?? '').trim() || undefined,
-        name: String(row.name ?? row.code ?? '').trim(),
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
-        market: String(row.market ?? 'global').trim() || undefined,
-        location: String(row.location ?? '').trim() || undefined,
-        trade_state_label: String(row.tradeStateLabel ?? '').trim() || undefined,
-      })).filter(item => item.code || item.name)
-    }
-
-    const mapMoverItems = (resp: { success: boolean; data?: unknown }) => {
-      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
-      const block = resp.data[0] as { items?: Record<string, unknown>[] }
-      return (block.items ?? []).map(row => ({
-        code: String(row.code ?? '').trim(),
-        name: String(row.name ?? row.code ?? '').trim(),
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
-        change_amt: typeof row.changeAmt === 'number' ? row.changeAmt : null,
-      })).filter(item => item.code)
-    }
 
     const mapDragonTigerItems = (resp: { success: boolean; data?: unknown }) => {
       if (!resp.success || !Array.isArray(resp.data)) return []
@@ -961,30 +996,33 @@ export class ResearchHub {
         id: 'spotlight',
         title: '全球要闻',
         hint: '主要市场指数一览，数据约每 30 秒刷新',
-        items: mapCnItems(homeR),
+        items: cnSpotlight,
       },
       {
         id: 'cn_major',
         title: 'A 股主要指数',
         hint: '沪深市场核心宽基指数',
-        items: mapCnItems(majorR),
+        items: cnMajor,
       },
       {
         id: 'asia',
         title: '亚太市场',
-        items: mapGlobalItems(asiaR),
+        hint: asiaItems.length ? undefined : '亚太指数需配置 Tickflow 等数据源后展示',
+        items: asiaItems,
       },
       {
         id: 'europe',
         title: '欧洲市场',
-        items: mapGlobalItems(europeR),
+        hint: '欧洲指数请通过 Agent MCP 宏观工具查询',
+        items: [],
       },
       {
         id: 'america',
         title: '美洲市场',
-        items: mapGlobalItems(americaR),
+        hint: americaItems.length ? undefined : '美洲指数需配置 Tickflow 等数据源后展示',
+        items: americaItems,
       },
-    ].filter(section => section.items.length > 0)
+    ].filter(section => section.items.length > 0 || section.id === 'europe')
 
     const hasEmotionData = cnLimitUp.length > 0
       || cnSkyrocket.length > 0
@@ -993,8 +1031,8 @@ export class ResearchHub {
     return ok({
       refreshed_at: new Date().toISOString(),
       sections,
-      cn_gainers: mapMoverItems(gainersR),
-      cn_losers: mapMoverItems(losersR),
+      cn_gainers: cnMovers.gainers,
+      cn_losers: cnMovers.losers,
       cn_dragon_tiger: cnDragonTiger,
       cn_dragon_tiger_date: cnDragonTiger[0]?.date ?? null,
       cn_limit_up: cnLimitUp.length ? cnLimitUp : undefined,
@@ -1252,7 +1290,7 @@ export class ResearchHub {
       const flowR = await this.de.queryInstrumentData(ref, 'money_flow')
       const flowRows = instrumentQueryData<MoneyFlow[]>(flowR)
       const flow = flowRows?.[0] ?? (await this.callDetailProviderMethod<MoneyFlow>(
-        ['tencent', 'sinafinance', 'zzshare'],
+        ['zzshare'],
         'moneyFlow',
         [symbol],
         ref,
@@ -1401,7 +1439,7 @@ export class ResearchHub {
     }
     const code = cnRef.symbol
     const raw = await this.callDetailProviderMethod<Record<string, unknown>>(
-      ['sinafinance', 'tushare'],
+      ['tushare'],
       'shareholders',
       [code],
       cnRef,
@@ -1427,76 +1465,28 @@ export class ResearchHub {
     return holderHistoryFromRows(rows)
   }
 
-  /** 详情页行情：腾讯补全 PE/PB/量比/市值，fallback 保留准确 OHLCV/成交量 */
+  /** 详情页行情：标准 realtime，无第三方 enrich */
   private async stockDetailQuote(ref: InstrumentRef) {
     const cnRef = resolveCnInstrumentRef(ref)
     const code = cnRef.symbol
-    const secSym = formatProviderMethodArgs('tencent', 'realtimeSec', cnRef)[0] as string
-    const [preferred, fallbackR] = await Promise.all([
-      this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'realtimeSec', [secSym]),
-      this.de.queryInstrumentData(cnRef, 'realtime'),
-    ])
+    const realtimeR = await this.de.queryInstrumentData(cnRef, 'realtime')
     const merged = mergeDetailQuoteRows(
       code,
-      preferred?.[0] ?? null,
-      (instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(fallbackR)?.[0] ?? null) as Record<string, unknown> | null,
+      null,
+      (instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(realtimeR)?.[0] ?? null) as Record<string, unknown> | null,
     )
     if (!merged) return null
     return normalizePreOpenRealtimeQuote(merged as unknown as import('@opptrix/shared').StockRealtime)
   }
 
-  /** 详情页公司资料：绕过 queryScoped 测速，合并 sinafinance / tushare / 腾讯 + 扩展 enrichments */
+  /** 详情页公司资料：仅 queryInstrumentData profile */
   private async stockDetailProfile(ref: InstrumentRef): Promise<Record<string, unknown> | null> {
     const cnRef = resolveCnInstrumentRef(ref)
     const code = cnRef.symbol
     const engineProfileR = await this.de.queryInstrumentData(cnRef, 'profile')
     const engineRow = instrumentQueryData<Array<Record<string, unknown>>>(engineProfileR)?.[0] ?? null
-
-    const [
-      industryRankR,
-      platesR,
-      institutionRatingR,
-      executivesR,
-      indexMembershipR,
-    ] = await Promise.all([
-      this.callDetailProviderMethod<Record<string, unknown>>(
-        ['tencent'], 'tencentIndustryRank', formatProviderMethodArgs('tencent', 'tencentIndustryRank', cnRef),
-      ),
-      this.callDetailProviderMethod<Record<string, unknown>>(
-        ['tencent'], 'tencentStockPlates', formatProviderMethodArgs('tencent', 'tencentStockPlates', cnRef),
-      ),
-      this.callDetailProviderMethod<Record<string, unknown>>(
-        ['tencent'], 'tencentInstitutionRating', formatProviderMethodArgs('tencent', 'tencentInstitutionRating', cnRef),
-      ),
-      this.callDetailProviderMethod<Record<string, unknown>>(
-        ['sinafinance'], 'sinaExecutives', formatProviderMethodArgs('sinafinance', 'sinaExecutives', cnRef),
-      ),
-      this.callDetailProviderMethod<Record<string, unknown>>(
-        ['sinafinance'], 'sinaIndexMembership', formatProviderMethodArgs('sinafinance', 'sinaIndexMembership', cnRef),
-      ),
-    ])
-
-    const rows: Record<string, unknown>[] = []
-    if (engineRow) rows.push(engineRow)
-    if (!engineRow) {
-      for (const pid of ['sinafinance', 'tushare', 'tencent']) {
-        const batch = await this.callDetailProviderMethod<Record<string, unknown>>(
-          [pid],
-          'profile',
-          formatProviderMethodArgs(pid, 'profile', cnRef),
-        )
-        if (batch?.[0]) rows.push(batch[0])
-      }
-    }
-
-    const base = mergeStockProfileRows(code, rows)
-    return enrichCnStockProfile(code, base, {
-      industryRank: industryRankR?.[0] ?? null,
-      plates: platesR ?? null,
-      institutionRating: institutionRatingR?.[0] ?? null,
-      executives: executivesR ?? null,
-      indexMembership: indexMembershipR ?? null,
-    })
+    const rows: Record<string, unknown>[] = engineRow ? [engineRow] : []
+    return mergeStockProfileRows(code, rows)
   }
 
   private async stockDetail(ref: InstrumentRef, t0: number) {
@@ -1514,7 +1504,7 @@ export class ResearchHub {
       this.stockDetailOptional(
         (async () => {
           const fast = await this.callDetailProviderMethod<FinancialSummary>(
-            ['sinafinance', 'tushare'],
+            ['tushare', 'tonghuashun'],
             'financials',
             [code, '', 'all'],
             cnRef,
@@ -1536,7 +1526,7 @@ export class ResearchHub {
           const engineRows = instrumentQueryData<Dividend[]>(engineR)
           if (engineRows?.length) return { success: true, data: engineRows }
           const preferred = await this.callDetailProviderMethod<Dividend>(
-            ['sinafinance', 'tushare'],
+            ['tushare'],
             'dividend',
             [code],
             cnRef,
@@ -1556,13 +1546,6 @@ export class ResearchHub {
           const engineR = await this.de.queryInstrumentData(cnRef, 'money_flow')
           const engineRows = instrumentQueryData<MoneyFlow[]>(engineR)
           if (engineRows?.length) return { success: true, data: engineRows }
-          const preferred = await this.callDetailProviderMethod<MoneyFlow>(
-            ['tencent', 'sinafinance'],
-            'moneyFlow',
-            [code],
-            cnRef,
-          )
-          if (preferred?.length) return { success: true, data: preferred }
           const fallback = await this.callDetailProviderMethod<MoneyFlow>(
             ['zzshare'],
             'moneyFlow',
@@ -2607,25 +2590,17 @@ export class ResearchHub {
   }
 
   /**
-   * 个股机构持仓（东财 zlsj）— 季报一览 / 分类型明细 Tab / 报告期列表。
+   * 个股机构持仓 — 一览经 inst_holding / instHolding；明细与报告期走 Agent MCP。
    * scope: overview（默认）| detail | dates
    */
   private async instrumentInstitutionHoldings(params: Record<string, unknown>, t0: number) {
     const scope = String(params.scope ?? 'overview').trim().toLowerCase() || 'overview'
     const orgType = String(params.org_type ?? params.orgType ?? params.kind ?? 'fund').trim()
     const reportDate = String(params.report_date ?? params.reportDate ?? '').trim()
-    const page = params.page != null ? Number(params.page) : 1
-    const pageSize = params.page_size != null ? Number(params.page_size) : 30
 
     if (scope === 'dates' || scope === 'report_dates') {
-      const r = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldReportDates', [
-        params.limit != null ? Number(params.limit) : 25,
-      ])
-      if (!r.success) return fail(r.error ?? '机构持仓报告期暂不可用（请启用 eastmoney）', t0)
-      const rows = Array.isArray(r.data) ? r.data : []
-      return ok(
-        { scope: 'dates', items: rows, count: rows.length, source: 'eastmoney', provider_method: 'emInstHoldReportDates' },
-        `机构持仓报告期 ${rows.length} 条`,
+      return fail(
+        '机构持仓报告期列表需通过 Agent MCP 机构工具查询，Hub 仅提供持仓一览',
         t0,
       )
     }
@@ -2636,72 +2611,34 @@ export class ResearchHub {
     const code = ref.symbol
 
     if (scope === 'detail' || scope === 'tab') {
-      const r = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldDetail', [
-        code,
-        orgType || 'fund',
-        reportDate,
-        Number.isFinite(page) ? page : 1,
-        Number.isFinite(pageSize) ? pageSize : 30,
-      ])
-      if (!r.success) return fail(r.error ?? '机构持仓明细暂不可用', t0)
-      const rowsRaw = Array.isArray(r.data) ? r.data : []
-      const rows = rowsRaw.filter(row => !(row && typeof row === 'object' && (row as { empty?: boolean }).empty === true))
-      if (!rows.length) {
-        return ok(
-          {
-            instrument: ref,
-            scope: 'detail',
-            org_type: orgType,
-            report_date: reportDate || null,
-            items: [],
-            count: 0,
-            source: 'eastmoney',
-            provider_method: 'emInstHoldDetail',
-            hint: '该报告期该类型可能无披露（尤其一季报/三季报）；可换 scope=overview 或报告期',
-          },
-          '机构持仓明细 0 条',
-          t0,
-        )
-      }
-      return ok(
-        {
-          instrument: ref,
-          scope: 'detail',
-          org_type: orgType,
-          report_date: (rows[0]?.reportDate as string | undefined) ?? (reportDate || null),
-          items: rows,
-          count: rows.length,
-          pages: rows[0]?.pages ?? null,
-          source: 'eastmoney',
-          provider_method: 'emInstHoldDetail',
-        },
-        `机构持仓明细 ${rows.length} 条`,
+      return fail(
+        `机构持仓明细（${orgType || 'fund'}）需通过 Agent MCP 机构工具查询；可换 scope=overview 查看汇总`,
         t0,
       )
     }
 
-    // overview：优先自定义一览；失败回退标准 INST_HOLDING
-    const overview = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldOverview', [code, reportDate])
-    if (overview.success && Array.isArray(overview.data) && overview.data.length) {
+    const engineR = await this.de.queryInstrumentData(ref, 'inst_holding')
+    const engineRows = instrumentQueryData<Record<string, unknown>[]>(engineR)
+    if (engineR.success && engineRows?.length) {
       return ok(
         {
           instrument: ref,
           scope: 'overview',
-          report_date: (overview.data[0]?.reportDate as string | undefined) ?? (reportDate || null),
-          items: overview.data,
-          count: overview.data.length,
-          source: 'eastmoney',
-          provider_method: 'emInstHoldOverview',
-          hint: '明细 Tab 用 scope=detail + org_type=fund|qfii|social|broker|insurance|trust',
+          report_date: (engineRows[0]?.reportDate as string | undefined) ?? (reportDate || null),
+          items: engineRows,
+          count: engineRows.length,
+          source: 'inst_holding',
+          hint: '分类明细与报告期列表请使用 Agent MCP 机构工具',
         },
-        `机构持仓一览 ${overview.data.length} 条`,
+        `机构持仓一览 ${engineRows.length} 条`,
         t0,
       )
     }
 
     const r = await this.de.instHolding(code)
     if (!r.success || !Array.isArray(r.data) || !r.data.length) {
-      return fail(r.error ?? overview.error ?? '机构持仓暂不可用', t0)
+      const engineErr = 'error' in engineR && engineR.error ? String(engineR.error) : undefined
+      return fail(r.error ?? engineErr ?? '机构持仓暂不可用', t0)
     }
     return ok(
       {
@@ -2710,7 +2647,7 @@ export class ResearchHub {
         items: r.data,
         count: r.data.length,
         source: r.source ?? 'instHolding',
-        hint: '明细 Tab 用 scope=detail + org_type=…',
+        hint: '分类明细与报告期列表请使用 Agent MCP 机构工具',
       },
       `机构持仓一览 ${r.data.length} 条`,
       t0,
@@ -2857,7 +2794,7 @@ export class ResearchHub {
   }
 
   /**
-   * 宏观序列 — 中国走 MACRO_INDICATOR；国外/行业/油价/翻页走 eastmoney cjsj。
+   * 宏观序列 — 中国 scope 仅 Baostock macroIndicator；其他 scope 走 Agent MCP。
    * scope: cn（默认）| foreign | industry | oil | catalog
    */
   private async macroSeries(params: Record<string, unknown>, t0: number) {
@@ -2876,86 +2813,45 @@ export class ResearchHub {
       return fail('scope 须为 cn | foreign | industry | oil | catalog', t0)
     }
 
-    const okRows = (
-      items: unknown[],
-      source: string,
-      providerMethod?: string,
-      hint?: string,
-    ) => ok(
-      {
-        scope: scope === 'china' ? 'cn' : scope === 'hyzs' ? 'industry' : scope === 'list' ? 'catalog' : scope,
-        kind: kind || (scope === 'oil' ? 'adjust' : scope === 'catalog' || scope === 'list' ? 'catalog' : 'summary'),
-        page,
-        page_size: pageSize,
-        items,
-        count: items.length,
-        source,
-        ...(providerMethod ? { provider_method: providerMethod } : {}),
-        hint: hint ?? '市况叙事仍用 get_market_regime；本工具为可引用宏观事实序列',
-      },
-      `宏观 ${scope} ${kind || 'summary'} ${items.length} 条`,
-      t0,
-    )
+    const normalizedScope = scope === 'china' ? 'cn' : scope === 'hyzs' ? 'industry' : scope === 'list' ? 'catalog' : scope
 
-    const fromCustom = async (method: string, args: unknown[], label: string) => {
-      const r = await this.de.invokeCustomMethod('eastmoney', method, args)
-      if (!r.success) {
-        return fail(r.error ?? `${label}暂不可用（请启用 eastmoney Provider）`, t0)
-      }
-      const raw = r.data
-      const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
-      if (!rows.length) return fail(`${label}无数据`, t0)
-      return okRows(rows, 'eastmoney', method)
+    if (normalizedScope !== 'cn') {
+      return fail(
+        '国外宏观、行业指数、油价与宏观目录需通过 Agent MCP 宏观工具查询，Hub 不再直接抓取第三方页面',
+        t0,
+      )
     }
 
-    if (scope === 'catalog' || scope === 'list') {
-      const listScope = kind || String(params.catalog_scope ?? 'cn')
-      return fromCustom('emMacroList', [listScope], '宏观目录')
-    }
-
-    if (scope === 'foreign') {
-      if (!kind) return fail('国外宏观须传 kind（如 foreign_0_0 / EMG… / ISM制造业指数）', t0)
-      return fromCustom('emMacroForeign', [kind, page, pageSize], '国外宏观')
-    }
-
-    if (scope === 'industry' || scope === 'hyzs') {
-      if (!kind) return fail('行业指数须传 kind（如 EMI00662543 / 农副指数）', t0)
-      return fromCustom('emMacroIndustryIndex', [kind, page, pageSize], '行业指数')
-    }
-
-    if (scope === 'oil') {
-      const oilKind = kind || 'adjust'
-      return fromCustom('emMacroOil', [oilKind, page, pageSize], '油价')
-    }
-
-    // —— 中国宏观 ——
-    // 翻页或非首页：直接走 eastmoney emMacro（标准 MACRO_INDICATOR 无 page）
     if (page > 1) {
-      if (!kind) return fail('中国宏观翻页须传 kind', t0)
-      return fromCustom('emMacro', [kind, page, pageSize], '中国宏观')
+      return fail('中国宏观历史翻页需通过 Agent MCP 宏观工具查询', t0)
     }
 
-    // 首页：标准 Capability 路由（Baostock → eastmoney → AkShare）
-    const r = await this.de.macroIndicator(kind)
-    if (r.success && Array.isArray(r.data) && r.data.length) {
-      const items = r.data.slice(0, pageSize)
-      return okRows(items, r.source ?? 'macroIndicator')
-    }
-
-    // 标准路由无结果时，回退 eastmoney 全量中国目录（社零/固投等）
-    if (kind) {
-      const fallback = await this.de.invokeCustomMethod('eastmoney', 'emMacro', [kind, 1, pageSize])
-      if (fallback.success) {
-        const raw = fallback.data
-        const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
-        if (rows.length) return okRows(rows, 'eastmoney', 'emMacro')
-      }
+    const rows = await this.callDetailProviderMethod<Record<string, unknown>>(
+      ['baostock'],
+      'macroIndicator',
+      [kind],
+    )
+    if (rows?.length) {
+      const items = rows.slice(0, pageSize)
+      return ok(
+        {
+          scope: 'cn',
+          kind: kind || 'summary',
+          page,
+          page_size: pageSize,
+          items,
+          count: items.length,
+          source: 'baostock',
+          provider_method: 'macroIndicator',
+          hint: '市况叙事仍用 get_market_regime；国外/行业/油价请用 Agent MCP 宏观工具',
+        },
+        `宏观 cn ${kind || 'summary'} ${items.length} 条`,
+        t0,
+      )
     }
 
     return fail(
-      r.error
-        ?? '宏观数据暂不可用（请确认已启用 eastmoney / Baostock / AkShare；'
-        + 'kind=cpi|ppi|pmi|gdp|lpr|社零…；国外/行业/油价请传 scope）',
+      '宏观数据暂不可用（请确认已启用 Baostock；kind=cpi|ppi|pmi|gdp|lpr 等）',
       t0,
     )
   }
@@ -3777,174 +3673,96 @@ export class ResearchHub {
     const snapshotR = await this.de.queryInstrumentData(ref, 'snapshot')
     const snap = instrumentQueryData<Record<string, unknown>>(snapshotR)
 
-    const profileMethod = market === 'US' ? 'tencentUsStockProfile' : 'tencentHkStockProfile'
-    const financialMethod = market === 'US' ? 'tencentUsFinancialSummary' : 'tencentHkStockFinancialReport'
-
-    const relatedMethod = market === 'US' ? 'tencentUsRelatedStocks' : 'tencentHkRelatedStocks'
-
     const [
       profileR,
       noticeR,
       articleR,
       financialR,
-      balanceR,
       dividendR,
       shareholderR,
-      reviewR,
-      quoteEnrichR,
-      relatedR,
-      seniorTradesR,
-      technicalR,
+      quoteR,
     ] = await Promise.all([
       this.stockDetailOptional(
-        (async () => {
-          const engineR = await this.de.queryInstrumentData(ref, 'profile')
-          const engineRows = instrumentQueryData<Array<Record<string, unknown>>>(engineR)
-          if (engineR.success && engineRows?.length) {
-            return { success: true as const, data: engineRows }
-          }
-          return this.callDetailProviderMethod<Record<string, unknown>>(
-            ['tencent'], profileMethod, formatProviderMethodArgs('tencent', profileMethod, ref),
-          ).then(rows => ({ success: !!rows?.length, data: rows }))
-        })(),
+        this.de.queryInstrumentData(ref, 'profile').then(r => {
+          const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
+          return { success: r.success && !!(data?.length), data }
+        }),
       ),
       this.stockDetailOptional(
         this.de.queryInstrumentData(ref, 'notices', { page: 1, pageSize: 30 }).then(r => {
-          const data = instrumentQueryData<Record<string, unknown>[]>(r)
+          const data = instrumentQueryData<NewsItem[]>(r)
           return { success: r.success && !!(data?.length), data }
         }),
       ),
       this.stockDetailOptional(
         this.de.queryInstrumentData(ref, 'news', { page: 1, pageSize: 30 }).then(r => {
-          const data = instrumentQueryData<Record<string, unknown>[]>(r)
+          const data = instrumentQueryData<NewsItem[]>(r)
           return { success: r.success && !!(data?.length), data }
         }),
       ),
       this.stockDetailOptional(
-        this.callDetailProviderMethod<Record<string, unknown>>(
-          ['tencent'],
-          financialMethod,
-          formatProviderMethodArgs(
-            'tencent',
-            financialMethod,
-            ref,
-            market === 'US' ? [1, 8] : ['income', 'all', 4],
-          ),
-        ).then(rows => ({ success: !!rows?.length, data: rows })),
+        this.de.queryInstrumentData(ref, 'financials', { reportDate: '', reportType: 'annual' }).then(r => {
+          const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
+          return { success: r.success && !!(data?.length), data }
+        }),
       ),
-      market === 'HK'
-        ? this.stockDetailOptional(
-          this.callDetailProviderMethod<Record<string, unknown>>(
-            ['tencent'],
-            'tencentHkStockFinancialReport',
-            formatProviderMethodArgs('tencent', 'tencentHkStockFinancialReport', ref, ['balance', 'all', 4]),
-          ).then(rows => ({ success: !!rows?.length, data: rows })),
-        )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
       market === 'HK'
         ? this.stockDetailOptional(
           this.de.queryInstrumentData(ref, 'dividend', { page: 1, pageSize: 10 }).then(r => {
-            const data = instrumentQueryData<Record<string, unknown>[]>(r)
+            const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
             return { success: r.success && !!(data?.length), data }
           }),
         )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+        : Promise.resolve({ success: false as const, data: null as Array<Record<string, unknown>> | null }),
       market === 'US'
         ? this.stockDetailOptional(
           this.de.queryInstrumentData(ref, 'shareholders', { page: 1 }).then(r => {
-            const data = instrumentQueryData<Record<string, unknown>[]>(r)
+            const data = instrumentQueryData<Array<Record<string, unknown>>>(r)
             return { success: r.success && !!(data?.length), data }
           }),
         )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
-      market === 'HK'
-        ? this.stockDetailOptional(
-          this.callDetailProviderMethod<Record<string, unknown>>(
-            ['tencent'],
-            'tencentHkReviewProspect',
-            formatProviderMethodArgs('tencent', 'tencentHkReviewProspect', ref),
-          ).then(rows => ({ success: !!rows?.length, data: rows })),
-        )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
-      market === 'US'
-        ? this.stockDetailOptional(
-          (async () => {
-            const engineR = await this.de.queryInstrumentData(ref, 'realtime')
-            const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(engineR)?.[0]
-            if (row) return { success: true as const, data: [row as unknown as Record<string, unknown>] }
-            return this.callDetailProviderMethod<Record<string, unknown>>(
-              ['tencent'],
-              'tencentUsStockQuote',
-              formatProviderMethodArgs('tencent', 'tencentUsStockQuote', ref),
-            ).then(rows => ({ success: !!rows?.length, data: rows }))
-          })(),
-        )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+        : Promise.resolve({ success: false as const, data: null as Array<Record<string, unknown>> | null }),
       this.stockDetailOptional(
-        this.callDetailProviderMethod<Record<string, unknown>>(
-          ['tencent'], relatedMethod, formatProviderMethodArgs('tencent', relatedMethod, ref),
-        ).then(rows => ({ success: !!rows?.length, data: rows })),
+        (async () => {
+          const engineR = await this.de.queryInstrumentData(ref, 'realtime')
+          const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(engineR)?.[0]
+          if (row) return { success: true as const, data: [row as unknown as Record<string, unknown>] }
+          return { success: false as const, data: null as Record<string, unknown>[] | null }
+        })(),
       ),
-      market === 'US'
-        ? this.stockDetailOptional(
-          this.callDetailProviderMethod<Record<string, unknown>>(
-            ['tencent'],
-            'tencentUsSeniorTrades',
-            formatProviderMethodArgs('tencent', 'tencentUsSeniorTrades', ref, [1, 15]),
-          ).then(rows => ({ success: !!rows?.length, data: rows })),
-        )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
-      market === 'HK'
-        ? this.stockDetailOptional(
-          this.de.queryInstrumentData(ref, 'technical_analysis').then(r => {
-            const data = instrumentQueryData<Record<string, unknown>[]>(r)
-            return { success: r.success && !!(data?.length), data }
-          }),
-        )
-        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
     ])
 
     const profileRaw = profileR.data?.[0] ?? null
     const profile = profileRaw
-      ? (market === 'US'
-        ? normalizeUsTencentProfile(symbol, profileRaw)
-        : normalizeHkTencentProfile(symbol, profileRaw))
+      ? normalizeCrossMarketProfile(market, symbol, profileRaw)
       : (snap?.profile as Record<string, unknown> | null) ?? null
 
-    const notices = normalizeCrossMarketNotices(symbol, noticeR.data?.[0] ?? null)
-    const articles = normalizeCrossMarketArticles(symbol, articleR.data?.[0] ?? null)
+    const notices = normalizeCrossMarketNoticesFromNews(symbol, noticeR.data ?? null)
+    const articles = normalizeCrossMarketArticlesFromNews(symbol, articleR.data ?? null)
     const quote = mergeCrossMarketQuote(
       (snap?.quote ?? null) as Record<string, unknown> | null,
-      quoteEnrichR.data?.[0] ?? null,
+      quoteR.data?.[0] ?? null,
     )
 
-    const financialHistory = market === 'US'
-      ? normalizeUsFinancialHistory(symbol, financialR.data?.[0] ?? null)
-      : normalizeHkFinancialHistory(
-        symbol,
-        financialR.data?.[0] ?? null,
-        balanceR.data?.[0] ?? null,
-      )
+    const financialRows = financialR.data ?? []
+    const financialHistory = financialRows.length
+      ? normalizeCrossMarketFinancialHistory(symbol, financialRows)
+      : market === 'US'
+        ? normalizeUsFinancialHistory(symbol, null)
+        : normalizeHkFinancialHistory(symbol, null, null)
 
+    const hkDividendRows = dividendR.data ?? null
     const dividends = market === 'HK'
-      ? normalizeHkDividends(symbol, dividendR.data?.[0] ?? null)
+      ? (() => {
+        const fromStandard = normalizeCrossMarketDividends(symbol, hkDividendRows)
+        if (fromStandard.length) return fromStandard
+        return normalizeHkDividends(symbol, hkDividendRows?.[0] ?? null)
+      })()
       : []
 
     const shareholders = market === 'US'
-      ? normalizeUsShareholders(symbol, shareholderR.data?.[0] ?? null)
-      : null
-
-    const reviewRow = reviewR.data?.[0] as { review?: string | null; prospect?: string | null } | undefined
-    const reviewProspect = reviewRow
-      ? { review: reviewRow.review ?? null, prospect: reviewRow.prospect ?? null }
-      : null
-
-    const relatedStocks = normalizeCrossMarketRelatedStocks(market, relatedR.data?.[0] ?? null)
-    const seniorTrades = market === 'US'
-      ? normalizeUsSeniorTrades(symbol, seniorTradesR.data?.[0] ?? null)
-      : []
-    const tradingDistribution = market === 'HK'
-      ? normalizeHkTradingDistribution(symbol, technicalR.data?.[0] ?? null)
+      ? normalizeCrossMarketShareholdersFromRows(symbol, shareholderR.data ?? null)
+        ?? normalizeUsShareholders(symbol, shareholderR.data?.[0] ?? null)
       : null
 
     const payload = buildCrossMarketDetailPayload(market, symbol, snap ?? null, {
@@ -3955,10 +3773,10 @@ export class ResearchHub {
       financialHistory,
       dividends,
       shareholders,
-      reviewProspect,
-      relatedStocks,
-      seniorTrades,
-      tradingDistribution,
+      reviewProspect: null,
+      relatedStocks: [],
+      seniorTrades: [],
+      tradingDistribution: null,
     })
 
     if (!payload.quote && !payload.profile && !(payload.recentKlines as unknown[])?.length

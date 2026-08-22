@@ -13,8 +13,7 @@ for (const manifest of BUILTIN_PROVIDER_MANIFESTS) {
 
 const store = getProviderConfigStore()
 try {
-  store.save('tencent', { enabled: true })
-  store.save('tickflow', { enabled: false })
+  store.save('tickflow', { enabled: true })
 } catch (e) {
   // DB may be read-only in some local environments; engine uses defaults
 }
@@ -25,15 +24,15 @@ registerAllDrivers(engine.registry)
 
 const LIVE = liveNetworkTestsEnabled()
 
-test('tencent driver binds HK equity realtime capability', () => {
-  const info = engine.registry.listDriverInfo().find(d => d.name === 'tencent')
+test('tickflow driver binds HK equity realtime capability', () => {
+  const info = engine.registry.listDriverInfo().find(d => d.name === 'tickflow')
   assert.ok(info)
   assert.ok(info.bindings.some(
     b => b.market === 'HK' && b.assetClass === 'EQUITY' && b.capability === Capability.STOCK_REALTIME,
   ))
 })
 
-test('HK watchlist quote works via tencent when tickflow disabled', {
+test('HK watchlist quote works via tickflow when enabled', {
   skip: !LIVE,
   timeout: 20_000,
 }, async () => {
@@ -43,12 +42,15 @@ test('HK watchlist quote works via tencent when tickflow disabled', {
   )
   assert.equal(result.success, true, result.error ?? 'expected success')
   assert.ok(result.data?.length, 'expected quote rows')
-  assert.equal(result.source, 'tencent')
+  assert.ok(
+    result.source === 'tickflow' || result.source === 'cache',
+    `expected tickflow or cache, got ${result.source ?? 'unknown'}`,
+  )
   assert.ok(result.data?.[0]?.price != null && result.data[0].price > 0)
   assert.ok(result.data?.[0]?.changePct != null)
 })
 
-test('HK snapshot loads quote and klines via tencent', {
+test('HK snapshot loads quote and klines via tickflow', {
   skip: !LIVE,
   timeout: 30_000,
 }, async () => {

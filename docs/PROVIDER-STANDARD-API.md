@@ -57,7 +57,7 @@ bindingsFor: (p, mc) => [
 // 纯 Crypto
 bindingsFor: (p, mc) => cryptoSpotBindings(CAPS, p, mc)
 
-// 纯自定义（AkShare）
+// 纯自定义（第三方插件 Provider）
 capabilities: []
 bindingsFor: () => []
 ```
@@ -71,7 +71,7 @@ bindingsFor: () => []
 
 ### 2.3 免费源退避保护（硬性）
 
-适用：manifest **无**必填 `secret` 字段的免费行情源（tencent / sinafinance / eastmoney / akshare / baostock 等）。
+适用：manifest **无**必填 `secret` 字段的免费行情源（baostock / zzshare / stockindex 等）。
 
 > **设计全文**（分层、批内全开、主机闸门、不变量与常数）：[FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md)。
 
@@ -98,28 +98,52 @@ bindingsFor: () => []
 
 ---
 
-## 3. 内置 Provider 审计（2026-07-08）
+## 3. 内置 Provider 审计（2026-08-22）
+
+### 3.0 已移除的爬虫源（不再内置注册）
+
+自 **2026-08** 起，下列 **公开门户爬虫** Provider 已从 `register.ts` / `BUILTIN_MANIFESTS` **移除**，源码目录保留作参考，**不再**参与 Engine 路由与设置页默认列表：
+
+| Provider | 原职责摘要 | 移除后影响 |
+|----------|------------|------------|
+| **tencent** | CN/US/HK 行情、ETF 基金 custom、港美详情 enrich | 港美部分深度维度、跨市场 enrich 降级 |
+| **sinafinance** | CN 行情 / F10 custom | 由 tonghuashun / tickflow / zzshare / baostock 覆盖主路径 |
+| **eastmoney** | 资金流、两融、宏观 cjsj、机构持仓 zlsj | Hub `instrument_institution_holdings`、`macro_series` 等非 CN 宏观 scope 降级 |
+| **akshare** | 纯自定义另类数据（216+ custom） | Agent `provider_ext` 逃生舱不再默认可用 |
+
+**推荐内置栈**（`registerAllDrivers` 现状）：
+
+| 市场 | Provider | 备注 |
+|------|----------|------|
+| CN | **tonghuashun** | 需扶摇 Key；个股 / ETF / 公募基金主路径 |
+| CN | **zzshare** / **baostock** | 免费层；ETF / 基本面补充 |
+| CN | **tushare** | 需 Token；批量 / 基本面 |
+| 多市场 | **tickflow** | 需 Key；US / HK / CN ETF |
+| 搜索 / 列表 | **stockindex** | 跨市场 `instrument_search` / `stock_list` |
+| CRYPTO | **binance** / **okx** | 现货行情 |
+
+**右侧面板**：个股 / ETF 行情、K 线、概况、财报等 **仍经** `queryInstrumentData` 标准能力，由上述内置源 failover；不依赖已移除爬虫源。
+
+**Hub 功能降级**（无替代内置源时）：机构持仓详情 Tab、非 CN 宏观 scope、部分跨市场 enrich（原依赖 eastmoney cjsj/zlsj、tencent 港美 custom）。
+
+### 3.1 内置 Provider 矩阵
 
 | Provider | 注册 | Binding 结构 | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|------|--------------|--------|----------|----------|--------|------|
-| **stockindex** | ✅ | CN/US/HK EQUITY + CN ETF_LIST | ✅ 搜索/列表 | 仅 ETF_LIST | ✅ `instrumentSearch` 等 | 板块/行业扩展 API | **合规**；ETF 净值/持仓靠 sinafinance/tencent 等 |
+| **stockindex** | ✅ | CN/US/HK EQUITY + CN ETF_LIST | ✅ 搜索/列表 | 仅 ETF_LIST | ✅ `instrumentSearch` 等 | 板块/行业扩展 API | **合规**；ETF 净值/持仓靠 tonghuashun / zzshare / tickflow |
 | **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆** |
 | **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
-| **sinafinance** | ✅ | cnEquityEtfIndex + SINA_ETF | CN | ✅ | ✅ | F10 深度 custom | **合规**；部分 `sinaEtf*` custom 与标准重复，宜标注 deprecated |
-| **eastmoney** | ✅ | CN EQUITY：STOCK/SECTOR/MARKET_MONEY_FLOW + MARGIN_TRADE + MACRO_INDICATOR + INST_HOLDING | CN | N/A | ✅ 资金流/两融/宏观/机构持仓 | `em*` 排名/历史/宏观/机构持仓 | **合规**；data.eastmoney.com 公开接口 |
-| **tencent** | ✅ | CN + **US/HK registry binding**；`mixTencent*Equity` 单 Driver 内路由 | ✅ CN ETF | ✅ 三市场标准方法 + US/HK 详情维度（news/notices/shareholders/dividend/technical） | HK/US 深度财报等 custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | **fund_* 五件套 + fund_company/div/daily/adj 自定义** | **合规（CN）** |
 | **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |
 | **tonghuashun** | ✅ | CN；**CN ETF 分拆**（`CN_ETF_CAPABILITIES`，priority 120）；**CN FUND** `fundProfile/fundNav/fundHoldings/fundQuote`（见 `docs/FUYAO-FUND-API.md`）；含 BALANCE_SHEET / CASH_FLOW | CN | ✅ ETF_LIST/PROFILE/NAV/HOLDINGS + FUND_PROFILE/HOLDINGS/QUOTE + STOCK_REALTIME/KLINE | ✅ `limitUpdown`；Hub `market_dynamics` 可选消费 `thsSkyrocketList` / `thsLimitUpLadder` | `ths*` 指数/特色数据（10，含 `thsValuationsSnapshot`）；Fuyao `/api/fund/*` 全量 Client + CN:PF 标准四件套；**realtime enrich** `valuations/snapshot`→pe/pb；**etfProfile enrich** `fund/holders/detail` | **合规（CN 个股 + ETF + 公募基金）** |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |
-| **akshare** | ⚠️ 须 register | `capabilities: []` | 另类数据 | N/A | 无（设计如此） | 216+ custom | **自定义专用**；须注册 Driver 否则 invoke 失败 |
 
-### 3.1 已知技术债（非 Provider 层）
+### 3.2 已知技术债（非 Provider 层）
 
 - **Hub** 部分路径仍 `de.realtime` / `de.kline` 直连（A 股详情、筹码等），应逐步改为 `queryInstrumentData`
 - **sync** 个别 job 仍 `de.realtime`（CN 批量行情优化路径）
 - **JP/KR** 无 `instrument_search` 计划（`resolveInstrumentQueryPlan` 返回 null）
-- **Tencent** `tencentHkStockList` 等：有意保留为 custom，待标准 `stock_list`+`market:HK` 覆盖后可 deprecate
+- **机构持仓 / 非 CN 宏观**：原 eastmoney 专属 Hub feature 待新 Provider 或付费源补齐
 
 ---
 

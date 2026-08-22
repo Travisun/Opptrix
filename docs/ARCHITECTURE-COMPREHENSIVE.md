@@ -455,21 +455,17 @@ packages/a-stock-layer/src/providers/
 │   ├── index.ts
 │   ├── api/
 │   └── normalize/
-├── tencent/                 # 腾讯 Provider
-│   ├── manifest.ts
-│   ├── custom-method-docs.ts
-│   ├── markets/
-│   └── api/
-├── sinafinance/             # 新浪 Provider
-├── eastmoney/               # 东方财富 Provider（资金流 / 两融 / 宏观 cjsj）
 ├── binance/                 # Binance Provider
 ├── okx/                     # OKX Provider
 ├── baostock/                # BaoStock Provider
 ├── zzshare/                 # 自在量化 Provider
 ├── tickflow/                # TickFlow Provider
-├── tonghuashun/             # 同花顺 Provider
+├── tonghuashun/             # 同花顺 Provider（CN 主路径，需扶摇 Key）
 ├── stockindex/              # 股票指数 Provider
-├── akshare/                 # AkShare Provider（纯自定义）
+├── tencent/                 # （已移除内置注册，源码保留）
+├── sinafinance/             # （已移除内置注册，源码保留）
+├── eastmoney/               # （已移除内置注册，源码保留）
+├── akshare/                 # （已移除内置注册，源码保留）
 ├── catalog.ts               # Provider 目录服务
 ├── config-store.ts          # Provider 配置存储
 ├── installer.ts             # Provider 安装器
@@ -519,26 +515,26 @@ bindingsFor: (p, mc) => [
 // 纯 Crypto
 bindingsFor: (p, mc) => cryptoSpotBindings(CAPS, p, mc)
 
-// 纯自定义（AkShare）
+// 纯自定义（第三方插件 Provider）
 capabilities: []
 bindingsFor: () => []
 ```
 
-### 5.5 内置 Provider 审计
+### 5.5 内置 Provider 审计（2026-08-22）
+
+> **已移除内置注册**（源码保留）：`tencent`、`sinafinance`、`eastmoney`、`akshare`。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
 
 | Provider | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|--------|----------|----------|--------|------|
 | stockindex | ✅ | 仅 ETF_LIST | ✅ | 板块/行业扩展 | 合规 |
 | tickflow | ✅ | ✅ | ✅ | 少量 custom | 标杆 |
 | baostock | CN | ✅ | ✅ | custom | 合规 |
-| sinafinance | CN | ✅ | ✅ | F10 深度 custom | 合规 |
-| eastmoney | CN | N/A | ✅ 资金流/两融/宏观/机构持仓 | `em*` 排名/历史/宏观/zlsj | 合规 |
-| tencent | ✅ | ✅ | ✅ | HK/US 深度 custom | 合规 |
-| tushare | CN | 弱 | ✅ | 无 | 合规 |
+| tushare | CN | 弱 | ✅ | fund_* custom | 合规 |
 | zzshare | CN | ✅ | ✅ | custom | 合规 |
-| tonghuashun | CN | ❌ | ✅ | 无 | 合规 |
+| tonghuashun | CN | ✅ | ✅ | ths* / Fuyao | 合规（CN 主路径） |
 | binance / okx | CRYPTO | N/A | ✅ | 无 | 合规 |
-| akshare | 另类数据 | N/A | 无 | 216+ custom | 自定义专用 |
+
+**推荐栈**：tonghuashun（CN，需 Key）+ tickflow（多市场）+ tushare + zzshare + baostock。**右侧面板**经 `queryInstrumentData` 标准能力；机构持仓详情 Tab、非 CN 宏观 scope、部分跨市场 enrich 因移除 eastmoney/tencent 而降级。
 
 ### 5.6 自定义方法文档标准
 
@@ -559,9 +555,9 @@ bindingsFor: () => []
  * @pageUrl https://product.example.com/page
  * @param code 6 位 A 股代码（必填）
  * @returns FooRow[]；无数据时 null
- * @usage engine.invokeCustomMethod("tencent", "tencentFoo", ["600519"])
+ * @usage engine.invokeCustomMethod("zzshare", "zzPlatesRank", [14, "20260101", 10])
  * @remarks Referer 要求、分页、延迟等维护要点
- * @example {"provider":"tencent","method":"tencentFoo","args":["600519"]}
+ * @example {"provider":"zzshare","method":"zzPlatesRank","args":[14,"20260101",10]}
  */
 ```
 

@@ -62,7 +62,7 @@ import { WatchlistManager } from './watchlist/manager.js'
 import { watchlistItemKey } from './watchlist/instrument.js'
 import { instrumentId } from './core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from './utils/helpers.js'
-import { resampleStockKlinesToPeriod } from './utils/kline-resample.js'
+
 import {
   normalizePreOpenRealtimeQuote,
   normalizePreOpenRealtimeQuotes,
@@ -475,8 +475,7 @@ export class MarketDataEngine {
     if (inferCnAssetClass(code) === 'INDEX') {
       const primary = await this.indexKline(code, period, '', '', count) as QueryResult<StockKline[]>
       if (primary.success && primary.data?.length) return primary
-      if (startOffset > 0) return primary
-      return this.fetchCnIndexMinuteFromTencent(code, period, count)
+      return { success: false, error: '指数分钟 K 暂无数据' }
     }
     const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
     const writeCache = this.isWatchlistTarget('CN', assetClass, [code])
@@ -544,29 +543,6 @@ export class MarketDataEngine {
         assetClass: 'INDEX',
       },
     )
-  }
-
-  /** 指数分钟 K — zzshare stk_mins 会误返个股，回退腾讯 minute/query */
-  private async fetchCnIndexMinuteFromTencent(
-    code: string,
-    period: string,
-    count: number,
-  ): Promise<QueryResult<StockKline[]>> {
-    const driver = this.registry.get('tencent') as {
-      minuteTrendKline?: (c: string, ndays?: number, n?: number) => Promise<StockKline[] | null>
-    } | undefined
-    if (!driver?.minuteTrendKline) {
-      return { success: false, error: '指数分钟 K 暂无数据' }
-    }
-    try {
-      const rows = await driver.minuteTrendKline.call(driver, code, 1, 0)
-      if (!rows?.length) return { success: false, error: '指数分钟 K 暂无数据' }
-      let klines = period === '1m' ? rows : resampleStockKlinesToPeriod(rows, period)
-      if (count > 0 && klines.length > count) klines = klines.slice(-count)
-      return { success: true, data: klines, source: 'tencent' }
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : String(e) }
-    }
   }
 
   marketMoneyFlow(direction = 'north'): Promise<QueryResult<MarketMoneyFlow[]>> {
@@ -1283,8 +1259,6 @@ export {
   BaostockDriver,
   ZzshareDriver,
   TonghuashunDriver,
-  TencentDriver,
-  SinafinanceDriver,
   StockIndexDriver,
   registerAllDrivers,
 } from './providers/register.js'

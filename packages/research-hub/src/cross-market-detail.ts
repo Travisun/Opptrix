@@ -57,18 +57,47 @@ function isOfficialNoticeRow(row: Record<string, unknown>): boolean {
   return Boolean(id && str(row.title))
 }
 
+/** 标准 NewsItem 列表 → 跨市场资讯行 */
 export function mapCrossMarketNewsItems(
   code: string,
-  rows: Array<{ title?: string; time?: string; url?: string; type?: unknown }>,
+  rows: Array<{ title?: string; time?: string; date?: string; url?: string; type?: unknown }>,
   fallbackType = 'news',
 ): Array<{ code: string; title: string; date: string; url?: string; type?: string }> {
   return rows.map(row => ({
     code,
     title: str(row.title),
-    date: newsDate(str(row.time)),
+    date: newsDate(str(row.time ?? row.date)),
     url: str(row.url) || undefined,
     type: str(row.type, fallbackType) || fallbackType,
   })).filter(row => row.title)
+}
+
+/** 通用 profile（Tickflow / 标准 StockProfile）→ 详情页 profile */
+export function normalizeCrossMarketProfile(
+  market: 'US' | 'HK',
+  code: string,
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  if (raw.companyName != null || raw.revenueBreakdown != null) {
+    return normalizeUsTencentProfile(code, raw)
+  }
+  if (raw.chiName != null || raw.raw != null) {
+    return normalizeHkTencentProfile(code, raw)
+  }
+  const name = str(raw.name ?? raw.orgName, code)
+  return {
+    code,
+    name,
+    orgName: str(raw.orgName ?? raw.name) || undefined,
+    industry: str(raw.industry) || undefined,
+    listingDate: str(raw.listingDate) || undefined,
+    website: str(raw.website) || undefined,
+    orgProfile: str(raw.orgProfile) || undefined,
+    mainBusiness: str(raw.mainBusiness) || undefined,
+    securityType: str(raw.securityType ?? raw.exchange) || undefined,
+    totalShares: num(raw.totalShares),
+    market: market,
+  }
 }
 
 export function normalizeUsTencentProfile(
@@ -240,6 +269,127 @@ export function normalizeHkFinancialHistory(
     })
   }
   return out.sort((a, b) => String(b.reportDate).localeCompare(String(a.reportDate)))
+}
+
+/** FinancialSummary[]（标准 financials）→ 详情财务历史 */
+export function normalizeCrossMarketFinancialHistory(
+  code: string,
+  rows: Array<Record<string, unknown>> | null | undefined,
+): Array<Record<string, unknown>> {
+  if (!rows?.length) return []
+  return rows.map(row => {
+    const revenue = num(row.revenue)
+    const netProfit = num(row.netProfit ?? row.net_profit)
+    const totalAssets = num(row.totalAssets ?? row.total_assets)
+    const totalLiabilities = num(row.totalLiabilities ?? row.total_liabilities)
+    const debtRatio = totalAssets && totalLiabilities != null
+      ? (totalLiabilities / totalAssets) * 100
+      : num(row.debtRatio ?? row.debt_ratio)
+    return {
+      code,
+      reportDate: str(row.reportDate ?? row.report_date),
+      reportType: str(row.reportType ?? row.report_type, 'annual'),
+      revenue,
+      revenueYoy: num(row.revenueYoy ?? row.revenue_yoy),
+      netProfit,
+      netProfitYoy: num(row.netProfitYoy ?? row.net_profit_yoy),
+      eps: num(row.eps),
+      roe: num(row.roe),
+      grossMargin: num(row.grossMargin ?? row.gross_margin),
+      netMargin: num(row.netMargin ?? row.net_margin)
+        ?? (revenue && netProfit != null ? (netProfit / revenue) * 100 : null),
+      debtRatio,
+      operatingCashFlow: num(row.operatingCashFlow ?? row.operating_cash_flow),
+      totalAssets,
+      totalLiabilities,
+    }
+  }).filter(row => row.reportDate)
+}
+
+export function normalizeCrossMarketDividends(
+  code: string,
+  rows: Array<Record<string, unknown>> | null | undefined,
+): Array<Record<string, unknown>> {
+  if (!rows?.length) return []
+  return rows.map(row => ({
+    code,
+    year: str(row.year ?? row.exDate ?? row.ex_date).slice(0, 4),
+    plan: str(row.plan ?? row.dividend ?? row.cashDiv ?? row.cash_div) || str(row.progress),
+    progress: str(row.progress) || undefined,
+    recordDate: str(row.recordDate ?? row.record_date) || undefined,
+    exDate: str(row.exDate ?? row.ex_date) || undefined,
+    payDate: str(row.payDate ?? row.pay_date) || undefined,
+  })).filter(row => row.plan)
+}
+
+export function normalizeCrossMarketNoticesFromNews(
+  code: string,
+  rows: Array<{ title?: string; date?: string; url?: string; type?: unknown }> | null | undefined,
+): Array<Record<string, unknown>> {
+  if (!rows?.length) return []
+  const seen = new Set<string>()
+  return rows
+    .filter(row => str(row.type).toLowerCase() === 'notice' || str(row.type) === '公告')
+    .map(row => ({
+      code,
+      title: str(row.title),
+      date: newsDate(str(row.date)),
+      url: str(row.url) || undefined,
+      type: 'notice',
+    }))
+    .filter(row => {
+      if (!row.title) return false
+      const key = `${row.date}|${row.title}|${row.url ?? ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 40)
+}
+
+export function normalizeCrossMarketArticlesFromNews(
+  code: string,
+  rows: Array<{ title?: string; date?: string; url?: string; type?: unknown }> | null | undefined,
+): Array<Record<string, unknown>> {
+  if (!rows?.length) return []
+  const seen = new Set<string>()
+  return mapCrossMarketNewsItems(code, rows, 'article')
+    .map(row => ({ ...row, type: 'article' }))
+    .filter(row => {
+      if (!row.title) return false
+      const key = `${row.date}|${row.title}|${row.url ?? ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 40)
+}
+
+export function normalizeCrossMarketShareholdersFromRows(
+  code: string,
+  rows: Array<Record<string, unknown>> | null | undefined,
+): Record<string, unknown> | null {
+  if (!rows?.length) return null
+  const first = rows[0] as Record<string, unknown>
+  if (Array.isArray(first.top10Shareholders)) {
+    return { code, ...first }
+  }
+  const top10 = rows.slice(0, 10).map((row, index) => ({
+    rank: index + 1,
+    name: str(row.holder_name ?? row.name ?? row.holderName),
+    sharesHeld: parseShareAmount(row.shares_held ?? row.sharesHeld ?? row.hold_amount),
+    sharePct: parseSharePct(row.share_pct ?? row.sharePct),
+    change: parseShareAmount(row.change ?? row.shares_change),
+    shareType: str(row.holder_type ?? row.shareType) || undefined,
+  })).filter(row => row.name)
+  if (!top10.length) return null
+  return {
+    code,
+    reportDate: str(first.reportDate ?? first.end_date ?? first.report_date),
+    top10Shareholders: top10,
+  }
 }
 
 export function normalizeUsFinancialHistory(

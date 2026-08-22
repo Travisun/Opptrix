@@ -3,6 +3,7 @@
 > **状态**：设计文档（v2）— 描述当前实现与多市场演进目标。  
 > **v2 更新**：Provider 模块内部结构、上层统一 API、Provider 配置与设置页自动发现。  
 > **v2.1**：`provider_settings` 持久化（启用/优先级/密钥分层存储）。  
+> **v2.2（2026-08）**：内置注册移除 `tencent` / `sinafinance` / `eastmoney` / `akshare`；推荐栈见 §8.0。  
 > **关联**：[ARCHITECTURE.md](./ARCHITECTURE.md)、[AGENT-GUIDE.md](./AGENT-GUIDE.md) §4.3、[DEVELOPMENT.md](./DEVELOPMENT.md)
 
 ---
@@ -16,10 +17,10 @@
 | 你的设想 | 与现状的关系 |
 |----------|--------------|
 | Driver → `DataProvider` 接口 | 现有 `BaseDriver` 已是雏形；需补 **market / assetClass 声明** 与 **统一 Instrument 入参** |
-| 每个提供商一个 module | 与 `drivers/eastmoney.ts`、`drivers/tushare.ts` 一致；东财/TDX 已跨股票/指数/ETF 多接口 |
+| 每个提供商一个 module | 与 `providers/tushare/`、`providers/tonghuashun/` 一致；按 market / assetClass 分子模块 |
 | DataLayer 看全量 Provider × Capability 列表（带优先级） | 现有 `DriverRegistry.capIndex` 已实现；需升级为 **三维索引** `(market, assetClass, capability)` |
 | 上层 API 统一 | Hub / Agent / UI 只调 Engine | 现有已接近；需收敛 Tushare 等散落 endpoint |
-| Provider 内按 market 分文件 | 单 Provider module，内部 boot 市场子模块 | 东财已有 `eastmoney-f10.ts` 等 mixin 模式，需标准化 |
+| Provider 内按 market 分文件 | 单 Provider module，内部 boot 市场子模块 | tonghuashun / zzshare 已采用 `markets/cn/` 模式 |
 | 设置页自动发现 | 数据源 Tab 分组展示 Provider 配置 | 现状仅硬编码 Tushare（`MarketDataSettingsSection` + `/api/tushare/*`） |
 
 **A 股 ETF** 应作为 **Phase 1** 优先补齐：接口与股票高度重叠，但本地库、Instrument 解析、筛选因子需单独建模，不能仅依赖现有的 `etfData()` 列表接口。
@@ -40,7 +41,7 @@
 ┌─────────────────────┐              ┌─────────────────────┐
 │ @opptrix/a-stock-layer │              │ @opptrix/market-data   │
 │ AshareEngine (在线)    │◄── sync ────│ SQLite (本地挖掘)      │
-│ 14× BaseDriver        │              │ 因子 / K线 / 筛选      │
+│ 8× BaseDriver（内置）  │              │ 因子 / K线 / 筛选      │
 └─────────────────────┘              └─────────────────────┘
 ```
 
@@ -114,8 +115,8 @@ erDiagram
 | **AssetClass** | 标的类型 | `EQUITY`、`ETF`、`INDEX`、`FUND`、`CRYPTO_SPOT`、`CRYPTO_PERP` |
 | **Instrument** | 统一标的引用 | `{ market: 'CN', assetClass: 'ETF', symbol: '510300', exchange: 'SH' }` |
 | **Capability** | 数据维度（已有枚举，按需扩展） | `STOCK_REALTIME`、`STOCK_KLINE`、`ETF_HOLDINGS` |
-| **DataProvider** | 数据提供商 module | `eastmoney`、`tushare`、`tdx`、`polygon`、`binance` |
-| **ProviderBinding** | Provider 在 (market, assetClass, capability) 上的能力与优先级 | `{ provider: 'eastmoney', market: 'CN', assetClass: 'ETF', capability: 'STOCK_KLINE', priority: 100 }` |
+| **DataProvider** | 数据提供商 module | `tonghuashun`、`tushare`、`tickflow`、`zzshare`、`baostock`、`binance` |
+| **ProviderBinding** | Provider 在 (market, assetClass, capability) 上的能力与优先级 | `{ provider: 'tonghuashun', market: 'CN', assetClass: 'ETF', capability: 'ETF_NAV', priority: 120 }` |
 
 ### 4.2 Instrument 标识规范
 
@@ -198,7 +199,7 @@ flowchart TB
   end
 
   subgraph online [在线 Provider 层]
-    CN[eastmoney / tushare / tdx / ...]
+    CN[tonghuashun / tushare / zzshare / baostock / tickflow / ...]
     US[polygon / alpaca / ...]
     CR[binance / okx / ...]
   end
@@ -266,7 +267,7 @@ interface ProviderBinding {
 }
 
 interface DataProvider {
-  readonly id: string          // 'eastmoney' | 'tushare' | 'tdx' | ...
+  readonly id: string          // 'tonghuashun' | 'tushare' | 'tickflow' | ...
   readonly displayName?: string
 
   /** 静态声明支持矩阵；Registry 据此建索引 */
@@ -294,7 +295,7 @@ interface DataProvider {
 
 **设计要点**：
 
-1. **一个 Provider module 可绑定多 Market**：例如 `eastmoney` 主要服务 `CN`；未来 `eastmoney-global` 或 `sina` 可声明 `GLOBAL_INDEX` 等跨市场能力。
+1. **一个 Provider module 可绑定多 Market**：例如 `tickflow` 服务 US/HK/CN ETF；`stockindex` 可声明跨市场 `instrument_search`。
 2. **bindings() 替代 capabilities()**：从「我支持哪些 capability」升级为「我在哪些市场、哪些资产类型下支持哪些 capability、优先级多少」。
 3. **方法签名统一收 InstrumentRef**：Provider 内部自行调用 `resolveSecId(instrument)` 等 adapter，Engine 不再硬编码 A 股 code 规则。
 
@@ -325,7 +326,7 @@ registry.getDriversForCapability(Capability.STOCK_KLINE)
 
 // 目标
 registry.getProviders('CN', 'ETF', Capability.STOCK_KLINE)
-// → [eastmoney(100), tushare(110), tdx(90), ...]
+// → [tonghuashun(120), tushare(110), tickflow(100), zzshare(105), ...]
 ```
 
 ### 6.3 MarketDataEngine 查询循环
@@ -368,11 +369,11 @@ interface QueryPlan {
 
 **原则**：对外一个 Provider module；对内按 **市场（market）** 与 **API 家族** 拆文件，由入口 `index.ts` 统一 boot 并注册 bindings。
 
-#### 6.4.1 推荐目录（以 `eastmoney` 为例）
+#### 6.4.1 推荐目录（以 `tonghuashun` 为例）
 
 ```
-packages/a-stock-layer/src/providers/eastmoney/
-  index.ts              # class EastMoneyProvider implements ConfigurableProvider
+packages/a-stock-layer/src/providers/tonghuashun/
+  index.ts              # class TonghuashunProvider implements ConfigurableProvider
   manifest.ts           # id、displayName、bindings()、markets 声明
   config.ts             # 本 Provider 专属配置 load/save（走 ProviderConfigStore）
   settings.ts           # settings() 自描述 → 设置页自动发现
@@ -380,15 +381,12 @@ packages/a-stock-layer/src/providers/eastmoney/
   markets/
     cn/
       index.ts          # bootCnHandlers() — 聚合 cn 下各 assetClass
-      equity.ts         # 股票 realtime / kline / moneyFlow
-      etf.ts            # ETF 列表 / 净值 / 持仓（Phase 1）
-      index-bars.ts     # 指数行情
-    global/
-      index-quotes.ts   # GLOBAL_INDEX（已有能力）
+      equity.ts         # 股票 realtime / kline / profile
+      etf.ts            # ETF 列表 / 净值 / 持仓
+      fund.ts           # 公募基金 profile / nav / holdings
   api/
-    push2.ts            # push2 / push2his HTTP
-    datacenter.ts       # RPT_* 报表
-    f10.ts              # F10 基本面（自 eastmoney-f10.ts 迁入）
+    fuyao.ts            # 扶摇 HTTP Client
+    ths.ts              # 同花顺特色数据
   normalize/
     quote.ts
     kline.ts
@@ -410,16 +408,16 @@ providers/polygon/
       fx.ts
 ```
 
-**无配置 Provider**（如 `sina`、`tdx` 免密钥）：可不实现 `settings()`，设置页仅展示「已启用 / 优先级 / 健康状态」，无表单字段。
+**无配置 Provider**（如 `baostock` 免密钥）：可不实现 `settings()`，设置页仅展示「已启用 / 优先级 / 健康状态」，无表单字段。
 
 #### 6.4.2 Boot 与组合模式
 
 Provider 入口负责 **装配**，不把市场逻辑堆在单文件：
 
 ```typescript
-/** providers/eastmoney/index.ts */
-export class EastMoneyProvider implements ConfigurableProvider {
-  readonly id = 'eastmoney'
+/** providers/tonghuashun/index.ts */
+export class TonghuashunProvider implements ConfigurableProvider {
+  readonly id = 'tonghuashun'
   private readonly cn: CnMarketHandlers
 
   constructor(private readonly ctx: ProviderContext) {
@@ -431,7 +429,7 @@ export class EastMoneyProvider implements ConfigurableProvider {
   }
 
   settings(): ProviderSettingsDefinition {
-    return eastmoneySettings        // settings.ts
+    return tonghuashunSettings      // settings.ts
   }
 
   // 委托到 market handler（按 assetClass 分发）
@@ -469,14 +467,14 @@ export function bootCnHandlers(ctx: ProviderContext): CnMarketHandlers {
 }
 ```
 
-**与现状迁移**：现有 `eastmoney.ts` + `eastmoney-f10.ts` + `eastmoney-research.ts` mixin → 拆入上述目录；`mixEastMoneyResearch(EastMoneyDriver)` 改为显式 `etf` handler 模块。
+**与现状**：tonghuashun / zzshare / tickflow 已采用上述 `markets/cn/` 分拆；历史爬虫源（eastmoney 等）源码保留但不再内置注册。
 
 #### 6.4.3 共享 vs 市场专属
 
 | 层级 | 放什么 | 示例 |
 |------|--------|------|
-| `providers/<id>/api/` | HTTP/TCP 客户端、签名、限流 | `push2.ts`、`TdxClient` 封装 |
-| `providers/<id>/normalize/` | 原始 JSON → `@opptrix/shared` schema | `mapEastMoneyKline` |
+| `providers/<id>/api/` | HTTP/TCP 客户端、签名、限流 | `fuyao.ts`、`BaostockClient` 封装 |
+| `providers/<id>/normalize/` | 原始 JSON → `@opptrix/shared` schema | `mapTonghuashunKline` |
 | `providers/<id>/markets/<m>/` | 市场规则、secid 解析、Capability 实现 | A 股涨跌停、美股 split |
 | `packages/a-stock-layer/src/tdx/` | 过渡期保留；由 `providers/tdx/` 引用 | 纯协议层 |
 
@@ -728,12 +726,12 @@ interface ProviderCatalogResponse {
 
 | marketGroup | Tab 内区块标题 | 典型 Provider |
 |-------------|----------------|---------------|
-| `CN` | A 股 | eastmoney（无表单）、tushare、tdx |
-| `US` | 美股 | polygon、fmp（Phase 2） |
-| `CRYPTO` | 加密货币 | binance、okx（Phase 3） |
-| `GLOBAL` | 全球 / 宏观 | stats-gov、eastmoney-global-index |
+| `CN` | A 股 | tonghuashun、tushare、zzshare、baostock |
+| `US` | 美股 | tickflow、polygon（Phase 2） |
+| `CRYPTO` | 加密货币 | binance、okx |
+| `GLOBAL` | 全球 / 宏观 | stockindex（搜索/列表） |
 
-无 `settings.fields` 的 Provider 仍出现在列表，卡片仅显示说明 + 健康状态（如「东财 Push2 · 免费 · 默认启用」）。
+无 `settings.fields` 的 Provider 仍出现在列表，卡片仅显示说明 + 健康状态（如「BaoStock · 免费 · 默认启用」）。
 
 #### 7.4.3 与现有 UI 的关系
 
@@ -869,7 +867,7 @@ function effectivePriority(providerId: string, binding: ProviderBinding): number
 ```sql
 -- 每 Provider 一行：运维字段 + 扩展配置 JSON
 CREATE TABLE IF NOT EXISTS provider_settings (
-  provider_id     TEXT PRIMARY KEY,          -- 'tushare' | 'eastmoney' | 'tdx' | ...
+  provider_id     TEXT PRIMARY KEY,          -- 'tushare' | 'tonghuashun' | 'tickflow' | ...
   enabled         INTEGER NOT NULL DEFAULT 1,
   priority_mode   TEXT NOT NULL DEFAULT 'manifest',  -- 'manifest' | 'custom'
   priority        INTEGER,                   -- custom 时生效；NULL = 用 manifest
@@ -1005,7 +1003,9 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 | tushare | 110 | ✅ | 需 Token；bulk/基本面 |
 | tickflow | 100 | ✅ | 需 Key；多市场行情 |
 | zzshare / baostock 等免费 | 105–110 | ✅ | 免费层（effective 低于需 Key 层） |
-| tencent / sina | ~50–56 | ✅ | 回退源 |
+| stockindex | ~90 | ✅ | 搜索/列表；无表单 |
+
+> **已移除**：`tencent` / `sinafinance` / `eastmoney` / `akshare` 不再出现在内置 Registry。
 
 默认值在 **`manifest.ts` 的 `bindings()`** 里声明；用户未改时 `priority_mode = 'manifest'`，**不在 DB 重复存一份默认表**。
 
@@ -1031,18 +1031,33 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 ## 8. 各市场 Provider 矩阵（规划）
 
-### 8.1 A 股（CN）— 现状 + ETF 补齐
+### 8.0 内置注册现状（2026-08）
+
+**已注册**（`register.ts`）：tonghuashun、tushare、tickflow、zzshare、baostock、stockindex、binance、okx。
+
+**已移除内置注册**（源码目录保留，不参与路由）：tencent、sinafinance、eastmoney、akshare。
+
+| 影响域 | 降级说明 |
+|--------|----------|
+| Hub 机构持仓 | `instrument_institution_holdings` 详情 Tab（原 eastmoney zlsj） |
+| 宏观序列 | `macro_series` 非 CN scope（原 eastmoney cjsj） |
+| 跨市场 enrich | 原 tencent 港美 custom 维度 |
+| **右侧面板** | **不受影响** — 行情/K 线/概况/财报等仍经 `queryInstrumentData` |
+
+### 8.1 A 股（CN）— 现状
 
 | Provider | EQUITY | ETF | INDEX | 说明 |
 |----------|--------|-----|-------|------|
-| eastmoney | ○ 资金流/两融/宏观/机构持仓已接入 | ○ | ○ 大盘资金流 | `STOCK/SECTOR/MARKET_MONEY_FLOW` + `MARGIN_TRADE` + `MACRO_INDICATOR` + `INST_HOLDING`；cjsj + zlsj；行情主路径仍靠其他源 |
-| tushare | ● 需 token | ○ Phase 1 | ● | 批量/sync 优先 |
-| tdx | ● 行情/K线 | ● 行情/K线 | ● | 低延迟；TCP |
-| tencent / sina | ● 行情备选 | ○ | ○ | 回退；个股资金流/两融备选 |
-| csindex | ○ | ○ | ● 指数 | 中证指数 |
-| cninfo | ○ 公告 | ○ | ○ | 披露 |
+| tonghuashun | ● 需 Key | ● | ○ | CN 主路径；扶摇 Fuyao ETF/基金 |
+| tushare | ● 需 token | ○ | ● | 批量/sync、基本面 |
+| zzshare | ● | ● | ○ | 免费层；板块/情绪 |
+| baostock | ● | ● | ● | 免费；历史 K 线/财报 |
+| tickflow | ○ | ● | ○ | 多市场；CN ETF |
+| stockindex | ○ | ○ ETF_LIST | ● | 搜索/列表 |
 
-● = 已支持或 Phase 1；○ = 计划/可选
+● = 已支持；○ = 计划/可选
+
+> **历史**：eastmoney（资金流/两融/宏观/机构持仓）、tencent/sinafinance（行情爬虫）已自内置栈移除。
 
 ### 8.2 美股（US）— Phase 2
 
@@ -1069,7 +1084,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 ### 9.1 为什么先做 ETF
 
-1. **API 复用度高**：东财 `secid` 对 ETF 与股票相同，TDX 同样支持 ETF 代码。
+1. **API 复用度高**：同花顺 / zzshare / tickflow 对 ETF 与股票共用标准 capability 路由。
 2. **产品需求明确**：宽基/行业/红利 ETF 是 A 股投资者核心标的，右侧面板与筛选需支持。
 3. **风险低于美股/币圈**：同一 `Market: CN`，不改 Registry 主流程，只扩展 `AssetClass: ETF`。
 
@@ -1077,11 +1092,11 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 | 能力 | Provider 实现 | 说明 |
 |------|---------------|------|
-| 列表 | eastmoney `RPT_ETF_LIST`（已有 `etfData`） | 升级为 `ETF_LIST` capability |
-| 实时/ K 线 | eastmoney / tdx / tushare | `assetClass: ETF`，复用 `STOCK_REALTIME` / `STOCK_KLINE` |
-| 成分股 | eastmoney 基金持仓 API | 新 `ETF_HOLDINGS` |
-| 净值/溢价 | eastmoney 基金净值 | 新 `ETF_NAV` |
-| 份额变动 | eastmoney ETF 份额 | 新 `ETF_FLOW` |
+| 列表 | tonghuashun / zzshare | `ETF_LIST` capability |
+| 实时/ K 线 | tonghuashun / tickflow / tushare / baostock | `assetClass: ETF`，复用 `realtime` / `kline` |
+| 成分股 | tonghuashun Fuyao | `ETF_HOLDINGS` |
+| 净值/溢价 | tonghuashun / zzshare | `ETF_NAV` |
+| 概况 | tonghuashun | `ETF_PROFILE` + holders enrich |
 
 ### 9.3 本地库扩展
 
@@ -1193,7 +1208,7 @@ flowchart LR
 
 ### Phase 1 — A 股 ETF
 
-- [x] 新增 ETF Capability 与 eastmoney 实现
+- [x] 新增 ETF Capability 与 tonghuashun / zzshare 实现
 - [x] `InstrumentResolver` 识别 ETF 代码段（15/51/56/58 等）
 - [x] SQLite migration v5：`instruments` + `etf_profiles` + `etf_nav_daily` + `etf_holdings`
 - [x] Sync jobs：`etf_list`、`etf_nav`、`etf_holdings`（`etf_kline_bootstrap` 已下线，主库不再写静态日 K）
@@ -1317,8 +1332,8 @@ A：不要。实现 `settings.ts` + 注册后，数据源 Tab 自动出现新卡
 | Driver 基类 | `packages/a-stock-layer/src/drivers/base.ts` |
 | Registry | `packages/a-stock-layer/src/core/registry.ts` |
 | Capability 枚举 | `packages/a-stock-layer/src/core/capabilities.ts` |
+| 同花顺 CN handlers | `packages/a-stock-layer/src/providers/tonghuashun/markets/cn/` |
 | 注册入口 | `packages/a-stock-layer/src/providers/register.ts` |
-| 东财 research/chain | `packages/a-stock-layer/src/providers/eastmoney/markets/cn/` |
 | Tushare 配置 | `packages/a-stock-layer/src/providers/tushare/config.ts` |
 | 设置页数据源 Tab | `client-ui/src/pages/settings/MarketDataSettingsSection.tsx` |
 | Tushare REST（待统一） | `apps/server/src/index.ts` — `/api/tushare/*` |
@@ -1326,4 +1341,4 @@ A：不要。实现 `settings.ts` + 注册后，数据源 Tab 自动出现新卡
 
 ---
 
-*文档版本：2026-07-03 v2.1 — 含 Provider 运行时配置持久化（`provider_settings` 表）。*
+*文档版本：2026-08-22 v2.2 — 移除内置爬虫源（tencent/sinafinance/eastmoney/akshare）；推荐栈 tonghuashun + tickflow + tushare + zzshare + baostock。*

@@ -9,12 +9,8 @@
  */
 
 import { resolveProviderAlias } from '../providers/common/provider-aliases.js'
-import { TENCENT_CUSTOM } from '../providers/tencent/custom-method-docs.js'
 import { STOCKINDEX_CUSTOM } from '../providers/stockindex/custom-method-docs.js'
-import { SINA_CUSTOM } from '../providers/sinafinance/custom-method-docs.js'
-import { AKSHARE_CUSTOM } from '../providers/akshare/custom-method-docs.js'
 import { TONGHUASHUN_CUSTOM } from '../providers/tonghuashun/custom-method-docs.js'
-import { EASTMONEY_CUSTOM } from '../providers/eastmoney/custom-method-docs.js'
 import { TUSHARE_CUSTOM } from '../providers/tushare/custom-method-docs.js'
 
 /**
@@ -217,12 +213,6 @@ const TICKFLOW_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
-// Tencent / sinafinance 自定义方法完整文档见：
-// - providers/tencent/custom-method-docs.ts
-// - providers/sinafinance/custom-method-docs.ts
-
-const SINAFINANCE_CUSTOM = SINA_CUSTOM
-
 const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   {
     method: 'zzUplimitHot',
@@ -268,12 +258,8 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
   { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
-  { providerId: 'tencent', methods: TENCENT_CUSTOM },
   { providerId: 'stockindex', methods: STOCKINDEX_CUSTOM },
-  { providerId: 'sinafinance', methods: SINAFINANCE_CUSTOM },
-  { providerId: 'akshare', methods: AKSHARE_CUSTOM },
   { providerId: 'tonghuashun', methods: TONGHUASHUN_CUSTOM },
-  { providerId: 'eastmoney', methods: EASTMONEY_CUSTOM },
   { providerId: 'tushare', methods: TUSHARE_CUSTOM },
 ]
 

@@ -40,6 +40,7 @@ import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regi
  * - notices:        公司公告（news 的 notice 通道）
  * - shareholders:   股东结构/持仓统计
  * - money_flow:     个股资金流向
+ * - inst_holding:   机构持仓一览
  * - technical_analysis: 技术面摘要（港股成交分布等）
  */
 export type InstrumentDataCapability =
@@ -72,6 +73,7 @@ export type InstrumentDataCapability =
   | 'notices'
   | 'shareholders'
   | 'money_flow'
+  | 'inst_holding'
   | 'technical_analysis'
 
 /**
@@ -413,6 +415,8 @@ export function resolveInstrumentQueryPlan(
         )
       case 'money_flow':
         return registryPlan('CN', assetClass, Capability.STOCK_MONEY_FLOW, 'moneyFlow', true, [symbol], normalized)
+      case 'inst_holding':
+        return registryPlan('CN', assetClass, Capability.INST_HOLDING, 'instHolding', true, [symbol], normalized)
       default:
         return null
     }

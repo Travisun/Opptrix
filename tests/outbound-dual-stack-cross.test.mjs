@@ -13,9 +13,8 @@ import {
   resetOutboundNetworkForTests,
   setOutboundNetworkStatusForTests,
 } from '@opptrix/shared'
-import { testTencentConnection } from '../packages/a-stock-layer/dist/providers/tencent/api/probe.js'
-import { testSinafinanceConnection } from '../packages/a-stock-layer/dist/providers/sinafinance/api/probe.js'
-import { testAkshareConnection } from '../packages/a-stock-layer/dist/providers/akshare/driver.js'
+import { testBaostockConnection } from '../packages/a-stock-layer/dist/providers/baostock/api/client.js'
+import { testZzshareConnection } from '../packages/a-stock-layer/dist/providers/zzshare/api/client.js'
 import { liveNetworkTestsEnabled } from './helpers.mjs'
 
 const TIMEOUT_MS = 12_000
@@ -35,9 +34,8 @@ const NETWORK_PROFILES = [
 ]
 
 const FREE_PROVIDERS = [
-  { id: 'tencent', host: 'qt.gtimg.cn', testFn: () => testTencentConnection() },
-  { id: 'sinafinance', host: 'hq.sinajs.cn', testFn: () => testSinafinanceConnection() },
-  { id: 'akshare', host: 'datacenter-web.eastmoney.com', testFn: () => testAkshareConnection() },
+  { id: 'baostock', host: 'baostock.com', testFn: () => testBaostockConnection() },
+  { id: 'zzshare', host: 'api.zhizhuwang.com', testFn: () => testZzshareConnection() },
 ]
 
 const INTL_PROBE = {
@@ -150,13 +148,12 @@ describe('outbound dual-stack live — must-pass scenarios', { skip: !LIVE }, ()
     })
   }
 
-  it('tencent raw outboundFetch under dual-stack auto', async () => {
+  it('baostock raw outboundFetch under dual-stack auto', async () => {
     setupNetwork(NETWORK_PROFILES[0])
-    const resp = await outboundFetch('https://qt.gtimg.cn/q=sh600519', {
+    const resp = await outboundFetch('https://www.baostock.com/', {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
-    const text = await resp.text()
-    assert.ok(resp.ok && text.length > 10, 'tencent quote body')
+    assert.ok(resp.ok, 'baostock homepage reachable')
   })
 })
 

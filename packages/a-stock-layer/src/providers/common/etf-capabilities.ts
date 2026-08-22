@@ -12,7 +12,7 @@ export const FREE_CN_ETF_HOLDINGS_CAPABILITIES = [
   Capability.ETF_HOLDINGS,
 ] as const
 
-/** 新浪 sinafinance — ETF 四件套（列表 / 概况 / 真实净值 / 宽基持仓代理） */
+/** 已注销 sinafinance — 保留常量供 legacy manifest 引用 */
 export const SINA_CN_ETF_CAPABILITIES = [
   Capability.ETF_LIST,
   Capability.ETF_PROFILE,
@@ -20,7 +20,7 @@ export const SINA_CN_ETF_CAPABILITIES = [
   Capability.ETF_HOLDINGS,
 ] as const
 
-/** 腾讯行情 — ETF 标准方法（K 线代理净值 + 宽基持仓代理） */
+/** 已注销 tencent — 保留常量供 legacy manifest 引用 */
 export const TENCENT_CN_ETF_CAPABILITIES = [
   Capability.ETF_LIST,
   Capability.ETF_PROFILE,

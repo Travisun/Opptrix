@@ -115,11 +115,11 @@ describe('free provider throttle — engine integration', () => {
   it('invokeProviderDriverMethod respects cooldown for hub detail fallback', async () => {
     const { throttle } = await bootEngine()
     const { invokeProviderDriverMethod } = await import('../packages/a-stock-layer/dist/core/provider-driver-guard.js')
-    throttle.recordTrigger('sinafinance', 'HTTP 502')
+    throttle.recordTrigger('baostock', 'HTTP 502')
 
     let called = false
     const rows = await invokeProviderDriverMethod(
-      'sinafinance',
+      'baostock',
       'detail:shareholders',
       async () => {
         called = true

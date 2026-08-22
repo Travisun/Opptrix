@@ -82,7 +82,7 @@ test('normalizeStockProfileRow maps snake_case aliases', () => {
   assert.equal(out.regCapital, 125619.78)
 })
 
-test('mergeStockProfileRows prefers richer sinafinance and fills gaps from tencent', () => {
+test('mergeStockProfileRows prefers richer profile and fills gaps from secondary source', () => {
   const out = mergeStockProfileRows('600519', [
     {
       code: '600519',
@@ -110,7 +110,7 @@ test('mergeStockProfileRows prefers richer sinafinance and fills gaps from tence
   assert.deepEqual(out.concepts, ['白酒', '沪股通', 'MSCI'])
 })
 
-test('mergeDetailQuoteRows keeps fallback volume and tencent valuation fields', () => {
+test('mergeDetailQuoteRows keeps fallback volume and valuation fields', () => {
   const out = mergeDetailQuoteRows('600519', {
     code: '600519',
     price: 1199.3,

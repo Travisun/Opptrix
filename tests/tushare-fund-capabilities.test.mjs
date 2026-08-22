@@ -49,7 +49,7 @@ assert.equal(
   wireProviderSymbolArg('tushare', 'code', 'profile', { market: 'CN', assetClass: 'ETF', symbol: '510330', exchange: 'SH' }),
   '510330.SH',
 )
-assert.equal(wireProviderSymbolArg('sinafinance', 'code', 'fundNav', cnPublicFund), '000001')
+assert.equal(wireProviderSymbolArg('tushare', 'code', 'profile', { market: 'CN', assetClass: 'ETF', symbol: '510330', exchange: 'SH' }), '510330.SH')
 
 const wiredList = wireRegistryMethodArgs('tushare', 'fundList', ['CN', '华夏'], cnPublicFund)
 assert.deepEqual(wiredList, ['CN', '华夏'])

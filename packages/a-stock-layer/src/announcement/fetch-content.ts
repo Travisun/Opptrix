@@ -1,5 +1,3 @@
-import { fetchTencentNoticeList } from '../providers/tencent/api/proxy.js'
-import { fetchSinaNoticeList } from '../providers/sinafinance/api/content.js'
 import { compressPlainTextForAgent, isLowQualityExtractedText, truncatePlainTextForAgent } from './compress.js'
 import {
   fetchHtmlAnnouncementContent,
@@ -32,42 +30,6 @@ function finalize(
   })
 }
 
-async function trySinaNoticeByTitle(code: string, title: string) {
-  const data = await fetchSinaNoticeList({ code, pageSize: 30 })
-  const rows = data.result?.data ?? []
-  const normalized = title.replace(/\s+/g, '')
-  const hit = rows.find(row => {
-    const t = String(row.title ?? '').replace(/\s+/g, '')
-    return t === normalized || t.includes(normalized) || normalized.includes(t)
-  })
-  if (!hit?.id) return null
-  return fetchSinaMemordDetailContent(code, String(hit.id))
-}
-
-async function fetchTencentNoticeContent(
-  code: string,
-  noticeId: string,
-  sourceUrl: string,
-  maxChars: number,
-): Promise<AnnouncementContent | null> {
-  const list = await fetchTencentNoticeList({ code, page: 1, pageSize: 50 })
-  const hit = list.data?.find(row => String(row.id) === noticeId)
-  if (!hit) return null
-
-  const external = String(hit.url ?? '').trim()
-  if (external) {
-    const nested = await fetchAnnouncementContentByUrl(external, { maxChars })
-    if (nested) return nested
-  }
-
-  const sina = await trySinaNoticeByTitle(code, hit.title)
-  if (sina?.text) {
-    return finalize(sourceUrl, 'tencent_via_sina_memord', sina, maxChars)
-  }
-
-  return null
-}
-
 /**
  * 按公告 URL 提取正文（HTML 去标签或 PDF 文字），压缩后供 Agent 阅读。
  */
@@ -89,7 +51,8 @@ export async function fetchAnnouncementContentByUrl(
       return finalize(plan.url, 'sina_memord', raw, maxChars)
     }
     case 'tencent_notice':
-      return fetchTencentNoticeContent(plan.code, plan.noticeId, plan.url, maxChars)
+      // 腾讯公告列表 API 已随 scraping provider 下线；仅保留 URL 识别，正文需外链或 generic html/pdf。
+      return null
     case 'pdf': {
       const raw = await fetchPdfAnnouncementContent(plan.pdfUrl)
       return finalize(plan.url, 'pdf', raw, maxChars)

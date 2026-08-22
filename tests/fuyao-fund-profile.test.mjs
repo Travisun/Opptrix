@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/src/providers/tonghuashun/api/fund-symbols.ts'
+import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/tonghuashun/api/fund-symbols.js'
 import {
   mapFundHoldingsToFundRows,
   mapFundNavRowsForFund,
   mapFundProfileToFundProfileRow,
   mapFundReturnsToPerformance,
-} from '../packages/a-stock-layer/src/providers/tonghuashun/normalize/fund.ts'
+} from '../packages/a-stock-layer/dist/providers/tonghuashun/normalize/fund.js'
 
 describe('fuyao fund profile', () => {
   it('resolveFuyaoFundRoute maps OTC and exchange codes', () => {

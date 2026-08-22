@@ -45,7 +45,7 @@ export interface InterfaceHealth {
  * 健康状态快照 — 所有 (Provider × Capability) 组合的当前健康状态。
  *
  * 用途：诊断接口返回、健康监控面板展示。
- * key 格式："{providerId}::{capability}"（如 "eastmoney::STOCK_REALTIME"）
+ * key 格式："{providerId}::{capability}"（如 "tushare::STOCK_REALTIME"）
  */
 export interface HealthSnapshot {
   [key: string]: InterfaceHealth

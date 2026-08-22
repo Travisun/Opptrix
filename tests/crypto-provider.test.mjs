@@ -48,10 +48,10 @@ test('matchesCryptoKeyword filters by pair or base', () => {
 })
 
 test('defaultProviderEnabled enables free providers and disables key-only providers', () => {
-  assert.equal(defaultProviderEnabled('sinafinance'), true)
+  assert.equal(defaultProviderEnabled('baostock'), true)
+  assert.equal(defaultProviderEnabled('zzshare'), true)
   assert.equal(defaultProviderEnabled('binance'), true)
   assert.equal(defaultProviderEnabled('okx'), true)
-  assert.equal(defaultProviderEnabled('baostock'), true)
   assert.equal(defaultProviderEnabled('tushare'), false)
   assert.equal(defaultProviderEnabled('tickflow'), false)
   assert.equal(defaultProviderEnabled('tonghuashun'), false)

@@ -89,12 +89,12 @@ test('normalizeInstrumentExchange maps null to empty string', () => {
   assert.equal(normalizeInstrumentExchange('sz'), 'SZ')
 })
 
-test('fresh database uses schema v13 with duck primary migration complete', () => {
+test('fresh database uses current schema with duck primary migration complete', () => {
   const dbPath = join(dataDir, 'fresh-v9.db')
   const store = new MarketDataStore(dbPath, join(dataDir, 'fresh-v9.duckdb'))
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
   assert.equal(ver.v, SCHEMA_VERSION)
-  assert.equal(SCHEMA_VERSION, 13)
+  assert.equal(SCHEMA_VERSION, 14)
 
   const ddl = store.db.prepare(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instruments'",

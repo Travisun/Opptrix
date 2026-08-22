@@ -42,7 +42,7 @@ describe('provider order → registry fallback', () => {
     const cnKlineBefore = engine.registry
       .getProviders('CN', 'EQUITY', Capability.STOCK_KLINE)
       .map(d => d.name)
-    const candidates = ['zzshare', 'baostock', 'tencent'].filter(
+    const candidates = ['zzshare', 'baostock'].filter(
       id => cnKlineBefore.includes(id),
     )
     assert.ok(candidates.length >= 2, `need >=2 free CN kline providers, got ${cnKlineBefore.join(', ')}`)

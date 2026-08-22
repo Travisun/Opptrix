@@ -84,7 +84,7 @@ test('resolveInstrumentQueryPlan — 标准 CN:PF 路由至 fund_* registry', ()
   }
 })
 
-test('provider-wire — tushare / sinafinance 场内外标准码', async () => {
+test('provider-wire — tushare / tonghuashun 场内外标准码', async () => {
   const { wireProviderSymbolArg, wireRegistryMethodArgs } = await import(
     '../packages/a-stock-layer/dist/core/provider-wire.js',
   )
@@ -98,17 +98,17 @@ test('provider-wire — tushare / sinafinance 场内外标准码', async () => {
       `${c.label} tushare wireProviderSymbolArg`,
     )
     assert.equal(
-      wireProviderSymbolArg('sinafinance', 'code', 'fundNav', ref),
-      c.sinaWire,
-      `${c.label} sinafinance wireProviderSymbolArg`,
+      wireProviderSymbolArg('tonghuashun', 'code', 'fundNav', ref),
+      c.tushareWire,
+      `${c.label} tonghuashun wireProviderSymbolArg`,
     )
 
     for (const { method } of FUND_REGISTRY_METHODS) {
       const tArgs = wireRegistryMethodArgs('tushare', method, [c.symbol], ref)
       assert.equal(tArgs[0], c.tushareWire, `${c.label} tushare ${method}`)
 
-      const sArgs = wireRegistryMethodArgs('sinafinance', method, [c.symbol], ref)
-      assert.equal(sArgs[0], c.sinaWire, `${c.label} sinafinance ${method}`)
+      const thArgs = wireRegistryMethodArgs('tonghuashun', method, [c.symbol], ref)
+      assert.equal(thArgs[0], c.tushareWire, `${c.label} tonghuashun ${method}`)
     }
   }
 })
@@ -145,14 +145,14 @@ test('Provider 门禁 — CN:PF FUND ref', async () => {
   const { tushareFundGate } = await import(
     '../packages/a-stock-layer/dist/providers/tushare/markets/cn/fund.js',
   )
-  const { sinafinanceFundGate } = await import(
-    '../packages/a-stock-layer/dist/providers/sinafinance/markets/cn/fund.js',
+  const { assertCnPublicFundCode } = await import(
+    '../packages/a-stock-layer/dist/core/fund-instrument.js',
   )
 
   for (const c of STANDARD_FUND_CASES) {
     const ref = parseInstrumentNamespace(c.namespace)
     assert.equal(tushareFundGate(ref), true, c.label)
-    assert.equal(sinafinanceFundGate(ref), true, c.label)
+    assert.doesNotThrow(() => assertCnPublicFundCode(ref.symbol), c.label)
   }
 
   const etfRef = normalizeInstrumentRef({
@@ -162,7 +162,6 @@ test('Provider 门禁 — CN:PF FUND ref', async () => {
     exchange: 'SH',
   })
   assert.equal(tushareFundGate(etfRef), false)
-  assert.equal(sinafinanceFundGate(etfRef), false)
 })
 
 function createTushareFundProto() {
@@ -284,28 +283,11 @@ test('Tushare Driver fundProfile — 场内 SH 回退候选', async () => {
   assert.equal(rows[0].code, '510330')
 })
 
-test('sinafinance 行情键 — 场内外 resolveMarket 前缀', async () => {
-  const { resolveMarket } = await import('../packages/a-stock-layer/dist/utils/helpers.js')
-
-  assert.equal(resolveMarket('110022'), 'SZ')
-  assert.equal(resolveMarket('510330'), 'SH')
-  assert.equal(resolveMarket('159915'), 'SZ')
-
-  const hqKeys = (bare) => {
-    const prefix = resolveMarket(bare) === 'SH' ? 'sh' : 'sz'
-    return [`of${bare}`, `f_${bare}`, `${prefix}${bare}`]
-  }
-
-  assert.deepEqual(hqKeys('110022'), ['of110022', 'f_110022', 'sz110022'])
-  assert.deepEqual(hqKeys('510330'), ['of510330', 'f_510330', 'sh510330'])
-  assert.deepEqual(hqKeys('159915'), ['of159915', 'f_159915', 'sz159915'])
-})
-
-test('PROVIDER_FUND_COVERAGE — tushare 与 sinafinance 五件套', async () => {
+test('PROVIDER_FUND_COVERAGE — tushare 与 tonghuashun', async () => {
   const { PROVIDER_FUND_COVERAGE } = await import(
     '../packages/a-stock-layer/dist/providers/common/standard-methods.js',
   )
-  const expected = ['fundList', 'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote']
-  assert.deepEqual(PROVIDER_FUND_COVERAGE.tushare, expected)
-  assert.deepEqual(PROVIDER_FUND_COVERAGE.sinafinance, expected)
+  const expectedTushare = ['fundList', 'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote']
+  assert.deepEqual(PROVIDER_FUND_COVERAGE.tushare, expectedTushare)
+  assert.deepEqual(PROVIDER_FUND_COVERAGE.tonghuashun, ['fundProfile', 'fundNav', 'fundHoldings', 'fundQuote'])
 })

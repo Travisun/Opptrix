@@ -49,11 +49,11 @@ describe('market-data Cache LRU + persist throttle', () => {
   it('TTL=0 skips cache; positive TTL returns full data', () => {
     cache = new Cache(filePath, { persistDebounceMs: 60_000, disableExitFlush: true })
     const rows = Array.from({ length: 50 }, (_, i) => ({ i, v: `row-${i}` }))
-    cache.setWithTtl('stock_realtime', rows, 'rt', { code: '600519' }, 0, 'tencent')
+    cache.setWithTtl('stock_realtime', rows, 'rt', { code: '600519' }, 0, 'zzshare')
     assert.equal(cache.getWithTtl('stock_realtime', 'rt', { code: '600519' }, 0), null)
     assert.equal(cache.stats().entries, 0)
 
-    cache.setWithTtl('stock_kline', rows, 'kl', { code: '600519' }, 3600, 'tencent')
+    cache.setWithTtl('stock_kline', rows, 'kl', { code: '600519' }, 3600, 'zzshare')
     const hit = cache.getWithTtl('stock_kline', 'kl', { code: '600519' }, 3600)
     assert.deepEqual(hit, rows)
     assert.equal(hit.length, 50)
@@ -133,7 +133,7 @@ describe('market-data Cache LRU + persist throttle', () => {
       v: 1000 + i,
     }))
     const t0 = performance.now()
-    cache.setWithTtl('stock_kline', rows, 'kl', { code: '600519' }, 3600, 'tencent')
+    cache.setWithTtl('stock_kline', rows, 'kl', { code: '600519' }, 3600, 'zzshare')
     const elapsed = performance.now() - t0
     assert.ok(elapsed < 250, `setWithTtl took ${elapsed.toFixed(1)}ms`)
     const hit = cache.getWithTtl('stock_kline', 'kl', { code: '600519' }, 3600)

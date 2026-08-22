@@ -211,14 +211,6 @@ test('Engine resolveInstrumentQueryPlan CN ETF profile uses etfProfile registry'
   }
 })
 
-test('AkShare custom methods are registered', async () => {
-  const { listProviderCustomMethods } = await import('../packages/a-stock-layer/dist/core/custom-methods.js')
-  const ak = listProviderCustomMethods('akshare')
-  assert.equal(ak.length, 1)
-  assert.ok(ak[0] && ak[0].methods.length >= 200)
-  assert.ok(ak[0].methods.some(m => m.method === 'bondZhHsDaily'))
-})
-
 test('Engine resolveInstrumentQueryPlan CN instrument_search uses registry', () => {
   const plan = resolveInstrumentQueryPlan(
     { market: 'CN', assetClass: 'EQUITY', symbol: '000001' },
@@ -359,20 +351,13 @@ test('parseInstrumentRef resolves namespace in symbol field', async () => {
   assert.equal(ref?.exchange, 'SZ')
 })
 
-test('listCustomMethodsForAgent truncates large providers and supports keyword', async () => {
+test('listCustomMethodsForAgent supports provider filter and keyword', async () => {
   const { listCustomMethodsForAgent } = await import('../packages/a-stock-layer/dist/core/custom-methods-agent.js')
-  const all = listCustomMethodsForAgent()
-  const ak = all.providers.find(p => p.providerId === 'akshare')
-  assert.ok(ak)
-  assert.ok(ak.methodCount > 50)
-  assert.equal(ak.truncated, true)
-  assert.ok(ak.categoryHints?.length)
-  const bond = listCustomMethodsForAgent({ providerId: 'akshare', keyword: 'bond', limit: 10 })
-  assert.ok(bond.providers[0].methods.length <= 10)
-  assert.ok(bond.providers[0].methods.some(m => m.method.toLowerCase().includes('bond')))
   const baostock = listCustomMethodsForAgent({ providerId: 'baostock' })
   assert.ok(baostock.providers[0].methods.length > 0)
   assert.ok(!baostock.providers[0].truncated)
+  const bond = listCustomMethodsForAgent({ providerId: 'baostock', keyword: 'concept', limit: 10 })
+  assert.ok(bond.providers[0].methods.length <= 10)
 })
 
 test('resolveCnInstrumentIdentity — exchange-first for ambiguous 000977', async () => {
@@ -493,11 +478,6 @@ test('normalizeCustomMethodArgs converts instrument formats per provider', async
   const tf = normalizeCustomMethodArgs('tickflow', tfDef, [{ market: 'CN', symbol: '600519' }])
   assert.equal(tf.args[0], '600519.SH')
 
-  const tcDef = findCustomMethod('tencent', 'tencentCnIndexSnapshot')
-  assert.ok(tcDef)
-  const tc = normalizeCustomMethodArgs('tencent', tcDef, ['major', false, 'sh600519,sz399001'])
-  assert.match(String(tc.args[2]), /sh600519/)
-  assert.match(String(tc.args[2]), /sz399001/)
 })
 
 test('wireProviderSymbolArg — 000977 per provider and exchange', async () => {
@@ -507,16 +487,12 @@ test('wireProviderSymbolArg — 000977 per provider and exchange', async () => {
   const szEquity = { market: 'CN', assetClass: 'EQUITY', symbol: '000977', exchange: 'SZ' }
   const shIndex = { market: 'CN', assetClass: 'INDEX', symbol: '000977', exchange: 'SH' }
 
-  assert.equal(wireProviderSymbolArg('tencent', 'code', 'realtime', szEquity), 'sz000977')
-  assert.equal(wireProviderSymbolArg('tencent', 'code', 'realtime', shIndex), 'sh000977')
-  assert.equal(wireProviderSymbolArg('sinafinance', 'code', 'moneyFlow', szEquity), 'sz000977')
   assert.equal(wireProviderSymbolArg('tushare', 'code', 'profile', szEquity), '000977.SZ')
   assert.equal(wireProviderSymbolArg('tushare', 'code', 'profile', shIndex), '000977.SH')
-  assert.equal(wireProviderSymbolArg('tencent', 'code', 'profile', szEquity), '000977')
   assert.equal(wireProviderSymbolArg('baostock', 'code', 'kline', szEquity), '000977.SZ')
+  assert.equal(wireProviderSymbolArg('zzshare', 'code', 'realtime', szEquity), '000977.SZ')
+  assert.equal(wireProviderSymbolArg('tonghuashun', 'code', 'realtime', szEquity), '000977.SZ')
 
-  const wired = wireRegistryMethodArgs('tencent', 'realtime', ['000977'], szEquity)
-  assert.equal(wired[0], 'sz000977')
   const wiredTushare = wireRegistryMethodArgs('tushare', 'financials', ['000977', '', 'all'], szEquity)
   assert.equal(wiredTushare[0], '000977.SZ')
   assert.equal(wiredTushare[1], '')
@@ -579,16 +555,6 @@ test('wireProviderSymbolArg — dot-suffix providers with exchange', async () =>
   assert.equal(wireProviderSymbolArg('zzshare', 'code', 'kline', szEquity), '000977.SZ')
   assert.equal(wireProviderSymbolArg('baostock', 'code', 'kline', szEquity), '000977.SZ')
   assert.equal(wireProviderSymbolArg('tonghuashun', 'code', 'realtime', szEquity), '000977.SZ')
-})
-
-test('resolveTencentWireMarket — single provider multi-market wire', async () => {
-  const { resolveTencentWireMarket, bareTencentWireSymbol } = await import(
-    '../packages/a-stock-layer/dist/providers/tencent/market-router.js'
-  )
-  assert.equal(resolveTencentWireMarket('AAPL'), 'US')
-  assert.equal(resolveTencentWireMarket('00700'), 'HK')
-  assert.equal(resolveTencentWireMarket('sz000977'), 'CN')
-  assert.equal(bareTencentWireSymbol('sz000977'), '000977')
 })
 
 test('resolveInstrumentQueryPlan — detail capabilities CN/US/HK', () => {

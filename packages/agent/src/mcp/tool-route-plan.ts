@@ -864,7 +864,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['get_macro_series', 'get_market_regime'],
     avoidTools: ['get_market_dynamics', 'evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '宏观数字序列 → get_macro_series(scope/kind；中国翻页带 page)；勿用 regime 代替事实表；勿直接 invoke eastmoney emMacro*',
+    hint: '宏观数字序列 → get_macro_series(scope/kind；中国翻页带 page)；勿用 regime 代替事实表；勿直接 invoke 自定义 macro 方法',
   },
   {
     intent: 'market_dynamics',
@@ -1201,7 +1201,7 @@ const INTENT_RULES: IntentRule[] = [
   {
     intent: 'provider_ext',
     priority: 56,
-    patterns: [/自定义方法|invoke_provider|akshare|baostock|list_provider/i],
+    patterns: [/自定义方法|invoke_provider|baostock|zzshare|list_provider/i],
     preferredTools: ['list_enabled_providers', 'list_provider_custom_methods', 'invoke_provider_custom_method'],
     avoidTools: ['get_instrument_snapshot'],
     confidence: 'medium',

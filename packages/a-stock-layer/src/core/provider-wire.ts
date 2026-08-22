@@ -13,28 +13,11 @@ import {
 } from '@opptrix/shared'
 import {
   cnSecSymbol,
-  normalizeCode,
   parseStockMarket,
   type StockMarket,
 } from '../utils/helpers.js'
 import { fundTsCode } from '../providers/tushare/codes.js'
 
-const QUOTE_METHODS = new Set([
-  'realtime',
-  'realtimeSec',
-  'batchRealtime',
-  'kline',
-  'indexRealtime',
-  'indexKline',
-  'moneyFlow',
-  'chipDistribution',
-  'chipProfile',
-  'intradayTick',
-])
-
-const CN_SEC_PROVIDERS = new Set(['tencent', 'sinafinance'])
-
-/** 接受 000977.SZ / 600519.SH 线格式的 Provider */
 const CN_DOT_SUFFIX_PROVIDERS = new Set([
   'tushare', 'tickflow', 'tonghuashun', 'zzshare', 'baostock',
 ])
@@ -90,16 +73,7 @@ export function wireProviderSymbolArg(
       return cnTsCode(sym, ex)
     }
 
-    if (CN_SEC_PROVIDERS.has(providerId)) {
-      const needsSec = paramName === 'codes'
-        || (paramName === 'code' && (QUOTE_METHODS.has(method) || method.includes('Quote') || method.includes('Realtime')))
-      if (needsSec) {
-        return cnSecSymbol(sym, ex)
-      }
-      return sym
-    }
-
-    if (providerId === 'stockindex' || providerId === 'akshare') {
+    if (providerId === 'stockindex') {
       return sym
     }
 

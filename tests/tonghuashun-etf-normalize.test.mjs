@@ -102,7 +102,7 @@ test('mapFundProfileToEtfProfileRow merges holder fields', () => {
   assert.equal(row.instHolderRatio, 12.5)
 })
 
-test('computeEtfPremiumRate matches sinafinance percent convention', () => {
+test('computeEtfPremiumRate uses percent convention', () => {
   const premium = computeEtfPremiumRate(4.753, 4.71)
   assert.ok(premium != null)
   assert.ok(Math.abs(premium - 0.913) < 0.01)

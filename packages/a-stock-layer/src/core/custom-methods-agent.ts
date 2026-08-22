@@ -5,19 +5,6 @@ const FULL_PROVIDER_THRESHOLD = 24
 const DEFAULT_METHOD_LIMIT = 40
 const OVERVIEW_SAMPLE_SIZE = 8
 
-const AKSHARE_CATEGORY_HINTS = [
-  'AMAC 私募/基金业（amac*）',
-  '债券（bond*）',
-  '期货（futures*）',
-  '汇率（currency*）',
-  '宏观（macro* / macroChina*）',
-  '能源/碳排放（energy*）',
-  '期权波动率（indexOption*）',
-  '上交所（sse*）',
-  '深交所（szse*）',
-  'A 股市场指标（stock*）',
-]
-
 export type AgentCustomMethodEntry = {
   method: string
   description: string
@@ -71,10 +58,7 @@ function summarizeProvider(
       methodCount,
       methods: filtered.slice(0, OVERVIEW_SAMPLE_SIZE).map(compactMethod),
       truncated: true,
-      categoryHints: block.providerId === 'akshare' ? AKSHARE_CATEGORY_HINTS : undefined,
-      hint: block.providerId === 'akshare'
-        ? `共 ${methodCount} 个方法，请传 keyword（如 bond、amac、sse、stock）或精确 method 名后重试`
-        : `共 ${methodCount} 个方法，请传 keyword 或 provider_id 缩小范围`,
+      hint: `共 ${methodCount} 个方法，请传 keyword 或 provider_id 缩小范围`,
     }
   }
 
@@ -110,7 +94,7 @@ export function listCustomMethodsForAgent(options?: {
     'invoke 的 args 为 JSON 数组，按 params 顺序传参；code/symbol 支持 InstrumentRef、CN:代码、600519.SH、sh600519，引擎自动转为 Provider 格式。',
     keyword
       ? `当前 keyword="${keyword}"；无结果时请换关键词或去掉 provider_id 浏览分类提示。`
-      : '大数据源（如 akshare）须带 provider_id 或 keyword，避免一次拉全量方法列表。',
+      : '方法较多时请带 provider_id 或 keyword，避免一次拉全量方法列表。',
   ].join(' ')
 
   return { providers, usageHint }

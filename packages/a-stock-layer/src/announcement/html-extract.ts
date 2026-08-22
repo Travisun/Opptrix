@@ -1,6 +1,17 @@
-import { stripHtmlTags } from '../providers/sinafinance/api/html.js'
-
 const PDF_HREF_RE = /href=['"](https?:\/\/[^'"]+\.pdf[^'"]*)['"]/gi
+
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
 
 export function extractPdfUrlsFromHtml(html: string): string[] {
   const out = new Set<string>()
