@@ -33,6 +33,20 @@ const PLACEHOLDER_SYMBOL: Record<InitialEquityMarket, string> = {
   US: 'SPY',
 }
 
+export function cnFundRef(code: string): InstrumentRef {
+  const symbol = normalizeCnSymbol(code) || '000001'
+  return normalizeInstrumentRef({
+    market: 'CN',
+    assetClass: 'FUND',
+    symbol,
+    exchange: 'OF',
+  })
+}
+
+export function cnFundListRef(): InstrumentRef {
+  return cnFundRef('000001')
+}
+
 export function cnEtfRef(code: string): InstrumentRef {
   return resolveCnInstrumentRef(code.trim() || '510300')
 }

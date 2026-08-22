@@ -3,6 +3,7 @@ import {
   CN_ETF_CAPABILITIES,
   cnEquityBindings,
   cnEtfBindings,
+  cnFundBindings,
   cnIndexBindings,
   cryptoSpotBindings,
   usEquityBindings,
@@ -41,6 +42,7 @@ export function cnFullSplit(caps: Capability[], p: number, maxConcurrent?: numbe
 export {
   cnEquityBindings,
   cnEtfBindings,
+  cnFundBindings,
   cnIndexBindings,
   usEquityBindings,
   cryptoSpotBindings,

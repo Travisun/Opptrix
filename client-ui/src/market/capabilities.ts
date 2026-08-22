@@ -32,10 +32,15 @@ const HK_EQUITY: ApplicationCapability[] = [
 const JP_EQUITY: ApplicationCapability[] = ['quote', 'snapshot', 'chart_daily', 'discover_mine']
 const KR_EQUITY: ApplicationCapability[] = ['quote', 'snapshot', 'chart_daily', 'discover_mine']
 
+const CN_FUND: ApplicationCapability[] = [
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine', 'portfolio_pnl',
+]
+
 const MATRIX: InstrumentCapabilitySet[] = [
   { market: 'CN', assetClass: 'EQUITY', capabilities: CN_EQUITY, detailPanelKind: 'cn-equity' },
   { market: 'CN', assetClass: 'INDEX', capabilities: CN_INDEX, detailPanelKind: 'cn-equity' },
   { market: 'CN', assetClass: 'ETF', capabilities: CN_ETF, detailPanelKind: 'cn-etf' },
+  { market: 'CN', assetClass: 'FUND', capabilities: CN_FUND, detailPanelKind: 'cn-fund' },
   { market: 'US', assetClass: 'EQUITY', capabilities: US_EQUITY, detailPanelKind: 'cross-market' },
   { market: 'HK', assetClass: 'EQUITY', capabilities: HK_EQUITY, detailPanelKind: 'cross-market' },
   { market: 'JP', assetClass: 'EQUITY', capabilities: JP_EQUITY, detailPanelKind: 'cross-market' },

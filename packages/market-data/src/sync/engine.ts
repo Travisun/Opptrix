@@ -30,7 +30,7 @@ import { syncInitialCnEtf } from './stockindex-etf.js'
 import { syncInitialStockIndexUniverse } from './stockindex-universe.js'
 import { syncAllInitialTaxonomy } from './stockindex-taxonomy.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
-import { cnEtfListRef, cnEtfRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
+import { cnEtfListRef, cnEtfRef, cnFundListRef, cnFundRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
 
 function equityInstrumentRef(
   market: 'US' | 'JP' | 'KR' | 'HK',
@@ -233,6 +233,12 @@ export class MarketDataSyncEngine {
             break
           case 'etf_holdings':
             await this.syncEtfHoldings(runId, mode, options)
+            break
+          case 'fund_list':
+            await this.syncFundList(runId, options, mode)
+            break
+          case 'fund_nav':
+            await this.syncFundNav(runId, mode, options)
             break
           case 'us_list':
             await this.syncUsList(runId, options, mode)
@@ -756,6 +762,107 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
+  }
+
+  private async syncFundList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
+    const cfg = this.cfg('fund_list', options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess('fund_list')
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, 'fund_list', options, '场外基金列表在 TTL 内，跳过')
+        return
+      }
+    }
+
+    const resp = await this.callApi(
+      () => this.de.queryInstrumentData(cnFundListRef(), 'fund_list') as Promise<QueryResult<StockListItem[]>>,
+      'default',
+    )
+    if (!resp.success || !resp.data?.length) {
+      throw new Error(resp.error ?? 'fundList failed')
+    }
+
+    let total = resp.data.length
+    if (options.maxStocks) total = Math.min(total, options.maxStocks)
+    let success = 0
+    for (const [i, item] of resp.data.entries()) {
+      if (options.maxStocks && i >= options.maxStocks) break
+      const code = normalizeStockCode(String(item.code ?? ''))
+      if (!code) continue
+      this.store.upsertInstrument({
+        code,
+        market: 'CN',
+        assetClass: 'FUND',
+        name: String(item.name ?? ''),
+        exchange: 'OF',
+        status: 'active',
+      })
+      this.store.upsertFundProfile(code, item as unknown as Record<string, unknown>)
+      this.markDone('fund_list', code, '')
+      success++
+      if (i % 50 === 0) {
+        options.onProgress?.({ job: 'fund_list', current: i + 1, total })
+      }
+    }
+    options.onProgress?.({ job: 'fund_list', current: success, total })
+    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  private async syncFundNav(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('fund_nav', options)
+    const codes = this.pendingFundCodes('fund_nav', options, mode, '', cfg.ttlDays, code =>
+      mode === 'incremental' && !shouldRefresh(this.store.fundNavSyncedAt(code), cfg.ttlDays, mode),
+    )
+    if (codes.length === 0) {
+      this.finishJobEmpty(runId, 'fund_nav', options, '场外基金净值均在 TTL 内，跳过')
+      return
+    }
+    let success = 0
+    let error = 0
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'fund_nav', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(
+          () => this.de.queryInstrumentData(cnFundRef(code), 'fund_nav') as Promise<QueryResult<unknown[]>>,
+          'default',
+        )
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'fundNav failed')
+        const rows = resp.data.map(row => {
+          const r = row as Record<string, unknown>
+          return {
+            date: String(r.date ?? ''),
+            nav: typeof r.nav === 'number' ? r.nav : null,
+            accNav: typeof r.accNav === 'number' ? r.accNav : null,
+            changePct: typeof r.changePct === 'number' ? r.changePct : null,
+          }
+        })
+        this.store.replaceFundNav(code, rows)
+        this.markDone('fund_nav', code, '')
+        success++
+      } catch (e) {
+        error++
+        this.markError('fund_nav', code, '')
+        this.store.logError(runId, 'fund_nav', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private pendingFundCodes(
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+    prefix: string,
+    ttlDays: number | undefined,
+    skip?: (code: string) => boolean,
+  ): string[] {
+    const all = this.store.listFundCodes(true)
+    if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
+    return all.filter(code => !skip?.(code))
   }
 
   private async syncEtfHoldings(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {

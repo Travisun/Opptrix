@@ -42,6 +42,25 @@ export function cnEtfBindings(defaultPriority: number, maxConcurrent?: number): 
   }))
 }
 
+/** 场外开放式基金 capability 集 */
+export const CN_FUND_CAPABILITIES: Capability[] = [
+  Capability.FUND_LIST,
+  Capability.FUND_PROFILE,
+  Capability.FUND_NAV,
+  Capability.FUND_HOLDINGS,
+  Capability.FUND_QUOTE,
+]
+
+export function cnFundBindings(defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
+  return CN_FUND_CAPABILITIES.map(capability => ({
+    market: 'CN',
+    assetClass: 'FUND',
+    capability,
+    defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+  }))
+}
+
 export function cnIndexBindings(capabilities: Capability[], defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
   return capabilities
     .filter(c => [

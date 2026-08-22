@@ -221,6 +221,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_etf_nav: 'etf',
   get_etf_holdings: 'etf',
   get_etf_profile: 'etf',
+  get_fund_list: 'etf',
+  get_fund_profile: 'etf',
+  get_fund_nav: 'etf',
+  get_fund_holdings: 'etf',
 
   // portfolio
   get_watchlist: 'portfolio',

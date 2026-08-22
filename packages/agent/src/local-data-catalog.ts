@@ -146,6 +146,30 @@ const INSTRUMENT_CAPS: Array<{
     how: 'Agent: get_etf_holdings；标准层: queryInstrumentData(ref, "etf_holdings")',
   },
   {
+    id: 'cap.fund_list',
+    title: '场外基金列表',
+    summary: '场外基金目录',
+    how: 'Agent: get_fund_list；标准层: queryInstrumentData(ref, "fund_list")',
+  },
+  {
+    id: 'cap.fund_profile',
+    title: '场外基金档案',
+    summary: '类型、经理、费率等',
+    how: 'Agent: get_fund_profile；标准层: queryInstrumentData(ref, "fund_profile")',
+  },
+  {
+    id: 'cap.fund_nav',
+    title: '场外基金净值',
+    summary: '历史净值序列',
+    how: 'Agent: get_fund_nav；标准层: queryInstrumentData(ref, "fund_nav")',
+  },
+  {
+    id: 'cap.fund_holdings',
+    title: '场外基金持仓',
+    summary: '季报重仓',
+    how: 'Agent: get_fund_holdings；标准层: queryInstrumentData(ref, "fund_holdings")',
+  },
+  {
     id: 'cap.etf_snapshot',
     title: 'ETF 快照',
     summary: 'ETF 综合快照',

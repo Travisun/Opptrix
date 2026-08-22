@@ -126,7 +126,7 @@ export function isCnIndexSymbolByExchange(symbol: string, exchange?: string | nu
 }
 
 /** A 股交易所 — CN 标的内部身份的一部分，与 symbol 共同消歧 */
-export type CnExchange = 'SH' | 'SZ' | 'BJ'
+export type CnExchange = 'SH' | 'SZ' | 'BJ' | 'OF'
 
 /**
  * 无 exchange 时从代码段推断交易所（兜底，非权威）。
@@ -154,7 +154,11 @@ export function inferCnExchangeFromSymbol(symbol: string): CnExchange {
  */
 export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
   const symbol = canonicalCnSymbol(ref.symbol)
-  const exchange = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase() as CnExchange
+  const exRaw = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase()
+  if (ref.assetClass === 'FUND' || exRaw === 'OF') {
+    return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'OF' }
+  }
+  const exchange = exRaw as CnExchange
   const assetClass = inferCnAssetClassFromSymbol(symbol, exchange)
   return { market: 'CN', assetClass, symbol, exchange }
 }
@@ -240,6 +244,9 @@ export function buildInstrumentNamespace(ref: InstrumentRef): string {
   const n = normalizeInstrumentRef(ref)
   switch (n.market) {
     case 'CN': {
+      if (n.assetClass === 'FUND' || n.exchange?.toUpperCase() === 'OF') {
+        return `CN:OF.${n.symbol}`
+      }
       const ex = (n.exchange ?? inferCnExchangeFromSymbol(n.symbol)).toUpperCase()
       return `CN:${ex}.${n.symbol}`
     }
@@ -279,6 +286,16 @@ export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
       symbol: cn[2]!,
       exchange: cn[1]!.toUpperCase(),
       assetClass: 'EQUITY',
+    })
+  }
+
+  const cnOf = /^CN:OF[.:](\d{6})$/i.exec(text)
+  if (cnOf) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      symbol: cnOf[1]!,
+      exchange: 'OF',
+      assetClass: 'FUND',
     })
   }
 

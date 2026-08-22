@@ -373,6 +373,20 @@ export const TOOL_SUFFICIENCY_SPECS: Record<string, ToolSufficiencySpec> = {
     requiredFields: ['symbol', 'name'],
     supplementStrategy: DEFAULT_STRATEGY,
   },
+  get_fund_nav: {
+    requiredFields: ['symbol', 'nav'],
+    supplementStrategy: 'extend',
+    supplementNote: '场外基金净值历史序列，外部缺失时本地补全',
+  },
+  get_fund_holdings: {
+    requiredFields: ['symbol'],
+    minRecords: 1,
+    supplementStrategy: DEFAULT_STRATEGY,
+  },
+  get_fund_profile: {
+    requiredFields: ['symbol', 'name'],
+    supplementStrategy: DEFAULT_STRATEGY,
+  },
 
   /* ---- 宏观 / 市场 ---- */
   get_macro_series: {

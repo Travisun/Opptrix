@@ -26,7 +26,7 @@ export interface InstrumentCapabilitySet {
   market: Market
   assetClass: AssetClass
   capabilities: readonly ApplicationCapability[]
-  detailPanelKind: 'cn-equity' | 'cn-etf' | 'cross-market' | 'unsupported'
+  detailPanelKind: 'cn-equity' | 'cn-etf' | 'cn-fund' | 'cross-market' | 'unsupported'
 }
 
 const CN_EQUITY: ApplicationCapability[] = [
@@ -41,6 +41,10 @@ const CN_INDEX: ApplicationCapability[] = [
 
 const CN_ETF: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_daily', 'scorecard', 'discover_mine', 'portfolio_pnl',
+]
+
+const CN_FUND: ApplicationCapability[] = [
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine', 'portfolio_pnl',
 ]
 
 const US_EQUITY: ApplicationCapability[] = [
@@ -72,6 +76,7 @@ export const INSTRUMENT_CAPABILITY_MATRIX: InstrumentCapabilitySet[] = [
   capabilityRow('CN', 'EQUITY', CN_EQUITY, 'cn-equity'),
   capabilityRow('CN', 'INDEX', CN_INDEX, 'cn-equity'),
   capabilityRow('CN', 'ETF', CN_ETF, 'cn-etf'),
+  capabilityRow('CN', 'FUND', CN_FUND, 'cn-fund'),
   capabilityRow('US', 'EQUITY', US_EQUITY, 'cross-market'),
   capabilityRow('HK', 'EQUITY', HK_EQUITY, 'cross-market'),
   capabilityRow('CRYPTO', 'CRYPTO_SPOT', CRYPTO_SPOT, 'cross-market'),

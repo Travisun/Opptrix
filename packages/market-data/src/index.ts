@@ -204,6 +204,14 @@ export class MarketDataService {
     return this.store.getEtfHoldings(code, limit)
   }
 
+  localFundProfile(code: string) {
+    return this.store.getFundProfile(code)
+  }
+
+  getFundNavHistory(code: string, limit = 120) {
+    return this.store.getFundNavHistory(code, limit)
+  }
+
   /** L1 on-demand: shareholders / partners with quarterly TTL. */
   hydrateStocks(codes: string[], manifest: HydrateManifest = 'watchlist') {
     return hydrateStocks(this.store, this.de, codes, manifest)
