@@ -477,9 +477,13 @@ export const research = {
       20000,
     ),
 
-  fundSnapshot: async (code: string, signal?: AbortSignal): Promise<
+  fundSnapshot: async (
+    instrument: InstrumentRef,
+    signal?: AbortSignal,
+  ): Promise<
     import('../types/schemas').ApiResponse<import('../types/market').FundSnapshotData>
   > => {
+    const code = instrument.symbol
     const fallback: import('../types/market').FundSnapshotData = {
       code,
       profile: null,
@@ -488,25 +492,25 @@ export const research = {
     }
     const resp = await apiCall<import('../types/market').FundSnapshotData>(
       'fund_snapshot',
-      { code },
+      { instrument, code },
       { signal },
       20000,
     )
     return toApiResponse('fund_snapshot', resp, fallback, resp.data ?? undefined)
   },
 
-  fundNav: (code: string, signal?: AbortSignal) =>
+  fundNav: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').FundNavPoint[]; source?: string }>(
       'local_fund_nav',
-      { code },
+      { instrument, code: instrument.symbol },
       { signal },
       20000,
     ),
 
-  fundHoldings: (code: string, signal?: AbortSignal) =>
+  fundHoldings: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').FundHoldingRow[]; source?: string }>(
       'local_fund_holdings',
-      { code },
+      { instrument, code: instrument.symbol },
       { signal },
       20000,
     ),
