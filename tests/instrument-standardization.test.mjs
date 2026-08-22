@@ -9,6 +9,7 @@ import {
   normalizeInstrumentRef,
   canonicalHkSymbol,
   instrumentRefLabel,
+  parseInstrumentNamespace,
 } from '../packages/shared/dist/instrument-symbol.js'
 import { instrumentRefKey } from '../packages/shared/dist/instrument-ref.js'
 import {
@@ -19,6 +20,8 @@ import {
 import {
   resolveInstrumentQueryPlan,
 } from '../packages/a-stock-layer/dist/core/instrument-query.js'
+import { parseTickflowSymbol } from '../packages/a-stock-layer/dist/providers/tickflow/api/symbols.js'
+import { stockIndexItemToInstrumentRef } from '../packages/a-stock-layer/dist/providers/stockindex/normalize.js'
 
 test('resolveInstrumentFromParams — legacy code and explicit market', () => {
   const cn = resolveInstrumentFromParams({ code: '600519' })
@@ -227,11 +230,37 @@ test('Engine resolveInstrumentQueryPlan CN instrument_search uses registry', () 
 test('canonical symbol normalization across markets', () => {
   assert.equal(canonicalHkSymbol('700'), '00700')
   assert.equal(canonicalHkSymbol('0700'), '00700')
+  assert.equal(canonicalHkSymbol('2'), '00002')
   const hk = normalizeInstrumentRef({ market: 'HK', assetClass: 'EQUITY', symbol: '700' })
   assert.equal(hk.symbol, '00700')
   assert.equal(instrumentRefLabel(hk), 'HK:00700')
+  const hk2 = normalizeInstrumentRef({ market: 'HK', assetClass: 'EQUITY', symbol: '00002' })
+  assert.equal(instrumentRefLabel(hk2), 'HK:00002')
   const cn = normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: '519' })
   assert.equal(cn.symbol, '000519')
+})
+
+test('parseInstrumentNamespace accepts HK:HK.00002 StockIndex id', () => {
+  const ref = parseInstrumentNamespace('HK:HK.00002')
+  assert.equal(ref?.market, 'HK')
+  assert.equal(ref?.symbol, '00002')
+  assert.equal(instrumentRefLabel(ref), 'HK:00002')
+})
+
+test('parseTickflowSymbol keeps HK leading zeros', () => {
+  assert.equal(parseTickflowSymbol('00002.HK').code, '00002')
+  assert.equal(parseTickflowSymbol('00700.HK').code, '00700')
+})
+
+test('stockIndexItemToInstrumentRef resolves HK:HK.00002 instrumentId', () => {
+  const ref = stockIndexItemToInstrumentRef({
+    market: 'HK',
+    code: '00002',
+    instrumentId: 'HK:HK.00002',
+    nameCn: '中电控股',
+  })
+  assert.equal(ref?.market, 'HK')
+  assert.equal(ref?.symbol, '00002')
 })
 
 test('instrumentRefKey uses stock-index namespace without assetClass', () => {

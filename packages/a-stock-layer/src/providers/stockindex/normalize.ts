@@ -5,6 +5,7 @@ import {
   instrumentRefLabel,
   normalizeInstrumentRef,
   parseInstrumentNamespace,
+  parseCanonicalInstrumentInput,
 } from '@opptrix/shared'
 import type { StockIndexItem } from './api/client.js'
 import { stockIndexItemLooksLikeCnPublicFund } from '../../core/fund-instrument.js'
@@ -21,7 +22,9 @@ export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentR
   if (!code) return null
 
   const instrumentIdStr = String(item.instrumentId ?? '').trim()
-  const fromId = instrumentIdStr ? parseInstrumentNamespace(instrumentIdStr) : null
+  const fromId = instrumentIdStr
+    ? (parseInstrumentNamespace(instrumentIdStr) ?? parseCanonicalInstrumentInput(instrumentIdStr))
+    : null
 
   if (market === 'CN') {
     if (fromId && (fromId.assetClass === 'FUND' || String(fromId.exchange ?? '').toUpperCase() === 'PF')) {

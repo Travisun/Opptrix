@@ -320,7 +320,7 @@ export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
     })
   }
 
-  const hk = /^HK:(\d{5})$/i.exec(text)
+  const hk = /^HK:(?:HK\.)?(\d{1,5})$/i.exec(text)
   if (hk) {
     return normalizeInstrumentRef({
       market: 'HK',

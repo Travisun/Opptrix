@@ -1,4 +1,5 @@
 import type { Market } from '@opptrix/shared'
+import { canonicalHkSymbol } from '@opptrix/shared'
 import { inferMarketFromSymbol, isCnEtfCode } from '../../../core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from '../../../utils/helpers.js'
 import { normalizeUsSymbol } from '../../../utils/us-market.js'
@@ -76,7 +77,9 @@ export function parseTickflowSymbol(symbol: string): ParsedTickflowSymbol {
   const market = TICKFLOW_SUFFIX[suffix]
   if (!market) throw new Error(`未知的 TickFlow 交易所后缀：${suffix}`)
   if (suffix === 'US') return { code: normalizeUsSymbol(code), market, exchange: suffix }
-  if (suffix === 'HK') return { code: code.replace(/^0+/, '') || '0', market, exchange: suffix }
+  if (suffix === 'HK') {
+    return { code: canonicalHkSymbol(code), market, exchange: suffix }
+  }
   return { code: normalizeCode(code), market, exchange: suffix }
 }
 

@@ -71,7 +71,7 @@ export class ChartWorkspace {
     const scheme = options.colorScheme ?? 'light'
     const theme = getChartTheme(scheme)
     const chartTimeZone = options.chartTimeZone ?? CN_TIMEZONE
-    const axisFormat = createChartAxisFormatters(chartTimeZone)
+    const axisFormat = createChartAxisFormatters(chartTimeZone, options.period)
 
     try {
       this.mainChart = createChart(refs.main, {
@@ -90,7 +90,7 @@ export class ChartWorkspace {
           borderVisible: false,
           fixLeftEdge: false,
           fixRightEdge: true,
-          timeVisible: true,
+          timeVisible: minuteChart || intradayChart,
           secondsVisible: (minuteChart && options.period === '1m') || intradayChart,
           tickMarkFormatter: axisFormat.tickMarkFormatter,
           ...((minuteChart || intradayChart) ? { barSpacing: 7, minBarSpacing: 2 } : {}),

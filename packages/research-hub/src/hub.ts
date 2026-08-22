@@ -13,6 +13,10 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   isCrossMarketTradingDay,
   isHkFdaysPayload,
   minuteKlinesToIntradayItems,
+  resolveCrossMarketKlineEngineQuery,
+  crossMarketFiveDayMinuteCount,
+  crossMarketIntradayMinuteCount,
+  resampleOhlcKlines,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
@@ -1626,9 +1630,11 @@ export class ResearchHub {
       case '15m': return 320
       case '30m': return 240
       case '60m': return 240
-      case '5day': return 5
+      case '5day': return crossMarketFiveDayMinuteCount(2000)
       case 'weekly': return 160
-      case 'monthly': return 80
+      case 'monthly': return 120
+      case 'quarterly': return 80
+      case 'yearly': return 40
       case 'year1': return 260
       case 'year3': return 780
       case 'year5': return 1300
@@ -1641,7 +1647,9 @@ export class ResearchHub {
       case 'year5': return 1300
       case 'year3': return 780
       case 'year1': return 260
-      case '5day': return 5
+      case 'quarterly': return 120
+      case 'yearly': return 60
+      case '5day': return crossMarketFiveDayMinuteCount(2000)
       default: return 800
     }
   }
@@ -1657,9 +1665,10 @@ export class ResearchHub {
     opts: { count?: number; startDate?: string; endDate?: string },
   ) {
     const ref = { market, assetClass: 'EQUITY' as const, symbol }
+    const resolved = resolveCrossMarketKlineEngineQuery(period, opts.count ?? 120)
     return this.de.queryInstrumentData(ref, 'kline', {
-      count: opts.count ?? 120,
-      period,
+      count: resolved.count,
+      period: resolved.enginePeriod,
       startDate: opts.startDate,
       endDate: opts.endDate,
     })
@@ -1714,6 +1723,9 @@ export class ResearchHub {
         klines: data,
         hasMore: data.length >= Math.min(step, safeCount) && safeCount < mergeCap,
       }
+    }
+    if (period === 'quarterly' || period === 'yearly') {
+      return await this.fetchCrossMarketQuarterlyYearlyResampleFallback(market, symbol, period, safeCount)
     }
     return null
   }
@@ -1791,6 +1803,58 @@ export class ResearchHub {
     }
   }
 
+  private async fetchCnQuarterlyYearlyResampleFallback(
+    code: string,
+    period: 'quarterly' | 'yearly',
+    safeCount: number,
+    exchange: StockMarket,
+  ): Promise<{ klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null> {
+    const factor = period === 'quarterly' ? 3 : 12
+    const monthlyCount = Math.min(Math.max(safeCount * factor, 80), 800)
+    let monthlyR = await this.queryCnKline(code, {
+      period: 'monthly',
+      count: monthlyCount,
+      exchange,
+    })
+    let monthly = instrumentQueryData<import('@opptrix/shared').StockKline[]>(monthlyR) ?? []
+    if (!monthly.length && inferCnAssetClass(normalizeCode(code)) === 'INDEX') {
+      monthlyR = await this.queryCnKline(code, {
+        period: 'monthly',
+        count: Math.max(monthlyCount, 120),
+        exchange,
+      })
+      monthly = instrumentQueryData<import('@opptrix/shared').StockKline[]>(monthlyR) ?? []
+    }
+    if (!monthlyR.success || !monthly.length) return null
+    const resampled = resampleOhlcKlines(monthly, period)
+    const klines = resampled.slice(-Math.min(safeCount, 800))
+    if (!klines.length) return null
+    return {
+      klines,
+      hasMore: resampled.length >= safeCount && monthlyCount < 800,
+    }
+  }
+
+  private async fetchCrossMarketQuarterlyYearlyResampleFallback(
+    market: 'US' | 'HK',
+    symbol: string,
+    period: 'quarterly' | 'yearly',
+    safeCount: number,
+  ): Promise<{ klines: StockKline[]; hasMore: boolean } | null> {
+    const factor = period === 'quarterly' ? 3 : 12
+    const monthlyCount = Math.min(Math.max(safeCount * factor, 80), 800)
+    const monthlyR = await this.queryCrossMarketKline(market, symbol, 'monthly', { count: monthlyCount })
+    const monthly = instrumentQueryData<StockKline[]>(monthlyR) ?? []
+    if (!monthlyR.success || !monthly.length) return null
+    const resampled = resampleOhlcKlines(monthly, period)
+    const klines = resampled.slice(-Math.min(safeCount, 800))
+    if (!klines.length) return null
+    return {
+      klines,
+      hasMore: resampled.length >= safeCount && monthlyCount < 800,
+    }
+  }
+
   private async fetchChartKlines(
     code: string,
     period: string,
@@ -1803,12 +1867,15 @@ export class ResearchHub {
       return this.fetchMinuteChartKlines(code, period, safeCount, before, tail, stockMarket)
     }
 
-    const klinePeriod = period === 'daily' ? 'daily' : period
+    const exchange = stockMarket
+    const klinePeriod = period === 'year1' || period === 'year3' || period === 'year5'
+      ? 'daily'
+      : (period === 'daily' ? 'daily' : period)
+
     const isIndex = inferCnAssetClass(normalizeCode(code)) === 'INDEX'
     const requestCount = isIndex && klinePeriod !== 'daily'
       ? Math.max(safeCount, 80)
       : safeCount
-    const exchange = stockMarket
     if (before) {
       const step = 200
       const endDay = this.dayBefore(before.slice(0, 10))
@@ -1842,7 +1909,15 @@ export class ResearchHub {
           hasMore: older.length >= step,
         }
       }
-      if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') return null
+      if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') {
+        if (period === 'quarterly' || period === 'yearly') {
+          return await this.fetchCnQuarterlyYearlyResampleFallback(code, period, safeCount, exchange)
+        }
+        return null
+      }
+      if (period === 'quarterly' || period === 'yearly') {
+        return await this.fetchCnQuarterlyYearlyResampleFallback(code, period, safeCount, exchange)
+      }
       return null
     }
 
@@ -1865,6 +1940,9 @@ export class ResearchHub {
         klines: klineData,
         hasMore: klineData.length >= safeCount && safeCount < 800,
       }
+    }
+    if (period === 'quarterly' || period === 'yearly') {
+      return await this.fetchCnQuarterlyYearlyResampleFallback(code, period, safeCount, exchange)
     }
     return null
   }
@@ -1889,7 +1967,7 @@ export class ResearchHub {
         }
         : normalized,
     )
-    const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : 800
+    const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : this.crossMarketMaxBars(period)
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
     const stockMarket = this.resolveStockMarket(normalized, explicitMarket, cnRef)
     const quoteR = await this.stockRealtime(cnRef, explicitMarket)
@@ -1952,6 +2030,52 @@ export class ResearchHub {
         bars: this.sortChartBars(bars),
         indicators: [],
       }, `${name} 分时 ${session.sessionDate} ${bars.length} 点`, t0)
+    }
+
+    if (period === '5day') {
+      const trendR = await this.de.fetchIntradaySessions(code, 5, stockMarket)
+      const trendData = trendR.success
+        ? trendR.data as IntradayTrendFetchResult
+        : null
+      const sessions = trendData?.sessions ?? []
+      if (!sessions.length) {
+        return ok({
+          code: normalized,
+          name,
+          period,
+          preClose,
+          sessionDate: null,
+          isTradingDay: false,
+          bars: [],
+          indicators: [],
+        }, `${name} 暂无五日数据`, t0)
+      }
+
+      const today = cnTodayString()
+      const latestSession = sessions.at(-1)
+      const isLiveSession = latestSession?.sessionDate === today && shouldPreferTodayIntraday()
+      const bars = this.sortChartBars(
+        sessions.flatMap(session => session.bars.map(bar => ({
+          time: bar.time,
+          price: bar.price,
+          volume: bar.volume,
+          amount: bar.amount,
+          avgPrice: bar.avgPrice,
+        }))),
+      )
+
+      return ok({
+        code: normalized,
+        name,
+        period,
+        preClose,
+        sessionDate: latestSession?.sessionDate ?? null,
+        isTradingDay: isLiveSession,
+        hasMore: false,
+        chart_time_zone: 'Asia/Shanghai',
+        bars,
+        indicators: [],
+      }, `${name} 五日 ${bars.length} 点`, t0)
     }
 
     const fetched = await this.fetchChartKlines(normalized, period, safeCount, before, tail, stockMarket)
@@ -3400,21 +3524,21 @@ export class ResearchHub {
     const chartTimeZone = crossMarketChartTimeZone(market)
 
     if (period === 'intraday') {
-      const r = await this.de.queryInstrumentData(ref, 'kline', { count: safeCount, period })
-      if (!r.success) {
-        return fail(instrumentQueryError(r, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
+      const minuteCount = crossMarketIntradayMinuteCount(safeCount)
+      const minuteR = await this.de.queryInstrumentData(ref, 'kline', { count: minuteCount, period: 'intraday' })
+      if (!minuteR.success) {
+        return fail(instrumentQueryError(minuteR, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
       }
-      let items = instrumentQueryData<Record<string, unknown>[]>(r) ?? []
+      const minuteKlines = instrumentQueryData<StockKline[]>(minuteR) ?? []
       const qR = await this.de.queryInstrumentData(ref, 'realtime')
       const quote = instrumentQueryData<Record<string, unknown>[]>(qR)?.[0]
       preClose = quote?.preClose != null ? Number(quote.preClose) : null
       if (preClose == null || !Number.isFinite(preClose)) {
         preClose = quote?.pre_close != null ? Number(quote.pre_close) : null
       }
-      const minuteKlines = this.mapCrossMarketKlineItems(items, symbol)
       sessionDate = intradaySessionDateFromKlines(minuteKlines)
       isTradingDay = sessionDate ? isCrossMarketTradingDay(market, sessionDate) : false
-      items = minuteKlines.length ? minuteKlinesToIntradayItems(market, minuteKlines) : []
+      const items = minuteKlines.length ? minuteKlinesToIntradayItems(market, minuteKlines) : []
       return ok(
         {
           symbol,
@@ -3435,7 +3559,8 @@ export class ResearchHub {
     }
 
     if (period === '5day') {
-      const r = await this.de.queryInstrumentData(ref, 'kline', { count: safeCount, period })
+      const fiveCount = crossMarketFiveDayMinuteCount(safeCount)
+      const r = await this.de.queryInstrumentData(ref, 'kline', { count: fiveCount, period: '5day' })
       if (!r.success) {
         return fail(instrumentQueryError(r, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
       }
@@ -3467,7 +3592,32 @@ export class ResearchHub {
         )
       }
 
-      const klines = items.length ? this.mapCrossMarketKlineItems(items, symbol) : []
+      const minuteKlines = items.length
+        ? this.mapCrossMarketKlineItems(items, symbol)
+        : []
+      if (minuteKlines.length) {
+        const fdaysItems = minuteKlinesToIntradayItems(market, minuteKlines)
+        const latestDay = intradaySessionDateFromKlines(minuteKlines)
+        return ok(
+          {
+            symbol,
+            period,
+            items: fdaysItems,
+            indicators: [],
+            count: fdaysItems.length,
+            preClose,
+            pre_close: preClose,
+            session_date: latestDay,
+            is_trading_day: latestDay ? isCrossMarketTradingDay(market, latestDay) : false,
+            hasMore: false,
+            chart_time_zone: chartTimeZone,
+          },
+          `五日 ${fdaysItems.length} 点`,
+          t0,
+        )
+      }
+
+      const klines = minuteKlines
       const indicators = klines.length ? this.mapCrossMarketChartIndicators(symbol, klines) : []
       return ok(
         {

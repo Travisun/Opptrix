@@ -22,6 +22,7 @@ const PROBE_CHECKS: ProbeItem[] = [
   { feature: 'depth', run: c => c.getDepth(PROBE_SYMBOL) },
   { feature: 'kline_batch', run: c => c.getKlinesBatch({ symbols: `${PROBE_SYMBOL},${PROBE_SYMBOL2}`, period: '1d', count: 1 }) },
   { feature: 'intraday', run: c => c.getKlinesIntraday({ symbol: PROBE_SYMBOL, period: '1m' }) },
+  { feature: 'intraday_batch', run: c => c.getKlinesIntradayBatch({ symbols: `${PROBE_SYMBOL},${PROBE_SYMBOL2}`, period: '1m' }) },
   { feature: 'financial', run: c => c.getFinancialsMetrics({ symbols: PROBE_SYMBOL, latest: true }) },
   { feature: 'ex_factors', run: c => c.getKlinesExFactors({ symbols: PROBE_SYMBOL }) },
 ]

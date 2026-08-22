@@ -191,7 +191,7 @@ export interface StockKlineBar {
 export type ChartPeriod =
   | 'intraday'
   | '1m' | '5m' | '15m' | '30m' | '60m'
-  | 'daily' | '5day' | 'weekly' | 'monthly'
+  | 'daily' | '5day' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
   | 'year1' | 'year3' | 'year5'
 
 export interface IntradayChartBar {

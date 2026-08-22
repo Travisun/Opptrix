@@ -15,6 +15,8 @@ export function maxChartBars(period: ChartPeriod): number {
     case 'year5': return 1300
     case 'year3': return 780
     case 'year1': return 260
+    case 'quarterly': return 120
+    case 'yearly': return 60
     default: return MAX_CHART_BARS
   }
 }
@@ -28,8 +30,10 @@ export function initialFetchCount(period: ChartPeriod): number {
     case '30m': return 240
     case '60m': return 240
     case '5day': return 120
-    case 'weekly': return 160
-    case 'monthly': return 80
+    case 'weekly': return 200
+    case 'monthly': return 120
+    case 'quarterly': return 80
+    case 'yearly': return 40
     case 'year1': return 260
     case 'year3': return 780
     case 'year5': return 1300
@@ -48,7 +52,9 @@ export function defaultVisibleBars(period: ChartPeriod): number {
     case '60m': return 48
     case '5day': return 48
     case 'weekly': return 52
-    case 'monthly': return 24
+    case 'monthly': return 36
+    case 'quarterly': return 24
+    case 'yearly': return 20
     case 'year1': return 120
     case 'year3': return 180
     case 'year5': return 240

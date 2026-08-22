@@ -3,8 +3,10 @@ export {
   expandCompactKlines,
   isIntradayTickflowPeriod,
   opptrixPeriodToTickflow,
+  resolveTickflowKlineQuery,
   timestampToKlineDate,
   ymdToMs,
+  type ResolvedTickflowKlineQuery,
 } from './klines.js'
 export {
   mapTickflowInstrumentToListItem,

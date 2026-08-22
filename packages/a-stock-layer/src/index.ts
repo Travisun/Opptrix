@@ -58,6 +58,13 @@ export {
   type HkFdaysDay,
 } from './utils/cross-market-intraday.js'
 export {
+  crossMarketFiveDayMinuteCount,
+  crossMarketIntradayMinuteCount,
+  resolveCrossMarketKlineEngineQuery,
+  type CrossMarketKlineEngineQuery,
+} from './utils/cross-market-kline.js'
+export { resampleOhlcKlines } from './utils/kline-resample.js'
+export {
   parseStockMarket,
   resolveStockMarketCode,
   isShIndexCode,

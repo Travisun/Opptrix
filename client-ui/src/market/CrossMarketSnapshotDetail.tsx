@@ -444,7 +444,7 @@ export default function CrossMarketSnapshotDetail({
 
       <div className={s.chartBody}>
         <div className={s.chartPanel}>
-          <TradingViewChart code={chartCode} expanded active />
+          <TradingViewChart code={chartCode} instrument={ref} expanded active />
         </div>
         {error && quote ? <Text className={s.error}>刷新失败：{error}</Text> : null}
         {localIndexed === false ? (

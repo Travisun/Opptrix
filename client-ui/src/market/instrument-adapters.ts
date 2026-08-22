@@ -284,7 +284,8 @@ export function unifiedChartToStockChart(
   fallbackCode: string,
 ): StockChartData {
   const period = data.period as ChartPeriod
-  if (period === 'intraday') {
+  const isLinePeriod = period === 'intraday' || period === '5day'
+  if (isLinePeriod) {
     const bars: IntradayChartBar[] = data.bars.map(b => ({
       time: b.time,
       price: b.price ?? b.close ?? 0,
