@@ -269,7 +269,6 @@ export function resolveInstrumentQueryPlan(
         case 'fund_holdings':
           return registryPlan('CN', 'FUND', Capability.FUND_HOLDINGS, 'fundHoldings', true, [symbol], normalized)
         case 'fund_quote':
-        case 'quote':
         case 'realtime':
           return registryPlan('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, [symbol], normalized)
         case 'fund_list':

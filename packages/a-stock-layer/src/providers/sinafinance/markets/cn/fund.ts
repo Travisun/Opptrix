@@ -56,7 +56,11 @@ export function mixSinafinanceFund(Driver: { prototype: SinafinanceCnHandler }) 
         rethrowIfFreeProviderThrottleTrigger(e)
         return null
       })
-      const name = String(profile?.shortName ?? profile?.fullName ?? quote?.name ?? '')
+      const profileRec = profile as Record<string, unknown> | null
+      const quoteRec = quote as Record<string, unknown> | null
+      const name = String(
+        profileRec?.shortName ?? profileRec?.fullName ?? quoteRec?.name ?? '',
+      )
       if (!name && !profile && !quote) return null
       return [{
         code: bare,

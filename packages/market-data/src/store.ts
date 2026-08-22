@@ -3204,7 +3204,7 @@ export class MarketDataStore {
 
   getFundProfile(code: string): Record<string, unknown> | null {
     const normalized = normalizeStockCode(code)
-    const row = this.duckRead<{ profile_json: string } | undefined>(
+    const row = this.duckRead<{ profile_json: string }>(
       'SELECT profile_json FROM fund_profiles WHERE code = ? LIMIT 1',
       [normalized],
       () => this.db.prepare('SELECT profile_json FROM fund_profiles WHERE code = ?').get(normalized) as
@@ -3231,7 +3231,7 @@ export class MarketDataStore {
 
   fundNavSyncedAt(code: string): string | null {
     const normalized = normalizeStockCode(code)
-    const row = this.duckRead<{ synced_at: string } | undefined>(
+    const row = this.duckRead<{ synced_at: string }>(
       'SELECT MAX(synced_at) AS synced_at FROM fund_nav_daily WHERE code = ?',
       [normalized],
       () => this.db.prepare(
