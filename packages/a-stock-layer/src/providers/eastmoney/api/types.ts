@@ -1,7 +1,23 @@
 /** 东方财富 push2 / datacenter 公共常量与响应形态 */
 
 export const EM_REFERER = 'https://data.eastmoney.com/'
+/** 天天基金 F10 档案页 Referer */
+export const EM_FUND_F10_REFERER = 'https://fundf10.eastmoney.com/'
+/** 天天基金品种页 Referer（pingzhongdata） */
+export const EM_FUND_HOME_REFERER = 'https://fund.eastmoney.com/'
+
+export const EM_FUND_API = 'https://api.fund.eastmoney.com/f10'
+export const EM_FUND_ARCHIVES = 'https://fundf10.eastmoney.com/FundArchivesDatas.aspx'
+export const EM_FUND_PINGZHONG = 'https://fund.eastmoney.com/pingzhongdata'
+
+/**
+ * push2 行情/资金流接口的 `ut` 查询参数。
+ * 来源：data.eastmoney.com / quote.eastmoney.com 官方前端 JS 中的固定客户端标识，
+ * 用于区分 Web 端请求形态（非用户密钥、非登录 Token、不参与基金 F10 档案路径）。
+ * 仅用于 eastmoney push2 / clist 公开行情请求（见 api/client.ts），基金 F10 不使用。
+ */
 export const EM_UT = 'b2884a393a59ad64002292a3e90d46a5'
+/** clist 板块/排名列表使用的 Web 客户端 `ut`（同上，来自官方前端） */
 export const EM_UT_CLIST = '8dec03ba335b81bf4ebdf7b29ec27d15'
 
 export const EM_DATACENTER = 'https://datacenter-web.eastmoney.com/api/data/v1/get'

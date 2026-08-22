@@ -69,6 +69,7 @@ export const PROVIDER_ETF_COVERAGE: Record<string, readonly string[]> = {
 export const PROVIDER_FUND_COVERAGE: Record<string, readonly string[]> = {
   sinafinance: [...CN_FUND_STANDARD_METHODS],
   tushare: [...CN_FUND_STANDARD_METHODS],
+  eastmoney: ['fundProfile', 'fundNav', 'fundHoldings', 'fundQuote'],
 }
 
 /** 建议新增的 Capability（DATA-LAYER Phase-2） */
