@@ -110,7 +110,7 @@ bindingsFor: () => []
 | **tencent** | ✅ | CN + **US/HK registry binding**；`mixTencent*Equity` 单 Driver 内路由 | ✅ CN ETF | ✅ 三市场标准方法 + US/HK 详情维度（news/notices/shareholders/dividend/technical） | HK/US 深度财报等 custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | **fund_* 五件套 + fund_company/div/daily/adj 自定义** | **合规（CN）** |
 | **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |
-| **tonghuashun** | ✅ | CN；**CN ETF 分拆**（`CN_ETF_CAPABILITIES`，priority 120）；含 BALANCE_SHEET / CASH_FLOW | CN | ✅ ETF_LIST/PROFILE/NAV/HOLDINGS + STOCK_REALTIME/KLINE | ✅ `limitUpdown`；Hub `market_dynamics` 可选消费 `thsSkyrocketList` / `thsLimitUpLadder` | `ths*` 指数/特色数据（10，含 `thsValuationsSnapshot`）；Fuyao `/api/fund/*` 场内 ETF；**realtime enrich** `valuations/snapshot`→pe/pb；**etfProfile enrich** `fund/holders/detail` | **合规（CN 个股 + ETF）** |
+| **tonghuashun** | ✅ | CN；**CN ETF 分拆**（`CN_ETF_CAPABILITIES`，priority 120）；**CN FUND** `fundProfile/fundNav/fundHoldings/fundQuote`（见 `docs/FUYAO-FUND-API.md`）；含 BALANCE_SHEET / CASH_FLOW | CN | ✅ ETF_LIST/PROFILE/NAV/HOLDINGS + FUND_PROFILE/HOLDINGS/QUOTE + STOCK_REALTIME/KLINE | ✅ `limitUpdown`；Hub `market_dynamics` 可选消费 `thsSkyrocketList` / `thsLimitUpLadder` | `ths*` 指数/特色数据（10，含 `thsValuationsSnapshot`）；Fuyao `/api/fund/*` 全量 Client + CN:PF 标准四件套；**realtime enrich** `valuations/snapshot`→pe/pb；**etfProfile enrich** `fund/holders/detail` | **合规（CN 个股 + ETF + 公募基金）** |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |
 | **akshare** | ⚠️ 须 register | `capabilities: []` | 另类数据 | N/A | 无（设计如此） | 216+ custom | **自定义专用**；须注册 Driver 否则 invoke 失败 |
 

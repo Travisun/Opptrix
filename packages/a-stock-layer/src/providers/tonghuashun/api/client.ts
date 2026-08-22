@@ -475,6 +475,174 @@ export class FuyaoClient {
     bars.sort((a, b) => Number(a.date_ms) - Number(b.date_ms))
     return bars
   }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/companies/detail */
+  fundCompaniesDetail(companyId: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/companies/detail',
+      { company_id: companyId },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/corporate-actions/dividends */
+  fundCorporateActionsDividends(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/corporate-actions/dividends',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/diagnostics/detail */
+  fundDiagnosticsDetail(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/diagnostics/detail',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/indicators */
+  fundFinancialsIndicators(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/financials/indicators',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/income-statements */
+  fundFinancialsIncomeStatements(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/financials/income-statements',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/balance-sheets */
+  fundFinancialsBalanceSheets(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/financials/balance-sheets',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/holders/top */
+  fundHoldersTop(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/holders/top',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/investment-style */
+  fundManagersInvestmentStyle(managerId: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/managers/investment-style',
+      { manager_id: managerId },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/performance */
+  fundManagersPerformance(managerId: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/managers/performance',
+      { manager_id: managerId },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/experience */
+  fundManagersExperience(managerId: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/managers/experience',
+      { manager_id: managerId },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/detail */
+  fundManagersDetail(managerId: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/managers/detail',
+      { manager_id: managerId },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/news/article-list */
+  fundNewsArticleList(fundType: string, thscode: string, opts?: { limit?: number }) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/news/article-list',
+      { fund_type: fundType, thscode, limit: opts?.limit },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/offerings/list */
+  fundOfferingsList(opts?: { fund_type?: string; limit?: number }) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/offerings/list',
+      { fund_type: opts?.fund_type, limit: opts?.limit },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/indicators-historical */
+  fundPerformanceIndicatorsHistorical(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/performance/indicators-historical',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/drawdowns */
+  fundPerformanceDrawdowns(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/performance/drawdowns',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/stock-history */
+  fundPortfolioStockHistory(fundType: string, thscode: string, reportDateMs?: number) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/stock-history',
+      { fund_type: fundType, thscode, report_date_ms: reportDateMs },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/bond-history */
+  fundPortfolioBondHistory(fundType: string, thscode: string, reportDateMs?: number) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/bond-history',
+      { fund_type: fundType, thscode, report_date_ms: reportDateMs },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/stock-report-dates */
+  fundPortfolioStockReportDates(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/stock-report-dates',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/bond-report-dates */
+  fundPortfolioBondReportDates(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/bond-report-dates',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/asset-allocation */
+  fundPortfolioAssetAllocation(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/asset-allocation',
+      { fund_type: fundType, thscode },
+    )
+  }
+
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/industry-allocation */
+  fundPortfolioIndustryAllocation(fundType: string, thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/fund/portfolio/industry-allocation',
+      { fund_type: fundType, thscode },
+    )
+  }
 }
 
 export async function testTonghuashunConnection(

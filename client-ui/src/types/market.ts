@@ -477,6 +477,7 @@ export interface FundProfileData {
   scale?: number | null
   benchmark?: string
   establishDate?: string
+  return1y?: number | null
   source?: string
 }
 

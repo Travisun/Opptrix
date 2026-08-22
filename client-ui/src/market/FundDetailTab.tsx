@@ -296,6 +296,26 @@ export default function FundDetailTab({ stock }: Props) {
                 </div>
               </div>
               <div>
+                <div className={s.label}>成立日期</div>
+                <div className={s.value}>{profile.establishDate ?? '—'}</div>
+              </div>
+              <div>
+                <div className={s.label}>近一年收益</div>
+                <div className={mergeClasses(s.value, pctTone(profile.return1y))}>
+                  {formatPct(profile.return1y)}
+                </div>
+              </div>
+              <div>
+                <div className={s.label}>托管人</div>
+                <div className={s.value}>{profile.custodian ?? '—'}</div>
+              </div>
+              <div>
+                <div className={s.label}>管理费率</div>
+                <div className={s.value}>
+                  {profile.expenseRatio != null ? `${profile.expenseRatio}%` : '—'}
+                </div>
+              </div>
+              <div>
                 <div className={s.label}>累计净值</div>
                 <div className={s.value}>{formatPrice(profile.accNav)}</div>
               </div>
