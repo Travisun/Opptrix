@@ -90,7 +90,7 @@ export function mapTickflowInstrumentToProfile(inst: TickflowInstrument): StockP
 
   const totalShares = typeof totalSharesRaw === 'number' ? totalSharesRaw : numShares(totalSharesRaw)
   if (totalShares != null) {
-    (profile as Record<string, unknown>).totalShares = totalShares
+    profile.totalShares = totalShares
   }
 
   if (market === 'CN' && typeof totalSharesRaw === 'number' && typeof floatShares === 'number') {

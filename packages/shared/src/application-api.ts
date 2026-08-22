@@ -114,6 +114,10 @@ export interface UnifiedInstrumentQuote {
   week52_low?: number | null
   /** 报价币种（如 USD、HKD） */
   currency?: string | null
+  /** 交易时段（美股盘前/盘中/盘后） */
+  quote_session?: string | null
+  /** 交易时段用户文案（如「盘中」） */
+  session_label?: string | null
 }
 
 /**
