@@ -49,9 +49,6 @@ body {
   --opptrix-gray-100: #F3F3F3;
   --opptrix-gray-200: #EEEEEE;
   --opptrix-gray-300: rgba(20, 20, 20, 0.20);
-  /** 关注列表行 hover — 实色深灰，浅底上清晰可见 */
-  --opptrix-watchlist-row-hover-bg: #DADADF;
-  --opptrix-watchlist-row-active-bg: #CECED4;
   --opptrix-separator: rgba(20, 20, 20, 0.08);
   --opptrix-separator-strong: rgba(20, 20, 20, 0.12);
   --opptrix-separator-hairline: rgba(20, 20, 20, 0.08);
@@ -132,8 +129,6 @@ body {
   --opptrix-gray-100: #2A2A2A;
   --opptrix-gray-200: #3A3A3A;
   --opptrix-gray-300: #4A4A4A;
-  --opptrix-watchlist-row-hover-bg: #3A3A3C;
-  --opptrix-watchlist-row-active-bg: #48484A;
   --opptrix-separator: rgba(240, 240, 240, 0.075);
   --opptrix-separator-strong: rgba(240, 240, 240, 0.12);
   --opptrix-separator-hairline: rgba(240, 240, 240, 0.075);
@@ -2660,15 +2655,6 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
   .opptrix-follow-item:hover,
   .opptrix-follow-item:focus-within {
     background-color: transparent;
-  }
-
-  .opptrix-follow-item:hover .opptrix-follow-hover-overlay,
-  .opptrix-follow-item:focus-within .opptrix-follow-hover-overlay {
-    background-color: var(--opptrix-watchlist-row-hover-bg);
-  }
-
-  .opptrix-follow-item-active .opptrix-follow-hover-overlay {
-    background-color: var(--opptrix-watchlist-row-active-bg);
   }
 
   .opptrix-follow-item:hover .opptrix-follow-quote {
