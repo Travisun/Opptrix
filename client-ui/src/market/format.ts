@@ -1,3 +1,6 @@
+import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
+import { parseInstrumentInput, normalizeInstrumentRefLocal } from './instrument'
+
 export function formatPrice(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return '—'
   return value.toFixed(digits)
@@ -60,9 +63,11 @@ export function normalizeCode(code: string): string {
   return code.trim().padStart(6, '0')
 }
 
-/** 持仓 map 键 — A 股六位，港/美用展示代码 */
+/** 持仓 map 键 — 与账本 holdings[].code 对齐（支持 CN:SH.xxx / US:xxx 命名空间） */
 export function portfolioHoldingsKey(code: string, market?: string): string {
   const trimmed = code.trim()
+  const parsed = parseInstrumentInput(trimmed)
+  if (parsed) return portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(parsed))
   if (market && market !== 'CN') return trimmed
   if (/^\d+$/.test(trimmed) && trimmed.length <= 6) return normalizeCode(trimmed)
   return trimmed
@@ -200,7 +205,7 @@ export function hasCjkText(value: string | null | undefined): boolean {
   return Boolean(value && /[\u4e00-\u9fff]/.test(value))
 }
 
-/** Prefer Chinese name from quote / radar / stored watchlist item. */
+/** Prefer Chinese name from quote / radar / stored watchlist item (longest CJK wins). */
 export function resolveDisplayStockName(
   code: string,
   ...candidates: Array<string | null | undefined>
@@ -209,8 +214,10 @@ export function resolveDisplayStockName(
   const clean = candidates
     .map(c => c?.trim())
     .filter((c): c is string => Boolean(c && c !== normalized))
-  const cjk = clean.find(hasCjkText)
-  if (cjk) return cjk
+  const cjk = clean.filter(hasCjkText)
+  if (cjk.length > 0) {
+    return cjk.reduce((best, cur) => (cur.length >= best.length ? cur : best))
+  }
   if (clean[0]) return clean[0]
   return normalized
 }

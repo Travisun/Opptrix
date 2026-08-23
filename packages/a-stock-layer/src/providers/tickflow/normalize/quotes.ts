@@ -8,11 +8,12 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** TickFlow decimal ratio (0.01 → 1%) → Opptrix percent */
+/** TickFlow decimal ratio (0.01 → 1%) → Opptrix percent；已为百分数时不再乘 100 */
 function pctFromDecimal(v: unknown): number | null {
   const n = num(v)
   if (n == null) return null
-  return n * 100
+  if (Math.abs(n) > 1.5) return Math.round(n * 100) / 100
+  return Math.round(n * 10000) / 100
 }
 
 function strField(v: unknown): string | null {

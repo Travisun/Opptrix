@@ -3,6 +3,7 @@ import type { ChipDistributionPoint, StockMoneyFlowItem, WatchlistItem } from '.
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { positiveFactorBullet, riskFactorBullet } from './factorLabels'
 import { formatCompactNumber, formatPct, formatPrice } from './format'
+import { holdingReturnPctFromQuote } from './portfolioCalc'
 import { formatScoreExplanation, formatScoreSummary, formatScorecardDisplayName, scoreGrade } from './scoreGrade'
 import { formatValuationDisplay } from './watchlistRadar'
 
@@ -152,8 +153,10 @@ export function buildDecisionCardViewModel(input: {
   let holdingLabel: string | null = null
   if (input.holding && input.holding.shares > 0) {
     const cost = input.holding.costBasis
-    const pnl = input.holding.unrealizedPnlPct ?? input.holding.totalPnlPct
-    holdingLabel = `成本 ${formatPrice(cost)} · 浮盈 ${formatPct(pnl, 1)}`
+    const pnl = holdingReturnPctFromQuote(input.holding, input.price)
+      ?? input.holding.unrealizedPnlPct
+      ?? input.holding.totalPnlPct
+    holdingLabel = `成本 ${formatPrice(cost)} · 收益 ${formatPct(pnl, 1)}`
   }
 
   let cyqLabel: string | null = null

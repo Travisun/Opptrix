@@ -14,9 +14,10 @@ import { filterWatchlistByGroup, useWatchlistGroups } from './WatchlistGroupsCon
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { formatPct, formatPriceForMarket, pctTone, portfolioHoldingsKey, resolveDisplayStockName, hasCjkText } from './format'
+import HoverMarqueeText from '../chat/HoverMarqueeText'
+import { formatPct, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText, normalizeCode } from './format'
 import { unifiedQuoteToMarketQuote } from './instrument-adapters'
-import { followReturnPct } from './portfolioCalc'
+import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayChangeReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, hitToWatchlistItem, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
@@ -34,6 +35,22 @@ function stopRowActionPointer(e: React.MouseEvent | React.PointerEvent) {
 const CONTENT_PAD = '15px'
 const ITEM_BG_INSET = '10px'
 const ITEM_INNER_PAD = '10px'
+
+const IDENTITY_WIDTH = '108px'
+const METRICS_MIN_WIDTH = '268px'
+/** Hover 操作区（双 28px 钮 + gap），与行尾留白一并计入横滑可滚区域 */
+const ROW_ACTION_RESERVE = '68px'
+const ROW_SCROLL_END_PAD = `calc(${ROW_ACTION_RESERVE} + ${CONTENT_PAD})`
+/** overlay 内缘至图标组 — 与行内边距 + 面板 inset 对齐，窄窗也不贴边 */
+const HOVER_OVERLAY_PAD_RIGHT = `calc(${ITEM_INNER_PAD} + ${ITEM_BG_INSET})`
+const LIST_TABLE_MIN_WIDTH = `calc(${IDENTITY_WIDTH} + 8px + ${METRICS_MIN_WIDTH} + ${ITEM_INNER_PAD} * 2 + ${ROW_ACTION_RESERVE} + ${CONTENT_PAD})`
+
+const METRIC_COLUMNS = [
+  { key: 'price', label: '最新价', minWidth: '68px' },
+  { key: 'follow', label: '关注收益', minWidth: '64px' },
+  { key: 'cost', label: '成本价', minWidth: '64px' },
+  { key: 'holding', label: '持仓收益', minWidth: '68px' },
+] as const
 
 const useStyles = makeStyles({
   root: {
@@ -149,137 +166,228 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
   },
-  list: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto',
-    padding: `10px ${ITEM_BG_INSET} 0`,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  listCentered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: '10px',
-  },
   resultsCentered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  row: {...ghostInteractive,
-
+  list: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'auto',
+    padding: `10px ${CONTENT_PAD} 10px ${ITEM_BG_INSET}`,
+  },
+  listCentered: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: '10px',
+  },
+  listTable: {
+    minWidth: '100%',
+    width: 'max-content',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    boxSizing: 'border-box',
+  },
+  tableHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: `0 ${ITEM_INNER_PAD}`,
-    height: '40px',
-    minHeight: '40px',
-    maxHeight: '40px',
-    overflow: 'hidden',
-    borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: 'transparent',
-    width: '100%',
+    minHeight: '24px',
+    minWidth: LIST_TABLE_MIN_WIDTH,
+    width: 'max-content',
     boxSizing: 'border-box',
-    color: opptrixCssVars.textPrimary,
-    cursor: 'pointer',
-':hover': {
-      backgroundColor: opptrixCssVars.accentSoft,
-    },
-    ':focus-within': {
-      backgroundColor: opptrixCssVars.accentSoft,
-    },
   },
-  rowActive: {...sidebarItemSelected,
-':hover': {
-      backgroundColor: opptrixCssVars.accentSoft,
-    },
-    ':focus-within': {
-      backgroundColor: opptrixCssVars.accentSoft,
-    },
+  headerIdentity: {
+    flexShrink: 0,
+    width: IDENTITY_WIDTH,
+    minWidth: IDENTITY_WIDTH,
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
   },
-  rowBody: {
+  headerMetrics: {
     flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: '6px',
-    overflow: 'hidden',
-  },
-  rowTitle: {
-    flex: '1 1 auto',
-    minWidth: 0,
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    textAlign: 'left',
+    minWidth: METRICS_MIN_WIDTH,
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
   },
-  rowName: {
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  rowCode: {
-    flexShrink: 0,
+  headerMetricCell: {
+    flex: '1 0 auto',
+    textAlign: 'right',
     fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  row: {...ghostInteractive,
+
+    display: 'grid',
+    gridTemplateColumns: `${IDENTITY_WIDTH} minmax(${METRICS_MIN_WIDTH}, 1fr) ${ROW_SCROLL_END_PAD}`,
+    gridTemplateRows: '48px',
+    alignItems: 'center',
+    columnGap: '8px',
+    padding: `0 ${ITEM_INNER_PAD}`,
+    height: '48px',
+    minHeight: '48px',
+    maxHeight: '48px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
+    minWidth: LIST_TABLE_MIN_WIDTH,
+    width: 'max-content',
+    boxSizing: 'border-box',
+    color: opptrixCssVars.textPrimary,
+    cursor: 'pointer',
+    position: 'relative',
+    ':hover': {
+      backgroundColor: 'transparent',
+    },
+    ':focus-within': {
+      backgroundColor: 'transparent',
+    },
+    '&:hover $rowHoverOverlay': {
+      backgroundColor: 'var(--opptrix-watchlist-row-hover-bg)',
+    },
+    '&:focus-within $rowHoverOverlay': {
+      backgroundColor: 'var(--opptrix-watchlist-row-hover-bg)',
+    },
+    '&$rowActive:hover $rowHoverOverlay': {
+      backgroundColor: 'var(--opptrix-watchlist-row-active-bg)',
+    },
+    '&$rowActive:focus-within $rowHoverOverlay': {
+      backgroundColor: 'var(--opptrix-watchlist-row-active-bg)',
+    },
+  },
+  rowActive: {...sidebarItemSelected,
+    backgroundColor: 'transparent',
+    '& $rowHoverOverlay': {
+      backgroundColor: 'var(--opptrix-watchlist-row-active-bg)',
+    },
+  },
+  rowHoverOverlay: {
+    gridColumn: '1 / -1',
+    gridRow: '1',
+    position: 'sticky',
+    left: 0,
+    width: 'var(--watchlist-viewport-width, 100%)',
+    maxWidth: 'var(--watchlist-viewport-width, 100%)',
+    minWidth: 'var(--watchlist-viewport-width, 100%)',
+    height: '48px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingRight: 'var(--watchlist-hover-pad-right, 20px)',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+    zIndex: 2,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
+    transitionProperty: 'background-color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
+  },
+  rowIdentity: {
+    gridColumn: '1',
+    gridRow: '1',
+    zIndex: 3,
+    flexShrink: 0,
+    width: IDENTITY_WIDTH,
+    minWidth: IDENTITY_WIDTH,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: '1px',
+    minHeight: 0,
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+  },
+  rowNameLine: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    width: '100%',
+    minWidth: 0,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 500,
+    lineHeight: 1.2,
+  },
+  rowCode: {
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
+    whiteSpace: 'nowrap',
+    lineHeight: 1.2,
+    fontVariantNumeric: 'tabular-nums',
   },
   holdBadge: {
     flexShrink: 0,
   },
+  rowMetrics: {
+    flex: 1,
+    minWidth: METRICS_MIN_WIDTH,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    height: '28px',
+  },
+  metricCell: {
+    flex: '1 0 auto',
+    textAlign: 'right',
+    fontSize: 'var(--opptrix-font-sm)',
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.1,
+    color: opptrixCssVars.textPrimary,
+  },
+  metricPrice: {
+    fontWeight: 650,
+  },
+  pctUp: { color: MARKET_UP, fontWeight: 600 },
+  pctDown: { color: MARKET_DOWN, fontWeight: 600 },
+  pctFlat: { color: opptrixCssVars.textTertiary },
+  metricMuted: {
+    color: opptrixCssVars.textTertiary,
+    fontWeight: 400,
+  },
   rowTrailing: {
-    position: 'relative',
-    flexShrink: 0,
-    width: '96px',
+    width: ROW_ACTION_RESERVE,
     height: '28px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    boxSizing: 'border-box',
+    pointerEvents: 'auto',
+  },
+  rowMetricsWrap: {
+    gridColumn: '2',
+    gridRow: '1',
+    zIndex: 1,
+    minWidth: METRICS_MIN_WIDTH,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  rowEndPad: {
+    gridColumn: '3',
+    gridRow: '1',
+    flexShrink: 0,
+    width: ROW_SCROLL_END_PAD,
+    height: '1px',
   },
   rowQuote: {
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-    transform: 'translateY(-50%)',
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    width: '100%',
     transitionProperty: 'opacity',
     transitionDuration: motion.fast,
     '@media (hover: none)': {
       display: 'none',
     },
   },
-  quotePrimary: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontSize: 'var(--opptrix-font-sm)',
-    fontVariantNumeric: 'tabular-nums',
-    whiteSpace: 'nowrap',
-    lineHeight: 1.1,
-  },
-  metricPrice: {
-    fontWeight: 650,
-    color: opptrixCssVars.textPrimary,
-  },
-  pctUp: { color: MARKET_UP, fontWeight: 600 },
-  pctDown: { color: MARKET_DOWN, fontWeight: 600 },
-  pctFlat: { color: opptrixCssVars.textTertiary },
   rowActions: {
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-    transform: 'translateY(-50%)',
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
@@ -331,6 +439,12 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     flexShrink: 0,
+  },
+  footerHint: {
+    color: opptrixCssVars.textSecondary,
+  },
+  footerError: {
+    color: MARKET_DOWN,
   },
   iconBtn: {...ghostInteractive,
     flexShrink: 0,
@@ -418,8 +532,10 @@ export default function WatchlistTab({
   const [radar, setRadar] = useState<Record<string, WatchlistRadarItem>>({})
   const [strategyByCode, setStrategyByCode] = useState<Record<string, string>>({})
   const [loadingQuotes, setLoadingQuotes] = useState(false)
+  const [quoteError, setQuoteError] = useState('')
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
+  const listRef = useRef<HTMLDivElement>(null)
   const itemsRef = useRef(items)
   itemsRef.current = items
   const loadSeqRef = useRef(0)
@@ -432,6 +548,24 @@ export default function WatchlistTab({
     () => filterWatchlistByGroup(items, membership, selectedGroupId, watchlistItemKey),
     [items, membership, selectedGroupId],
   )
+
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return undefined
+    const syncViewportWidth = () => {
+      const cs = getComputedStyle(el)
+      const padLeft = Number.parseFloat(cs.paddingLeft) || 0
+      const padRight = Number.parseFloat(cs.paddingRight) || 0
+      const scrollbar = Math.max(0, el.offsetWidth - el.clientWidth)
+      const contentWidth = el.clientWidth - padLeft - padRight - scrollbar
+      el.style.setProperty('--watchlist-viewport-width', `${Math.max(0, contentWidth)}px`)
+      el.style.setProperty('--watchlist-hover-pad-right', HOVER_OVERLAY_PAD_RIGHT)
+    }
+    syncViewportWidth()
+    const ro = new ResizeObserver(syncViewportWidth)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [filteredItems.length])
 
   const selectedGroupTitle = useMemo(() => {
     if (!selectedGroupId) return null
@@ -447,6 +581,7 @@ export default function WatchlistTab({
     const currentItems = itemsRef.current
     if (!currentItems.length) {
       setQuotes({})
+      setQuoteError('')
       return
     }
     const seq = ++loadSeqRef.current
@@ -456,36 +591,33 @@ export default function WatchlistTab({
       const instruments = currentItems.map(resolveWatchlistInstrument)
       const resp = await research.instrumentQuotes(instruments)
       if (seq !== loadSeqRef.current) return
-      if (resp.success && resp.data?.quotes) {
-        const patch: Record<string, MarketQuote> = {}
-        for (const q of resp.data.quotes) {
-          const itemRef = q.instrument ?? resolveWatchlistInstrument({
-            code: q.code,
-            name: q.name,
-          })
-          const mq = unifiedQuoteToMarketQuote(q)
-          const code = displayCodeFromInstrument(itemRef)
-          const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
-          const quote: MarketQuote = {
-            code,
-            name: mq.name ?? code,
-            price: mq.price ?? null,
-            changePct: mq.changePct ?? null,
-            pe: mq.pe ?? null,
-            pb: mq.pb ?? null,
-            turnoverRate: mq.turnoverRate ?? null,
-            volume: mq.volume ?? null,
-            amount: mq.amount ?? null,
-          }
-          patch[code] = quote
-          patch[rowKey] = quote
-          patch[instrumentKey(itemRef)] = quote
-        }
-        setQuotes(prev => ({ ...prev, ...patch }))
-        setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+      if (!resp.success || !resp.data?.quotes) {
+        setQuoteError('行情暂时无法更新')
+        return
       }
+      setQuoteError('')
+      const patch: Record<string, MarketQuote> = {}
+      for (const q of resp.data.quotes) {
+        const itemRef = q.instrument ?? resolveWatchlistInstrument({
+          code: q.code,
+          name: q.name,
+        })
+        const mq = unifiedQuoteToMarketQuote(q)
+        const code = displayCodeFromInstrument(itemRef)
+        const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
+        const quote: MarketQuote = {
+          ...mq,
+          code,
+          name: mq.name ?? code,
+        }
+        patch[code] = quote
+        patch[rowKey] = quote
+        patch[instrumentKey(itemRef)] = quote
+      }
+      setQuotes(prev => ({ ...prev, ...patch }))
+      setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
-      /* ignore transient quote errors */
+      if (seq === loadSeqRef.current) setQuoteError('行情暂时无法更新')
     } finally {
       if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }
@@ -562,11 +694,48 @@ export default function WatchlistTab({
         ?? quotes[watchlistItemKey(item)]?.price
         ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
       if (price == null) continue
+      const preClose = quotes[item.code]?.preClose
+        ?? quotes[watchlistItemKey(item)]?.preClose
+        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.preClose
+      if (preClose != null && preClose > 0) {
+        const ratio = price / preClose
+        if (ratio > 5 || ratio < 0.2) continue
+      }
       patchedRef.current.add(item.code)
       onPatchItem(item.code, {
         addedPrice: price,
         addedAt: item.addedAt ?? new Date().toISOString(),
       })
+    }
+  }, [items, quotes, onPatchItem])
+
+  useEffect(() => {
+    for (const item of items) {
+      const added = item.addedPrice
+      if (added == null || added <= 0 || patchedRef.current.has(item.code)) continue
+      const price = quotes[item.code]?.price
+        ?? quotes[watchlistItemKey(item)]?.price
+        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
+      if (price == null) continue
+      const follow = followReturnPct(price, added)
+      const day = dayChangeReturnPct(
+        quotes[item.code]?.changePct
+          ?? quotes[watchlistItemKey(item)]?.changePct
+          ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.changePct,
+        price,
+        quotes[item.code]?.preClose
+          ?? quotes[watchlistItemKey(item)]?.preClose
+          ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.preClose,
+      )
+      if (follow != null) {
+        if (day != null && Math.abs(follow - day) > 15) {
+          patchedRef.current.add(item.code)
+          onPatchItem(item.code, { addedPrice: null })
+        }
+        continue
+      }
+      patchedRef.current.add(item.code)
+      onPatchItem(item.code, { addedPrice: null })
     }
   }, [items, quotes, onPatchItem])
 
@@ -579,11 +748,63 @@ export default function WatchlistTab({
       const rName = radar[itemKey]?.name ?? radar[instrumentKey(resolveWatchlistInstrument(item))]?.name
       const resolved = resolveDisplayStockName(item.code, qName, rName, item.name)
       if (resolved === item.name) continue
-      if (!item.name || item.name === item.code || !hasCjkText(item.name)) {
+      const stored = item.name?.trim() ?? ''
+      const shouldPatch = !stored
+        || stored === item.code
+        || !hasCjkText(stored)
+        || (hasCjkText(resolved) && resolved.length > stored.length)
+      if (shouldPatch) {
         onPatchItem(item.code, { name: resolved })
       }
     }
   }, [items, quotes, radar, onPatchItem])
+
+  useEffect(() => {
+    let cancelled = false
+    const targets = items.filter(item => {
+      const stored = item.name?.trim() ?? ''
+      return !stored || stored === item.code || !hasCjkText(stored) || stored.length < 8
+    })
+    if (!targets.length) return undefined
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        for (const item of targets) {
+          if (cancelled) break
+          const syncKey = `index-name:${item.code}`
+          if (patchedRef.current.has(syncKey)) continue
+          try {
+            const ref = resolveWatchlistInstrument(item)
+            const lookup = displayCodeFromInstrument(ref)
+            const resp = await research.searchInstruments(lookup, 12)
+            if (cancelled) return
+            const hits = resp.data?.items ?? []
+            const refKey = instrumentKey(ref)
+            const match = hits.find(hit => {
+              const hitKey = instrumentKey(hit.instrument)
+              return hitKey === refKey || normalizeCode(hit.code) === normalizeCode(item.code)
+            })
+            const indexName = match?.name?.trim()
+            if (!indexName) continue
+            const stored = item.name?.trim() ?? ''
+            if (indexName.length <= stored.length && stored !== item.code && hasCjkText(stored)) {
+              patchedRef.current.add(syncKey)
+              continue
+            }
+            patchedRef.current.add(syncKey)
+            onPatchItem(item.code, { name: indexName })
+          } catch {
+            /* 名录同步失败时保留已有名称 */
+          }
+        }
+      })()
+    }, 500)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [itemsKey, onPatchItem])
 
   useEffect(() => {
     const q = keyword.trim()
@@ -616,7 +837,7 @@ export default function WatchlistTab({
   const holdingCount = useMemo(
     () => items.filter(item => {
       const ref = resolveWatchlistInstrument(item)
-      return (holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]?.shares ?? 0) > 0
+      return (lookupHoldingSnapshot(holdingsByCode, ref)?.shares ?? 0) > 0
     }).length,
     [items, holdingsByCode],
   )
@@ -715,7 +936,10 @@ export default function WatchlistTab({
         </div>
       )}
 
-      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !filteredItems.length && s.listCentered)}>
+      <div
+        ref={listRef}
+        className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !filteredItems.length && s.listCentered)}
+      >
         {!filteredItems.length && !items.length && (
           <SidebarListEmpty
             icon={<StarRegular />}
@@ -730,103 +954,165 @@ export default function WatchlistTab({
             hint="在上方搜索添加新关注，或点右侧设置把已有关注移入此分组"
           />
         )}
-        {filteredItems.map(item => {
-          const ref = resolveWatchlistInstrument(item)
-          const quoteKey = instrumentKey(ref)
-          const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
-          const holding = holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]
-            ?? holdingsByCode[instrumentKey(ref)]
-          const isHolding = (holding?.shares ?? 0) > 0
-          const followPct = item.addedPrice != null && item.addedPrice > 0
-            ? followReturnPct(quote?.price, item.addedPrice)
-            : null
-          const displayPct = followPct != null ? followPct : (quote?.changePct ?? null)
-          const dayTone = pctTone(displayPct)
-          const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
-          const radarLine = formatWatchlistRadarLine(
-            item,
-            radarRow,
-            selectedCode === item.code ? strategyByCode[item.code] : null,
-          )
-          const displayName = resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)
-          const rowTooltip = [radarLine, item.note?.trim()].filter(Boolean).join('\n') || undefined
-
-          return (
-            <div
-              key={item.code}
-              className={mergeClasses(
-                s.row,
-                'opptrix-follow-item',
-                'opptrix-focusable',
-                selectedCode === item.code && s.rowActive,
-              )}
-              role="button"
-              tabIndex={0}
-              title={rowTooltip}
-              onClick={() => onSelect(item)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  onSelect(item)
-                }
-              }}
-            >
-              <div className={s.rowBody}>
-                <span className={s.rowTitle}>
-                  <span className={s.rowName}>{displayName}</span>
-                  {isHolding && (
-                    <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
-                  )}
-                </span>
-                <span className={s.rowCode}>{item.code}</span>
-              </div>
-
-              <div
-                className={s.rowTrailing}
-                onPointerDown={stopRowActionPointer}
-                onMouseDown={stopRowActionPointer}
-                onClick={stopRowActionPointer}
-              >
-                <div className={mergeClasses(s.rowQuote, 'opptrix-follow-quote')}>
-                  <span className={s.quotePrimary}>
-                    <span className={s.metricPrice}>{formatPriceForMarket(ref.market, quote?.price ?? null)}</span>
-                    <span className={mergeClasses(dayTone === 'up' && s.pctUp, dayTone === 'down' && s.pctDown, dayTone === 'flat' && s.pctFlat)}>
-                      {formatPct(displayPct, 1)}
-                    </span>
+        {filteredItems.length > 0 && (
+          <div className={s.listTable}>
+            <div className={s.tableHeader}>
+              <span className={s.headerIdentity}>名称</span>
+              <div className={s.headerMetrics}>
+                {METRIC_COLUMNS.map(col => (
+                  <span
+                    key={col.key}
+                    className={s.headerMetricCell}
+                    style={{ minWidth: col.minWidth }}
+                  >
+                    {col.label}
                   </span>
-                </div>
-
-                <span className={mergeClasses(s.rowActions, 'opptrix-follow-actions')}>
-                  <button
-                    type="button"
-                    className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
-                    aria-label={`修改 ${item.name}`}
-                    onClick={() => onManage(item)}
-                  >
-                    <EditRegular fontSize={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
-                    aria-label={`删除 ${item.name}`}
-                    onClick={() => onRemove(item)}
-                  >
-                    <DeleteRegular fontSize={14} />
-                  </button>
-                </span>
+                ))}
               </div>
+              <span className={s.rowEndPad} aria-hidden />
             </div>
-          )
-        })}
+            {filteredItems.map(item => {
+              const ref = resolveWatchlistInstrument(item)
+              const quoteKey = instrumentKey(ref)
+              const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
+              const holding = lookupHoldingSnapshot(holdingsByCode, ref)
+              const isHolding = (holding?.shares ?? 0) > 0
+              const price = quote?.price ?? null
+              const followPct = followReturnPct(price, item.addedPrice)
+              const holdingPct = isHolding
+                ? holdingReturnPctFromQuote(holding, price)
+                : null
+              const followTone = pctTone(followPct)
+              const holdingTone = pctTone(holdingPct)
+              const costBasis = holding != null && isHolding && holding.costBasis > 0 ? holding.costBasis : null
+              const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
+              const radarLine = formatWatchlistRadarLine(
+                item,
+                radarRow,
+                selectedCode === item.code ? strategyByCode[item.code] : null,
+              )
+              const displayName = resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)
+              const displayCode = displayCodeFromInstrument(ref)
+              const rowTooltip = [radarLine, item.note?.trim()].filter(Boolean).join('\n') || undefined
+
+              return (
+                <div
+                  key={item.code}
+                  className={mergeClasses(
+                    s.row,
+                    'opptrix-follow-item',
+                    selectedCode === item.code && 'opptrix-follow-item-active',
+                    'opptrix-focusable',
+                    'opptrix-hover-marquee-host',
+                    selectedCode === item.code && s.rowActive,
+                  )}
+                  role="button"
+                  tabIndex={0}
+                  title={rowTooltip}
+                  onClick={() => onSelect(item)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelect(item)
+                    }
+                  }}
+                >
+                  <div
+                    className={mergeClasses(s.rowHoverOverlay, 'opptrix-follow-hover-overlay')}
+                    onPointerDown={stopRowActionPointer}
+                    onMouseDown={stopRowActionPointer}
+                    onClick={stopRowActionPointer}
+                  >
+                    <div className={s.rowTrailing}>
+                      <span className={mergeClasses(s.rowActions, 'opptrix-follow-actions')}>
+                        <button
+                          type="button"
+                          className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
+                          aria-label={`修改 ${displayName}`}
+                          onClick={() => onManage(item)}
+                        >
+                          <EditRegular fontSize={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
+                          aria-label={`删除 ${displayName}`}
+                          onClick={() => onRemove(item)}
+                        >
+                          <DeleteRegular fontSize={14} />
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                  <div className={s.rowIdentity}>
+                    <div className={s.rowNameLine}>
+                      <HoverMarqueeText text={displayName} />
+                      {isHolding && (
+                        <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
+                      )}
+                    </div>
+                    <span className={s.rowCode}>{displayCode}</span>
+                  </div>
+
+                  <div className={s.rowMetricsWrap}>
+                    <div
+                      className={mergeClasses(s.rowMetrics, 'opptrix-follow-quote')}
+                      onPointerDown={stopRowActionPointer}
+                      onMouseDown={stopRowActionPointer}
+                      onClick={stopRowActionPointer}
+                    >
+                      <span className={mergeClasses(s.metricCell, s.metricPrice)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                        {formatPriceForMarket(ref.market, price)}
+                      </span>
+                      <span
+                        className={mergeClasses(
+                          s.metricCell,
+                          followPct == null && s.metricMuted,
+                          followTone === 'up' && s.pctUp,
+                          followTone === 'down' && s.pctDown,
+                          followTone === 'flat' && s.pctFlat,
+                        )}
+                        style={{ minWidth: METRIC_COLUMNS[1].minWidth }}
+                      >
+                        {formatPct(followPct, 1)}
+                      </span>
+                      <span
+                        className={mergeClasses(s.metricCell, costBasis == null && s.metricMuted)}
+                        style={{ minWidth: METRIC_COLUMNS[2].minWidth }}
+                      >
+                        {costBasis != null ? formatPriceForMarket(ref.market, costBasis) : '—'}
+                      </span>
+                      <span
+                        className={mergeClasses(
+                          s.metricCell,
+                          holdingPct == null && s.metricMuted,
+                          holdingTone === 'up' && s.pctUp,
+                          holdingTone === 'down' && s.pctDown,
+                          holdingTone === 'flat' && s.pctFlat,
+                        )}
+                        style={{ minWidth: METRIC_COLUMNS[3].minWidth }}
+                      >
+                        {isHolding ? formatPct(holdingPct, 1) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={s.rowEndPad} aria-hidden />
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div className={s.footer}>
-        <span>
+        <span className={mergeClasses(quoteError && !loadingQuotes && s.footerError)}>
           {loadingQuotes
-            ? '刷新中…'
-            : selectedGroupId
-              ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
-              : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
+            ? '正在获取最新行情…'
+            : quoteError
+              ? quoteError
+              : selectedGroupId
+                ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
+                : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
         </span>
         <button
           type="button"

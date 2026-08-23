@@ -154,6 +154,14 @@ export function inferCnExchangeFromSymbol(symbol: string): CnExchange {
  */
 export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
   const symbol = canonicalCnSymbol(ref.symbol)
+  // 场内 ETF（51/52/159 等）须走交易所行情，不可落成 PF 公募基金
+  if (isCnEtfSymbol(symbol)) {
+    const exRaw = ref.exchange?.toUpperCase()
+    const exchange = (exRaw && exRaw !== 'PF' && exRaw !== 'OF')
+      ? exRaw as CnExchange
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'ETF', symbol, exchange }
+  }
   const exRaw = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase()
   if (ref.assetClass === 'FUND' || exRaw === 'PF' || exRaw === 'OF') {
     return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }

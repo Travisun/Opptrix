@@ -2,6 +2,7 @@ import type { WatchlistItem } from '../types/market'
 import type { DetailPanelKind, InstrumentRef, LocalInstrumentHit, Market } from '../types/instrument'
 import type { StockContext } from '../context/AppContext'
 import { inferCnExchangeFromCode, isCnEtfCode, isCnListedFundSymbol, normalizeCode } from './format'
+import { resolveCnInstrumentIdentity } from '@opptrix/shared/instrument-symbol'
 
 function inferCnAssetClass(code: string, exchange: 'SH' | 'SZ' | 'BJ'): InstrumentRef['assetClass'] {
   const c = normalizeCode(code)
@@ -267,13 +268,10 @@ function refToParseInput(ref: InstrumentRef): string {
 }
 
 function normalizeCnInstrumentRef(ref: InstrumentRef): InstrumentRef {
-  const sym = normalizeCode(ref.symbol)
-  const exUp = ref.exchange?.toUpperCase()
-  if (ref.assetClass === 'FUND' || exUp === 'PF' || exUp === 'OF') {
-    return { market: 'CN', assetClass: 'FUND', symbol: sym, exchange: 'PF' }
-  }
-  const exchange = (ref.exchange ?? inferCnExchangeFromCode(sym)).toUpperCase() as 'SH' | 'SZ' | 'BJ'
-  return { market: 'CN', assetClass: inferCnAssetClass(sym, exchange), symbol: sym, exchange }
+  return resolveCnInstrumentIdentity({
+    ...ref,
+    symbol: normalizeCode(ref.symbol),
+  })
 }
 
 /** 将 InstrumentRef 规范化为应用内 canonical 格式（与 shared normalizeInstrumentRef 对齐） */
@@ -373,9 +371,12 @@ export function marketDisplayName(market: Market): string {
 }
 
 export function hitToWatchlistItem(hit: LocalInstrumentHit): WatchlistItem {
-  const isFund = hit.assetClass === 'FUND' || hit.exchange?.toUpperCase() === 'PF' || hit.exchange?.toUpperCase() === 'OF'
+  const sym = normalizeCode(hit.instrument.symbol)
+  const isListedEtf = isCnEtfCode(sym)
+  const isFund = !isListedEtf
+    && (hit.assetClass === 'FUND' || hit.exchange?.toUpperCase() === 'PF' || hit.exchange?.toUpperCase() === 'OF')
   const industry = isFund
-    ? (isCnListedFundSymbol(hit.instrument.symbol) ? '公募基金 · 场内' : '公募基金 · 场外')
+    ? (isCnListedFundSymbol(sym) ? '公募基金 · 场内' : '公募基金 · 场外')
     : hit.market === 'CN' && hit.exchange
       ? `${marketDisplayName(hit.market)} · ${hit.exchange === 'SH' ? '上交所' : hit.exchange === 'SZ' ? '深交所' : hit.exchange === 'BJ' ? '北交所' : hit.exchange}`
       : marketDisplayName(hit.market)

@@ -25,6 +25,7 @@ import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrum
 import PortfolioFeeEditor from './PortfolioFeeEditor'
 import {
   calcHoldingFromTrades,
+  displayPortfolioHoldingReturnPct,
   estimateTradeAmount,
   estimateTradeFees,
   followReturnPct,
@@ -679,7 +680,8 @@ export default function FollowStockDialog({
 
   if (!stock) return null
 
-  const holdPct = holding?.totalPnlPct ?? holding?.unrealizedPnlPct ?? localHolding?.totalPnlPct
+  const holdPct = displayPortfolioHoldingReturnPct(holding, currentPrice)
+    ?? displayPortfolioHoldingReturnPct(localHolding, currentPrice)
   const holdTone = pctTone(holdPct)
   const followTone = pctTone(followPct)
   const isHolding = portfolioEnabled && (localHolding?.shares ?? holding?.shares ?? 0) > 0

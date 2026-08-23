@@ -17,6 +17,14 @@
     "./portfolio-fees": {
       "types": "./dist/portfolio-fees.d.ts",
       "import": "./dist/portfolio-fees.js"
+    },
+    "./portfolio-return": {
+      "types": "./dist/portfolio-return.d.ts",
+      "import": "./dist/portfolio-return.js"
+    },
+    "./instrument-symbol": {
+      "types": "./dist/instrument-symbol.d.ts",
+      "import": "./dist/instrument-symbol.js"
     }
   },
   "scripts": {
