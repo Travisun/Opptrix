@@ -205,7 +205,7 @@ export function hasCjkText(value: string | null | undefined): boolean {
   return Boolean(value && /[\u4e00-\u9fff]/.test(value))
 }
 
-/** Prefer Chinese name from quote / radar / stored watchlist item. */
+/** Prefer Chinese name from quote / radar / stored watchlist item (longest CJK wins). */
 export function resolveDisplayStockName(
   code: string,
   ...candidates: Array<string | null | undefined>
@@ -214,8 +214,10 @@ export function resolveDisplayStockName(
   const clean = candidates
     .map(c => c?.trim())
     .filter((c): c is string => Boolean(c && c !== normalized))
-  const cjk = clean.find(hasCjkText)
-  if (cjk) return cjk
+  const cjk = clean.filter(hasCjkText)
+  if (cjk.length > 0) {
+    return cjk.reduce((best, cur) => (cur.length >= best.length ? cur : best))
+  }
   if (clean[0]) return clean[0]
   return normalized
 }
