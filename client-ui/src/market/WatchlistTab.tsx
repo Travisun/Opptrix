@@ -313,6 +313,8 @@ const useStyles = makeStyles({
     gridColumn: '3',
     gridRow: '1',
     zIndex: 2,
+    position: 'sticky',
+    right: 0,
     flexShrink: 0,
     width: ROW_SCROLL_END_PAD,
     minWidth: ROW_SCROLL_END_PAD,
