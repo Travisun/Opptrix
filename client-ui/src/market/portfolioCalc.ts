@@ -17,7 +17,7 @@ import {
   calcHoldingPnlFromTrades,
   type HoldingReturnInputs,
   type PortfolioHoldingCalcResult,
-} from '@opptrix/shared'
+} from '@opptrix/shared/portfolio-return'
 import type { PortfolioTradeItem } from '../types/schemas'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import {

@@ -2,7 +2,7 @@ import type { WatchlistItem } from '../types/market'
 import type { DetailPanelKind, InstrumentRef, LocalInstrumentHit, Market } from '../types/instrument'
 import type { StockContext } from '../context/AppContext'
 import { inferCnExchangeFromCode, isCnEtfCode, isCnListedFundSymbol, normalizeCode } from './format'
-import { resolveCnInstrumentIdentity } from '@opptrix/shared'
+import { resolveCnInstrumentIdentity } from '@opptrix/shared/instrument-symbol'
 
 function inferCnAssetClass(code: string, exchange: 'SH' | 'SZ' | 'BJ'): InstrumentRef['assetClass'] {
   const c = normalizeCode(code)

@@ -11,7 +11,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { listRowKey } from '../utils/listRowKey'
-import { isSanePortfolioReturnPct } from '@opptrix/shared'
+import { isSanePortfolioReturnPct } from '@opptrix/shared/portfolio-return'
 
 const CONTENT_PAD = '15px'
 const ITEM_BG_INSET = '10px'
