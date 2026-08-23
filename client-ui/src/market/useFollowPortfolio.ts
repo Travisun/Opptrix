@@ -3,7 +3,6 @@ import { portfolioClearInstrument, portfolioDeleteTrade, portfolioTrade, researc
 import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
 import { normalizeCode, portfolioHoldingsKey } from './format'
 import {
-  buildInstrumentNamespace,
   instrumentKey,
   parseInstrumentInput,
   normalizeInstrumentRefLocal,
@@ -28,10 +27,8 @@ function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnaps
   const ref = holdingRowRef(row)
   const keys = [
     portfolioHoldingsStorageKey(ref),
-    portfolioHoldingsKey(row.code, row.market),
     instrumentKey(ref),
-    buildInstrumentNamespace(ref),
-    row.code.trim(),
+    portfolioHoldingsKey(row.code, row.market),
   ]
   for (const key of keys) {
     if (key) map[key] = row
@@ -41,7 +38,9 @@ function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnaps
 export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true
   const [holdingsByCode, setHoldingsByCode] = useState<Record<string, HoldingSnapshot>>({})
+  const [summary, setSummary] = useState<PortfolioSummaryData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const tradesCache = useRef<Record<string, PortfolioTradeItem[]>>({})
 
   const tradeCacheKey = (code: string, market?: string) => {
@@ -61,17 +60,21 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
 
   const refreshHoldings = useCallback(async () => {
     setLoading(true)
+    setError('')
     try {
       const resp = await research.portfolioSummary()
-      if (resp.success && resp.data?.holdings) {
+      if (resp.success && resp.data) {
+        setSummary(resp.data)
         const map: Record<string, HoldingSnapshot> = {}
         for (const row of resp.data.holdings) {
           indexHoldingRow(map, row)
         }
         setHoldingsByCode(map)
+      } else {
+        setError(resp.message || '组合数据加载失败')
       }
-    } catch {
-      /* ignore transient errors */
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '组合数据加载失败')
     } finally {
       setLoading(false)
     }
@@ -125,7 +128,16 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     delete tradesCache.current[tradeCacheKey(code, market)]
     setHoldingsByCode(prev => {
       const next = { ...prev }
-      delete next[portfolioHoldingsKey(code, market)]
+      const ref = parseInstrumentInput(code)
+      const keys = new Set<string>()
+      keys.add(portfolioHoldingsKey(code, market))
+      if (ref) {
+        keys.add(portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(ref)))
+        keys.add(instrumentKey(ref))
+      }
+      for (const k of keys) {
+        if (k) delete next[k]
+      }
       return next
     })
     await refreshHoldings()
@@ -138,7 +150,9 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
 
   return {
     holdingsByCode,
+    summary,
     loading,
+    error,
     refreshHoldings,
     loadTrades,
     submitTrade,

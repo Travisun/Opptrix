@@ -16,7 +16,7 @@ import type { MarketQuote, WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText } from './format'
 import { unifiedQuoteToMarketQuote } from './instrument-adapters'
-import { followReturnPct, holdingReturnPctFromQuote, lookupHoldingSnapshot } from './portfolioCalc'
+import { watchlistDisplayReturnPct, lookupHoldingSnapshot, followReturnPct, dayChangeReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, hitToWatchlistItem, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
@@ -332,6 +332,12 @@ const useStyles = makeStyles({
     gap: '8px',
     flexShrink: 0,
   },
+  footerHint: {
+    color: opptrixCssVars.textSecondary,
+  },
+  footerError: {
+    color: MARKET_DOWN,
+  },
   iconBtn: {...ghostInteractive,
     flexShrink: 0,
     display: 'inline-flex',
@@ -418,6 +424,7 @@ export default function WatchlistTab({
   const [radar, setRadar] = useState<Record<string, WatchlistRadarItem>>({})
   const [strategyByCode, setStrategyByCode] = useState<Record<string, string>>({})
   const [loadingQuotes, setLoadingQuotes] = useState(false)
+  const [quoteError, setQuoteError] = useState('')
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
   const itemsRef = useRef(items)
@@ -447,6 +454,7 @@ export default function WatchlistTab({
     const currentItems = itemsRef.current
     if (!currentItems.length) {
       setQuotes({})
+      setQuoteError('')
       return
     }
     const seq = ++loadSeqRef.current
@@ -456,36 +464,33 @@ export default function WatchlistTab({
       const instruments = currentItems.map(resolveWatchlistInstrument)
       const resp = await research.instrumentQuotes(instruments)
       if (seq !== loadSeqRef.current) return
-      if (resp.success && resp.data?.quotes) {
-        const patch: Record<string, MarketQuote> = {}
-        for (const q of resp.data.quotes) {
-          const itemRef = q.instrument ?? resolveWatchlistInstrument({
-            code: q.code,
-            name: q.name,
-          })
-          const mq = unifiedQuoteToMarketQuote(q)
-          const code = displayCodeFromInstrument(itemRef)
-          const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
-          const quote: MarketQuote = {
-            code,
-            name: mq.name ?? code,
-            price: mq.price ?? null,
-            changePct: mq.changePct ?? null,
-            pe: mq.pe ?? null,
-            pb: mq.pb ?? null,
-            turnoverRate: mq.turnoverRate ?? null,
-            volume: mq.volume ?? null,
-            amount: mq.amount ?? null,
-          }
-          patch[code] = quote
-          patch[rowKey] = quote
-          patch[instrumentKey(itemRef)] = quote
-        }
-        setQuotes(prev => ({ ...prev, ...patch }))
-        setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+      if (!resp.success || !resp.data?.quotes) {
+        setQuoteError('行情暂时无法更新')
+        return
       }
+      setQuoteError('')
+      const patch: Record<string, MarketQuote> = {}
+      for (const q of resp.data.quotes) {
+        const itemRef = q.instrument ?? resolveWatchlistInstrument({
+          code: q.code,
+          name: q.name,
+        })
+        const mq = unifiedQuoteToMarketQuote(q)
+        const code = displayCodeFromInstrument(itemRef)
+        const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
+        const quote: MarketQuote = {
+          ...mq,
+          code,
+          name: mq.name ?? code,
+        }
+        patch[code] = quote
+        patch[rowKey] = quote
+        patch[instrumentKey(itemRef)] = quote
+      }
+      setQuotes(prev => ({ ...prev, ...patch }))
+      setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
-      /* ignore transient quote errors */
+      if (seq === loadSeqRef.current) setQuoteError('行情暂时无法更新')
     } finally {
       if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }
@@ -562,11 +567,48 @@ export default function WatchlistTab({
         ?? quotes[watchlistItemKey(item)]?.price
         ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
       if (price == null) continue
+      const preClose = quotes[item.code]?.preClose
+        ?? quotes[watchlistItemKey(item)]?.preClose
+        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.preClose
+      if (preClose != null && preClose > 0) {
+        const ratio = price / preClose
+        if (ratio > 5 || ratio < 0.2) continue
+      }
       patchedRef.current.add(item.code)
       onPatchItem(item.code, {
         addedPrice: price,
         addedAt: item.addedAt ?? new Date().toISOString(),
       })
+    }
+  }, [items, quotes, onPatchItem])
+
+  useEffect(() => {
+    for (const item of items) {
+      const added = item.addedPrice
+      if (added == null || added <= 0 || patchedRef.current.has(item.code)) continue
+      const price = quotes[item.code]?.price
+        ?? quotes[watchlistItemKey(item)]?.price
+        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
+      if (price == null) continue
+      const follow = followReturnPct(price, added)
+      const day = dayChangeReturnPct(
+        quotes[item.code]?.changePct
+          ?? quotes[watchlistItemKey(item)]?.changePct
+          ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.changePct,
+        price,
+        quotes[item.code]?.preClose
+          ?? quotes[watchlistItemKey(item)]?.preClose
+          ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.preClose,
+      )
+      if (follow != null) {
+        if (day != null && Math.abs(follow - day) > 15) {
+          patchedRef.current.add(item.code)
+          onPatchItem(item.code, { addedPrice: null })
+        }
+        continue
+      }
+      patchedRef.current.add(item.code)
+      onPatchItem(item.code, { addedPrice: null })
     }
   }, [items, quotes, onPatchItem])
 
@@ -616,7 +658,7 @@ export default function WatchlistTab({
   const holdingCount = useMemo(
     () => items.filter(item => {
       const ref = resolveWatchlistInstrument(item)
-      return (lookupHoldingSnapshot(holdingsByCode, ref, item.code, ref.market)?.shares ?? 0) > 0
+      return (lookupHoldingSnapshot(holdingsByCode, ref)?.shares ?? 0) > 0
     }).length,
     [items, holdingsByCode],
   )
@@ -734,13 +776,15 @@ export default function WatchlistTab({
           const ref = resolveWatchlistInstrument(item)
           const quoteKey = instrumentKey(ref)
           const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
-          const holding = lookupHoldingSnapshot(holdingsByCode, ref, item.code, ref.market)
+          const holding = lookupHoldingSnapshot(holdingsByCode, ref)
           const isHolding = (holding?.shares ?? 0) > 0
-          const holdingPct = isHolding ? holdingReturnPctFromQuote(holding, quote?.price) : null
-          const followPct = !isHolding && item.addedPrice != null && item.addedPrice > 0
-            ? followReturnPct(quote?.price, item.addedPrice)
-            : null
-          const displayPct = holdingPct ?? followPct ?? (quote?.changePct ?? null)
+          const displayPct = watchlistDisplayReturnPct({
+            holding,
+            addedPrice: item.addedPrice,
+            price: quote?.price,
+            changePct: quote?.changePct,
+            preClose: quote?.preClose,
+          })
           const dayTone = pctTone(displayPct)
           const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
           const radarLine = formatWatchlistRadarLine(
@@ -821,12 +865,14 @@ export default function WatchlistTab({
       </div>
 
       <div className={s.footer}>
-        <span>
+        <span className={mergeClasses(quoteError && !loadingQuotes && s.footerError)}>
           {loadingQuotes
-            ? '刷新中…'
-            : selectedGroupId
-              ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
-              : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
+            ? '正在获取最新行情…'
+            : quoteError
+              ? quoteError
+              : selectedGroupId
+                ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
+                : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
         </span>
         <button
           type="button"

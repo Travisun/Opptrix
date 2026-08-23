@@ -12,6 +12,17 @@ test('toTickflowSymbol maps bare US ticker to AAPL.US', () => {
   assert.equal(toTickflowSymbol('AAPL'), 'AAPL.US')
 })
 
+test('mapTickflowQuote treats large change_pct as percent not decimal', () => {
+  const row = mapTickflowQuote({
+    symbol: 'AAPL.US',
+    last_price: 190,
+    prev_close: 188,
+    ext: { change_pct: 9.42 },
+  })
+  assert.ok(row)
+  assert.equal(row.changePct, 9.42)
+})
+
 test('mapTickflowQuote maps US session label and valuation fields from ext', () => {
   const row = mapTickflowQuote({
     symbol: 'AAPL.US',
@@ -41,4 +52,5 @@ test('mapTickflowQuote maps US session label and valuation fields from ext', () 
   assert.equal(row.marketCap, 3e12)
   assert.equal(row.week52High, 200)
   assert.equal(row.currency, 'USD')
+  assert.equal(row.changePct, 1)
 })

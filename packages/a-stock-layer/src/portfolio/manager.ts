@@ -1,5 +1,5 @@
 import type { InstrumentRef, Market } from '@opptrix/shared'
-import { resolveInstrumentQuotePrice } from '@opptrix/shared'
+import { resolveInstrumentQuotePrice, calcHoldingPnlFromTrades } from '@opptrix/shared'
 import type { AshareEngine } from '../engine.js'
 import type { HoldingPosition, PnLSummary, TradeRecord, TradeSide } from './trade-models.js'
 import {
@@ -14,46 +14,23 @@ import {
 import { PortfolioStore } from './store.js'
 
 function calcPnlForStock(trades: TradeRecord[], currentPrice: number): HoldingPosition {
-  let shares = 0
-  let totalCost = 0
-  let realizedPnl = 0
-
-  for (const t of trades) {
-    if (t.tradeSide === 'buy') {
-      totalCost += t.amount + t.totalFee
-      shares += t.shares
-    } else {
-      if (shares <= 0) continue
-      const sellShares = Math.min(t.shares, shares)
-      const avgCost = shares > 0 ? totalCost / shares : 0
-      realizedPnl += (t.price - avgCost) * sellShares - t.totalFee
-      totalCost -= avgCost * sellShares
-      shares -= sellShares
-    }
-  }
-
-  const costBasis = shares > 0 ? totalCost / shares : 0
-  const marketValue = shares * currentPrice
-  const unrealizedPnl = marketValue - totalCost
-  const totalPnl = unrealizedPnl + realizedPnl
   const first = trades[0]
-
+  const calc = calcHoldingPnlFromTrades(trades, currentPrice)
+  const roundedPrice = Math.round(currentPrice * 100) / 100
   return {
     code: first?.code ?? '',
     name: first?.name ?? '',
     market: first?.market,
-    shares: Math.round(shares * 100) / 100,
-    costBasis: Math.round(costBasis * 1000) / 1000,
-    totalCost: Math.round(totalCost * 100) / 100,
-    currentPrice: Math.round(currentPrice * 100) / 100,
-    marketValue: Math.round(marketValue * 100) / 100,
-    unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
-    unrealizedPnlPct: totalCost > 0 ? Math.round((unrealizedPnl / totalCost) * 10000) / 100 : 0,
-    realizedPnl: Math.round(realizedPnl * 100) / 100,
-    totalPnl: Math.round(totalPnl * 100) / 100,
-    totalPnlPct: totalCost > 0 || realizedPnl !== 0
-      ? Math.round((totalPnl / (totalCost + Math.abs(realizedPnl))) * 10000) / 100
-      : 0,
+    shares: calc.shares,
+    costBasis: calc.costBasis,
+    totalCost: calc.totalCost,
+    currentPrice: roundedPrice,
+    marketValue: Math.round(calc.shares * roundedPrice * 100) / 100,
+    unrealizedPnl: calc.unrealizedPnl,
+    unrealizedPnlPct: calc.unrealizedPnlPct,
+    realizedPnl: calc.realizedPnl,
+    totalPnl: calc.totalPnl,
+    totalPnlPct: calc.totalPnlPct,
   }
 }
 

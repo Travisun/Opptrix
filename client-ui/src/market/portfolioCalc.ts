@@ -6,16 +6,56 @@ import {
   portfolioHoldingsStorageKey,
   type TradeSide,
 } from '@opptrix/shared/portfolio-fees'
+import {
+  PORTFOLIO_RETURN_SANE_ABS_MAX,
+  isSanePortfolioReturnPct,
+  dayChangeReturnPct,
+  followReturnPct,
+  holdingReturnPctFromQuote,
+  watchlistDisplayReturnPct,
+  displayPortfolioHoldingReturnPct,
+  calcHoldingPnlFromTrades,
+  type HoldingReturnInputs,
+  type PortfolioHoldingCalcResult,
+} from '@opptrix/shared'
 import type { PortfolioTradeItem } from '../types/schemas'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import {
-  buildInstrumentNamespace,
   instrumentKey,
   parseInstrumentInput,
   normalizeInstrumentRefLocal,
 } from './instrument'
 
-export type { TradeSide }
+export type { TradeSide, HoldingReturnInputs }
+
+/** @deprecated 使用 PORTFOLIO_RETURN_SANE_ABS_MAX */
+export const WATCHLIST_RETURN_SANE_ABS_MAX = PORTFOLIO_RETURN_SANE_ABS_MAX
+
+/** @deprecated 使用 isSanePortfolioReturnPct */
+export const isSaneWatchlistReturnPct = isSanePortfolioReturnPct
+
+export {
+  dayChangeReturnPct,
+  followReturnPct,
+  holdingReturnPctFromQuote,
+  watchlistDisplayReturnPct,
+  displayPortfolioHoldingReturnPct,
+}
+
+export function holdingMatchesRef(
+  holding: HoldingSnapshot,
+  ref: InstrumentRef,
+): boolean {
+  const parsed = parseInstrumentInput(holding.code.trim())
+  const hRef = parsed
+    ? normalizeInstrumentRefLocal(parsed)
+    : normalizeInstrumentRefLocal({
+      market: (holding.market ?? 'CN') as InstrumentRef['market'],
+      assetClass: 'EQUITY',
+      symbol: holding.code.trim(),
+    })
+  return portfolioHoldingsStorageKey(hRef) === portfolioHoldingsStorageKey(ref)
+}
 
 export const DEFAULT_FEE_CONFIG = {
   commissionRate: 0.00025,
@@ -24,58 +64,14 @@ export const DEFAULT_FEE_CONFIG = {
   transferFeeRate: 0.00001,
 }
 
-export interface HoldingCalcResult {
-  shares: number
-  costBasis: number
-  totalCost: number
-  unrealizedPnl: number
-  unrealizedPnlPct: number
-  realizedPnl: number
-  totalPnl: number
-  totalPnlPct: number
-}
+export type HoldingCalcResult = PortfolioHoldingCalcResult
 
-/** Weighted-average cost + realized PnL — matches server PortfolioManager. */
+/** Weighted-average cost + realized PnL — 与 PortfolioManager 共用 shared 实现 */
 export function calcHoldingFromTrades(
   trades: PortfolioTradeItem[],
   currentPrice: number,
 ): HoldingCalcResult {
-  const sorted = [...trades].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate) || a.id - b.id)
-  let shares = 0
-  let totalCost = 0
-  let realizedPnl = 0
-
-  for (const t of sorted) {
-    if (t.tradeSide === 'buy') {
-      totalCost += t.amount + t.totalFee
-      shares += t.shares
-    } else {
-      if (shares <= 0) continue
-      const sellShares = Math.min(t.shares, shares)
-      const avgCost = shares > 0 ? totalCost / shares : 0
-      realizedPnl += (t.price - avgCost) * sellShares - t.totalFee
-      totalCost -= avgCost * sellShares
-      shares -= sellShares
-    }
-  }
-
-  const costBasis = shares > 0 ? totalCost / shares : 0
-  const marketValue = shares * currentPrice
-  const unrealizedPnl = marketValue - totalCost
-  const totalPnl = unrealizedPnl + realizedPnl
-
-  return {
-    shares: Math.round(shares * 100) / 100,
-    costBasis: Math.round(costBasis * 1000) / 1000,
-    totalCost: Math.round(totalCost * 100) / 100,
-    unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
-    unrealizedPnlPct: totalCost > 0 ? Math.round((unrealizedPnl / totalCost) * 10000) / 100 : 0,
-    realizedPnl: Math.round(realizedPnl * 100) / 100,
-    totalPnl: Math.round(totalPnl * 100) / 100,
-    totalPnlPct: totalCost > 0 || realizedPnl !== 0
-      ? Math.round((totalPnl / (totalCost + Math.abs(realizedPnl))) * 10000) / 100
-      : 0,
-  }
+  return calcHoldingPnlFromTrades(trades, currentPrice)
 }
 
 export function estimateTradeAmount(shares: number, price: number) {
@@ -93,59 +89,15 @@ export function estimateTradeFees(
   return estimatePortfolioTradeFees(ref, side, shares, price, globalFees, overrides)
 }
 
-export function followReturnPct(
-  currentPrice: number | null | undefined,
-  addedPrice: number | null | undefined,
-): number | null {
-  if (currentPrice == null || addedPrice == null || addedPrice <= 0) return null
-  return Math.round(((currentPrice - addedPrice) / addedPrice) * 10000) / 100
-}
-
-/** 从 holdings map 按 InstrumentRef / 展示代码解析持仓快照（兼容 US:AAPL vs AAPL 等键） */
+/** 从 holdings map 按 InstrumentRef 解析持仓快照（严格匹配账本标的） */
 export function lookupHoldingSnapshot(
   map: Record<string, HoldingSnapshot>,
   ref: InstrumentRef,
-  code?: string,
-  market?: string,
 ): HoldingSnapshot | undefined {
-  const keys = new Set<string>()
-  keys.add(portfolioHoldingsStorageKey(ref))
-  keys.add(instrumentKey(ref))
-  keys.add(buildInstrumentNamespace(ref))
-  if (code?.trim()) {
-    keys.add(code.trim())
-    const parsed = parseInstrumentInput(code.trim())
-    if (parsed) keys.add(portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(parsed)))
-  }
-  if (market) keys.add(`${market}:${ref.symbol}`)
+  const keys = [portfolioHoldingsStorageKey(ref), instrumentKey(ref)]
   for (const k of keys) {
-    if (k && map[k]) return map[k]
+    const row = k ? map[k] : undefined
+    if (row && holdingMatchesRef(row, ref)) return row
   }
   return undefined
-}
-
-export type HoldingReturnInputs = {
-  shares: number
-  totalCost?: number
-  realizedPnl?: number
-  totalPnlPct?: number | null
-  unrealizedPnlPct?: number | null
-}
-
-export function holdingReturnPctFromQuote(
-  holding: HoldingReturnInputs | null | undefined,
-  price: number | null | undefined,
-): number | null {
-  if (!holding || holding.shares <= 0) return null
-  if (price == null || !Number.isFinite(price)) {
-    return holding.totalPnlPct ?? holding.unrealizedPnlPct ?? null
-  }
-  const totalCost = holding.totalCost ?? 0
-  const realizedPnl = holding.realizedPnl ?? 0
-  const unrealizedPnl = price * holding.shares - totalCost
-  const totalPnl = unrealizedPnl + realizedPnl
-  if (totalCost > 0 || realizedPnl !== 0) {
-    return Math.round((totalPnl / (totalCost + Math.abs(realizedPnl))) * 10000) / 100
-  }
-  return 0
 }

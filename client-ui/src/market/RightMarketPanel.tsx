@@ -222,6 +222,9 @@ function RightMarketPanel({
   const { tab, setTab, selected, setSelected, selectDetail } = useMarketPanelUi()
   const {
     holdingsByCode,
+    summary: portfolioSummary,
+    loading: portfolioLoading,
+    error: portfolioError,
     loadTrades,
     submitTrade,
     deleteTrade,
@@ -510,6 +513,10 @@ function RightMarketPanel({
             active={panelVisible && tab === 'portfolio'}
             selectedCode={selectedCode}
             onSelect={handlePortfolioSelect}
+            summary={portfolioSummary}
+            loading={portfolioLoading}
+            error={portfolioError}
+            onRetry={() => { void refreshHoldings() }}
           />
         </div>
         {tab === 'detail' && detailStock && detailKind === 'cn-fund' ? (

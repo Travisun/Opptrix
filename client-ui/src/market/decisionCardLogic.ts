@@ -156,7 +156,7 @@ export function buildDecisionCardViewModel(input: {
     const pnl = holdingReturnPctFromQuote(input.holding, input.price)
       ?? input.holding.unrealizedPnlPct
       ?? input.holding.totalPnlPct
-    holdingLabel = `成本 ${formatPrice(cost)} · 浮盈 ${formatPct(pnl, 1)}`
+    holdingLabel = `成本 ${formatPrice(cost)} · 收益 ${formatPct(pnl, 1)}`
   }
 
   let cyqLabel: string | null = null

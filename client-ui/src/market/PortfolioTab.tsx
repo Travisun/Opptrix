@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { BriefcaseRegular } from '@fluentui/react-icons'
 import SidebarListEmpty from './SidebarListEmpty'
-import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { formatPct, formatPrice, formatPriceForMarket, pctTone, portfolioHoldingsKey } from './format'
 import { instrumentKey, marketDisplayName, parseInstrumentInput } from './instrument'
+import { displayPortfolioHoldingReturnPct } from './portfolioCalc'
 import type { Market } from '../types/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { listRowKey } from '../utils/listRowKey'
+import { isSanePortfolioReturnPct } from '@opptrix/shared'
 
 const CONTENT_PAD = '15px'
 const ITEM_BG_INSET = '10px'
@@ -158,9 +158,13 @@ interface PortfolioTabProps {
   active?: boolean
   selectedCode: string | null
   onSelect: (code: string, market?: string) => void
+  summary: PortfolioSummaryData | null
+  loading: boolean
+  error: string
+  onRetry: () => void
 }
 
-function pnlColor(pct: number): string {
+function pnlColor(pct: number | null | undefined): string {
   const tone = pctTone(pct)
   if (tone === 'up') return MARKET_UP
   if (tone === 'down') return MARKET_DOWN
@@ -172,34 +176,22 @@ function formatShares(shares: number): string {
   return shares % 1 === 0 ? `${shares} 股` : `${shares.toFixed(0)} 股`
 }
 
-export default function PortfolioTab({ active = true, selectedCode, onSelect }: PortfolioTabProps) {
+export default function PortfolioTab({
+  active = true,
+  selectedCode,
+  onSelect,
+  summary,
+  loading,
+  error,
+  onRetry,
+}: PortfolioTabProps) {
   const s = useStyles()
-  const [data, setData] = useState<PortfolioSummaryData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const resp = await research.portfolioSummary()
-      if (!resp.success || !resp.data) {
-        throw new Error(resp.message || '组合数据加载失败')
-      }
-      setData(resp.data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '组合数据加载失败')
-      setData(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  if (!active) {
+    return <div className={s.root} />
+  }
 
-  useEffect(() => {
-    if (active) void load()
-  }, [active, load])
-
-  if (loading) {
+  if (loading && !summary) {
     return (
       <div className={s.root}>
         <div className={mergeClasses(s.list, s.listCentered)}>
@@ -212,16 +204,16 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
     )
   }
 
-  if (error && !data) {
+  if (error && !summary) {
     return (
       <div className={s.root}>
         <div className={mergeClasses(s.list, s.listCentered)}>
           <SidebarListEmpty
             icon={<BriefcaseRegular />}
             title="组合暂时加载不了"
-            hint="请检查网络连接后重试"
+            hint="请检查网络后重试"
             action={(
-              <OpptrixButton size="small" appearance="secondary" onClick={() => void load()}>
+              <OpptrixButton size="small" appearance="secondary" onClick={onRetry}>
                 重试
               </OpptrixButton>
             )}
@@ -231,8 +223,10 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
     )
   }
 
+  const data = summary
   const holdings = data?.holdings ?? []
   const empty = holdings.length === 0
+  const totalPnlPct = isSanePortfolioReturnPct(data?.totalPnlPct) ? data?.totalPnlPct : null
 
   return (
     <div className={s.root}>
@@ -243,16 +237,16 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
             <Text className={s.metricValue}>{formatPrice(data.totalMarketValue)}</Text>
           </div>
           <div className={s.metric}>
-            <Text className={s.metricLabel}>总盈亏</Text>
-            <Text className={s.metricValue} style={{ color: pnlColor(data.totalPnlPct) }}>
-              {formatPct(data.totalPnlPct)}
+            <Text className={s.metricLabel}>总收益</Text>
+            <Text className={s.metricValue} style={{ color: pnlColor(totalPnlPct) }}>
+              {formatPct(totalPnlPct)}
             </Text>
           </div>
           <div className={s.metric}>
             <Text className={s.metricLabel}>浮动盈亏</Text>
             <Text
               className={s.metricValue}
-              style={{ color: pnlColor(data.totalUnrealizedPnl >= 0 ? 1 : -1) }}
+              style={{ color: pnlColor(data.totalUnrealizedPnl) }}
             >
               {formatPrice(data.totalUnrealizedPnl)}
             </Text>
@@ -281,8 +275,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
               || (() => {
                 const parsed = parseInstrumentInput(selectedCode)
                 if (!parsed) return false
-                const market = (h.market ?? 'CN') as import('../types/instrument').Market
-                // CN 用 parseInstrumentInput 推断真实 assetClass（ETF/INDEX/EQUITY）；非 CN 仍为 EQUITY
+                const market = (h.market ?? 'CN') as Market
                 const holdingRef = market === 'CN'
                   ? parseInstrumentInput(h.code)
                   : { market, assetClass: 'EQUITY' as const, symbol: h.code }
@@ -294,6 +287,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
               marketLabel ? `${marketLabel} · ${h.code}` : displayCode,
               sharesLabel,
             ].filter(Boolean).join(' · ')
+            const rowReturnPct = displayPortfolioHoldingReturnPct(h, h.currentPrice)
             return (
               <div
                 key={listRowKey(index, h.market, displayCode)}
@@ -313,8 +307,8 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
                   <span className={s.rowNote}>{note}</span>
                 </div>
                 <div className={s.rowTrailing}>
-                  <span className={s.quotePrimary} style={{ color: pnlColor(h.unrealizedPnlPct) }}>
-                    {formatPct(h.unrealizedPnlPct)}
+                  <span className={s.quotePrimary} style={{ color: pnlColor(rowReturnPct) }}>
+                    {formatPct(rowReturnPct)}
                   </span>
                   <span className={s.quoteSecondary}>
                     {h.market && h.market !== 'CN'

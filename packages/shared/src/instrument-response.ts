@@ -118,13 +118,34 @@ function str(v: unknown, fallback = ''): string {
   return v != null ? String(v) : fallback
 }
 
-/** 基金报价常用 unitNav；场内基金可能用 exchangePrice */
+/** 基金报价常用 unitNav；场内基金/ETF 优先 exchangePrice（交易所价） */
 export function resolveInstrumentQuotePrice(row: Record<string, unknown>): number | null {
-  return num(row.price) ?? num(row.unitNav) ?? num(row.exchangePrice)
+  const exchangePrice = num(row.exchangePrice ?? row.exchange_price)
+  if (exchangePrice != null) return exchangePrice
+  return num(row.price) ?? num(row.unitNav)
 }
 
 export function resolveInstrumentQuotePreClose(row: Record<string, unknown>): number | null {
-  return num(row.preClose ?? row.pre_close ?? row.prevNav ?? row.prev_nav)
+  const exchangePrice = num(row.exchangePrice ?? row.exchange_price)
+  const exchangePre = num(row.preClose ?? row.pre_close)
+  if (exchangePrice != null) {
+    return exchangePre
+  }
+  const navPrice = num(row.price) ?? num(row.unitNav)
+  const navPre = num(row.prevNav ?? row.prev_nav)
+  const unitNav = num(row.unitNav)
+  const price = num(row.price)
+  if (navPrice != null && navPre != null) {
+    if (price != null && unitNav != null) {
+      const navGap = Math.abs(price - unitNav) / Math.max(price, unitNav)
+      const prevRatio = navPre / price
+      if (navGap < 0.05 && (prevRatio > 1.15 || prevRatio < 0.85)) {
+        return exchangePre ?? null
+      }
+    }
+    return navPre
+  }
+  return exchangePre ?? navPre
 }
 
 /** 将基金报价行规范为带 price 的行情行，供关注列表 / 持仓估值复用 */
@@ -138,20 +159,25 @@ export function coerceInstrumentQuoteRow(row: Record<string, unknown>): Record<s
   return out
 }
 
-/** 从报价行解析涨跌幅；平价时补 0% 而非留空 */
+/** 从报价行解析涨跌幅；平价时补 0% 而非留空；异常大值用现价/昨收重算 */
 export function resolveInstrumentQuoteChangePct(
   row: Record<string, unknown>,
   price?: number | null,
   preClose?: number | null,
 ): number | null {
-  const raw = num(row.changePct ?? row.change_pct)
-  if (raw != null) return raw
   const p = price ?? resolveInstrumentQuotePrice(row)
   const pc = preClose ?? resolveInstrumentQuotePreClose(row)
-  if (p != null && pc != null && pc > 0) {
-    return Math.round(((p - pc) / pc) * 10000) / 100
+  const derived = p != null && pc != null && pc > 0
+    ? Math.round(((p - pc) / pc) * 10000) / 100
+    : null
+  const raw = num(row.changePct ?? row.change_pct)
+  if (raw != null) {
+    if (Math.abs(raw) <= 500) return raw
+    if (derived != null) return derived
+    return raw
   }
-  return null
+  if (p != null && pc != null && pc > 0 && p === pc) return 0
+  return derived
 }
 
 export function quoteFromProviderRow(

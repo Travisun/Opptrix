@@ -6,7 +6,18 @@ import {
   normalizeInstrumentSnapshot,
   klinesToChartBars,
   quoteFromProviderRow,
+  resolveInstrumentQuoteChangePct,
 } from '../packages/shared/dist/instrument-response.js'
+import { resolveCnInstrumentIdentity } from '../packages/shared/dist/instrument-symbol.js'
+
+test('resolveInstrumentQuoteChangePct recovers from absurd upstream change_pct', () => {
+  const pct = resolveInstrumentQuoteChangePct(
+    { change_pct: 94196, price: 190, preClose: 188 },
+    190,
+    188,
+  )
+  assert.equal(pct, 1.06)
+})
 
 test('quoteFromProviderRow normalizes camelCase provider row', () => {
   const q = quoteFromProviderRow(
@@ -16,6 +27,34 @@ test('quoteFromProviderRow normalizes camelCase provider row', () => {
   assert.equal(q.code, 'US:AAPL')
   assert.equal(q.change_pct, 1.2)
   assert.equal(q.market, 'US')
+})
+
+test('resolveCnInstrumentIdentity maps listed ETF codes to CN ETF not PF fund', () => {
+  const ref = resolveCnInstrumentIdentity({
+    market: 'CN',
+    assetClass: 'FUND',
+    symbol: '510300',
+    exchange: 'PF',
+  })
+  assert.equal(ref.assetClass, 'ETF')
+  assert.equal(ref.symbol, '510300')
+  assert.equal(ref.exchange, 'SH')
+})
+
+test('quoteFromProviderRow ignores stale prevNav when price tracks unitNav', () => {
+  const q = quoteFromProviderRow(
+    { market: 'CN', assetClass: 'ETF', symbol: '510300', exchange: 'SH' },
+    {
+      price: 4.0,
+      unitNav: 4.05,
+      prevNav: 9.76,
+      preClose: 4.02,
+      changePct: -0.5,
+    },
+  )
+  assert.equal(q.price, 4.0)
+  assert.equal(q.pre_close, 4.02)
+  assert.ok(q.change_pct != null && Math.abs(q.change_pct) < 10)
 })
 
 test('quoteFromProviderRow maps fund unitNav to price', () => {
