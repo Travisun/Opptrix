@@ -4,6 +4,9 @@ export const MAX_CHART_BARS = 800
 export const LOAD_MORE_STEP = 200
 export const HISTORY_EDGE_THRESHOLD = 15
 
+/** 详情侧栏 K 线区最大高度（px）— 避免随窗口高度无限拉长 */
+export const DETAIL_PANEL_CHART_MAX_HEIGHT_PX = 520
+
 /** 分钟 K 可加载上限（TDX 单次最多 800，靠 offset 分页叠加） */
 export function maxChartBars(period: ChartPeriod): number {
   switch (period) {

@@ -50,7 +50,7 @@
 | 财务指标 | `GET /api/fund/financials/indicators` | `fundFinancialsIndicators` | ✅ Client |
 | 利润表 | `GET /api/fund/financials/income-statements` | `fundFinancialsIncomeStatements` | ✅ Client |
 | 资产负债表 | `GET /api/fund/financials/balance-sheets` | `fundFinancialsBalanceSheets` | ✅ Client |
-| 场内快照 | `GET /api/fund/market/snapshot` | `fundMarketSnapshot` | ✅ ETF 路径 |
+| 场内快照 | `GET /api/fund/market/snapshot` | `fundMarketSnapshot` | ✅ ETF 路径；**场内公募基金 `fundQuote` 合并交易所价** |
 | 场内历史 | `GET /api/fund/market/historical` | `fundMarketHistorical` | ✅ ETF K 线 |
 | 资讯列表 | `GET /api/fund/news/article-list` | `fundNewsArticleList` | ✅ Client |
 | 募集公告 | `GET /api/fund/offerings/list` | `fundOfferingsList` | ✅ Client |
@@ -61,8 +61,8 @@
 |---|---|---|---|
 | `FUND_PROFILE` | `fundProfile` | CN / FUND | 120（同花顺全局） |
 | `FUND_HOLDINGS` | `fundHoldings` | CN / FUND | 120 |
-| `FUND_QUOTE` | `fundQuote` | CN / FUND | 120 |
-| `FUND_NAV` | `fundNav` | CN / FUND | 120（UI 未拉取；Agent/Hub 可用） |
+| `FUND_QUOTE` | `fundQuote` | CN / FUND | 120；**场内**并行 `fundMarketSnapshot` 合并交易所价；失败时回退 A 股 `realtime` |
+| `FUND_NAV` | `fundNav` | CN / FUND | 120（`FundDetailTab` 走势 / 净值 Tab） |
 | `ETF_*` | `etfProfile` 等 | CN / ETF | 120（`fund_type=exchange`） |
 
 无 API Key 或 Provider 未启用时，`withFuyaoClient` 返回 `null`，Engine 自动 failover 至东方财富（优先级 112）或新浪 / Tushare。
@@ -72,7 +72,10 @@
 ```
 InstrumentRef (CN:PF)
   → research.fundSnapshot
-    → Engine.fundSnapshot → fundProfile（单次）
+    → Engine.fundSnapshot → fundProfile + fundQuote（场内并行快照）
+  → 关注列表 / 行情 → FUND_QUOTE（场内含交易所价 + 净值；扶摇失败走 realtime 回退）
+  → Tab「走势」→ research.fundNav → Fuyao performance/nav（全量序列）
+  → Tab「净值」→ research.fundNav（列表）
   → Tab「持仓」→ research.fundHoldings
 ```
 
@@ -81,6 +84,7 @@ InstrumentRef (CN:PF)
 | 动作 | 上游调用 |
 |---|---|
 | 打开详情 | `profile/detail` + `performance/nav`（最新）+ `performance/returns` + `holders/detail` ≈ **4 次** |
+| 点走势 / 净值 | `performance/nav`（全量，与概览可能复用缓存）≈ **1 次** |
 | 点持仓 | `portfolio/holdings` ≈ **1 次** |
 
 **概览 Tab 字段来源**
@@ -88,6 +92,7 @@ InstrumentRef (CN:PF)
 | UI 字段 | Standard 字段 | 扶摇来源 |
 |---|---|---|
 | 头部净值 / 涨跌 | `unitNav`, `changePct`, `navDate` | `performance/nav` 最近两日 |
+| 场内交易所价 / 折溢价 | `exchangePrice`, `premiumPct` | `fundMarketSnapshot`（`fundQuote` / `fundSnapshot` 合并） |
 | 基金类型 | `fundType` | `profile/detail` |
 | 基金经理 / 公司 | `manager`, `company` | `profile/detail` |
 | 规模 | `scale`（亿） | `fund_scale` ÷ 1e8 |
@@ -107,6 +112,7 @@ InstrumentRef (CN:PF)
 | `providers/tonghuashun/markets/cn/fund.ts` | `mixTonghuashunFund` |
 | `providers/tonghuashun/manifest.ts` | `cnFundBindings` |
 | `client-ui/src/market/FundDetailTab.tsx` | 右侧详情 UI |
+| `client-ui/src/market/FundNavChart.tsx` | 历史净值折线图 |
 
 ## 验证
 

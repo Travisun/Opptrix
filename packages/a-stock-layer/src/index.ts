@@ -147,6 +147,7 @@ export {
   assertCnPublicFundCode,
   CN_PUBLIC_FUND_EXCHANGE,
   isCnListedFundSymbol,
+  isCnLofSymbol,
   inferCnPublicFundListingExchange,
   stockIndexItemLooksLikeCnPublicFund,
   resolveCnPublicFundBareCode,
@@ -224,8 +225,6 @@ export {
   wireProviderSymbolArg,
   wireRegistryMethodArgs,
   formatProviderMethodArgs,
-  exchangeFromTencentSecSymbol,
-  tencentSecSymbol,
 } from './core/provider-wire.js'
 export { resolveInstrumentFromParams, instrumentRefsFromList, normalizeInstrumentHubParams, instrumentProviderSymbol } from '@opptrix/shared'
 export {

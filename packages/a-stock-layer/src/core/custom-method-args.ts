@@ -21,7 +21,7 @@ const CODES_PARAM_NAMES = new Set(['codes'])
 const MARKET_PARAM_NAMES = new Set(['market'])
 
 const CN_PROVIDER_IDS = new Set([
-  'baostock', 'tickflow', 'zzshare', 'sinafinance', 'tencent',
+  'baostock', 'tickflow', 'zzshare', 'tonghuashun', 'tushare',
 ])
 
 function normalizeMarketValue(value: unknown): string {
@@ -133,7 +133,7 @@ function normalizeSymbolArg(
   const raw = value.trim()
   if (!raw) return value
 
-  if (CN_PROVIDER_IDS.has(providerId) || providerId === 'akshare') {
+  if (CN_PROVIDER_IDS.has(providerId)) {
     const parsed = parseInstrumentLikeValue(raw)
     if (parsed) {
       return wireProviderSymbolArg(providerId, paramName, method, parsed)
@@ -175,13 +175,9 @@ function normalizeCodesArg(providerId: string, value: unknown, marketHint: Marke
         // fall through
       }
     }
-    if (providerId === 'tencent' || providerId === 'sinafinance') {
-      return trimmed.split(',')
-        .map(part => String(normalizeSymbolArg(providerId, 'codes', part.trim(), marketHint, method)))
-        .join(',')
-    }
     return trimmed.split(',')
       .map(part => normalizeSymbolArg(providerId, 'codes', part.trim(), marketHint, method))
+      .join(',')
   }
   return value
 }

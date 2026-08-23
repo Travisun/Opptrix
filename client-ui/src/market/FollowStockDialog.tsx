@@ -12,8 +12,17 @@ import { DismissRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { WatchlistItem } from '../types/market'
 import type { PortfolioTradeItem } from '../types/schemas'
-import { formatCompactNumberForMarket, formatPct, formatPriceForMarket, pctTone } from './format'
-import { resolveWatchlistInstrument } from './instrument'
+import { research, portfolioFeeInstrument, portfolioFeeInstrumentSave } from '../api/client'
+import {
+  DEFAULT_PORTFOLIO_GLOBAL_FEES,
+  resolvePortfolioLedgerKind,
+  type InstrumentFeeOverrides,
+  type PortfolioGlobalFees,
+  type PortfolioLedgerKind,
+} from '@opptrix/shared/portfolio-fees'
+import { formatCompactNumberForMarket, formatPct, formatPriceForMarket, pctTone, resolveCloseOnDate, resolveFundNavOnDate } from './format'
+import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrument'
+import PortfolioFeeEditor from './PortfolioFeeEditor'
 import {
   calcHoldingFromTrades,
   estimateTradeAmount,
@@ -359,6 +368,15 @@ const useStyles = makeStyles({
     padding: '10px 2px',
     textAlign: 'center',
   },
+  feeToggle: {
+    alignSelf: 'flex-start',
+    background: 'transparent',
+    padding: '4px 0',
+    fontSize: 'var(--opptrix-font-xs)',
+    color: 'var(--colorBrandForeground1)',
+    cursor: 'pointer',
+    ...ghostInteractive,
+  },
   noteArea: {
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     borderRadius: opptrixTokens.radiusMd,
@@ -385,6 +403,7 @@ interface Props {
     date?: string
   }) => Promise<PortfolioTradeItem[]>
   deleteTrade: (id: number, code: string, market?: string) => Promise<PortfolioTradeItem[]>
+  onFeesRecalculated?: () => void
 }
 
 export default function FollowStockDialog({
@@ -398,16 +417,26 @@ export default function FollowStockDialog({
   loadTrades,
   submitTrade,
   deleteTrade,
+  onFeesRecalculated,
 }: Props) {
   const s = useStyles()
   const closingRef = useRef(false)
   const lastSavedNoteRef = useRef('')
+  const priceManualRef = useRef(false)
   const [presented, setPresented] = useState(false)
   const [note, setNote] = useState('')
   const [dialogTab, setDialogTab] = useState<DialogTab>('trade')
   const [trades, setTrades] = useState<PortfolioTradeItem[]>([])
   const [loadingTrades, setLoadingTrades] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [fundNavRows, setFundNavRows] = useState<Array<{ date: string; nav?: number | null }>>([])
+  const [loadingFundNav, setLoadingFundNav] = useState(false)
+  const [klineBars, setKlineBars] = useState<Array<{ date: string; close?: number | null }>>([])
+  const [loadingKline, setLoadingKline] = useState(false)
+  const [feePanelOpen, setFeePanelOpen] = useState(false)
+  const [ledgerKind, setLedgerKind] = useState<PortfolioLedgerKind>('exchange')
+  const [globalFees, setGlobalFees] = useState<PortfolioGlobalFees>(DEFAULT_PORTFOLIO_GLOBAL_FEES)
+  const [feeOverrides, setFeeOverrides] = useState<InstrumentFeeOverrides>({})
   const [tradeForm, setTradeForm] = useState({
     side: 'buy' as 'buy' | 'sell',
     shares: '',
@@ -416,11 +445,12 @@ export default function FollowStockDialog({
   })
 
   const stockRef = stock ? resolveWatchlistInstrument(stock) : null
-  const tradeCode = stockRef && stock
-    ? stockRef.market === 'CN'
-      ? stock.code.padStart(6, '0')
-      : stock.code
-    : ''
+  const tradeCode = stockRef ? displayCodeFromInstrument(stockRef) : (stock?.code ?? '')
+  const isFundRef = stockRef?.assetClass === 'FUND'
+  const isExchangeLedger = stockRef ? resolvePortfolioLedgerKind(stockRef) === 'exchange' : false
+  const isOtcFund = isFundRef && !isExchangeLedger
+  const positionUnit = isFundRef || stockRef?.assetClass === 'ETF' ? '份' : '股'
+  const positionUnitLabel = isFundRef || stockRef?.assetClass === 'ETF' ? '份额' : '股数'
 
   const finishClose = useCallback(() => {
     if (!closingRef.current) return
@@ -470,9 +500,12 @@ export default function FollowStockDialog({
     const initialNote = stock.note ?? ''
     setNote(initialNote)
     lastSavedNoteRef.current = initialNote.trim()
+    priceManualRef.current = false
+    setFeePanelOpen(false)
+    if (stockRef) setLedgerKind(resolvePortfolioLedgerKind(stockRef))
     setTradeForm(prev => ({
       ...prev,
-      price: currentPrice != null ? String(currentPrice) : prev.price,
+      price: isOtcFund ? prev.price : (currentPrice != null ? String(currentPrice) : prev.price),
       date: todayTradeDate(),
     }))
     if (!portfolioEnabled) {
@@ -492,7 +525,79 @@ export default function FollowStockDialog({
       if (!cancelled) setLoadingTrades(false)
     })
     return () => { cancelled = true }
-  }, [open, stock, tradeCode, stockRef?.market, currentPrice, loadTrades, portfolioEnabled])
+  }, [open, stock, tradeCode, stockRef?.market, currentPrice, loadTrades, portfolioEnabled, isOtcFund, stockRef])
+
+  useEffect(() => {
+    if (!open || !stock || !portfolioEnabled || !stockRef) return undefined
+    let cancelled = false
+    void portfolioFeeInstrument(tradeCode, stockRef.market).then(resp => {
+      if (cancelled || !resp.success || !resp.data) return
+      setLedgerKind(resp.data.ledgerKind)
+      setGlobalFees(resp.data.globalFees)
+      setFeeOverrides(resp.data.overrides)
+    })
+    return () => { cancelled = true }
+  }, [open, stock, stockRef, tradeCode, portfolioEnabled])
+
+  useEffect(() => {
+    if (!open || !stock || !isOtcFund || !stockRef) {
+      setFundNavRows([])
+      return undefined
+    }
+    let cancelled = false
+    setLoadingFundNav(true)
+    void research.fundNav(stockRef).then(resp => {
+      if (cancelled) return
+      const items = resp.success && Array.isArray(resp.data?.items) ? resp.data.items : []
+      setFundNavRows(items)
+    }).finally(() => {
+      if (!cancelled) setLoadingFundNav(false)
+    })
+    return () => { cancelled = true }
+  }, [open, stock, isOtcFund, stockRef])
+
+  useEffect(() => {
+    if (!open || !stockRef || !isExchangeLedger) {
+      setKlineBars([])
+      return undefined
+    }
+    let cancelled = false
+    setLoadingKline(true)
+    void research.stockChart(stockRef, 'daily', 260).then(resp => {
+      if (cancelled) return
+      const bars = resp.success && resp.data?.bars
+        ? resp.data.bars
+            .filter((b): b is import('../types/market').OhlcChartBar => 'close' in b)
+            .map(b => ({ date: b.time.slice(0, 10), close: b.close }))
+        : []
+      setKlineBars(bars)
+    }).finally(() => {
+      if (!cancelled) setLoadingKline(false)
+    })
+    return () => { cancelled = true }
+  }, [open, stockRef, isExchangeLedger])
+
+  useEffect(() => {
+    if (priceManualRef.current) return
+    const tradeDate = tradeForm.date || todayTradeDate()
+    if (isOtcFund && fundNavRows.length) {
+      const nav = resolveFundNavOnDate(fundNavRows, tradeDate)
+      if (nav == null) return
+      setTradeForm(prev => {
+        const next = String(nav)
+        return prev.price === next ? prev : { ...prev, price: next }
+      })
+      return
+    }
+    if (isExchangeLedger && klineBars.length) {
+      const close = resolveCloseOnDate(klineBars, tradeDate)
+      if (close == null) return
+      setTradeForm(prev => {
+        const next = String(close)
+        return prev.price === next ? prev : { ...prev, price: next }
+      })
+    }
+  }, [isOtcFund, isExchangeLedger, fundNavRows, klineBars, tradeForm.date])
 
   useEffect(() => {
     if (!open || !stock) return undefined
@@ -520,11 +625,24 @@ export default function FollowStockDialog({
   const followPct = followReturnPct(currentPrice, stock?.addedPrice)
 
   const previewFees = useMemo(() => {
+    if (!stockRef) return null
     const shares = Number(tradeForm.shares)
     const price = Number(tradeForm.price)
     if (!shares || !price) return null
-    return estimateTradeFees(shares, price, tradeForm.side)
-  }, [tradeForm])
+    return estimateTradeFees(stockRef, tradeForm.side, shares, price, globalFees, feeOverrides)
+  }, [stockRef, tradeForm, globalFees, feeOverrides])
+
+  const handleFeeOverridesChange = useCallback((next: InstrumentFeeOverrides) => {
+    setFeeOverrides(next)
+    if (!stock || !stockRef) return
+    void portfolioFeeInstrumentSave(tradeCode, next, stockRef.market).then(resp => {
+      if (!resp.success) return
+      if ((resp.data?.recalculatedTrades ?? 0) > 0) {
+        onFeesRecalculated?.()
+        void loadTrades(tradeCode, stockRef.market).then(setTrades)
+      }
+    }).catch(() => { /* ignore */ })
+  }, [stock, stockRef, tradeCode, onFeesRecalculated])
 
   const handleSubmitTrade = useCallback(async () => {
     if (!stock) return
@@ -618,7 +736,7 @@ export default function FollowStockDialog({
               <div className={s.metric}>
                 <span className={s.metricLabel}>关注收益</span>
                 <span className={mergeClasses(s.metricValue, followTone === 'up' && s.pctUp, followTone === 'down' && s.pctDown)}>
-                  {followPct != null ? formatPct(followPct) : '—'}
+                  {formatPct(followPct)}
                 </span>
               </div>
               {isHolding && (
@@ -626,13 +744,13 @@ export default function FollowStockDialog({
                   <div className={s.metric}>
                     <span className={s.metricLabel}>持仓</span>
                     <span className={s.metricValue}>
-                      {(localHolding?.shares ?? holding?.shares ?? 0).toFixed(0)} 股
+                      {(localHolding?.shares ?? holding?.shares ?? 0).toFixed(0)} {positionUnit}
                     </span>
                   </div>
                   <div className={s.metric}>
                     <span className={s.metricLabel}>持有收益</span>
                     <span className={mergeClasses(s.metricValue, holdTone === 'up' && s.pctUp, holdTone === 'down' && s.pctDown)}>
-                      {holdPct != null ? formatPct(holdPct) : '—'}
+                      {formatPct(holdPct)}
                     </span>
                   </div>
                 </>
@@ -709,7 +827,7 @@ export default function FollowStockDialog({
                     className={s.glassInput}
                     appearance="filled-darker"
                     size="small"
-                    placeholder="股数"
+                    placeholder={positionUnitLabel}
                     value={tradeForm.shares}
                     onChange={(_, data) => setTradeForm(prev => ({ ...prev, shares: data.value }))}
                   />
@@ -717,29 +835,75 @@ export default function FollowStockDialog({
                     className={s.glassInput}
                     appearance="filled-darker"
                     size="small"
-                    placeholder="成交价"
+                    placeholder={
+                      isOtcFund
+                        ? (loadingFundNav ? '正在获取净值…' : '成交净值（自动，可改）')
+                        : isExchangeLedger
+                          ? (loadingKline ? '正在匹配收盘价…' : '成交价（自动，可改）')
+                          : '成交价'
+                    }
                     value={tradeForm.price}
-                    onChange={(_, data) => setTradeForm(prev => ({ ...prev, price: data.value }))}
+                    onChange={(_, data) => {
+                      priceManualRef.current = true
+                      setTradeForm(prev => ({ ...prev, price: data.value }))
+                    }}
                   />
                   <div className={s.tradeFullRow}>
                     <TradeDateField
                       className={s.glassInput}
                       value={tradeForm.date}
-                      onChange={date => setTradeForm(prev => ({ ...prev, date }))}
+                      onChange={date => {
+                        priceManualRef.current = false
+                        setTradeForm(prev => ({ ...prev, date }))
+                      }}
                     />
                   </div>
                   {previewFees && tradeForm.shares && tradeForm.price && (
                     <Text className={s.feeHint}>
                       预估成交额 {formatCompactNumberForMarket(stockRef?.market, estimateTradeAmount(Number(tradeForm.shares), Number(tradeForm.price)))}
                       {' · '}
-                      费用约 {previewFees.totalFee.toFixed(2)}（佣金+过户{tradeForm.side === 'sell' ? '+印花税' : ''}）
+                      费用约 {previewFees.totalFee.toFixed(2)}
+                      {ledgerKind === 'exchange'
+                        ? `（佣金+过户${tradeForm.side === 'sell' ? '+印花税' : ''}）`
+                        : `（${tradeForm.side === 'buy' ? '申购' : '赎回'}费）`}
                     </Text>
+                  )}
+                  {isOtcFund && tradeForm.shares && tradeForm.price && (
+                    <Text className={s.feeHint}>
+                      按 {tradeForm.date || todayTradeDate()} 单位净值 {tradeForm.price} 记账
+                    </Text>
+                  )}
+                  {isExchangeLedger && tradeForm.shares && tradeForm.price && !isOtcFund && (
+                    <Text className={s.feeHint}>
+                      按 {tradeForm.date || todayTradeDate()} 收盘价 {tradeForm.price} 记账
+                    </Text>
+                  )}
+                  <button
+                    type="button"
+                    className={mergeClasses(s.feeToggle, 'opptrix-focusable')}
+                    onClick={() => setFeePanelOpen(prev => !prev)}
+                  >
+                    {feePanelOpen ? '收起费率设置' : '为本标的设置费率'}
+                  </button>
+                  {feePanelOpen && stockRef && (
+                    <PortfolioFeeEditor
+                      ledgerKind={ledgerKind}
+                      globalFees={globalFees}
+                      overrides={feeOverrides}
+                      onChange={handleFeeOverridesChange}
+                    />
                   )}
                   <OpptrixButton
                     className={s.tradeFullRow}
                     variant="primary"
                     block
-                    disabled={submitting || !tradeForm.shares || !tradeForm.price}
+                    disabled={
+                      submitting
+                      || !tradeForm.shares
+                      || !tradeForm.price
+                      || (isOtcFund && loadingFundNav)
+                      || (isExchangeLedger && loadingKline && !tradeForm.price)
+                    }
                     onClick={() => void handleSubmitTrade()}
                   >
                     {submitting ? '提交中…' : '添加记录'}
@@ -761,7 +925,7 @@ export default function FollowStockDialog({
                             {t.tradeSide === 'buy' ? '买' : '卖'}
                           </Badge>
                           <div className={s.tradeMain}>
-                            <span>{t.tradeDate} · {t.shares} 股 @ {t.price.toFixed(2)}</span>
+                            <span>{t.tradeDate} · {t.shares} {positionUnit} @ {t.price.toFixed(2)}</span>
                             <span className={s.sub}>
                               成交额 {formatCompactNumberForMarket(stockRef?.market, t.amount)} · 费用 {t.totalFee.toFixed(2)}
                             </span>

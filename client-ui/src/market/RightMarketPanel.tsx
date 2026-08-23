@@ -343,9 +343,10 @@ function RightMarketPanel({
     : null
 
   const detailRef = detailStock ? resolveWatchlistInstrument(detailStock) : null
-  const detailHoldingKey = detailStock && detailRef
-    ? portfolioHoldingsKey(detailStock.code, detailRef.market)
-    : ''
+  const detailHolding = detailStock && detailRef
+    ? holdingsByCode[portfolioHoldingsKey(detailStock.code, detailRef.market)]
+      ?? holdingsByCode[instrumentKey(detailRef)]
+    : null
 
   const handleDetailManage = useCallback(() => {
     const current = detailStockRef.current
@@ -512,7 +513,11 @@ function RightMarketPanel({
           />
         </div>
         {tab === 'detail' && detailStock && detailKind === 'cn-fund' ? (
-          <FundDetailTab stock={detailStock} />
+          <FundDetailTab
+            stock={detailStock}
+            isHolding={(detailHolding?.shares ?? 0) > 0}
+            onManage={handleDetailManage}
+          />
         ) : tab === 'detail' && detailStock && detailKind === 'cn-etf' ? (
           <EtfDetailTab stock={detailStock} />
         ) : tab === 'detail' && detailStock && detailKind === 'crypto' ? (
@@ -533,8 +538,8 @@ function RightMarketPanel({
         ) : tab === 'detail' && detailStock && detailKind === 'cn-equity' ? (
           <StockDetailTab
             stock={detailStock}
-            isHolding={detailHoldingKey ? (holdingsByCode[detailHoldingKey]?.shares ?? 0) > 0 : false}
-            holding={detailHoldingKey ? holdingsByCode[detailHoldingKey] ?? null : null}
+            isHolding={(detailHolding?.shares ?? 0) > 0}
+            holding={detailHolding ?? null}
             onManage={handleDetailManage}
             onDiscussInChat={onDiscussInChat}
           />
@@ -564,6 +569,7 @@ function RightMarketPanel({
             await refreshHoldings()
             return rows
           }}
+          onFeesRecalculated={() => void refreshHoldings()}
         />
       </div>
     </div>

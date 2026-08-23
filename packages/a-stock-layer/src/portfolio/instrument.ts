@@ -1,5 +1,5 @@
 import type { InstrumentRef, Market } from '@opptrix/shared'
-import { instrumentRefKey, normalizeInstrumentRef } from '@opptrix/shared'
+import { instrumentRefKey, normalizeInstrumentRef, parseCanonicalInstrumentInput } from '@opptrix/shared'
 import { normalizeCode } from '../utils/helpers.js'
 import { normalizeHkEquityCode } from '../utils/hk-market.js'
 import { normalizeUsSymbol } from '../utils/us-market.js'
@@ -24,6 +24,9 @@ export function normalizePortfolioSymbol(code: string, market: Market): string {
 }
 
 export function portfolioInstrumentRef(code: string, market?: Market): InstrumentRef {
+  const trimmed = code.trim()
+  const parsed = parseCanonicalInstrumentInput(trimmed)
+  if (parsed) return normalizeInstrumentRef(parsed)
   const m = inferPortfolioMarket(code, market)
   const symbol = normalizePortfolioSymbol(code, m)
   if (m === 'CN') return legacyToInstrument(symbol)

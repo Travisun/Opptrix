@@ -24,6 +24,7 @@ import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
+import PortfolioFeeSettingsSection from './settings/PortfolioFeeSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -753,6 +754,9 @@ function SettingsPageView({
 
       case 'python':
         return <PythonEnvironmentSettingsSection />
+
+      case 'portfolio_fees':
+        return <PortfolioFeeSettingsSection />
 
       case 'translation':
         return <TranslationSettingsSection />

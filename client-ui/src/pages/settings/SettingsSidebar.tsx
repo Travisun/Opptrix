@@ -16,6 +16,7 @@ import {
   ShieldRegular,
   CalendarClockRegular,
   BookOpenRegular,
+  CalculatorRegular,
   ArrowSyncRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
@@ -40,8 +41,10 @@ export type { SettingsSection } from './settingsTypes'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
-  // 基础与核心能力
+  // 基础与持仓
   { id: 'general', label: '常规', icon: SettingsRegular },
+  { id: 'portfolio_fees', label: '组合费率', icon: CalculatorRegular },
+  // 核心能力
   { id: 'models', label: '大模型', icon: BotRegular },
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
   // 内容与阅读
@@ -479,6 +482,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '管理定时智能体任务与受控脚本'
     case 'python':
       return '查看 Python 状态、配置镜像源与安装选项'
+    case 'portfolio_fees':
+      return '持仓默认佣金、印花税与申赎费'
     case 'about':
       return '版本信息与法律说明'
     default:

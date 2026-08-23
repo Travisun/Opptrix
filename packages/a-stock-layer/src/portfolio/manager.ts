@@ -1,23 +1,17 @@
 import type { InstrumentRef, Market } from '@opptrix/shared'
+import { resolveInstrumentQuotePrice } from '@opptrix/shared'
 import type { AshareEngine } from '../engine.js'
-import type { FeeConfig, HoldingPosition, PnLSummary, TradeRecord, TradeSide } from './models.js'
+import type { HoldingPosition, PnLSummary, TradeRecord, TradeSide } from './trade-models.js'
+import {
+  calcFeesFromSettings,
+  resolvePortfolioLedgerKind,
+} from './models.js'
 import {
   portfolioDisplayCode,
   portfolioInstrumentRef,
   portfolioLedgerKey,
 } from './instrument.js'
 import { PortfolioStore } from './store.js'
-
-function calcFees(amount: number, side: TradeSide, cfg: FeeConfig) {
-  const commission = Math.max(amount * cfg.commissionRate, cfg.commissionMin)
-  const stampDuty = side === 'sell' ? amount * cfg.stampDutyRate : 0
-  const transferFee = amount * cfg.transferFeeRate
-  return {
-    commission: Math.round(commission * 100) / 100,
-    stampDuty: Math.round(stampDuty * 100) / 100,
-    transferFee: Math.round(transferFee * 100) / 100,
-  }
-}
 
 function calcPnlForStock(trades: TradeRecord[], currentPrice: number): HoldingPosition {
   let shares = 0
@@ -68,17 +62,6 @@ export class PortfolioManager {
 
   constructor(private engine?: AshareEngine) {}
 
-  private feeConfig(code: string, market?: Market): FeeConfig {
-    const global = this.store.getConfig()
-    const stock = this.store.getStockConfig(code, market)
-    return {
-      commissionRate: stock.commissionRate ?? global.commissionRate,
-      commissionMin: stock.commissionMin ?? global.commissionMin,
-      stampDutyRate: stock.stampDutyRate ?? global.stampDutyRate,
-      transferFeeRate: stock.transferFeeRate ?? global.transferFeeRate,
-    }
-  }
-
   private equityRef(code: string, market?: Market): InstrumentRef {
     return portfolioInstrumentRef(code, market)
   }
@@ -100,12 +83,56 @@ export class PortfolioManager {
     try {
       const r = await this.engine.queryInstrumentData(ref, 'realtime')
       const rows = 'data' in r && Array.isArray(r.data) ? r.data : []
-      const row = rows[0] as { price?: unknown } | undefined
-      const price = row?.price
-      return price != null && Number.isFinite(Number(price)) ? Number(price) : null
+      const row = rows[0] as Record<string, unknown> | undefined
+      const price = row ? resolveInstrumentQuotePrice(row) : null
+      return price != null && Number.isFinite(price) ? price : null
     } catch {
       return null
     }
+  }
+
+  private tradeFees(
+    code: string,
+    market: Market | undefined,
+    amount: number,
+    side: TradeSide,
+  ) {
+    const ref = this.equityRef(code, market)
+    const overrides = this.store.getInstrumentFees(code, market)
+    const ledgerKind = overrides.ledgerKind ?? resolvePortfolioLedgerKind(ref)
+    return calcFeesFromSettings(
+      ledgerKind,
+      amount,
+      side,
+      this.store.getGlobalFees(),
+      overrides,
+    )
+  }
+
+  getGlobalFees() {
+    return this.store.getGlobalFees()
+  }
+
+  setGlobalFees(globalFees: import('@opptrix/shared').PortfolioGlobalFees) {
+    return this.store.setGlobalFees(globalFees)
+  }
+
+  getInstrumentFees(code: string, market?: Market) {
+    const ref = this.equityRef(code, market)
+    const overrides = this.store.getInstrumentFees(code, market)
+    return {
+      ledgerKind: overrides.ledgerKind ?? resolvePortfolioLedgerKind(ref),
+      overrides,
+      globalFees: this.store.getGlobalFees(),
+    }
+  }
+
+  setInstrumentFees(
+    code: string,
+    overrides: import('@opptrix/shared').InstrumentFeeOverrides,
+    market?: Market,
+  ) {
+    return this.store.setInstrumentFees(code, market, overrides)
   }
 
   async buy(
@@ -120,9 +147,8 @@ export class PortfolioManager {
     const displayCode = portfolioDisplayCode(code, ref.market)
     const tradeDate = date || new Date().toISOString().slice(0, 10)
     const amount = Math.round(shares * price * 100) / 100
-    const fees = calcFees(amount, 'buy', this.feeConfig(displayCode, ref.market))
+    const fees = this.tradeFees(code, market, amount, 'buy')
     const stockName = await this.resolveName(ref, name)
-    const totalFee = fees.commission + fees.stampDuty + fees.transferFee
     const id = this.store.addTrade({
       code: displayCode,
       market: ref.market,
@@ -134,7 +160,7 @@ export class PortfolioManager {
       commission: fees.commission,
       stampDuty: fees.stampDuty,
       transferFee: fees.transferFee,
-      totalFee: Math.round(totalFee * 100) / 100,
+      totalFee: fees.totalFee,
       tradeDate,
     })
     return {
@@ -162,9 +188,8 @@ export class PortfolioManager {
     const displayCode = portfolioDisplayCode(code, ref.market)
     const tradeDate = date || new Date().toISOString().slice(0, 10)
     const amount = Math.round(shares * price * 100) / 100
-    const fees = calcFees(amount, 'sell', this.feeConfig(displayCode, ref.market))
+    const fees = this.tradeFees(code, market, amount, 'sell')
     const stockName = await this.resolveName(ref, name)
-    const totalFee = fees.commission + fees.stampDuty + fees.transferFee
     const id = this.store.addTrade({
       code: displayCode,
       market: ref.market,
@@ -176,7 +201,7 @@ export class PortfolioManager {
       commission: fees.commission,
       stampDuty: fees.stampDuty,
       transferFee: fees.transferFee,
-      totalFee: Math.round(totalFee * 100) / 100,
+      totalFee: fees.totalFee,
       tradeDate,
     })
     return {

@@ -15,6 +15,8 @@ import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPriceForMarket, pctTone, portfolioHoldingsKey, resolveDisplayStockName, hasCjkText } from './format'
+import { unifiedQuoteToMarketQuote } from './instrument-adapters'
+import { followReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, hitToWatchlistItem, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
@@ -461,18 +463,19 @@ export default function WatchlistTab({
             code: q.code,
             name: q.name,
           })
+          const mq = unifiedQuoteToMarketQuote(q)
           const code = displayCodeFromInstrument(itemRef)
-          const rowKey = watchlistItemKey({ code, name: q.name, instrument: itemRef })
+          const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
           const quote: MarketQuote = {
             code,
-            name: q.name ?? code,
-            price: q.price ?? null,
-            changePct: q.change_pct ?? null,
-            pe: q.pe ?? null,
-            pb: q.pb ?? null,
-            turnoverRate: q.turnover_rate ?? null,
-            volume: q.volume ?? null,
-            amount: q.amount ?? null,
+            name: mq.name ?? code,
+            price: mq.price ?? null,
+            changePct: mq.changePct ?? null,
+            pe: mq.pe ?? null,
+            pb: mq.pb ?? null,
+            turnoverRate: mq.turnoverRate ?? null,
+            volume: mq.volume ?? null,
+            amount: mq.amount ?? null,
           }
           patch[code] = quote
           patch[rowKey] = quote
@@ -555,7 +558,9 @@ export default function WatchlistTab({
   useEffect(() => {
     for (const item of items) {
       if (item.addedPrice != null || patchedRef.current.has(item.code)) continue
-      const price = quotes[item.code]?.price ?? quotes[watchlistItemKey(item)]?.price
+      const price = quotes[item.code]?.price
+        ?? quotes[watchlistItemKey(item)]?.price
+        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
       if (price == null) continue
       patchedRef.current.add(item.code)
       onPatchItem(item.code, {
@@ -567,7 +572,9 @@ export default function WatchlistTab({
 
   useEffect(() => {
     for (const item of items) {
-      const qName = quotes[item.code]?.name ?? quotes[watchlistItemKey(item)]?.name
+      const qName = quotes[item.code]?.name
+        ?? quotes[watchlistItemKey(item)]?.name
+        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.name
       const itemKey = watchlistItemKey(item)
       const rName = radar[itemKey]?.name ?? radar[instrumentKey(resolveWatchlistInstrument(item))]?.name
       const resolved = resolveDisplayStockName(item.code, qName, rName, item.name)
@@ -725,10 +732,16 @@ export default function WatchlistTab({
         )}
         {filteredItems.map(item => {
           const ref = resolveWatchlistInstrument(item)
-          const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)]
+          const quoteKey = instrumentKey(ref)
+          const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
           const holding = holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]
+            ?? holdingsByCode[instrumentKey(ref)]
           const isHolding = (holding?.shares ?? 0) > 0
-          const dayTone = pctTone(quote?.changePct)
+          const followPct = item.addedPrice != null && item.addedPrice > 0
+            ? followReturnPct(quote?.price, item.addedPrice)
+            : null
+          const displayPct = followPct != null ? followPct : (quote?.changePct ?? null)
+          const dayTone = pctTone(displayPct)
           const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
           const radarLine = formatWatchlistRadarLine(
             item,
@@ -778,7 +791,7 @@ export default function WatchlistTab({
                   <span className={s.quotePrimary}>
                     <span className={s.metricPrice}>{formatPriceForMarket(ref.market, quote?.price ?? null)}</span>
                     <span className={mergeClasses(dayTone === 'up' && s.pctUp, dayTone === 'down' && s.pctDown, dayTone === 'flat' && s.pctFlat)}>
-                      {formatPct(quote?.changePct ?? null, 1)}
+                      {formatPct(displayPct, 1)}
                     </span>
                   </span>
                 </div>

@@ -21,6 +21,7 @@ import {
 export type InstrumentRouteHandlers = {
   stockDetail: (ref: InstrumentRef) => Promise<ResearchResult>
   etfSnapshot: (ref: InstrumentRef) => Promise<ResearchResult>
+  fundSnapshot: (ref: InstrumentRef) => Promise<ResearchResult>
   usSnapshot: (symbol: string) => Promise<ResearchResult>
   regionalSnapshot: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoSnapshot: (pair: string) => Promise<ResearchResult>
@@ -119,6 +120,9 @@ export async function routeInstrumentSnapshot(
   if (ref.market === 'CN' && ref.assetClass === 'ETF') {
     return wrapSnapshot(ref, await handlers.etfSnapshot(ref), handlers)
   }
+  if (ref.market === 'CN' && ref.assetClass === 'FUND') {
+    return wrapSnapshot(ref, await handlers.fundSnapshot(ref), handlers)
+  }
   if (ref.market === 'CN') {
     return wrapSnapshot(ref, await handlers.stockDetail(ref), handlers)
   }
@@ -155,7 +159,9 @@ export async function routeInstrumentQuotes(
   if (!refs.length) return fail('instruments 必填')
 
   const quotes: UnifiedInstrumentQuote[] = []
-  const cnRefs = refs.filter(r => r.market === 'CN' && r.assetClass !== 'ETF')
+  const cnRefs = refs.filter(
+    r => r.market === 'CN' && r.assetClass !== 'ETF' && r.assetClass !== 'FUND',
+  )
   if (cnRefs.length) {
     const resp = await handlers.stockQuotes(cnRefs)
     if (resp.success && resp.data && typeof resp.data === 'object') {
@@ -198,6 +204,14 @@ export async function routeInstrumentQuotes(
         const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
         const row = findQuoteRowForRef(rows, ref)
         if (row) quotes.push(quoteFromProviderRow(ref, row, 'mixed'))
+      }
+    }
+    if (ref.market === 'CN' && ref.assetClass === 'FUND') {
+      const resp = await handlers.stockQuotes([ref])
+      if (resp.success && resp.data && typeof resp.data === 'object') {
+        const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
+        const row = findQuoteRowForRef(rows, ref)
+        if (row) quotes.push(quoteFromProviderRow(ref, row, handlers.localInsights?.(ref) ? 'mixed' : 'live'))
       }
     }
   }

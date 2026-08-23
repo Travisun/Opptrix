@@ -119,6 +119,83 @@ export function isCnEtfCode(code: string): boolean {
   return false
 }
 
+/** 场内上市基金代码段（ETF / LOF 等）— 与 @opptrix/a-stock-layer fund-instrument 对齐 */
+export function isCnListedFundSymbol(code: string): boolean {
+  let raw = String(code ?? '').trim().toUpperCase()
+  const ns = /^CN:(?:PF|OF)[.:](\d{6})$/.exec(raw)
+  if (ns) raw = ns[1]!
+  raw = raw.replace(/\.(OF|SH|SZ|BJ|PF)$/i, '').replace(/\D/g, '')
+  if (raw.length > 6) raw = raw.slice(-6)
+  const c = raw.padStart(6, '0')
+  if (!/^\d{6}$/.test(c)) return false
+  const head2 = c.slice(0, 2)
+  if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return true
+  if (c.startsWith('159') || isCnLofSymbol(c)) return true
+  return false
+}
+
+/** 场内 LOF（16xxxx，不含 159xxx ETF 段） */
+export function isCnLofSymbol(code: string): boolean {
+  let raw = String(code ?? '').trim().toUpperCase()
+  const ns = /^CN:(?:PF|OF)[.:](\d{6})$/.exec(raw)
+  if (ns) raw = ns[1]!
+  raw = raw.replace(/\.(OF|SH|SZ|BJ|PF)$/i, '').replace(/\D/g, '')
+  if (raw.length > 6) raw = raw.slice(-6)
+  const c = raw.padStart(6, '0')
+  if (!/^\d{6}$/.test(c)) return false
+  return c.startsWith('16') && !c.startsWith('159')
+}
+
+/** 按成交日取不晚于该日的最近单位净值（场外/场内基金持仓记账） */
+export function resolveFundNavOnDate(
+  rows: Array<{ date: string; nav?: number | null }>,
+  date: string,
+): number | null {
+  const target = date.slice(0, 10)
+  if (!target || !rows.length) return null
+  let bestDate = ''
+  let bestNav: number | null = null
+  for (const row of rows) {
+    const d = row.date?.slice(0, 10)
+    if (!d || d > target) continue
+    const nav = row.nav
+    if (nav == null || !Number.isFinite(nav)) continue
+    if (!bestDate || d > bestDate) {
+      bestDate = d
+      bestNav = nav
+    }
+  }
+  return bestNav
+}
+
+/** 按成交日取当日收盘价（场内 ETF / 场内基金） */
+export function resolveCloseOnDate(
+  bars: Array<{ date: string; close?: number | null }>,
+  date: string,
+): number | null {
+  const target = date.slice(0, 10)
+  if (!target || !bars.length) return null
+  for (const bar of bars) {
+    const d = bar.date?.slice(0, 10)
+    if (d !== target) continue
+    const close = bar.close
+    if (close != null && Number.isFinite(close)) return close
+  }
+  let bestDate = ''
+  let bestClose: number | null = null
+  for (const bar of bars) {
+    const d = bar.date?.slice(0, 10)
+    if (!d || d > target) continue
+    const close = bar.close
+    if (close == null || !Number.isFinite(close)) continue
+    if (!bestDate || d > bestDate) {
+      bestDate = d
+      bestClose = close
+    }
+  }
+  return bestClose
+}
+
 export function hasCjkText(value: string | null | undefined): boolean {
   return Boolean(value && /[\u4e00-\u9fff]/.test(value))
 }

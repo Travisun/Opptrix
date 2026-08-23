@@ -12,6 +12,7 @@ import {
   pctTone,
 } from './format'
 import TradingViewChart from './TradingViewChart'
+import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import {
   normalizeWatchlistItem,
   resolveWatchlistInstrument,
@@ -142,11 +143,11 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   chartPanel: {
-    flex: 1,
-    minHeight: 0,
+    flexShrink: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX}px`,
+    minHeight: '200px',
     padding: `4px ${CONTENT_PAD} 8px`,
-    overflowY: 'auto',
-    overflowX: 'hidden',
+    overflow: 'hidden',
   },
   foot: {
     flexShrink: 0,

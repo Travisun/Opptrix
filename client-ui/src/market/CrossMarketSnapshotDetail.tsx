@@ -20,6 +20,7 @@ import {
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import TradingViewChart from './TradingViewChart'
+import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
@@ -156,11 +157,11 @@ const useStyles = makeStyles({
     padding: `8px ${CONTENT_PAD} 10px`,
   },
   chartPanel: {
-    flex: 1,
-    minHeight: 0,
+    flexShrink: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX}px`,
+    minHeight: '200px',
     padding: `4px ${CONTENT_PAD} 8px`,
-    overflowY: 'auto',
-    overflowX: 'hidden',
+    overflow: 'hidden',
   },
   card: {
     display: 'flex',

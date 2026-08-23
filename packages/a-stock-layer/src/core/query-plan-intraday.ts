@@ -11,7 +11,7 @@ type IntradayDriver = {
   minuteTrendKline?: (c: string, ndays?: number, count?: number) => Promise<StockKline[] | null>
 }
 
-/** Intraday sessions — licensed + 在线 fallback（sinafinance / 腾讯 minuteTrendKline） */
+/** Intraday sessions — 仅走已注册 Provider 的 INTRADAY_TICK / minuteTrendKline */
 export async function executeIntradaySessionsPlan(
   registry: DriverRegistry,
   code: string,
@@ -28,15 +28,15 @@ export async function executeIntradaySessionsPlan(
     return { success: true, data: licensed, source: licensed.source ?? 'unknown' }
   }
 
-  const online = await fetchIntradaySessionsFromDrivers(
-    ['sinafinance', 'tencent'].map(id => registry.get(id)).filter(Boolean) as IntradayDriver[],
+  const minuteOnly = await fetchIntradaySessionsFromDrivers(
+    registry.getProvidersWithFallback('CN', 'EQUITY', Capability.STOCK_KLINE) as IntradayDriver[],
     code,
     1,
     market,
     { minuteFallbackOnly: true },
   )
-  if (online) {
-    return { success: true, data: online, source: online.source ?? 'unknown' }
+  if (minuteOnly) {
+    return { success: true, data: minuteOnly, source: minuteOnly.source ?? 'unknown' }
   }
 
   return {

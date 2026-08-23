@@ -12,10 +12,12 @@ export type SettingsSection =
   | 'translation'
   | 'doc_library'
   | 'multimodal'
+  | 'portfolio_fees'
   | 'about'
 
 const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'general',
+  'portfolio_fees',
   'models',
   'data_providers',
   'news_feed',

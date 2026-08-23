@@ -1905,6 +1905,40 @@ app.get('/api/portfolio/summary', async () => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.get('/api/portfolio/fees/global', async () => {
+  const r = await hub.dispatch('portfolio_fee_global', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.put<{ Body: { globalFees?: unknown } }>('/api/portfolio/fees/global', async (req, reply) => {
+  const r = await hub.dispatch('portfolio_fee_global_save', { globalFees: req.body?.globalFees })
+  if (!r.success) return reply.code(400).send({ error: r.message })
+  return { success: true, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { code?: string; market?: string } }>('/api/portfolio/fees/instrument', async (req, reply) => {
+  const code = String(req.query?.code ?? '').trim()
+  if (!code) return reply.code(400).send({ error: 'code required' })
+  const market = req.query?.market?.trim() || undefined
+  const r = await hub.dispatch('portfolio_fee_instrument', { code, market })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.put<{ Body: { code?: string; market?: string; overrides?: unknown } }>(
+  '/api/portfolio/fees/instrument',
+  async (req, reply) => {
+    const code = String(req.body?.code ?? '').trim()
+    if (!code) return reply.code(400).send({ error: 'code required' })
+    const r = await hub.dispatch('portfolio_fee_instrument_save', {
+      code,
+      market: req.body?.market,
+      overrides: req.body?.overrides,
+    })
+    if (!r.success) return reply.code(400).send({ error: r.message })
+    return { success: true, data: r.data, message: r.message }
+  },
+)
+
 app.get('/api/watchlist', async () => {
   const r = await hub.dispatch('watchlist_list', {})
   return { success: r.success, data: r.data, message: r.message }

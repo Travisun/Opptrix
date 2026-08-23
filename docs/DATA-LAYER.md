@@ -1035,7 +1035,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 **已注册**（`register.ts`）：tonghuashun、tushare、tickflow、zzshare、baostock、stockindex、binance、okx。
 
-**已移除内置注册**（源码目录保留，不参与路由）：tencent、sinafinance、eastmoney、akshare。
+**已移除内置注册**（实现与注册均已删除）：tencent、sinafinance、eastmoney、akshare、webfeed。
 
 | 影响域 | 降级说明 |
 |--------|----------|

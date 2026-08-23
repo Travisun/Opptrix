@@ -461,11 +461,8 @@ packages/a-stock-layer/src/providers/
 ├── zzshare/                 # 自在量化 Provider
 ├── tickflow/                # TickFlow Provider
 ├── tonghuashun/             # 同花顺 Provider（CN 主路径，需扶摇 Key）
+├── tushare/                 # Tushare Pro
 ├── stockindex/              # 股票指数 Provider
-├── tencent/                 # （已移除内置注册，源码保留）
-├── sinafinance/             # （已移除内置注册，源码保留）
-├── eastmoney/               # （已移除内置注册，源码保留）
-├── akshare/                 # （已移除内置注册，源码保留）
 ├── catalog.ts               # Provider 目录服务
 ├── config-store.ts          # Provider 配置存储
 ├── installer.ts             # Provider 安装器
@@ -522,7 +519,7 @@ bindingsFor: () => []
 
 ### 5.5 内置 Provider 审计（2026-08-22）
 
-> **已移除内置注册**（源码保留）：`tencent`、`sinafinance`、`eastmoney`、`akshare`。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
+> **已移除内置注册**（实现与注册均已删除）：`tencent`、`sinafinance`、`eastmoney`、`akshare`、`webfeed`。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
 
 | Provider | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|--------|----------|----------|--------|------|

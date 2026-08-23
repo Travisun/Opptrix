@@ -499,10 +499,10 @@ export const research = {
     return toApiResponse('fund_snapshot', resp, fallback, resp.data ?? undefined)
   },
 
-  fundNav: (instrument: InstrumentRef, signal?: AbortSignal) =>
+  fundNav: (instrument: InstrumentRef, signal?: AbortSignal, limit = 500) =>
     apiCall<{ code: string; items: import('../types/market').FundNavPoint[]; source?: string }>(
-      'local_fund_nav',
-      { instrument, code: instrument.symbol },
+      'fund_nav',
+      { instrument, code: instrument.symbol, limit },
       { signal },
       20000,
     ),
@@ -1257,6 +1257,64 @@ export async function portfolioClearInstrument(code: string, market?: string) {
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/instrument?${qs}`, { method: 'DELETE' })
   if (!resp.ok) throw new Error('clear portfolio instrument failed')
   return resp.json() as Promise<{ success: boolean; removed: number }>
+}
+
+export async function portfolioFeeGlobal() {
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/fees/global`)
+  if (!resp.ok) throw new Error('portfolio fee global failed')
+  return resp.json() as Promise<{
+    success: boolean
+    data?: { globalFees: import('@opptrix/shared/portfolio-fees').PortfolioGlobalFees }
+  }>
+}
+
+export async function portfolioFeeGlobalSave(globalFees: import('@opptrix/shared/portfolio-fees').PortfolioGlobalFees) {
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/fees/global`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ globalFees }),
+  })
+  if (!resp.ok) throw new Error('portfolio fee global save failed')
+  return resp.json() as Promise<{
+    success: boolean
+    data?: { globalFees: import('@opptrix/shared/portfolio-fees').PortfolioGlobalFees; recalculatedTrades?: number }
+  }>
+}
+
+export async function portfolioFeeInstrument(code: string, market?: string) {
+  const qs = new URLSearchParams({ code: code.trim() })
+  if (market) qs.set('market', market)
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/fees/instrument?${qs}`)
+  if (!resp.ok) throw new Error('portfolio fee instrument failed')
+  return resp.json() as Promise<{
+    success: boolean
+    data?: {
+      ledgerKind: import('@opptrix/shared/portfolio-fees').PortfolioLedgerKind
+      overrides: import('@opptrix/shared/portfolio-fees').InstrumentFeeOverrides
+      globalFees: import('@opptrix/shared/portfolio-fees').PortfolioGlobalFees
+    }
+  }>
+}
+
+export async function portfolioFeeInstrumentSave(
+  code: string,
+  overrides: import('@opptrix/shared/portfolio-fees').InstrumentFeeOverrides,
+  market?: string,
+) {
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/fees/instrument`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, market, overrides }),
+  })
+  if (!resp.ok) throw new Error('portfolio fee instrument save failed')
+  return resp.json() as Promise<{
+    success: boolean
+    data?: {
+      ledgerKind: import('@opptrix/shared/portfolio-fees').PortfolioLedgerKind
+      overrides: import('@opptrix/shared/portfolio-fees').InstrumentFeeOverrides
+      recalculatedTrades?: number
+    }
+  }>
 }
 
 export async function getHealth() {

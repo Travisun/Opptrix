@@ -4,11 +4,12 @@ import { research } from '../api/client'
 import { instrumentKey, parseInstrumentInput } from './instrument'
 import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
+import { isCnListedFundSymbol } from './format'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
 import { buildChartSeries, isLineChartView, periodLabel } from './chartSeries'
 import { buildChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOptions'
-import { initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
+import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX, initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
 import { isLineChartPaneLabel } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
 import CyqProfileStrip from './CyqProfileStrip'
@@ -27,10 +28,11 @@ const useStyles = makeStyles({
     minHeight: 0,
   },
   rootExpanded: {
-    flex: 1,
+    flex: '0 1 auto',
     minHeight: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX}px`,
     width: '100%',
-    height: '100%',
+    height: 'auto',
   },
   toolbar: {
     display: 'flex',
@@ -90,8 +92,9 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   chartAreaExpanded: {
-    flex: 1,
+    flex: '0 1 auto',
     minHeight: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX - 48}px`,
     width: '100%',
     overflow: 'hidden',
   },
@@ -116,8 +119,9 @@ const useStyles = makeStyles({
   chartFrameExpanded: {
     display: 'flex',
     flexDirection: 'column',
-    flex: 1,
+    flex: '0 1 auto',
     minHeight: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX - 56}px`,
   },
   chartOverlay: {
     position: 'absolute',
@@ -135,14 +139,14 @@ const useStyles = makeStyles({
     '& > :first-child': { borderTop: 'none' },
   },
   chartStackExpanded: {
-    flex: 1,
+    flex: '0 1 auto',
     minHeight: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX - 72}px`,
     display: 'flex',
     flexDirection: 'column',
   },
   paneRowExpanded: {
-    flex: 1,
-    minHeight: 0,
+    flexShrink: 0,
   },
   paneRow: {
     display: 'flex',
@@ -173,7 +177,7 @@ const useStyles = makeStyles({
     '& [class*="attribution"]': { display: 'none !important', opacity: '0 !important' },
   },
   paneMain: { height: '148px' },
-  paneMainExpanded: { flex: 1, minHeight: '120px' },
+  paneMainExpanded: { height: '252px', minHeight: '180px', flexShrink: 0 },
   paneVol: { height: '38px' },
   paneVolExpanded: { height: '46px', flexShrink: 0 },
   paneMacd: { height: '36px' },
@@ -295,10 +299,14 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
   )
   const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
     && hasApplicationCapability(instrumentRef, 'chart_daily')
+  const listedCnFundChart = instrumentRef.market === 'CN'
+    && instrumentRef.assetClass === 'FUND'
+    && isCnListedFundSymbol(instrumentRef.symbol)
   const cnEquityChart = instrumentRef.market === 'CN'
     && (instrumentRef.assetClass === 'EQUITY'
       || instrumentRef.assetClass === 'INDEX'
-      || instrumentRef.assetClass === 'ETF')
+      || instrumentRef.assetClass === 'ETF'
+      || listedCnFundChart)
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
   const canChart = cnEquityChart || crossMarketChart

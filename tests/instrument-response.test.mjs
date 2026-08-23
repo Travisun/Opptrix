@@ -18,6 +18,26 @@ test('quoteFromProviderRow normalizes camelCase provider row', () => {
   assert.equal(q.market, 'US')
 })
 
+test('quoteFromProviderRow maps fund unitNav to price', () => {
+  const q = quoteFromProviderRow(
+    { market: 'CN', assetClass: 'FUND', symbol: '000001', exchange: 'PF' },
+    { name: '华夏成长', unitNav: 1.2345, prevNav: 1.22, changePct: 1.02 },
+  )
+  assert.equal(q.code, 'CN:PF.000001')
+  assert.equal(q.price, 1.2345)
+  assert.equal(q.pre_close, 1.22)
+  assert.equal(q.change_pct, 1.02)
+  assert.equal(q.asset_class, 'FUND')
+})
+
+test('quoteFromProviderRow derives 0% change when price equals pre_close', () => {
+  const q = quoteFromProviderRow(
+    { market: 'CN', assetClass: 'FUND', symbol: '000001', exchange: 'PF' },
+    { name: '华夏成长', unitNav: 1.22, prevNav: 1.22 },
+  )
+  assert.equal(q.change_pct, 0)
+})
+
 test('quoteFromProviderRow preserves extended CN quote fields', () => {
   const q = quoteFromProviderRow(
     { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },

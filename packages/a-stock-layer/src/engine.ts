@@ -62,6 +62,7 @@ import { WatchlistManager } from './watchlist/manager.js'
 import { watchlistItemKey } from './watchlist/instrument.js'
 import { instrumentId } from './core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from './utils/helpers.js'
+import { isCnListedFundSymbol } from './core/fund-instrument.js'
 
 import {
   normalizePreOpenRealtimeQuote,
@@ -701,7 +702,44 @@ export class MarketDataEngine {
   }
 
   fundNav(fundCode: string) {
-    return this.qScoped('CN', 'FUND', Capability.FUND_NAV, 'fundNav', true, fundCode)
+    const code = normalizeCode(fundCode)
+    return this.fundNavWithDepthFallback(code)
+  }
+
+  /** 净值序列过短时尝试其他已注册 Provider（扶摇默认仅 1 条时需 Tushare 等补齐） */
+  private async fundNavWithDepthFallback(
+    code: string,
+  ): Promise<QueryResult<Record<string, unknown>[]>> {
+    const MIN_NAV_ROWS = 20
+    const primary = await this.qScoped<Record<string, unknown>>(
+      'CN', 'FUND', Capability.FUND_NAV, 'fundNav', true, code,
+    )
+    if (primary.success && (primary.data?.length ?? 0) >= MIN_NAV_ROWS) return primary
+
+    const tried = new Set<string>()
+    if (primary.source) tried.add(primary.source)
+
+    let best: QueryResult<Record<string, unknown>[]> = primary
+    const drivers = this.registry.getProvidersWithFallback('CN', 'FUND', Capability.FUND_NAV)
+    for (const driver of drivers) {
+      if (tried.has(driver.name)) continue
+      tried.add(driver.name)
+      const fn = (driver as unknown as Record<string, unknown>).fundNav as
+        | ((c: string) => Promise<Record<string, unknown>[] | null>)
+        | undefined
+      if (!fn) continue
+      try {
+        const rows = await fn.call(driver, code)
+        if (!rows?.length) continue
+        if (!best.success || rows.length > (best.data?.length ?? 0)) {
+          best = { success: true, data: rows, source: driver.name }
+        }
+        if (rows.length >= MIN_NAV_ROWS) break
+      } catch {
+        /* try next provider */
+      }
+    }
+    return best
   }
 
   fundHoldings(fundCode: string) {
@@ -709,39 +747,100 @@ export class MarketDataEngine {
   }
 
   fundQuote(fundCode: string) {
-    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, fundCode)
+    const code = normalizeCode(fundCode)
+    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, code)
+      .then(result => this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>))
+  }
+
+  /** 场内基金 fundQuote 失败时，回退 A 股实时行情（交易所价） */
+  private async listedFundQuoteFallback(
+    code: string,
+    primary: QueryResult<Record<string, unknown>[]>,
+  ): Promise<QueryResult<Record<string, unknown>[]>> {
+    if (primary.success && primary.data?.length) return primary
+    if (!isCnListedFundSymbol(code)) return primary
+    const rt = await this.realtime(code, resolveStockMarketCode(code))
+    const row = rt.data?.[0]
+    if (!rt.success || !row) return primary
+    return {
+      success: true,
+      data: [{
+        code,
+        name: row.name,
+        price: row.price,
+        exchangePrice: row.price,
+        changePct: row.changePct,
+        change: row.change,
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        preClose: row.preClose,
+        volume: row.volume,
+        amount: row.amount,
+        exchangeVolume: row.volume,
+        exchangeAmount: row.amount,
+        source: rt.source,
+      }],
+      source: rt.source,
+    }
   }
 
   async fundSnapshot(fundCode: string) {
     const code = normalizeCode(fundCode)
-    // 右侧面板仅展示最新净值与档案字段，一次 fundProfile 即可（内含 lsjz 首条）
-    const profile = await this.fundProfile(code)
+    const listed = isCnListedFundSymbol(code)
+    const [profile, quoteRes] = await Promise.all([
+      this.fundProfile(code),
+      listed ? this.fundQuote(code) : Promise.resolve(null),
+    ])
     const profileRow = profile.data?.[0] as Record<string, unknown> | undefined
-    const latestNav = profileRow
+    const quoteRow = quoteRes?.success
+      ? quoteRes.data?.[0] as Record<string, unknown> | undefined
+      : undefined
+    const success = profile.success || (listed && quoteRes?.success && quoteRow)
+    if (!success) {
+      return {
+        success: false,
+        data: null,
+        source: profile.source,
+      }
+    }
+    const mergedProfile = profileRow ?? (quoteRow
       ? {
-          date: String(profileRow.navDate ?? '').slice(0, 10),
-          nav: profileRow.unitNav,
-          accNav: profileRow.accNav,
-          changePct: profileRow.changePct,
+          code,
+          name: quoteRow.name,
+          unitNav: quoteRow.unitNav,
+          accNav: quoteRow.accNav,
+          changePct: quoteRow.changePct,
+          navDate: quoteRow.navDate,
+        }
+      : null)
+    const navSource = mergedProfile ?? quoteRow
+    const latestNav = navSource
+      ? {
+          date: String(navSource.navDate ?? '').slice(0, 10),
+          nav: navSource.unitNav,
+          accNav: navSource.accNav,
+          changePct: navSource.changePct,
         }
       : null
+    const quote = quoteRow ?? (profileRow
+      ? {
+          unitNav: profileRow.unitNav,
+          accNav: profileRow.accNav,
+          changePct: profileRow.changePct,
+          navDate: profileRow.navDate,
+          name: profileRow.name,
+        }
+      : null)
     return {
-      success: profile.success,
+      success: true,
       data: {
         code,
-        profile: profileRow ?? null,
+        profile: mergedProfile ?? null,
         nav: latestNav ?? null,
-        quote: profileRow
-          ? {
-              unitNav: profileRow.unitNav,
-              accNav: profileRow.accNav,
-              changePct: profileRow.changePct,
-              navDate: profileRow.navDate,
-              name: profileRow.name,
-            }
-          : null,
+        quote,
       },
-      source: profile.source,
+      source: profile.source ?? quoteRes?.source,
     }
   }
 
@@ -916,7 +1015,17 @@ export class MarketDataEngine {
           plan.args,
           15_000,
           plan.ref,
-        )
+        ).then(result => {
+          if (
+            plan.capability === Capability.FUND_QUOTE
+            && plan.market === 'CN'
+            && plan.assetClass === 'FUND'
+          ) {
+            const code = normalizeCode(String(plan.args[0] ?? ''))
+            return this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>)
+          }
+          return result
+        })
       }
       default:
         return Promise.resolve({

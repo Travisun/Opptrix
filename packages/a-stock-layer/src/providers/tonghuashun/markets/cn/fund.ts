@@ -3,6 +3,8 @@ import { FuyaoClient } from '../../api/client.js'
 import { resolveFuyaoFundRoute } from '../../api/fund-symbols.js'
 import { isTonghuashunEnabled } from '../../config.js'
 import {
+  computeEtfPremiumRate,
+  mapFundMarketSnapshotToStockRealtime,
   mapFundHoldersToProfileFields,
   mapFundHoldingsToFundRows,
   mapFundNavRowsForFund,
@@ -31,6 +33,66 @@ function msToYmd(ms: unknown): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/** 场内基金：合并交易所快照价与单位净值 */
+function mergeListedFundQuoteRow(
+  bare: string,
+  navRow: Record<string, unknown>,
+  snap: Record<string, unknown>,
+  profileName?: string,
+): Record<string, unknown> {
+  const exchange = mapFundMarketSnapshotToStockRealtime(snap, profileName ?? '')
+  const unitNav = navRow.unitNav as number | null | undefined
+  const premiumPct = computeEtfPremiumRate(exchange.price, unitNav ?? null)
+  return {
+    ...navRow,
+    code: bare,
+    name: navRow.name ?? exchange.name,
+    price: exchange.price ?? unitNav ?? navRow.price,
+    exchangePrice: exchange.price,
+    preClose: exchange.preClose ?? navRow.prevNav,
+    changePct: exchange.changePct ?? navRow.changePct,
+    change: exchange.change,
+    open: exchange.open,
+    high: exchange.high,
+    low: exchange.low,
+    volume: exchange.volume,
+    amount: exchange.amount,
+    exchangeVolume: exchange.volume,
+    exchangeAmount: exchange.amount,
+    exchangeOpen: exchange.open,
+    exchangeHigh: exchange.high,
+    exchangeLow: exchange.low,
+    premiumPct,
+    premiumRate: premiumPct,
+    source: 'tonghuashun',
+  }
+}
+
+function listedFundQuoteFromSnapshot(
+  bare: string,
+  snap: Record<string, unknown>,
+  profileName?: string,
+): Record<string, unknown> {
+  const exchange = mapFundMarketSnapshotToStockRealtime(snap, profileName ?? '')
+  return {
+    code: bare,
+    name: exchange.name,
+    price: exchange.price,
+    exchangePrice: exchange.price,
+    changePct: exchange.changePct,
+    change: exchange.change,
+    open: exchange.open,
+    high: exchange.high,
+    low: exchange.low,
+    preClose: exchange.preClose,
+    volume: exchange.volume,
+    amount: exchange.amount,
+    exchangeVolume: exchange.volume,
+    exchangeAmount: exchange.amount,
+    source: 'tonghuashun',
+  }
 }
 
 /** 同花顺 Fuyao 公募基金标准 Capability（fundProfile / fundNav / fundHoldings / fundQuote） */
@@ -69,7 +131,6 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const navData = await client.fundPerformanceNav(fundType, thscode, {
-        range: 'year',
         nav_type: 'unit,adj',
       })
       const rows = mapFundNavRowsForFund(bare, navData.item ?? [])
@@ -84,12 +145,24 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     if (!route) return null
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
-      const [navData, profileData] = await Promise.all([
+      const isListed = fundType === 'exchange'
+      const [navData, profileData, snapData] = await Promise.all([
         client.fundPerformanceNav(fundType, thscode, { nav_type: 'unit,adj' }),
         client.fundProfileDetail(fundType, thscode).catch(() => ({ item: [] })),
+        isListed
+          ? client.fundMarketSnapshot(thscode).catch(() => ({ item: [] }))
+          : Promise.resolve({ item: [] }),
       ])
       const items = navData.item ?? []
-      if (!items.length) return null
+      const snap = snapData.item?.[0]
+      const profile = profileData.item?.[0]
+      const profileName = String(profile?.fund_name ?? '').trim()
+
+      if (!items.length) {
+        if (!isListed || !snap) return null
+        return [listedFundQuoteFromSnapshot(bare, snap, profileName)]
+      }
+
       const sorted = [...items].sort((a, b) => Number(b.nav_date) - Number(a.nav_date))
       const latest = sorted[0]
       const prev = sorted[1]
@@ -98,17 +171,20 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
       const changePct = Number.isFinite(unitNav) && prevNav != null && prevNav > 0
         ? ((unitNav - prevNav) / prevNav) * 100
         : null
-      const profile = profileData.item?.[0]
-      return [{
+      const navRow: Record<string, unknown> = {
         code: bare,
-        name: String(profile?.fund_name ?? '').trim() || undefined,
+        name: profileName || undefined,
         unitNav: Number.isFinite(unitNav) ? unitNav : null,
         accNav: Number(latest.adj_nav) || null,
         prevNav: prevNav != null && Number.isFinite(prevNav) ? prevNav : null,
         changePct,
         navDate: msToYmd(latest.nav_date),
         source: 'tonghuashun',
-      }]
+      }
+      if (isListed && snap) {
+        return [mergeListedFundQuoteRow(bare, navRow, snap, profileName)]
+      }
+      return [navRow]
     })
   }
 

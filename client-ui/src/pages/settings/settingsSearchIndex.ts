@@ -129,6 +129,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },
   { section: 'python', title: '优先使用 Opptrix 托管', desc: '随应用提供的托管 Python 优先于本机环境', keywords: ['托管', '本机', '系统', '随应用'] },
 
+  // 组合费率
+  { section: 'portfolio_fees', group: '场内', title: '佣金', desc: '股票 ETF 场内基金默认佣金', keywords: ['手续费', '万2.5', '组合'] },
+  { section: 'portfolio_fees', group: '场内', title: '印花税', desc: '卖出时计入', keywords: ['税费', '组合'] },
+  { section: 'portfolio_fees', group: '场内', title: '过户费', keywords: ['交易费用', '组合'] },
+  { section: 'portfolio_fees', group: '场外', title: '申购费', desc: '场外基金买入', keywords: ['基金', '申赎', '组合'] },
+  { section: 'portfolio_fees', group: '场外', title: '赎回费', desc: '场外基金卖出', keywords: ['基金', '组合'] },
+
   // 研报库
   { section: 'doc_library', group: '研报检索', title: '语义检索', desc: '按含义查找研报与资讯；未就绪时可安装', keywords: ['语义检索', '研报检索', '语义', '安装', '研报'] },
   { section: 'doc_library', group: '研报检索', title: '扫描件文字识别', desc: '识别扫描件中的文字，便于入库与检索', keywords: ['扫描件', '文字识别', '识别', '研报'] },
@@ -166,6 +173,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   sandbox: '沙盒',
   schedule: '计划任务',
   python: 'Python',
+  portfolio_fees: '组合费率',
   about: '关于',
 }
 

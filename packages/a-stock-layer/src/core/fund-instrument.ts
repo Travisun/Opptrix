@@ -7,12 +7,18 @@ export const CN_PUBLIC_FUND_EXCHANGE = 'PF' as const
 /** @deprecated 使用 CN_PUBLIC_FUND_EXCHANGE */
 export const CN_OTC_FUND_EXCHANGE = CN_PUBLIC_FUND_EXCHANGE
 
+/** 场内 LOF（16xxxx，不含 159xxx 深证 ETF 段） */
+export function isCnLofSymbol(symbol: string): boolean {
+  const c = canonicalCnSymbol(symbol)
+  return c.length === 6 && c.startsWith('16') && !c.startsWith('159')
+}
+
 /** 场内上市基金代码段（ETF / LOF 等） */
 export function isCnListedFundSymbol(symbol: string): boolean {
   const c = canonicalCnSymbol(symbol)
   const head2 = c.slice(0, 2)
   if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return true
-  if (c.startsWith('159') || c.startsWith('16')) return true
+  if (c.startsWith('159') || isCnLofSymbol(c)) return true
   return false
 }
 

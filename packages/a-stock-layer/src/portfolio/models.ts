@@ -1,62 +1,79 @@
-import type { Market } from '@opptrix/shared'
+import type {
+  InstrumentFeeOverrides,
+  LegacyFlatFeeConfig,
+  PortfolioGlobalFees,
+  TradeSide,
+  TradeFeeBreakdown,
+} from '@opptrix/shared'
+import {
+  DEFAULT_LEGACY_FLAT_FEE_CONFIG,
+  DEFAULT_PORTFOLIO_GLOBAL_FEES,
+  calcPortfolioTradeFees,
+  legacyFlatFeesToGlobal,
+  legacyFlatPartialToOverrides,
+} from '@opptrix/shared'
 
-export type TradeSide = 'buy' | 'sell'
+export type FeeConfig = LegacyFlatFeeConfig
 
-export interface TradeRecord {
-  id: number
-  code: string
-  name: string
-  market?: Market
-  tradeSide: TradeSide
-  shares: number
-  price: number
-  amount: number
-  commission: number
-  stampDuty: number
-  transferFee: number
-  totalFee: number
-  tradeDate: string
-  createdAt?: string
+export const DEFAULT_FEE_CONFIG: FeeConfig = { ...DEFAULT_LEGACY_FLAT_FEE_CONFIG }
+
+export type { TradeRecord, HoldingPosition, PnLSummary, TradeSide } from './trade-models.js'
+
+export type {
+  FeeRule,
+  FeeCalcMode,
+  PortfolioLedgerKind,
+  PortfolioGlobalFees,
+  InstrumentFeeOverrides,
+  ExchangeFeeTemplate,
+  OtcFundFeeTemplate,
+  TradeFeeBreakdown,
+} from '@opptrix/shared'
+
+export {
+  DEFAULT_PORTFOLIO_GLOBAL_FEES,
+  DEFAULT_EXCHANGE_COMMISSION,
+  DEFAULT_STAMP_DUTY,
+  DEFAULT_TRANSFER_FEE,
+  DEFAULT_FEE_NONE,
+  resolvePortfolioLedgerKind,
+  estimatePortfolioTradeFees,
+  calcPortfolioTradeFees,
+  resolveFeeRule,
+  legacyFlatFeesToGlobal,
+  legacyFlatPartialToOverrides,
+} from '@opptrix/shared'
+
+export function migrateLegacyFeeState(input: {
+  config?: Partial<FeeConfig>
+  stockConfig?: Record<string, Partial<FeeConfig>>
+}): { globalFees: PortfolioGlobalFees; instrumentFees: Record<string, InstrumentFeeOverrides> } {
+  const globalFees = legacyFlatFeesToGlobal({
+    ...DEFAULT_LEGACY_FLAT_FEE_CONFIG,
+    ...input.config,
+  })
+  const instrumentFees: Record<string, InstrumentFeeOverrides> = {}
+  if (input.stockConfig) {
+    for (const [key, partial] of Object.entries(input.stockConfig)) {
+      const overrides = legacyFlatPartialToOverrides(partial)
+      if (Object.keys(overrides).length > 0) instrumentFees[key] = overrides
+    }
+  }
+  return { globalFees, instrumentFees }
 }
 
-export interface HoldingPosition {
-  code: string
-  name: string
-  market?: Market
-  shares: number
-  costBasis: number
-  totalCost: number
-  currentPrice: number
-  marketValue: number
-  unrealizedPnl: number
-  unrealizedPnlPct: number
-  realizedPnl: number
-  totalPnl: number
-  totalPnlPct: number
-}
-
-export interface PnLSummary {
-  totalCost: number
-  totalMarketValue: number
-  totalUnrealizedPnl: number
-  totalRealizedPnl: number
-  totalPnl: number
-  totalPnlPct: number
-  holdingsCount: number
-  tradesCount: number
-  holdings: HoldingPosition[]
-}
-
-export interface FeeConfig {
-  commissionRate: number
-  commissionMin: number
-  stampDutyRate: number
-  transferFeeRate: number
-}
-
-export const DEFAULT_FEE_CONFIG: FeeConfig = {
-  commissionRate: 0.00025,
-  commissionMin: 5,
-  stampDutyRate: 0.0005,
-  transferFeeRate: 0.00001,
+export function calcFeesFromSettings(
+  ledgerKind: 'exchange' | 'otc_fund',
+  amount: number,
+  side: TradeSide,
+  globalFees: PortfolioGlobalFees,
+  overrides?: InstrumentFeeOverrides,
+): TradeFeeBreakdown {
+  return calcPortfolioTradeFees({
+    ledgerKind,
+    side,
+    amount,
+    globalFees,
+    overrides,
+  })
 }

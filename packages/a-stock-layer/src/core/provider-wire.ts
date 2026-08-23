@@ -12,7 +12,6 @@ import {
   normalizeInstrumentRef,
 } from '@opptrix/shared'
 import {
-  cnSecSymbol,
   parseStockMarket,
   type StockMarket,
 } from '../utils/helpers.js'
@@ -124,18 +123,4 @@ export function formatProviderMethodArgs(
 ): unknown[] {
   const wired = wireProviderSymbolArg(providerId, 'code', method, ref)
   return [wired, ...extraArgs]
-}
-
-/** 从腾讯 smartbox / qt 原始 symbol 提取交易所 */
-export function exchangeFromTencentSecSymbol(raw: string): StockMarket | undefined {
-  const lower = String(raw).trim().toLowerCase()
-  if (lower.startsWith('sh')) return 'SH'
-  if (lower.startsWith('sz')) return 'SZ'
-  if (lower.startsWith('bj')) return 'BJ'
-  return undefined
-}
-
-/** 裸码 + 交易所 → 腾讯 sec 符号（sh600519） */
-export function tencentSecSymbol(symbol: string, exchange?: string | null): string {
-  return cnSecSymbol(symbol, exchange)
 }

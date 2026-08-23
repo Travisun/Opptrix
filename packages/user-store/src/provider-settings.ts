@@ -1,10 +1,11 @@
 import type Database from 'better-sqlite3'
-import type {
-  ProviderPriorityMode,
-  ProviderSettingsPatch,
-  ProviderSettingsRow,
-  ProviderBindingOverrideRow,
-  ProviderBindingOverridePatch,
+import {
+  REMOVED_SCRAPING_PROVIDER_IDS,
+  type ProviderPriorityMode,
+  type ProviderSettingsPatch,
+  type ProviderSettingsRow,
+  type ProviderBindingOverrideRow,
+  type ProviderBindingOverridePatch,
 } from '@opptrix/shared'
 import {
   defaultManifestTierPriority,
@@ -13,6 +14,7 @@ import {
 
 const MIGRATION_KEY = 'provider_settings_v1'
 const WEBFEED_REMOVED_KEY = 'webfeed_removed_v1'
+const SCRAPING_PROVIDERS_REMOVED_KEY = 'scraping_providers_removed_v2'
 
 export function initProviderSettingsSchema(db: Database.Database) {
   db.exec(`
@@ -85,55 +87,40 @@ export class ProviderSettingsRepository {
     markMigration(MIGRATION_KEY)
   }
 
+  /** 清理已下线爬虫源在本地库中的配置、限流与测速残留 */
+  purgeRemovedScrapingProviders(
+    hasMigration: (key: string) => boolean,
+    markMigration: (key: string) => void,
+  ) {
+    if (hasMigration(SCRAPING_PROVIDERS_REMOVED_KEY)) return
+
+    for (const id of REMOVED_SCRAPING_PROVIDER_IDS) {
+      this.db.prepare('DELETE FROM provider_binding_overrides WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM provider_settings WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM free_provider_throttle WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM free_provider_throttle_log WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM provider_speed_ranking WHERE provider_id = ?').run(id)
+    }
+    this.db.prepare('DELETE FROM provider_ranking_cache').run()
+
+    markMigration(SCRAPING_PROVIDERS_REMOVED_KEY)
+    markMigration(WEBFEED_REMOVED_KEY)
+  }
+
+  /** @deprecated 使用 purgeRemovedScrapingProviders */
+  migrateWebfeedRemoved(
+    hasMigration: (key: string) => boolean,
+    markMigration: (key: string) => void,
+  ) {
+    this.purgeRemovedScrapingProviders(hasMigration, markMigration)
+  }
+
+  /** @deprecated 使用 purgeRemovedScrapingProviders */
   migrateWebfeedToSinafinance(
     hasMigration: (key: string) => boolean,
     markMigration: (key: string) => void,
   ) {
-    if (hasMigration(WEBFEED_REMOVED_KEY)) return
-
-    const webfeed = this.get('webfeed')
-    if (webfeed) {
-      const sinaExisting = this.get('sinafinance')
-      const patch: ProviderSettingsPatch = {}
-
-      if (webfeed.enabled && (!sinaExisting || !sinaExisting.enabled)) {
-        patch.enabled = true
-      }
-      if (
-        webfeed.priorityMode === 'custom'
-        && webfeed.priority != null
-        && (!sinaExisting || sinaExisting.priorityMode !== 'custom')
-      ) {
-        patch.priorityMode = 'custom'
-        patch.priority = webfeed.priority
-      }
-      if (Object.keys(patch).length > 0) {
-        this.save('sinafinance', patch)
-      }
-
-      for (const ov of this.listBindingOverrides('webfeed')) {
-        const existing = this.getBindingOverride(
-          'sinafinance',
-          ov.market,
-          ov.assetClass,
-          ov.capability,
-        )
-        if (!existing) {
-          this.saveBindingOverride(
-            'sinafinance',
-            ov.market,
-            ov.assetClass,
-            ov.capability,
-            { enabled: ov.enabled, priority: ov.priority },
-          )
-        }
-      }
-
-      this.db.prepare('DELETE FROM provider_binding_overrides WHERE provider_id = ?').run('webfeed')
-      this.db.prepare('DELETE FROM provider_settings WHERE provider_id = ?').run('webfeed')
-    }
-
-    markMigration(WEBFEED_REMOVED_KEY)
+    this.purgeRemovedScrapingProviders(hasMigration, markMigration)
   }
 
   get(providerId: string): ProviderSettingsRow | null {

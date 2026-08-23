@@ -77,7 +77,7 @@ export interface UnifiedInstrumentSearchHit {
   market: Market
   asset_class: AssetClass
   exchange: string | null
-  source: 'stock_index' | 'tencent' | 'local' | 'online'
+  source: 'stock_index' | 'local' | 'online'
 }
 
 export interface UnifiedInstrumentSnapshot {
@@ -118,44 +118,82 @@ function str(v: unknown, fallback = ''): string {
   return v != null ? String(v) : fallback
 }
 
+/** 基金报价常用 unitNav；场内基金可能用 exchangePrice */
+export function resolveInstrumentQuotePrice(row: Record<string, unknown>): number | null {
+  return num(row.price) ?? num(row.unitNav) ?? num(row.exchangePrice)
+}
+
+export function resolveInstrumentQuotePreClose(row: Record<string, unknown>): number | null {
+  return num(row.preClose ?? row.pre_close ?? row.prevNav ?? row.prev_nav)
+}
+
+/** 将基金报价行规范为带 price 的行情行，供关注列表 / 持仓估值复用 */
+export function coerceInstrumentQuoteRow(row: Record<string, unknown>): Record<string, unknown> {
+  const price = resolveInstrumentQuotePrice(row)
+  const preClose = resolveInstrumentQuotePreClose(row)
+  if (price == null && preClose == null) return row
+  const out = { ...row }
+  if (price != null && out.price == null) out.price = price
+  if (preClose != null && out.preClose == null && out.pre_close == null) out.preClose = preClose
+  return out
+}
+
+/** 从报价行解析涨跌幅；平价时补 0% 而非留空 */
+export function resolveInstrumentQuoteChangePct(
+  row: Record<string, unknown>,
+  price?: number | null,
+  preClose?: number | null,
+): number | null {
+  const raw = num(row.changePct ?? row.change_pct)
+  if (raw != null) return raw
+  const p = price ?? resolveInstrumentQuotePrice(row)
+  const pc = preClose ?? resolveInstrumentQuotePreClose(row)
+  if (p != null && pc != null && pc > 0) {
+    return Math.round(((p - pc) / pc) * 10000) / 100
+  }
+  return null
+}
+
 export function quoteFromProviderRow(
   ref: InstrumentRef,
   row: Record<string, unknown>,
   source: UnifiedInstrumentQuote['source'] = 'live',
 ): UnifiedInstrumentQuote {
+  const normalizedRow = coerceInstrumentQuoteRow(row)
   const instrument = normalizeInstrumentRef(ref)
+  const price = resolveInstrumentQuotePrice(normalizedRow)
+  const preClose = resolveInstrumentQuotePreClose(normalizedRow)
+  const changePct = resolveInstrumentQuoteChangePct(normalizedRow, price, preClose)
   return {
     instrument,
     code: instrumentDisplayCode(instrument),
-    name: str(row.name, instrument.symbol),
-    price: num(row.price),
-    change_pct: num(row.changePct ?? row.change_pct),
-    volume: num(row.volume),
-    amount: num(row.amount),
+    name: str(normalizedRow.name, instrument.symbol),
+    price,
+    change_pct: changePct,
+    volume: num(normalizedRow.volume ?? normalizedRow.exchangeVolume),
+    amount: num(normalizedRow.amount ?? normalizedRow.exchangeAmount),
     market: instrument.market,
     asset_class: instrument.assetClass,
     source,
-    open: num(row.open),
-    high: num(row.high),
-    low: num(row.low),
-    pre_close: num(row.preClose ?? row.pre_close),
-    change: num(row.change) ?? (
-      num(row.price) != null && num(row.preClose ?? row.pre_close) != null
-        ? num(row.price)! - num(row.preClose ?? row.pre_close)!
-        : null
+    open: num(normalizedRow.open ?? normalizedRow.exchangeOpen),
+    high: num(normalizedRow.high ?? normalizedRow.exchangeHigh),
+    low: num(normalizedRow.low ?? normalizedRow.exchangeLow),
+    pre_close: preClose,
+    change: num(normalizedRow.change) ?? (
+      price != null && preClose != null ? price - preClose : null
     ),
-    pe: num(row.pe),
-    pb: num(row.pb),
-    turnover_rate: num(row.turnoverRate ?? row.turnover_rate),
-    amplitude: num(row.amplitude),
-    volume_ratio: num(row.volumeRatio ?? row.volume_ratio),
-    market_cap: num(row.marketCap ?? row.market_cap),
-    circulating_market_cap: num(row.circulatingMarketCap ?? row.circulating_market_cap),
-    week52_high: num(row.week52High ?? row.week52_high),
-    week52_low: num(row.week52Low ?? row.week52_low),
-    currency: str(row.currency) || null,
-    quote_session: str(row.quoteSession ?? row.quote_session) || null,
-    session_label: str(row.sessionLabel ?? row.session_label) || null,
+    pe: num(normalizedRow.pe),
+    pb: num(normalizedRow.pb),
+    turnover_rate: num(normalizedRow.turnoverRate ?? normalizedRow.turnover_rate),
+    amplitude: num(normalizedRow.amplitude),
+    volume_ratio: num(normalizedRow.volumeRatio ?? normalizedRow.volume_ratio),
+    market_cap: num(normalizedRow.marketCap ?? normalizedRow.market_cap),
+    circulating_market_cap: num(normalizedRow.circulatingMarketCap ?? normalizedRow.circulating_market_cap),
+    week52_high: num(normalizedRow.week52High ?? normalizedRow.week52_high),
+    week52_low: num(normalizedRow.week52Low ?? normalizedRow.week52_low),
+    currency: str(normalizedRow.currency) || null,
+    quote_session: str(normalizedRow.quoteSession ?? normalizedRow.quote_session) || null,
+    session_label: str(normalizedRow.sessionLabel ?? normalizedRow.session_label) || null,
   }
 }
 
@@ -228,7 +266,7 @@ export function onlineHitToSearchHit(hit: {
   exchange: string | null
   instrument: InstrumentRef
   refLabel: string
-  source: 'stock_index' | 'tencent'
+  source: 'stock_index' | 'online'
 }): UnifiedInstrumentSearchHit {
   const instrument = normalizeInstrumentRef(hit.instrument)
   const ns = buildInstrumentNamespace(instrument)

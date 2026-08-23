@@ -227,7 +227,7 @@ Storage Layer (user-store, market-data)
 - 扩展顺序：复用 capability → 扩 `instrument-query.ts` → 扩 Provider 标准方法 → 最后才 `invokeCustomMethod` + 文档登记
 - **禁止** Hub / client-ui / Agent 主路径新增 `de.realtime()` / 直连第三方行情 URL
 - **内置推荐栈**：tonghuashun（CN，需扶摇 Key）、tickflow、tushare、zzshare、baostock；另含 stockindex（搜索/列表）、binance/okx（CRYPTO）
-- **已移除内置注册**：tencent、sinafinance、eastmoney、akshare（源码保留，不再参与路由）
+- **已移除内置注册**：tencent、sinafinance、eastmoney、akshare、webfeed（实现与注册均已删除，本地配置启动时自动清理）
 - **Hub 降级**：机构持仓详情 Tab、非 CN 宏观 scope、部分跨市场 enrich；**右侧面板**主路径仍经 `queryInstrumentData`
 
 ## Agent / MCP 工具（摘要）

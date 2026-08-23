@@ -13,6 +13,10 @@
     "./onboarding": {
       "types": "./dist/onboarding.d.ts",
       "import": "./dist/onboarding.js"
+    },
+    "./portfolio-fees": {
+      "types": "./dist/portfolio-fees.d.ts",
+      "import": "./dist/portfolio-fees.js"
     }
   },
   "scripts": {

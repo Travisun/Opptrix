@@ -278,3 +278,12 @@ export interface TusharePublicConfigLegacy {
   token_preview: string
   config_path: string
 }
+
+/** 已下线爬虫 / 模拟访问行情 Provider（内置注册与实现均已移除） */
+export const REMOVED_SCRAPING_PROVIDER_IDS = [
+  'tencent',
+  'sinafinance',
+  'eastmoney',
+  'akshare',
+  'webfeed',
+] as const

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { isCnListedFundSymbol, isCnLofSymbol } from '../packages/a-stock-layer/dist/core/fund-instrument.js'
 import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/tonghuashun/api/fund-symbols.js'
 import {
   mapFundHoldingsToFundRows,
@@ -7,6 +8,17 @@ import {
   mapFundProfileToFundProfileRow,
   mapFundReturnsToPerformance,
 } from '../packages/a-stock-layer/dist/providers/tonghuashun/normalize/fund.js'
+
+describe('cn lof instrument', () => {
+  it('isCnLofSymbol distinguishes LOF from 159 ETF segment', () => {
+    assert.equal(isCnLofSymbol('161725'), true)
+    assert.equal(isCnLofSymbol('160216'), true)
+    assert.equal(isCnLofSymbol('159915'), false)
+    assert.equal(isCnLofSymbol('510300'), false)
+    assert.equal(isCnListedFundSymbol('161725'), true)
+    assert.equal(isCnListedFundSymbol('159915'), true)
+  })
+})
 
 describe('fuyao fund profile', () => {
   it('resolveFuyaoFundRoute maps OTC and exchange codes', () => {

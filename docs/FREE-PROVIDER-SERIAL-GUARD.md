@@ -105,7 +105,7 @@ isFreeMarketDataProvider(providerId)
 | 免费 · 出口缺口 | `stockindex` | 直连 `outboundFetch`，**绕过**主机闸门（待修） | 是（吞错风险同左） |
 | 付费可 bypass | `tushare` / `tickflow` / `tonghuashun` | `bypassRateLimit: true` | 否 |
 | 公开但当前 bypass | `binance` / `okx` | 当前为 `true`（加密货币公开 API；**不**按免费源阶梯冷却） | 判定为免费但不进冷却 |
-| **已移除内置** | `tencent` / `eastmoney` / `sinafinance` / `akshare` | 不再注册；源码保留 | — |
+| **已移除内置** | `tencent` / `eastmoney` / `sinafinance` / `akshare` / `webfeed` | 不再注册；实现已删除 | — |
 
 新增 Provider 时：无必填 secret → **禁止** `bypassRateLimit: true`；HTTP 必须经 `ProviderHttpClient`。
 

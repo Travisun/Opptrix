@@ -54,6 +54,9 @@ import {
   normalizeInstrumentRef,
   instrumentRefKey,
   buildInstrumentNamespace,
+  coerceInstrumentQuoteRow,
+  resolveInstrumentQuotePrice,
+  resolveInstrumentQuotePreClose,
   type InstrumentRef,
   type InstrumentHubCapability,
 } from '@opptrix/shared'
@@ -322,6 +325,10 @@ export class ResearchHub {
         case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), params.market != null ? String(params.market) : undefined, t0)
         case 'portfolio_holdings': return this.portfolioHoldings(t0)
         case 'portfolio_summary': return this.portfolioSummary(t0)
+        case 'portfolio_fee_global': return this.portfolioFeeGlobal(t0)
+        case 'portfolio_fee_global_save': return this.portfolioFeeGlobalSave(params, t0)
+        case 'portfolio_fee_instrument': return this.portfolioFeeInstrument(String(params.code ?? ''), params.market != null ? String(params.market) : undefined, t0)
+        case 'portfolio_fee_instrument_save': return this.portfolioFeeInstrumentSave(params, t0)
         case 'news_center_status': return newsCenterStatus(t0)
         case 'news_groups_list': return newsGroupsList(t0)
         case 'news_sources_list': return newsSourcesList(t0)
@@ -1524,22 +1531,36 @@ export class ResearchHub {
     code: string,
     quoteRaw: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0] | null,
   ) {
-    const normalized = quoteRaw ? normalizePreOpenRealtimeQuote(quoteRaw) : null
+    if (!quoteRaw) return null
+    const row = coerceInstrumentQuoteRow({ ...quoteRaw } as unknown as Record<string, unknown>)
+    const coerced = {
+      ...quoteRaw,
+      ...(row.price != null ? { price: row.price as number } : {}),
+      ...(row.preClose != null ? { preClose: row.preClose as number } : {}),
+    }
+    const normalized = normalizePreOpenRealtimeQuote(coerced)
     if (!normalized) return null
     return this.enrichQuote(normalized)
   }
 
   private enrichQuote(quote: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0]) {
-    const price = quote.price
-    const preClose = quote.preClose
+    const row = coerceInstrumentQuoteRow({ ...quote } as unknown as Record<string, unknown>)
+    const price = resolveInstrumentQuotePrice(row) ?? quote.price
+    const preClose = resolveInstrumentQuotePreClose(row) ?? quote.preClose
     const derivedChange = price != null && preClose != null ? price - preClose : null
     const change = derivedChange ?? quote.change
+    const rawPct = quote.changePct
+    const changePct = rawPct != null && Number.isFinite(rawPct)
+      ? rawPct
+      : (price != null && preClose != null && preClose > 0
+        ? ((price - preClose) / preClose) * 100
+        : quote.changePct)
     const amplitude = quote.amplitude ?? (
       quote.high != null && quote.low != null && preClose
         ? ((quote.high - quote.low) / preClose) * 100
         : null
     )
-    return { ...quote, change, amplitude }
+    return { ...quote, price, preClose, change, changePct, amplitude }
   }
 
   private isCnTradingDayCandidate(): boolean {
@@ -2392,6 +2413,11 @@ export class ResearchHub {
   }
 
   private async localFundNav(code: string, params: Record<string, unknown>, t0: number) {
+    const online = await this.queryFundInstrumentData({ ...params, code }, 'fund_nav', t0)
+    const onlineItems = (online.data as { items?: unknown[] } | undefined)?.items
+    if (online.success && Array.isArray(onlineItems) && onlineItems.length > 0) {
+      return online
+    }
     const local = this.marketData.getFundNavHistory(code, Number(params.limit ?? 120))
     if (local.length) {
       return ok(
@@ -2400,7 +2426,7 @@ export class ResearchHub {
         t0,
       )
     }
-    return this.queryFundInstrumentData({ ...params, code }, 'fund_nav', t0)
+    return online.success ? online : this.queryFundInstrumentData({ ...params, code }, 'fund_nav', t0)
   }
 
   private async localFundHoldings(code: string, params: Record<string, unknown>, t0: number) {
@@ -3139,6 +3165,10 @@ export class ResearchHub {
     return this.queryEtfInstrumentData({ instrument: ref }, 'etf_snapshot', t0)
   }
 
+  private async fundSnapshot(ref: InstrumentRef, t0: number) {
+    return this.queryFundInstrumentData({ instrument: ref }, 'fund_snapshot', t0)
+  }
+
   private async localEtfList(params: Record<string, unknown>, t0: number) {
     return this.etfList(params, t0)
   }
@@ -3297,6 +3327,7 @@ export class ResearchHub {
     return {
       stockDetail: ref => this.stockDetail(ref, t0),
       etfSnapshot: ref => this.etfSnapshot(ref, t0),
+      fundSnapshot: ref => this.fundSnapshot(ref, t0),
       usSnapshot: symbol => this.usSnapshot(symbol, t0),
       regionalSnapshot: (market, symbol) => this.regionalSnapshot(market, symbol, t0),
       cryptoSnapshot: pair => this.cryptoSnapshot(pair, t0),
@@ -3882,6 +3913,58 @@ export class ResearchHub {
   private async portfolioSummary(t0: number) {
     const summary = await this.de.portfolio.summary(true)
     return ok(summary, `持仓 ${summary.holdingsCount} 只`, t0)
+  }
+
+  private portfolioFeeGlobal(t0: number) {
+    return ok({ globalFees: this.de.portfolio.getGlobalFees() }, '全局费率', t0)
+  }
+
+  private portfolioFeeGlobalSave(params: Record<string, unknown>, t0: number) {
+    const globalFees = params.globalFees ?? params.global_fees
+    if (!globalFees || typeof globalFees !== 'object') return fail('globalFees 必填', t0)
+    const result = this.de.portfolio.setGlobalFees(globalFees as import('@opptrix/shared').PortfolioGlobalFees)
+    return ok(
+      { globalFees: result.globalFees, recalculatedTrades: result.recalculatedTrades },
+      result.recalculatedTrades > 0
+        ? `全局费率已保存，已重算 ${result.recalculatedTrades} 笔交易费用`
+        : '全局费率已保存',
+      t0,
+    )
+  }
+
+  private portfolioFeeInstrument(code: string, market: string | undefined, t0: number) {
+    if (!code.trim()) return fail('code 必填', t0)
+    const data = this.de.portfolio.getInstrumentFees(code, market as import('@opptrix/shared').Market | undefined)
+    return ok(data, '标的费率', t0)
+  }
+
+  private portfolioFeeInstrumentSave(params: Record<string, unknown>, t0: number) {
+    const code = String(params.code ?? '').trim()
+    if (!code) return fail('code 必填', t0)
+    const market = params.market != null ? String(params.market) : undefined
+    const overrides = params.overrides ?? params.instrument_fees
+    if (!overrides || typeof overrides !== 'object') return fail('overrides 必填', t0)
+    const result = this.de.portfolio.setInstrumentFees(
+      code,
+      overrides as import('@opptrix/shared').InstrumentFeeOverrides,
+      market as import('@opptrix/shared').Market | undefined,
+    )
+    const snapshot = this.de.portfolio.getInstrumentFees(
+      code,
+      market as import('@opptrix/shared').Market | undefined,
+    )
+    return ok(
+      {
+        ledgerKind: snapshot.ledgerKind,
+        overrides: result.overrides,
+        globalFees: snapshot.globalFees,
+        recalculatedTrades: result.recalculatedTrades,
+      },
+      result.recalculatedTrades > 0
+        ? `标的费率已保存，已重算 ${result.recalculatedTrades} 笔交易费用`
+        : '标的费率已保存',
+      t0,
+    )
   }
 
   private watchlistList(t0: number) {

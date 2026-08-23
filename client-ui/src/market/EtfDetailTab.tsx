@@ -18,6 +18,7 @@ import {
 } from './format'
 import { resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
 import TradingViewChart from './TradingViewChart'
+import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import EtfDecisionCard from './EtfDecisionCard'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { listRowKey } from '../utils/listRowKey'
@@ -211,11 +212,13 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   chartWrap: {
-    flex: 1,
-    minHeight: 0,
+    flexShrink: 0,
+    maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX}px`,
+    minHeight: '200px',
     display: 'flex',
     flexDirection: 'column',
     padding: `0 ${CONTENT_PAD} ${CONTENT_PAD}`,
+    overflow: 'hidden',
   },
   center: {
     flex: 1,
@@ -535,6 +538,7 @@ export default function EtfDetailTab({ stock }: Props) {
           <TradingViewChart
             code={stock.code}
             instrument={chartInstrument}
+            expanded
             active={tab === 'chart'}
           />
         </div>

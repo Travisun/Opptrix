@@ -11,19 +11,3 @@ export const FREE_CN_ETF_CAPABILITIES = [
 export const FREE_CN_ETF_HOLDINGS_CAPABILITIES = [
   Capability.ETF_HOLDINGS,
 ] as const
-
-/** 已注销 sinafinance — 保留常量供 legacy manifest 引用 */
-export const SINA_CN_ETF_CAPABILITIES = [
-  Capability.ETF_LIST,
-  Capability.ETF_PROFILE,
-  Capability.ETF_NAV,
-  Capability.ETF_HOLDINGS,
-] as const
-
-/** 已注销 tencent — 保留常量供 legacy manifest 引用 */
-export const TENCENT_CN_ETF_CAPABILITIES = [
-  Capability.ETF_LIST,
-  Capability.ETF_PROFILE,
-  Capability.ETF_NAV,
-  Capability.ETF_HOLDINGS,
-] as const

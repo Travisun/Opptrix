@@ -1,26 +1,19 @@
+import type { PortfolioGlobalFees, InstrumentFeeOverrides } from '@opptrix/shared/portfolio-fees'
+import type { InstrumentRef } from '../types/instrument'
+import {
+  DEFAULT_PORTFOLIO_GLOBAL_FEES,
+  estimatePortfolioTradeFees,
+  type TradeSide,
+} from '@opptrix/shared/portfolio-fees'
 import type { PortfolioTradeItem } from '../types/schemas'
 
-export type TradeSide = 'buy' | 'sell'
+export type { TradeSide }
 
-/** A-share default fee config (commission min 5, stamp duty on sell). */
 export const DEFAULT_FEE_CONFIG = {
   commissionRate: 0.00025,
   commissionMin: 5,
   stampDutyRate: 0.0005,
   transferFeeRate: 0.00001,
-}
-
-function calcFees(amount: number, side: TradeSide) {
-  const cfg = DEFAULT_FEE_CONFIG
-  const commission = Math.max(amount * cfg.commissionRate, cfg.commissionMin)
-  const stampDuty = side === 'sell' ? amount * cfg.stampDutyRate : 0
-  const transferFee = amount * cfg.transferFeeRate
-  return {
-    commission: Math.round(commission * 100) / 100,
-    stampDuty: Math.round(stampDuty * 100) / 100,
-    transferFee: Math.round(transferFee * 100) / 100,
-    totalFee: Math.round((commission + stampDuty + transferFee) * 100) / 100,
-  }
 }
 
 export interface HoldingCalcResult {
@@ -81,8 +74,15 @@ export function estimateTradeAmount(shares: number, price: number) {
   return Math.round(shares * price * 100) / 100
 }
 
-export function estimateTradeFees(shares: number, price: number, side: TradeSide) {
-  return calcFees(estimateTradeAmount(shares, price), side)
+export function estimateTradeFees(
+  ref: InstrumentRef,
+  side: TradeSide,
+  shares: number,
+  price: number,
+  globalFees: PortfolioGlobalFees = DEFAULT_PORTFOLIO_GLOBAL_FEES,
+  overrides?: InstrumentFeeOverrides,
+) {
+  return estimatePortfolioTradeFees(ref, side, shares, price, globalFees, overrides)
 }
 
 export function followReturnPct(
@@ -93,7 +93,6 @@ export function followReturnPct(
   return Math.round(((currentPrice - addedPrice) / addedPrice) * 10000) / 100
 }
 
-/** Minimal holding fields needed to recompute total return from a live quote. */
 export type HoldingReturnInputs = {
   shares: number
   totalCost?: number
@@ -102,11 +101,6 @@ export type HoldingReturnInputs = {
   unrealizedPnlPct?: number | null
 }
 
-/**
- * Recompute holding total return % from the current quote price — same formula as
- * server `calcPnlForStock` / `calcHoldingFromTrades`. Falls back to server pct when
- * price is missing.
- */
 export function holdingReturnPctFromQuote(
   holding: HoldingReturnInputs | null | undefined,
   price: number | null | undefined,

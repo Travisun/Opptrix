@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { portfolioClearInstrument, portfolioDeleteTrade, portfolioTrade, research } from '../api/client'
 import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
 import { normalizeCode, portfolioHoldingsKey } from './format'
+import { instrumentKey, parseInstrumentInput } from './instrument'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
 
@@ -11,7 +12,20 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const [loading, setLoading] = useState(false)
   const tradesCache = useRef<Record<string, PortfolioTradeItem[]>>({})
 
-  const tradeCacheKey = (code: string, market?: string) => `${market ?? 'CN'}:${code.trim()}`
+  const tradeCacheKey = (code: string, market?: string) => {
+    const trimmed = code.trim()
+    if (/^CN:/i.test(trimmed)) {
+      return instrumentKey(parseInstrumentInput(trimmed))
+    }
+    return `${market ?? 'CN'}:${trimmed}`
+  }
+
+  const resolveTradeLookupCode = (code: string, market?: string) => {
+    const trimmed = code.trim()
+    if (market && market !== 'CN') return trimmed
+    if (/^CN:/i.test(trimmed)) return trimmed
+    return normalizeCode(trimmed)
+  }
 
   const refreshHoldings = useCallback(async () => {
     setLoading(true)
@@ -22,6 +36,9 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
         for (const row of resp.data.holdings) {
           const key = portfolioHoldingsKey(row.code, row.market)
           map[key] = row
+          if (row.market === 'CN' && /^CN:/i.test(row.code.trim())) {
+            map[instrumentKey(parseInstrumentInput(row.code))] = row
+          }
         }
         setHoldingsByCode(map)
       }
@@ -41,7 +58,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
 
   const loadTrades = useCallback(async (code: string, market?: string) => {
     const cacheKey = tradeCacheKey(code, market)
-    const lookupCode = market && market !== 'CN' ? code.trim() : normalizeCode(code)
+    const lookupCode = resolveTradeLookupCode(code, market)
     try {
       const resp = await research.portfolioTrades(lookupCode, market)
       if (resp.success && resp.data?.trades) {
