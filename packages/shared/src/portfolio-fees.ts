@@ -1,5 +1,5 @@
-import type { InstrumentRef } from './market-data.js'
-import { canonicalCnSymbol } from './instrument-symbol.js'
+import type { InstrumentRef, Market } from './market-data.js'
+import { canonicalCnSymbol, normalizeInstrumentRef } from './instrument-symbol.js'
 
 export type PortfolioLedgerKind = 'exchange' | 'otc_fund'
 export type TradeSide = 'buy' | 'sell'
@@ -68,7 +68,25 @@ export const DEFAULT_PORTFOLIO_GLOBAL_FEES: PortfolioGlobalFees = {
   },
 }
 
-/** 场内上市基金代码段（ETF / LOF 等） */
+/** 持仓账本与 API 返回 holdings[].code 对齐的存储键 */
+export function portfolioHoldingsStorageKey(ref: InstrumentRef): string {
+  const n = normalizeInstrumentRef(ref)
+  switch (n.market) {
+    case 'CN':
+      return canonicalCnSymbol(n.symbol)
+    case 'US':
+      return n.symbol.trim().toUpperCase()
+    case 'HK': {
+      const raw = n.symbol.trim().replace(/^HK:/i, '')
+      const digits = raw.replace(/\D/g, '')
+      return digits.padStart(5, '0')
+    }
+    default:
+      return n.symbol.trim()
+  }
+}
+
+/** A 股场内上市基金代码段（ETF / LOF 等） */
 export function isCnListedFundSymbol(symbol: string): boolean {
   const c = canonicalCnSymbol(symbol)
   if (c.length !== 6) return false
@@ -162,19 +180,28 @@ export function calcPortfolioTradeFees(input: {
   amount: number
   globalFees: PortfolioGlobalFees
   overrides?: InstrumentFeeOverrides
+  /** 非 CN 市场默认不计印花税/过户费（全局 CN 模板不误用于美股等） */
+  market?: Market
 }): TradeFeeBreakdown {
-  const { ledgerKind, side, amount, globalFees, overrides } = input
+  const { ledgerKind, side, amount, globalFees, overrides, market } = input
   let commission = 0
   let stampDuty = 0
   let transferFee = 0
 
   if (ledgerKind === 'exchange') {
+    const cnExchange = !market || market === 'CN'
     const comm = resolveFeeRule(overrides?.commission, globalFees.exchange.commission)
-    const stamp = resolveFeeRule(overrides?.stampDuty, globalFees.exchange.stampDuty)
-    const transfer = resolveFeeRule(overrides?.transferFee, globalFees.exchange.transferFee)
+    const stamp = resolveFeeRule(
+      overrides?.stampDuty,
+      cnExchange ? globalFees.exchange.stampDuty : DEFAULT_FEE_NONE,
+    )
+    const transfer = resolveFeeRule(
+      overrides?.transferFee,
+      cnExchange ? globalFees.exchange.transferFee : DEFAULT_FEE_NONE,
+    )
     commission = round2(calcOne(comm, amount))
-    transferFee = round2(calcOne(transfer, amount))
-    stampDuty = side === 'sell' ? round2(calcOne(stamp, amount)) : 0
+    transferFee = cnExchange ? round2(calcOne(transfer, amount)) : 0
+    stampDuty = cnExchange && side === 'sell' ? round2(calcOne(stamp, amount)) : 0
   } else {
     const sub = resolveFeeRule(overrides?.subscriptionFee, globalFees.otcFund.subscriptionFee)
     const red = resolveFeeRule(overrides?.redemptionFee, globalFees.otcFund.redemptionFee)
@@ -207,5 +234,6 @@ export function estimatePortfolioTradeFees(
     amount,
     globalFees,
     overrides,
+    market: ref.market,
   })
 }

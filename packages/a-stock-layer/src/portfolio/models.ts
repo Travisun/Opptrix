@@ -1,6 +1,7 @@
 import type {
   InstrumentFeeOverrides,
   LegacyFlatFeeConfig,
+  Market,
   PortfolioGlobalFees,
   TradeSide,
   TradeFeeBreakdown,
@@ -68,6 +69,7 @@ export function calcFeesFromSettings(
   side: TradeSide,
   globalFees: PortfolioGlobalFees,
   overrides?: InstrumentFeeOverrides,
+  market?: Market,
 ): TradeFeeBreakdown {
   return calcPortfolioTradeFees({
     ledgerKind,
@@ -75,5 +77,6 @@ export function calcFeesFromSettings(
     amount,
     globalFees,
     overrides,
+    market,
   })
 }

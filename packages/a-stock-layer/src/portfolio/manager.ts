@@ -106,6 +106,7 @@ export class PortfolioManager {
       side,
       this.store.getGlobalFees(),
       overrides,
+      ref.market,
     )
   }
 

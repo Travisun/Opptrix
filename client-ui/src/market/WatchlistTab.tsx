@@ -14,9 +14,9 @@ import { filterWatchlistByGroup, useWatchlistGroups } from './WatchlistGroupsCon
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { formatPct, formatPriceForMarket, pctTone, portfolioHoldingsKey, resolveDisplayStockName, hasCjkText } from './format'
+import { formatPct, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText } from './format'
 import { unifiedQuoteToMarketQuote } from './instrument-adapters'
-import { followReturnPct } from './portfolioCalc'
+import { followReturnPct, holdingReturnPctFromQuote, lookupHoldingSnapshot } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, hitToWatchlistItem, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
@@ -616,7 +616,7 @@ export default function WatchlistTab({
   const holdingCount = useMemo(
     () => items.filter(item => {
       const ref = resolveWatchlistInstrument(item)
-      return (holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]?.shares ?? 0) > 0
+      return (lookupHoldingSnapshot(holdingsByCode, ref, item.code, ref.market)?.shares ?? 0) > 0
     }).length,
     [items, holdingsByCode],
   )
@@ -734,13 +734,13 @@ export default function WatchlistTab({
           const ref = resolveWatchlistInstrument(item)
           const quoteKey = instrumentKey(ref)
           const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
-          const holding = holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]
-            ?? holdingsByCode[instrumentKey(ref)]
+          const holding = lookupHoldingSnapshot(holdingsByCode, ref, item.code, ref.market)
           const isHolding = (holding?.shares ?? 0) > 0
-          const followPct = item.addedPrice != null && item.addedPrice > 0
+          const holdingPct = isHolding ? holdingReturnPctFromQuote(holding, quote?.price) : null
+          const followPct = !isHolding && item.addedPrice != null && item.addedPrice > 0
             ? followReturnPct(quote?.price, item.addedPrice)
             : null
-          const displayPct = followPct != null ? followPct : (quote?.changePct ?? null)
+          const displayPct = holdingPct ?? followPct ?? (quote?.changePct ?? null)
           const dayTone = pctTone(displayPct)
           const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
           const radarLine = formatWatchlistRadarLine(

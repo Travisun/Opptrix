@@ -101,6 +101,7 @@ test('recompute trade fees updates stored zero fees', () => {
     side: 'buy',
     amount: 1000,
     globalFees: global,
+    market: 'CN',
   })
   assert.equal(fees.commission, 5)
   assert.equal(fees.totalFee, 5.01)

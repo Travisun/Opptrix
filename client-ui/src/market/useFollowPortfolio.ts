@@ -2,9 +2,41 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { portfolioClearInstrument, portfolioDeleteTrade, portfolioTrade, research } from '../api/client'
 import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
 import { normalizeCode, portfolioHoldingsKey } from './format'
-import { instrumentKey, parseInstrumentInput } from './instrument'
+import {
+  buildInstrumentNamespace,
+  instrumentKey,
+  parseInstrumentInput,
+  normalizeInstrumentRefLocal,
+} from './instrument'
+import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
+import type { Market } from '../types/instrument'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
+
+function holdingRowRef(row: HoldingSnapshot) {
+  const parsed = parseInstrumentInput(row.code.trim())
+  if (parsed) return normalizeInstrumentRefLocal(parsed)
+  const market = (row.market ?? 'CN') as Market
+  return normalizeInstrumentRefLocal({
+    market,
+    assetClass: 'EQUITY',
+    symbol: row.code.trim(),
+  })
+}
+
+function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnapshot) {
+  const ref = holdingRowRef(row)
+  const keys = [
+    portfolioHoldingsStorageKey(ref),
+    portfolioHoldingsKey(row.code, row.market),
+    instrumentKey(ref),
+    buildInstrumentNamespace(ref),
+    row.code.trim(),
+  ]
+  for (const key of keys) {
+    if (key) map[key] = row
+  }
+}
 
 export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true
@@ -34,11 +66,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
       if (resp.success && resp.data?.holdings) {
         const map: Record<string, HoldingSnapshot> = {}
         for (const row of resp.data.holdings) {
-          const key = portfolioHoldingsKey(row.code, row.market)
-          map[key] = row
-          if (row.market === 'CN' && /^CN:/i.test(row.code.trim())) {
-            map[instrumentKey(parseInstrumentInput(row.code))] = row
-          }
+          indexHoldingRow(map, row)
         }
         setHoldingsByCode(map)
       }

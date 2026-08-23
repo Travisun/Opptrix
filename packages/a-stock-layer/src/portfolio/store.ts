@@ -15,6 +15,7 @@ import { recomputeAllTradeFees, recomputeTradeRecordFees } from './fee-recompute
 
 const NAMESPACE = 'portfolio'
 const DOC_ID = 'default'
+const FEE_MARKET_AWARE_KEY = 'portfolio_fee_market_aware_v1'
 
 interface DbState {
   globalFees: PortfolioGlobalFees
@@ -72,7 +73,9 @@ export class PortfolioStore {
   private state: DbState
 
   private constructor() {
-    this.state = this.load()
+    const { state, feesMigrated } = this.load()
+    this.state = state
+    if (feesMigrated) this.save()
   }
 
   static getInstance() {
@@ -80,12 +83,30 @@ export class PortfolioStore {
     return PortfolioStore.inst
   }
 
-  private load(): DbState {
+  private load(): { state: DbState; feesMigrated: boolean } {
     try {
       const raw = getUserDataStore().getDocument<LegacyDbState>(NAMESPACE, DOC_ID)
-      if (raw) return normalizeLoadedState(raw)
+      if (raw) {
+        const state = normalizeLoadedState(raw)
+        const { state: next, migrated } = this.maybeRecomputeFeesForMarketFix(state)
+        return { state: next, feesMigrated: migrated }
+      }
     } catch { /* reset */ }
-    return defaultState()
+    return { state: defaultState(), feesMigrated: false }
+  }
+
+  /** 一次性按市场重算费率（修复美股等误用 A 股印花税的历史成交） */
+  private maybeRecomputeFeesForMarketFix(state: DbState): { state: DbState; migrated: boolean } {
+    const userStore = getUserDataStore()
+    if (userStore.getMetaFlag(FEE_MARKET_AWARE_KEY)) return { state, migrated: false }
+    const { trades, updated } = recomputeAllTradeFees(
+      state.trades,
+      state.globalFees,
+      state.instrumentFees,
+    )
+    userStore.setMetaFlag(FEE_MARKET_AWARE_KEY)
+    if (updated <= 0) return { state, migrated: false }
+    return { state: { ...state, trades }, migrated: true }
   }
 
   private save() {

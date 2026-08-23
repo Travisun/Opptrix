@@ -33,6 +33,7 @@ export function recomputeTradeRecordFees(
     trade.tradeSide,
     globalFees,
     overrides,
+    ref.market,
   )
   return {
     ...trade,

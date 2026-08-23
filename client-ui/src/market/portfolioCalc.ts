@@ -1,11 +1,19 @@
-import type { PortfolioGlobalFees, InstrumentFeeOverrides } from '@opptrix/shared/portfolio-fees'
 import type { InstrumentRef } from '../types/instrument'
+import type { PortfolioGlobalFees, InstrumentFeeOverrides } from '@opptrix/shared/portfolio-fees'
 import {
   DEFAULT_PORTFOLIO_GLOBAL_FEES,
   estimatePortfolioTradeFees,
+  portfolioHoldingsStorageKey,
   type TradeSide,
 } from '@opptrix/shared/portfolio-fees'
 import type { PortfolioTradeItem } from '../types/schemas'
+import type { HoldingSnapshot } from './useFollowPortfolio'
+import {
+  buildInstrumentNamespace,
+  instrumentKey,
+  parseInstrumentInput,
+  normalizeInstrumentRefLocal,
+} from './instrument'
 
 export type { TradeSide }
 
@@ -91,6 +99,29 @@ export function followReturnPct(
 ): number | null {
   if (currentPrice == null || addedPrice == null || addedPrice <= 0) return null
   return Math.round(((currentPrice - addedPrice) / addedPrice) * 10000) / 100
+}
+
+/** 从 holdings map 按 InstrumentRef / 展示代码解析持仓快照（兼容 US:AAPL vs AAPL 等键） */
+export function lookupHoldingSnapshot(
+  map: Record<string, HoldingSnapshot>,
+  ref: InstrumentRef,
+  code?: string,
+  market?: string,
+): HoldingSnapshot | undefined {
+  const keys = new Set<string>()
+  keys.add(portfolioHoldingsStorageKey(ref))
+  keys.add(instrumentKey(ref))
+  keys.add(buildInstrumentNamespace(ref))
+  if (code?.trim()) {
+    keys.add(code.trim())
+    const parsed = parseInstrumentInput(code.trim())
+    if (parsed) keys.add(portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(parsed)))
+  }
+  if (market) keys.add(`${market}:${ref.symbol}`)
+  for (const k of keys) {
+    if (k && map[k]) return map[k]
+  }
+  return undefined
 }
 
 export type HoldingReturnInputs = {
