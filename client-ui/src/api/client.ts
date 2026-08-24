@@ -99,6 +99,7 @@ import {
   unifiedSnapshotToStockDetail,
   unifiedQuoteToMarketQuote,
   type UnifiedInstrumentChartDto,
+  type UnifiedInstrumentQuotesDto,
   type UnifiedInstrumentSnapshotDto,
 } from '../market/instrument-adapters'
 import type { InstrumentRef, UnifiedInstrumentQuote } from '../types/instrument'
@@ -554,7 +555,7 @@ export const research = {
   },
 
   instrumentQuotes: (instruments: InstrumentRef[], signal?: AbortSignal) =>
-    postInstrument<{ quotes: UnifiedInstrumentQuote[] }>(
+    postInstrument<UnifiedInstrumentQuotesDto>(
       '/instruments/quotes',
       { instruments },
       signal,

@@ -138,6 +138,8 @@ collectParallelCnBatchItems(codes, fetchOne, max = BATCH_INSTRUMENT_SNAPSHOTS_MA
 
 部分失败时仍可 `success: true` 返回已拿到的数据（具体 feature 信封以 Hub / API 文档为准），便于 LLM 对失败项降级或换问法。
 
+**`/instruments/quotes`（`routeInstrumentQuotes`）的实际信封**：`failed[]` 项为 `{ instrument, code, reason }`——`instrument` = `normalizeInstrumentRef(ref)`，`code` = `instrumentDisplayCode(ref)`，`reason` ∈ `no_provider`（无可用 Provider / 未启用，依据 `没有可用的 provider` / `暂无` 文案归类）| `unsupported`（JP/KR 暂未接入）| `empty`（Provider 返回空）| `error`（查询失败，拿不准一律归此类）| `not_found`（上游明确未收录，如扶摇 `code 3001 Fund not found`，匹配 `/not found/i` 文案归类）。US/HK/CRYPTO 组内有界并行（每块 ≤ 5），CN 个股/ETF/基金各自合并为一次批量调用。
+
 ### 4.3 `maxQueued` 与批量上限
 
 | 常数 | 值 | 作用 |

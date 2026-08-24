@@ -229,6 +229,24 @@ GET /api/watchlist
 | POST | `/api/instruments/chart` | `{ instrument, period?, count? }` 日/周/月 K |
 | POST | `/api/instruments/capabilities` | 返回 UI 能力矩阵（`detailPanelKind` 等） |
 
+`POST /api/instruments/quotes` 响应 `data` 结构：
+
+```jsonc
+{
+  "quotes": [
+    // UnifiedInstrumentQuote —— 含 instrument / code / price / change_pct 等
+    { "instrument": { "market": "US", "assetClass": "EQUITY", "symbol": "AAPL" }, "code": "US:AAPL", "price": 190.5 }
+  ],
+  "failed": [
+    { "instrument": { "market": "JP", "assetClass": "EQUITY", "symbol": "7203" }, "code": "JP:JP.7203", "reason": "unsupported" }
+  ]
+}
+```
+
+- `failed[]` 记录每个失败/被跳过的 ref：`instrument`（`normalizeInstrumentRef(ref)`）、`code`（`instrumentDisplayCode(ref)`）、`reason` ∈ `no_provider`（无可用 Provider / 未启用）| `unsupported`（JP/KR 暂未接入）| `empty`（Provider 返回空）| `error`（查询失败）| `not_found`（上游明确未收录该标的，如扶摇 `code 3001 Fund not found`）。
+- **部分成功**：只要 `quotes` 至少一条，`success` 即为 `true`（响应同时带 `failed`）；全部失败才 `success: false`（`行情获取失败`）。
+- **编排**：CN 个股 / ETF / 基金各一次批量 `stockQuotes`；US / HK / CRYPTO 组内有界并行（每块 ≤ 5，tickflow `maxConcurrent`），三组可同时启动；结果按 code / instrument 匹配，顺序无关。
+
 示例：
 
 ```json

@@ -39,7 +39,7 @@
 <table align="center">
   <tr>
     <td align="center" width="33%">
-      <img src="https://opptrix.org/images/wechat-group-qr.jpg?v=20260817" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
+      <img src="https://opptrix.org/images/wechat-group-qr.jpg?v=202608241038" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
       <sub>微信 · Opptrix 技术交流群</sub>
       <!-- 维护备注：群二维码过期后替换官网 docs/public/images/wechat-group-qr.jpg，并更新 ?v= 缓存戳 -->
     </td>

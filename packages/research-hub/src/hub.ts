@@ -53,6 +53,7 @@ import {
   instrumentRefsFromList,
   normalizeInstrumentRef,
   instrumentRefKey,
+  instrumentDisplayCode,
   buildInstrumentNamespace,
   coerceInstrumentQuoteRow,
   resolveInstrumentQuotePrice,
@@ -70,6 +71,10 @@ import {
   verifyStrategyForRef,
 } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
+import {
+  classifyQuoteFailureMessage,
+  type QuoteFailedReason,
+} from './quote-failure.js'
 import { formatVerificationReport, generateStrategyReport } from '@opptrix/t-strategy'
 import {
   newsArticleDetail,
@@ -1240,11 +1245,29 @@ export class ResearchHub {
     await this.fillMissingStockNames(normalizedRefs.map(r => r.symbol))
     const batch = await this.stockBatchRealtime(normalizedRefs)
     // Sparse list: failed refs omitted. Callers (routeInstrumentQuotes) must match by code, not index.
-    const quotes = normalizedRefs
-      .map((ref, i) => this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null))
-      .filter((q): q is NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> => q != null)
-    if (!quotes.length) return fail('行情获取失败', t0)
-    return ok({ quotes }, `更新 ${quotes.length} 只`, t0)
+    const quotes: NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>>[] = []
+    const failed: { code: string; reason: QuoteFailedReason }[] = []
+    let firstError = ''
+    normalizedRefs.forEach((ref, i) => {
+      const errorText = batch.errors?.[i] ?? ''
+      const quote = this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null)
+      if (quote) {
+        quotes.push(quote)
+        return
+      }
+      if (!firstError && errorText) firstError = errorText
+      failed.push({ code: instrumentDisplayCode(ref), reason: classifyQuoteFailureMessage(errorText) })
+    })
+    if (!quotes.length) {
+      // 全失败时把首个失败原因带进 message，供 routeInstrumentQuotes 归类（如 not_found）
+      return fail(`行情获取失败: ${firstError || '未知原因'}`, t0)
+    }
+    const data: {
+      quotes: NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>>[]
+      failed?: { code: string; reason: QuoteFailedReason }[]
+    } = { quotes }
+    if (failed.length) data.failed = failed
+    return ok(data, `更新 ${quotes.length} 只`, t0)
   }
 
   /** Lightweight batch insights for watchlist rows — prefers local market DB, then SnapshotStore. */
@@ -1612,10 +1635,14 @@ export class ResearchHub {
       normalizedRefs.map(async ref => {
         const result = await this.stockRealtime(ref)
         const data = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(result)
-        return data?.[0] ?? null
+        return { row: data?.[0] ?? null, error: instrumentQueryError(result, '') }
       }),
     )
-    return { success: rows.some(row => row != null), data: rows }
+    return {
+      success: rows.some(row => row.row != null),
+      data: rows.map(row => row.row),
+      errors: rows.map(row => row.error),
+    }
   }
 
   private async resolveIntradaySessionPreClose(

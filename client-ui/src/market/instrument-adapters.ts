@@ -50,6 +50,21 @@ export interface UnifiedInstrumentQuoteDto {
   session_label?: string | null
 }
 
+/** 单只标的行情获取失败项 — /instruments/quotes 响应 failed[] 契约 */
+export type QuoteFailedReason = 'no_provider' | 'unsupported' | 'empty' | 'error' | 'not_found'
+
+export interface QuoteFailedItem {
+  instrument: InstrumentRef
+  code: string
+  reason: QuoteFailedReason
+}
+
+/** /instruments/quotes 成功响应（部分成功 success:true 时携带 failed[]） */
+export interface UnifiedInstrumentQuotesDto {
+  quotes: UnifiedInstrumentQuoteDto[]
+  failed?: QuoteFailedItem[]
+}
+
 export interface UnifiedChartBarDto {
   time: string
   open?: number | null
