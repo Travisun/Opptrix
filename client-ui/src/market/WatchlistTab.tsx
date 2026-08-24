@@ -17,6 +17,7 @@ import type { HoldingSnapshot } from './useFollowPortfolio'
 import HoverMarqueeText from '../chat/HoverMarqueeText'
 import { formatPct, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText, normalizeCode } from './format'
 import { unifiedQuoteToMarketQuote } from './instrument-adapters'
+import type { QuoteFailedReason } from './instrument-adapters'
 import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayChangeReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
@@ -49,6 +50,15 @@ const METRIC_COLUMNS = [
   { key: 'cost', label: '成本价', minWidth: '64px' },
   { key: 'holding', label: '持仓收益', minWidth: '68px' },
 ] as const
+
+/** 行内失败态文案 — reason → 产品级短文案 + title 提示（禁技术词） */
+const QUOTE_FAILED_COPY: Record<QuoteFailedReason, { label: string; hint: string }> = {
+  no_provider: { label: '行情源未配置', hint: '在设置中添加行情源后即可查看' },
+  unsupported: { label: '暂不支持该市场', hint: '该市场暂未开通实时行情' },
+  empty: { label: '暂时无行情数据', hint: '可稍后刷新查看最新行情' },
+  error: { label: '行情暂时获取失败', hint: '请稍后刷新重试' },
+  not_found: { label: '该标的数据源暂未收录', hint: '可稍后再试，或添加其他行情源' },
+}
 
 const useStyles = makeStyles({
   root: {
@@ -490,6 +500,7 @@ export default function WatchlistTab({
   const [strategyByCode, setStrategyByCode] = useState<Record<string, string>>({})
   const [loadingQuotes, setLoadingQuotes] = useState(false)
   const [quoteError, setQuoteError] = useState('')
+  const [failedByKey, setFailedByKey] = useState<Record<string, QuoteFailedReason>>({})
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
   const itemsRef = useRef(items)
@@ -519,6 +530,7 @@ export default function WatchlistTab({
     const currentItems = itemsRef.current
     if (!currentItems.length) {
       setQuotes({})
+      setFailedByKey({})
       setQuoteError('')
       return
     }
@@ -552,7 +564,13 @@ export default function WatchlistTab({
         patch[rowKey] = quote
         patch[instrumentKey(itemRef)] = quote
       }
+      const failedMap: Record<string, QuoteFailedReason> = {}
+      for (const f of resp.data.failed ?? []) {
+        failedMap[f.code] = f.reason
+        failedMap[instrumentKey(f.instrument)] = f.reason
+      }
       setQuotes(prev => ({ ...prev, ...patch }))
+      setFailedByKey(failedMap)
       setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
       if (seq === loadSeqRef.current) setQuoteError('行情暂时无法更新')
@@ -912,6 +930,8 @@ export default function WatchlistTab({
               const ref = resolveWatchlistInstrument(item)
               const quoteKey = instrumentKey(ref)
               const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
+              const failedReason = failedByKey[item.code] ?? failedByKey[watchlistItemKey(item)] ?? failedByKey[quoteKey]
+              const failedCopy = failedReason ? QUOTE_FAILED_COPY[failedReason] : undefined
               const holding = lookupHoldingSnapshot(holdingsByCode, ref)
               const isHolding = (holding?.shares ?? 0) > 0
               const price = quote?.price ?? null
@@ -930,7 +950,7 @@ export default function WatchlistTab({
               )
               const displayName = resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)
               const displayCode = displayCodeFromInstrument(ref)
-              const rowTooltip = [radarLine, item.note?.trim()].filter(Boolean).join('\n') || undefined
+              const rowTooltip = [failedCopy?.hint, radarLine, item.note?.trim()].filter(Boolean).join('\n') || undefined
 
               return (
                 <div
@@ -971,39 +991,47 @@ export default function WatchlistTab({
                       onMouseDown={stopRowActionPointer}
                       onClick={stopRowActionPointer}
                     >
-                      <span className={mergeClasses(s.metricCell, s.metricPrice)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
-                        {formatPriceForMarket(ref.market, price)}
-                      </span>
-                      <span
-                        className={mergeClasses(
-                          s.metricCell,
-                          followPct == null && s.metricMuted,
-                          followTone === 'up' && s.pctUp,
-                          followTone === 'down' && s.pctDown,
-                          followTone === 'flat' && s.pctFlat,
-                        )}
-                        style={{ minWidth: METRIC_COLUMNS[1].minWidth }}
-                      >
-                        {formatPct(followPct, 1)}
-                      </span>
-                      <span
-                        className={mergeClasses(s.metricCell, costBasis == null && s.metricMuted)}
-                        style={{ minWidth: METRIC_COLUMNS[2].minWidth }}
-                      >
-                        {costBasis != null ? formatPriceForMarket(ref.market, costBasis) : '—'}
-                      </span>
-                      <span
-                        className={mergeClasses(
-                          s.metricCell,
-                          holdingPct == null && s.metricMuted,
-                          holdingTone === 'up' && s.pctUp,
-                          holdingTone === 'down' && s.pctDown,
-                          holdingTone === 'flat' && s.pctFlat,
-                        )}
-                        style={{ minWidth: METRIC_COLUMNS[3].minWidth }}
-                      >
-                        {isHolding ? formatPct(holdingPct, 1) : '—'}
-                      </span>
+                      {failedCopy ? (
+                        <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                          {failedCopy.label}
+                        </span>
+                      ) : (
+                        <>
+                          <span className={mergeClasses(s.metricCell, s.metricPrice)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                            {formatPriceForMarket(ref.market, price)}
+                          </span>
+                          <span
+                            className={mergeClasses(
+                              s.metricCell,
+                              followPct == null && s.metricMuted,
+                              followTone === 'up' && s.pctUp,
+                              followTone === 'down' && s.pctDown,
+                              followTone === 'flat' && s.pctFlat,
+                            )}
+                            style={{ minWidth: METRIC_COLUMNS[1].minWidth }}
+                          >
+                            {formatPct(followPct, 1)}
+                          </span>
+                          <span
+                            className={mergeClasses(s.metricCell, costBasis == null && s.metricMuted)}
+                            style={{ minWidth: METRIC_COLUMNS[2].minWidth }}
+                          >
+                            {costBasis != null ? formatPriceForMarket(ref.market, costBasis) : '—'}
+                          </span>
+                          <span
+                            className={mergeClasses(
+                              s.metricCell,
+                              holdingPct == null && s.metricMuted,
+                              holdingTone === 'up' && s.pctUp,
+                              holdingTone === 'down' && s.pctDown,
+                              holdingTone === 'flat' && s.pctFlat,
+                            )}
+                            style={{ minWidth: METRIC_COLUMNS[3].minWidth }}
+                          >
+                            {isHolding ? formatPct(holdingPct, 1) : '—'}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div

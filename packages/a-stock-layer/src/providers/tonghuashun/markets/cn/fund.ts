@@ -1,6 +1,7 @@
 import { assertCnPublicFundCode } from '../../../../core/fund-instrument.js'
-import { FuyaoClient } from '../../api/client.js'
+import { FuyaoClient, FuyaoApiError } from '../../api/client.js'
 import { resolveFuyaoFundRoute } from '../../api/fund-symbols.js'
+import { FuyaoFundNotFoundError } from '../../errors.js'
 import { isTonghuashunEnabled } from '../../config.js'
 import {
   computeEtfPremiumRate,
@@ -20,7 +21,12 @@ async function withFuyaoClient<T>(fn: (client: FuyaoClient) => Promise<T>): Prom
   if (!client) return null
   try {
     return await fn(client)
-  } catch {
+  } catch (e) {
+    // 上游明确未收录（如 Fund not found: 000001.OF）—— 抛专用错误交由编排层归类
+    // not_found，而不是当瞬时故障吞成 null。其余错误保持 failover（返回 null）。
+    if (e instanceof FuyaoApiError && (e.code === 3001 || /not found/i.test(e.message))) {
+      throw new FuyaoFundNotFoundError(e.rawMessage ?? e.message)
+    }
     return null
   }
 }

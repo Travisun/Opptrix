@@ -4,10 +4,11 @@ import { FUYAO_BASE_URL, loadTonghuashunConfig } from '../config.js'
 export class FuyaoApiError extends Error {
   constructor(
     readonly code: number,
-    message: string,
+    /** 上游返回的原始 message（不含 wrapper 前缀 / request_id） */
+    readonly rawMessage: string,
     readonly requestId?: string | null,
   ) {
-    super(`同花顺 API code=${code}: ${message}${requestId ? ` (${requestId})` : ''}`)
+    super(`同花顺 API code=${code}: ${rawMessage}${requestId ? ` (${requestId})` : ''}`)
     this.name = 'FuyaoApiError'
   }
 }

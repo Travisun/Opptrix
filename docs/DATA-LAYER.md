@@ -352,6 +352,8 @@ async query<T>(
 | **Fast-path override** | 特定 (market, cap) 的编排策略可配置 | TDX 优先 K 线 → 应改为 `TdxProvider` 的 binding priority + `mergeStrategy` |
 | **Cache-first** | 命中 QueryCache 则跳过 Provider | 已有 `CACHE_TYPE` |
 
+**多标的批量行情**（关注列表 `/instruments/quotes`，`routeInstrumentQuotes`）**多市场分组有界并行**：CN 个股 / ETF / 基金各一次批量 `stockQuotes`；US / HK / CRYPTO 组内有界并行（每块并发 ≤ 5，与 tickflow `maxConcurrent` 对齐），三组可同时启动；结果按 code / instrument 匹配，与顺序无关。失败项 `failed[].reason` 支持 `not_found`（上游明确未收录，如扶摇 `code 3001 Fund not found`）—— Provider 层抛专用错误、Engine 透传 error 文案、Hub `stockQuotes` 返回 failed 明细，Router 按文案归类，前端展示「该标的数据源暂未收录」。
+
 **建议**：将 TDX/Tushare 特殊路径从 Engine 抽到 **`QueryPlan`** 配置：
 
 ```typescript

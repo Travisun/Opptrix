@@ -6,6 +6,7 @@ import {
   instrumentRefKey,
   instrumentRefsFromList,
   normalizeInstrumentChart,
+  normalizeInstrumentRef,
   normalizeInstrumentSnapshot,
   canonicalSymbolForMarket,
   parseInstrumentRef,
@@ -17,6 +18,13 @@ import {
   type UnifiedInstrumentQuote,
   type UnifiedInstrumentSearchHit,
 } from '@opptrix/shared'
+import {
+  classifyQuoteFailureMessage,
+  isQuoteFailedReason,
+  type QuoteFailedReason,
+} from './quote-failure.js'
+
+export type { QuoteFailedReason } from './quote-failure.js'
 
 export type InstrumentRouteHandlers = {
   stockDetail: (ref: InstrumentRef) => Promise<ResearchResult>
@@ -141,83 +149,179 @@ export async function routeInstrumentSnapshot(
   return fail('不支持的市场')
 }
 
+/** 每市场组实时行情的最大并发（tickflow maxConcurrent = 5） */
+const MAX_QUOTE_GROUP_CONCURRENCY = 5
+
+export interface FailedInstrumentRef {
+  instrument: InstrumentRef
+  code: string
+  reason: QuoteFailedReason
+}
+
+function resolveQuoteRefs(params: Record<string, unknown>): InstrumentRef[] {
+  const rawList = params.instruments ?? params.refs ?? params.codes
+  if (!Array.isArray(rawList)) return []
+  const refs = instrumentRefsFromList(rawList)
+  if (refs.length) return refs
+  const fallback: InstrumentRef[] = []
+  for (const item of rawList) {
+    const ref = parseInstrumentRef(item)
+    if (ref) fallback.push(ref)
+  }
+  return fallback
+}
+
+function failedQuoteForRef(ref: InstrumentRef, reason: QuoteFailedReason): FailedInstrumentRef {
+  const instrument = normalizeInstrumentRef(ref)
+  return { instrument, code: instrumentDisplayCode(instrument), reason }
+}
+
+/** 无 Provider / 未启用 → no_provider；上游明确未收录 → not_found；其它查询失败 → error */
+function quoteFailureReason(message: string): QuoteFailedReason {
+  return classifyQuoteFailureMessage(message)
+}
+
+/** resp.success 为 false → 按文案归类；成功但 data 非对象 → Provider 返回空 */
+function classifyQuoteResponseFailure(resp: ResearchResult): QuoteFailedReason {
+  return resp.success ? 'empty' : quoteFailureReason(String(resp.message ?? ''))
+}
+
+function quoteRowsFromResponse(resp: ResearchResult): Record<string, unknown>[] | null {
+  if (!resp.success || !resp.data || typeof resp.data !== 'object') return null
+  return (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
+}
+
+/** Hub 侧 stockQuotes 明细失败项（code 为 instrumentDisplayCode，reason 已归类） */
+interface HubFailedItem {
+  code: string
+  reason: string
+}
+
+/** 读取 resp.data.failed 并按 code 归类到 ref */
+function cnBatchHubFailed(resp: ResearchResult): Map<string, QuoteFailedReason> {
+  const out = new Map<string, QuoteFailedReason>()
+  if (!resp.success || !resp.data || typeof resp.data !== 'object') return out
+  const raw = (resp.data as { failed?: HubFailedItem[] }).failed
+  if (!Array.isArray(raw)) return out
+  for (const item of raw) {
+    if (isQuoteFailedReason(item.reason)) out.set(item.code, item.reason)
+  }
+  return out
+}
+
+function collectCnBatchQuotes(
+  refs: InstrumentRef[],
+  resp: ResearchResult,
+  quotes: UnifiedInstrumentQuote[],
+  failed: FailedInstrumentRef[],
+  sourceFor: (ref: InstrumentRef) => UnifiedInstrumentQuote['source'],
+): void {
+  const rows = quoteRowsFromResponse(resp)
+  if (rows) {
+    const hubFailed = cnBatchHubFailed(resp)
+    for (const ref of refs) {
+      const row = findQuoteRowForRef(rows, ref)
+      if (row) {
+        quotes.push(quoteFromProviderRow(ref, row, sourceFor(ref)))
+        continue
+      }
+      // 未命中行时优先用 hub 侧已归类的明细原因；无则按原语义记 empty
+      failed.push(failedQuoteForRef(ref, hubFailed.get(instrumentDisplayCode(ref)) ?? 'empty'))
+    }
+    return
+  }
+  const reason = classifyQuoteResponseFailure(resp)
+  for (const ref of refs) failed.push(failedQuoteForRef(ref, reason))
+}
+
+interface RealtimeQuoteCall {
+  ref: InstrumentRef
+  call: () => Promise<ResearchResult>
+}
+
+async function collectRealtimeQuotesBounded(
+  items: RealtimeQuoteCall[],
+  quotes: UnifiedInstrumentQuote[],
+  failed: FailedInstrumentRef[],
+): Promise<void> {
+  for (let i = 0; i < items.length; i += MAX_QUOTE_GROUP_CONCURRENCY) {
+    const chunk = items.slice(i, i + MAX_QUOTE_GROUP_CONCURRENCY)
+    await Promise.all(chunk.map(async ({ ref, call }) => {
+      const resp = await call()
+      if (resp.success && resp.data && typeof resp.data === 'object') {
+        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
+        return
+      }
+      failed.push(failedQuoteForRef(ref, classifyQuoteResponseFailure(resp)))
+    }))
+  }
+}
+
+function localSourceFor(handlers: InstrumentRouteHandlers, ref: InstrumentRef): UnifiedInstrumentQuote['source'] {
+  return handlers.localInsights?.(ref) ? 'mixed' : 'live'
+}
+
 export async function routeInstrumentQuotes(
   params: Record<string, unknown>,
   handlers: InstrumentRouteHandlers,
 ): Promise<ResearchResult> {
-  const rawList = params.instruments ?? params.refs ?? params.codes
-  let refs: InstrumentRef[] = []
-  if (Array.isArray(rawList)) {
-    refs = instrumentRefsFromList(rawList)
-    if (!refs.length) {
-      for (const item of rawList) {
-        const ref = parseInstrumentRef(item)
-        if (ref) refs.push(ref)
-      }
-    }
-  }
+  const refs = resolveQuoteRefs(params)
   if (!refs.length) return fail('instruments 必填')
 
   const quotes: UnifiedInstrumentQuote[] = []
-  const cnRefs = refs.filter(
-    r => r.market === 'CN' && r.assetClass !== 'ETF' && r.assetClass !== 'FUND',
-  )
-  if (cnRefs.length) {
-    const resp = await handlers.stockQuotes(cnRefs)
-    if (resp.success && resp.data && typeof resp.data === 'object') {
-      const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-      for (const ref of cnRefs) {
-        const row = findQuoteRowForRef(rows, ref)
-        if (row) {
-          quotes.push(quoteFromProviderRow(ref, row, handlers.localInsights?.(ref) ? 'mixed' : 'live'))
-        }
-      }
-    }
+  const failed: FailedInstrumentRef[] = []
+  for (const ref of refs) {
+    if (ref.market === 'JP' || ref.market === 'KR') failed.push(failedQuoteForRef(ref, 'unsupported'))
   }
 
-  for (const ref of refs) {
-    if (ref.market === 'US') {
-      const resp = await handlers.usRealtime(ref.symbol)
-      if (resp.success && resp.data && typeof resp.data === 'object') {
-        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
-      }
-    }
-    if (ref.market === 'HK') {
-      const resp = await handlers.regionalRealtime('HK', ref.symbol)
-      if (resp.success && resp.data && typeof resp.data === 'object') {
-        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
-      }
-    }
-    if (ref.market === 'JP' || ref.market === 'KR') {
-      // 日股/韩股暂未接入 — 跳过
-    }
-    if (ref.market === 'CRYPTO') {
-      const pair = instrumentDisplayCode(ref)
-      const resp = await handlers.cryptoRealtime(pair)
-      if (resp.success && resp.data && typeof resp.data === 'object') {
-        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
-      }
-    }
-    if (ref.market === 'CN' && ref.assetClass === 'ETF') {
-      const resp = await handlers.stockQuotes([ref])
-      if (resp.success && resp.data && typeof resp.data === 'object') {
-        const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-        const row = findQuoteRowForRef(rows, ref)
-        if (row) quotes.push(quoteFromProviderRow(ref, row, 'mixed'))
-      }
-    }
-    if (ref.market === 'CN' && ref.assetClass === 'FUND') {
-      const resp = await handlers.stockQuotes([ref])
-      if (resp.success && resp.data && typeof resp.data === 'object') {
-        const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-        const row = findQuoteRowForRef(rows, ref)
-        if (row) quotes.push(quoteFromProviderRow(ref, row, handlers.localInsights?.(ref) ? 'mixed' : 'live'))
-      }
-    }
+  const tasks: Promise<void>[] = []
+  const cnRefs = refs.filter(r => r.market === 'CN' && r.assetClass !== 'ETF' && r.assetClass !== 'FUND')
+  if (cnRefs.length) {
+    tasks.push(handlers.stockQuotes(cnRefs).then(resp =>
+      collectCnBatchQuotes(cnRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref)),
+    ))
   }
+  const etfRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'ETF')
+  if (etfRefs.length) {
+    tasks.push(handlers.stockQuotes(etfRefs).then(resp =>
+      collectCnBatchQuotes(etfRefs, resp, quotes, failed, () => 'mixed'),
+    ))
+  }
+  const fundRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'FUND')
+  if (fundRefs.length) {
+    tasks.push(handlers.stockQuotes(fundRefs).then(resp =>
+      collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref)),
+    ))
+  }
+  const usRefs = refs.filter(r => r.market === 'US')
+  if (usRefs.length) {
+    tasks.push(collectRealtimeQuotesBounded(
+      usRefs.map(ref => ({ ref, call: () => handlers.usRealtime(ref.symbol) })),
+      quotes,
+      failed,
+    ))
+  }
+  const hkRefs = refs.filter(r => r.market === 'HK')
+  if (hkRefs.length) {
+    tasks.push(collectRealtimeQuotesBounded(
+      hkRefs.map(ref => ({ ref, call: () => handlers.regionalRealtime('HK', ref.symbol) })),
+      quotes,
+      failed,
+    ))
+  }
+  const cryptoRefs = refs.filter(r => r.market === 'CRYPTO')
+  if (cryptoRefs.length) {
+    tasks.push(collectRealtimeQuotesBounded(
+      cryptoRefs.map(ref => ({ ref, call: () => handlers.cryptoRealtime(instrumentDisplayCode(ref)) })),
+      quotes,
+      failed,
+    ))
+  }
+
+  await Promise.all(tasks)
 
   if (!quotes.length) return fail('行情获取失败')
-  return { success: true, message: `更新 ${quotes.length} 只`, data: { quotes }, elapsed: 0 }
+  return { success: true, message: `更新 ${quotes.length} 只`, data: { quotes, failed }, elapsed: 0 }
 }
 
 export async function routeInstrumentChart(

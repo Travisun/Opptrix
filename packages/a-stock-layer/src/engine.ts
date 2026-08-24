@@ -90,6 +90,11 @@ function pickLatestNavRow<T extends Record<string, unknown>>(
   return best
 }
 
+/** 追加 provider 失败原因 — 保留更早的明确错误（如 not found），避免被后续 空数据 覆盖 */
+function appendProviderError(prev: string, next: string): string {
+  return prev ? `${prev}; ${next}` : next
+}
+
 export type { InstrumentDataCapability } from './core/instrument-query.js'
 
 /** Multi-market data engine — provider fallback + cache (canonical name: MarketDataEngine) */
@@ -206,7 +211,7 @@ export class MarketDataEngine {
 
       const skip = shouldSkipProviderQuery(driver.name, capStr, health)
       if (skip.skip) {
-        lastError = skip.lastError
+        lastError = appendProviderError(lastError, skip.lastError)
         continue
       }
 
@@ -232,7 +237,7 @@ export class MarketDataEngine {
           recordProviderQueryEmpty(driver.name, capStr, health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
-          lastError = `${driver.name}: 空数据`
+          lastError = appendProviderError(lastError, `${driver.name}: 空数据`)
           continue
         }
 
@@ -241,7 +246,7 @@ export class MarketDataEngine {
           recordProviderQueryInvalid(driver.name, capStr, validation.reason ?? 'invalid_response', health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
-          lastError = `${driver.name}: ${validation.reason}`
+          lastError = appendProviderError(lastError, `${driver.name}: ${validation.reason}`)
           continue
         }
 
@@ -255,7 +260,7 @@ export class MarketDataEngine {
         return { success: true, data: data as T[], source: driver.name }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        lastError = `${driver.name}: ${msg}`
+        lastError = appendProviderError(lastError, `${driver.name}: ${msg}`)
         if (!isFreeMarketDataProvider(driver.name) && isPermissionDeniedError(e)) {
           recordProviderPermissionDenial(driver.name, capStr, msg)
           this.registry.rebuildIndicesWithRanking()
