@@ -11,6 +11,7 @@ import {
   resolveWatchlistInstrument,
   watchlistItemKey,
 } from '../../market/instrument'
+import { WATCHLIST_QUOTES_POLL_MS } from '../../market/watchlistQuotes'
 
 const CONTENT_PAD = '8px'
 
@@ -118,12 +119,13 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
   const [quotes, setQuotes] = useState<WatchQuote[]>([])
   const [loading, setLoading] = useState(false)
 
-  const refreshQuotes = useCallback(async () => {
+  const refreshQuotes = useCallback(async (opts?: { silent?: boolean }) => {
     if (!items.length) {
       setQuotes([])
       return
     }
-    setLoading(true)
+    const silent = opts?.silent === true
+    if (!silent) setLoading(true)
     try {
       const instruments = items
         .map(resolveWatchlistInstrument)
@@ -152,7 +154,12 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
         const ordered = items.map(item => {
           const key = watchlistItemKey(item)
           const ref = resolveWatchlistInstrument(item)
-          return byKey.get(key) ?? {
+          const hit = (ref ? byKey.get(watchlistItemKey({
+            code: displayCodeFromInstrument(ref),
+            name: item.name,
+            instrument: ref,
+          })) : undefined) ?? byKey.get(key)
+          return hit ?? {
             key,
             code: item.code,
             name: item.name ?? item.code,
@@ -166,18 +173,18 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
     } catch {
       /* ignore */
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [items])
 
   useEffect(() => {
     void refreshQuotes()
-    const timer = window.setInterval(() => { void refreshQuotes() }, 15000)
+    const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
   }, [refreshQuotes])
 
   if (loading && !quotes.length) {
-    return <div className={s.empty}><Spinner size="tiny" label="加载关注列表…" /></div>
+    return <div className={s.empty}><Spinner size="tiny" label="正在更新行情…" /></div>
   }
 
   if (!items.length) {

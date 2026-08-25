@@ -96,17 +96,30 @@ function wrapChart(ref: InstrumentRef, period: string, resp: ResearchResult): Re
 }
 
 function quoteRowMatchesRef(row: Record<string, unknown>, ref: InstrumentRef): boolean {
+  const inst = row.instrument
+  if (inst && typeof inst === 'object') {
+    return instrumentRefKey(normalizeInstrumentRef(inst as InstrumentRef))
+      === instrumentRefKey(normalizeInstrumentRef(ref))
+  }
   const code = String(row.code ?? '')
   if (!code) return false
   if (code === ref.symbol) return true
   return canonicalSymbolForMarket(ref.market, code) === ref.symbol
 }
 
-/** Match a quote row to ref by symbol (+ exchange). Never trust sparse/filtered array index. */
+/** Match a quote row to ref by instrumentRefKey, then symbol + exchange. Never trust sparse/filtered array index. */
 function findQuoteRowForRef(
   rows: Record<string, unknown>[],
   ref: InstrumentRef,
 ): Record<string, unknown> | undefined {
+  const wantKey = instrumentRefKey(normalizeInstrumentRef(ref))
+  const byKey = rows.find(r => {
+    const inst = r.instrument
+    if (!inst || typeof inst !== 'object') return false
+    return instrumentRefKey(normalizeInstrumentRef(inst as InstrumentRef)) === wantKey
+  })
+  if (byKey) return byKey
+
   return rows.find(r => {
     if (!quoteRowMatchesRef(r, ref)) return false
     if (!ref.exchange || r.exchange == null || r.exchange === '') return true

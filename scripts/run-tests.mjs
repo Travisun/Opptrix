@@ -41,6 +41,7 @@ for (const file of testFiles) {
     || label === 'canvas-compile-smoke.test.mjs'
     || label === 'news-articles-memory-cap.test.mjs'
     || label === 'context-usage-format.test.mjs'
+    || label === 'chart-series-align.test.mjs'
   ) {
     nodeArgs.unshift('--experimental-strip-types')
   }

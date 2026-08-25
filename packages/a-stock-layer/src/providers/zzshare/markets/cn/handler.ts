@@ -2,7 +2,12 @@ import type {
   IndexKline, IndexRealtime, StockKline, StockListItem, StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
-import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
+import {
+  isShIndexCode,
+  normalizeCode,
+  parseStockMarket,
+  type StockMarket,
+} from '../../../../utils/helpers.js'
 import { createNameCache } from '../../../../utils/lru-map.js'
 import { isCnEtfCode, inferCnAssetClass } from '../../../../core/instrument.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
@@ -65,6 +70,22 @@ function resolveQueryDate(date = ''): string {
 function isCnIndexCode(code: string): boolean {
   const c = normalizeCode(code)
   return isShIndexCode(c) || c.startsWith('399')
+}
+
+/** 指数 ts_code：399xxx.SZ，其余上证指数系 .SH（000001.SH 不得与平安银行 .SZ 混用） */
+function zzshareIndexTsCode(code: string): string {
+  const c = normalizeCode(code)
+  return toTsCode(c, c.startsWith('399') ? 'SZ' : 'SH')
+}
+
+/** 已有 SZ 时禁止把 000001 当上证指数；裸码默认个股（与 inferCnExchangeFromSymbol 一致） */
+function treatAsCnIndex(code: string, market?: StockMarket | null): boolean {
+  const c = normalizeCode(code)
+  const ex = parseStockMarket(market)
+  if (ex === 'SZ') return c.startsWith('399')
+  if (ex === 'SH') return isShIndexCode(c) || (c.startsWith('000') && c.length === 6)
+  if (c === '000001') return false
+  return isCnIndexCode(c)
 }
 
 function isPlateCode(code: string): boolean {
@@ -233,13 +254,14 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     end: string,
     count?: number,
     resample?: 'weekly' | 'monthly',
+    exchange?: StockMarket | null,
   ): Promise<StockKline[] | null> {
     const params: {
       ts_code?: string
       start_date?: string
       end_date?: string
       limit?: number
-    } = { ts_code: toTsCode(code) }
+    } = { ts_code: toTsCode(code, exchange) }
     if (start) params.start_date = ymdToApi(start)
     if (end) params.end_date = ymdToApi(end)
     if (!start && !end && count) {
@@ -325,10 +347,14 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
-  private async fetchStockRealtime(client: ZzshareClient, code: string): Promise<StockRealtime | null> {
+  private async fetchStockRealtime(
+    client: ZzshareClient,
+    code: string,
+    market?: StockMarket | null,
+  ): Promise<StockRealtime | null> {
     const bare = normalizeCode(code)
     if (hasZzshareToken()) {
-      const rows = await client.rt_k({ ts_code: toTsCode(bare) })
+      const rows = await client.rt_k({ ts_code: toTsCode(bare, market) })
       const quotes = mapZzshareRtKRows(rows)
       if (quotes.length) {
         const q = quotes[0]!
@@ -341,7 +367,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     const cached = snapshot.get(bare)
     if (cached) return cached
 
-    const daily = await client.daily({ ts_code: toTsCode(bare), limit: 1 })
+    const daily = await client.daily({ ts_code: toTsCode(bare, market), limit: 1 })
     const row = daily[0]
     if (!row) return null
     return mapZzshareDailyRowToStockRealtime(
@@ -353,8 +379,9 @@ export class ZzshareCnHandler extends MarketHandlerShell {
 
   private async fetchIndexRealtime(client: ZzshareClient, code: string): Promise<IndexRealtime | null> {
     const bare = normalizeCode(code)
+    const tsCode = zzshareIndexTsCode(bare)
     if (hasZzshareToken()) {
-      const rows = await client.rt_k({ ts_code: toTsCode(bare) })
+      const rows = await client.rt_k({ ts_code: tsCode })
       const quotes = mapZzshareRtKRows(rows)
       if (quotes.length) {
         const q = quotes[0]!
@@ -373,7 +400,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
       }
     }
 
-    const daily = await client.daily({ ts_code: toTsCode(bare), limit: 1 })
+    const daily = await client.daily({ ts_code: tsCode, limit: 1 })
     const row = daily[0]
     if (!row) return null
     return mapZzshareDailyRowToIndexRealtime(bare, row as unknown as Record<string, unknown>)
@@ -387,10 +414,10 @@ export class ZzshareCnHandler extends MarketHandlerShell {
    * @param code 6 位股票或指数代码
    * @returns 单条实时行情；无数据时 `null`
    */
-  async realtime(code: string): Promise<StockRealtime[] | null> {
+  async realtime(code: string, market?: StockMarket | null): Promise<StockRealtime[] | null> {
     if (!this.beginQuoteGuard('realtime', code)) return null
     try {
-      if (isCnIndexCode(code)) {
+      if (treatAsCnIndex(code, market)) {
         return this.withClient(async client => {
           const idx = await this.fetchIndexRealtime(client, code)
           return idx ? [indexToStockRealtime(idx)] : null
@@ -398,7 +425,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
       }
 
       return this.withClient(async client => {
-        const q = await this.fetchStockRealtime(client, code)
+        const q = await this.fetchStockRealtime(client, code, market)
         return q ? [q] : null
       })
     } finally {
@@ -412,13 +439,17 @@ export class ZzshareCnHandler extends MarketHandlerShell {
    * @param codes 股票代码数组
    * @returns 实时行情列表；无数据时 `null`
    */
-  async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
+  async batchRealtime(
+    codes: string[],
+    markets?: Record<string, StockMarket | undefined>,
+  ): Promise<StockRealtime[] | null> {
     return this.withClient(async client => {
       const normalized = codes.map(c => normalizeCode(c))
+      const exchangeOf = (c: string) => markets?.[c] ?? markets?.[normalizeCode(c)]
       const out: StockRealtime[] = []
 
       if (hasZzshareToken() && normalized.length) {
-        const tsCodes = normalized.map(c => toTsCode(c)).join(',')
+        const tsCodes = normalized.map(c => toTsCode(c, exchangeOf(c))).join(',')
         const rows = await client.rt_k({ ts_code: tsCodes })
         const quotes = mapZzshareRtKRows(rows)
         for (const q of quotes) {
@@ -436,10 +467,13 @@ export class ZzshareCnHandler extends MarketHandlerShell {
       if (out.length) return out
 
       for (const code of normalized) {
-        const q = isCnIndexCode(code)
+        const market = exchangeOf(code)
+        const q = treatAsCnIndex(code, market)
           ? await this.fetchIndexRealtime(client, code)
-          : await this.fetchStockRealtime(client, code)
-        if (q) out.push(isCnIndexCode(code) ? indexToStockRealtime(q as IndexRealtime) : q as StockRealtime)
+          : await this.fetchStockRealtime(client, code, market)
+        if (q) {
+          out.push(treatAsCnIndex(code, market) ? indexToStockRealtime(q as IndexRealtime) : q as StockRealtime)
+        }
       }
       return out.length ? out : null
     })
@@ -481,15 +515,16 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     start = '',
     end = '',
     count?: number,
+    market?: StockMarket | null,
   ): Promise<StockKline[] | null> {
     const spec = opptrixPeriodToZzshareFreq(period)
     if (!spec) return null
 
     return this.withClient(async client => {
       if (spec.kind === 'minute') {
-        if (inferCnAssetClass(code) === 'INDEX') return null
+        if (treatAsCnIndex(code, market)) return null
         const rows = await client.stk_mins({
-          ts_code: toTsCode(code),
+          ts_code: toTsCode(code, market),
           freq: spec.freq,
           count: count ?? undefined,
           start_time: start ? ymdToApi(start) : undefined,
@@ -500,7 +535,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
         return mapped.length ? mapped : null
       }
 
-      return this.fetchDailyKlines(client, code, start, end, count, spec.resample)
+      return this.fetchDailyKlines(client, code, start, end, count, spec.resample, market)
     })
   }
 
@@ -555,7 +590,8 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     }
 
     return this.withClient(async client => {
-      const rows = await this.fetchDailyKlines(client, code, start, end, count, spec.resample)
+      const indexEx = normalizeCode(code).startsWith('399') ? 'SZ' : 'SH'
+      const rows = await this.fetchDailyKlines(client, code, start, end, count, spec.resample, indexEx)
       if (!rows) return null
       return mapZzshareIndexKlineRows(code, rows, period)
     })

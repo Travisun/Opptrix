@@ -3,7 +3,7 @@ import type {
   LimitUpDown, SentimentData, StockKline, StockListItem, StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
 import { isCnEtfCode } from '../../../../core/instrument.js'
-import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
+import { isShIndexCode, normalizeCode, type StockMarket } from '../../../../utils/helpers.js'
 import { createNameCache } from '../../../../utils/lru-map.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { FuyaoClient } from '../../api/client.js'
@@ -76,26 +76,31 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     }
   }
 
-  private async resolveName(client: FuyaoClient, code: string): Promise<string> {
+  private async resolveName(
+    client: FuyaoClient,
+    code: string,
+    assetType: 'a-share' | 'a-share-index' | 'fund-etf' | 'index' = 'a-share',
+  ): Promise<string> {
     const c = normalizeCode(code)
-    const cached = this.nameCache.get(c)
+    const cacheKey = `${assetType}:${c}`
+    const cached = this.nameCache.get(cacheKey)
     if (cached) return cached
-    const assetType = isCnEtfCode(c) ? 'fund-etf' : 'a-share'
-    const data = await client.tickersSearch(c, 3, assetType)
+    const searchType = assetType === 'index' ? 'a-share-index' : assetType
+    const data = await client.tickersSearch(c, 3, searchType)
     const hit = (data.item ?? []).find(it => fromThsCode(String(it.thscode ?? '')) === c)
       ?? data.item?.[0]
     const name = String(hit?.name ?? c)
-    this.nameCache.set(c, name)
+    this.nameCache.set(cacheKey, name)
     return name
   }
 
-  async realtime(code: string): Promise<StockRealtime[] | null> {
+  async realtime(code: string, market?: StockMarket | null): Promise<StockRealtime[] | null> {
     if (isCnEtfCode(code)) {
       return this.withClient(async client => {
-        const thscode = toThsCode(code)
+        const thscode = toThsCode(code, market)
         const [snap, name] = await Promise.all([
           client.fundMarketSnapshot(thscode),
-          this.resolveName(client, code),
+          this.resolveName(client, code, 'fund-etf'),
         ])
         const item = snap.item?.[0]
         if (!item) return null
@@ -103,10 +108,10 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
       })
     }
     return this.withClient(async client => {
-      const thscode = toThsCode(code)
+      const thscode = toThsCode(code, market)
       const [snap, name, valSnap] = await Promise.all([
         client.pricesSnapshot(thscode),
-        this.resolveName(client, code),
+        this.resolveName(client, code, 'a-share'),
         client.valuationsSnapshot(thscode).catch(() => ({ item: [] })),
       ])
       const item = snap.item?.[0]
@@ -119,15 +124,19 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     })
   }
 
-  async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
+  async batchRealtime(
+    codes: string[],
+    markets?: Record<string, StockMarket | undefined>,
+  ): Promise<StockRealtime[] | null> {
     if (!codes.length) return null
     const etfCodes = codes.filter(c => isCnEtfCode(c))
     const stockCodes = codes.filter(c => !isCnEtfCode(c))
+    const exchangeOf = (c: string) => markets?.[normalizeCode(c)] ?? markets?.[c]
     return this.withClient(async client => {
       const out: StockRealtime[] = []
 
       if (stockCodes.length) {
-        const thscodes = stockCodes.map(toThsCode)
+        const thscodes = stockCodes.map(c => toThsCode(c, exchangeOf(c)))
         const [snap, valSnap] = await Promise.all([
           client.pricesSnapshot(thscodes),
           client.valuationsSnapshot(thscodes).catch(() => ({ item: [] })),
@@ -135,8 +144,8 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
         const valByThscode = indexValuationItems(valSnap.item ?? [])
         for (const item of snap.item ?? []) {
           const c = fromThsCode(String(item.thscode ?? ''))
-          const name = await this.resolveName(client, c)
-          const thscode = String(item.thscode ?? toThsCode(c))
+          const name = await this.resolveName(client, c, 'a-share')
+          const thscode = String(item.thscode ?? toThsCode(c, exchangeOf(c)))
           const row = mapSnapshotToStockRealtime(item, name)
           out.push(applyValuationToStockRealtime(row, valByThscode.get(thscode)))
         }
@@ -145,10 +154,10 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
       if (etfCodes.length) {
         const etfRows = await Promise.all(
           etfCodes.map(async c => {
-            const thscode = toThsCode(c)
+            const thscode = toThsCode(c, exchangeOf(c))
             const [snap, name] = await Promise.all([
               client.fundMarketSnapshot(thscode),
-              this.resolveName(client, c),
+              this.resolveName(client, c, 'fund-etf'),
             ])
             const item = snap.item?.[0]
             if (!item) return null
@@ -170,6 +179,7 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     start = '',
     end = '',
     count?: number,
+    market?: StockMarket | null,
   ): Promise<StockKline[] | null> {
     const p = period.toLowerCase()
     if (p !== 'daily' && p !== 'weekly' && p !== 'monthly' && p !== 'day' && p !== 'week' && p !== 'month') {
@@ -177,7 +187,7 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     }
     if (isCnEtfCode(code)) {
       return this.withClient(async client => {
-        const thscode = toThsCode(code)
+        const thscode = toThsCode(code, market)
         const endMs = end ? ymdToMs(end, true) : Date.now()
         const startMs = start
           ? ymdToMs(start)
@@ -193,7 +203,7 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
       })
     }
     return this.withClient(async client => {
-      const thscode = toThsCode(code)
+      const thscode = toThsCode(code, market)
       const endMs = end ? ymdToMs(end, true) : Date.now()
       const startMs = start
         ? ymdToMs(start)
@@ -215,7 +225,7 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
       const snap = await client.indexPricesSnapshot(thscode)
       const item = snap.item?.[0]
       if (!item) return null
-      const name = await this.resolveName(client, fromThsCode(String(item.thscode ?? code)))
+      const name = await this.resolveName(client, fromThsCode(String(item.thscode ?? code)), 'index')
       return [mapSnapshotToIndexRealtime(item, name)]
     })
   }

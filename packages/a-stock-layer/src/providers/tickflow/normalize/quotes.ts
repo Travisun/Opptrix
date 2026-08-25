@@ -55,7 +55,7 @@ export function mapTickflowQuote(quote: Record<string, unknown>): StockRealtime 
   const symbol = String(quote.symbol ?? '')
   if (!symbol) return null
 
-  const { code, market } = parseTickflowSymbol(symbol)
+  const { code, market, exchange } = parseTickflowSymbol(symbol)
   const ext = quoteExt(quote)
   const price = num(quote.last_price)
   const preClose = num(quote.prev_close)
@@ -70,6 +70,7 @@ export function mapTickflowQuote(quote: Record<string, unknown>): StockRealtime 
   return {
     code,
     name,
+    ...(exchange ? { exchange } : {}),
     price,
     changePct,
     pe: num(ext.pe ?? ext.pe_ttm ?? ext.pe_ratio),

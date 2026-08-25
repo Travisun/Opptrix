@@ -177,6 +177,20 @@ enum Capability {
 
 ETF 的 `STOCK_REALTIME` / `STOCK_KLINE` **复用**现有 Capability，通过 `assetClass: 'ETF'` 区分；专用维度走新 Capability。
 
+**公募基金详情 Capability（同花顺扶摇）**：
+
+```typescript
+enum Capability {
+  FUND_RETURNS = 'fund_returns',         // 区间收益 / 同类排名
+  FUND_DRAWDOWN = 'fund_drawdown',       // 区间最大回撤
+  FUND_ALLOCATION = 'fund_allocation',   // 资产配置 + 行业配置
+  FUND_HOLDERS = 'fund_holders',         // 持有人结构 / 十大持有人
+  FUND_DIVIDEND = 'fund_dividend',       // 历史分红
+}
+```
+
+Hub `fund_detail` 并行 `queryInstrumentData` 聚合上述能力 + `fund_snapshot` / `fund_holdings`；单路失败写入 `failed[]`，快照失败则整页失败。UI `FundDetailTab` 经 `research.fundDetail` 消费（档案 / 业绩 / 持仓为主路径；持有人、分红有数据才显示 Tab）。仅同花顺绑定这些扩展能力，Tushare 仍为五件套（profile / nav / holdings / quote / list）。
+
 ---
 
 ## 5. 目标架构
@@ -387,7 +401,7 @@ packages/a-stock-layer/src/providers/tonghuashun/
       index.ts          # bootCnHandlers() — 聚合 cn 下各 assetClass
       equity.ts         # 股票 realtime / kline / profile
       etf.ts            # ETF 列表 / 净值 / 持仓
-      fund.ts           # 公募基金 profile / nav / holdings
+      fund.ts           # 公募基金 profile / nav / holdings / 详情扩展
   api/
     fuyao.ts            # 扶摇 HTTP Client
     ths.ts              # 同花顺特色数据

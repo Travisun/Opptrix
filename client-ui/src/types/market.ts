@@ -486,7 +486,78 @@ export interface FundProfileData {
   benchmark?: string
   establishDate?: string
   return1y?: number | null
+  investTarget?: string
+  investScope?: string
+  performance?: FundPerformance
+  holderAmount?: number | null
+  avgHolderShare?: number | null
+  instHolderRatio?: number | null
+  indivHolderRatio?: number | null
+  holderReportDate?: string
   source?: string
+}
+
+export interface FundPerformance {
+  w1?: number | null
+  w4?: number | null
+  w13?: number | null
+  w26?: number | null
+  w52?: number | null
+  year?: number | null
+  year2?: number | null
+  year3?: number | null
+  year5?: number | null
+  total?: number | null
+}
+
+export interface FundRankCell {
+  rank?: number | null
+  total?: number | null
+}
+
+export interface FundReturnsData {
+  performance?: FundPerformance
+  ranks?: Partial<Record<keyof FundPerformance, FundRankCell>>
+  peerAvg?: FundPerformance
+}
+
+export interface FundDrawdownRow {
+  period: string
+  label: string
+  value?: number | null
+}
+
+export interface FundAllocItem {
+  name: string
+  ratio?: number | null
+}
+
+export interface FundAllocationData {
+  reportDate?: string
+  assets: FundAllocItem[]
+  industries: FundAllocItem[]
+}
+
+export interface FundHolderTopRow {
+  name: string
+  share?: number | null
+  ratio?: number | null
+}
+
+export interface FundHoldersData {
+  holderAmount?: number | null
+  avgHolderShare?: number | null
+  instHolderRatio?: number | null
+  indivHolderRatio?: number | null
+  holderReportDate?: string
+  top: FundHolderTopRow[]
+}
+
+export interface FundDividendRow {
+  date: string
+  recordDate?: string
+  amount?: number | null
+  type?: string
 }
 
 export interface FundNavPoint {
@@ -511,6 +582,18 @@ export interface FundSnapshotData {
   profile: FundProfileData | Record<string, unknown> | null
   nav: FundNavPoint | Record<string, unknown> | null
   quote: Record<string, unknown> | null
+}
+
+export interface FundDetailData {
+  code: string
+  snapshot: FundSnapshotData | null
+  holdings: FundHoldingRow[]
+  returns: FundReturnsData | null
+  drawdowns: FundDrawdownRow[]
+  allocation: FundAllocationData | null
+  holders: FundHoldersData | null
+  dividends: FundDividendRow[]
+  failed: string[]
 }
 
 export interface EtfSnapshotData {

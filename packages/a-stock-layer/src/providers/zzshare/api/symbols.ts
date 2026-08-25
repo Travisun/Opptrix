@@ -1,4 +1,4 @@
-import { isShIndexCode, normalizeCode } from '../../../utils/helpers.js'
+import { isShIndexCode, normalizeCode, parseStockMarket } from '../../../utils/helpers.js'
 
 const SUFFIX_MAP: Record<string, string> = {
   SS: 'SH',
@@ -27,13 +27,17 @@ export function normalizeSymbol(symbol: string): string {
  * @param symbol 股票代码，支持带后缀或裸代码
  * @returns 如 `600519.SH`、`000001.SZ`
  */
-export function toTsCode(symbol: string): string {
+export function toTsCode(symbol: string, exchange?: string | null): string {
   const normalized = symbol.trim().toUpperCase()
   if (normalized.includes('.')) {
     const [code, suffix] = normalized.split('.', 2)
     return `${code}.${SUFFIX_MAP[suffix] ?? suffix}`
   }
   const bare = normalizeCode(normalized)
+  const ex = parseStockMarket(exchange)
+  if (ex) return `${bare}.${ex}`
+  // 000001 默认深市个股；上证指数须显式 exchange=SH
+  if (bare === '000001') return `${bare}.SZ`
   if (isShIndexCode(bare)) return `${bare}.SH`
   if (bare.startsWith('399')) return `${bare}.SZ`
   if (bare.startsWith('6') || bare.startsWith('5')) return `${bare}.SH`

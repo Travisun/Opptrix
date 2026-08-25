@@ -79,6 +79,16 @@ export abstract class BaseDriver {
   etfProfile?(etfCode: string): Promise<unknown[] | null> | unknown[] | null
   etfHoldings?(etfCode: string): Promise<unknown[] | null> | unknown[] | null
   etfNav?(etfCode: string): Promise<unknown[] | null> | unknown[] | null
+  fundList?(market?: string, keyword?: string): Promise<unknown[] | null> | unknown[] | null
+  fundProfile?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundNav?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundHoldings?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundQuote?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundReturns?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundDrawdown?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundAllocation?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundHolders?(code: string): Promise<unknown[] | null> | unknown[] | null
+  fundDividend?(code: string): Promise<unknown[] | null> | unknown[] | null
   managerInfo?(code: string): Promise<unknown[] | null> | unknown[] | null
   shareholderPlans?(code: string): Promise<unknown[] | null> | unknown[] | null
   buyback?(code: string): Promise<unknown[] | null> | unknown[] | null
@@ -142,6 +152,11 @@ export const CAP_METHOD: Partial<Record<Capability, string>> = {
   [Capability.FUND_NAV]: 'fundNav',
   [Capability.FUND_HOLDINGS]: 'fundHoldings',
   [Capability.FUND_QUOTE]: 'fundQuote',
+  [Capability.FUND_RETURNS]: 'fundReturns',
+  [Capability.FUND_DRAWDOWN]: 'fundDrawdown',
+  [Capability.FUND_ALLOCATION]: 'fundAllocation',
+  [Capability.FUND_HOLDERS]: 'fundHolders',
+  [Capability.FUND_DIVIDEND]: 'fundDividend',
   [Capability.MANAGER_INFO]: 'managerInfo',
   [Capability.SHAREHOLDER_PLAN]: 'shareholderPlans',
   [Capability.BUYBACK]: 'buyback',

@@ -13,6 +13,7 @@ import {
 } from './format'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
+import { WATCHLIST_QUOTES_POLL_MS } from './watchlistQuotes'
 import {
   normalizeWatchlistItem,
   resolveWatchlistInstrument,
@@ -25,7 +26,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const CONTENT_PAD = '15px'
-const DETAIL_FOOTNOTE = '行情约每 1–2 分钟刷新；公司资料、财务与新闻请通过助手查询。'
+const DETAIL_FOOTNOTE = '行情约每 1 分钟刷新；公司资料、财务与新闻请通过助手查询。'
 
 const useStyles = makeStyles({
   root: {
@@ -264,7 +265,7 @@ function StockDetailTab({
 
   useEffect(() => {
     if (!stockKey) return undefined
-    const timer = window.setInterval(() => setDetailReload(n => n + 1), 90_000)
+    const timer = window.setInterval(() => setDetailReload(n => n + 1), WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
   }, [stockKey])
 

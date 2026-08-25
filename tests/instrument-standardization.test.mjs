@@ -426,11 +426,27 @@ test('inferCnAssetClassFromSymbol — 000977 defaults to SZ equity without excha
 })
 
 test('inferCnAssetClassFromSymbol — 000001 defaults to equity, 000300 stays index', async () => {
-  const { inferCnAssetClassFromSymbol } = await import('../packages/shared/dist/instrument-symbol.js')
+  const { inferCnAssetClassFromSymbol, inferCnExchangeFromSymbol, parseInstrumentNamespace, normalizeInstrumentRef } = await import('../packages/shared/dist/instrument-symbol.js')
   assert.equal(inferCnAssetClassFromSymbol('000001'), 'EQUITY')
   assert.equal(inferCnAssetClassFromSymbol('000001', 'SH'), 'INDEX')
   assert.equal(inferCnAssetClassFromSymbol('000300'), 'INDEX')
   assert.equal(inferCnAssetClassFromSymbol('000300', 'SH'), 'INDEX')
+  assert.equal(inferCnExchangeFromSymbol('000001'), 'SZ')
+
+  const sz = parseInstrumentNamespace('CN:SZ.000001')
+  assert.ok(sz)
+  assert.equal(sz.exchange, 'SZ')
+  assert.equal(sz.assetClass, 'EQUITY')
+  assert.equal(sz.symbol, '000001')
+
+  const sh = parseInstrumentNamespace('CN:SH.000001')
+  assert.ok(sh)
+  assert.equal(sh.exchange, 'SH')
+  assert.equal(sh.assetClass, 'INDEX')
+
+  const bare = normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: '000001' })
+  assert.equal(bare.exchange, 'SZ')
+  assert.equal(bare.assetClass, 'EQUITY')
 })
 
 test('Engine resolveInstrumentQueryPlan CN realtime preserves exchange', () => {
@@ -442,16 +458,18 @@ test('Engine resolveInstrumentQueryPlan CN realtime preserves exchange', () => {
   if (plan?.kind === 'cn_realtime') {
     assert.equal(plan.symbol, '000977')
     assert.equal(plan.exchange, 'SZ')
+    assert.equal(plan.assetClass, 'EQUITY')
   }
 
   const indexPlan = resolveInstrumentQueryPlan(
     { market: 'CN', assetClass: 'INDEX', symbol: '000977', exchange: 'SH' },
     'realtime',
   )
-  assert.equal(indexPlan?.kind, 'cn_realtime')
-  if (indexPlan?.kind === 'cn_realtime') {
-    assert.equal(indexPlan.symbol, '000977')
-    assert.equal(indexPlan.exchange, 'SH')
+  assert.equal(indexPlan?.kind, 'registry')
+  if (indexPlan?.kind === 'registry') {
+    assert.equal(indexPlan.assetClass, 'INDEX')
+    assert.equal(indexPlan.method, 'indexRealtime')
+    assert.deepEqual(indexPlan.args, ['000977'])
   }
 })
 

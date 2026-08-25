@@ -95,6 +95,36 @@ function appendProviderError(prev: string, next: string): string {
   return prev ? `${prev}; ${next}` : next
 }
 
+/** 引擎内 A 股分流：显式 assetClass 优先，其次 exchange，禁止无 exchange 时用裸码把 000001 猜成指数。 */
+function resolveCnEngineAssetClass(
+  code: string,
+  market?: import('./utils/helpers.js').StockMarket,
+  assetClass?: AssetClass,
+): AssetClass {
+  if (assetClass === 'INDEX' || assetClass === 'ETF' || assetClass === 'EQUITY') return assetClass
+  if (market) return inferCnAssetClassFromSymbol(code, market)
+  return inferCnAssetClass(code)
+}
+
+function mapIndexRealtimeResultToStock(
+  result: QueryResult<IndexRealtime[]>,
+): QueryResult<StockRealtime[]> {
+  if (!result.success || !result.data?.length) return { ...result, data: undefined }
+  const data = result.data.map(row => ({
+    code: row.code,
+    name: row.name,
+    price: row.price,
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    preClose: row.preClose,
+    volume: row.volume,
+    amount: row.amount,
+    changePct: row.changePct,
+  })) as StockRealtime[]
+  return { ...result, data: normalizePreOpenRealtimeQuotes(data) }
+}
+
 export type { InstrumentDataCapability } from './core/instrument-query.js'
 
 /** Multi-market data engine — provider fallback + cache (canonical name: MarketDataEngine) */
@@ -333,31 +363,18 @@ export class MarketDataEngine {
   }
 
   // ── Core market data ──
-  realtime(code: string, market?: import('./utils/helpers.js').StockMarket): Promise<QueryResult<StockRealtime[]>> {
-    const assetClass = market
-      ? inferCnAssetClassFromSymbol(code, market)
-      : inferCnAssetClass(code)
-    if (assetClass === 'INDEX') {
-      return this.qScoped<import('./core/schema.js').IndexRealtime>(
+  realtime(
+    code: string,
+    market?: import('./utils/helpers.js').StockMarket,
+    assetClass?: AssetClass,
+  ): Promise<QueryResult<StockRealtime[]>> {
+    const resolved = resolveCnEngineAssetClass(code, market, assetClass)
+    if (resolved === 'INDEX') {
+      return this.qScoped<IndexRealtime>(
         'CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, code,
-      ).then(result => {
-        if (!result.success || !result.data?.length) return { ...result, data: undefined }
-        const data = result.data.map(row => ({
-          code: row.code,
-          name: row.name,
-          price: row.price,
-          open: row.open,
-          high: row.high,
-          low: row.low,
-          preClose: row.preClose,
-          volume: row.volume,
-          amount: row.amount,
-          changePct: row.changePct,
-        })) as StockRealtime[]
-        return { ...result, data: normalizePreOpenRealtimeQuotes(data) }
-      })
+      ).then(mapIndexRealtimeResultToStock)
     }
-    return this.qScoped<StockRealtime>('CN', assetClass, Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
+    return this.qScoped<StockRealtime>('CN', resolved, Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
     })
@@ -377,6 +394,7 @@ export class MarketDataEngine {
     end?: string,
     count?: number,
     market?: import('./utils/helpers.js').StockMarket,
+    assetClass?: AssetClass,
   ): Promise<QueryResult<StockKline[]>>
   kline(
     code: string,
@@ -385,11 +403,10 @@ export class MarketDataEngine {
     end = '',
     count?: number,
     market?: import('./utils/helpers.js').StockMarket,
+    assetClass?: AssetClass,
   ) {
-    const assetClass = market
-      ? inferCnAssetClassFromSymbol(code, market)
-      : inferCnAssetClass(code)
-    if (assetClass === 'INDEX') {
+    const resolved = resolveCnEngineAssetClass(code, market, assetClass)
+    if (resolved === 'INDEX') {
       if (typeof periodOrCount === 'number') {
         return this.indexKline(code, periodOrCount) as Promise<QueryResult<StockKline[]>>
       }
@@ -399,13 +416,13 @@ export class MarketDataEngine {
       return this.indexKline(code, periodOrCount, start, end) as Promise<QueryResult<StockKline[]>>
     }
     if (typeof periodOrCount === 'number') {
-      return this.fetchDailyKline(code, periodOrCount, 0, 'daily', market)
+      return this.fetchDailyKline(code, periodOrCount, 0, 'daily', market, resolved)
     }
     if (MINUTE_PERIODS.has(periodOrCount)) {
-      return this.minuteKline(code, periodOrCount, count ?? 800, 0, market)
+      return this.minuteKline(code, periodOrCount, count ?? 800, 0, market, resolved)
     }
     if (periodOrCount === 'daily' || periodOrCount === 'weekly' || periodOrCount === 'monthly') {
-      return this.fetchDailyKline(code, count ?? 800, 0, periodOrCount, market)
+      return this.fetchDailyKline(code, count ?? 800, 0, periodOrCount, market, resolved)
     }
     const args = count != null
       ? [code, periodOrCount, start, end, count, market]
@@ -437,14 +454,16 @@ export class MarketDataEngine {
     startOffset = 0,
     period = 'daily',
     market?: import('./utils/helpers.js').StockMarket,
+    assetClass?: AssetClass,
   ): Promise<QueryResult<StockKline[]>> {
-    if (inferCnAssetClass(code) === 'INDEX') {
+    const resolved = resolveCnEngineAssetClass(code, market, assetClass)
+    if (resolved === 'INDEX') {
       return this.fetchIndexKline(code, count, period) as Promise<QueryResult<StockKline[]>>
     }
     const want = Math.max(1, count)
-    const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const klineAssetClass = resolved === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
     // 读缓存保留（兼容旧盘）；写仅 watchlist，与 queryScoped 对齐，避免长 K 键空间爆炸
-    const writeCache = this.isWatchlistTarget('CN', assetClass, [code])
+    const writeCache = this.isWatchlistTarget('CN', klineAssetClass, [code])
     return this.queryPlans.execute<StockKline>(
       this.queryPlans.getPlan('cn_equity_stock_kline_daily'),
       {
@@ -453,7 +472,7 @@ export class MarketDataEngine {
         useCache: true,
         writeCache,
         args: [code, period, '', '', want, market, startOffset],
-        assetClass,
+        assetClass: klineAssetClass,
       },
     )
   }
@@ -465,10 +484,11 @@ export class MarketDataEngine {
     count = 800,
     startOffset = 0,
     market?: import('./utils/helpers.js').StockMarket,
+    assetClass?: AssetClass,
   ): Promise<QueryResult<StockKline[]>> {
     const safeCount = Math.max(1, Math.min(count, 800))
     const safeOffset = Math.max(0, startOffset)
-    return this.fetchMinuteKline(code, period, safeCount, safeOffset, market)
+    return this.fetchMinuteKline(code, period, safeCount, safeOffset, market, assetClass)
   }
 
   private async fetchMinuteKline(
@@ -477,14 +497,16 @@ export class MarketDataEngine {
     count: number,
     startOffset: number,
     market?: import('./utils/helpers.js').StockMarket,
+    assetClass?: AssetClass,
   ): Promise<QueryResult<StockKline[]>> {
-    if (inferCnAssetClass(code) === 'INDEX') {
+    const resolved = resolveCnEngineAssetClass(code, market, assetClass)
+    if (resolved === 'INDEX') {
       const primary = await this.indexKline(code, period, '', '', count) as QueryResult<StockKline[]>
       if (primary.success && primary.data?.length) return primary
       return { success: false, error: '指数分钟 K 暂无数据' }
     }
-    const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
-    const writeCache = this.isWatchlistTarget('CN', assetClass, [code])
+    const klineAssetClass = resolved === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const writeCache = this.isWatchlistTarget('CN', klineAssetClass, [code])
     const viaPlan = await this.queryPlans.execute<StockKline>(
       this.queryPlans.getPlan('cn_equity_stock_kline_minute'),
       {
@@ -493,7 +515,7 @@ export class MarketDataEngine {
         useCache: true,
         writeCache,
         args: [code, period, '', '', count, market, startOffset],
-        assetClass,
+        assetClass: klineAssetClass,
       },
     )
     return viaPlan
@@ -989,7 +1011,11 @@ export class MarketDataEngine {
 
     switch (plan.kind) {
       case 'cn_realtime':
-        return this.realtime(plan.symbol, plan.exchange as import('./utils/helpers.js').StockMarket | undefined)
+        return this.realtime(
+          plan.symbol,
+          plan.exchange as import('./utils/helpers.js').StockMarket | undefined,
+          plan.assetClass,
+        )
       case 'cn_kline':
         if ((plan.period && plan.period !== 'daily') || plan.start || plan.end) {
           return this.kline(
@@ -999,6 +1025,7 @@ export class MarketDataEngine {
             plan.end ?? '',
             plan.count,
             plan.exchange as import('./utils/helpers.js').StockMarket | undefined,
+            plan.assetClass,
           )
         }
         return this.kline(
@@ -1008,6 +1035,7 @@ export class MarketDataEngine {
           '',
           plan.count ?? 120,
           plan.exchange as import('./utils/helpers.js').StockMarket | undefined,
+          plan.assetClass,
         )
       case 'composite_snapshot':
         if (plan.market === 'US') return this.usSnapshot(plan.symbol)
@@ -1031,6 +1059,9 @@ export class MarketDataEngine {
           15_000,
           plan.ref,
         ).then(result => {
+          if (plan.capability === Capability.INDEX_REALTIME) {
+            return mapIndexRealtimeResultToStock(result as QueryResult<IndexRealtime[]>)
+          }
           if (
             plan.capability === Capability.FUND_QUOTE
             && plan.market === 'CN'

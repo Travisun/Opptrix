@@ -30,6 +30,19 @@ const LINE_OPTS = {
   crosshairMarkerVisible: false,
 }
 
+/** Shared so K / Vol / MACD plot areas share the same horizontal origin. */
+const PRICE_SCALE_MIN_WIDTH = 52
+
+function alignedTimeScaleBase(minuteChart: boolean, intradayChart: boolean) {
+  const tight = minuteChart || intradayChart
+  return {
+    borderVisible: false,
+    fixLeftEdge: false,
+    fixRightEdge: true as const,
+    ...(tight ? { barSpacing: 7, minBarSpacing: 2 } : {}),
+  }
+}
+
 export interface ChartPaneRefs {
   main: HTMLDivElement
   volume: HTMLDivElement
@@ -84,16 +97,13 @@ export class ChartWorkspace {
         },
         rightPriceScale: {
           borderVisible: false,
-          ...(minuteChart ? { minimumWidth: 52 } : {}),
+          minimumWidth: PRICE_SCALE_MIN_WIDTH,
         },
         timeScale: {
-          borderVisible: false,
-          fixLeftEdge: false,
-          fixRightEdge: true,
+          ...alignedTimeScaleBase(minuteChart, intradayChart),
           timeVisible: minuteChart || intradayChart,
           secondsVisible: (minuteChart && options.period === '1m') || intradayChart,
           tickMarkFormatter: axisFormat.tickMarkFormatter,
-          ...((minuteChart || intradayChart) ? { barSpacing: 7, minBarSpacing: 2 } : {}),
         },
         crosshair: theme.crosshair,
         handleScroll: {
@@ -112,8 +122,15 @@ export class ChartWorkspace {
       this.volumeChart = createChart(refs.volume, {
         layout: theme.layout,
         grid: theme.grid,
-        rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0 } },
-        timeScale: { visible: false, borderVisible: false },
+        rightPriceScale: {
+          borderVisible: false,
+          minimumWidth: PRICE_SCALE_MIN_WIDTH,
+          scaleMargins: { top: 0.08, bottom: 0 },
+        },
+        timeScale: {
+          ...alignedTimeScaleBase(minuteChart, intradayChart),
+          visible: false,
+        },
         handleScroll: false,
         handleScale: false,
       })
@@ -122,8 +139,15 @@ export class ChartWorkspace {
         this.macdChart = createChart(refs.macd, {
           layout: theme.layout,
           grid: theme.grid,
-          rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0 } },
-          timeScale: { visible: false, borderVisible: false },
+          rightPriceScale: {
+            borderVisible: false,
+            minimumWidth: PRICE_SCALE_MIN_WIDTH,
+            scaleMargins: { top: 0.15, bottom: 0 },
+          },
+          timeScale: {
+            ...alignedTimeScaleBase(minuteChart, intradayChart),
+            visible: false,
+          },
           handleScroll: false,
           handleScale: false,
         })
@@ -247,7 +271,9 @@ export class ChartWorkspace {
       }
       for (const ma of bundle.maLines) {
         const line = this.mainChart.addSeries(LineSeries, { ...lineOpts, color: ma.color })
-        this.setSeriesData(ma.key, () => line.setData(ma.points))
+        this.setSeriesData(ma.key, () => line.setData(ma.points.map(p => (
+          p.value == null ? { time: p.time } : { time: p.time, value: p.value }
+        ))))
       }
     }
 
@@ -259,28 +285,46 @@ export class ChartWorkspace {
         priceLineVisible: false,
         lastValueVisible: false,
       })
-      this.setSeriesData('MACD柱', () => hist.setData(bundle.macd.map(row => ({
-        time: row.time,
-        value: row.hist,
-        color: row.histColor,
-      }))))
+      this.setSeriesData('MACD柱', () => hist.setData(bundle.macd.map(row => (
+        row.hist == null
+          ? { time: row.time }
+          : { time: row.time, value: row.hist, color: row.histColor }
+      ))))
 
       const dif = this.macdChart.addSeries(LineSeries, { ...LINE_OPTS, color: indicatorColors.macd })
-      this.setSeriesData('DIF', () => dif.setData(bundle.macd.map(row => ({ time: row.time, value: row.dif }))))
+      this.setSeriesData('DIF', () => dif.setData(bundle.macd.map(row => (
+        row.dif == null ? { time: row.time } : { time: row.time, value: row.dif }
+      ))))
 
       const dea = this.macdChart.addSeries(LineSeries, { ...LINE_OPTS, color: indicatorColors.signal })
-      this.setSeriesData('DEA', () => dea.setData(bundle.macd.map(row => ({ time: row.time, value: row.dea }))))
+      this.setSeriesData('DEA', () => dea.setData(bundle.macd.map(row => (
+        row.dea == null ? { time: row.time } : { time: row.time, value: row.dea }
+      ))))
     }
+  }
+
+  private applyRangeToPanes(range: LogicalRange): void {
+    try {
+      this.volumeChart?.timeScale().setVisibleLogicalRange(range)
+      this.macdChart?.timeScale().setVisibleLogicalRange(range)
+    } catch { /* ignore sync during pane rebuild */ }
+  }
+
+  /** Copy main visible range onto Vol/MACD — needed after focusRecent / resize, not only on user scroll. */
+  private pushRangeToPanes(): void {
+    if (!this.mainChart || !this.alive) return
+    try {
+      const range = this.mainChart.timeScale().getVisibleLogicalRange()
+      if (!range) return
+      this.applyRangeToPanes(range)
+    } catch { /* ignore */ }
   }
 
   private syncTimeScales(): void {
     if (!this.mainChart || !this.volumeChart) return
     this.rangeHandler = range => {
       if (!range || !this.alive) return
-      try {
-        this.volumeChart?.timeScale().setVisibleLogicalRange(range)
-        this.macdChart?.timeScale().setVisibleLogicalRange(range)
-      } catch { /* ignore sync during pane rebuild */ }
+      this.applyRangeToPanes(range)
 
       if (range.from <= HISTORY_EDGE_THRESHOLD) {
         this.mountOptions?.onNeedHistory?.()
@@ -311,8 +355,10 @@ export class ChartWorkspace {
     if (!this.mainChart || total <= 0) return
     const count = Math.min(visible, total)
     const from = Math.max(0, total - count)
+    const range = { from, to: total } as LogicalRange
     try {
-      this.mainChart.timeScale().setVisibleLogicalRange({ from, to: total })
+      this.mainChart.timeScale().setVisibleLogicalRange(range)
+      this.applyRangeToPanes(range)
     } catch { /* ignore */ }
   }
 
@@ -323,17 +369,20 @@ export class ChartWorkspace {
       const visible = defaultVisibleBars(options.period)
       if (options.preserveRange && options.addedBars && options.addedBars > 0) {
         const shift = options.addedBars
+        const range = {
+          from: options.preserveRange.from + shift,
+          to: options.preserveRange.to + shift,
+        } as LogicalRange
         try {
-          this.mainChart.timeScale().setVisibleLogicalRange({
-            from: options.preserveRange.from + shift,
-            to: options.preserveRange.to + shift,
-          })
+          this.mainChart.timeScale().setVisibleLogicalRange(range)
+          this.applyRangeToPanes(range)
         } catch {
           this.focusRecent(this.totalBars, visible)
         }
       } else if (options.preserveRange) {
         try {
           this.mainChart.timeScale().setVisibleLogicalRange(options.preserveRange)
+          this.applyRangeToPanes(options.preserveRange)
         } catch {
           this.focusRecent(this.totalBars, visible)
         }
@@ -356,6 +405,7 @@ export class ChartWorkspace {
       if (refs.macd && this.macdChart) {
         this.macdChart.applyOptions({ width: refs.macd.clientWidth, height: refs.macd.clientHeight })
       }
+      this.pushRangeToPanes()
     }
     this.doResize = resize
 

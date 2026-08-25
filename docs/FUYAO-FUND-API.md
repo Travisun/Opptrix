@@ -32,15 +32,15 @@
 | 债券持仓历史 | `GET /api/fund/portfolio/bond-history` | `fundPortfolioBondHistory` | ✅ Client |
 | 股票报告期 | `GET /api/fund/portfolio/stock-report-dates` | `fundPortfolioStockReportDates` | ✅ Client |
 | 债券报告期 | `GET /api/fund/portfolio/bond-report-dates` | `fundPortfolioBondReportDates` | ✅ Client |
-| 资产配置 | `GET /api/fund/portfolio/asset-allocation` | `fundPortfolioAssetAllocation` | ✅ Client |
-| 行业配置 | `GET /api/fund/portfolio/industry-allocation` | `fundPortfolioIndustryAllocation` | ✅ Client |
+| 资产配置 | `GET /api/fund/portfolio/asset-allocation` | `fundPortfolioAssetAllocation` | ✅ `fundAllocation` |
+| 行业配置 | `GET /api/fund/portfolio/industry-allocation` | `fundPortfolioIndustryAllocation` | ✅ `fundAllocation` |
 | 净值序列 | `GET /api/fund/performance/nav` | `fundPerformanceNav` | ✅ `fundProfile` / `fundNav` / `fundQuote`（**须传 `range`**，见下方分工） |
-| 区间收益 | `GET /api/fund/performance/returns` | `fundPerformanceReturns` | ✅ `fundProfile`（概览近一年） |
+| 区间收益 | `GET /api/fund/performance/returns` | `fundPerformanceReturns` | ✅ `fundProfile`（概览近一年）+ `fundReturns` |
 | 风险指标历史 | `GET /api/fund/performance/indicators-historical` | `fundPerformanceIndicatorsHistorical` | ✅ Client |
-| 回撤 | `GET /api/fund/performance/drawdowns` | `fundPerformanceDrawdowns` | ✅ Client |
-| 持有人结构 | `GET /api/fund/holders/detail` | `fundHoldersDetail` | ✅ `fundProfile`（扩展字段） |
-| 十大持有人 | `GET /api/fund/holders/top` | `fundHoldersTop` | ✅ Client |
-| 分红 | `GET /api/fund/corporate-actions/dividends` | `fundCorporateActionsDividends` | ✅ Client |
+| 回撤 | `GET /api/fund/performance/drawdowns` | `fundPerformanceDrawdowns` | ✅ `fundDrawdown` |
+| 持有人结构 | `GET /api/fund/holders/detail` | `fundHoldersDetail` | ✅ `fundProfile`（扩展字段）+ `fundHolders` |
+| 十大持有人 | `GET /api/fund/holders/top` | `fundHoldersTop` | ✅ `fundHolders` |
+| 分红 | `GET /api/fund/corporate-actions/dividends` | `fundCorporateActionsDividends` | ✅ `fundDividend` |
 | 经理详情 | `GET /api/fund/managers/detail` | `fundManagersDetail` | ✅ Client |
 | 经理业绩 | `GET /api/fund/managers/performance` | `fundManagersPerformance` | ✅ Client |
 | 经理经历 | `GET /api/fund/managers/experience` | `fundManagersExperience` | ✅ Client |
@@ -62,7 +62,12 @@
 | `FUND_PROFILE` | `fundProfile` | CN / FUND | 120（同花顺全局） |
 | `FUND_HOLDINGS` | `fundHoldings` | CN / FUND | 120 |
 | `FUND_QUOTE` | `fundQuote` | CN / FUND | 120；**场内**并行 `fundMarketSnapshot` 合并交易所价；失败时回退 A 股 `realtime` |
-| `FUND_NAV` | `fundNav` | CN / FUND | 120（`FundDetailTab` 走势 / 净值 Tab） |
+| `FUND_NAV` | `fundNav` | CN / FUND | 120（`FundDetailTab` 走势） |
+| `FUND_RETURNS` | `fundReturns` | CN / FUND | 120（业绩 Tab） |
+| `FUND_DRAWDOWN` | `fundDrawdown` | CN / FUND | 120（业绩 Tab 回撤） |
+| `FUND_ALLOCATION` | `fundAllocation` | CN / FUND | 120（持仓 Tab 资产/行业配置） |
+| `FUND_HOLDERS` | `fundHolders` | CN / FUND | 120（持有人 Tab；无数据不显示） |
+| `FUND_DIVIDEND` | `fundDividend` | CN / FUND | 120（分红 Tab；无数据不显示） |
 | `ETF_*` | `etfProfile` 等 | CN / ETF | 120（`fund_type=exchange`） |
 
 ### `get_fund_performance_nav` / `fundPerformanceNav` 的 `range` 分工
@@ -71,7 +76,7 @@
 
 | 调用方 | 常量 / `range` | 用途 |
 |---|---|---|
-| `fundNav` | `FUYAO_FUND_NAV_SERIES_OPTS` → `range=fyear` | 历史净值走势 / 净值 Tab 全量序列 |
+| `fundNav` | `FUYAO_FUND_NAV_SERIES_OPTS` → `range=fyear` | 历史净值走势 |
 | `fundProfile` / `fundQuote` | `FUYAO_FUND_NAV_RECENT_OPTS` → `range=month` | 近月序列，取 latest+prev 算涨跌；报价取排序后首条 |
 | （勿省略） | 不传 `range` | 最多 1 条，无法算涨跌、也无法画走势 |
 
@@ -81,23 +86,29 @@
 
 ```
 InstrumentRef (CN:PF)
-  → research.fundSnapshot
-    → Engine.fundSnapshot → fundProfile + fundQuote（场内并行快照）
-  → 关注列表 / 行情 → FUND_QUOTE（场内含交易所价 + 净值；扶摇失败走 realtime 回退）
-  → Tab「走势」→ research.fundNav → Fuyao performance/nav（`range=fyear` 序列）
-  → Tab「净值」→ research.fundNav（`range=fyear` 列表）
-  → Tab「持仓」→ research.fundHoldings
+  → research.fundDetail  → Hub fund_detail
+      并行 queryInstrumentData：
+        fund_snapshot / fund_holdings / fund_returns / fund_drawdown
+        fund_allocation / fund_holders / fund_dividend
+      快照失败 → 整页失败（UI 再回退 research.fundSnapshot）
+      其余失败 → data.failed[]（如「持仓」「业绩」），不拖垮整页
+  → Hero：净值 / 涨跌 / 规模 / 经理（来自 snapshot.profile + quote）
+  → Tab「走势」→ 场内非 LOF：K 线；其余：FundNavChart（fund_nav，range=fyear）
+  → Tab「档案」→ snapshot.profile（资料 / 经理 / 成立日 / 基准 / 费率）
+  → Tab「业绩」→ fund_returns + fund_drawdown（可回退 profile.performance）
+  → Tab「持仓」→ fund_holdings + fund_allocation
+  → Tab「持有人」→ fund_holders（有结构或十大持有人时才显示）
+  → Tab「分红」→ fund_dividend（有记录才显示）
 ```
 
 **请求量（扶摇，打开一只基金）**
 
 | 动作 | 上游调用 |
 |---|---|
-| 打开详情 | `profile/detail` + `performance/nav`（`range=month`）+ `performance/returns` + `holders/detail` ≈ **4 次** |
-| 点走势 / 净值 | `performance/nav`（`range=fyear`，与概览可能复用缓存）≈ **1 次** |
-| 点持仓 | `portfolio/holdings` ≈ **1 次** |
+| 打开详情 | Hub 并行：profile/nav/returns/holders + holdings + drawdowns + asset/industry allocation + holders top + dividends（单路失败不阻塞） |
+| 点走势 | 场外/LOF：`performance/nav`（`range=fyear`，可复用缓存）；场内非 LOF：K 线通道 |
 
-**概览 Tab 字段来源**
+**Hero / 档案字段来源**
 
 | UI 字段 | Standard 字段 | 扶摇来源 |
 |---|---|---|
@@ -120,8 +131,10 @@ InstrumentRef (CN:PF)
 | `providers/tonghuashun/api/fund-symbols.ts` | `resolveFuyaoFundRoute` |
 | `providers/tonghuashun/normalize/fund.ts` | 标准化 `StandardFund*` 行 |
 | `providers/tonghuashun/markets/cn/fund.ts` | `mixTonghuashunFund` |
-| `providers/tonghuashun/manifest.ts` | `cnFundBindings` |
-| `client-ui/src/market/FundDetailTab.tsx` | 右侧详情 UI |
+| `providers/tonghuashun/manifest.ts` | `TONGHUASHUN_CN_FUND_CAPABILITIES` 绑定 |
+| `client-ui/src/market/FundDetailTab.tsx` | 右侧详情 UI（走势 / 档案 / 业绩 / 持仓 / 持有人 / 分红） |
+| `client-ui/src/market/fundDetailPanels.tsx` | 档案 / 业绩 / 持仓 / 持有人 / 分红面板 |
+| `packages/research-hub/src/fund-detail.ts` | Hub `fund_detail` 聚合 `mergeFundDetailParts` |
 | `client-ui/src/market/FundNavChart.tsx` | 历史净值折线图 |
 
 ## 验证
@@ -129,7 +142,7 @@ InstrumentRef (CN:PF)
 ```bash
 npm run build:packages
 npm run check:ui
-node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs
+node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs tests/fund-detail-merge.test.mjs tests/instrument-fund-routing.test.mjs
 ```
 
 配置同花顺 API Key 并启用 Provider 后，打开 CN:PF 基金详情，`source` 应为 `tonghuashun`。

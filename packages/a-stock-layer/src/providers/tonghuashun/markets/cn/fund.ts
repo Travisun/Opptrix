@@ -10,6 +10,11 @@ import {
   mapFundHoldingsToFundRows,
   mapFundNavRowsForFund,
   mapFundProfileToFundProfileRow,
+  mapFundReturnsDetail,
+  mapFundDrawdownRows,
+  mapFundAllocationRow,
+  mapFundHoldersRow,
+  mapFundDividendRows,
 } from '../../normalize/fund.js'
 import type { TonghuashunMarketHandler } from './handler.js'
 
@@ -117,7 +122,7 @@ function listedFundQuoteFromSnapshot(
   }
 }
 
-/** 同花顺 Fuyao 公募基金标准 Capability（fundProfile / fundNav / fundHoldings / fundQuote） */
+/** 同花顺 Fuyao 公募基金标准 Capability（profile / nav / holdings / quote / 详情扩展） */
 export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler }) {
   const p = Driver.prototype as Handler
 
@@ -223,6 +228,79 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
       const { fundType, thscode } = route
       const data = await client.fundPortfolioHoldings(fundType, thscode)
       const rows = mapFundHoldingsToFundRows(bare, data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  p.fundReturns = async function fundReturns(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundPerformanceReturns(fundType, thscode)
+      const item = data.item?.[0]
+      if (!item) return null
+      return [mapFundReturnsDetail(bare, item)]
+    })
+  }
+
+  p.fundDrawdown = async function fundDrawdown(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundPerformanceDrawdowns(fundType, thscode)
+      const rows = mapFundDrawdownRows(bare, data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  p.fundAllocation = async function fundAllocation(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const [assetData, industryData] = await Promise.all([
+        client.fundPortfolioAssetAllocation(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] })),
+        client.fundPortfolioIndustryAllocation(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] })),
+      ])
+      const row = mapFundAllocationRow(bare, assetData.item ?? [], industryData.item ?? [])
+      if (!row.assets.length && !row.industries.length) return null
+      return [row]
+    })
+  }
+
+  p.fundHolders = async function fundHolders(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const [detailData, topData] = await Promise.all([
+        client.fundHoldersDetail(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] })),
+        client.fundHoldersTop(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] })),
+      ])
+      const row = mapFundHoldersRow(bare, detailData.item ?? [], topData.item ?? [])
+      return row ? [row] : null
+    })
+  }
+
+  p.fundDividend = async function fundDividend(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundCorporateActionsDividends(fundType, thscode)
+      const rows = mapFundDividendRows(bare, data.item ?? [])
       return rows.length ? rows : null
     })
   }

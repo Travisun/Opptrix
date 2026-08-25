@@ -98,6 +98,7 @@ import {
   routeInstrumentSnapshot,
   type InstrumentRouteHandlers,
 } from './instrument-router.js'
+import { mergeFundDetailParts } from './fund-detail.js'
 import {
   routeInstrumentEvaluation,
   routeInstrumentIndicators,
@@ -377,6 +378,7 @@ export class ResearchHub {
         case 'fund_nav': return await this.queryFundInstrumentData(params, 'fund_nav', t0)
         case 'fund_holdings': return await this.queryFundInstrumentData(params, 'fund_holdings', t0)
         case 'fund_profile': return await this.queryFundInstrumentData(params, 'fund_profile', t0)
+        case 'fund_detail': return await this.fundDetail(params, t0)
         case 'local_fund_list': return await this.localFundList(params, t0)
         case 'local_fund_nav': return await this.localFundNav(String(params.code ?? ''), params, t0)
         case 'local_fund_holdings': return await this.localFundHoldings(String(params.code ?? ''), params, t0)
@@ -1240,14 +1242,20 @@ export class ResearchHub {
     await this.fillMissingStockNames(normalizedRefs.map(r => r.symbol))
     const batch = await this.stockBatchRealtime(normalizedRefs)
     // Sparse list: failed refs omitted. Callers (routeInstrumentQuotes) must match by code, not index.
-    const quotes: NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>>[] = []
+    const quotes: Array<NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> & {
+      instrument?: InstrumentRef
+    }> = []
     const failed: { code: string; reason: QuoteFailedReason }[] = []
     let firstError = ''
     normalizedRefs.forEach((ref, i) => {
       const errorText = batch.errors?.[i] ?? ''
       const quote = this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null)
       if (quote) {
-        quotes.push(quote)
+        quotes.push({
+          ...quote,
+          exchange: quote.exchange ?? ref.exchange,
+          instrument: ref,
+        })
         return
       }
       if (!firstError && errorText) firstError = errorText
@@ -3189,6 +3197,47 @@ export class ResearchHub {
 
   private async fundSnapshot(ref: InstrumentRef, t0: number) {
     return this.queryFundInstrumentData({ instrument: ref }, 'fund_snapshot', t0)
+  }
+
+  private async fundDetail(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    if (ref.assetClass !== 'FUND') {
+      return fail('当前标的不是公募基金，请重新搜索并选择基金', t0)
+    }
+    const settle = (cap: 'fund_snapshot' | 'fund_holdings' | 'fund_returns' | 'fund_drawdown' | 'fund_allocation' | 'fund_holders' | 'fund_dividend') =>
+      this.de.queryInstrumentData(ref, cap).catch((e: unknown) => ({
+        success: false as const,
+        error: e instanceof Error ? e.message : String(e),
+      }))
+    const [
+      snapshotPart,
+      holdingsPart,
+      returnsPart,
+      drawdownPart,
+      allocationPart,
+      holdersPart,
+      dividendPart,
+    ] = await Promise.all([
+      settle('fund_snapshot'),
+      settle('fund_holdings'),
+      settle('fund_returns'),
+      settle('fund_drawdown'),
+      settle('fund_allocation'),
+      settle('fund_holders'),
+      settle('fund_dividend'),
+    ])
+    const merged = mergeFundDetailParts(ref.symbol, {
+      snapshot: snapshotPart,
+      holdings: holdingsPart,
+      returns: returnsPart,
+      drawdown: drawdownPart,
+      allocation: allocationPart,
+      holders: holdersPart,
+      dividend: dividendPart,
+    })
+    if (!merged.success || !merged.data) return fail(merged.message, t0)
+    return ok(merged.data, merged.message, t0)
   }
 
   private async localEtfList(params: Record<string, unknown>, t0: number) {

@@ -1,7 +1,7 @@
 import type { Market } from '@opptrix/shared'
 import { canonicalHkSymbol } from '@opptrix/shared'
 import { inferMarketFromSymbol, isCnEtfCode } from '../../../core/instrument.js'
-import { normalizeCode, resolveStockMarketCode } from '../../../utils/helpers.js'
+import { normalizeCode, parseStockMarket, resolveStockMarketCode } from '../../../utils/helpers.js'
 import { normalizeUsSymbol } from '../../../utils/us-market.js'
 
 export interface ParsedTickflowSymbol {
@@ -37,7 +37,11 @@ function cnExchangeSuffix(code: string): string {
   return CN_EXCHANGE_SUFFIX[resolveStockMarketCode(c)] ?? 'SZ'
 }
 
-function toTickflowSymbolFromMarket(market: Market, code: string): string {
+function toTickflowSymbolFromMarket(
+  market: Market,
+  code: string,
+  exchange?: string | null,
+): string {
   const raw = code.trim()
   if (/\.(SH|SZ|BJ|US|HK)$/i.test(raw)) return raw.toUpperCase()
 
@@ -48,17 +52,29 @@ function toTickflowSymbolFromMarket(market: Market, code: string): string {
   }
   if (market === 'CN') {
     const c = normalizeCode(raw)
-    const ex = cnExchangeSuffix(c)
+    const ex = parseStockMarket(exchange) ?? cnExchangeSuffix(c)
     return `${c}.${ex}`
   }
   throw new Error(`TickFlow 暂不支持市场：${market}`)
 }
 
+/** A 股指数 TickFlow 符号：399xxx.SZ，其余 000xxx.SH（上证指数 000001.SH） */
+export function toTickflowIndexSymbol(code: string): string {
+  const raw = String(code ?? '').trim()
+  if (/\.(SH|SZ|BJ)$/i.test(raw)) return raw.toUpperCase()
+  const c = normalizeCode(raw)
+  return `${c}.${c.startsWith('399') ? 'SZ' : 'SH'}`
+}
+
 /** Opptrix market + code, or bare code with inferred market → TickFlow symbol. */
-export function toTickflowSymbol(market: Market, code: string): string
+export function toTickflowSymbol(market: Market, code: string, exchange?: string | null): string
 export function toTickflowSymbol(input: string): string
-export function toTickflowSymbol(marketOrInput: Market | string, code?: string): string {
-  if (code !== undefined) return toTickflowSymbolFromMarket(marketOrInput as Market, code)
+export function toTickflowSymbol(
+  marketOrInput: Market | string,
+  code?: string,
+  exchange?: string | null,
+): string {
+  if (code !== undefined) return toTickflowSymbolFromMarket(marketOrInput as Market, code, exchange)
   const input = marketOrInput.trim()
   if (/\.(SH|SZ|BJ|US|HK)$/i.test(input)) return input.toUpperCase()
   return toTickflowSymbolFromMarket(inferMarketFromSymbol(input), input)

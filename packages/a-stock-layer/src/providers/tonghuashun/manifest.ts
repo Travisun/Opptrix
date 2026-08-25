@@ -1,5 +1,5 @@
 import { Capability } from '../../core/capabilities.js'
-import { CN_ETF_CAPABILITIES, cnFundBindings } from '../../core/bindings.js'
+import { CN_ETF_CAPABILITIES } from '../../core/bindings.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { TONGHUASHUN_SETTINGS } from './settings.js'
@@ -53,7 +53,13 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
       CN_ETF_CAPABILITIES,
       maxConcurrent,
     ),
-    ...cnFundBindings(p, maxConcurrent),
+    ...TONGHUASHUN_CN_FUND_CAPABILITIES.map(capability => ({
+      market: 'CN' as const,
+      assetClass: 'FUND' as const,
+      capability,
+      defaultPriority: p,
+      ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    })),
   ],
   settings: TONGHUASHUN_SETTINGS,
   supportsTest: true,

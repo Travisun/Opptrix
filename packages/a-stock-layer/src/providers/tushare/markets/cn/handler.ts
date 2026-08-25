@@ -19,7 +19,7 @@ import {
   todayYmd,
   ymdDaysAgo,
 } from '../../normalize/index.js'
-import { isBse920Code, normalizeCode } from '../../../../utils/helpers.js'
+import { isBse920Code, normalizeCode, type StockMarket } from '../../../../utils/helpers.js'
 import { createNameCache } from '../../../../utils/lru-map.js'
 
 /** Tushare Pro — 2000 积分档常用接口（bulk 优先） */
@@ -86,7 +86,10 @@ export class TushareMarketHandler extends MarketHandlerShell {
     }
   }
 
-  async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
+  async batchRealtime(
+    codes: string[],
+    _markets?: Record<string, StockMarket | undefined>,
+  ): Promise<StockRealtime[] | null> {
     const client = this.client()
     const eligible = codes.filter(c => !isBse920Code(normalizeCode(c)))
     if (!client || !eligible.length) return null
@@ -103,9 +106,15 @@ export class TushareMarketHandler extends MarketHandlerShell {
     }
   }
 
-  async realtime(code: string): Promise<StockRealtime[] | null> {
+  async realtime(
+    code: string,
+    market?: StockMarket | null,
+  ): Promise<StockRealtime[] | null> {
     if (isBse920Code(normalizeCode(code))) return null
-    const batch = await this.batchRealtime([code])
+    const batch = await this.batchRealtime(
+      [code],
+      market ? { [normalizeCode(code)]: market } : undefined,
+    )
     return batch
   }
 
@@ -115,13 +124,14 @@ export class TushareMarketHandler extends MarketHandlerShell {
     start = '',
     end = '',
     count?: number,
+    market?: StockMarket | null,
   ): Promise<StockKline[] | null> {
     if (isBse920Code(normalizeCode(code))) return null
     if (period !== 'daily' && period !== 'weekly' && period !== 'monthly') return null
     const client = this.client()
     if (!client) return null
     try {
-      const tsCode = toTsCode(code)
+      const tsCode = toTsCode(code, market)
       const api = period === 'daily' ? 'daily' : period === 'weekly' ? 'weekly' : 'monthly'
       const params: Record<string, unknown> = { ts_code: tsCode }
       if (start) params.start_date = start.replace(/-/g, '')

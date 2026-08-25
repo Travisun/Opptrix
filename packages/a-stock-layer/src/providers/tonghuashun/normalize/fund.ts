@@ -75,16 +75,210 @@ export function mapFundReturnsToPerformance(
 ): Record<string, number | null> | undefined {
   if (!row || typeof row !== 'object') return undefined
   const perf = {
+    w1: safeFloat(row.return_week),
     w4: safeFloat(row.return_month),
     w13: safeFloat(row.return_tmonth),
     w26: safeFloat(row.return_hyear),
     w52: safeFloat(row.return_year),
     year: safeFloat(row.return_nowyear),
-    total: safeFloat(row.return_now),
+    year2: safeFloat(row.return_twoyear),
     year3: safeFloat(row.return_tyear),
+    year5: safeFloat(row.return_fyear),
+    total: safeFloat(row.return_now),
   }
   const hasValue = Object.values(perf).some(v => v != null)
   return hasValue ? perf : undefined
+}
+
+const PERF_RANK_KEYS: Array<{ key: keyof NonNullable<ReturnType<typeof mapFundReturnsToPerformance>>; rank: string; total: string }> = [
+  { key: 'w1', rank: 'rank_week', total: 'count_week' },
+  { key: 'w4', rank: 'rank_month', total: 'count_month' },
+  { key: 'w13', rank: 'rank_tmonth', total: 'count_tmonth' },
+  { key: 'w26', rank: 'rank_hyear', total: 'count_hyear' },
+  { key: 'w52', rank: 'rank_year', total: 'count_year' },
+  { key: 'year', rank: 'rank_nowyear', total: 'count_nowyear' },
+  { key: 'year2', rank: 'rank_twoyear', total: 'count_twoyear' },
+  { key: 'year3', rank: 'rank_tyear', total: 'count_tyear' },
+  { key: 'year5', rank: 'rank_fyear', total: 'count_fyear' },
+  { key: 'total', rank: 'rank_now', total: 'count_now' },
+]
+
+export function mapFundReturnsToRanks(
+  row: Record<string, unknown> | null | undefined,
+): Record<string, { rank?: number | null; total?: number | null }> | undefined {
+  if (!row || typeof row !== 'object') return undefined
+  const ranks: Record<string, { rank?: number | null; total?: number | null }> = {}
+  for (const { key, rank, total } of PERF_RANK_KEYS) {
+    const r = safeFloat(row[rank] ?? row[`similar_${rank}`])
+    const t = safeFloat(row[total] ?? row.similar_count ?? row.rank_count)
+    if (r == null && t == null) continue
+    ranks[key] = { rank: r, total: t }
+  }
+  return Object.keys(ranks).length ? ranks : undefined
+}
+
+export function mapFundReturnsToPeerAvg(
+  row: Record<string, unknown> | null | undefined,
+): Record<string, number | null> | undefined {
+  if (!row || typeof row !== 'object') return undefined
+  return mapFundReturnsToPerformance({
+    return_week: row.avg_return_week ?? row.similar_avg_week,
+    return_month: row.avg_return_month ?? row.similar_avg_month,
+    return_tmonth: row.avg_return_tmonth ?? row.similar_avg_tmonth,
+    return_hyear: row.avg_return_hyear ?? row.similar_avg_hyear,
+    return_year: row.avg_return_year ?? row.similar_avg_year,
+    return_nowyear: row.avg_return_nowyear ?? row.similar_avg_nowyear,
+    return_twoyear: row.avg_return_twoyear ?? row.similar_avg_twoyear,
+    return_tyear: row.avg_return_tyear ?? row.similar_avg_tyear,
+    return_fyear: row.avg_return_fyear ?? row.similar_avg_fyear,
+    return_now: row.avg_return_now ?? row.similar_avg_now,
+  })
+}
+
+export function mapFundReturnsDetail(
+  code: string,
+  row: Record<string, unknown>,
+): import('../../common/standard-fund.js').StandardFundReturnsRow {
+  return {
+    code: normalizeCode(code),
+    performance: mapFundReturnsToPerformance(row),
+    ranks: mapFundReturnsToRanks(row),
+    peerAvg: mapFundReturnsToPeerAvg(row),
+    source: 'tonghuashun',
+  }
+}
+
+const DRAWDOWN_PERIODS: Array<{ period: string; label: string; keys: string[] }> = [
+  { period: 'w1', label: '近 1 周', keys: ['drawdown_week', 'max_drawdown_week'] },
+  { period: 'w4', label: '近 1 月', keys: ['drawdown_month', 'max_drawdown_month'] },
+  { period: 'w13', label: '近 3 月', keys: ['drawdown_tmonth', 'max_drawdown_tmonth'] },
+  { period: 'w26', label: '近半年', keys: ['drawdown_hyear', 'max_drawdown_hyear'] },
+  { period: 'w52', label: '近 1 年', keys: ['drawdown_year', 'max_drawdown_year'] },
+  { period: 'year2', label: '近 2 年', keys: ['drawdown_twoyear', 'max_drawdown_twoyear'] },
+  { period: 'year3', label: '近 3 年', keys: ['drawdown_tyear', 'max_drawdown_tyear'] },
+  { period: 'year5', label: '近 5 年', keys: ['drawdown_fyear', 'max_drawdown_fyear'] },
+  { period: 'year', label: '今年以来', keys: ['drawdown_nowyear', 'max_drawdown_nowyear'] },
+  { period: 'total', label: '成立以来', keys: ['drawdown_now', 'max_drawdown_now'] },
+]
+
+function pickFirstFloat(row: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const v = safeFloat(row[key])
+    if (v != null) return v
+  }
+  return null
+}
+
+export function mapFundDrawdownRows(
+  code: string,
+  items: Record<string, unknown>[],
+): import('../../common/standard-fund.js').StandardFundDrawdownRow[] {
+  const c = normalizeCode(code)
+  if (!items.length) return []
+  const asIntervals = items.filter(row =>
+    typeof row.period === 'string' || typeof row.range === 'string' || typeof row.label === 'string',
+  )
+  if (asIntervals.length) {
+    return asIntervals.map(row => {
+      const period = String(row.period ?? row.range ?? '')
+      const matched = DRAWDOWN_PERIODS.find(p => p.period === period || p.keys.includes(period))
+      return {
+        code: c,
+        period: matched?.period ?? period,
+        label: String(row.label ?? matched?.label ?? period),
+        value: pickFirstFloat(row, ['value', 'max_drawdown', 'drawdown', 'drawdown_pct']),
+        source: 'tonghuashun',
+      }
+    }).filter(r => r.value != null)
+  }
+  const blob = items[0] ?? {}
+  return DRAWDOWN_PERIODS.map(({ period, label, keys }) => ({
+    code: c,
+    period,
+    label,
+    value: pickFirstFloat(blob, keys),
+    source: 'tonghuashun',
+  })).filter(r => r.value != null)
+}
+
+const ASSET_NAME_KEYS: Array<{ keys: string[]; name: string }> = [
+  { keys: ['stock_ratio', 'equity_ratio', 'stock_position', 'equity_position'], name: '股票' },
+  { keys: ['bond_ratio', 'bond_position'], name: '债券' },
+  { keys: ['cash_ratio', 'deposit_ratio', 'monetary_ratio'], name: '现金及存款' },
+  { keys: ['fund_ratio', 'other_fund_ratio'], name: '基金' },
+  { keys: ['other_ratio', 'other_position'], name: '其他' },
+]
+
+function mapAllocItemsFromObject(row: Record<string, unknown>): import('../../common/standard-fund.js').StandardFundAllocItem[] {
+  const named = String(row.asset_name ?? row.asset_type ?? row.industry_name ?? row.sw_industry_name ?? row.name ?? '').trim()
+  const ratio = pickFirstFloat(row, ['ratio', 'hold_ratio', 'weight', 'position_ratio', 'asset_ratio'])
+  if (named) return [{ name: named, ratio }]
+  const out: import('../../common/standard-fund.js').StandardFundAllocItem[] = []
+  for (const { keys, name } of ASSET_NAME_KEYS) {
+    const v = pickFirstFloat(row, keys)
+    if (v == null) continue
+    out.push({ name, ratio: v })
+  }
+  return out
+}
+
+export function mapFundAllocationRow(
+  code: string,
+  assetItems: Record<string, unknown>[],
+  industryItems: Record<string, unknown>[],
+): import('../../common/standard-fund.js').StandardFundAllocationRow {
+  const c = normalizeCode(code)
+  const assets = assetItems.flatMap(mapAllocItemsFromObject).filter(i => i.name)
+  const industries = industryItems.flatMap(row => {
+    const name = String(row.industry_name ?? row.sw_industry_name ?? row.name ?? '').trim()
+    const ratio = pickFirstFloat(row, ['ratio', 'hold_ratio', 'weight', 'position_ratio'])
+    return name ? [{ name, ratio }] : []
+  })
+  const reportMs = assetItems[0]?.report_date_ms ?? industryItems[0]?.report_date_ms
+    ?? assetItems[0]?.end_date_ms ?? industryItems[0]?.end_date_ms
+  return {
+    code: c,
+    reportDate: msToYmd(reportMs) || undefined,
+    assets,
+    industries,
+    source: 'tonghuashun',
+  }
+}
+
+export function mapFundHoldersRow(
+  code: string,
+  detailItems: Record<string, unknown>[],
+  topItems: Record<string, unknown>[],
+): import('../../common/standard-fund.js').StandardFundHoldersRow | null {
+  const structure = mapFundHoldersToProfileFields(detailItems)
+  const top = topItems.map(row => ({
+    name: String(row.holder_name ?? row.name ?? '').trim(),
+    share: pickFirstFloat(row, ['hold_share', 'holder_share', 'share', 'hold_amount']),
+    ratio: pickFirstFloat(row, ['hold_ratio', 'holder_ratio', 'ratio']),
+  })).filter(r => r.name)
+  if (!structure && !top.length) return null
+  return {
+    code: normalizeCode(code),
+    ...structure,
+    top,
+    source: 'tonghuashun',
+  }
+}
+
+export function mapFundDividendRows(
+  code: string,
+  items: Record<string, unknown>[],
+): import('../../common/standard-fund.js').StandardFundDividendRow[] {
+  const c = normalizeCode(code)
+  return items.map(row => ({
+    code: c,
+    date: msToYmd(row.ex_date_ms ?? row.pay_date_ms ?? row.dividend_date_ms)
+      || String(row.ex_date ?? row.pay_date ?? row.dividend_date ?? '').slice(0, 10),
+    recordDate: msToYmd(row.record_date_ms) || String(row.record_date ?? '').slice(0, 10) || undefined,
+    amount: pickFirstFloat(row, ['unit_dividend', 'dividend_per_unit', 'dividend_amount', 'bonus']),
+    type: String(row.bonus_type ?? row.dividend_type ?? row.type ?? '').trim() || undefined,
+    source: 'tonghuashun',
+  })).filter(r => r.date)
 }
 
 export function mapFundProfileToEtfProfileRow(
