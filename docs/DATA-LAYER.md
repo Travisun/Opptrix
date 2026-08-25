@@ -731,7 +731,7 @@ interface ProviderCatalogResponse {
 | `CN` | A 股 | tonghuashun、tushare、zzshare、baostock |
 | `US` | 美股 | tickflow、polygon（Phase 2） |
 | `CRYPTO` | 加密货币 | binance、okx |
-| `GLOBAL` | 全球 / 宏观 | stockindex（搜索/列表） |
+| `GLOBAL` | 全球 / 宏观 | stockindex（OpptrixQuant：搜索/列表 + CN 基金净值） |
 
 无 `settings.fields` 的 Provider 仍出现在列表，卡片仅显示说明 + 健康状态（如「BaoStock · 免费 · 默认启用」）。
 
@@ -1005,7 +1005,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 | tushare | 110 | ✅ | 需 Token；bulk/基本面 |
 | tickflow | 100 | ✅ | 需 Key；多市场行情 |
 | zzshare / baostock 等免费 | 105–110 | ✅ | 免费层（effective 低于需 Key 层） |
-| stockindex | ~90 | ✅ | 搜索/列表；无表单 |
+| stockindex（OpptrixQuant） | ~90 | ✅ 需 API Key | 搜索/列表 + CN 基金净值/档案/行情 |
 
 > **已移除**：`tencent` / `sinafinance` / `eastmoney` / `akshare` 不再出现在内置 Registry。
 
@@ -1055,7 +1055,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 | zzshare | ● | ● | ○ | 免费层；板块/情绪 |
 | baostock | ● | ● | ● | 免费；历史 K 线/财报 |
 | tickflow | ○ | ● | ○ | 多市场；CN ETF |
-| stockindex | ○ | ○ ETF_LIST | ● | 搜索/列表 |
+| stockindex（OpptrixQuant） | ○ | ○ ETF_LIST + FUND_* | ● | 搜索/列表 + CN 基金净值 |
 
 ● = 已支持；○ = 计划/可选
 

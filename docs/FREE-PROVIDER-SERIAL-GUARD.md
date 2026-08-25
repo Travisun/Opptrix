@@ -102,7 +102,7 @@ isFreeMarketDataProvider(providerId)
 |------|----------|------------------|--------------|
 | 免费 · 主路径合规 | `baostock` | TCP/SDK，**不经** `hostnameLimiter`；靠 `maxConcurrent: 1` | 是 |
 | 免费 · 出口缺口 | `zzshare`（Key 可选，仍算免费） | 现经 `httpGetWithRetry` → `outboundFetch`，**绕过**主机闸门（待修） | 是（若错误被吞则冷却失效） |
-| 免费 · 出口缺口 | `stockindex` | 直连 `outboundFetch`，**绕过**主机闸门（待修） | 是（吞错风险同左） |
+| 付费可 bypass | `stockindex`（OpptrixQuant，需 API Key） | `ProviderHttpClient` + `bypassRateLimit: true`（对齐 tushare/tickflow） | 否 |
 | 付费可 bypass | `tushare` / `tickflow` / `tonghuashun` | `bypassRateLimit: true` | 否 |
 | 公开但当前 bypass | `binance` / `okx` | 当前为 `true`（加密货币公开 API；**不**按免费源阶梯冷却） | 判定为免费但不进冷却 |
 | **已移除内置** | `tencent` / `eastmoney` / `sinafinance` / `akshare` / `webfeed` | 不再注册；实现已删除 | — |
@@ -187,7 +187,7 @@ collectParallelCnBatchItems(codes, fetchOne, max = BATCH_INSTRUMENT_SNAPSHOTS_MA
 
 | 范围 | 结论 |
 |------|------|
-| **内置免费源（baostock / zzshare / stockindex）+ Hub 批开 + LoadBalancer + failover** | **有条件合规**：批内全开依赖主机排队；见下方出口缺口 |
+| **内置免费源（baostock / zzshare）+ Hub 批开 + LoadBalancer + failover** | **有条件合规**：批内全开依赖主机排队；见下方出口缺口 |
 | **已移除爬虫源** | `tencent` / `sinafinance` / `eastmoney` / `akshare` 不再内置注册，不适用本机制 |
 
 ### 7.2 必须关注的缺口
@@ -195,7 +195,6 @@ collectParallelCnBatchItems(codes, fetchOne, max = BATCH_INSTRUMENT_SNAPSHOTS_MA
 | 严重性 | 缺口 | 说明 |
 |--------|------|------|
 | **高** | `zzshare` HTTP 绕过闸门 | `httpGetWithRetry` 直连 `outboundFetch`；`withClient` 可能吞错导致冷却失效 |
-| **高** | `stockindex` 直连 + 吞错 | 不经 `ProviderHttpClient`；handler 裸 `catch` 风险 |
 | **中** | announcement 等旁路 `bypassRateLimit: true` | 可能与同 host 免费源并行出站 |
 | **低** | baostock TCP | 设计上不经 hostname；依赖 `maxConcurrent: 1` |
 
@@ -208,7 +207,7 @@ collectParallelCnBatchItems(codes, fetchOne, max = BATCH_INSTRUMENT_SNAPSHOTS_MA
 | binance / okx bypass | 公开行情但当前 bypass；若纳入主机串行须改配置并回归 |
 | Hub 不再做批内限并发 | 依赖主机闸门；调小 `maxQueued` 会导致大批量 `queue full` |
 
-**可选后续**（非承诺）：将 zzshare / stockindex 迁入 `ProviderHttpClient`；按 Provider 配置 interval；非 HTTP 源统一适配器闸门；慢工具超时与排队深度联动提示。
+**可选后续**（非承诺）：将 zzshare 迁入 `ProviderHttpClient`；按 Provider 配置 interval；非 HTTP 源统一适配器闸门；慢工具超时与排队深度联动提示。
 
 ---
 

@@ -1,15 +1,88 @@
 /**
- * StockIndex HTTP 客户端 — https://open-stock.lirdb.com
+ * OpptrixQuant API 客户端函数 — https://quant.opptrix.net/api/v1
+ *
+ * 认证走 `StockIndexHttpClient`（X-API-Key）；未配置 Key 时返回 null。
+ * 分页约定：单页 ≤ 35（page/page_size/total_pages/has_more），跨页由本层循环。
  */
-
 import type { Market } from '@opptrix/shared'
-import { outboundFetch } from '@opptrix/shared'
 import { sleep } from '../../../utils/http-shared.js'
-import { stockIndexBaseUrl } from '../settings.js'
+import { opptrixInstrumentToStockIndexItem } from '../normalize.js'
+import { StockIndexHttpClient } from './http-client.js'
 
-const STOCKINDEX_FETCH_TIMEOUT_MS = 30_000
-const STOCKINDEX_FETCH_RETRIES = 3
+/** OpptrixQuant 单页上限 */
+const OPPTRIX_PAGE_SIZE_CAP = 35
+/** 防失控的硬性分页上限 */
+const OPPTRIX_MAX_PAGES = 500
 
+export interface OpptrixPagination {
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
+  has_more: boolean
+}
+
+/** GET /api/v1/instruments 返回的标的 */
+export interface OpptrixInstrument {
+  instrument_id: string
+  market: string
+  class_token: string
+  symbol: string
+  name?: string | null
+  name_en?: string | null
+  venue?: string | null
+  sub_type?: string | null
+  isin?: string | null
+  currency?: string | null
+  status?: string | null
+}
+
+/** GET /api/v1/funds/{code}/nav 返回的净值行 */
+export interface OpptrixNavRow {
+  product_code: string
+  as_of_date: string
+  nav_unit?: string | null
+  nav_cumulative?: string | null
+  fund_assets?: string | null
+  per_10k_gain?: string | null
+  annualized_7d?: string | null
+  remarks?: string | null
+}
+
+/** POST /api/v1/funds/nav/latest 返回的批量最新净值项 */
+export interface OpptrixFundLatestNavItem {
+  id: string
+  product_code: string | null
+  product_name: string | null
+  as_of_date: string | null
+  nav_unit: number | string | null
+  nav_cumulative: number | string | null
+  fund_assets: number | string | null
+  per_10k_gain: number | string | null
+  annualized_7d: number | string | null
+  remarks: string | null
+}
+
+/** GET /api/v1/funds/{code}/metrics 返回的绩效指标 */
+export interface OpptrixFundMetrics {
+  as_of_date?: string | null
+  start_date?: string | null
+  end_date?: string | null
+  total_return?: string | null
+  annual_return?: string | null
+  win_rate?: string | null
+  max_drawdown?: string | null
+  annual_vol?: string | null
+  downside_vol?: string | null
+  sharpe?: string | null
+  sortino?: string | null
+  calmar?: string | null
+  days?: number | null
+  product_code?: string | null
+  product_name?: string | null
+}
+
+/** 旧 StockIndex 行形态 — normalize / market-data 兼容层（新旧字段共存） */
 export interface StockIndexItem {
   instrumentId: string
   market: string
@@ -18,18 +91,13 @@ export interface StockIndexItem {
   nameCn?: string | null
   industryCode?: string | null
   industryName?: string | null
+  sub_type?: string | null
   exchange?: string | null
   board?: string | null
   boards?: string[]
   assetType?: string
   matchField?: string
   score?: number
-}
-
-export interface StockIndexSearchResponse {
-  query: string
-  total: number
-  items: StockIndexItem[]
 }
 
 export interface StockIndexListResponse {
@@ -39,207 +107,187 @@ export interface StockIndexListResponse {
   items: StockIndexItem[]
 }
 
-export interface StockIndexBoard {
-  market?: string
-  boardKey?: string
-  boardCode?: string
-  name?: string
-  priority?: number
-  stockCount?: number
+interface OpptrixPage<T> {
+  data?: T[]
+  pagination?: OpptrixPagination
 }
 
-export interface StockIndexBoardListResponse {
-  total?: number
-  items: StockIndexBoard[]
+function clientOrNull(): StockIndexHttpClient | null {
+  return StockIndexHttpClient.fromConfig()
 }
 
-export interface StockIndexIndustry {
-  market?: string
-  industryCode?: string
-  name?: string
-  level?: number
-  parentCode?: string | null
-  stockCount?: number
-  parentName?: string | null
-}
-
-export interface StockIndexIndustryListResponse {
-  total?: number
-  items: StockIndexIndustry[]
-}
-
-async function fetchJson<T>(
-  path: string,
-  query: Record<string, string | number | boolean | undefined>,
-): Promise<T> {
-  const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(query)) {
-    if (v == null || v === '') continue
-    qs.set(k, String(v))
-  }
-  const url = `${stockIndexBaseUrl()}${path}?${qs}`
-  let lastErr: unknown
-  for (let attempt = 0; attempt < STOCKINDEX_FETCH_RETRIES; attempt++) {
-    try {
-      const resp = await outboundFetch(url, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(STOCKINDEX_FETCH_TIMEOUT_MS),
-      })
-      if (!resp.ok) {
-        throw new Error(`StockIndex HTTP ${resp.status} ${path}`)
-      }
-      return await resp.json() as T
-    } catch (e) {
-      lastErr = e
-      if (attempt < STOCKINDEX_FETCH_RETRIES - 1) {
-        await sleep(600 * (attempt + 1))
-      }
-    }
-  }
-  const detail = lastErr instanceof Error ? lastErr.message : String(lastErr)
-  throw new Error(`StockIndex ${path} 请求失败（已重试 ${STOCKINDEX_FETCH_RETRIES} 次）: ${detail}`)
-}
-
-export async function stockIndexSearch(
+/**
+ * 标的搜索 / 列表 — GET /api/v1/instruments（q / market / class_token）。
+ * 内部按 has_more 翻页直到 limit 或上游 total。
+ */
+export async function opptrixInstrumentSearch(
   q: string,
   opts: {
-    market?: Market
+    market?: string
+    classToken?: string
     limit?: number
-    board?: string
-    industry?: string
-    assetType?: string
+    /** 跨页间隔 ms — 批量名录同步时缓解日/月配额 */
+    delayMs?: number
   } = {},
-): Promise<StockIndexSearchResponse> {
-  return fetchJson<StockIndexSearchResponse>('/api/v1/search', {
-    q: q.trim(),
-    limit: Math.min(Math.max(opts.limit ?? 20, 1), 100),
-    market: opts.market,
-    board: opts.board,
-    industry: opts.industry,
-    assetType: opts.assetType,
-  })
+): Promise<OpptrixInstrument[] | null> {
+  const client = clientOrNull()
+  if (!client) return null
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 5000)
+  const pageSize = Math.min(OPPTRIX_PAGE_SIZE_CAP, limit)
+  const all: OpptrixInstrument[] = []
+  let page = 1
+  for (;;) {
+    const resp = await client.get<OpptrixPage<OpptrixInstrument>>('/api/v1/instruments', {
+      q: q.trim() || undefined,
+      market: opts.market,
+      class_token: opts.classToken,
+      page: String(page),
+      page_size: String(pageSize),
+    })
+    const batch = resp?.data ?? []
+    all.push(...batch)
+    const pagination = resp?.pagination
+    if (!batch.length) break
+    if (!pagination?.has_more) break
+    if (pagination && pagination.total > 0 && all.length >= pagination.total) break
+    if (all.length >= limit) break
+    if (page >= OPPTRIX_MAX_PAGES) break
+    page += 1
+    if (opts.delayMs && opts.delayMs > 0) await sleep(opts.delayMs)
+  }
+  return all.slice(0, limit)
 }
 
-export async function stockIndexListStocks(
-  opts: {
-    market?: Market
-    page?: number
-    pageSize?: number
-    board?: string
-    industry?: string
-    assetType?: string
-    q?: string
-  } = {},
-): Promise<StockIndexListResponse> {
-  const raw = await fetchJson<StockIndexListResponse & { rank_list?: StockIndexItem[] }>(
-    '/api/v1/stocks',
-    {
-      market: opts.market ?? 'CN',
-      page: opts.page ?? 1,
-      pageSize: Math.min(Math.max(opts.pageSize ?? 50, 1), 100),
-      board: opts.board,
-      industry: opts.industry,
-      assetType: opts.assetType,
-      q: opts.q?.trim(),
-    },
+/** 标的详情 — GET /api/v1/instruments/{id}（id 形如 CN:of:009049） */
+export async function opptrixGetInstrument(id: string): Promise<OpptrixInstrument | null> {
+  const client = clientOrNull()
+  if (!client) return null
+  const resp = await client.get<OpptrixInstrument>(
+    `/api/v1/instruments/${encodeURIComponent(id)}`,
   )
-  return { ...raw, items: raw.items ?? raw.rank_list ?? [] }
+  return resp ?? null
 }
 
-export async function stockIndexGetStock(
-  opts: {
-    code?: string
-    instrumentId?: string
-    symbol?: string
-    market?: Market
-  },
-): Promise<{ item: StockIndexItem }> {
-  return fetchJson('/api/v1/stock', {
-    code: opts.code,
-    instrumentId: opts.instrumentId,
-    symbol: opts.symbol,
-    market: opts.market,
+/** 单基金净值历史 — GET /api/v1/funds/{code}/nav（has_more 翻页到 limit） */
+export async function opptrixFundNav(
+  code: string,
+  opts: { start?: string; end?: string; limit?: number; delayMs?: number } = {},
+): Promise<OpptrixNavRow[] | null> {
+  const client = clientOrNull()
+  if (!client) return null
+  const limit = Math.min(Math.max(opts.limit ?? 120, 1), 5000)
+  const pageSize = Math.min(OPPTRIX_PAGE_SIZE_CAP, limit)
+  const all: OpptrixNavRow[] = []
+  let page = 1
+  for (;;) {
+    const resp = await client.get<OpptrixPage<OpptrixNavRow>>(
+      `/api/v1/funds/${encodeURIComponent(code)}/nav`,
+      {
+        start: opts.start,
+        end: opts.end,
+        page: String(page),
+        page_size: String(pageSize),
+      },
+    )
+    const batch = resp?.data ?? []
+    all.push(...batch)
+    const pagination = resp?.pagination
+    if (!batch.length) break
+    if (!pagination?.has_more) break
+    if (pagination && pagination.total > 0 && all.length >= pagination.total) break
+    if (all.length >= limit) break
+    if (page >= OPPTRIX_MAX_PAGES) break
+    page += 1
+    if (opts.delayMs && opts.delayMs > 0) await sleep(opts.delayMs)
+  }
+  return all.slice(0, limit)
+}
+
+/** 批量最新净值 — POST /api/v1/funds/nav/latest（items 形式，每块 ≤ 10） */
+export async function opptrixFundQuoteBatch(
+  codes: string[],
+): Promise<OpptrixFundLatestNavItem[] | null> {
+  const client = clientOrNull()
+  if (!client) return null
+  const unique = [...new Set(codes.map(c => String(c).trim()).filter(Boolean))]
+  if (!unique.length) return []
+  const out: OpptrixFundLatestNavItem[] = []
+  for (let i = 0; i < unique.length; i += 10) {
+    const chunk = unique.slice(i, i + 10)
+    const resp = await client.post<{ data?: OpptrixFundLatestNavItem[] }>(
+      '/api/v1/funds/nav/latest',
+      { items: chunk.map(code => ({ id: code, code })) },
+    )
+    out.push(...(resp?.data ?? []))
+  }
+  return out
+}
+
+/** 基金绩效指标 — GET /api/v1/funds/{code}/metrics */
+export async function opptrixFundMetrics(code: string): Promise<OpptrixFundMetrics | null> {
+  const client = clientOrNull()
+  if (!client) return null
+  const resp = await client.get<OpptrixFundMetrics>(
+    `/api/v1/funds/${encodeURIComponent(code)}/metrics`,
+  )
+  return resp ?? null
+}
+
+export interface StockIndexListStocksOpts {
+  market?: Market | string
+  page?: number
+  pageSize?: number
+  q?: string
+}
+
+/** 个股名录（供 market-data sync）— 改走 /api/v1/instruments?class_token=stock */
+export async function stockIndexListStocks(
+  opts: StockIndexListStocksOpts = {},
+): Promise<StockIndexListResponse> {
+  const client = clientOrNull()
+  if (!client) return { items: [] }
+  const pageSize = Math.min(
+    OPPTRIX_PAGE_SIZE_CAP,
+    Math.max(opts.pageSize ?? OPPTRIX_PAGE_SIZE_CAP, 1),
+  )
+  const resp = await client.get<OpptrixPage<OpptrixInstrument>>('/api/v1/instruments', {
+    market: String(opts.market ?? 'CN'),
+    class_token: 'stock',
+    q: opts.q?.trim() || undefined,
+    page: String(opts.page ?? 1),
+    page_size: String(pageSize),
   })
+  const items = (resp?.data ?? []).map(opptrixInstrumentToStockIndexItem)
+  return {
+    page: opts.page ?? 1,
+    pageSize,
+    total: resp?.pagination?.total ?? items.length,
+    items,
+  }
 }
 
+/** CN ETF 名录（供 market-data sync）— 改走 /api/v1/instruments?class_token=etf */
 export async function stockIndexListEtfs(
   opts: { page?: number; pageSize?: number; q?: string } = {},
 ): Promise<StockIndexListResponse> {
-  return fetchJson('/api/v1/etfs', {
+  const client = clientOrNull()
+  if (!client) return { items: [] }
+  const pageSize = Math.min(
+    OPPTRIX_PAGE_SIZE_CAP,
+    Math.max(opts.pageSize ?? OPPTRIX_PAGE_SIZE_CAP, 1),
+  )
+  const resp = await client.get<OpptrixPage<OpptrixInstrument>>('/api/v1/instruments', {
+    market: 'CN',
+    class_token: 'etf',
+    q: opts.q?.trim() || undefined,
+    page: String(opts.page ?? 1),
+    page_size: String(pageSize),
+  })
+  const items = (resp?.data ?? []).map(opptrixInstrumentToStockIndexItem)
+  return {
     page: opts.page ?? 1,
-    pageSize: Math.min(Math.max(opts.pageSize ?? 50, 1), 100),
-    q: opts.q?.trim(),
-  })
-}
-
-export async function stockIndexListBoards(
-  opts: { market?: Market; withCount?: boolean } = {},
-): Promise<StockIndexBoardListResponse> {
-  return fetchJson('/api/v1/boards', {
-    market: opts.market,
-    withCount: opts.withCount ? '1' : undefined,
-  })
-}
-
-export async function stockIndexGetBoardDetail(
-  board: string,
-  market?: Market,
-): Promise<{ item: StockIndexBoard }> {
-  return fetchJson('/api/v1/boards/detail', { board, market })
-}
-
-export async function stockIndexListBoardStocks(
-  board: string,
-  opts: {
-    market?: Market
-    page?: number
-    pageSize?: number
-    q?: string
-    assetType?: string
-  } = {},
-): Promise<StockIndexListResponse & { board?: string }> {
-  return fetchJson('/api/v1/boards/stocks', {
-    board,
-    market: opts.market,
-    page: opts.page ?? 1,
-    pageSize: Math.min(Math.max(opts.pageSize ?? 50, 1), 100),
-    q: opts.q?.trim(),
-    assetType: opts.assetType,
-  })
-}
-
-export async function stockIndexListIndustries(
-  opts: {
-    market?: Market
-    level?: 1 | 2
-    q?: string
-    parent?: string
-    withCount?: boolean
-  } = {},
-): Promise<StockIndexIndustryListResponse> {
-  return fetchJson('/api/v1/industries', {
-    market: opts.market ?? 'CN',
-    level: opts.level,
-    q: opts.q?.trim(),
-    parent: opts.parent,
-    withCount: opts.withCount ? '1' : undefined,
-  })
-}
-
-export async function stockIndexGetIndustryDetail(
-  code: string,
-): Promise<{ item: StockIndexIndustry }> {
-  return fetchJson('/api/v1/industries/detail', { code })
-}
-
-export async function stockIndexListIndustryStocks(
-  industryCode: string,
-  opts: { page?: number; pageSize?: number; q?: string } = {},
-): Promise<StockIndexListResponse & { industryCode?: string }> {
-  return fetchJson('/api/v1/industries/stocks', {
-    code: industryCode,
-    page: opts.page ?? 1,
-    pageSize: Math.min(Math.max(opts.pageSize ?? 50, 1), 100),
-    q: opts.q?.trim(),
-  })
+    pageSize,
+    total: resp?.pagination?.total ?? items.length,
+    items,
+  }
 }

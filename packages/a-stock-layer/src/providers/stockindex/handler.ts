@@ -1,149 +1,103 @@
 import type { StockListItem } from '@opptrix/shared'
 import { Capability } from '../../core/capabilities.js'
+import { resolveCnPublicFundBareCode } from '../../core/fund-instrument.js'
 import { MarketHandlerShell } from '../common/driver-factory.js'
 import {
-  stockIndexGetBoardDetail,
-  stockIndexGetIndustryDetail,
-  stockIndexGetStock,
-  stockIndexListBoardStocks,
-  stockIndexListBoards,
-  stockIndexListEtfs,
-  stockIndexListIndustries,
-  stockIndexListIndustryStocks,
+  opptrixFundMetrics,
+  opptrixFundNav,
+  opptrixFundQuoteBatch,
+  opptrixGetInstrument,
+  opptrixInstrumentSearch,
   stockIndexListStocks,
-  stockIndexSearch,
-  type StockIndexItem,
 } from './api/client.js'
-import { parseStockIndexMarket, stockIndexItemsToListRows } from './normalize.js'
+import {
+  opptrixInstrumentToProfileRow,
+  opptrixInstrumentToStockIndexItem,
+  opptrixLatestNavToQuoteRow,
+  opptrixMetricsToRow,
+  opptrixNavToStandardRows,
+  stockIndexItemsToListRows,
+} from './normalize.js'
 
-function resolveMarketAndKeyword(marketOrKeyword: string, keyword?: string) {
-  if (keyword !== undefined) {
-    return {
-      market: parseStockIndexMarket(marketOrKeyword) ?? 'CN',
-      keyword: keyword.trim(),
-    }
-  }
-  const scoped = marketOrKeyword.trim()
-  const boardMatch = scoped.match(/^board:([^:]+)(?::(CN|US|HK))?$/i)
-  if (boardMatch) {
-    return {
-      market: parseStockIndexMarket(boardMatch[2]) ?? 'CN',
-      keyword: '',
-      board: boardMatch[1]!,
-    }
-  }
-  return { market: 'CN' as const, keyword: scoped }
+/** OpptrixQuant 支持的市场（含 SG，超集应用内 Market） */
+const OPPTRIX_MARKETS = new Set(['CN', 'US', 'HK', 'JP', 'KR', 'SG'])
+
+function opptrixMarket(raw: string | undefined): string {
+  const m = String(raw ?? '').trim().toUpperCase()
+  return OPPTRIX_MARKETS.has(m) ? m : 'CN'
+}
+
+/** 业务 assetType → OpptrixQuant class_token（stock/etf/fund/of/lof） */
+function classTokenForAssetType(assetType?: string): string | undefined {
+  const at = String(assetType ?? '').trim().toLowerCase()
+  if (at === 'stock' || at === 'etf' || at === 'fund' || at === 'of' || at === 'lof') return at
+  if (at === 'equity') return 'stock'
+  return undefined
+}
+
+function toRows(raw: Awaited<ReturnType<typeof opptrixInstrumentSearch>>): StockListItem[] | null {
+  if (!raw) return null
+  const rows = stockIndexItemsToListRows(raw.map(opptrixInstrumentToStockIndexItem))
+  return rows.length ? rows : null
 }
 
 export class StockIndexHandler extends MarketHandlerShell {
   readonly selfThrottled = true
 
-  async stockList(marketOrKeyword = '', keyword = '', page = 1, pageSize = 100, board?: string, industry?: string): Promise<StockListItem[] | null> {
+  async stockList(marketOrKeyword = '', keyword = '', page = 1, pageSize = 100): Promise<StockListItem[] | null> {
     try {
-      const parsed = resolveMarketAndKeyword(marketOrKeyword, keyword || undefined)
-      const market = parsed.market
-      const q = parsed.keyword
-      const boardKey = board ?? ('board' in parsed ? parsed.board : undefined)
+      const hasKeyword = keyword !== undefined && keyword !== ''
+      const bareMarket = marketOrKeyword.trim().toUpperCase()
+      const market = opptrixMarket(
+        hasKeyword ? marketOrKeyword : (OPPTRIX_MARKETS.has(bareMarket) ? marketOrKeyword : undefined),
+      )
+      const q = hasKeyword
+        ? keyword.trim()
+        : (OPPTRIX_MARKETS.has(bareMarket) ? '' : marketOrKeyword.trim())
 
       if (q) {
-        const resp = await stockIndexSearch(q, { market, limit: 50, board: boardKey })
-        const rows = stockIndexItemsToListRows(resp.items ?? [])
-        return rows.length ? rows : null
+        return toRows(
+          await opptrixInstrumentSearch(q, {
+            market,
+            limit: Math.min(Math.max(pageSize, 1), 100),
+          }),
+        )
       }
 
-      if (boardKey) {
-        const resp = await stockIndexListBoardStocks(boardKey, { market, page, pageSize })
-        const rows = stockIndexItemsToListRows(resp.items ?? [])
-        return rows.length ? rows : null
-      }
-
-      if (industry) {
-        const resp = await stockIndexListIndustryStocks(industry, { page, pageSize })
-        const rows = stockIndexItemsToListRows(resp.items ?? [])
-        return rows.length ? rows : null
-      }
-
-      if (!page || page === 1) {
-        const allItems: StockIndexItem[] = []
-        let p = 1
-        const size = Math.min(Math.max(pageSize, 1), 100)
-        while (p <= 400) {
-          const resp = await stockIndexListStocks({ market, page: p, pageSize: size })
-          const batch = resp.items ?? []
-          allItems.push(...batch)
-          const total = resp.total ?? 0
-          if (!batch.length) break
-          if (total > 0 && allItems.length >= total) break
-          if (batch.length < size) break
-          p++
-        }
-        const rows = stockIndexItemsToListRows(allItems)
-        return rows.length ? rows : null
-      }
-
-      const resp = await stockIndexListStocks({ market, page, pageSize })
-      const rows = stockIndexItemsToListRows(resp.items ?? [])
+      const raw = await opptrixInstrumentSearch('', {
+        market,
+        classToken: 'stock',
+        limit: Math.min(Math.max(pageSize, 1), 100) * Math.max(page, 1),
+      })
+      if (!raw) return null
+      const start = (page - 1) * pageSize
+      const rows = stockIndexItemsToListRows(raw.map(opptrixInstrumentToStockIndexItem)).slice(
+        start,
+        start + pageSize,
+      )
       return rows.length ? rows : null
     } catch {
       return null
     }
   }
 
-  /** 标准 instrument_search — 跨市场关键词搜索 */
+  /** 标准 instrument_search — 跨市场关键词搜索（board/industry 已随旧上游下线而忽略） */
   async instrumentSearch(
     query: string,
     market = 'CN',
     limit = 20,
-    board?: string,
-    industry?: string,
+    _board?: string,
+    _industry?: string,
     assetType?: string,
   ): Promise<StockListItem[] | null> {
     try {
-      const resp = await stockIndexSearch(query, {
-        market: parseStockIndexMarket(market) ?? 'CN',
-        limit: Math.min(Math.max(limit, 1), 100),
-        board,
-        industry,
-        assetType,
-      })
-      const rows = stockIndexItemsToListRows(resp.items ?? [])
-      return rows.length ? rows : null
-    } catch {
-      return null
-    }
-  }
-
-  /** boards:CN | industries:CN:1 | board:hsj:CN */
-  async sectorList(plateType = 'boards:CN'): Promise<Record<string, unknown>[] | null> {
-    try {
-      const scoped = plateType.trim()
-      const boardMatch = scoped.match(/^board:([^:]+)(?::(CN|US|HK))?$/i)
-      if (boardMatch) {
-        const detail = await stockIndexGetBoardDetail(
-          boardMatch[1]!,
-          parseStockIndexMarket(boardMatch[2]),
-        )
-        return [{ ...detail.item, source: 'stockindex' }]
-      }
-
-      const boardsMatch = scoped.match(/^boards(?::(CN|US|HK))?$/i)
-      if (boardsMatch || scoped === 'boards') {
-        const market = parseStockIndexMarket(boardsMatch?.[1]) ?? 'CN'
-        const resp = await stockIndexListBoards({ market, withCount: true })
-        const rows = (resp.items ?? []).map(item => ({ ...item, source: 'stockindex' }))
-        return rows.length ? rows : null
-      }
-
-      const industriesMatch = scoped.match(/^industries(?::(CN|US|HK))?(?::([12]))?$/i)
-      if (industriesMatch || scoped === 'industries') {
-        const market = parseStockIndexMarket(industriesMatch?.[1]) ?? 'CN'
-        const level = industriesMatch?.[2] ? Number(industriesMatch[2]) as 1 | 2 : undefined
-        const resp = await stockIndexListIndustries({ market, level, withCount: true })
-        const rows = (resp.items ?? []).map(item => ({ ...item, source: 'stockindex' }))
-        return rows.length ? rows : null
-      }
-
-      return null
+      return toRows(
+        await opptrixInstrumentSearch(query, {
+          market: opptrixMarket(market),
+          classToken: classTokenForAssetType(assetType),
+          limit: Math.min(Math.max(limit, 1), 100),
+        }),
+      )
     } catch {
       return null
     }
@@ -151,27 +105,72 @@ export class StockIndexHandler extends MarketHandlerShell {
 
   async etfList(_market = 'CN', keyword = ''): Promise<StockListItem[] | null> {
     try {
-      const q = keyword.trim()
-      if (q) {
-        const resp = await stockIndexListEtfs({ pageSize: 100, q })
-        const rows = stockIndexItemsToListRows(resp.items ?? [])
-        return rows.length ? rows : null
-      }
-      const allItems: StockIndexItem[] = []
-      let page = 1
-      const pageSize = 100
-      while (page <= 50) {
-        const resp = await stockIndexListEtfs({ page, pageSize })
-        const batch = resp.items ?? []
-        allItems.push(...batch)
-        const total = resp.total ?? 0
-        if (!batch.length) break
-        if (total > 0 && allItems.length >= total) break
-        if (batch.length < pageSize) break
-        page++
-      }
-      const rows = stockIndexItemsToListRows(allItems)
-      return rows.length ? rows : null
+      const q = String(keyword ?? '').trim()
+      return toRows(
+        await opptrixInstrumentSearch(q, {
+          market: 'CN',
+          classToken: 'etf',
+          limit: 500,
+        }),
+      )
+    } catch {
+      return null
+    }
+  }
+
+  /** 基金档案 — GET /api/v1/instruments/{id}（id = CN:of:{code}） */
+  async fundProfile(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const bare = resolveCnPublicFundBareCode(fundCode)
+      if (!bare) return null
+      const instrument = await opptrixGetInstrument(`CN:of:${bare}`)
+      if (!instrument) return null
+      const row = opptrixInstrumentToProfileRow(instrument)
+      return row ? [row] : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 基金历史净值 — GET /api/v1/funds/{code}/nav（最近 N=120） */
+  async fundNav(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const bare = resolveCnPublicFundBareCode(fundCode)
+      if (!bare) return null
+      const rows = await opptrixFundNav(bare, { limit: 120 })
+      if (!rows) return null
+      const mapped = opptrixNavToStandardRows(rows)
+      return mapped.length ? mapped : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 基金最新净值 — POST /api/v1/funds/nav/latest（单只） */
+  async fundQuote(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const bare = resolveCnPublicFundBareCode(fundCode)
+      if (!bare) return null
+      const items = await opptrixFundQuoteBatch([bare])
+      if (!items) return null
+      const first = items[0]
+      if (!first) return null
+      const row = opptrixLatestNavToQuoteRow(first)
+      return row ? [row] : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 基金绩效指标（自定义方法）— GET /api/v1/funds/{code}/metrics */
+  async fundMetrics(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const bare = resolveCnPublicFundBareCode(fundCode)
+      if (!bare) return null
+      const metrics = await opptrixFundMetrics(bare)
+      if (!metrics) return null
+      const row = opptrixMetricsToRow(metrics)
+      return row ? [row] : null
     } catch {
       return null
     }
@@ -181,135 +180,18 @@ export class StockIndexHandler extends MarketHandlerShell {
 export function mixStockIndexExt(DriverClass: typeof import('../common/base.js').BaseDriver) {
   const p = DriverClass.prototype as StockIndexHandler & Record<string, unknown>
 
-  p.stockIndexSearch = async function stockIndexSearchMethod(
-    query: string,
-    market?: string,
-    limit = 20,
-    board?: string,
-    industry?: string,
-    assetType?: string,
-  ) {
-    const resp = await stockIndexSearch(query, {
-      market: parseStockIndexMarket(market),
-      limit,
-      board,
-      industry,
-      assetType,
-    })
-    return [{ ...resp, source: 'stockindex' }]
-  }
-
   p.stockIndexListStocks = async function stockIndexListStocksMethod(
     market = 'CN',
     page = 1,
-    pageSize = 50,
-    board?: string,
-    industry?: string,
+    pageSize = 35,
     q?: string,
-    assetType?: string,
   ) {
     const resp = await stockIndexListStocks({
-      market: parseStockIndexMarket(market) ?? 'CN',
-      page,
-      pageSize,
-      board,
-      industry,
-      q,
-      assetType,
-    })
-    return [{ ...resp, source: 'stockindex' }]
-  }
-
-  p.stockIndexGetStock = async function stockIndexGetStockMethod(
-    code?: string,
-    instrumentId?: string,
-    symbol?: string,
-    market?: string,
-  ) {
-    const resp = await stockIndexGetStock({
-      code,
-      instrumentId,
-      symbol,
-      market: parseStockIndexMarket(market),
-    })
-    return [{ ...resp.item, source: 'stockindex' }]
-  }
-
-  p.stockIndexListEtfs = async function stockIndexListEtfsMethod(
-    page = 1,
-    pageSize = 50,
-    q?: string,
-  ) {
-    const resp = await stockIndexListEtfs({ page, pageSize, q })
-    return [{ ...resp, source: 'stockindex' }]
-  }
-
-  p.stockIndexListBoards = async function stockIndexListBoardsMethod(
-    market = 'CN',
-    withCount = true,
-  ) {
-    const resp = await stockIndexListBoards({
-      market: parseStockIndexMarket(market) ?? 'CN',
-      withCount,
-    })
-    return [{ ...resp, source: 'stockindex' }]
-  }
-
-  p.stockIndexGetBoardDetail = async function stockIndexGetBoardDetailMethod(
-    board: string,
-    market = 'CN',
-  ) {
-    const resp = await stockIndexGetBoardDetail(board, parseStockIndexMarket(market) ?? 'CN')
-    return [{ ...resp.item, source: 'stockindex' }]
-  }
-
-  p.stockIndexListBoardStocks = async function stockIndexListBoardStocksMethod(
-    board: string,
-    market = 'CN',
-    page = 1,
-    pageSize = 50,
-    q?: string,
-    assetType?: string,
-  ) {
-    const resp = await stockIndexListBoardStocks(board, {
-      market: parseStockIndexMarket(market) ?? 'CN',
+      market: opptrixMarket(market),
       page,
       pageSize,
       q,
-      assetType,
     })
-    return [{ ...resp, source: 'stockindex' }]
-  }
-
-  p.stockIndexListIndustries = async function stockIndexListIndustriesMethod(
-    market = 'CN',
-    level?: number,
-    q?: string,
-    parent?: string,
-    withCount = true,
-  ) {
-    const resp = await stockIndexListIndustries({
-      market: parseStockIndexMarket(market) ?? 'CN',
-      level: level === 1 || level === 2 ? level : undefined,
-      q,
-      parent,
-      withCount,
-    })
-    return [{ ...resp, source: 'stockindex' }]
-  }
-
-  p.stockIndexGetIndustryDetail = async function stockIndexGetIndustryDetailMethod(code: string) {
-    const resp = await stockIndexGetIndustryDetail(code)
-    return [{ ...resp.item, source: 'stockindex' }]
-  }
-
-  p.stockIndexListIndustryStocks = async function stockIndexListIndustryStocksMethod(
-    industryCode: string,
-    page = 1,
-    pageSize = 50,
-    q?: string,
-  ) {
-    const resp = await stockIndexListIndustryStocks(industryCode, { page, pageSize, q })
     return [{ ...resp, source: 'stockindex' }]
   }
 }
@@ -317,6 +199,8 @@ export function mixStockIndexExt(DriverClass: typeof import('../common/base.js')
 export const STOCKINDEX_HANDLER_CAPS = [
   Capability.STOCK_LIST,
   Capability.INSTRUMENT_SEARCH,
-  Capability.SECTOR_LIST,
   Capability.ETF_LIST,
+  Capability.FUND_PROFILE,
+  Capability.FUND_NAV,
+  Capability.FUND_QUOTE,
 ]

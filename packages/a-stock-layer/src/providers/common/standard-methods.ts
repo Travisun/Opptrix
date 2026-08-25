@@ -63,12 +63,14 @@ export const PROVIDER_ETF_COVERAGE: Record<string, readonly string[]> = {
   baostock: ['etfList', 'etfProfile', 'etfNav', 'etfHoldings'],
   tickflow: ['etfList', 'etfProfile'],
   tonghuashun: ['etfList', 'etfProfile'],
+  stockindex: ['etfList'],
 }
 
 export const PROVIDER_FUND_COVERAGE: Record<string, readonly string[]> = {
   tushare: [...CN_FUND_STANDARD_METHODS],
   tonghuashun: ['fundProfile', 'fundNav', 'fundHoldings', 'fundQuote'],
   baostock: ['fundList', 'fundProfile'],
+  stockindex: ['fundProfile', 'fundNav', 'fundQuote'],
 }
 
 /** 建议新增的 Capability（DATA-LAYER Phase-2） */

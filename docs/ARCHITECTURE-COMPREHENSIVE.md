@@ -502,7 +502,7 @@ export abstract class BaseDriver {
 // CN 个股 + ETF + 指数
 bindingsFor: (p, mc) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, ETF_CAPS, mc)
 
-// 跨市场（StockIndex / TickFlow）
+// 跨市场（OpptrixQuant stockindex / TickFlow）
 bindingsFor: (p, mc) => [
   ...usEquityBindings(CAPS, p, mc),
   ...cnEquityEtfIndex(...),
@@ -523,7 +523,7 @@ bindingsFor: () => []
 
 | Provider | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|--------|----------|----------|--------|------|
-| stockindex | ✅ | 仅 ETF_LIST | ✅ | 板块/行业扩展 | 合规 |
+| stockindex（OpptrixQuant） | ✅ | ETF_LIST + FUND_* | ✅ | fundMetrics 绩效指标（板块/行业已下线） | 合规（需 API Key） |
 | tickflow | ✅ | ✅ | ✅ | 少量 custom | 标杆 |
 | baostock | CN | ✅ | ✅ | custom | 合规 |
 | tushare | CN | 弱 | ✅ | fund_* custom | 合规 |

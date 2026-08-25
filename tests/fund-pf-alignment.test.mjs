@@ -74,7 +74,7 @@ test('stockIndexItemToInstrumentRef — CN:SZ + 基金名称落成 CN:PF', () =>
   assert.equal(buildInstrumentNamespace(ref), 'CN:PF.009049')
 })
 
-test('stockIndexItemToInstrumentRef — CN:PF instrumentId', () => {
+test('stockIndexItemToInstrumentRef — CN:PF instrumentId（ETF 代码段落交易所行情，不落 PF）', () => {
   const ref = stockIndexItemToInstrumentRef({
     market: 'CN',
     code: '510330',
@@ -82,5 +82,69 @@ test('stockIndexItemToInstrumentRef — CN:PF instrumentId', () => {
     assetType: 'fund',
   })
   assert.ok(ref)
-  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.510330')
+  // 共享层 resolveCnInstrumentIdentity：场内 ETF（51/52/159 等）须走交易所行情，不可落成 PF 公募基金
+  assert.equal(buildInstrumentNamespace(ref), 'CN:SH.510330')
+})
+
+test('stockIndexItemToInstrumentRef — OpptrixQuant 冒号 instrument_id CN:of:009049 → CN:PF', () => {
+  const ref = stockIndexItemToInstrumentRef({
+    market: 'CN',
+    code: '009049',
+    instrumentId: 'CN:of:009049',
+    assetType: 'of',
+    nameCn: '易方达高端制造混合发起式A',
+  })
+  assert.ok(ref)
+  assert.equal(ref.market, 'CN')
+  assert.equal(ref.assetClass, 'FUND')
+  assert.equal(ref.exchange, 'PF')
+  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.009049')
+})
+
+test('stockIndexItemToInstrumentRef — OpptrixQuant 冒号 CN:fund 与 CN:etf', () => {
+  const fund = stockIndexItemToInstrumentRef({
+    market: 'CN', code: '110022', instrumentId: 'CN:fund:110022',
+  })
+  assert.equal(fund?.assetClass, 'FUND')
+  assert.equal(buildInstrumentNamespace(fund), 'CN:PF.110022')
+
+  const etf = stockIndexItemToInstrumentRef({
+    market: 'CN', code: '510300', instrumentId: 'CN:etf:510300',
+  })
+  assert.equal(etf?.assetClass, 'ETF')
+  assert.equal(buildInstrumentNamespace(etf), 'CN:SH.510300')
+})
+
+test('stockIndexItemToInstrumentRef — US:stock:AAPL → US EQUITY', () => {
+  const ref = stockIndexItemToInstrumentRef({
+    market: 'US',
+    code: 'AAPL',
+    instrumentId: 'US:stock:AAPL',
+    nameCn: '苹果',
+  })
+  assert.ok(ref)
+  assert.equal(ref.market, 'US')
+  assert.equal(ref.assetClass, 'EQUITY')
+  assert.equal(ref.symbol, 'AAPL')
+  assert.equal(buildInstrumentNamespace(ref), 'US:AAPL')
+})
+
+test('stockIndexItemToInstrumentRef — venue SSE → SH / SZSE → SZ', () => {
+  const sh = stockIndexItemToInstrumentRef({
+    market: 'CN', code: '600519', venue: 'SSE',
+  })
+  assert.equal(sh?.exchange, 'SH')
+  assert.equal(buildInstrumentNamespace(sh), 'CN:SH.600519')
+
+  const sz = stockIndexItemToInstrumentRef({
+    market: 'CN', code: '000002', venue: 'SZSE',
+  })
+  assert.equal(sz?.exchange, 'SZ')
+  assert.equal(buildInstrumentNamespace(sz), 'CN:SZ.000002')
+
+  const hk = stockIndexItemToInstrumentRef({
+    market: 'HK', code: '00700', venue: 'HKEX',
+  })
+  assert.equal(hk?.exchange, 'HK')
+  assert.equal(buildInstrumentNamespace(hk), 'HK:00700')
 })

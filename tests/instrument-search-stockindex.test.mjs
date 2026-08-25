@@ -1,10 +1,14 @@
 /**
- * 标的在线搜索 — StockIndex 单源回归（需网络）
+ * 标的在线搜索 — OpptrixQuant（stockindex 单源）回归
+ *
+ * 需要 `OPPTRIX_STOCKINDEX_API_KEY`（真实联调）；无 Key 时自动跳过。
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-test('searchInstrumentsOnline — StockIndex CN 公募基金 009049 → CN:PF', { timeout: 30_000 }, async () => {
+const HAS_KEY = Boolean(process.env.OPPTRIX_STOCKINDEX_API_KEY)
+
+test('searchInstrumentsOnline — CN 公募基金 009049 → CN:PF', { timeout: 30_000, skip: !HAS_KEY }, async () => {
   const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')
@@ -20,7 +24,7 @@ test('searchInstrumentsOnline — StockIndex CN 公募基金 009049 → CN:PF', 
   assert.ok(fund.name?.includes('易方达') || fund.name?.includes('009049'))
 })
 
-test('searchInstrumentsOnline — CN 股票与 US 标的', { timeout: 30_000 }, async () => {
+test('searchInstrumentsOnline — CN 股票与 US 标的', { timeout: 30_000, skip: !HAS_KEY }, async () => {
   const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')
@@ -35,7 +39,7 @@ test('searchInstrumentsOnline — CN 股票与 US 标的', { timeout: 30_000 }, 
   assert.ok(us.every(h => h.source === 'stock_index'))
 })
 
-test('searchInstrumentsOnline — 基金名称关键词', { timeout: 30_000 }, async () => {
+test('searchInstrumentsOnline — 基金名称关键词', { timeout: 30_000, skip: !HAS_KEY }, async () => {
   const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')

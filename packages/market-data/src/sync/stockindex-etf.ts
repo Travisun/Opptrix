@@ -1,10 +1,11 @@
 /**
- * A 股 ETF 名录 — 仅走 StockIndex 公开 API（/api/v1/etfs）。
+ * A 股 ETF 名录 — 仅走 OpptrixQuant 标的检索（/api/v1/instruments?class_token=etf）。
  * 不经过 StandardInstrumentGateway，避免触发其他 Provider。
  */
 import {
+  opptrixInstrumentSearch,
+  opptrixInstrumentToStockIndexItem,
   stockIndexItemToListRow,
-  stockIndexListEtfs,
   type StockIndexItem,
 } from '@opptrix/a-stock-layer'
 import type { MarketDataStore } from '../store.js'
@@ -17,41 +18,34 @@ import { yieldToEventLoop } from './event-loop.js'
 function cnEtfItems(items: StockIndexItem[]): StockIndexItem[] {
   return items.filter(
     i => String(i.market ?? 'CN').toUpperCase() === 'CN'
-      && (i.assetType ?? 'etf') === 'etf'
       && String(i.code ?? '').trim(),
   )
 }
 
+/** 拉取 A 股全部 ETF（内部 has_more 翻页，page_size ≤ 35，跨页间隔 30ms 缓解配额） */
 async function fetchAllStockIndexEtfs(
   onPage?: (fetched: number, total: number | null) => void,
 ): Promise<StockIndexItem[]> {
-  const all: StockIndexItem[] = []
-  let page = 1
-  let knownTotal: number | null = null
-  const pageSize = 100
-  while (page <= 50) {
-    const resp = await stockIndexListEtfs({ page, pageSize })
-    const batch = cnEtfItems(resp.items ?? [])
-    if (!batch.length) break
-    all.push(...batch)
-    const total = resp.total ?? 0
-    if (total > 0) knownTotal = total
-    onPage?.(all.length, knownTotal)
-    if (total > 0 && all.length >= total) break
-    if (batch.length < pageSize) break
-    page++
-  }
-  return all
+  const raw = await opptrixInstrumentSearch('', {
+    market: 'CN',
+    classToken: 'etf',
+    limit: 5000,
+    delayMs: 30,
+  })
+  if (!raw) throw new Error('未配置 OpptrixQuant API Key，无法拉取 ETF 名录')
+  const batch = cnEtfItems(raw.map(opptrixInstrumentToStockIndexItem))
+  onPage?.(batch.length, null)
+  return batch
 }
 
-/** StockIndex 专用：同步 A 股 ETF 名录到 instruments + etf_profiles */
+/** OpptrixQuant 专用：同步 A 股 ETF 名录到 instruments + etf_profiles */
 export async function syncStockIndexCnEtf(
   store: MarketDataStore,
   cfg: JobSyncConfig,
   callbacks: InitialSyncCallbacks = {},
   job = 'initial_cn_etf',
 ): Promise<{ total: number; success: number }> {
-  callbacks.onLog?.('从 StockIndex API 拉取 A 股 ETF 名录（不经过其他 Provider）…')
+  callbacks.onLog?.('从 OpptrixQuant API 拉取 A 股 ETF 名录（不经过其他 Provider）…')
   callbacks.onProgress?.(0, 0, '拉取 A 股 ETF 名录…')
 
   const items = await fetchAllStockIndexEtfs((fetched, total) => {
@@ -59,7 +53,7 @@ export async function syncStockIndexCnEtf(
     callbacks.onProgress?.(fetched, denom, '拉取 A 股 ETF 名录')
   })
   if (!items.length) {
-    throw new Error('StockIndex /api/v1/etfs 无数据')
+    throw new Error('OpptrixQuant /api/v1/instruments?class_token=etf 无数据')
   }
 
   callbacks.onProgress?.(0, items.length, '写入 A 股 ETF 名录')
@@ -82,7 +76,7 @@ export async function syncStockIndexCnEtf(
 
   store.flushDuckWritesSync()
   callbacks.onProgress?.(items.length, items.length, 'A 股 ETF 名录完成')
-  callbacks.onLog?.(`StockIndex ETF 名录已写入 ${success} / ${items.length} 只`)
+  callbacks.onLog?.(`OpptrixQuant ETF 名录已写入 ${success} / ${items.length} 只`)
   return { total: items.length, success }
 }
 
@@ -94,7 +88,7 @@ export async function syncInitialCnEtf(
 ): Promise<{ total: number; success: number }> {
   const result = await syncStockIndexCnEtf(store, cfg, callbacks, 'initial_cn_etf')
   if (result.success === 0) {
-    throw new Error('A 股 ETF 名录同步失败：StockIndex 未能写入任何 ETF')
+    throw new Error('A 股 ETF 名录同步失败：OpptrixQuant 未能写入任何 ETF')
   }
   return result
 }

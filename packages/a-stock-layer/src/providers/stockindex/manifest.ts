@@ -1,9 +1,17 @@
 import { Capability } from '../../core/capabilities.js'
 import type { ProviderBinding } from '@opptrix/shared'
+import { cnFundBindings } from '../../core/bindings.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { STOCKINDEX_SETTINGS } from './settings.js'
 import { STOCKINDEX_HANDLER_CAPS } from './handler.js'
+
+/** stockindex 已实现的基金能力（filter 掉 cnFundBindings 中的 FUND_LIST / FUND_HOLDINGS） */
+const STOCKINDEX_FUND_CAPS: string[] = [
+  Capability.FUND_PROFILE,
+  Capability.FUND_NAV,
+  Capability.FUND_QUOTE,
+]
 
 function crossMarketBindings(
   priority: number,
@@ -15,7 +23,6 @@ function crossMarketBindings(
     for (const capability of [
       Capability.STOCK_LIST,
       Capability.INSTRUMENT_SEARCH,
-      Capability.SECTOR_LIST,
     ]) {
       rows.push({
         market,
@@ -33,6 +40,11 @@ function crossMarketBindings(
     defaultPriority: priority,
     ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   })
+  rows.push(
+    ...cnFundBindings(priority, maxConcurrent).filter(b =>
+      STOCKINDEX_FUND_CAPS.includes(b.capability),
+    ),
+  )
   return rows
 }
 
@@ -40,8 +52,8 @@ export const STOCKINDEX_CAPS = STOCKINDEX_HANDLER_CAPS
 
 export const STOCKINDEX_SPEC: ProviderManifestSpec = {
   id: 'stockindex',
-  title: 'StockIndex',
-  subtitle: '跨市场标的索引（搜索 / 板块 / 申万行业 / ETF·LOF 名录）',
+  title: 'OpptrixQuant',
+  subtitle: '跨市场标的检索 + CN 公募基金净值 / 档案 / 行情（需 API Key）',
   marketGroup: 'GLOBAL',
   defaultPriority: 92,
   maxConcurrent: 4,
@@ -52,8 +64,8 @@ export const STOCKINDEX_SPEC: ProviderManifestSpec = {
 
 export const STOCKINDEX_MANIFEST = providerManifestEntry(
   'stockindex',
-  'StockIndex',
-  '跨市场标的索引服务（CN/HK/US 搜索、板块与行业成分）',
+  'OpptrixQuant',
+  '跨市场标的检索（CN/HK/US/JP/KR/SG）+ CN 公募基金净值、档案、最新行情',
   'GLOBAL',
   92,
   STOCKINDEX_SETTINGS,

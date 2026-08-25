@@ -66,7 +66,7 @@ export const DISCOVER_PROFILE_REGISTRY: DiscoverProfileDefinition[] = [
   {
     id: 'us_equity',
     label: '美股',
-    description: '美股在线列表筛选（StockIndex）',
+    description: '美股在线列表筛选（OpptrixQuant）',
     packId: 'us',
     prescreenMode: 'list_filter',
     scorecardProfile: null,
@@ -94,7 +94,7 @@ export const DISCOVER_PROFILE_REGISTRY: DiscoverProfileDefinition[] = [
   {
     id: 'jp_equity',
     label: '日本股市',
-    description: '日股挖掘（StockIndex 暂无日股名录，请直接指定代码）',
+    description: '日股挖掘（OpptrixQuant 暂无日股名录，请直接指定代码）',
     packId: 'jp',
     prescreenMode: 'blocked',
     scorecardProfile: null,
@@ -107,7 +107,7 @@ export const DISCOVER_PROFILE_REGISTRY: DiscoverProfileDefinition[] = [
   {
     id: 'kr_equity',
     label: '韩国股市',
-    description: '韩股挖掘（StockIndex 暂无韩股名录，请直接指定代码）',
+    description: '韩股挖掘（OpptrixQuant 暂无韩股名录，请直接指定代码）',
     packId: 'kr',
     prescreenMode: 'blocked',
     scorecardProfile: null,
@@ -120,7 +120,7 @@ export const DISCOVER_PROFILE_REGISTRY: DiscoverProfileDefinition[] = [
   {
     id: 'hk_equity',
     label: '港股',
-    description: '港股在线列表筛选（StockIndex）',
+    description: '港股在线列表筛选（OpptrixQuant）',
     packId: 'hk',
     prescreenMode: 'list_filter',
     scorecardProfile: null,

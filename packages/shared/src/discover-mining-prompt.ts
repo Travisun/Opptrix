@@ -11,7 +11,7 @@ export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): str
   if (profile === 'cn_etf') return 'A 股 ETF（折溢价%、规模亿元）'
   if (def.prescreenMode === 'list_filter') {
     const online = def.readinessCountKey == null
-    return `${def.label}（${online ? 'StockIndex 在线列表' : '本地列表'} keyword / industry_contains）`
+    return `${def.label}（${online ? 'OpptrixQuant 在线列表' : '本地列表'} keyword / industry_contains）`
   }
   return 'A 股股票'
 }

@@ -47,7 +47,7 @@ dividend | news | notices | shareholders | money_flow | technical_analysis
 // CN 个股 + ETF + 指数
 bindingsFor: (p, mc) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, ETF_CAPS, mc)
 
-// 跨市场（StockIndex / TickFlow）
+// 跨市场（OpptrixQuant stockindex / TickFlow）
 bindingsFor: (p, mc) => [
   ...usEquityBindings(CAPS, p, mc),
   ...cnEquityEtfIndex(...),
@@ -71,7 +71,7 @@ bindingsFor: () => []
 
 ### 2.3 免费源退避保护（硬性）
 
-适用：manifest **无**必填 `secret` 字段的免费行情源（baostock / zzshare / stockindex 等）。
+适用：manifest **无**必填 `secret` 字段的免费行情源（baostock / zzshare 等；stockindex 已升级为付费源，不再适用）。
 
 > **设计全文**（分层、批内全开、主机闸门、不变量与常数）：[FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md)。
 
@@ -119,7 +119,7 @@ bindingsFor: () => []
 | CN | **zzshare** / **baostock** | 免费层；ETF / 基本面补充 |
 | CN | **tushare** | 需 Token；批量 / 基本面 |
 | 多市场 | **tickflow** | 需 Key；US / HK / CN ETF |
-| 搜索 / 列表 | **stockindex** | 跨市场 `instrument_search` / `stock_list` |
+| 搜索 / 列表 / 基金 | **stockindex**（OpptrixQuant） | 需 Key；跨市场 `instrument_search` / `stock_list` + CN 公募基金 `fund_profile/fund_nav/fund_quote` |
 | CRYPTO | **binance** / **okx** | 现货行情 |
 
 **右侧面板**：个股 / ETF 行情、K 线、概况、财报等 **仍经** `queryInstrumentData` 标准能力，由上述内置源 failover；不依赖已移除爬虫源。
@@ -130,7 +130,7 @@ bindingsFor: () => []
 
 | Provider | 注册 | Binding 结构 | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|------|--------------|--------|----------|----------|--------|------|
-| **stockindex** | ✅ | CN/US/HK EQUITY + CN ETF_LIST | ✅ 搜索/列表 | 仅 ETF_LIST | ✅ `instrumentSearch` 等 | 板块/行业扩展 API | **合规**；ETF 净值/持仓靠 tonghuashun / zzshare / tickflow |
+| **stockindex**（OpptrixQuant） | ✅ | CN/US/HK EQUITY + CN ETF_LIST + **CN FUND**（fund_profile/fund_nav/fund_quote） | ✅ 搜索/列表 | ETF_LIST | ✅ `instrumentSearch` / `fundProfile` 等 | `fundMetrics` 绩效指标（板块/行业已下线） | **合规（需 API Key）**；ETF 净值/持仓靠 tonghuashun / zzshare / tickflow |
 | **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆** |
 | **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | **fund_* 五件套 + fund_company/div/daily/adj 自定义** | **合规（CN）** |

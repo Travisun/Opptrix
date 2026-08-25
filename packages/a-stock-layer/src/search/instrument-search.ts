@@ -1,5 +1,5 @@
 /**
- * 跨市场标的搜索 — 唯一在线源：StockIndex `/api/v1/search`。
+ * 跨市场标的搜索 — 唯一在线源：OpptrixQuant `GET /api/v1/instruments`。
  * Engine / 腾讯 / fund_list 补路已移除；normalize 在 stockIndexItemToInstrumentRef。
  */
 
@@ -12,8 +12,9 @@ import {
   normalizeInstrumentRef,
 } from '@opptrix/shared'
 import type { MarketDataEngine } from '../engine.js'
-import { stockIndexSearch } from '../providers/stockindex/api/client.js'
+import { opptrixInstrumentSearch } from '../providers/stockindex/api/client.js'
 import {
+  opptrixInstrumentToStockIndexItem,
   stockIndexItemToInstrumentRef,
 } from '../providers/stockindex/normalize.js'
 import { parseYahooSearchQuotes } from '../utils/yahoo-search.js'
@@ -30,8 +31,8 @@ export interface InstrumentSearchHit {
 }
 
 const SEARCH_CACHE_MS = 5 * 60 * 1000
-/** bump 后丢弃旧缓存（StockIndex 单源 + CN:PF 对齐） */
-const SEARCH_CACHE_VERSION = 3
+/** bump 后丢弃旧缓存（OpptrixQuant 单源 + CN:PF 对齐） */
+const SEARCH_CACHE_VERSION = 4
 const searchCache = new Map<string, { expires: number; items: InstrumentSearchHit[] }>()
 
 function equityListRef(market: Market): InstrumentRef {
@@ -117,8 +118,13 @@ async function searchMarketViaStockIndex(
   keyword: string,
   limit: number,
 ): Promise<InstrumentSearchHit[]> {
-  const resp = await stockIndexSearch(keyword, { market, limit: Math.min(limit, 50) })
-  return (resp.items ?? [])
+  const raw = await opptrixInstrumentSearch(keyword, {
+    market,
+    limit: Math.min(limit, 50),
+  })
+  if (!raw) return []
+  return raw
+    .map(opptrixInstrumentToStockIndexItem)
     .map(hitFromStockIndexItem)
     .filter((h): h is InstrumentSearchHit => h != null)
     .slice(0, limit)

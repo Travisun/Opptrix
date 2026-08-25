@@ -264,7 +264,7 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
-  /** 行业 — 与名录每周交替（见 schedule.ts） */
+  /** 行业 — 已禁用（OpptrixQuant 无行业/板块接口；sync 为 no-op，job 名称保留以维持 readiness） */
   initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** 日频截面 — 每个交易日刷新 */
