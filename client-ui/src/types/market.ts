@@ -469,6 +469,67 @@ export interface EtfHoldingRow {
   assetType?: string
 }
 
+/** 费率条目 — 与数据层 profile.rateInfo 对齐（label 标准；name 兼容） */
+export interface FundRateInfoItem {
+  label?: string
+  name?: string
+  rate?: number | null
+  note?: string
+}
+
+/** 基金经理详情 — 与 fund_detail.manager 对齐 */
+export interface FundManagerData {
+  name?: string
+  managerId?: string
+  years?: number | null
+  gender?: string
+  education?: string
+  resume?: string
+  style?: string
+  philosophy?: string
+  experience?: string
+  representFunds?: string[]
+  scale?: number | null
+  performanceSummary?: string
+}
+
+/** 诊断单维 */
+export interface FundDiagnosisDimension {
+  name: string
+  score?: number | null
+  label?: string
+  peerAvg?: number | null
+  detail?: string
+}
+
+/** 基金诊断 — 与 fund_detail.diagnosis 对齐 */
+export interface FundDiagnosisData {
+  dimensions?: FundDiagnosisDimension[]
+  resilience?: string | number | null
+  summary?: string
+}
+
+/** 基金资讯 — 与 fund_detail.news 对齐 */
+export interface FundNewsItem {
+  title: string
+  date: string
+  url?: string
+}
+
+/** 财务摘要 — 可嵌在档案底部；indicators 为扶摇关键指标行 */
+export interface FundFinancialSummary {
+  reportDate?: string
+  revenue?: number | null
+  revenueYoy?: number | null
+  netProfit?: number | null
+  netProfitYoy?: number | null
+  eps?: number | null
+  roe?: number | null
+  grossMargin?: number | null
+  debtRatio?: number | null
+  indicators?: Array<{ label: string; value?: number | string | null; unit?: string }>
+}
+
 export interface FundProfileData {
   code: string
   name?: string
@@ -479,15 +540,26 @@ export interface FundProfileData {
   changePct?: number | null
   fundType?: string
   manager?: string
+  managerId?: string
   company?: string
+  companyId?: string
   custodian?: string
   expenseRatio?: number | null
+  rateInfo?: FundRateInfoItem[]
+  purchaseFee?: number | null
+  redeemFee?: number | null
+  riskLevel?: string
   scale?: number | null
+  totalShares?: number | null
   benchmark?: string
   establishDate?: string
   return1y?: number | null
   investTarget?: string
   investScope?: string
+  investPhilosophy?: string
+  investStrategy?: string
+  /** 交易规则（可读文案） */
+  tradeRules?: string[]
   performance?: FundPerformance
   holderAmount?: number | null
   avgHolderShare?: number | null
@@ -593,6 +665,11 @@ export interface FundDetailData {
   allocation: FundAllocationData | null
   holders: FundHoldersData | null
   dividends: FundDividendRow[]
+  /** 经理详情；无则仅档案里的姓名 */
+  manager?: FundManagerData | null
+  diagnosis?: FundDiagnosisData | null
+  news?: FundNewsItem[]
+  financials?: FundFinancialSummary | null
   failed: string[]
 }
 

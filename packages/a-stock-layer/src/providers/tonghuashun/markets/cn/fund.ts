@@ -15,6 +15,10 @@ import {
   mapFundAllocationRow,
   mapFundHoldersRow,
   mapFundDividendRows,
+  mapFundManagerRow,
+  mapFundDiagnosisRow,
+  mapFundNewsRows,
+  mapFundFinancialsRow,
 } from '../../normalize/fund.js'
 import type { TonghuashunMarketHandler } from './handler.js'
 
@@ -302,6 +306,85 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
       const data = await client.fundCorporateActionsDividends(fundType, thscode)
       const rows = mapFundDividendRows(bare, data.item ?? [])
       return rows.length ? rows : null
+    })
+  }
+
+  p.fundManager = async function fundManager(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const profileData = await client.fundProfileDetail(fundType, thscode)
+      const profile = profileData.item?.[0]
+      if (!profile) return null
+      const managerInfo0 = Array.isArray(profile.manager_info) && profile.manager_info[0]
+        && typeof profile.manager_info[0] === 'object'
+        ? profile.manager_info[0] as Record<string, unknown>
+        : null
+      const managerId = String(
+        profile.manager_id
+        ?? profile.managerId
+        ?? managerInfo0?.manager_id
+        ?? managerInfo0?.managerId
+        ?? managerInfo0?.id
+        ?? '',
+      ).trim()
+      if (!managerId) return null
+      const [detailData, styleData, experienceData, performanceData] = await Promise.all([
+        client.fundManagersDetail(managerId).catch(() => ({ item: [] as Record<string, unknown>[] })),
+        client.fundManagersInvestmentStyle(managerId).catch(() => ({ item: [] as Record<string, unknown>[] })),
+        client.fundManagersExperience(managerId).catch(() => ({ item: [] as Record<string, unknown>[] })),
+        client.fundManagersPerformance(managerId, 'year').catch(() => ({ item: [] as Record<string, unknown>[] })),
+      ])
+      const row = mapFundManagerRow(bare, managerId, {
+        detail: detailData.item?.[0] ?? null,
+        style: styleData.item ?? null,
+        experience: experienceData.item ?? [],
+        performance: performanceData.item ?? null,
+        profile,
+      })
+      return row ? [row] : null
+    })
+  }
+
+  p.fundDiagnosis = async function fundDiagnosis(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundDiagnosticsDetail(fundType, thscode)
+      const row = mapFundDiagnosisRow(bare, data.item?.[0] ?? null)
+      return row ? [row] : null
+    })
+  }
+
+  p.fundNews = async function fundNews(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundNewsArticleList(fundType, thscode, { limit: 15 })
+      const rows = mapFundNewsRows(bare, data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  p.fundFinancials = async function fundFinancials(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundFinancialsIndicators(fundType, thscode)
+      const row = mapFundFinancialsRow(bare, data.item ?? [])
+      return row ? [row] : null
     })
   }
 }

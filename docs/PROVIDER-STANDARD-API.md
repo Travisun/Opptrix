@@ -19,6 +19,7 @@ stock_list | instrument_search | sector_list
 etf_list | etf_nav | etf_holdings | etf_snapshot | etf_profile
 fund_list | fund_nav | fund_holdings | fund_snapshot | fund_profile | fund_quote
 fund_returns | fund_drawdown | fund_allocation | fund_holders | fund_dividend
+fund_manager | fund_diagnosis | fund_news | fund_financials
 dividend | news | notices | shareholders | money_flow | technical_analysis
 ```
 

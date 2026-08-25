@@ -73,6 +73,10 @@ export type InstrumentDataCapability =
   | 'fund_allocation'
   | 'fund_holders'
   | 'fund_dividend'
+  | 'fund_manager'
+  | 'fund_diagnosis'
+  | 'fund_news'
+  | 'fund_financials'
   | 'dividend'
   | 'news'
   | 'notices'
@@ -311,6 +315,14 @@ export function resolveInstrumentQueryPlan(
           return registryPlan('CN', 'FUND', Capability.FUND_HOLDERS, 'fundHolders', true, [symbol], normalized)
         case 'fund_dividend':
           return registryPlan('CN', 'FUND', Capability.FUND_DIVIDEND, 'fundDividend', true, [symbol], normalized)
+        case 'fund_manager':
+          return registryPlan('CN', 'FUND', Capability.FUND_MANAGER, 'fundManager', true, [symbol], normalized)
+        case 'fund_diagnosis':
+          return registryPlan('CN', 'FUND', Capability.FUND_DIAGNOSIS, 'fundDiagnosis', true, [symbol], normalized)
+        case 'fund_news':
+          return registryPlan('CN', 'FUND', Capability.FUND_NEWS, 'fundNews', true, [symbol], normalized)
+        case 'fund_financials':
+          return registryPlan('CN', 'FUND', Capability.FUND_FINANCIALS, 'fundFinancials', true, [symbol], normalized)
         case 'fund_list':
           return registryPlan('CN', 'FUND', Capability.FUND_LIST, 'fundList', true, [
             'CN', opts.keyword ?? '',

@@ -545,10 +545,13 @@ export class FuyaoClient {
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/performance */
-  fundManagersPerformance(managerId: string) {
+  fundManagersPerformance(
+    managerId: string,
+    range: 'month' | 'tmonth' | 'year' | 'nowyear' | 'now' = 'year',
+  ) {
     return this.get<{ item?: Record<string, unknown>[] }>(
       '/api/fund/managers/performance',
-      { manager_id: managerId },
+      { manager_id: managerId, range },
     )
   }
 

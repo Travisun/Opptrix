@@ -8,9 +8,12 @@ import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import {
   FundArchivePanel,
+  FundDiagnosisPanel,
   FundDividendsPanel,
   FundHoldersPanel,
   FundHoldingsPanel,
+  FundManagerPanel,
+  FundNewsPanel,
   FundPerformancePanel,
 } from './fundDetailPanels'
 import {
@@ -27,7 +30,16 @@ import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrum
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
-type FundTab = 'chart' | 'archive' | 'performance' | 'holdings' | 'holders' | 'dividends'
+type FundTab =
+  | 'chart'
+  | 'archive'
+  | 'performance'
+  | 'holdings'
+  | 'manager'
+  | 'diagnosis'
+  | 'holders'
+  | 'dividends'
+  | 'news'
 
 const CONTENT_PAD = '15px'
 
@@ -149,6 +161,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    overflowX: 'auto',
   },
   body: {
     flex: 1,
@@ -265,6 +278,10 @@ export default function FundDetailTab({
   const failed = detail?.failed ?? []
   const holders = detail?.holders ?? null
   const dividends = detail?.dividends ?? []
+  const manager = detail?.manager ?? null
+  const diagnosis = detail?.diagnosis ?? null
+  const news = detail?.news ?? []
+  const financials = detail?.financials ?? null
   const showHoldersTab = Boolean(
     holders
     && (
@@ -275,6 +292,16 @@ export default function FundDetailTab({
     ),
   )
   const showDividendsTab = dividends.length > 0
+  const showManagerTab = Boolean(manager || profile?.manager?.trim())
+  const showDiagnosisTab = Boolean(
+    diagnosis
+    && (
+      (diagnosis.dimensions?.length ?? 0) > 0
+      || diagnosis.resilience != null
+      || diagnosis.summary
+    ),
+  )
+  const showNewsTab = news.length > 0
 
   useEffect(() => {
     if (!instrumentRef) {
@@ -322,7 +349,10 @@ export default function FundDetailTab({
   useEffect(() => {
     if (tab === 'holders' && !showHoldersTab) setTab('chart')
     if (tab === 'dividends' && !showDividendsTab) setTab('chart')
-  }, [tab, showHoldersTab, showDividendsTab])
+    if (tab === 'manager' && !showManagerTab) setTab('chart')
+    if (tab === 'diagnosis' && !showDiagnosisTab) setTab('chart')
+    if (tab === 'news' && !showNewsTab) setTab('chart')
+  }, [tab, showHoldersTab, showDividendsTab, showManagerTab, showDiagnosisTab, showNewsTab])
 
   const displayName = resolveDisplayStockName(stockCode ?? '', profile?.name, stock?.name)
   const unitNav = profile?.unitNav
@@ -410,8 +440,11 @@ export default function FundDetailTab({
           <Tab value="archive">档案</Tab>
           <Tab value="performance">业绩</Tab>
           <Tab value="holdings">持仓</Tab>
+          {showManagerTab ? <Tab value="manager">经理</Tab> : null}
+          {showDiagnosisTab ? <Tab value="diagnosis">诊断</Tab> : null}
           {showHoldersTab ? <Tab value="holders">持有人</Tab> : null}
           {showDividendsTab ? <Tab value="dividends">分红</Tab> : null}
+          {showNewsTab ? <Tab value="news">资讯</Tab> : null}
         </TabList>
       </div>
 
@@ -432,7 +465,9 @@ export default function FundDetailTab({
         </div>
       ) : (
         <div className={s.body}>
-          {tab === 'archive' && <FundArchivePanel profile={profile} />}
+          {tab === 'archive' && (
+            <FundArchivePanel profile={profile} financials={financials} />
+          )}
           {tab === 'performance' && (
             <FundPerformancePanel
               returns={detail?.returns ?? (profile?.performance ? { performance: profile.performance } : null)}
@@ -449,6 +484,21 @@ export default function FundDetailTab({
               failed={failed}
             />
           )}
+          {tab === 'manager' && (
+            <FundManagerPanel
+              manager={manager}
+              fallbackName={profile?.manager}
+              loading={loading && !detail}
+              failed={failed}
+            />
+          )}
+          {tab === 'diagnosis' && (
+            <FundDiagnosisPanel
+              diagnosis={diagnosis}
+              loading={loading && !detail}
+              failed={failed}
+            />
+          )}
           {tab === 'holders' && (
             <FundHoldersPanel
               holders={holders}
@@ -459,6 +509,13 @@ export default function FundDetailTab({
           {tab === 'dividends' && (
             <FundDividendsPanel
               dividends={dividends}
+              loading={loading && !detail}
+              failed={failed}
+            />
+          )}
+          {tab === 'news' && (
+            <FundNewsPanel
+              news={news}
               loading={loading && !detail}
               failed={failed}
             />

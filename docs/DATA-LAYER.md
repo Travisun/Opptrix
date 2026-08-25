@@ -186,10 +186,14 @@ enum Capability {
   FUND_ALLOCATION = 'fund_allocation',   // 资产配置 + 行业配置
   FUND_HOLDERS = 'fund_holders',         // 持有人结构 / 十大持有人
   FUND_DIVIDEND = 'fund_dividend',       // 历史分红
+  FUND_MANAGER = 'fund_manager',         // 经理详情（detail+style+experience+performance）
+  FUND_DIAGNOSIS = 'fund_diagnosis',     // 基金诊断
+  FUND_NEWS = 'fund_news',               // 资讯列表
+  FUND_FINANCIALS = 'fund_financials',   // 财务关键指标（非 IS/BS 全表）
 }
 ```
 
-Hub `fund_detail` 并行 `queryInstrumentData` 聚合上述能力 + `fund_snapshot` / `fund_holdings`；单路失败写入 `failed[]`，快照失败则整页失败。UI `FundDetailTab` 经 `research.fundDetail` 消费（档案 / 业绩 / 持仓为主路径；持有人、分红有数据才显示 Tab）。仅同花顺绑定这些扩展能力，Tushare 仍为五件套（profile / nav / holdings / quote / list）。
+Hub `fund_detail` 并行 `queryInstrumentData` 聚合上述能力 + `fund_snapshot` / `fund_holdings`；单路失败写入 `failed[]`（含「经理」「诊断」「资讯」「财务」），快照失败则整页失败。UI `FundDetailTab` 经 `research.fundDetail` 消费。仅同花顺绑定这些扩展能力，Tushare 仍为五件套（profile / nav / holdings / quote / list）。
 
 ---
 

@@ -81,7 +81,7 @@
 | `fund_nav` | InstrumentRef / code | 公募基金净值序列 |
 | `fund_holdings` | InstrumentRef / code | 公募基金重仓股 |
 | `fund_profile` | InstrumentRef / code | 公募基金档案 |
-| `fund_detail` | InstrumentRef / code | 基金详情页聚合（快照/持仓/业绩/回撤/配置/持有人/分红；单路失败写入 `failed[]`，快照失败则整页失败） |
+| `fund_detail` | InstrumentRef / code | 基金详情页聚合（快照/持仓/业绩/回撤/配置/持有人/分红/经理/诊断/资讯/财务；单路失败写入 `failed[]`，快照失败则整页失败） |
 | `market_session` | `market?` | 轻量交易时段状态 |
 | `news_center_status` | — | 资讯中心状态（刷新/订阅规模/文章总量） |
 | `news_groups_list` | — | 资讯分组列表 |
@@ -294,7 +294,7 @@ POST /api/research
 | `fund_nav` | InstrumentRef / code | 公募基金净值序列 |
 | `fund_holdings` | InstrumentRef / code | 公募基金重仓股 |
 | `fund_profile` | InstrumentRef / code | 公募基金档案 |
-| `fund_detail` | InstrumentRef / code | 基金详情页聚合（快照/持仓/业绩/回撤/配置/持有人/分红；单路失败写入 `failed[]`） |
+| `fund_detail` | InstrumentRef / code | 基金详情页聚合（快照/持仓/业绩/回撤/配置/持有人/分红/经理/诊断/资讯/财务；单路失败写入 `failed[]`） |
 | `market_session` | `market?` | 轻量交易时段（非完整日历） |
 
 服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。Agent 聊天工具（`news` pack：`add_news_source` / `delete_news_source` / `import_news_sources` / `create_news_group` 等）经同一 ResearchHub `news_*` feature 调度，与下表 REST 共用存储；破坏性写操作的确认纪律见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。

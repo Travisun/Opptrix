@@ -1,12 +1,17 @@
 import { type ReactNode } from 'react'
-import { Spinner, Text, makeStyles } from '@fluentui/react-components'
+import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type {
   FundAllocationData,
   FundDetailData,
+  FundDiagnosisData,
   FundDrawdownRow,
+  FundFinancialSummary,
   FundHoldingRow,
   FundHoldersData,
+  FundManagerData,
+  FundNewsItem,
   FundProfileData,
+  FundRateInfoItem,
   FundReturnsData,
 } from '../types/market'
 import {
@@ -15,7 +20,9 @@ import {
   formatPrice,
 } from './format'
 import { opptrixCssVars } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
+import { isHttpUrl, openExternalUrl } from '../platform/openUrl'
 
 const useStyles = makeStyles({
   section: {
@@ -50,6 +57,12 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  metricValueWrap: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.45,
+    whiteSpace: 'normal',
+  },
   tableHead: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.8fr) repeat(2, minmax(0, 0.7fr))',
@@ -64,6 +77,68 @@ const useStyles = makeStyles({
     padding: '4px 0',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
+  },
+  perfHead: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.85fr))',
+    gap: '4px',
+    padding: '4px 0',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+  },
+  perfRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.85fr))',
+    gap: '4px',
+    padding: '4px 0',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ':last-child': { borderBottom: 'none' },
+  },
+  rateHead: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 1fr)',
+    gap: '4px',
+    padding: '4px 0',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+  },
+  rateRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 1fr)',
+    gap: '4px',
+    padding: '4px 0',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ':last-child': { borderBottom: 'none' },
+  },
+  newsRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) 76px',
+    gap: '8px',
+    alignItems: 'baseline',
+    padding: '6px 0',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ':last-child': { borderBottom: 'none' },
+  },
+  newsRowClickable: {
+    ...ghostInteractive,
+    cursor: 'pointer',
+    borderRadius: '4px',
+    margin: '0 -4px',
+    padding: '6px 4px',
+  },
+  newsTitle: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+    overflow: 'hidden',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+  },
+  newsDate: {
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
+    fontVariantNumeric: 'tabular-nums',
+    textAlign: 'right',
+    flexShrink: 0,
   },
   tableHeadCell: {
     fontSize: 'var(--opptrix-font-xs)',
@@ -81,6 +156,8 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     padding: '8px 2px',
+    lineHeight: 1.5,
+    whiteSpace: 'pre-line',
   },
   subSection: {
     display: 'flex',
@@ -100,6 +177,13 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
+  },
+  dimChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textSecondary,
   },
 })
 
@@ -128,6 +212,11 @@ function formatRatio(raw: number | null | undefined): string {
   return `${raw.toFixed(2)}%`
 }
 
+function formatRateValue(rate: number | null | undefined): string {
+  if (rate == null || Number.isNaN(rate)) return '—'
+  return `${rate}%`
+}
+
 function PanelState({
   loading,
   loadingLabel,
@@ -154,42 +243,188 @@ function PanelState({
   return <>{children}</>
 }
 
-export function FundArchivePanel({ profile }: { profile: FundProfileData | null }) {
+function ArchiveMetric({
+  label,
+  value,
+  title,
+  wrap,
+}: {
+  label: string
+  value: string
+  title?: string
+  wrap?: boolean
+}) {
+  const s = useStyles()
+  return (
+    <div className={s.metric}>
+      <span className={s.metricLabel}>{label}</span>
+      <span className={wrap ? s.metricValueWrap : s.metricValue} title={title ?? (wrap ? undefined : value)}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function RateTable({ rates }: { rates: FundRateInfoItem[] }) {
+  const s = useStyles()
+  if (!rates.length) return null
+  return (
+    <div className={s.subSection}>
+      <Text className={s.sectionTitle}>费率一览</Text>
+      <div className={s.rateHead}>
+        <span className={s.tableHeadCell}>费率类型</span>
+        <span className={s.tableHeadCell}>费率</span>
+        <span className={s.tableHeadCell}>说明</span>
+      </div>
+      {rates.map((row, index) => {
+        const label = (row.label || row.name || '').trim()
+        return (
+          <div key={listRowKey(index, label)} className={s.rateRow}>
+            <span className={s.tableCell} title={label}>{label || '—'}</span>
+            <span className={s.tableCell}>{formatRateValue(row.rate)}</span>
+            <span className={s.tableCell} title={row.note}>{row.note || '—'}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function FinancialSummaryBlock({ financials }: { financials: FundFinancialSummary | null | undefined }) {
+  const s = useStyles()
+  if (!financials) return null
+  const cells: Array<{ label: string; value: string }> = []
+  if (financials.revenue != null) {
+    cells.push({ label: '营业收入', value: formatCompactNumber(financials.revenue) })
+  }
+  if (financials.revenueYoy != null) {
+    cells.push({ label: '营收同比', value: formatPct(financials.revenueYoy) })
+  }
+  if (financials.netProfit != null) {
+    cells.push({ label: '净利润', value: formatCompactNumber(financials.netProfit) })
+  }
+  if (financials.netProfitYoy != null) {
+    cells.push({ label: '净利同比', value: formatPct(financials.netProfitYoy) })
+  }
+  if (financials.eps != null) {
+    cells.push({ label: '每股收益', value: formatPrice(financials.eps) })
+  }
+  if (financials.roe != null) {
+    cells.push({ label: '净资产收益率', value: formatPct(financials.roe) })
+  }
+  if (financials.grossMargin != null) {
+    cells.push({ label: '毛利率', value: formatPct(financials.grossMargin) })
+  }
+  if (financials.debtRatio != null) {
+    cells.push({ label: '资产负债率', value: formatPct(financials.debtRatio) })
+  }
+  if (!cells.length && financials.indicators?.length) {
+    for (const ind of financials.indicators.slice(0, 8)) {
+      if (!ind.label) continue
+      const raw = ind.value
+      const value = typeof raw === 'number'
+        ? formatCompactNumber(raw)
+        : (raw != null && String(raw).trim() ? String(raw) : '—')
+      cells.push({ label: ind.label, value })
+    }
+  }
+  if (!cells.length && !financials.reportDate) return null
+  return (
+    <div className={s.subSection}>
+      <Text className={s.sectionTitle}>财务摘要</Text>
+      {financials.reportDate ? (
+        <Text className={s.note}>报告期 {financials.reportDate}</Text>
+      ) : null}
+      {cells.length > 0 ? (
+        <div className={s.metricGrid}>
+          {cells.map(cell => (
+            <ArchiveMetric key={cell.label} label={cell.label} value={cell.value} />
+          ))}
+        </div>
+      ) : (
+        <Text className={s.emptyHint}>
+          还没有可展示的财务指标
+          {'\n'}
+          等定期报告更新后再来看
+        </Text>
+      )}
+    </div>
+  )
+}
+
+export function FundArchivePanel({
+  profile,
+  financials,
+}: {
+  profile: FundProfileData | null
+  financials?: FundFinancialSummary | null
+}) {
   const s = useStyles()
   if (!profile) {
-    return <Text className={s.emptyHint}>暂时无法获取档案，请稍后重试</Text>
+    return (
+      <Text className={s.emptyHint}>
+        暂时无法获取档案
+        {'\n'}
+        请稍后重试，或切换其他基金查看
+      </Text>
+    )
   }
-  const rows: Array<{ label: string; value: string; title?: string }> = [
-    { label: '基金类型', value: profile.fundType || '—' },
-    { label: '基金经理', value: profile.manager || '—' },
-    { label: '管理人', value: profile.company || '—' },
-    { label: '托管人', value: profile.custodian || '—' },
-    { label: '成立日期', value: profile.establishDate || '—' },
-    {
-      label: '业绩基准',
-      value: profile.benchmark || '—',
-      title: profile.benchmark,
-    },
-    {
-      label: '管理费',
-      value: profile.expenseRatio != null ? `${profile.expenseRatio}%` : '—',
-    },
-    {
-      label: '规模',
-      value: profile.scale != null ? `${formatCompactNumber(profile.scale)} 亿` : '—',
-    },
-  ]
+
+  const rateInfo = profile.rateInfo?.filter(r => (r.label || r.name)?.trim()) ?? []
+  const hasExpenseOnly = rateInfo.length === 0 && profile.expenseRatio != null
+  const tradeRules = profile.tradeRules?.filter(r => r.trim()) ?? []
+
   return (
     <div className={s.section}>
       <Text className={s.sectionTitle}>基金档案</Text>
       <div className={s.metricGrid}>
-        {rows.map(row => (
-          <div key={row.label} className={s.metric}>
-            <span className={s.metricLabel}>{row.label}</span>
-            <span className={s.metricValue} title={row.title}>{row.value}</span>
-          </div>
-        ))}
+        {profile.fullName ? (
+          <ArchiveMetric label="全称" value={profile.fullName} title={profile.fullName} />
+        ) : null}
+        <ArchiveMetric label="基金类型" value={profile.fundType || '—'} />
+        <ArchiveMetric label="风险等级" value={profile.riskLevel || '—'} />
+        <ArchiveMetric label="基金经理" value={profile.manager || '—'} />
+        <ArchiveMetric label="管理人" value={profile.company || '—'} />
+        <ArchiveMetric label="托管人" value={profile.custodian || '—'} />
+        <ArchiveMetric label="成立日期" value={profile.establishDate || '—'} />
+        <ArchiveMetric
+          label="规模"
+          value={profile.scale != null ? `${formatCompactNumber(profile.scale)} 亿` : '—'}
+        />
+        <ArchiveMetric
+          label="份额"
+          value={profile.totalShares != null ? formatCompactNumber(profile.totalShares) : '—'}
+        />
+        <ArchiveMetric
+          label="业绩基准"
+          value={profile.benchmark || '—'}
+          title={profile.benchmark}
+        />
+        {profile.purchaseFee != null ? (
+          <ArchiveMetric label="申购费" value={`${profile.purchaseFee}%`} />
+        ) : null}
+        {profile.redeemFee != null ? (
+          <ArchiveMetric label="赎回费" value={`${profile.redeemFee}%`} />
+        ) : null}
+        {hasExpenseOnly ? (
+          <ArchiveMetric
+            label="管理费"
+            value={profile.expenseRatio != null ? `${profile.expenseRatio}%` : '—'}
+          />
+        ) : null}
       </div>
+
+      <RateTable rates={rateInfo} />
+
+      {tradeRules.length > 0 ? (
+        <div className={s.subSection}>
+          <Text className={s.sectionTitle}>交易规则</Text>
+          {tradeRules.map((rule, index) => (
+            <Text key={listRowKey(index, rule)} className={s.note}>{rule}</Text>
+          ))}
+        </div>
+      ) : null}
+
       {profile.investTarget ? (
         <div className={s.subSection}>
           <Text className={s.sectionTitle}>投资目标</Text>
@@ -202,6 +437,20 @@ export function FundArchivePanel({ profile }: { profile: FundProfileData | null 
           <Text className={s.note}>{profile.investScope}</Text>
         </div>
       ) : null}
+      {profile.investPhilosophy ? (
+        <div className={s.subSection}>
+          <Text className={s.sectionTitle}>投资理念</Text>
+          <Text className={s.note}>{profile.investPhilosophy}</Text>
+        </div>
+      ) : null}
+      {profile.investStrategy ? (
+        <div className={s.subSection}>
+          <Text className={s.sectionTitle}>投资策略</Text>
+          <Text className={s.note}>{profile.investStrategy}</Text>
+        </div>
+      ) : null}
+
+      <FinancialSummaryBlock financials={financials} />
     </div>
   )
 }
@@ -219,7 +468,13 @@ export function FundPerformancePanel({
 }) {
   const s = useStyles()
   const perf = returns?.performance
-  const perfRows = PERF_LABELS.filter(({ key }) => perf?.[key] != null)
+  const peerAvg = returns?.peerAvg
+  const ranks = returns?.ranks
+  const perfRows = PERF_LABELS.filter(({ key }) => (
+    perf?.[key] != null
+    || peerAvg?.[key] != null
+    || ranks?.[key]?.rank != null
+  ))
   const hasPerf = perfRows.length > 0
   const hasDrawdown = drawdowns.length > 0
   const returnsFailed = failed.includes('业绩') && !hasPerf
@@ -229,50 +484,38 @@ export function FundPerformancePanel({
     <PanelState
       loading={loading}
       loadingLabel="正在加载业绩…"
-      error={returnsFailed && drawdownFailed ? '暂时无法获取业绩，请稍后重试' : null}
-      empty={!hasPerf && !hasDrawdown ? '还没有可展示的区间收益或回撤，可稍后再试' : null}
+      error={returnsFailed && drawdownFailed
+        ? '暂时无法获取业绩，请稍后重试'
+        : null}
+      empty={!hasPerf && !hasDrawdown
+        ? '还没有可展示的区间收益或回撤，可稍后再试'
+        : null}
     >
       <div className={s.section}>
         {hasPerf ? (
           <>
-            <Text className={s.sectionTitle}>区间收益</Text>
-            <div className={s.metricGrid}>
-              {perfRows.map(({ key, label }) => (
-                <div key={key} className={s.metric}>
-                  <span className={s.metricLabel}>{label}</span>
-                  <span className={s.metricValue}>{formatPct(perf?.[key] ?? null)}</span>
-                </div>
-              ))}
+            <Text className={s.sectionTitle}>区间收益与同类</Text>
+            <div className={s.perfHead}>
+              <span className={s.tableHeadCell}>区间</span>
+              <span className={s.tableHeadCell}>本基金</span>
+              <span className={s.tableHeadCell}>同类均</span>
+              <span className={s.tableHeadCell}>排名</span>
             </div>
-            {returns?.ranks && Object.keys(returns.ranks).length > 0 ? (
-              <div className={s.subSection}>
-                <Text className={s.sectionTitle}>同类排名</Text>
-                <div className={s.metricGrid}>
-                  {PERF_LABELS.filter(({ key }) => returns.ranks?.[key]?.rank != null).map(({ key, label }) => (
-                    <div key={key} className={s.metric}>
-                      <span className={s.metricLabel}>{label}</span>
-                      <span className={s.metricValue}>{formatRank(returns.ranks?.[key])}</span>
-                    </div>
-                  ))}
-                </div>
+            {perfRows.map(({ key, label }) => (
+              <div key={key} className={s.perfRow}>
+                <span className={s.tableCell}>{label}</span>
+                <span className={s.tableCell}>{formatPct(perf?.[key] ?? null)}</span>
+                <span className={s.tableCell}>{formatPct(peerAvg?.[key] ?? null)}</span>
+                <span className={s.tableCell}>{formatRank(ranks?.[key])}</span>
               </div>
-            ) : null}
-            {returns?.peerAvg && PERF_LABELS.some(({ key }) => returns.peerAvg?.[key] != null) ? (
-              <div className={s.subSection}>
-                <Text className={s.sectionTitle}>同类平均</Text>
-                <div className={s.metricGrid}>
-                  {PERF_LABELS.filter(({ key }) => returns.peerAvg?.[key] != null).map(({ key, label }) => (
-                    <div key={key} className={s.metric}>
-                      <span className={s.metricLabel}>{label}</span>
-                      <span className={s.metricValue}>{formatPct(returns.peerAvg?.[key] ?? null)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            ))}
           </>
         ) : returnsFailed ? (
-          <Text className={s.emptyHint}>暂时无法获取区间收益，请稍后重试</Text>
+          <Text className={s.emptyHint}>
+            暂时无法获取区间收益
+            {'\n'}
+            请稍后重试
+          </Text>
         ) : null}
 
         {hasDrawdown ? (
@@ -288,7 +531,11 @@ export function FundPerformancePanel({
             </div>
           </div>
         ) : drawdownFailed ? (
-          <Text className={s.emptyHint}>暂时无法获取回撤，请稍后重试</Text>
+          <Text className={s.emptyHint}>
+            暂时无法获取回撤
+            {'\n'}
+            请稍后重试
+          </Text>
         ) : null}
       </div>
     </PanelState>
@@ -332,7 +579,9 @@ export function FundHoldingsPanel({
 }) {
   const s = useStyles()
   const holdingsFailed = failed.includes('持仓') && holdings.length === 0
-  const hasAlloc = Boolean(allocation?.assets.length || allocation?.industries.length)
+  const assets = allocation?.assets ?? []
+  const industries = allocation?.industries ?? []
+  const hasAlloc = Boolean(assets.length || industries.length)
   return (
     <PanelState
       loading={loading}
@@ -367,10 +616,204 @@ export function FundHoldingsPanel({
             ))}
           </>
         ) : holdingsFailed ? (
-          <Text className={s.emptyHint}>暂时无法获取重仓股，请稍后重试</Text>
+          <Text className={s.emptyHint}>
+            暂时无法获取重仓股
+            {'\n'}
+            请稍后重试，或先看下方配置
+          </Text>
         ) : null}
-        <AllocBlock title="资产配置" items={allocation?.assets ?? []} />
-        <AllocBlock title="行业配置" items={allocation?.industries ?? []} />
+        <AllocBlock title="资产配置" items={assets} />
+        <AllocBlock title="行业配置" items={industries} />
+      </div>
+    </PanelState>
+  )
+}
+
+export function FundManagerPanel({
+  manager,
+  fallbackName,
+  loading,
+  failed,
+}: {
+  manager: FundManagerData | null | undefined
+  fallbackName?: string
+  loading?: boolean
+  failed: string[]
+}) {
+  const s = useStyles()
+  const name = manager?.name?.trim() || fallbackName?.trim() || ''
+  const hasDetail = Boolean(
+    manager
+    && (
+      manager.years != null
+      || manager.style
+      || manager.philosophy
+      || manager.experience
+      || manager.resume
+      || manager.education
+      || manager.gender
+      || (manager.representFunds?.length ?? 0) > 0
+      || manager.scale != null
+      || manager.performanceSummary
+    ),
+  )
+  const managerFailed = failed.includes('经理') && !hasDetail && !name
+
+  return (
+    <PanelState
+      loading={loading}
+      loadingLabel="正在加载经理…"
+      error={managerFailed ? '暂时无法获取经理信息，请稍后重试' : null}
+      empty={!name && !hasDetail
+        ? '还没有基金经理信息，可稍后再试或查看档案'
+        : null}
+    >
+      <div className={s.section}>
+        <Text className={s.sectionTitle}>基金经理</Text>
+        {hasDetail ? (
+          <div className={s.metricGrid}>
+            <ArchiveMetric label="姓名" value={name || '—'} />
+            {manager?.gender ? (
+              <ArchiveMetric label="性别" value={manager.gender} />
+            ) : null}
+            {manager?.education ? (
+              <ArchiveMetric label="学历" value={manager.education} />
+            ) : null}
+            <ArchiveMetric
+              label="从业年限"
+              value={manager?.years != null ? `${manager.years} 年` : '—'}
+            />
+            <ArchiveMetric
+              label="投资风格"
+              value={typeof manager?.style === 'string' ? (manager.style || '—') : '—'}
+            />
+            <ArchiveMetric
+              label="管理规模"
+              value={manager?.scale != null ? `${formatCompactNumber(manager.scale)} 亿` : '—'}
+            />
+            {(manager?.representFunds?.length ?? 0) > 0 ? (
+              <ArchiveMetric
+                label="代表基金"
+                value={(manager?.representFunds ?? []).join('、')}
+                title={(manager?.representFunds ?? []).join('、')}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div className={s.metricGrid}>
+            <ArchiveMetric label="姓名" value={name || '—'} />
+          </div>
+        )}
+        {!hasDetail && name ? (
+          <Text className={s.emptyHint}>
+            已知道经理姓名，详细履历暂未披露
+            {'\n'}
+            可稍后再看，或先浏览档案与业绩
+          </Text>
+        ) : null}
+        {manager?.resume ? (
+          <div className={s.subSection}>
+            <Text className={s.sectionTitle}>履历</Text>
+            <Text className={s.note}>{manager.resume}</Text>
+          </div>
+        ) : null}
+        {manager?.philosophy ? (
+          <div className={s.subSection}>
+            <Text className={s.sectionTitle}>投资理念</Text>
+            <Text className={s.note}>{manager.philosophy}</Text>
+          </div>
+        ) : null}
+        {manager?.experience && manager.experience !== manager.resume ? (
+          <div className={s.subSection}>
+            <Text className={s.sectionTitle}>经历摘要</Text>
+            <Text className={s.note}>{manager.experience}</Text>
+          </div>
+        ) : null}
+        {manager?.performanceSummary ? (
+          <div className={s.subSection}>
+            <Text className={s.sectionTitle}>业绩概览</Text>
+            <Text className={s.note}>{manager.performanceSummary}</Text>
+          </div>
+        ) : null}
+      </div>
+    </PanelState>
+  )
+}
+
+export function FundDiagnosisPanel({
+  diagnosis,
+  loading,
+  failed,
+}: {
+  diagnosis: FundDiagnosisData | null | undefined
+  loading?: boolean
+  failed: string[]
+}) {
+  const s = useStyles()
+  const dims = diagnosis?.dimensions?.filter(d => d.name?.trim()) ?? []
+  const resilienceText = (() => {
+    const r = diagnosis?.resilience
+    if (r == null || r === '') return null
+    if (typeof r === 'object') return null
+    return String(r)
+  })()
+  const summaryText = (() => {
+    const s0 = diagnosis?.summary
+    if (s0 == null || s0 === '') return null
+    if (typeof s0 === 'object') return null
+    return String(s0)
+  })()
+  const hasContent = Boolean(
+    dims.length
+    || resilienceText
+    || summaryText,
+  )
+  const diagnosisFailed = failed.includes('诊断') && !hasContent
+
+  return (
+    <PanelState
+      loading={loading}
+      loadingLabel="正在加载诊断…"
+      error={diagnosisFailed ? '暂时无法获取诊断，请稍后重试' : null}
+      empty={!hasContent
+        ? '还没有诊断结果，等数据更新后再来看'
+        : null}
+    >
+      <div className={s.section}>
+        <Text className={s.sectionTitle}>综合诊断</Text>
+        {resilienceText ? (
+          <ArchiveMetric label="韧性" value={resilienceText} />
+        ) : null}
+        {summaryText ? (
+          <Text className={s.note}>{summaryText}</Text>
+        ) : null}
+        {dims.length > 0 ? (
+          <div className={s.subSection}>
+            <Text className={s.sectionTitle}>各维度</Text>
+            <div className={s.perfHead}>
+              <span className={s.tableHeadCell}>维度</span>
+              <span className={s.tableHeadCell}>得分</span>
+              <span className={s.tableHeadCell}>同类均</span>
+              <span className={s.tableHeadCell}>标签</span>
+            </div>
+            {dims.map((dim, index) => (
+              <div key={listRowKey(index, dim.name)} className={s.perfRow}>
+                <span className={s.tableCell} title={dim.detail || dim.name}>{dim.name}</span>
+                <span className={s.tableCell}>
+                  {dim.score != null ? String(dim.score) : '—'}
+                </span>
+                <span className={s.tableCell}>
+                  {dim.peerAvg != null ? String(dim.peerAvg) : '—'}
+                </span>
+                <span className={mergeClasses(s.tableCell, s.dimChip)}>
+                  {typeof dim.label === 'string' || typeof dim.label === 'number'
+                    ? String(dim.label)
+                    : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </PanelState>
   )
@@ -492,6 +935,59 @@ export function FundDividendsPanel({
             <span className={s.tableCell}>{row.type || '—'}</span>
           </div>
         ))}
+      </div>
+    </PanelState>
+  )
+}
+
+export function FundNewsPanel({
+  news,
+  loading,
+  failed,
+}: {
+  news: FundNewsItem[]
+  loading?: boolean
+  failed: string[]
+}) {
+  const s = useStyles()
+  const items = news.slice(0, 15)
+  return (
+    <PanelState
+      loading={loading}
+      loadingLabel="正在加载资讯…"
+      error={failed.includes('资讯') && !items.length ? '暂时无法获取资讯，请稍后重试' : null}
+      empty={!items.length
+        ? '还没有相关资讯，有更新后会出现在这里'
+        : null}
+    >
+      <div className={s.section}>
+        <Text className={s.sectionTitle}>最新资讯</Text>
+        {items.map((item, index) => {
+          const url = item.url?.trim()
+          const canOpen = Boolean(url && isHttpUrl(url))
+          return (
+            <div
+              key={listRowKey(index, item.date, item.title)}
+              className={mergeClasses(s.newsRow, canOpen && s.newsRowClickable)}
+              role={canOpen ? 'link' : undefined}
+              tabIndex={canOpen ? 0 : undefined}
+              onClick={canOpen && url
+                ? (event) => openExternalUrl(url, event)
+                : undefined}
+              onKeyDown={canOpen && url
+                ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openExternalUrl(url, event)
+                    }
+                  }
+                : undefined}
+            >
+              <span className={s.newsTitle} title={item.title}>{item.title || '—'}</span>
+              <span className={s.newsDate}>{item.date || '—'}</span>
+            </div>
+          )
+        })}
       </div>
     </PanelState>
   )

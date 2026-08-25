@@ -58,6 +58,10 @@ test('resolveInstrumentQueryPlan routes FUND capabilities', () => {
     ['fund_allocation', 'fundAllocation'],
     ['fund_holders', 'fundHolders'],
     ['fund_dividend', 'fundDividend'],
+    ['fund_manager', 'fundManager'],
+    ['fund_diagnosis', 'fundDiagnosis'],
+    ['fund_news', 'fundNews'],
+    ['fund_financials', 'fundFinancials'],
   ]
   for (const [cap, method] of detailCaps) {
     const plan = resolveInstrumentQueryPlan(ref, cap)

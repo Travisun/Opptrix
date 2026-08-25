@@ -18,6 +18,10 @@ export type FundDetailData = {
   allocation: Record<string, unknown> | null
   holders: Record<string, unknown> | null
   dividends: unknown[]
+  manager: Record<string, unknown> | null
+  diagnosis: Record<string, unknown> | null
+  news: unknown[]
+  financials: Record<string, unknown> | null
   failed: string[]
 }
 
@@ -61,6 +65,10 @@ export function mergeFundDetailParts(
     allocation: FundDetailQueryLike
     holders: FundDetailQueryLike
     dividend: FundDetailQueryLike
+    manager: FundDetailQueryLike
+    diagnosis: FundDetailQueryLike
+    news: FundDetailQueryLike
+    financials: FundDetailQueryLike
   },
 ): { success: boolean; data: FundDetailData | null; message: string } {
   const snapshot = asRecord(parts.snapshot)
@@ -119,6 +127,18 @@ export function mergeFundDetailParts(
   const dividends = asRows(parts.dividend)
   mark(parts.dividend.success, '分红')
 
+  const manager = asRecord(parts.manager)
+  mark(parts.manager.success, '经理')
+
+  const diagnosis = asRecord(parts.diagnosis)
+  mark(parts.diagnosis.success, '诊断')
+
+  const news = asRows(parts.news)
+  mark(parts.news.success, '资讯')
+
+  const financials = asRecord(parts.financials)
+  mark(parts.financials.success, '财务')
+
   const data: FundDetailData = {
     code,
     snapshot,
@@ -128,6 +148,10 @@ export function mergeFundDetailParts(
     allocation,
     holders,
     dividends,
+    manager,
+    diagnosis,
+    news,
+    financials,
     failed,
   }
   const extraHint = failed.length ? `（${failed.join('、')}暂缺）` : ''

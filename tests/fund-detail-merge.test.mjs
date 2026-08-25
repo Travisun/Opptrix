@@ -32,6 +32,10 @@ const emptyParts = {
   allocation: ok(null),
   holders: ok(null),
   dividend: ok([]),
+  manager: ok(null),
+  diagnosis: ok(null),
+  news: ok([]),
+  financials: ok(null),
 }
 
 describe('mergeFundDetailParts', () => {
@@ -54,14 +58,25 @@ describe('mergeFundDetailParts', () => {
       allocation: fail('alloc down'),
       holders: fail('holders down'),
       dividend: fail('div down'),
+      manager: fail('manager down'),
+      diagnosis: fail('diag down'),
+      news: fail('news down'),
+      financials: fail('fin down'),
     })
     assert.equal(r.success, true)
     assert.ok(r.data)
-    assert.deepEqual(r.data.failed.sort(), ['分红', '持仓', '持有人', '回撤', '业绩', '配置'].sort())
+    assert.deepEqual(
+      r.data.failed.sort(),
+      ['分红', '持仓', '持有人', '回撤', '业绩', '配置', '经理', '诊断', '资讯', '财务'].sort(),
+    )
     assert.equal(r.data.holdings.length, 0)
     assert.equal(r.data.returns?.performance?.w52, 12.5)
     assert.equal(r.data.holders?.holderAmount, 8000)
     assert.equal(r.data.dividends.length, 0)
+    assert.equal(r.data.manager, null)
+    assert.equal(r.data.diagnosis, null)
+    assert.equal(r.data.news.length, 0)
+    assert.equal(r.data.financials, null)
   })
 
   it('snapshot 成功且各路有数据时不写 failed', () => {
@@ -73,6 +88,10 @@ describe('mergeFundDetailParts', () => {
       allocation: ok({ assets: [{ name: '股票', ratio: 90 }], industries: [] }),
       holders: ok({ top: [{ name: '机构A', ratio: 5 }] }),
       dividend: ok([{ date: '2024-07-01', amount: 0.1 }]),
+      manager: ok({ name: '张三', managerId: 'm1' }),
+      diagnosis: ok({ score: 80, grade: '优秀' }),
+      news: ok([{ title: '公告', date: '2024-07-01' }]),
+      financials: ok({ reportDate: '2024-06-30', indicators: [{ label: '净资产', value: 1e9 }] }),
     })
     assert.equal(r.success, true)
     assert.deepEqual(r.data?.failed, [])
@@ -82,5 +101,22 @@ describe('mergeFundDetailParts', () => {
     assert.equal(r.data?.allocation?.assets[0]?.name, '股票')
     assert.equal(r.data?.holders?.top[0]?.name, '机构A')
     assert.equal(r.data?.dividends.length, 1)
+    assert.equal(r.data?.manager?.name, '张三')
+    assert.equal(r.data?.diagnosis?.score, 80)
+    assert.equal(r.data?.news.length, 1)
+    assert.equal(r.data?.financials?.indicators[0]?.label, '净资产')
+  })
+
+  it('部分新维度失败仍 success', () => {
+    const r = mergeFundDetailParts('110022', {
+      snapshot: ok(snapshot),
+      ...emptyParts,
+      manager: fail('no manager'),
+      news: fail('news timeout'),
+    })
+    assert.equal(r.success, true)
+    assert.ok(r.data?.failed.includes('经理'))
+    assert.ok(r.data?.failed.includes('资讯'))
+    assert.ok(!r.data?.failed.includes('持仓'))
   })
 })

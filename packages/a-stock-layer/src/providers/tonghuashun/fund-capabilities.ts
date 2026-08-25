@@ -11,4 +11,8 @@ export const TONGHUASHUN_CN_FUND_CAPABILITIES = [
   Capability.FUND_ALLOCATION,
   Capability.FUND_HOLDERS,
   Capability.FUND_DIVIDEND,
+  Capability.FUND_MANAGER,
+  Capability.FUND_DIAGNOSIS,
+  Capability.FUND_NEWS,
+  Capability.FUND_FINANCIALS,
 ] as const
