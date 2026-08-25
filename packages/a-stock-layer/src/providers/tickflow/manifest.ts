@@ -51,16 +51,16 @@ export const TICKFLOW_CAPS = [
 export const TICKFLOW_SPEC: ProviderManifestSpec = {
   id: 'tickflow',
   title: 'TickFlow',
-  subtitle: '免费日K/标的无需注册；配置 Key 可升级实时与分钟线',
+  subtitle: '多市场行情；免费可用日线，填密钥可看实时',
   marketGroup: 'GLOBAL',
-  /** CN 保持 100，低于 tonghuashun(120)，不抢 A 股主路径 */
-  defaultPriority: 100,
+  /** 目录默认 110（第 3）；CN binding 仍封顶 100，低于 tonghuashun(120) */
+  defaultPriority: 110,
   maxConcurrent: 5,
   capabilities: TICKFLOW_CAPS,
   bindingsFor: (p, maxConcurrent) => {
     /** US/HK 明显高于其它跨市源，保证右侧美港主路径 */
     const crossMarketPriority = Math.max(p, 200)
-    /** CN 保持与 defaultPriority 一致或更低，避免抢 Fuyao */
+    /** CN 封顶 100，避免抢 Fuyao / Opptrix量化 目录顺位 */
     const cnPriority = Math.min(p, 100)
     const equityCaps = [...TICKFLOW_EQUITY_CAPS]
     return [
@@ -83,8 +83,8 @@ export const TICKFLOW_SPEC: ProviderManifestSpec = {
 export const TICKFLOW_MANIFEST = providerManifestEntry(
   'tickflow',
   'TickFlow',
-  '免费日K/标的无需注册；配置 Key 可升级实时与分钟线',
+  '多市场行情；免费可用日线，填密钥可看实时',
   'GLOBAL',
-  100,
+  110,
   TICKFLOW_SETTINGS,
 )

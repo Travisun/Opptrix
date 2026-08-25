@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   parseCanonicalInstrumentInput,
+  parseOpptrixInstrumentId,
   isAmbiguousNumericCode,
   isUnambiguousCnDigits,
   buildInstrumentNamespace,
@@ -153,4 +154,60 @@ test('looksLikeInstrumentCode — 4–5 位与短码可精确补强', async () =
   assert.equal(looksLikeInstrumentCode('0700'), true)
   assert.equal(looksLikeInstrumentCode('700'), true)
   assert.equal(looksLikeInstrumentCode('600519'), true)
+})
+
+
+test('parseOpptrixInstrumentId — CN:of / CN:etf / CN:stock / US:stock / HK:stock', () => {
+  const of = parseOpptrixInstrumentId('CN:of:009049')
+  assert.ok(of)
+  assert.equal(of.market, 'CN')
+  assert.equal(of.assetClass, 'FUND')
+  assert.equal(of.symbol, '009049')
+  assert.equal(of.exchange, 'PF')
+
+  const etf = parseOpptrixInstrumentId('CN:etf:510300')
+  assert.ok(etf)
+  assert.equal(etf.assetClass, 'ETF')
+  assert.equal(etf.symbol, '510300')
+
+  const cn = parseOpptrixInstrumentId('CN:stock:600519')
+  assert.ok(cn)
+  assert.equal(cn.assetClass, 'EQUITY')
+  assert.equal(cn.symbol, '600519')
+
+  const us = parseOpptrixInstrumentId('US:stock:AAPL')
+  assert.ok(us)
+  assert.equal(us.market, 'US')
+  assert.equal(us.symbol, 'AAPL')
+
+  const hk = parseOpptrixInstrumentId('HK:stock:00700')
+  assert.ok(hk)
+  assert.equal(hk.market, 'HK')
+  assert.equal(hk.symbol, '00700')
+})
+
+test('parseCanonicalInstrumentInput — OpptrixQuant id 优先于旧命名空间', () => {
+  const of = parseCanonicalInstrumentInput('CN:of:009049')
+  assert.ok(of)
+  assert.equal(of.market, 'CN')
+  assert.equal(of.assetClass, 'FUND')
+  assert.equal(of.symbol, '009049')
+  assert.equal(of.exchange, 'PF')
+
+  const us = parseCanonicalInstrumentInput('US:stock:AAPL')
+  assert.ok(us)
+  assert.equal(us.market, 'US')
+  assert.equal(us.symbol, 'AAPL')
+
+  // 旧格式仍兼容
+  const legacy = parseCanonicalInstrumentInput('CN:SZ.600519')
+  assert.ok(legacy)
+  assert.equal(legacy.market, 'CN')
+  assert.equal(legacy.symbol, '600519')
+  assert.equal(legacy.exchange, 'SZ')
+
+  const legacyPf = parseCanonicalInstrumentInput('CN:PF.009049')
+  assert.ok(legacyPf)
+  assert.equal(legacyPf.assetClass, 'FUND')
+  assert.equal(legacyPf.exchange, 'PF')
 })

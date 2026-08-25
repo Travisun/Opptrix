@@ -12,6 +12,8 @@ export interface ProviderSettingsField {
   default?: unknown
   options?: Array<{ value: string; label: string }>
   masked?: boolean
+  /** 获取数据密钥的官方页面；设置页渲染为可点击外链 */
+  helpUrl?: string
 }
 
 export interface PublicProviderRuntime {

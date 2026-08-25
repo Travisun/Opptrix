@@ -111,17 +111,22 @@ bindingsFor: () => []
 | **eastmoney** | 资金流、两融、宏观 cjsj、机构持仓 zlsj | Hub `instrument_institution_holdings`、`macro_series` 等非 CN 宏观 scope 降级 |
 | **akshare** | 纯自定义另类数据（216+ custom） | Agent `provider_ext` 逃生舱不再默认可用 |
 
-**推荐内置栈**（`registerAllDrivers` 现状）：
+**推荐内置栈**（`registerAllDrivers` 现状；defaultPriority 越大越优先）：
 
-| 市场 | Provider | 备注 |
-|------|----------|------|
-| CN | **tonghuashun** | 需扶摇 Key；个股 / ETF / 公募基金主路径 |
-| CN | **zzshare** / **baostock** | 免费层；ETF / 基本面补充 |
-| CN | **tushare** | 需 Token；批量 / 基本面 |
-| 多市场 | **tickflow** | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 可升级实时/分钟线；US / HK / CN ETF；**HK/US 成分灌库**（`getExchangeInstruments`）供本地中文名搜索 |
-| 搜索编排 | **扶摇 + Tickflow + 本地名录** | Hub `instrument_search` → `searchInstrumentsUnified`（默认合并本地）+ `searchInstrumentsOnline`（扶摇 `tickersSearch` CN + Tickflow 精确代码） |
-| 名录灌库 | **Tickflow** | CN/HK/US 股票与 CN ETF：`getExchangeInstruments`（SH/SZ/BJ/HK/US）；失败则跳过，**不回退 OpptrixQuant**（已移除） |
-| CRYPTO | **binance** / **okx** | 现货行情 |
+| 顺位 | Provider | defaultPriority | 备注 |
+|------|----------|-----------------|------|
+| 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径 |
+| 2 | **stockindex**（Opptrix量化） | 115 | 标的搜索权威源；需数据密钥；基址固定 `https://quant.opptrix.net` |
+| 3 | **tickflow** | 110 | **默认开启**公开免费档；配置 Key 可升级实时；US / HK / CN ETF；名录灌库 |
+| 4 | **tushare** | 105 | 需 Token；批量 / 基本面 |
+| — | **binance** / **okx** | ≤100 | CRYPTO；勿抢前四 |
+
+**暂时下线**（源码保留，可加回）：**baostock**、**zzshare**。
+
+| 市场 | 其它说明 |
+|------|----------|
+| 搜索编排 | Hub `instrument_search` → Opptrix量化（stockindex）为主路径 + 本地名录 |
+| 名录灌库 | **Tickflow**（可选）：CN/HK/US 股票与 CN ETF：`getExchangeInstruments` |
 
 **右侧面板**：个股 / ETF 行情、K 线、概况、财报等 **仍经** `queryInstrumentData` 标准能力，由上述内置源 failover；不依赖已移除爬虫源。
 
@@ -131,11 +136,12 @@ bindingsFor: () => []
 
 | Provider | 注册 | Binding 结构 | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|------|--------------|--------|----------|----------|--------|------|
-| **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆**；名录灌库 + 精确搜索 || **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
-| **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | **fund_* 五件套 + fund_company/div/daily/adj 自定义** | **合规（CN）** |
-| **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |
-| **tonghuashun** | ✅ | CN；**CN ETF 分拆**（`CN_ETF_CAPABILITIES`，priority 120）；**CN FUND** `fundProfile/fundNav/fundHoldings/fundQuote`（见 `docs/FUYAO-FUND-API.md`）；含 BALANCE_SHEET / CASH_FLOW | CN | ✅ ETF_LIST/PROFILE/NAV/HOLDINGS + FUND_PROFILE/HOLDINGS/QUOTE + STOCK_REALTIME/KLINE | ✅ `limitUpdown`；Hub `market_dynamics` 可选消费 `thsSkyrocketList` / `thsLimitUpLadder` | `ths*` 指数/特色数据（10，含 `thsValuationsSnapshot`）；Fuyao `/api/fund/*` 全量 Client + CN:PF 标准四件套；**realtime enrich** `valuations/snapshot`→pe/pb；**etfProfile enrich** `fund/holders/detail` | **合规（CN 个股 + ETF + 公募基金）** |
+| **tonghuashun** | ✅ | CN；**CN ETF 分拆**（priority 120）；**CN FUND** | CN | ✅ | ✅ | `ths*` / Fuyao | **合规（CN 主路径）** |
+| **stockindex** | ✅ | 跨市 STOCK_LIST / INSTRUMENT_SEARCH + CN ETF_LIST / FUND_* | CN/US/HK | ETF_LIST | ✅ 搜索 | 少量 | **Opptrix量化**；priority 115 |
+| **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆**；目录 priority 110；名录灌库 |
+| **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | fund_* 等 | **合规（CN）**；priority 105 |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |
+| **baostock / zzshare** | ❌ 暂时下线 | 源码保留 | — | — | — | — | 可本地手动 register 测限流 |
 
 ### 3.2 已知技术债（非 Provider 层）
 
@@ -182,3 +188,12 @@ bindingsFor: () => []
 | Registry | `packages/market-data-core/src/core/registry.ts` |
 | 自定义登记 | `packages/a-stock-layer/src/core/custom-methods.ts` |
 | 标杆 Provider | `providers/tickflow/`、`providers/tonghuashun/` |
+
+
+### stockindex（Opptrix量化）
+
+- **用途**：跨市场标的搜索权威源（`instrumentSearch` / 统一搜索在线路径）
+- **基址**：固定 `https://quant.opptrix.net`（设置页不可改）
+- **认证**：数据密钥（`X-API-Key`）；在 [Opptrix量化社区](https://quant.opptrix.net/) 获取
+- **默认**：未启用（需用户配置密钥后开启）
+- **defaultPriority**：115（推荐栈第 2，仅次于同花顺 120）

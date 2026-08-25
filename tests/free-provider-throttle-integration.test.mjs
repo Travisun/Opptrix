@@ -21,15 +21,23 @@ after(async () => {
   if (dataDir) await rm(dataDir, { recursive: true, force: true })
 })
 
+/**
+ * baostock 暂时下线：不污染 registerAllDrivers；测试内本地 register Driver + Manifest 仅测限流。
+ */
 async function bootEngine() {
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const { getProviderConfigStore } = await import('../packages/a-stock-layer/dist/providers/config-store.js')
+  const { BaostockDriver } = await import('../packages/a-stock-layer/dist/providers/baostock/driver.js')
+  const { BAOSTOCK_MANIFEST } = await import('../packages/a-stock-layer/dist/providers/baostock/manifest.js')
+  const { getManifestRegistry } = await import('../packages/a-stock-layer/dist/providers/manifest-registry.js')
   const {
     getFreeProviderThrottle,
     resetFreeProviderThrottleSingleton,
   } = await import('../packages/a-stock-layer/dist/core/free-provider-throttle.js')
   const engine = new MarketDataEngine(false)
   engine.providerLoader.registerBuiltins()
+  getManifestRegistry().register(BAOSTOCK_MANIFEST, 'installed')
+  engine.registry.register(new BaostockDriver())
   resetFreeProviderThrottleSingleton()
   getFreeProviderThrottle().reset()
 
@@ -50,7 +58,7 @@ describe('free provider throttle — engine integration', () => {
   it('queryInstrumentData triggers cooldown on HTTP 429 and skips while cooling', async () => {
     const { engine, throttle } = await bootEngine()
     const driver = engine.registry.get('baostock')
-    assert.ok(driver)
+    assert.ok(driver, 'BaostockDriver must be locally registered for throttle tests')
     const original = driver.kline.bind(driver)
     let calls = 0
     driver.kline = async () => {

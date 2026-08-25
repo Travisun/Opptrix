@@ -10,6 +10,7 @@
 
 import { resolveProviderAlias } from '../providers/common/provider-aliases.js'
 import { TONGHUASHUN_CUSTOM } from '../providers/tonghuashun/custom-method-docs.js'
+import { STOCKINDEX_CUSTOM } from '../providers/stockindex/custom-method-docs.js'
 import { TUSHARE_CUSTOM } from '../providers/tushare/custom-method-docs.js'
 
 /**
@@ -290,6 +291,7 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
   { providerId: 'tonghuashun', methods: TONGHUASHUN_CUSTOM },
+  { providerId: 'stockindex', methods: STOCKINDEX_CUSTOM },
   { providerId: 'tushare', methods: TUSHARE_CUSTOM },
 ]
 

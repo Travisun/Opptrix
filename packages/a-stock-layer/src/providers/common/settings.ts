@@ -8,11 +8,13 @@ export function enabledOnlySettings(
   opts: {
     keywords?: string[]
     defaultEnabled?: boolean
+    subtitle?: string
   } = {},
 ): ProviderSettingsDefinition {
   return {
     providerId,
     title,
+    subtitle: opts.subtitle,
     marketGroup,
     keywords: opts.keywords ?? [providerId, title],
     enableAffectsPriority: true,
@@ -38,12 +40,16 @@ export function secretKeySettings(
     placeholder?: string
     keywords?: string[]
     defaultEnabled?: boolean
+    subtitle?: string
+    description?: string
+    helpUrl?: string
   } = {},
 ): ProviderSettingsDefinition {
   const key = opts.secretKey ?? 'apiKey'
   return {
     providerId,
     title,
+    subtitle: opts.subtitle,
     marketGroup,
     keywords: opts.keywords ?? [providerId, title],
     enableAffectsPriority: true,
@@ -53,10 +59,12 @@ export function secretKeySettings(
       {
         key,
         type: 'secret',
-        label: opts.secretLabel ?? 'API Key',
+        label: opts.secretLabel ?? '数据密钥',
         required: true,
         masked: true,
-        placeholder: opts.placeholder ?? `粘贴 ${title} API Key`,
+        placeholder: opts.placeholder ?? `粘贴${title}数据密钥`,
+        description: opts.description,
+        helpUrl: opts.helpUrl,
       },
     ],
   }

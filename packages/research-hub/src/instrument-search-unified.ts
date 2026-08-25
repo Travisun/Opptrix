@@ -1,4 +1,4 @@
-/** 统一标的搜索 — 本地名录（Tickflow 灌库）+ 扶摇/Tickflow 在线补强。 */
+/** 统一标的搜索 — 默认仅 OpptrixQuant 在线；本地名录可选（includeLocal）。 */
 
 import type { Market } from '@opptrix/shared'
 import {
@@ -15,8 +15,8 @@ export interface UnifiedSearchOptions {
   limit?: number
   markets?: Market[]
   /**
-   * 是否合并本地名录；默认 true（HK/US 中文名依赖 Tickflow 成分库）。
-   * 传 false 可仅测在线源。
+   * 是否合并本地名录；默认 false（搜索主路径仅 OpptrixQuant 在线）。
+   * 传 true 可附加本地名录结果。
    */
   includeLocal?: boolean
 }
@@ -33,7 +33,7 @@ export async function searchInstrumentsUnified(
   const seen = new Set<string>()
   const merged: UnifiedInstrumentSearchHit[] = []
   const sources = new Set<string>()
-  const includeLocal = opts.includeLocal !== false
+  const includeLocal = opts.includeLocal === true
 
   if (includeLocal) {
     const localHits = marketData.searchLocalInstruments(keyword, Math.max(limit * 2, limit), opts.markets)

@@ -18,6 +18,7 @@ import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSe
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { inputShellInteractive } from '../../theme/mixins'
+import { openExternalUrl } from '../../platform/openUrl'
 
 /** Row header already has the enable Switch — skip duplicate schema field. */
 export function isExpandableSettingsField(field: ProviderSettingsField): boolean {
@@ -99,7 +100,55 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     paddingLeft: '2px',
   },
+  helpLink: {
+    alignSelf: 'flex-start',
+    marginTop: '4px',
+    marginLeft: '2px',
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.accent,
+    textAlign: 'left',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
+    ':hover': {
+      color: opptrixCssVars.accentHover,
+    },
+  },
 })
+
+function FieldHelp({
+  description,
+  helpUrl,
+  secret = false,
+}: {
+  description?: string
+  helpUrl?: string
+  secret?: boolean
+}) {
+  const s = useStyles()
+  if (!description && !helpUrl) return null
+  return (
+    <>
+      {description ? (
+        <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{description}</Text>
+      ) : null}
+      {helpUrl ? (
+        <button
+          type="button"
+          className={s.helpLink}
+          title={helpUrl}
+          onClick={() => openExternalUrl(helpUrl)}
+        >
+          {secret ? '前往获取数据密钥' : '了解更多'}
+        </button>
+      ) : null}
+    </>
+  )
+}
 
 function fieldConfigured(provider: PublicProviderRuntime, field: ProviderSettingsField): boolean {
   if (field.type === 'secret') {
@@ -111,11 +160,14 @@ function fieldConfigured(provider: PublicProviderRuntime, field: ProviderSetting
   return String(value ?? '').trim().length > 0
 }
 
+/** 仅提示非密钥必填项；密钥已有输入框与「前往获取数据密钥」，避免底部重复文案 */
 function missingRequiredLabel(provider: PublicProviderRuntime, fields: ProviderSettingsField[]): string | null {
   const missing = fields.filter(f => f.required && !fieldConfigured(provider, f))
   if (!missing.length) return null
-  if (missing.length === 1) return `请先填写「${missing[0]!.label}」`
-  return `还有 ${missing.length} 项必填尚未完成`
+  const nonSecret = missing.filter(f => f.type !== 'secret')
+  if (!nonSecret.length) return null
+  if (nonSecret.length === 1) return `请先填写「${nonSecret[0]!.label}」`
+  return `还有 ${nonSecret.length} 项必填尚未完成`
 }
 
 function isExtraStorageField(field: ProviderSettingsField): boolean {
@@ -376,9 +428,7 @@ function ProviderFieldRow({
             disabled={saving}
           />
         </div>
-        {field.description && (
-          <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
-        )}
+        <FieldHelp description={field.description} helpUrl={field.helpUrl} />
       </div>
     )
   }
@@ -403,9 +453,7 @@ function ProviderFieldRow({
             ))}
           </OpptrixSelect>
         </div>
-        {field.description && (
-          <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
-        )}
+        <FieldHelp description={field.description} helpUrl={field.helpUrl} />
       </div>
     )
   }
@@ -459,9 +507,7 @@ function ProviderFieldRow({
           </div>
         )}
       </div>
-      {field.description && (
-        <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
-      )}
+      <FieldHelp description={field.description} helpUrl={field.helpUrl} secret={secret} />
       {showConfiguredHint && (
         <Text className={s.credHint} block>
           {preview ? `当前密钥：${preview}。如需更换，输入新密钥后保存。` : '密钥已保存在本机，如需更换请输入新密钥后保存。'}

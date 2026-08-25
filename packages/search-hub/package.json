@@ -21,6 +21,7 @@
     "@opptrix/news-feed": "*",
     "@opptrix/research-hub": "*",
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*"
+    "@opptrix/user-store": "*",
+    "@opptrix/a-stock-layer": "*"
   }
 }

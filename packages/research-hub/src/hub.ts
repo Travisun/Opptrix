@@ -3295,18 +3295,16 @@ export class ResearchHub {
     keyword: string,
     limit: number,
     markets?: string[],
-    includeLocal = true,
+    includeLocal = false,
     t0 = Date.now(),
   ) {
     const m = markets as import('@opptrix/shared').Market[] | undefined
-    const prepPromise = this.marketData.ensureSearchUniverseReady()
-    const searchPromise = searchInstrumentsUnified(this.de, this.marketData, {
+    const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, this.marketData, {
       keyword,
       limit,
       markets: m,
       includeLocal,
     })
-    const [prep, { items: rawItems, sources }] = await Promise.all([prepPromise, searchPromise])
     const sourceLabel = sources.length ? sources.join('+') : 'online'
     const items = rawItems.map(h => ({
       code: h.code,
@@ -3318,20 +3316,11 @@ export class ResearchHub {
       refLabel: h.ref_label,
       source: h.source,
     }))
-    const universe_prep = prep.status === 'ready'
-      ? undefined
-      : {
-          status: prep.status,
-          percent: prep.percent,
-          message: prep.message,
-          jobs: prep.jobs.length ? prep.jobs : undefined,
-        }
     return ok(
       {
         items,
         count: items.length,
         source: sourceLabel,
-        ...(universe_prep ? { universe_prep } : {}),
       },
       `标的搜索 ${items.length} 条`,
       t0,
@@ -3391,7 +3380,7 @@ export class ResearchHub {
           keyword,
           limit,
           markets,
-          includeLocal !== false,
+          includeLocal === true,
           t0,
         ),
       localInsights: ref => this.localInsightsForRef(ref),

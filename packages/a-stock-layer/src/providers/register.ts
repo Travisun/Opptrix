@@ -3,20 +3,18 @@ import { TushareDriver } from './tushare/driver.js'
 import { TickflowDriver } from './tickflow/driver.js'
 import { BinanceDriver } from './binance/driver.js'
 import { OkxDriver } from './okx/driver.js'
-import { BaostockDriver } from './baostock/driver.js'
-import { ZzshareDriver } from './zzshare/driver.js'
 import { TonghuashunDriver } from './tonghuashun/driver.js'
+import { StockIndexDriver } from './stockindex/driver.js'
 
-/** Register built-in data providers. */
+/** Register built-in data providers. baostock / zzshare 暂时下线（源码保留，可本地 new 测限流）。 */
 export function registerAllDrivers(registry: DriverRegistry) {
   const drivers = [
     new TushareDriver(),
     new TickflowDriver(),
     new BinanceDriver(),
     new OkxDriver(),
-    new BaostockDriver(),
-    new ZzshareDriver(),
     new TonghuashunDriver(),
+    new StockIndexDriver(),
   ]
   for (const d of drivers) registry.register(d)
   return drivers.length
@@ -27,7 +25,10 @@ export {
   TickflowDriver,
   BinanceDriver,
   OkxDriver,
-  BaostockDriver,
-  ZzshareDriver,
   TonghuashunDriver,
+  StockIndexDriver,
 }
+
+/** 源码保留；生产 registerAllDrivers 不再注册。测试限流等可手动 new。 */
+export { BaostockDriver } from './baostock/driver.js'
+export { ZzshareDriver } from './zzshare/driver.js'

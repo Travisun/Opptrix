@@ -19,13 +19,23 @@ after(async () => {
   if (dataDir) await rm(dataDir, { recursive: true, force: true })
 })
 
+/** 暂时下线源：仅测限流时本地挂上 manifest，不走生产 registerAllDrivers */
+async function registerTempFreeManifests() {
+  const { getManifestRegistry } = await import('../packages/a-stock-layer/dist/providers/manifest-registry.js')
+  const { BAOSTOCK_MANIFEST } = await import('../packages/a-stock-layer/dist/providers/baostock/manifest.js')
+  const { ZZSHARE_MANIFEST } = await import('../packages/a-stock-layer/dist/providers/zzshare/manifest.js')
+  const registry = getManifestRegistry()
+  registry.register(BAOSTOCK_MANIFEST, 'installed')
+  registry.register(ZZSHARE_MANIFEST, 'installed')
+}
+
 describe('free provider throttle persistence', () => {
   it('escalates cooldown on trigger and resets on success', async () => {
     const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
     const { getFreeProviderThrottle, resetFreeProviderThrottleSingleton } = await import('../packages/a-stock-layer/dist/core/free-provider-throttle.js')
-    const { FREE_PROVIDER_EMPTY_BODY_REASON } = await import('@opptrix/shared')
     const engine = new MarketDataEngine(false)
     engine.providerLoader.registerBuiltins()
+    await registerTempFreeManifests()
     resetFreeProviderThrottleSingleton()
     const throttle = getFreeProviderThrottle()
 
@@ -48,6 +58,7 @@ describe('free provider throttle persistence', () => {
     const { FREE_PROVIDER_EMPTY_BODY_REASON } = await import('@opptrix/shared')
     const engine = new MarketDataEngine(false)
     engine.providerLoader.registerBuiltins()
+    await registerTempFreeManifests()
     resetFreeProviderThrottleSingleton()
     const throttle = getFreeProviderThrottle()
     throttle.recordTrigger('zzshare', FREE_PROVIDER_EMPTY_BODY_REASON)
@@ -56,6 +67,7 @@ describe('free provider throttle persistence', () => {
 
     getUserDataStore().close()
     resetFreeProviderThrottleSingleton()
+    await registerTempFreeManifests()
     const throttle2 = getFreeProviderThrottle()
     const state = throttle2.getState('zzshare')
     assert.ok(state && state.escalationLevel >= 1)

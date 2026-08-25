@@ -5,80 +5,139 @@ import {
   compareDefaultProviderOrder,
   computeEffectiveRanks,
   defaultManifestTierPriority,
+  derivedProviderDisplaySortKey,
   providerRequiresApiKey,
+  RECOMMENDED_PROVIDER_DISPLAY_ORDER,
   sortOrderToEffectivePriority,
   sortProvidersForCatalog,
 } from '@opptrix/shared'
 
+function row(partial) {
+  return {
+    title: partial.providerId,
+    sortOrder: null,
+    requiresApiKey: true,
+    manifestDefaultPriority: 0,
+    ...partial,
+  }
+}
+
 describe('provider-priority-order', () => {
-  it('puts Tonghuashun first, then other API-key providers, then free', () => {
-    const tonghuashun = {
+  it('orders recommended stack by manifestDefaultPriority without API-key demotion', () => {
+    const tonghuashun = row({
       providerId: 'tonghuashun',
       title: '同花顺',
-      sortOrder: null,
       requiresApiKey: true,
       manifestDefaultPriority: 120,
-    }
-    const tickflow = {
+    })
+    const stockindex = row({
+      providerId: 'stockindex',
+      title: 'Opptrix量化',
+      requiresApiKey: true,
+      manifestDefaultPriority: 115,
+    })
+    const tickflow = row({
       providerId: 'tickflow',
       title: 'TickFlow',
-      sortOrder: null,
-      requiresApiKey: true,
-      manifestDefaultPriority: 100,
-    }
-    const tushare = {
-      providerId: 'tushare',
-      title: 'Tushare',
-      sortOrder: null,
-      requiresApiKey: true,
-      manifestDefaultPriority: 110,
-    }
-    const free = {
-      providerId: 'zzshare',
-      title: 'ZZShare',
-      sortOrder: null,
+      // 密钥可选 → requiresApiKey=false，不得因此排到 Tushare 后
       requiresApiKey: false,
       manifestDefaultPriority: 110,
-    }
-    const sorted = sortProvidersForCatalog([free, tushare, tickflow, tonghuashun])
-    assert.deepEqual(sorted.map(p => p.providerId), ['tonghuashun', 'tushare', 'tickflow', 'zzshare'])
+    })
+    const tushare = row({
+      providerId: 'tushare',
+      title: 'Tushare',
+      requiresApiKey: true,
+      manifestDefaultPriority: 105,
+    })
+    const binance = row({
+      providerId: 'binance',
+      title: 'Binance',
+      requiresApiKey: false,
+      manifestDefaultPriority: 100,
+    })
+    const okx = row({
+      providerId: 'okx',
+      title: 'OKX',
+      requiresApiKey: false,
+      manifestDefaultPriority: 90,
+    })
+    const sorted = sortProvidersForCatalog([
+      okx, tushare, binance, tickflow, stockindex, tonghuashun,
+    ])
+    assert.deepEqual(
+      sorted.map(p => p.providerId),
+      [...RECOMMENDED_PROVIDER_DISPLAY_ORDER],
+    )
   })
 
-  it('puts API-key providers before free providers by default', () => {
-    const paid = {
-      providerId: 'tushare',
-      title: 'Tushare',
-      sortOrder: null,
-      requiresApiKey: true,
-      manifestDefaultPriority: 110,
-    }
-    const free = {
-      providerId: 'zzshare',
-      title: 'ZZShare',
-      sortOrder: null,
+  it('interleaves providers without sortOrder using derived recommended keys', () => {
+    const tonghuashun = row({
+      providerId: 'tonghuashun',
+      title: '同花顺',
+      sortOrder: 0,
+      manifestDefaultPriority: 120,
+    })
+    const tickflow = row({
+      providerId: 'tickflow',
+      title: 'TickFlow',
+      sortOrder: 20,
       requiresApiKey: false,
       manifestDefaultPriority: 110,
-    }
-    assert.ok(compareDefaultProviderOrder(paid, free) < 0)
-    const sorted = sortProvidersForCatalog([free, paid])
-    assert.equal(sorted[0]?.providerId, 'tushare')
+    })
+    const tushare = row({
+      providerId: 'tushare',
+      title: 'Tushare',
+      sortOrder: 30,
+      manifestDefaultPriority: 105,
+    })
+    // 新加源无 sortOrder，不得甩到最后
+    const stockindex = row({
+      providerId: 'stockindex',
+      title: 'Opptrix量化',
+      sortOrder: null,
+      manifestDefaultPriority: 115,
+    })
+    const sorted = sortProvidersForCatalog([tushare, tickflow, stockindex, tonghuashun])
+    assert.deepEqual(sorted.map(p => p.providerId), [
+      'tonghuashun',
+      'stockindex',
+      'tickflow',
+      'tushare',
+    ])
+    assert.equal(derivedProviderDisplaySortKey(stockindex), 10)
+  })
+
+  it('puts TickFlow before Tushare even when TickFlow does not require API key', () => {
+    const tickflow = row({
+      providerId: 'tickflow',
+      title: 'TickFlow',
+      requiresApiKey: false,
+      manifestDefaultPriority: 110,
+    })
+    const tushare = row({
+      providerId: 'tushare',
+      title: 'Tushare',
+      requiresApiKey: true,
+      manifestDefaultPriority: 105,
+    })
+    assert.ok(compareDefaultProviderOrder(tickflow, tushare) < 0)
   })
 
   it('respects explicit sortOrder over tier defaults', () => {
-    const a = {
+    const a = row({
       providerId: 'a',
       title: 'A',
       sortOrder: 20,
       requiresApiKey: false,
       manifestDefaultPriority: 10,
-    }
-    const b = {
+    })
+    const b = row({
       providerId: 'b',
       title: 'B',
       sortOrder: 0,
       requiresApiKey: true,
       manifestDefaultPriority: 90,
-    }
+    })
     const sorted = sortProvidersForCatalog([a, b])
     assert.deepEqual(sorted.map(p => p.providerId), ['b', 'a'])
   })
@@ -88,11 +147,15 @@ describe('provider-priority-order', () => {
     assert.equal(sortOrderToEffectivePriority(10), 9_990)
   })
 
-  it('assigns stepped sort orders for drag save', () => {
+  it('assigns stepped sort orders for drag save and recommended stack', () => {
     assert.deepEqual(assignSortOrders(['x', 'y']), [
       { providerId: 'x', sortOrder: 0 },
       { providerId: 'y', sortOrder: 10 },
     ])
+    assert.deepEqual(
+      assignSortOrders([...RECOMMENDED_PROVIDER_DISPLAY_ORDER]).map(x => x.providerId),
+      [...RECOMMENDED_PROVIDER_DISPLAY_ORDER],
+    )
   })
 
   it('computes effective ranks only for eligible providers', () => {
@@ -115,14 +178,14 @@ describe('provider-priority-order', () => {
     ]), false)
   })
 
-  it('tiers default manifest priority with Tonghuashun on top of paid layer', () => {
+  it('tiers default manifest priority with Tonghuashun on top without demoting optional-key sources', () => {
     assert.ok(defaultManifestTierPriority('tonghuashun', true, 120)
-      > defaultManifestTierPriority('tushare', true, 110))
-    assert.ok(defaultManifestTierPriority('tushare', true, 110)
-      > defaultManifestTierPriority('tickflow', true, 100))
-    assert.ok(defaultManifestTierPriority('tickflow', true, 100)
-      > defaultManifestTierPriority('zzshare', false, 110))
-    assert.ok(defaultManifestTierPriority('baostock', false, 105)
-      < defaultManifestTierPriority('tushare', true, 110))
+      > defaultManifestTierPriority('stockindex', true, 115))
+    assert.ok(defaultManifestTierPriority('stockindex', true, 115)
+      > defaultManifestTierPriority('tickflow', false, 110))
+    assert.ok(defaultManifestTierPriority('tickflow', false, 110)
+      > defaultManifestTierPriority('tushare', true, 105))
+    assert.ok(defaultManifestTierPriority('tushare', true, 105)
+      > defaultManifestTierPriority('binance', false, 100))
   })
 })

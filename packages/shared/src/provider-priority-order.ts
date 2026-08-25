@@ -2,7 +2,7 @@
  * 数据源提供商统一排序与优先级换算。
  *
  * 展示顺序（设置页）与数据层 effectivePriority 共用同一套规则：
- * - 默认：需 API Key 的靠前；同花顺最高；免费源靠后
+ * - 默认：按推荐栈 / manifestDefaultPriority（降序），同一尺度
  * - 用户拖拽后：sortOrder 成为权威顺序
  * - 仅 enabled + 密钥就绪 的源享有位置对应的优先级数值
  */
@@ -13,7 +13,7 @@ export const PROVIDER_SORT_ORDER_STEP = 10
 export const PROVIDER_SORT_ORDER_BASE = 10_000
 export const PROVIDER_TIER_API_KEY_BASE = 20_000
 export const PROVIDER_TIER_FREE_BASE = 10_000
-/** 同花顺在无用户排序时的默认置顶加成（需 Key 层内最高） */
+/** 同花顺在无用户排序时的默认置顶加成（与推荐栈首位一致；保留兼容） */
 export const TONGHUASHUN_DEFAULT_PRIORITY_BOOST = 1_000
 
 export const TONGHUASHUN_PROVIDER_ID = 'tonghuashun'
@@ -22,6 +22,21 @@ export const TONGHUASHUN_PROVIDER_ID = 'tonghuashun'
 export const TICKFLOW_PROVIDER_ID = 'tickflow'
 /** @deprecated 使用 TONGHUASHUN_DEFAULT_PRIORITY_BOOST */
 export const TICKFLOW_DEFAULT_PRIORITY_BOOST = TONGHUASHUN_DEFAULT_PRIORITY_BOOST
+
+/**
+ * 设置页 / 目录默认展示顺序（内置推荐栈）。
+ * 与各 manifest `defaultPriority` 120/115/110/105/100/90 对齐。
+ */
+export const RECOMMENDED_PROVIDER_DISPLAY_ORDER = [
+  'tonghuashun',
+  'stockindex',
+  'tickflow',
+  'tushare',
+  'binance',
+  'okx',
+] as const
+
+export type RecommendedProviderId = (typeof RECOMMENDED_PROVIDER_DISPLAY_ORDER)[number]
 
 export function providerRequiresApiKey(fields: ProviderSettingsField[]): boolean {
   return fields.some(f => f.type === 'secret' && f.required !== false)
@@ -36,19 +51,29 @@ export function sortOrderToEffectivePriority(sortOrder: number): number {
   return PROVIDER_SORT_ORDER_BASE - sortOrder
 }
 
-/** 无用户排序时的分层默认优先级 */
+/**
+ * 无显式 sortOrder 时的展示/优先级派生 key（与 assignSortOrders 同尺度）。
+ * 推荐栈内按下标；其余按 inverted manifestDefault 排在栈后。
+ */
+export function recommendedOrManifestSortKey(providerId: string, manifestDefault: number): number {
+  const idx = (RECOMMENDED_PROVIDER_DISPLAY_ORDER as readonly string[]).indexOf(providerId)
+  if (idx >= 0) return idx * PROVIDER_SORT_ORDER_STEP
+  return (
+    RECOMMENDED_PROVIDER_DISPLAY_ORDER.length * PROVIDER_SORT_ORDER_STEP
+    + (1_000_000 - manifestDefault)
+  )
+}
+
+/**
+ * 无用户排序时的默认优先级。
+ * 与 sortOrder 路径共用同一换算，避免「仅部分源有 sortOrder」时量级错乱。
+ */
 export function defaultManifestTierPriority(
   providerId: string,
-  requiresApiKey: boolean,
+  _requiresApiKey: boolean,
   manifestDefault: number,
 ): number {
-  if (!requiresApiKey) {
-    return PROVIDER_TIER_FREE_BASE + manifestDefault
-  }
-  if (providerId === TONGHUASHUN_PROVIDER_ID) {
-    return PROVIDER_TIER_API_KEY_BASE + TONGHUASHUN_DEFAULT_PRIORITY_BOOST + manifestDefault
-  }
-  return PROVIDER_TIER_API_KEY_BASE + manifestDefault
+  return sortOrderToEffectivePriority(recommendedOrManifestSortKey(providerId, manifestDefault))
 }
 
 export interface ProviderOrderSortable {
@@ -59,19 +84,16 @@ export interface ProviderOrderSortable {
   manifestDefaultPriority: number
 }
 
+/** 无显式 sortOrder 时，用推荐栈下标或 inverted priority 派生可比 key */
+export function derivedProviderDisplaySortKey(p: ProviderOrderSortable): number {
+  if (p.sortOrder != null) return p.sortOrder
+  return recommendedOrManifestSortKey(p.providerId, p.manifestDefaultPriority)
+}
+
 export function compareDefaultProviderOrder(a: ProviderOrderSortable, b: ProviderOrderSortable): number {
-  if (a.sortOrder != null && b.sortOrder != null && a.sortOrder !== b.sortOrder) {
-    return a.sortOrder - b.sortOrder
-  }
-  if (a.sortOrder != null && b.sortOrder == null) return -1
-  if (a.sortOrder == null && b.sortOrder != null) return 1
-
-  if (a.providerId === TONGHUASHUN_PROVIDER_ID && b.providerId !== TONGHUASHUN_PROVIDER_ID) return -1
-  if (b.providerId === TONGHUASHUN_PROVIDER_ID && a.providerId !== TONGHUASHUN_PROVIDER_ID) return 1
-
-  if (a.requiresApiKey !== b.requiresApiKey) {
-    return a.requiresApiKey ? -1 : 1
-  }
+  const ka = derivedProviderDisplaySortKey(a)
+  const kb = derivedProviderDisplaySortKey(b)
+  if (ka !== kb) return ka - kb
 
   if (a.manifestDefaultPriority !== b.manifestDefaultPriority) {
     return b.manifestDefaultPriority - a.manifestDefaultPriority

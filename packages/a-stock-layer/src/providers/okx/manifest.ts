@@ -15,7 +15,7 @@ export const OKX_CAPS = [
 export const OKX_SPEC: ProviderManifestSpec = {
   id: 'okx',
   title: 'OKX',
-  subtitle: 'OKX 官方公开行情 API',
+  subtitle: '加密货币公开行情，无需密钥',
   marketGroup: 'CRYPTO',
   defaultPriority: 90,
   maxConcurrent: 5,
@@ -25,5 +25,5 @@ export const OKX_SPEC: ProviderManifestSpec = {
 }
 
 export const OKX_MANIFEST = providerManifestEntry(
-  'okx', 'OKX', 'OKX 官方公开行情 API', 'CRYPTO', 90, OKX_SETTINGS,
+  'okx', 'OKX', '加密货币公开行情，无需密钥', 'CRYPTO', 90, OKX_SETTINGS,
 )

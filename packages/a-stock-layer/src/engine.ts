@@ -1378,6 +1378,7 @@ export type { CustomMethodDef, CustomMethodParam, ProviderCustomMethods } from '
 export {
   TushareDriver,
   TickflowDriver,
+  StockIndexDriver,
   BinanceDriver,
   OkxDriver,
   BaostockDriver,

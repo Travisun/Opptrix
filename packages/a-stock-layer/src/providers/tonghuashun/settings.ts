@@ -6,8 +6,11 @@ export const TONGHUASHUN_SETTINGS = secretKeySettings(
   'CN',
   {
     keywords: ['tonghuashun', '同花顺', 'fuyao', 'aicubes'],
-    secretLabel: 'API Key',
-    placeholder: '粘贴 fuyao.aicubes.cn 控制台签发的 API Key',
+    secretLabel: '数据密钥',
+    placeholder: '粘贴同花顺数据密钥',
+    subtitle: '同花顺行情与基本面数据',
+    description: '在同花顺开放平台获取后填入即可使用',
+    helpUrl: 'https://fuyao.aicubes.cn/',
     defaultEnabled: false,
   },
 )

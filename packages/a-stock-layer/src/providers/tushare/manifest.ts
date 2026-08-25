@@ -31,9 +31,9 @@ export const TUSHARE_CAPS = [
 export const TUSHARE_SPEC: ProviderManifestSpec = {
   id: 'tushare',
   title: 'Tushare Pro',
-  subtitle: '批量行情与基本面，需 Token',
+  subtitle: '专业 A 股基本面与行情',
   marketGroup: 'CN',
-  defaultPriority: 110,
+  defaultPriority: 105,
   maxConcurrent: 5,
   capabilities: TUSHARE_CAPS,
   bindingsFor: (p, maxConcurrent) => [
@@ -57,5 +57,5 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
 }
 
 export const TUSHARE_MANIFEST = providerManifestEntry(
-  'tushare', 'Tushare Pro', '批量行情与基本面，需 Token', 'CN', 110, TUSHARE_SETTINGS,
+  'tushare', 'Tushare Pro', '专业 A 股基本面与行情', 'CN', 105, TUSHARE_SETTINGS,
 )
