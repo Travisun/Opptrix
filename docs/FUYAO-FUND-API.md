@@ -2,16 +2,17 @@
 
 > 官方文档：<https://fuyao.aicubes.cn/docs/api-reference/fund-profile/>
 > Provider ID：`tonghuashun`（同花顺金融数据，Base URL `https://fuyao.aicubes.cn`）
+> **运行时 HTTP**：依赖 npm 包 `@opptrix/fuyao`（SDK）；`packages/.../tonghuashun/api/client.ts` 为薄适配层（保留历史方法名与 unwrap 后的 `{ item? }` 形状）。markets / Engine 边界仍为 `Standard*` 行与 `queryInstrumentData`，勿在 markets 直连 SDK。
 
 ## 认证与通用约定
 
 | 项 | 说明 |
 |---|---|
 | Base URL | `https://fuyao.aicubes.cn` |
-| 请求头 | `X-api-key: <用户配置的 API Key>`（存于 Provider 设置，非代码硬编码） |
-| 响应信封 | `{ code, message, request_id, data }`；`code=0` 为成功 |
+| 请求头 | `X-api-key: <用户配置的 API Key>`（存于 Provider 设置，非代码硬编码；由 SDK 注入） |
+| 响应信封 | SDK 返回整包 `ApiResponse<T>`；适配层 unwrap 为 `data`，调用方继续用 `.item` |
 | 时间戳 | 毫秒 Unix，时区 `Asia/Shanghai` |
-| `fund_type` | `otc`（场外开放式）、`exchange`（场内 ETF/LOF）、`reits`（公募 REITs） |
+| `fund_type` | `otc`（场外开放式）、`exchange`（场内 ETF/LOF）、`reits`（公募 REITs）；SDK 入参 camelCase `fundType` |
 | `thscode` | 必须带后缀：`025480.OF`、`510300.SH`、`161725.SZ` |
 
 ### Opptrix 代码路由（`resolveFuyaoFundRoute`）

@@ -177,7 +177,7 @@ enum Capability {
 
 ETF 的 `STOCK_REALTIME` / `STOCK_KLINE` **复用**现有 Capability，通过 `assetClass: 'ETF'` 区分；专用维度走新 Capability。
 
-**公募基金详情 Capability（同花顺扶摇）**：
+**公募基金详情 Capability（同花顺扶摇；HTTP 经 `@opptrix/fuyao`，`Standard*` 仍为 Engine 边界）**：
 
 ```typescript
 enum Capability {
@@ -407,7 +407,7 @@ packages/a-stock-layer/src/providers/tonghuashun/
       etf.ts            # ETF 列表 / 净值 / 持仓
       fund.ts           # 公募基金 profile / nav / holdings / 详情扩展
   api/
-    fuyao.ts            # 扶摇 HTTP Client
+    client.ts           # FuyaoClient 薄适配层（HTTP 经 @opptrix/fuyao）
     ths.ts              # 同花顺特色数据
   normalize/
     quote.ts

@@ -1,6 +1,19 @@
+/**
+ * 同花顺扶摇 HTTP 适配层 — 对外保留历史 `FuyaoClient` 方法名与 `{ item? }` unwrap 形状；
+ * 实际请求经 `@opptrix/fuyao` SDK。markets/* 勿直接 import SDK（除非 `import type`）。
+ */
+import {
+  FuyaoClient as SdkFuyaoClient,
+  FuyaoApiError as SdkFuyaoApiError,
+  type AdjustMode,
+  type AssetType,
+  type FundType,
+  type NavRange,
+} from '@opptrix/fuyao'
 import { tonghuashunClient } from './http-client.js'
 import { FUYAO_BASE_URL, loadTonghuashunConfig } from '../config.js'
 
+/** 适配层错误：兼容旧 `code` + `rawMessage` + `requestId`；`instanceof` 供 fund.ts 3001 路径使用。 */
 export class FuyaoApiError extends Error {
   constructor(
     readonly code: number,
@@ -11,6 +24,10 @@ export class FuyaoApiError extends Error {
     super(`同花顺 API code=${code}: ${rawMessage}${requestId ? ` (${requestId})` : ''}`)
     this.name = 'FuyaoApiError'
   }
+
+  static fromSdk(err: SdkFuyaoApiError): FuyaoApiError {
+    return new FuyaoApiError(err.code, err.message, err.requestId)
+  }
 }
 
 type QueryValue = string | number | boolean | null | undefined
@@ -20,6 +37,7 @@ type FuyaoTickerAssetType = 'a-share' | 'a-share-index' | 'fund-etf' | 'fund-lof
 const RETRY_CODES = new Set([4001, 5001, 5002, 5003])
 const TEN_YEARS_MS = Math.floor(10 * 365.25 * 86400 * 1000)
 const FIVE_YEARS_MS = Math.floor(5 * 365.25 * 86400 * 1000)
+const ONE_YEAR_MS = Math.floor(365.25 * 86400 * 1000)
 
 function cleanParams(params: Record<string, QueryValue>): Record<string, string> {
   const out: Record<string, string> = {}
@@ -30,11 +48,53 @@ function cleanParams(params: Record<string, QueryValue>): Record<string, string>
   return out
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms))
+}
+
+function asFundType(fundType: string): FundType {
+  return fundType as FundType
+}
+
+function asAssetType(assetType: string): AssetType {
+  return assetType as AssetType
+}
+
+function ymdFromMs(ms: number): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(ms))
+}
+
+function defaultRankTrendWindow(start?: string, end?: string): { startDate: string; endDate: string } {
+  const endDate = (end?.trim() || ymdFromMs(Date.now()))
+  const startDate = (start?.trim() || ymdFromMs(Date.now() - ONE_YEAR_MS))
+  return { startDate, endDate }
+}
+
+function injectFetch(input: string, init?: RequestInit): Promise<Response> {
+  return tonghuashunClient.fetch(input, { ...init, timeoutMs: 30000 })
+}
+
 export class FuyaoClient {
-  constructor(
-    private readonly apiKey: string,
-    private readonly baseUrl = FUYAO_BASE_URL,
-  ) {}
+  private readonly sdk: SdkFuyaoClient
+  private readonly apiKey: string
+  private readonly baseUrl: string
+
+  constructor(apiKey: string, baseUrl = FUYAO_BASE_URL) {
+    this.apiKey = apiKey.trim()
+    this.baseUrl = baseUrl.replace(/\/$/, '') || FUYAO_BASE_URL
+    this.sdk = new SdkFuyaoClient({
+      apiKey: this.apiKey,
+      baseUrl: this.baseUrl,
+      timeoutMs: 30000,
+      intervalMs: 300,
+      fetch: injectFetch,
+    })
+  }
 
   static fromConfig(): FuyaoClient | null {
     const cfg = loadTonghuashunConfig()
@@ -42,11 +102,43 @@ export class FuyaoClient {
     return new FuyaoClient(cfg.apiKey.trim(), cfg.baseUrl)
   }
 
-  private headers(): Record<string, string> {
-    return { 'X-api-key': this.apiKey, Referer: 'https://fuyao.aicubes.cn/' }
+  /**
+   * 将 SDK `ApiResponse` unwrap 为旧形状（`Record` 线材），调用方继续用 `.item`。
+   * 故意不把 SDK 具名类型泄漏到 declaration emit / markets。
+   */
+  private async unwrap<T extends Record<string, unknown>>(
+    fn: () => Promise<{ data: unknown }>,
+  ): Promise<T> {
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fn()
+        return (res.data ?? {}) as T
+      } catch (e) {
+        lastErr = e
+        if (e instanceof SdkFuyaoApiError) {
+          if (RETRY_CODES.has(e.code) && attempt < 2) {
+            await sleep(1000 * (2 ** attempt))
+            continue
+          }
+          throw FuyaoApiError.fromSdk(e)
+        }
+        if (e instanceof FuyaoApiError) throw e
+        // 瞬时网络 / HTTP / 超时：与旧手写 client 一致，有限次退避重试
+        if (attempt < 2) {
+          await sleep(1000 * (2 ** attempt))
+          continue
+        }
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
   }
 
-  async get<T = Record<string, unknown>>(
+  /**
+   * SDK 未暴露的基金 financials 等：最小私有 GET（同一 fetch + 信封 unwrap）。
+   * 保持与旧 `get` 相同的重试与 `FuyaoApiError` 行为。
+   */
+  private async rawGet<T = Record<string, unknown>>(
     path: string,
     params: Record<string, QueryValue> = {},
   ): Promise<T> {
@@ -59,7 +151,10 @@ export class FuyaoClient {
       try {
         const resp = await tonghuashunClient.fetch(url, {
           method: 'GET',
-          headers: this.headers(),
+          headers: {
+            'X-api-key': this.apiKey,
+            Referer: 'https://fuyao.aicubes.cn/',
+          },
           timeoutMs: 30000,
         })
         const payload = await resp.json() as {
@@ -71,7 +166,7 @@ export class FuyaoClient {
         const code = payload.code ?? -1
         if (code === 0) return (payload.data ?? {}) as T
         if (RETRY_CODES.has(code) && attempt < 2) {
-          await new Promise(r => setTimeout(r, 1000 * (2 ** attempt)))
+          await sleep(1000 * (2 ** attempt))
           continue
         }
         throw new FuyaoApiError(code, String(payload.message ?? 'unknown'), payload.request_id)
@@ -79,7 +174,7 @@ export class FuyaoClient {
         lastErr = e
         if (e instanceof FuyaoApiError) throw e
         if (attempt < 2) {
-          await new Promise(r => setTimeout(r, 1000 * (2 ** attempt)))
+          await sleep(1000 * (2 ** attempt))
           continue
         }
       }
@@ -88,9 +183,8 @@ export class FuyaoClient {
   }
 
   tickersSearch(q: string, limit = 5, assetType: FuyaoTickerAssetType | string = 'a-share') {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/meta/tickers/search',
-      { q, limit, asset_type: assetType },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.meta.search({ q, limit, assetType: asAssetType(String(assetType)) }),
     )
   }
 
@@ -99,32 +193,33 @@ export class FuyaoClient {
     offset = 0,
     assetType: FuyaoTickerAssetType | string = 'a-share',
   ) {
-    return this.get<{ item?: Record<string, unknown>[]; total?: number }>(
-      '/api/meta/tickers/list',
-      { exchange: 'SH,SZ,BJ', asset_type: assetType, limit, offset },
+    return this.unwrap<{ item?: Record<string, unknown>[]; total?: number }>(() =>
+      this.sdk.meta.listTickers({
+        limit,
+        offset,
+        assetType: asAssetType(String(assetType)),
+      }),
     )
   }
 
   async tickersListAll(assetType: FuyaoTickerAssetType | string = 'a-share'): Promise<Record<string, unknown>[]> {
-    const pageSize = 1000
     const all: Record<string, unknown>[] = []
-    let offset = 0
-    while (true) {
-      const data = await this.tickersList(pageSize, offset, assetType)
-      const items = data.item ?? []
-      all.push(...items)
-      if (items.length < pageSize) break
-      offset += pageSize
+    try {
+      for await (const t of this.sdk.meta.iterateAllTickers({
+        assetType: asAssetType(String(assetType)),
+        pageSize: 1000,
+      })) {
+        all.push(t as unknown as Record<string, unknown>)
+      }
+    } catch (e) {
+      if (e instanceof SdkFuyaoApiError) throw FuyaoApiError.fromSdk(e)
+      throw e
     }
     return all
   }
 
   pricesSnapshot(thscodes: string | string[]) {
-    const joined = Array.isArray(thscodes) ? thscodes.join(',') : thscodes
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/prices/snapshot',
-      { thscodes: joined },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.aShare.prices.snapshot({ thscodes }))
   }
 
   /**
@@ -132,11 +227,7 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/valuations/snapshot
    */
   valuationsSnapshot(thscodes: string | string[]) {
-    const joined = Array.isArray(thscodes) ? thscodes.join(',') : thscodes
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/valuations/snapshot',
-      { thscodes: joined },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.aShare.valuations.snapshot({ thscodes }))
   }
 
   async pricesHistorical(
@@ -155,11 +246,16 @@ export class FuyaoClient {
     const seen = new Set<number>()
     const bars: Record<string, unknown>[] = []
     for (const [start, end] of slices) {
-      const data = await this.get<{ item?: Record<string, unknown>[] }>(
-        '/api/a-share/prices/historical',
-        { thscode, interval: '1d', start, end, adjust },
+      const data = await this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+        this.sdk.aShare.prices.historical({
+          thscode,
+          interval: '1d',
+          start,
+          end,
+          adjust: adjust as AdjustMode,
+        }),
       )
-      for (const bar of data.item ?? []) {
+      for (const bar of (data.item as Record<string, unknown>[] | undefined) ?? []) {
         const d = Number(bar.date_ms)
         if (seen.has(d)) continue
         seen.add(d)
@@ -171,17 +267,17 @@ export class FuyaoClient {
   }
 
   indexPricesSnapshot(thscodes: string | string[]) {
-    const joined = Array.isArray(thscodes) ? thscodes.join(',') : thscodes
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share-index/prices/snapshot',
-      { thscodes: joined },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.index.pricesSnapshot({ thscodes }))
   }
 
   indexPricesHistorical(thscode: string, startMs: number, endMs: number, interval = '1d') {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share-index/prices/historical',
-      { thscode, interval, start: startMs, end: endMs },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.index.pricesHistorical({
+        thscode,
+        interval: interval === '1d' ? '1d' : '1d',
+        start: startMs,
+        end: endMs,
+      }),
     )
   }
 
@@ -190,9 +286,8 @@ export class FuyaoClient {
     period: 'annual' | 'quarterly',
     limit = 20,
   ) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/financials/income-statements',
-      { thscode, period, limit },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.aShare.financials.incomeStatements({ thscode, period, limit }),
     )
   }
 
@@ -205,9 +300,8 @@ export class FuyaoClient {
     period: 'annual' | 'quarterly' = 'quarterly',
     limit = 20,
   ) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/financials/balance-sheets',
-      { thscode, period, limit },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.aShare.financials.balanceSheets({ thscode, period, limit }),
     )
   }
 
@@ -220,9 +314,8 @@ export class FuyaoClient {
     period: 'annual' | 'quarterly' = 'quarterly',
     limit = 20,
   ) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/financials/cash-flow-statements',
-      { thscode, period, limit },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.aShare.financials.cashFlowStatements({ thscode, period, limit }),
     )
   }
 
@@ -232,10 +325,7 @@ export class FuyaoClient {
    * @param report 报告期，如 2024Q3 / 2024
    */
   financialsIndicators(thscode: string, report: string) {
-    return this.get<{ abilities?: Record<string, unknown> } & Record<string, unknown>>(
-      '/api/a-share/financials/indicators',
-      { thscode, report },
-    )
+    return this.unwrap<{ abilities?: Record<string, unknown> } & Record<string, unknown>>(() => this.sdk.aShare.financials.indicators({ thscode, report }))
   }
 
   /**
@@ -244,9 +334,10 @@ export class FuyaoClient {
    * @param tag cn_concept | region | tszs | industry
    */
   thsIndexList(tag: 'cn_concept' | 'region' | 'tszs' | 'industry' | string = 'cn_concept') {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share-index/catalog/ths-index-list',
-      { tag },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.index.catalogThsIndexList({
+        tag: tag as 'cn_concept' | 'region' | 'tszs' | 'industry',
+      }),
     )
   }
 
@@ -255,37 +346,28 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share-index/constituents/ths-stock-list
    */
   thsIndexConstituents(thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share-index/constituents/ths-stock-list',
-      { thscode },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.index.constituentsThsStockList({ thscode }))
   }
 
   adjustmentFactors(thscode: string, from?: string, to?: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/corporate-actions/adjustment-factors',
-      { thscode, from, to },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.aShare.corporateActions.adjustmentFactors({ thscode, from, to }),
     )
   }
 
   tradingDays() {
-    return this.get<{ item?: Array<{ date_ms?: number; date?: string }> }>(
-      '/api/a-share/calendar/trading-days',
-      {},
-    )
+    return this.unwrap<{ item?: Array<{ date_ms?: number; date?: string }> }>(() => this.sdk.aShare.calendar.tradingDays())
   }
 
   dragonTigerList(date?: string, boardType: 'all' | 'org' | 'hot_money' = 'all') {
-    return this.get<Record<string, unknown>>(
-      '/api/a-share/special-data/dragon-tiger-list',
-      { board_type: boardType, date },
+    return this.unwrap<Record<string, unknown>>(() =>
+      this.sdk.specialData.dragonTigerList({ boardType, date }),
     )
   }
 
   limitUpPool(dateMs?: number, page = 1, size = 100) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/limit-up-pool',
-      { date_ms: dateMs, page, size },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.specialData.limitUpPool({ dateMs, page, size }),
     )
   }
 
@@ -294,17 +376,11 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/limit-up-ladder
    */
   limitUpLadder() {
-    return this.get<{ item?: Record<string, unknown>[] } & Record<string, unknown>>(
-      '/api/a-share/special-data/limit-up-ladder',
-      {},
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] } & Record<string, unknown>>(() => this.sdk.specialData.limitUpLadder())
   }
 
   hotStockList(period: 'day' | 'hour' = 'day') {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/hot-stock-list',
-      { period },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.specialData.hotStockList({ period }))
   }
 
   /**
@@ -312,10 +388,7 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/skyrocket-list
    */
   skyrocketList(period: 'day' | 'hour' = 'day') {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/skyrocket-list',
-      { period },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.specialData.skyrocketList({ period }))
   }
 
   /**
@@ -323,10 +396,7 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/hot-stock-list-history
    */
   hotStockListHistory(date: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/hot-stock-list-history',
-      { date },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.specialData.hotStockListHistory({ date }))
   }
 
   /**
@@ -334,9 +404,9 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/hot-stock-rank-trend
    */
   hotStockRankTrend(thscode: string, start?: string, end?: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/hot-stock-rank-trend',
-      { thscode, start, end },
+    const { startDate, endDate } = defaultRankTrendWindow(start, end)
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.specialData.hotStockRankTrend({ thscode, startDate, endDate }),
     )
   }
 
@@ -345,9 +415,10 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/anomaly-analysis-list
    */
   anomalyAnalysisList(tag?: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/anomaly-analysis-list',
-      { tag },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.specialData.anomalyAnalysisList(
+        tag ? { tagCodes: tag } : undefined,
+      ),
     )
   }
 
@@ -356,11 +427,7 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/anomaly-analysis-stock
    */
   anomalyAnalysisStock(thscodes: string | string[]) {
-    const joined = Array.isArray(thscodes) ? thscodes.join(',') : thscodes
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/a-share/special-data/anomaly-analysis-stock',
-      { thscodes: joined },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.specialData.anomalyAnalysisStock({ thscodes }))
   }
 
   /**
@@ -368,9 +435,8 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/fund/profile/detail
    */
   fundProfileDetail(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/profile/detail',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.profile.detail({ fundType: asFundType(fundType), thscode }),
     )
   }
 
@@ -379,9 +445,8 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/holdings
    */
   fundPortfolioHoldings(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/holdings',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.portfolio.holdings({ fundType: asFundType(fundType), thscode }),
     )
   }
 
@@ -397,14 +462,13 @@ export class FuyaoClient {
     thscode: string,
     opts?: { range?: string; nav_type?: string },
   ) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/performance/nav',
-      {
-        fund_type: fundType,
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.performance.nav({
+        fundType: asFundType(fundType),
         thscode,
-        range: opts?.range,
-        nav_type: opts?.nav_type,
-      },
+        range: opts?.range as NavRange | undefined,
+        navType: opts?.nav_type as 'unit' | 'adj' | 'unit,adj' | undefined,
+      }),
     )
   }
 
@@ -413,9 +477,8 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/returns
    */
   fundPerformanceReturns(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/performance/returns',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.performance.returns({ fundType: asFundType(fundType), thscode }),
     )
   }
 
@@ -428,9 +491,12 @@ export class FuyaoClient {
     thscode: string,
     mergeScope: 'all' | 'merged' | 'separate' = 'all',
   ) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/holders/detail',
-      { fund_type: fundType, thscode, merge_scope: mergeScope },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.holders.detail({
+        fundType: asFundType(fundType),
+        thscode,
+        mergeScope,
+      }),
     )
   }
 
@@ -439,10 +505,7 @@ export class FuyaoClient {
    * @sourceUrl https://fuyao.aicubes.cn/api/fund/market/snapshot
    */
   fundMarketSnapshot(thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/market/snapshot',
-      { thscode },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.funds.market.snapshot({ thscode }))
   }
 
   /**
@@ -455,6 +518,7 @@ export class FuyaoClient {
     endMs: number,
     interval = '1d',
   ): Promise<Record<string, unknown>[]> {
+    void interval
     const slices: Array<[number, number]> = []
     let cur = startMs
     while (cur < endMs) {
@@ -465,11 +529,10 @@ export class FuyaoClient {
     const seen = new Set<number>()
     const bars: Record<string, unknown>[] = []
     for (const [start, end] of slices) {
-      const data = await this.get<{ item?: Record<string, unknown>[] }>(
-        '/api/fund/market/historical',
-        { thscode, interval, start, end },
+      const data = await this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+        this.sdk.funds.market.historical({ thscode, interval: '1d', start, end }),
       )
-      for (const bar of data.item ?? []) {
+      for (const bar of (data.item as Record<string, unknown>[] | undefined) ?? []) {
         const d = Number(bar.date_ms)
         if (seen.has(d)) continue
         seen.add(d)
@@ -482,47 +545,42 @@ export class FuyaoClient {
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/companies/detail */
   fundCompaniesDetail(companyId: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/companies/detail',
-      { company_id: companyId },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.funds.companies.detail({ companyId }))
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/corporate-actions/dividends */
   fundCorporateActionsDividends(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/corporate-actions/dividends',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.corporateActions.dividends({ fundType: asFundType(fundType), thscode }),
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/diagnostics/detail */
   fundDiagnosticsDetail(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/diagnostics/detail',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.diagnostics.detail({ fundType: asFundType(fundType), thscode }),
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/indicators */
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/indicators — SDK 未暴露，走 rawGet */
   fundFinancialsIndicators(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
+    return this.rawGet<{ item?: Record<string, unknown>[] }>(
       '/api/fund/financials/indicators',
       { fund_type: fundType, thscode },
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/income-statements */
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/income-statements — SDK 未暴露，走 rawGet */
   fundFinancialsIncomeStatements(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
+    return this.rawGet<{ item?: Record<string, unknown>[] }>(
       '/api/fund/financials/income-statements',
       { fund_type: fundType, thscode },
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/balance-sheets */
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/balance-sheets — SDK 未暴露，走 rawGet */
   fundFinancialsBalanceSheets(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
+    return this.rawGet<{ item?: Record<string, unknown>[] }>(
       '/api/fund/financials/balance-sheets',
       { fund_type: fundType, thscode },
     )
@@ -530,18 +588,14 @@ export class FuyaoClient {
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/holders/top */
   fundHoldersTop(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/holders/top',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.holders.top({ fundType: asFundType(fundType), thscode }),
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/investment-style */
   fundManagersInvestmentStyle(managerId: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/managers/investment-style',
-      { manager_id: managerId },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.funds.managers.investmentStyle({ managerId }))
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/performance */
@@ -549,105 +603,152 @@ export class FuyaoClient {
     managerId: string,
     range: 'month' | 'tmonth' | 'year' | 'nowyear' | 'now' = 'year',
   ) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/managers/performance',
-      { manager_id: managerId, range },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.funds.managers.performance({ managerId, range }))
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/experience */
   fundManagersExperience(managerId: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/managers/experience',
-      { manager_id: managerId },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.funds.managers.experience({ managerId }))
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/managers/detail */
   fundManagersDetail(managerId: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/managers/detail',
-      { manager_id: managerId },
-    )
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() => this.sdk.funds.managers.detail({ managerId }))
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/news/article-list */
   fundNewsArticleList(fundType: string, thscode: string, opts?: { limit?: number }) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/news/article-list',
-      { fund_type: fundType, thscode, limit: opts?.limit },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.news.articleList({
+        fundType: asFundType(fundType),
+        thscode,
+        limit: opts?.limit,
+      }),
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/offerings/list */
-  fundOfferingsList(opts?: { fund_type?: string; limit?: number }) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/offerings/list',
-      { fund_type: opts?.fund_type, limit: opts?.limit },
+  /**
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/offerings/list
+   * SDK 必填 `subscribe`；旧 opts 无此字段时默认 `active`。
+   */
+  fundOfferingsList(opts?: {
+    fund_type?: string
+    limit?: number
+    subscribe?: 'active' | 'upcoming'
+  }) {
+    void opts?.fund_type
+    void opts?.limit
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.offerings.list({ subscribe: opts?.subscribe ?? 'active' }),
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/indicators-historical */
+  /**
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/indicators-historical
+   * SDK 必填 start/end；适配层默认近 1 年窗口。
+   */
   fundPerformanceIndicatorsHistorical(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/performance/indicators-historical',
-      { fund_type: fundType, thscode },
+    const end = Date.now()
+    const start = end - ONE_YEAR_MS
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.performance.indicatorsHistorical({
+        fundType: asFundType(fundType),
+        thscode,
+        start,
+        end,
+      }),
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/drawdowns */
   fundPerformanceDrawdowns(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/performance/drawdowns',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.performance.drawdowns({ fundType: asFundType(fundType), thscode }),
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/stock-history */
-  fundPortfolioStockHistory(fundType: string, thscode: string, reportDateMs?: number) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/stock-history',
-      { fund_type: fundType, thscode, report_date_ms: reportDateMs },
+  /**
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/stock-history
+   * SDK 需 `reportType` + `endDate`；第三参可传对象，或仅传 ms 时抛 TypeError（当前无调用方）。
+   */
+  fundPortfolioStockHistory(
+    fundType: string,
+    thscode: string,
+    reportDateMsOrOpts?: number | { reportType: string; endDate: string },
+  ) {
+    if (
+      reportDateMsOrOpts
+      && typeof reportDateMsOrOpts === 'object'
+      && reportDateMsOrOpts.reportType
+      && reportDateMsOrOpts.endDate
+    ) {
+      return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+        this.sdk.funds.portfolio.stockHistory({
+          fundType: asFundType(fundType),
+          thscode,
+          reportType: reportDateMsOrOpts.reportType,
+          endDate: reportDateMsOrOpts.endDate,
+        }),
+      )
+    }
+    throw new TypeError(
+      'fundPortfolioStockHistory: @opptrix/fuyao 需要 reportType 与 endDate（yyyy-MM-dd）；'
+      + '请传第三参 { reportType, endDate }（仅 reportDateMs 的旧调用已废弃）',
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/bond-history */
-  fundPortfolioBondHistory(fundType: string, thscode: string, reportDateMs?: number) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/bond-history',
-      { fund_type: fundType, thscode, report_date_ms: reportDateMs },
+  fundPortfolioBondHistory(
+    fundType: string,
+    thscode: string,
+    reportDateMsOrOpts?: number | { reportType: string; endDate: string },
+  ) {
+    if (
+      reportDateMsOrOpts
+      && typeof reportDateMsOrOpts === 'object'
+      && reportDateMsOrOpts.reportType
+      && reportDateMsOrOpts.endDate
+    ) {
+      return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+        this.sdk.funds.portfolio.bondHistory({
+          fundType: asFundType(fundType),
+          thscode,
+          reportType: reportDateMsOrOpts.reportType,
+          endDate: reportDateMsOrOpts.endDate,
+        }),
+      )
+    }
+    throw new TypeError(
+      'fundPortfolioBondHistory: @opptrix/fuyao 需要 reportType 与 endDate（yyyy-MM-dd）；'
+      + '请传第三参 { reportType, endDate }（仅 reportDateMs 的旧调用已废弃）',
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/stock-report-dates */
   fundPortfolioStockReportDates(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/stock-report-dates',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.portfolio.stockReportDates({ fundType: asFundType(fundType), thscode }),
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/bond-report-dates */
   fundPortfolioBondReportDates(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/bond-report-dates',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.portfolio.bondReportDates({ fundType: asFundType(fundType), thscode }),
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/asset-allocation */
   fundPortfolioAssetAllocation(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/asset-allocation',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.portfolio.assetAllocation({ fundType: asFundType(fundType), thscode }),
     )
   }
 
   /** @sourceUrl https://fuyao.aicubes.cn/api/fund/portfolio/industry-allocation */
   fundPortfolioIndustryAllocation(fundType: string, thscode: string) {
-    return this.get<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/portfolio/industry-allocation',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.portfolio.industryAllocation({ fundType: asFundType(fundType), thscode }),
     )
   }
 }

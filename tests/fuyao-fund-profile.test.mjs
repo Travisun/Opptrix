@@ -3,6 +3,10 @@ import { describe, it } from 'node:test'
 import { isCnListedFundSymbol, isCnLofSymbol } from '../packages/a-stock-layer/dist/core/fund-instrument.js'
 import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/tonghuashun/api/fund-symbols.js'
 import {
+  FuyaoApiError,
+  FuyaoClient,
+} from '../packages/a-stock-layer/dist/providers/tonghuashun/api/client.js'
+import {
   FUYAO_FUND_NAV_RECENT_OPTS,
   FUYAO_FUND_NAV_SERIES_OPTS,
 } from '../packages/a-stock-layer/dist/providers/tonghuashun/markets/cn/fund.js'
@@ -435,5 +439,43 @@ describe('fuyao fund profile', () => {
     assert.ok(row.indicators.some(i => i.label === '净值增长率' && i.value === 3.21))
     assert.ok(row.indicators.some(i => i.label === '基金资产净值'))
     assert.equal(row.netProfit, 1180000000.2)
+  })
+})
+
+describe('fuyao client adapter', () => {
+  it('FuyaoApiError keeps code + rawMessage for fund 3001 path', () => {
+    const e = new FuyaoApiError(3001, 'Fund not found: 000001.OF', 'req-1')
+    assert.equal(e.code, 3001)
+    assert.equal(e.rawMessage, 'Fund not found: 000001.OF')
+    assert.equal(e.requestId, 'req-1')
+    assert.ok(e instanceof FuyaoApiError)
+    assert.match(e.message, /not found/i)
+  })
+
+  it('FuyaoClient exposes legacy public methods and fromConfig', () => {
+    const client = new FuyaoClient('test-key-for-shape')
+    for (const name of [
+      'tickersSearch',
+      'pricesSnapshot',
+      'pricesHistorical',
+      'fundProfileDetail',
+      'fundPerformanceNav',
+      'fundMarketHistorical',
+      'fundOfferingsList',
+      'fundPerformanceIndicatorsHistorical',
+      'fundFinancialsIndicators',
+      'tickersListAll',
+    ]) {
+      assert.equal(typeof client[name], 'function', name)
+    }
+    assert.equal(typeof FuyaoClient.fromConfig, 'function')
+  })
+
+  it('fundPortfolioStockHistory rejects legacy ms-only args', () => {
+    const client = new FuyaoClient('test-key-for-shape')
+    assert.throws(
+      () => client.fundPortfolioStockHistory('otc', '009049.OF', 1719792000000),
+      (err) => err instanceof TypeError && /reportType/.test(err.message),
+    )
   })
 })

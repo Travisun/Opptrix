@@ -117,7 +117,7 @@ bindingsFor: () => []
 
 | 顺位 | Provider | defaultPriority | 备注 |
 |------|----------|-----------------|------|
-| 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径 |
+| 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径；HTTP 经 `@opptrix/fuyao` SDK（`FuyaoClient` 适配层） |
 | 2 | **stockindex**（Opptrix量化） | 115 | 标的搜索权威源；需数据密钥；基址固定 `https://quant.opptrix.net` |
 | 3 | **tickflow** | 110 | **默认开启**公开免费档；配置 Key 可升级实时；US / HK / CN ETF；名录灌库 |
 | 4 | **tushare** | 105 | 需 Token；批量 / 基本面 |
