@@ -1,4 +1,4 @@
-/** 统一标的搜索 — 本地名录优先，在线 StockIndex / 数据源补充。 */
+/** 统一标的搜索 — 本地名录（Tickflow 灌库）+ 扶摇/Tickflow 在线补强。 */
 
 import type { Market } from '@opptrix/shared'
 import {
@@ -14,7 +14,10 @@ export interface UnifiedSearchOptions {
   keyword: string
   limit?: number
   markets?: Market[]
-  /** 是否合并本地名录；默认 false（本地基础库已停用） */
+  /**
+   * 是否合并本地名录；默认 true（HK/US 中文名依赖 Tickflow 成分库）。
+   * 传 false 可仅测在线源。
+   */
   includeLocal?: boolean
 }
 
@@ -28,16 +31,17 @@ export async function searchInstrumentsUnified(
   if (!keyword) return { items: [], sources: [] }
 
   const seen = new Set<string>()
-  const items: UnifiedInstrumentSearchHit[] = []
+  const merged: UnifiedInstrumentSearchHit[] = []
   const sources = new Set<string>()
+  const includeLocal = opts.includeLocal !== false
 
-  if (opts.includeLocal === true) {
-    const localHits = marketData.searchLocalInstruments(keyword, limit, opts.markets)
+  if (includeLocal) {
+    const localHits = marketData.searchLocalInstruments(keyword, Math.max(limit * 2, limit), opts.markets)
     for (const hit of localHits) {
       const key = instrumentRefKey(hit.instrument)
       if (seen.has(key)) continue
       seen.add(key)
-      items.push({
+      merged.push({
         instrument: hit.instrument,
         code: hit.code,
         ref_label: hit.refLabel,
@@ -51,7 +55,10 @@ export async function searchInstrumentsUnified(
     }
   }
 
-  const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
+  const {
+    searchInstrumentsOnline,
+    scoreInstrumentSearchHit,
+  } = await import('@opptrix/a-stock-layer')
   const markets = opts.markets?.length
     ? opts.markets.filter(m => m === 'CN' || m === 'US' || m === 'HK')
     : undefined
@@ -59,21 +66,45 @@ export async function searchInstrumentsUnified(
   const onlineHits: InstrumentSearchHit[] = await searchInstrumentsOnline(
     de,
     keyword,
-    limit,
+    Math.max(limit * 2, limit),
     markets,
   )
 
   for (const hit of onlineHits) {
-    const normalized = onlineHitToSearchHit(hit)
+    const normalized = onlineHitToSearchHit({
+      ...hit,
+      source: hit.source === 'stock_index' ? 'stock_index' : 'online',
+    })
     const key = instrumentRefKey(normalized.instrument)
     if (seen.has(key)) continue
     seen.add(key)
-    items.push(normalized)
-    sources.add(hit.source)
+    merged.push(normalized)
+    sources.add(hit.source === 'stock_index' ? 'online' : hit.source)
   }
 
+  const ranked = merged
+    .map((hit, index) => ({
+      hit,
+      index,
+      score: scoreInstrumentSearchHit(
+        {
+          code: hit.code,
+          name: hit.name,
+          market: hit.market,
+          assetClass: hit.asset_class,
+          exchange: hit.exchange,
+          instrument: hit.instrument,
+          refLabel: hit.ref_label,
+          source: hit.source === 'local' ? 'online' : hit.source,
+        },
+        keyword,
+      ),
+    }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(x => x.hit)
+
   return {
-    items: items.slice(0, limit),
+    items: ranked.slice(0, limit),
     sources: [...sources],
   }
 }

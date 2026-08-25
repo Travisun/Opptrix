@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
-import { instrumentKey, parseInstrumentInput } from './instrument'
+import { instrumentKey, tryParseInstrumentInput } from './instrument'
 import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
 import { isCnListedFundSymbol } from './format'
@@ -292,7 +292,12 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
     ],
   )
   const instrumentRef = useMemo(
-    () => instrument ?? parseInstrumentInput(code),
+    () => instrument ?? tryParseInstrumentInput(code) ?? {
+      market: 'CN' as const,
+      assetClass: 'EQUITY' as const,
+      symbol: '000000',
+      exchange: 'SZ',
+    },
     // identity 不变时保留同一对象引用
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by instrumentIdentity
     [instrumentIdentity],

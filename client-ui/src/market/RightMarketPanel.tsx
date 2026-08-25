@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
-import { makeStyles, mergeClasses } from '@fluentui/react-components'
+import { makeStyles, mergeClasses, Text } from '@fluentui/react-components'
 import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
@@ -37,9 +37,10 @@ import {
   detailPanelKind,
   instrumentKey,
   normalizeWatchlistItem,
-  parseInstrumentInput,
+  tryParseInstrumentInput,
   resolveWatchlistInstrument,
   watchlistItemKey,
+  UNRESOLVED_INSTRUMENT_COPY,
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 
@@ -251,7 +252,7 @@ function RightMarketPanel({
     const ref = resolveWatchlistInstrument(item)
     setManageStock(item)
     try {
-      if (hasApplicationCapability(ref, 'batch_quote') || hasApplicationCapability(ref, 'quote')) {
+      if (ref && (hasApplicationCapability(ref, 'batch_quote') || hasApplicationCapability(ref, 'quote'))) {
         const resp = await research.instrumentQuotes([ref])
         setDialogPrice(resp.data?.quotes?.[0]?.price ?? null)
       } else {
@@ -275,7 +276,8 @@ function RightMarketPanel({
 
   const detailKind = useMemo(() => {
     if (!detailStock) return null
-    return detailPanelKind(resolveWatchlistInstrument(detailStock))
+    const ref = resolveWatchlistInstrument(detailStock)
+    return ref ? detailPanelKind(ref) : null
   }, [detailStock])
 
   const detailStockKey = useMemo(
@@ -317,9 +319,10 @@ function RightMarketPanel({
   const handlePortfolioSelect = useCallback((code: string, market?: string) => {
     const fromList = items.find(item => {
       const ref = resolveWatchlistInstrument(item)
+      if (!ref) return item.code === code
       const itemKey = portfolioHoldingsKey(item.code, ref.market)
       const targetKey = portfolioHoldingsKey(code, market ?? ref.market)
-      const parsedTarget = parseInstrumentInput(code)
+      const parsedTarget = tryParseInstrumentInput(code)
       const targetInstrumentKey = parsedTarget ? instrumentKey(parsedTarget) : itemKey
       return itemKey === targetKey
         || instrumentKey(ref) === targetInstrumentKey
@@ -328,8 +331,9 @@ function RightMarketPanel({
     const ref = fromList
       ? resolveWatchlistInstrument(fromList)
       : market
-        ? parseInstrumentInput(`${market}:${code}`)
-        : parseInstrumentInput(code)
+        ? tryParseInstrumentInput(`${market}:${code}`)
+        : tryParseInstrumentInput(code)
+    if (!ref) return
     const holding = holdingsByCode[portfolioHoldingsKey(code, ref.market)] ?? holdingsByCode[code]
     const item: WatchlistItem = fromList ?? normalizeWatchlistItem({
       code,
@@ -363,7 +367,7 @@ function RightMarketPanel({
 
   const handleRemove = useCallback((item: WatchlistItem) => {
     const ref = resolveWatchlistInstrument(normalizeWatchlistItem(item))
-    void clearPortfolioForCode(item.code, ref.market)
+    void clearPortfolioForCode(item.code, ref?.market)
     removeItemMembership(watchlistItemKey(normalizeWatchlistItem(item)))
     removeItem(item.code)
     const selectedKey = selected
@@ -550,6 +554,16 @@ function RightMarketPanel({
             onManage={handleDetailManage}
             onDiscussInChat={onDiscussInChat}
           />
+        ) : tab === 'detail' && detailStock && !detailKind ? (
+          <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Text weight="semibold">{detailStock.name || detailStock.code}</Text>
+            <Text size={200} style={{ color: opptrixCssVars.textSecondary }}>
+              {UNRESOLVED_INSTRUMENT_COPY.hint}
+            </Text>
+            <Text size={200} style={{ color: opptrixCssVars.textTertiary }}>
+              {UNRESOLVED_INSTRUMENT_COPY.listHint}
+            </Text>
+          </div>
         ) : null}
 
         <FollowStockDialog
@@ -557,8 +571,8 @@ function RightMarketPanel({
           stock={manageStock}
           currentPrice={dialogPrice}
           holding={manageHolding}
-          portfolioEnabled={manageStock
-            ? hasApplicationCapability(resolveWatchlistInstrument(manageStock), 'portfolio_pnl')
+          portfolioEnabled={manageStock && manageRef
+            ? hasApplicationCapability(manageRef, 'portfolio_pnl')
             : false}
           onClose={() => {
             setManageStock(null)

@@ -24,7 +24,7 @@ import {
   valuationMetricTone,
 } from './decisionCardTone'
 import { useStockDecisionCard } from './useStockDecisionCard'
-import { resolveWatchlistInstrument } from './instrument'
+import { resolveWatchlistInstrument, UNRESOLVED_INSTRUMENT_COPY } from './instrument'
 import { useStockAnalysis, type AnalysisStep } from './useStockAnalysis'
 import { listRowKey } from '../utils/listRowKey'
 
@@ -480,6 +480,16 @@ export default function StockDecisionCard({
       ? `请结合以下投研摘要，讨论 ${stock.name}（${stock.code}）的买入时机、仓位与风险。`
       : `请结合以下投研摘要，讨论 ${stock.name}（${stock.code}）是否适合减仓或卖出，以及关键价位。`
     onDiscuss({ code: stock.code, name: stock.name, topic, contextText, prompt })
+  }
+
+  if (!instrumentRef) {
+    return (
+      <div className={mergeClasses(s.panel, 'opptrix-stock-decision-card')}>
+        <div className={s.idleCard}>
+          <Text className={s.emptyHint}>{UNRESOLVED_INSTRUMENT_COPY.hint}</Text>
+        </div>
+      </div>
+    )
   }
 
   if (analysis.status === 'loading') {

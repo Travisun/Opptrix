@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { WatchlistItem } from '../types/market'
-import { research } from '../api/client'
-import { hitToWatchlistItem, normalizeWatchlistItem, watchlistItemKey } from '../market/instrument'
+import { normalizeWatchlistItem, watchlistItemKey } from '../market/instrument'
+import {
+  useInstrumentSearchWithUniversePrep,
+  type UniversePrepUi,
+} from '../market/useInstrumentSearchWithUniversePrep'
 
 export interface StockMentionState {
   open: boolean
@@ -29,33 +32,24 @@ function findMentionTrigger(text: string, cursor: number) {
 
 export function useStockMention(items: WatchlistItem[]) {
   const [state, setState] = useState<StockMentionState>(CLOSED)
-  const [remote, setRemote] = useState<WatchlistItem[]>([])
-  const searchGen = useRef(0)
 
-  useEffect(() => {
-    if (!state.open) {
-      setRemote([])
-      return
-    }
-    const q = state.query.trim()
-    if (q.length < 2 && !q.includes(':')) {
-      setRemote([])
-      return
-    }
-    const gen = ++searchGen.current
-    const timer = window.setTimeout(() => {
-      void research.searchInstruments(q, 12)
-        .then(resp => {
-          if (gen !== searchGen.current) return
-          const hits = resp.data?.items ?? []
-          setRemote(hits.map(hitToWatchlistItem))
-        })
-        .catch(() => {
-          if (gen === searchGen.current) setRemote([])
-        })
-    }, 220)
-    return () => window.clearTimeout(timer)
-  }, [state.open, state.query])
+  const searchEnabled = state.open && (
+    state.query.trim().length >= 2 || state.query.includes(':')
+  )
+  const searchKeyword = searchEnabled ? state.query.trim() : ''
+
+  const {
+    hits: remote,
+    searching: remoteSearching,
+    universePrep,
+    refreshingAfterPrep,
+  } = useInstrumentSearchWithUniversePrep({
+    keyword: searchKeyword,
+    limit: 12,
+    minLength: state.query.includes(':') ? 1 : 2,
+    debounceMs: 220,
+    enabled: searchEnabled,
+  })
 
   const syncFromInput = useCallback((text: string, cursor: number) => {
     const trigger = findMentionTrigger(text, cursor)
@@ -75,7 +69,6 @@ export function useStockMention(items: WatchlistItem[]) {
 
   const close = useCallback(() => {
     setState(CLOSED)
-    setRemote([])
   }, [])
 
   const matches = useMemo(() => {
@@ -85,10 +78,8 @@ export function useStockMention(items: WatchlistItem[]) {
       if (!q) return true
       const normalized = normalizeWatchlistItem(item)
       const code = normalized.code.toLowerCase()
-      const label = code
       return item.name.toLowerCase().includes(q)
         || code.includes(q)
-        || label.includes(q)
         || (item.industry?.toLowerCase().includes(q) ?? false)
     })
     const merged = new Map<string, WatchlistItem>()
@@ -116,7 +107,6 @@ export function useStockMention(items: WatchlistItem[]) {
     const nextText = `${before}${after}`
     const nextCursor = before.length
     setState(CLOSED)
-    setRemote([])
     return { nextText, nextCursor }
   }, [state.startIndex])
 
@@ -152,5 +142,8 @@ export function useStockMention(items: WatchlistItem[]) {
     clampActiveIndex,
     setActiveIndex,
     setMentionActiveIndex: setActiveIndex,
+    universePrep: universePrep as UniversePrepUi,
+    remoteSearching,
+    refreshingAfterPrep,
   }
 }

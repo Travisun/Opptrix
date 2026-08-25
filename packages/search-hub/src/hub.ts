@@ -3,8 +3,6 @@ import type { SessionMeta } from '@opptrix/agent'
 import { SessionStore } from '@opptrix/agent'
 import { NewsFeedStore } from '@opptrix/news-feed'
 import { getUserDataStore } from '@opptrix/user-store'
-import { buildInstrumentNamespace, inferCnAssetClassFromSymbol } from '@opptrix/shared'
-import type { CnExchange, StockListItem } from '@opptrix/shared'
 import { rebuildNewsSearchIndex } from './news-index.js'
 import { rebuildSessionSearchIndex } from './session-index.js'
 
@@ -98,23 +96,15 @@ export class SearchHub {
       }
     })
 
+    // 本地统一名录（CN/HK/US…），code 为 instrument_ns；不再硬编码全是 CN
     const stocks: StockSearchHit[] = q.length >= 2
-      ? this.hub.marketData.searchStocks(q, cap).map((s: StockListItem) => {
-        const exchange = (s.market?.trim().toUpperCase() || 'SH') as CnExchange
-        const instrument = {
-          market: 'CN' as const,
-          assetClass: inferCnAssetClassFromSymbol(s.code, exchange),
-          symbol: s.code,
-          exchange,
-        }
-        return {
-          kind: 'stock' as const,
-          code: buildInstrumentNamespace(instrument),
-          name: s.name,
-          industry: s.industry,
-          market: s.market,
-        }
-      })
+      ? this.hub.marketData.searchLocalInstruments(q, cap).map(h => ({
+        kind: 'stock' as const,
+        code: h.code,
+        name: h.name ?? h.code,
+        industry: '',
+        market: h.market,
+      }))
       : []
 
     const newsRows = q.length >= 1 ? store.searchNews(q, cap) : []

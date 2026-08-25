@@ -4,6 +4,7 @@ import {
   formatInstrumentLabel,
   marketDisplayName,
   resolveWatchlistInstrument,
+  UNRESOLVED_INSTRUMENT_COPY,
 } from './instrument'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 
@@ -83,6 +84,25 @@ export default function CrossMarketDetailPlaceholder({
 }: Props) {
   const s = useStyles()
   const ref = resolveWatchlistInstrument(stock)
+  if (!ref) {
+    return (
+      <div className={s.root}>
+        <div className={s.hero}>
+          <div className={s.titleRow}>
+            <Text className={s.name}>{stock.name}</Text>
+          </div>
+          <Text size={200} style={{ color: opptrixCssVars.textTertiary }}>
+            {stock.code}
+          </Text>
+        </div>
+        <div className={s.body}>
+          <div className={s.card}>
+            <Text className={s.muted}>{UNRESOLVED_INSTRUMENT_COPY.hint}</Text>
+          </div>
+        </div>
+      </div>
+    )
+  }
   const label = marketLabel ?? marketDisplayName(ref.market)
 
   return (

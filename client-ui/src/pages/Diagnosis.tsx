@@ -7,7 +7,7 @@ import { ArrowSyncRegular } from '@fluentui/react-icons'
 import MetricTile from '../components/MetricTile'
 import { getConfig, research } from '../api/client'
 import type { StockContext } from '../context/AppContext'
-import { normalizeInstrumentRefLocal, parseInstrumentInput, toStockContext } from '../market/instrument'
+import { normalizeInstrumentRefLocal, tryParseInstrumentInput, toStockContext } from '../market/instrument'
 import type { StockDiagnosisData, InstitutionRatingData, StrategySignalData } from '../types/schemas'
 import { listRowKey } from '../utils/listRowKey'
 
@@ -69,7 +69,8 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
     if (!trimmed) return
     const instrument = globalStock?.instrument && globalStock.code === trimmed
       ? normalizeInstrumentRefLocal(globalStock.instrument)
-      : parseInstrumentInput(trimmed)
+      : tryParseInstrumentInput(trimmed)
+    if (!instrument) return
     setLoading(true)
     try {
       const cfg = await getConfig().catch(() => null)

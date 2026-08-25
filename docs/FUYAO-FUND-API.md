@@ -34,7 +34,7 @@
 | 债券报告期 | `GET /api/fund/portfolio/bond-report-dates` | `fundPortfolioBondReportDates` | ✅ Client |
 | 资产配置 | `GET /api/fund/portfolio/asset-allocation` | `fundPortfolioAssetAllocation` | ✅ Client |
 | 行业配置 | `GET /api/fund/portfolio/industry-allocation` | `fundPortfolioIndustryAllocation` | ✅ Client |
-| 净值序列 | `GET /api/fund/performance/nav` | `fundPerformanceNav` | ✅ `fundProfile` / `fundNav` / `fundQuote` |
+| 净值序列 | `GET /api/fund/performance/nav` | `fundPerformanceNav` | ✅ `fundProfile` / `fundNav` / `fundQuote`（**须传 `range`**，见下方分工） |
 | 区间收益 | `GET /api/fund/performance/returns` | `fundPerformanceReturns` | ✅ `fundProfile`（概览近一年） |
 | 风险指标历史 | `GET /api/fund/performance/indicators-historical` | `fundPerformanceIndicatorsHistorical` | ✅ Client |
 | 回撤 | `GET /api/fund/performance/drawdowns` | `fundPerformanceDrawdowns` | ✅ Client |
@@ -65,7 +65,17 @@
 | `FUND_NAV` | `fundNav` | CN / FUND | 120（`FundDetailTab` 走势 / 净值 Tab） |
 | `ETF_*` | `etfProfile` 等 | CN / ETF | 120（`fund_type=exchange`） |
 
-无 API Key 或 Provider 未启用时，`withFuyaoClient` 返回 `null`，Engine 自动 failover 至东方财富（优先级 112）或新浪 / Tushare。
+### `get_fund_performance_nav` / `fundPerformanceNav` 的 `range` 分工
+
+扶摇净值接口：**不传 `range` 时最多返回 1 条**。Opptrix 调用约定：
+
+| 调用方 | 常量 / `range` | 用途 |
+|---|---|---|
+| `fundNav` | `FUYAO_FUND_NAV_SERIES_OPTS` → `range=fyear` | 历史净值走势 / 净值 Tab 全量序列 |
+| `fundProfile` / `fundQuote` | `FUYAO_FUND_NAV_RECENT_OPTS` → `range=month` | 近月序列，取 latest+prev 算涨跌；报价取排序后首条 |
+| （勿省略） | 不传 `range` | 最多 1 条，无法算涨跌、也无法画走势 |
+
+无 API Key 或 Provider 未启用时，`withFuyaoClient` 返回 `null`，Engine 自动 failover 至 **Tushare** 等现役栈（`eastmoney` / 新浪等已自内置 Registry 移除）。
 
 ## 右侧基金详情（`FundDetailTab`）数据流
 
@@ -74,8 +84,8 @@ InstrumentRef (CN:PF)
   → research.fundSnapshot
     → Engine.fundSnapshot → fundProfile + fundQuote（场内并行快照）
   → 关注列表 / 行情 → FUND_QUOTE（场内含交易所价 + 净值；扶摇失败走 realtime 回退）
-  → Tab「走势」→ research.fundNav → Fuyao performance/nav（全量序列）
-  → Tab「净值」→ research.fundNav（列表）
+  → Tab「走势」→ research.fundNav → Fuyao performance/nav（`range=fyear` 序列）
+  → Tab「净值」→ research.fundNav（`range=fyear` 列表）
   → Tab「持仓」→ research.fundHoldings
 ```
 
@@ -83,8 +93,8 @@ InstrumentRef (CN:PF)
 
 | 动作 | 上游调用 |
 |---|---|
-| 打开详情 | `profile/detail` + `performance/nav`（最新）+ `performance/returns` + `holders/detail` ≈ **4 次** |
-| 点走势 / 净值 | `performance/nav`（全量，与概览可能复用缓存）≈ **1 次** |
+| 打开详情 | `profile/detail` + `performance/nav`（`range=month`）+ `performance/returns` + `holders/detail` ≈ **4 次** |
+| 点走势 / 净值 | `performance/nav`（`range=fyear`，与概览可能复用缓存）≈ **1 次** |
 | 点持仓 | `portfolio/holdings` ≈ **1 次** |
 
 **概览 Tab 字段来源**
@@ -127,5 +137,5 @@ node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs
 ## 已知限制
 
 - `adj_nav` 为复权净值，**不等同**累计净值；UI「累计净值」在扶摇路径下展示复权净值，与天天基金口径可能略有差异。
-- `fundList` 未实现（与东方财富对齐）；列表仍走搜索 / 新浪 / Tushare。
+- `fundList` 未实现；名录/搜索走扶摇 + Tickflow + 本地；列表补路可走 Tushare 等现役栈。
 - 扩展接口（诊断、财务、经理详情等）已挂 Client，待 Hub Feature / Agent Tool 按需接入。

@@ -140,6 +140,8 @@ interface InstrumentRef {
 function resolveInstrument(input: string | InstrumentRef): InstrumentRef
 ```
 
+落库主键为 `(market, exchange, code, asset_class)`，并维护 `instrument_ns`；**1–5 位裸数字须经搜索消歧**，禁止本地 pad 成 CN（详见 [INSTRUMENT-PROTOCOL.md](./INSTRUMENT-PROTOCOL.md) §2.2.1）。HK 历史短码由 `instruments_hk_canonical_pad_v1` 全表幂等补零；关注未消歧项仅在本地/Tickflow **唯一命中**时自动写回 `InstrumentRef`（§2.2.2）。
+
 **符号对照（Phase 1 需实现）**：
 
 | 市场 | symbol | exchange | 说明 |
@@ -295,7 +297,7 @@ interface DataProvider {
 
 **设计要点**：
 
-1. **一个 Provider module 可绑定多 Market**：例如 `tickflow` 服务 US/HK/CN ETF；`stockindex` 可声明跨市场 `instrument_search`。
+1. **一个 Provider module 可绑定多 Market**：例如 `tickflow` 服务 US/HK/CN ETF 与跨市场名录。
 2. **bindings() 替代 capabilities()**：从「我支持哪些 capability」升级为「我在哪些市场、哪些资产类型下支持哪些 capability、优先级多少」。
 3. **方法签名统一收 InstrumentRef**：Provider 内部自行调用 `resolveSecId(instrument)` 等 adapter，Engine 不再硬编码 A 股 code 规则。
 
@@ -731,7 +733,7 @@ interface ProviderCatalogResponse {
 | `CN` | A 股 | tonghuashun、tushare、zzshare、baostock |
 | `US` | 美股 | tickflow、polygon（Phase 2） |
 | `CRYPTO` | 加密货币 | binance、okx |
-| `GLOBAL` | 全球 / 宏观 | stockindex（搜索/列表） |
+| `GLOBAL` | 全球 / 宏观 | 标的搜索：扶摇+Tickflow+本地 |
 
 无 `settings.fields` 的 Provider 仍出现在列表，卡片仅显示说明 + 健康状态（如「BaoStock · 免费 · 默认启用」）。
 
@@ -1003,11 +1005,10 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 |----------|---------------|----------|------|
 | tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0；**有 Key 时 CN ETF**（列表/概况/净值/持仓/行情）优先走 Fuyao `/api/fund/*`；**CN 个股 realtime** 并行 enrich `valuations/snapshot`（pe/pb）；**etfProfile** 并行 enrich `fund/holders/detail` |
 | tushare | 110 | ✅ | 需 Token；bulk/基本面 |
-| tickflow | 100 | ✅ | 需 Key；多市场行情 |
+| tickflow | 100（CN）/ 200（US·HK） | ✅ | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 升级实时；多市场 |
 | zzshare / baostock 等免费 | 105–110 | ✅ | 免费层（effective 低于需 Key 层） |
-| stockindex | ~90 | ✅ | 搜索/列表；无表单 |
 
-> **已移除**：`tencent` / `sinafinance` / `eastmoney` / `akshare` 不再出现在内置 Registry。
+> **已移除**：`tencent` / `sinafinance` / `eastmoney` / `akshare` / `stockindex`（OpptrixQuant）不再出现在内置 Registry。
 
 默认值在 **`manifest.ts` 的 `bindings()`** 里声明；用户未改时 `priority_mode = 'manifest'`，**不在 DB 重复存一份默认表**。
 
@@ -1035,7 +1036,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 ### 8.0 内置注册现状（2026-08）
 
-**已注册**（`register.ts`）：tonghuashun、tushare、tickflow、zzshare、baostock、stockindex、binance、okx。
+**已注册**（`register.ts`）：tonghuashun、tushare、tickflow、zzshare、baostock、binance、okx。
 
 **已移除内置注册**（实现与注册均已删除）：tencent、sinafinance、eastmoney、akshare、webfeed。
 
@@ -1054,12 +1055,21 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 | tushare | ● 需 token | ○ | ● | 批量/sync、基本面 |
 | zzshare | ● | ● | ○ | 免费层；板块/情绪 |
 | baostock | ● | ● | ● | 免费；历史 K 线/财报 |
-| tickflow | ○ | ● | ○ | 多市场；CN ETF |
-| stockindex | ○ | ○ ETF_LIST | ● | 搜索/列表 |
+| tickflow | ○ | ● | ○ | 多市场；CN ETF；CN/HK/US 名录灌库 |
+
+### 8.1.1 标的搜索编排（2026-08）
+
+| 路径 | 行为 |
+|------|------|
+| Hub `instrument_search` | `searchInstrumentsUnified`：默认 `includeLocal=true`，合并 `v_instruments_unified` |
+| 在线 | `searchInstrumentsOnline`：有扶摇 Key 时并行搜 `a-share` / `fund-etf` / `fund-lof`；关键词像代码时 Tickflow `getInstruments` 精确补强；中文别名表兜底美/港 |
+| 灌库 | `initial_cn/hk/us_universe` 与 `initial_cn_etf` **仅**走 Tickflow `getExchangeInstruments`；失败则跳过（**已移除 OpptrixQuant 回退**） |
+| 搜索触发 | 任意关键词搜索会调用 `ensureSearchUniverseReady`：名录未就绪时后台启动**仅缺的**轻量 universe jobs（不跑 taxonomy/quotes）；可先返回在线结果 + `universe_prep`；**boot 仍不自动灌库** |
+| 已知限制 | 场外公募（`CN:PF`）若扶摇未覆盖则可能搜不到；美港中文名依赖本地名录已同步 |
 
 ● = 已支持；○ = 计划/可选
 
-> **历史**：eastmoney（资金流/两融/宏观/机构持仓）、tencent/sinafinance（行情爬虫）已自内置栈移除。
+> **历史**：eastmoney（资金流/两融/宏观/机构持仓）、tencent/sinafinance（行情爬虫）、stockindex/OpptrixQuant（搜索/名录）已自内置栈移除。
 
 ### 8.2 美股（US）— Phase 2
 

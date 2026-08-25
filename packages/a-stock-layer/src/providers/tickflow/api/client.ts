@@ -1,4 +1,8 @@
-import { loadTickflowConfig, TICKFLOW_DEFAULT_BASE_URL } from '../config.js'
+import {
+  loadTickflowConfig,
+  TICKFLOW_DEFAULT_BASE_URL,
+  TICKFLOW_FREE_BASE_URL,
+} from '../config.js'
 import { tickflowClient } from './http-client.js'
 import { recordTickflowPermissionDenial, resolveTickflowEffectiveCapabilities } from './permissions.js'
 import { probeTickflowPermissions } from './probe.js'
@@ -378,14 +382,14 @@ export interface TickflowUniverseBatchRequest {
 }
 
 /**
- * TickFlow REST API 客户端 — 对齐官方 OpenAPI（`https://api.tickflow.org/openapi.json`）。
+ * TickFlow REST API 客户端 — 对齐官方 OpenAPI。
  *
- * 鉴权：请求头 `x-api-key`。
+ * 无 Key 时走免费端（free-api）；有 Key 时请求头带 `x-api-key` 走付费端。
  */
 export class TickflowClient {
   /**
-   * @param apiKey TickFlow API Key（`x-api-key` 请求头）
-   * @param baseUrl API 基地址，默认 {@link TICKFLOW_DEFAULT_BASE_URL}
+   * @param apiKey TickFlow API Key（可空；空则不发送鉴权头）
+   * @param baseUrl API 基地址，默认付费端 {@link TICKFLOW_DEFAULT_BASE_URL}
    */
   constructor(
     private readonly apiKey: string,
@@ -393,18 +397,19 @@ export class TickflowClient {
   ) {}
 
   /**
-   * 从 Provider 运行时配置构造客户端；未配置 Key 时返回 `null`。
+   * 从 Provider 运行时配置构造客户端；无 Key 时仍返回客户端（公开免费档）。
    */
   static fromConfig(cfg = loadTickflowConfig()): TickflowClient | null {
-    if (!cfg.apiKey) return null
     return new TickflowClient(cfg.apiKey, cfg.baseUrl)
   }
 
   private headers(): Record<string, string> {
-    return {
+    const headers: Record<string, string> = {
       Accept: 'application/json',
-      'x-api-key': this.apiKey,
     }
+    const key = this.apiKey.trim()
+    if (key) headers['x-api-key'] = key
+    return headers
   }
 
   private url(path: string): string {
@@ -636,13 +641,28 @@ export class TickflowClient {
 }
 
 /**
- * TickFlow 连接自检 — 调用 `GET /v1/exchanges` 验证 Key 与网络。
+ * TickFlow 连接自检 — 调用 `GET /v1/exchanges`。
+ * 无 Key：测公开免费服务；有 Key：测付费端并探测权限。
  */
 export async function testTickflowConnection(
-  apiKey: string,
+  apiKey?: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const key = apiKey.trim()
-  if (!key) return { ok: false, message: 'API Key 未配置' }
+  const key = (apiKey ?? '').trim()
+  if (!key) {
+    const client = new TickflowClient('', TICKFLOW_FREE_BASE_URL)
+    try {
+      const json = await client.getExchanges()
+      const data = json.data
+      if (!Array.isArray(data)) return { ok: false, message: '响应格式异常' }
+      return {
+        ok: true,
+        message: `TickFlow 免费服务连接成功 · ${data.length} 个交易所 · 无需 API Key`,
+      }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
   const client = new TickflowClient(key, TICKFLOW_DEFAULT_BASE_URL)
   try {
     const json = await client.getExchanges()
@@ -651,7 +671,11 @@ export async function testTickflowConnection(
 
     const probe = await probeTickflowPermissions(client, { reset: true })
     const cfg = loadTickflowConfig()
-    const effectiveCaps = resolveTickflowEffectiveCapabilities(cfg.permissionMode, cfg.plan)
+    const effectiveCaps = resolveTickflowEffectiveCapabilities(
+      cfg.permissionMode,
+      cfg.plan,
+      true,
+    )
     const deniedText = probe.denied.length ? probe.denied.join('、') : '无'
     const modeText = cfg.permissionMode === 'manual'
       ? `手动/${cfg.plan === 'paid' ? '付费' : '免费'}`

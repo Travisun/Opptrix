@@ -281,7 +281,7 @@ ETF 浅层    ██████░░░░
 | `money_flow` | ✅ | ✅ **`get_instrument_money_flow`** | Provider `moneyFlow` | 🟢 Phase2 |
 | `news` / `notices` | ✅ | ✅ **`get_instrument_notices`** + `get_notice_content` | `sinaBulletins*`、`tencent*Notices` | 🟢 Phase2 |
 | `instrument_search` | ✅ | ✅ | `tencentStockSearch` | 🟢 |
-| `stock_list` | ✅ | 🟡 search / ETF list / **constituents** | `tencent*StockList`、stockindex | 🟡 成分经 MCP |
+| `stock_list` | ✅ | 🟡 search / ETF list / **constituents** | Tickflow / 扶摇 list | 🟡 成分经 MCP |
 | `sector_list` | ✅ | ✅ **`get_sector_list`** + **`get_sector_constituents`** | `tencentIndustry*`、`zzPlatesRank` | 🟢 Phase3 |
 | `etf_*` | 部分 | ✅ list/nav/holdings/**profile** | `tencentFund*` 更全 | 🟢 Phase3（profile） |
 | `technical_analysis` | 部分 | ✅ indicators/cyq/signal | `tencentHkTechnicalAnalysis` | 🟢 偏 A 股 |

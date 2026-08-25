@@ -1,13 +1,16 @@
 /**
- * CN:PF 命名空间对齐 — watchlist / stockindex / 搜索命中路径
+ * CN:PF 命名空间对齐 — watchlist / 共享解析 / 搜索命中路径
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildInstrumentNamespace } from '@opptrix/shared'
+import {
+  buildInstrumentNamespace,
+  normalizeInstrumentRef,
+  parseInstrumentNamespace,
+} from '@opptrix/shared'
 import {
   legacyToInstrument,
   normalizeWatchlistItem,
-  stockIndexItemToInstrumentRef,
 } from '@opptrix/a-stock-layer'
 
 test('legacyToInstrument — CN:OF 兼容解析为 FUND + PF', () => {
@@ -32,55 +35,46 @@ test('normalizeWatchlistItem — 旧 code CN:OF 规范为 CN:PF', () => {
   assert.equal(item.instrument?.exchange, 'PF')
 })
 
-test('stockIndexItemToInstrumentRef — CN:OF instrumentId + assetType fund', () => {
-  const ref = stockIndexItemToInstrumentRef({
-    market: 'CN',
-    code: '009049',
-    instrumentId: 'CN:OF.009049',
-    assetType: 'fund',
-  })
-  assert.ok(ref)
-  assert.equal(ref.assetClass, 'FUND')
-  assert.equal(ref.exchange, 'PF')
-  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.009049')
+test('parseInstrumentNamespace — CN:OF / CN:PF 公募基金', () => {
+  const ofRef = parseInstrumentNamespace('CN:OF.009049')
+  assert.equal(ofRef?.assetClass, 'FUND')
+  assert.equal(ofRef?.exchange, 'PF')
+  assert.equal(buildInstrumentNamespace(ofRef), 'CN:PF.009049')
+
+  const pfRef = parseInstrumentNamespace('CN:PF.110022')
+  assert.equal(pfRef?.assetClass, 'FUND')
+  assert.equal(buildInstrumentNamespace(pfRef), 'CN:PF.110022')
 })
 
-test('stockIndexItemToInstrumentRef — 远程 CN:PF instrumentId 直接采用', () => {
-  const ref = stockIndexItemToInstrumentRef({
+test('normalizeInstrumentRef — 场内 ETF 代码不落成 PF', () => {
+  const ref = normalizeInstrumentRef({
     market: 'CN',
-    code: '009049',
-    instrumentId: 'CN:PF.009049',
+    assetClass: 'FUND',
+    symbol: '510330',
     exchange: 'PF',
-    assetType: 'fund',
-    board: 'fund',
-    nameCn: '易方达高端制造混合发起式A',
   })
-  assert.ok(ref)
-  assert.equal(ref.assetClass, 'FUND')
-  assert.equal(ref.exchange, 'PF')
-  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.009049')
+  // 共享层 resolveCnInstrumentIdentity：场内 ETF（51/52/159 等）须走交易所行情
+  assert.equal(buildInstrumentNamespace(ref), 'CN:SH.510330')
 })
 
-test('stockIndexItemToInstrumentRef — CN:SZ + 基金名称落成 CN:PF', () => {
-  const ref = stockIndexItemToInstrumentRef({
-    market: 'CN',
-    code: '009049',
-    instrumentId: 'CN:SZ.009049',
-    nameCn: '某混合型基金',
-    assetType: 'equity',
-  })
-  assert.ok(ref)
-  assert.equal(ref.assetClass, 'FUND')
-  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.009049')
+test('parseInstrumentNamespace — CN:SH / HK 命名空间', () => {
+  const sh = parseInstrumentNamespace('CN:SH.600519')
+  assert.equal(sh?.market, 'CN')
+  assert.equal(sh?.symbol, '600519')
+  assert.equal(sh?.exchange, 'SH')
+
+  const hk = parseInstrumentNamespace('HK:HK.00002')
+  assert.equal(hk?.market, 'HK')
+  assert.equal(hk?.symbol, '00002')
 })
 
-test('stockIndexItemToInstrumentRef — CN:PF instrumentId', () => {
-  const ref = stockIndexItemToInstrumentRef({
-    market: 'CN',
-    code: '510330',
-    instrumentId: 'CN:PF.510330',
-    assetType: 'fund',
+test('normalizeInstrumentRef — US EQUITY', () => {
+  const ref = normalizeInstrumentRef({
+    market: 'US',
+    assetClass: 'EQUITY',
+    symbol: 'AAPL',
   })
-  assert.ok(ref)
-  assert.equal(buildInstrumentNamespace(ref), 'CN:PF.510330')
+  assert.equal(ref.market, 'US')
+  assert.equal(ref.symbol, 'AAPL')
+  assert.equal(buildInstrumentNamespace(ref), 'US:AAPL')
 })

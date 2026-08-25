@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import {
   REMOVED_SCRAPING_PROVIDER_IDS,
+  REMOVED_STOCKINDEX_PROVIDER_IDS,
   type ProviderPriorityMode,
   type ProviderSettingsPatch,
   type ProviderSettingsRow,
@@ -15,6 +16,9 @@ import {
 const MIGRATION_KEY = 'provider_settings_v1'
 const WEBFEED_REMOVED_KEY = 'webfeed_removed_v1'
 const SCRAPING_PROVIDERS_REMOVED_KEY = 'scraping_providers_removed_v2'
+const STOCKINDEX_REMOVED_KEY = 'stockindex_provider_removed_v1'
+/** 一次性：无 Key 的 tickflow 默认开启公开免费档 */
+export const TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY = 'tickflow_public_free_default_enabled_v1'
 
 export function initProviderSettingsSchema(db: Database.Database) {
   db.exec(`
@@ -105,6 +109,54 @@ export class ProviderSettingsRepository {
 
     markMigration(SCRAPING_PROVIDERS_REMOVED_KEY)
     markMigration(WEBFEED_REMOVED_KEY)
+  }
+
+  /** 清理已下线 OpptrixQuant（stockindex）在本地库中的配置与测速残留 */
+  purgeRemovedStockindexProvider(
+    hasMigration: (key: string) => boolean,
+    markMigration: (key: string) => void,
+  ) {
+    if (hasMigration(STOCKINDEX_REMOVED_KEY)) return
+
+    for (const id of REMOVED_STOCKINDEX_PROVIDER_IDS) {
+      this.db.prepare('DELETE FROM provider_binding_overrides WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM provider_settings WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM free_provider_throttle WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM free_provider_throttle_log WHERE provider_id = ?').run(id)
+      this.db.prepare('DELETE FROM provider_speed_ranking WHERE provider_id = ?').run(id)
+    }
+    this.db.prepare('DELETE FROM provider_ranking_cache').run()
+
+    markMigration(STOCKINDEX_REMOVED_KEY)
+  }
+
+  /**
+   * 一次性：把「未配 Key 故关闭」的 tickflow 翻成公开免费档默认开启。
+   * - 无行 → 写入 enabled=true（extra 空）
+   * - 有行、无 apiKey、enabled=false → enabled=true
+   * - 已有 apiKey → 保持用户原 enabled
+   */
+  migrateTickflowPublicFreeDefaultEnabled(
+    hasMigration: (key: string) => boolean,
+    markMigration: (key: string) => void,
+  ) {
+    if (hasMigration(TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY)) return
+
+    const existing = this.get('tickflow')
+    if (!existing) {
+      this.save('tickflow', {
+        enabled: true,
+        priorityMode: 'manifest',
+        extra: {},
+      })
+    } else {
+      const apiKey = String(existing.extra.apiKey ?? '').trim()
+      if (!apiKey && !existing.enabled) {
+        this.save('tickflow', { enabled: true })
+      }
+    }
+
+    markMigration(TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY)
   }
 
   /** @deprecated 使用 purgeRemovedScrapingProviders */
@@ -332,6 +384,7 @@ export function tushareSecretsOk(extra: Record<string, unknown>, envToken = ''):
   return !!String(extra.token ?? envToken).trim()
 }
 
-export function tickflowSecretsOk(extra: Record<string, unknown>, envKey = ''): boolean {
-  return !!String(extra.apiKey ?? envKey).trim()
+/** 公开免费档无需 secret；有无 apiKey 均可启用 */
+export function tickflowSecretsOk(_extra: Record<string, unknown>, _envKey = ''): boolean {
+  return true
 }

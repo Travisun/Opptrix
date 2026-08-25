@@ -4,7 +4,7 @@ import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
 import { normalizeCode, portfolioHoldingsKey } from './format'
 import {
   instrumentKey,
-  parseInstrumentInput,
+  tryParseInstrumentInput,
   normalizeInstrumentRefLocal,
 } from './instrument'
 import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
@@ -13,7 +13,7 @@ import type { Market } from '../types/instrument'
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
 
 function holdingRowRef(row: HoldingSnapshot) {
-  const parsed = parseInstrumentInput(row.code.trim())
+  const parsed = tryParseInstrumentInput(row.code.trim())
   if (parsed) return normalizeInstrumentRefLocal(parsed)
   const market = (row.market ?? 'CN') as Market
   return normalizeInstrumentRefLocal({
@@ -46,7 +46,8 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const tradeCacheKey = (code: string, market?: string) => {
     const trimmed = code.trim()
     if (/^CN:/i.test(trimmed)) {
-      return instrumentKey(parseInstrumentInput(trimmed))
+      const parsed = tryParseInstrumentInput(trimmed)
+      return parsed ? instrumentKey(parsed) : trimmed
     }
     return `${market ?? 'CN'}:${trimmed}`
   }
@@ -128,7 +129,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     delete tradesCache.current[tradeCacheKey(code, market)]
     setHoldingsByCode(prev => {
       const next = { ...prev }
-      const ref = parseInstrumentInput(code)
+      const ref = tryParseInstrumentInput(code)
       const keys = new Set<string>()
       keys.add(portfolioHoldingsKey(code, market))
       if (ref) {

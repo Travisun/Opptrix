@@ -47,7 +47,7 @@ dividend | news | notices | shareholders | money_flow | technical_analysis
 // CN 个股 + ETF + 指数
 bindingsFor: (p, mc) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, ETF_CAPS, mc)
 
-// 跨市场（StockIndex / TickFlow）
+// 跨市场（TickFlow）
 bindingsFor: (p, mc) => [
   ...usEquityBindings(CAPS, p, mc),
   ...cnEquityEtfIndex(...),
@@ -71,7 +71,7 @@ bindingsFor: () => []
 
 ### 2.3 免费源退避保护（硬性）
 
-适用：manifest **无**必填 `secret` 字段的免费行情源（baostock / zzshare / stockindex 等）。
+适用：manifest **无**必填 `secret` 字段的免费行情源（baostock / zzshare 等）。
 
 > **设计全文**（分层、批内全开、主机闸门、不变量与常数）：[FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md)。
 
@@ -84,7 +84,7 @@ bindingsFor: () => []
 
 实现要求：
 
-1. HTTP 统一走 `ProviderHttpClient`，免费源 **`bypassRateLimit: false`**（仅 tushare / tickflow / tonghuashun / binance / okx 等付费源可为 `true`）
+1. HTTP 统一走 `ProviderHttpClient`，免费源 **`bypassRateLimit: false`**（仅 tushare / 带 Key 的 tickflow / tonghuashun / binance / okx 等可为 `true`（tickflow 公开免费档按免费源限流））
 2. 上游 `403/429/5xx`、空响应体、`访问被拒绝` 等须 **抛到引擎**；`queryScoped` / `invokeCustomMethod` 的 `catch` 会 `recordProviderQueryError` → 阶梯冷却
 3. Handler 业务空结果可 `return null`；若 `catch` 吞错，必须先 `rethrowIfFreeProviderThrottleTrigger(e)`（`providers/common/free-provider-call.ts`）
 4. `invokeCustomMethod` 空结果走 `recordProviderQueryEmpty`，勿用成功路径误清冷却
@@ -118,8 +118,9 @@ bindingsFor: () => []
 | CN | **tonghuashun** | 需扶摇 Key；个股 / ETF / 公募基金主路径 |
 | CN | **zzshare** / **baostock** | 免费层；ETF / 基本面补充 |
 | CN | **tushare** | 需 Token；批量 / 基本面 |
-| 多市场 | **tickflow** | 需 Key；US / HK / CN ETF |
-| 搜索 / 列表 | **stockindex** | 跨市场 `instrument_search` / `stock_list` |
+| 多市场 | **tickflow** | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 可升级实时/分钟线；US / HK / CN ETF；**HK/US 成分灌库**（`getExchangeInstruments`）供本地中文名搜索 |
+| 搜索编排 | **扶摇 + Tickflow + 本地名录** | Hub `instrument_search` → `searchInstrumentsUnified`（默认合并本地）+ `searchInstrumentsOnline`（扶摇 `tickersSearch` CN + Tickflow 精确代码） |
+| 名录灌库 | **Tickflow** | CN/HK/US 股票与 CN ETF：`getExchangeInstruments`（SH/SZ/BJ/HK/US）；失败则跳过，**不回退 OpptrixQuant**（已移除） |
 | CRYPTO | **binance** / **okx** | 现货行情 |
 
 **右侧面板**：个股 / ETF 行情、K 线、概况、财报等 **仍经** `queryInstrumentData` 标准能力，由上述内置源 failover；不依赖已移除爬虫源。
@@ -130,9 +131,7 @@ bindingsFor: () => []
 
 | Provider | 注册 | Binding 结构 | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|------|--------------|--------|----------|----------|--------|------|
-| **stockindex** | ✅ | CN/US/HK EQUITY + CN ETF_LIST | ✅ 搜索/列表 | 仅 ETF_LIST | ✅ `instrumentSearch` 等 | 板块/行业扩展 API | **合规**；ETF 净值/持仓靠 tonghuashun / zzshare / tickflow |
-| **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆** |
-| **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
+| **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆**；名录灌库 + 精确搜索 || **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | **fund_* 五件套 + fund_company/div/daily/adj 自定义** | **合规（CN）** |
 | **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |
 | **tonghuashun** | ✅ | CN；**CN ETF 分拆**（`CN_ETF_CAPABILITIES`，priority 120）；**CN FUND** `fundProfile/fundNav/fundHoldings/fundQuote`（见 `docs/FUYAO-FUND-API.md`）；含 BALANCE_SHEET / CASH_FLOW | CN | ✅ ETF_LIST/PROFILE/NAV/HOLDINGS + FUND_PROFILE/HOLDINGS/QUOTE + STOCK_REALTIME/KLINE | ✅ `limitUpdown`；Hub `market_dynamics` 可选消费 `thsSkyrocketList` / `thsLimitUpLadder` | `ths*` 指数/特色数据（10，含 `thsValuationsSnapshot`）；Fuyao `/api/fund/*` 全量 Client + CN:PF 标准四件套；**realtime enrich** `valuations/snapshot`→pe/pb；**etfProfile enrich** `fund/holders/detail` | **合规（CN 个股 + ETF + 公募基金）** |
@@ -182,4 +181,4 @@ bindingsFor: () => []
 | ETF capability 集 | `packages/a-stock-layer/src/providers/common/etf-capabilities.ts` |
 | Registry | `packages/market-data-core/src/core/registry.ts` |
 | 自定义登记 | `packages/a-stock-layer/src/core/custom-methods.ts` |
-| 标杆 Provider | `providers/tickflow/`、`providers/stockindex/` |
+| 标杆 Provider | `providers/tickflow/`、`providers/tonghuashun/` |

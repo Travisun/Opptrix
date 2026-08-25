@@ -3,6 +3,10 @@ import { describe, it } from 'node:test'
 import { isCnListedFundSymbol, isCnLofSymbol } from '../packages/a-stock-layer/dist/core/fund-instrument.js'
 import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/tonghuashun/api/fund-symbols.js'
 import {
+  FUYAO_FUND_NAV_RECENT_OPTS,
+  FUYAO_FUND_NAV_SERIES_OPTS,
+} from '../packages/a-stock-layer/dist/providers/tonghuashun/markets/cn/fund.js'
+import {
   mapFundHoldingsToFundRows,
   mapFundNavRowsForFund,
   mapFundProfileToFundProfileRow,
@@ -26,6 +30,15 @@ describe('fuyao fund profile', () => {
     assert.deepEqual(resolveFuyaoFundRoute('515150'), { fundType: 'exchange', thscode: '515150.SH' })
     assert.deepEqual(resolveFuyaoFundRoute('161725'), { fundType: 'exchange', thscode: '161725.SZ' })
     assert.deepEqual(resolveFuyaoFundRoute('025480.OF'), { fundType: 'otc', thscode: '025480.OF' })
+  })
+
+  it('fundNav / profile / quote pass documented range + nav_type', () => {
+    // fundNav：五年序列（侧边栏走势）；不传 range 时扶摇最多 1 条
+    assert.equal(FUYAO_FUND_NAV_SERIES_OPTS.range, 'fyear')
+    assert.equal(FUYAO_FUND_NAV_SERIES_OPTS.nav_type, 'unit,adj')
+    // profile / quote：近月序列以便 latest+prev 算 changePct
+    assert.equal(FUYAO_FUND_NAV_RECENT_OPTS.range, 'month')
+    assert.equal(FUYAO_FUND_NAV_RECENT_OPTS.nav_type, 'unit,adj')
   })
 
   it('mapFundReturnsToPerformance maps return_year to w52', () => {
@@ -52,6 +65,7 @@ describe('fuyao fund profile', () => {
     assert.equal(row.code, '009049')
     assert.equal(row.name, '测试基金')
     assert.equal(row.unitNav, 1.01)
+    // adj_nav → accNav（复权净值口径，非累计净值）
     assert.equal(row.accNav, 1.15)
     assert.equal(row.changePct != null && Math.abs(row.changePct - 1) < 1e-6, true)
     assert.equal(row.return1y, 8.5)
@@ -77,12 +91,16 @@ describe('fuyao fund profile', () => {
     assert.equal(rows[0].source, 'tonghuashun')
   })
 
-  it('mapFundNavRowsForFund computes daily change', () => {
+  it('mapFundNavRowsForFund maps multi-day series with daily change', () => {
     const rows = mapFundNavRowsForFund('009049', [
-      { nav_date: 1752508800000, unit_nav: 1.0 },
-      { nav_date: 1752595200000, unit_nav: 1.02 },
+      { nav_date: 1752508800000, unit_nav: 1.0, adj_nav: 1.1 },
+      { nav_date: 1752595200000, unit_nav: 1.02, adj_nav: 1.12 },
+      { nav_date: 1752681600000, unit_nav: 1.03, adj_nav: 1.13 },
     ])
-    assert.equal(rows.length, 2)
+    assert.equal(rows.length, 3)
+    assert.equal(rows[0].changePct, null)
     assert.equal(rows[1].changePct != null && Math.abs(rows[1].changePct - 2) < 1e-6, true)
+    assert.equal(rows[2].nav, 1.03)
+    assert.equal(rows[2].accNav, 1.13)
   })
 })

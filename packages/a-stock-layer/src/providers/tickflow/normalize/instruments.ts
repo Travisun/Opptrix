@@ -53,14 +53,30 @@ function listMarket(inst: TickflowInstrument): string {
   return String(inst.exchange ?? 'CN').toUpperCase()
 }
 
+function inferAssetClassFromTickflowType(type: string | null | undefined): 'EQUITY' | 'ETF' | 'INDEX' {
+  const t = String(type ?? '').trim().toLowerCase()
+  if (t === 'etf' || t.includes('etf')) return 'ETF'
+  if (t === 'index' || t.includes('index')) return 'INDEX'
+  return 'EQUITY'
+}
+
 export function mapTickflowInstrumentToListItem(inst: TickflowInstrument): StockListItem {
-  const { code } = parseTickflowSymbol(inst.symbol)
+  const parsed = parseTickflowSymbol(inst.symbol)
   const ext = (inst.ext ?? {}) as Record<string, unknown>
+  const assetClass = inferAssetClassFromTickflowType(inst.type ?? inst.symbol_type)
+  const exchange = parsed.exchange
+    ?? (parsed.market === 'HK' ? 'HK' : undefined)
+  // CN：market 字段保留交易所（SH/SZ/BJ）以兼容旧调用；region 写 Opptrix market
+  const marketField = parsed.market === 'CN'
+    ? (exchange ?? listMarket(inst))
+    : parsed.market
   return {
-    code,
-    name: String(inst.name ?? code),
+    code: parsed.code,
+    name: String(inst.name ?? parsed.code),
     industry: industryFromInstrument(inst, ext) ?? String(inst.type ?? inst.symbol_type ?? ''),
-    market: listMarket(inst),
+    market: marketField,
+    region: parsed.market,
+    assetClass,
   }
 }
 

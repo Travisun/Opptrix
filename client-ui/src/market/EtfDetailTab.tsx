@@ -320,7 +320,7 @@ export default function EtfDetailTab({ stock }: Props) {
   )
   /** 传给 TradingViewChart：按 stockKey 稳定，避免同标的重渲染新建 instrument */
   const chartInstrument = useMemo(
-    () => (stock ? resolveWatchlistInstrument(stock) : undefined),
+    () => (stock ? resolveWatchlistInstrument(stock) ?? undefined : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by stockKey
     [stockKey],
   )

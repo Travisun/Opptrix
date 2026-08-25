@@ -25,6 +25,10 @@
     "./instrument-symbol": {
       "types": "./dist/instrument-symbol.d.ts",
       "import": "./dist/instrument-symbol.js"
+    },
+    "./instrument-ref": {
+      "types": "./dist/instrument-ref.d.ts",
+      "import": "./dist/instrument-ref.js"
     }
   },
   "scripts": {

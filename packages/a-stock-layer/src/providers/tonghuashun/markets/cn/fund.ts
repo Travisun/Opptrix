@@ -15,6 +15,22 @@ import type { TonghuashunMarketHandler } from './handler.js'
 
 type Handler = TonghuashunMarketHandler & Record<string, unknown>
 
+/**
+ * 扶摇 GET /api/fund/performance/nav 查询选项。
+ * - 不传 `range` → 最多最新 1 条；传 week|month|…|fyear → 区间序列
+ * - `nav_type`: unit / adj / unit,adj；`adj_nav` 为复权净值（≠累计净值）
+ */
+export const FUYAO_FUND_NAV_SERIES_OPTS = {
+  range: 'fyear',
+  nav_type: 'unit,adj',
+} as const
+
+/** profile / quote：取近月序列以便 latest+prev 算 changePct（侧边栏涨跌） */
+export const FUYAO_FUND_NAV_RECENT_OPTS = {
+  range: 'month',
+  nav_type: 'unit,adj',
+} as const
+
 async function withFuyaoClient<T>(fn: (client: FuyaoClient) => Promise<T>): Promise<T | null> {
   if (!isTonghuashunEnabled()) return null
   const client = FuyaoClient.fromConfig()
@@ -114,7 +130,8 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
       const { fundType, thscode } = route
       const [profileData, navData, returnsData, holdersData] = await Promise.all([
         client.fundProfileDetail(fundType, thscode),
-        client.fundPerformanceNav(fundType, thscode, { nav_type: 'unit,adj' }),
+        // range=month：保证至少两日净值，便于 map 层算 changePct
+        client.fundPerformanceNav(fundType, thscode, { ...FUYAO_FUND_NAV_RECENT_OPTS }),
         client.fundPerformanceReturns(fundType, thscode),
         client.fundHoldersDetail(fundType, thscode).catch(() => ({ item: [] })),
       ])
@@ -136,8 +153,9 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     if (!route) return null
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
+      // range=fyear：侧边栏历史净值走势；不传 range 时扶摇最多返回 1 条
       const navData = await client.fundPerformanceNav(fundType, thscode, {
-        nav_type: 'unit,adj',
+        ...FUYAO_FUND_NAV_SERIES_OPTS,
       })
       const rows = mapFundNavRowsForFund(bare, navData.item ?? [])
       return rows.length ? rows : null
@@ -153,7 +171,8 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
       const { fundType, thscode } = route
       const isListed = fundType === 'exchange'
       const [navData, profileData, snapData] = await Promise.all([
-        client.fundPerformanceNav(fundType, thscode, { nav_type: 'unit,adj' }),
+        // range=month：取最近两日算涨跌；最新报价取排序后第一条
+        client.fundPerformanceNav(fundType, thscode, { ...FUYAO_FUND_NAV_RECENT_OPTS }),
         client.fundProfileDetail(fundType, thscode).catch(() => ({ item: [] })),
         isListed
           ? client.fundMarketSnapshot(thscode).catch(() => ({ item: [] }))
@@ -181,6 +200,7 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
         code: bare,
         name: profileName || undefined,
         unitNav: Number.isFinite(unitNav) ? unitNav : null,
+        // adj_nav = 复权净值（≠累计净值）；字段名 accNav 为历史兼容保留
         accNav: Number(latest.adj_nav) || null,
         prevNav: prevNav != null && Number.isFinite(prevNav) ? prevNav : null,
         changePct,

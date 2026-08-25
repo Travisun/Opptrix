@@ -15,7 +15,7 @@ test('taxonomyNodeCode: zzshare plate_code / plateCode', () => {
   assert.equal(taxonomyNodeName(zz2, 'industry'), '养殖业')
 })
 
-test('taxonomyNodeCode: stockindex industryCode', () => {
+test('taxonomyNodeCode: industryCode 字段', () => {
   const si = { industryCode: 'sw001', name: '农林牧渔' }
   assert.equal(taxonomyNodeCode(si, 'industry'), 'sw001')
   assert.equal(taxonomyNodeName(si, 'industry'), '农林牧渔')

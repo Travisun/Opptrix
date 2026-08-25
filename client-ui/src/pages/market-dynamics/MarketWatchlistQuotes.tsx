@@ -125,12 +125,19 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
     }
     setLoading(true)
     try {
-      const instruments = items.map(resolveWatchlistInstrument)
+      const instruments = items
+        .map(resolveWatchlistInstrument)
+        .filter((r): r is NonNullable<typeof r> => r != null)
+      if (!instruments.length) {
+        setQuotes([])
+        return
+      }
       const resp = await research.instrumentQuotes(instruments)
       if (resp.success && resp.data?.quotes) {
         const byKey = new Map<string, WatchQuote>()
         for (const q of resp.data.quotes) {
           const ref = q.instrument ?? resolveWatchlistInstrument({ code: q.code, name: q.name })
+          if (!ref) continue
           const code = displayCodeFromInstrument(ref)
           const key = watchlistItemKey({ code, name: q.name, instrument: ref })
           byKey.set(key, {
@@ -144,11 +151,12 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
         }
         const ordered = items.map(item => {
           const key = watchlistItemKey(item)
+          const ref = resolveWatchlistInstrument(item)
           return byKey.get(key) ?? {
             key,
             code: item.code,
             name: item.name ?? item.code,
-            market: resolveWatchlistInstrument(item).market,
+            market: ref?.market ?? 'CN',
             price: null,
             changePct: null,
           }

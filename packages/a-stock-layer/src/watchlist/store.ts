@@ -1,6 +1,10 @@
 import { getUserDataStore } from '@opptrix/user-store'
 import type { WatchlistItem } from './models.js'
 import { normalizeWatchlistItem, watchlistItemKey } from './instrument.js'
+import {
+  INSTRUMENT_ID_UNIFY_WATCHLIST_V1,
+  migrateWatchlistItemsInstrumentIdV1,
+} from './migrate-instrument-id.js'
 
 const NAMESPACE = 'watchlist'
 const DOC_ID = 'default'
@@ -34,10 +38,28 @@ export class WatchlistStore {
 
   private load(): WatchlistItem[] {
     try {
-      const raw = getUserDataStore().getDocument<{ items?: WatchlistItem[] }>(NAMESPACE, DOC_ID)
-      if (Array.isArray(raw?.items)) {
-        return raw.items.map(normalizeWatchlistItem)
+      const store = getUserDataStore()
+      const raw = store.getDocument<{ items?: WatchlistItem[] }>(NAMESPACE, DOC_ID)
+      if (!Array.isArray(raw?.items)) return []
+
+      let items = raw.items.map(normalizeWatchlistItem)
+
+      if (!store.getMetaFlag(INSTRUMENT_ID_UNIFY_WATCHLIST_V1)) {
+        try {
+          const migrated = migrateWatchlistItemsInstrumentIdV1(items).map(normalizeWatchlistItem)
+          items = migrated
+          store.setDocument(NAMESPACE, DOC_ID, { items })
+          store.setMetaFlag(INSTRUMENT_ID_UNIFY_WATCHLIST_V1)
+        } catch (err) {
+          // 失败保留原数据，不写 flag，下次启动可重试
+          console.warn(
+            '[watchlist] instrument_id_unify_watchlist_v1 failed; keeping original items:',
+            err instanceof Error ? err.message : String(err),
+          )
+        }
       }
+
+      return items
     } catch { /* reset */ }
     return []
   }

@@ -8,14 +8,9 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   type NewsItem, type MoneyFlow, type Dividend,
   invokeProviderDriverMethod,
   crossMarketChartTimeZone,
-  hkFdaysToIntradayItems,
-  intradaySessionDateFromKlines,
   isCrossMarketTradingDay,
-  isHkFdaysPayload,
-  minuteKlinesToIntradayItems,
   resolveCrossMarketKlineEngineQuery,
   crossMarketFiveDayMinuteCount,
-  crossMarketIntradayMinuteCount,
   resampleOhlcKlines,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
@@ -3300,16 +3295,18 @@ export class ResearchHub {
     keyword: string,
     limit: number,
     markets?: string[],
-    includeLocal = false,
+    includeLocal = true,
     t0 = Date.now(),
   ) {
     const m = markets as import('@opptrix/shared').Market[] | undefined
-    const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, this.marketData, {
+    const prepPromise = this.marketData.ensureSearchUniverseReady()
+    const searchPromise = searchInstrumentsUnified(this.de, this.marketData, {
       keyword,
       limit,
       markets: m,
       includeLocal,
     })
+    const [prep, { items: rawItems, sources }] = await Promise.all([prepPromise, searchPromise])
     const sourceLabel = sources.length ? sources.join('+') : 'online'
     const items = rawItems.map(h => ({
       code: h.code,
@@ -3321,7 +3318,24 @@ export class ResearchHub {
       refLabel: h.ref_label,
       source: h.source,
     }))
-    return ok({ items, count: items.length, source: sourceLabel }, `标的搜索 ${items.length} 条`, t0)
+    const universe_prep = prep.status === 'ready'
+      ? undefined
+      : {
+          status: prep.status,
+          percent: prep.percent,
+          message: prep.message,
+          jobs: prep.jobs.length ? prep.jobs : undefined,
+        }
+    return ok(
+      {
+        items,
+        count: items.length,
+        source: sourceLabel,
+        ...(universe_prep ? { universe_prep } : {}),
+      },
+      `标的搜索 ${items.length} 条`,
+      t0,
+    )
   }
 
   private async searchLocalInstruments(params: Record<string, unknown>, t0: number) {
@@ -3373,7 +3387,13 @@ export class ResearchHub {
       institutionRating: (ref, groups) => this.institutionRating(ref, groups, t0),
       institutionReport: (params, groups) => this.institutionReport(params, groups, t0),
       searchInstruments: (keyword, limit, markets, includeLocal) =>
-        this.searchInstrumentsUnifiedHandler(keyword, limit, markets, includeLocal === true, t0),
+        this.searchInstrumentsUnifiedHandler(
+          keyword,
+          limit,
+          markets,
+          includeLocal !== false,
+          t0,
+        ),
       localInsights: ref => this.localInsightsForRef(ref),
     }
   }
@@ -3576,122 +3596,14 @@ export class ResearchHub {
     const ref = { market, assetClass: 'EQUITY' as const, symbol }
     const cap = this.crossMarketMaxBars(period)
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
-    let preClose: number | null = null
-    let sessionDate: string | null = null
-    let isTradingDay = false
+    const preClose: number | null = null
     const chartTimeZone = crossMarketChartTimeZone(market)
+    const marketLabel = market === 'US' ? '美股' : '港股'
 
-    if (period === 'intraday') {
-      const minuteCount = crossMarketIntradayMinuteCount(safeCount)
-      const minuteR = await this.de.queryInstrumentData(ref, 'kline', { count: minuteCount, period: 'intraday' })
-      if (!minuteR.success) {
-        return fail(instrumentQueryError(minuteR, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
-      }
-      const minuteKlines = instrumentQueryData<StockKline[]>(minuteR) ?? []
-      const qR = await this.de.queryInstrumentData(ref, 'realtime')
-      const quote = instrumentQueryData<Record<string, unknown>[]>(qR)?.[0]
-      preClose = quote?.preClose != null ? Number(quote.preClose) : null
-      if (preClose == null || !Number.isFinite(preClose)) {
-        preClose = quote?.pre_close != null ? Number(quote.pre_close) : null
-      }
-      sessionDate = intradaySessionDateFromKlines(minuteKlines)
-      isTradingDay = sessionDate ? isCrossMarketTradingDay(market, sessionDate) : false
-      const items = minuteKlines.length ? minuteKlinesToIntradayItems(market, minuteKlines) : []
-      return ok(
-        {
-          symbol,
-          period,
-          items,
-          indicators: [],
-          count: items.length,
-          preClose,
-          pre_close: preClose,
-          session_date: sessionDate,
-          is_trading_day: isTradingDay,
-          hasMore: false,
-          chart_time_zone: chartTimeZone,
-        },
-        `分时 ${items.length} 点`,
-        t0,
-      )
-    }
-
-    if (period === '5day') {
-      const fiveCount = crossMarketFiveDayMinuteCount(safeCount)
-      const r = await this.de.queryInstrumentData(ref, 'kline', { count: fiveCount, period: '5day' })
-      if (!r.success) {
-        return fail(instrumentQueryError(r, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
-      }
-      let items = instrumentQueryData<Record<string, unknown>[]>(r) ?? []
-
-      if (market === 'HK' && isHkFdaysPayload(items)) {
-        const fdaysItems = hkFdaysToIntradayItems(market, items as import('@opptrix/a-stock-layer').HkFdaysDay[])
-        const latestDay = [...items]
-          .map(row => String(row.date ?? '').slice(0, 10))
-          .filter(Boolean)
-          .sort()
-          .at(-1) ?? null
-        return ok(
-          {
-            symbol,
-            period,
-            items: fdaysItems,
-            indicators: [],
-            count: fdaysItems.length,
-            preClose,
-            pre_close: preClose,
-            session_date: latestDay,
-            is_trading_day: latestDay ? isCrossMarketTradingDay(market, latestDay) : false,
-            hasMore: false,
-            chart_time_zone: chartTimeZone,
-          },
-          `五日 ${fdaysItems.length} 点`,
-          t0,
-        )
-      }
-
-      const minuteKlines = items.length
-        ? this.mapCrossMarketKlineItems(items, symbol)
-        : []
-      if (minuteKlines.length) {
-        const fdaysItems = minuteKlinesToIntradayItems(market, minuteKlines)
-        const latestDay = intradaySessionDateFromKlines(minuteKlines)
-        return ok(
-          {
-            symbol,
-            period,
-            items: fdaysItems,
-            indicators: [],
-            count: fdaysItems.length,
-            preClose,
-            pre_close: preClose,
-            session_date: latestDay,
-            is_trading_day: latestDay ? isCrossMarketTradingDay(market, latestDay) : false,
-            hasMore: false,
-            chart_time_zone: chartTimeZone,
-          },
-          `五日 ${fdaysItems.length} 点`,
-          t0,
-        )
-      }
-
-      const klines = minuteKlines
-      const indicators = klines.length ? this.mapCrossMarketChartIndicators(symbol, klines) : []
-      return ok(
-        {
-          symbol,
-          period,
-          items,
-          indicators,
-          count: items.length,
-          preClose,
-          pre_close: preClose,
-          hasMore: false,
-          chart_time_zone: chartTimeZone,
-        },
-        `K 线 ${items.length} 根`,
-        t0,
-      )
+    // 美港右侧不展示分时/五日：产品只提供日周月季年 K
+    const p = period.trim().toLowerCase()
+    if (p === 'intraday' || p === '5day' || p === 'fdays' || p === 'five') {
+      return fail(`${marketLabel}暂不支持该周期，请查看日K及更长周期`, t0)
     }
 
     const fetched = await this.fetchCrossMarketChartKlines(
@@ -3703,7 +3615,7 @@ export class ResearchHub {
       tail,
     )
     if (!fetched?.klines.length) {
-      return fail(`${market === 'US' ? '美股' : '港股'} K 线获取失败`, t0)
+      return fail(`${marketLabel} K 线获取失败`, t0)
     }
 
     const items = fetched.klines.map(row => ({
@@ -3995,10 +3907,17 @@ export class ResearchHub {
   }
 
   private watchlistList(t0: number) {
-    const items = this.de.watchlist.list()
+    // 加载时对未消歧项做本地唯一写回；多命中候选一并返回；在线补强后台节流
+    const { items, candidatesByCode } = this.marketData.disambiguateWatchlist({ online: true })
     const groupsDoc = this.de.watchlist.groups.get()
     return ok(
-      { items, count: items.length, groups: groupsDoc.groups, membership: groupsDoc.membership },
+      {
+        items,
+        count: items.length,
+        groups: groupsDoc.groups,
+        membership: groupsDoc.membership,
+        disambiguation_candidates: candidatesByCode,
+      },
       `关注列表 ${items.length} 只`,
       t0,
     )

@@ -10,8 +10,13 @@ import {
   type SetStateAction,
 } from 'react'
 import { fetchWatchlist, saveWatchlist } from '../api/client'
-import type { WatchlistItem } from '../types/market'
-import { normalizeWatchlistItem, watchlistItemKey } from './instrument'
+import type { DisambiguationCandidate, WatchlistItem } from '../types/market'
+import {
+  isAmbiguousNumericCode,
+  normalizeWatchlistItem,
+  tryResolveWatchlistInstrument,
+  watchlistItemKey,
+} from './instrument'
 
 const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '600519', name: '贵州茅台', industry: '白酒' },
@@ -25,19 +30,26 @@ function itemKey(item: WatchlistItem): string {
 
 type WatchlistContextValue = {
   items: WatchlistItem[]
+  /** 未消歧多命中候选（key = 原 code）；点选写回后清除 */
+  disambiguationCandidates: Record<string, DisambiguationCandidate[]>
   addItem: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => void
   updateItem: (code: string, patch: Partial<WatchlistItem>) => void
   removeItem: (code: string) => void
   reorderItem: (code: string, direction: 'up' | 'down') => void
   setItems: Dispatch<SetStateAction<WatchlistItem[]>>
+  clearDisambiguationCandidates: (code: string) => void
 }
 
 const WatchlistContext = createContext<WatchlistContextValue | null>(null)
 
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<WatchlistItem[]>([])
+  const [disambiguationCandidates, setDisambiguationCandidates] = useState<
+    Record<string, DisambiguationCandidate[]>
+  >({})
   const hydrated = useRef(false)
   const skipNextSync = useRef(false)
+  const unresolvedRefetchDone = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -48,6 +60,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         if (remote.items.length > 0) {
           skipNextSync.current = true
           setItems(remote.items.map(normalizeWatchlistItem))
+          setDisambiguationCandidates(remote.disambiguation_candidates ?? {})
         } else {
           const seeded = DEFAULT_ITEMS.map(row => normalizeWatchlistItem({
             ...row,
@@ -56,6 +69,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           await saveWatchlist(seeded)
           skipNextSync.current = true
           setItems(seeded)
+          setDisambiguationCandidates({})
         }
       } catch {
         if (!cancelled) {
@@ -63,6 +77,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
             ...row,
             addedAt: new Date().toISOString(),
           })))
+          setDisambiguationCandidates({})
         }
       } finally {
         if (!cancelled) hydrated.current = true
@@ -70,6 +85,28 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     })()
     return () => { cancelled = true }
   }, [])
+
+  // 仍有未消歧短码时，稍后重拉一次（承接服务端后台唯一消歧写回）
+  useEffect(() => {
+    if (!hydrated.current || unresolvedRefetchDone.current) return
+    const hasUnresolved = items.some(item => {
+      if (tryResolveWatchlistInstrument(item)) return false
+      return isAmbiguousNumericCode(item.code.trim())
+    })
+    if (!hasUnresolved) return
+    unresolvedRefetchDone.current = true
+    const timer = setTimeout(() => {
+      void fetchWatchlist()
+        .then(remote => {
+          if (!remote.items.length) return
+          skipNextSync.current = true
+          setItems(remote.items.map(normalizeWatchlistItem))
+          setDisambiguationCandidates(remote.disambiguation_candidates ?? {})
+        })
+        .catch(() => {})
+    }, 2500)
+    return () => clearTimeout(timer)
+  }, [items])
 
   useEffect(() => {
     if (!hydrated.current) return
@@ -96,16 +133,25 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateItem = useCallback((code: string, patch: Partial<WatchlistItem>) => {
     setItems(prev => prev.map(item => {
-      const key = itemKey(item)
-      const match = item.code === code || itemKey({ ...item, code }) === itemKey({ ...item, code, ...patch })
+      const match = item.code === code || itemKey(item) === code
       if (!match && item.code !== code) return item
       return normalizeWatchlistItem({ ...item, ...patch, code: patch.code ?? item.code })
     }))
   }, [])
 
+  const clearDisambiguationCandidates = useCallback((code: string) => {
+    setDisambiguationCandidates(prev => {
+      if (!(code in prev)) return prev
+      const next = { ...prev }
+      delete next[code]
+      return next
+    })
+  }, [])
+
   const removeItem = useCallback((code: string) => {
     setItems(prev => prev.filter(item => item.code !== code && itemKey(item) !== code))
-  }, [])
+    clearDisambiguationCandidates(code)
+  }, [clearDisambiguationCandidates])
 
   const reorderItem = useCallback((code: string, direction: 'up' | 'down') => {
     setItems(prev => {
@@ -122,11 +168,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const value: WatchlistContextValue = {
     items,
+    disambiguationCandidates,
     addItem,
     updateItem,
     removeItem,
     reorderItem,
     setItems,
+    clearDisambiguationCandidates,
   }
 
   return (
@@ -138,11 +186,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
 const EMPTY_WATCHLIST: WatchlistContextValue = {
   items: [],
+  disambiguationCandidates: {},
   addItem: () => {},
   updateItem: () => {},
   removeItem: () => {},
   reorderItem: () => {},
   setItems: () => {},
+  clearDisambiguationCandidates: () => {},
 }
 
 export function useWatchlist(): WatchlistContextValue {

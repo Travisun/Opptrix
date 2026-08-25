@@ -532,10 +532,36 @@ export const research = {
     ),
 
   searchInstruments: (keyword: string, limit = 20, signal?: AbortSignal) =>
-    jsonFetch<{ success: boolean; data?: { items: import('../types/instrument').LocalInstrumentHit[]; count: number } }>(
+    jsonFetch<{
+      success: boolean
+      data?: {
+        items: import('../types/instrument').LocalInstrumentHit[]
+        count: number
+        source?: string
+        universe_prep?: {
+          status: 'ready' | 'preparing' | 'failed'
+          percent: number
+          message: string
+          jobs?: string[]
+        }
+      }
+    }>(
       `/instruments/search?keyword=${encodeURIComponent(keyword)}&limit=${limit}`,
       { signal },
     ),
+
+  marketDataSyncState: (signal?: AbortSignal) =>
+    jsonFetch<{
+      success: boolean
+      data?: {
+        running: boolean
+        overall_percent: number
+        message: string | null
+        current_job: string | null
+        jobs_completed: number
+        jobs_total: number
+      }
+    }>('/market-data/sync-state', { signal }),
 
   instrumentsSummary: () =>
     jsonFetch<{ success: boolean; data?: {
@@ -712,9 +738,13 @@ export const research = {
 export async function fetchWatchlist() {
   const resp = await jsonFetch<{
     success: boolean
-    data?: { items: import('../types/market').WatchlistItem[]; count: number }
+    data?: {
+      items: import('../types/market').WatchlistItem[]
+      count: number
+      disambiguation_candidates?: Record<string, import('../types/market').DisambiguationCandidate[]>
+    }
   }>('/watchlist')
-  return resp.data ?? { items: [], count: 0 }
+  return resp.data ?? { items: [], count: 0, disambiguation_candidates: {} }
 }
 
 export async function saveWatchlist(items: import('../types/market').WatchlistItem[]) {

@@ -711,7 +711,11 @@ export class MarketDataEngine {
     return this.fundNavWithDepthFallback(code)
   }
 
-  /** 净值序列过短时尝试其他已注册 Provider（扶摇默认仅 1 条时需 Tushare 等补齐） */
+  /**
+   * 净值序列过短时尝试其他已注册 Provider。
+   * 扶摇在传 range（如 fyear）后应返回完整序列；本 fallback 仍留给未配置扶摇 /
+   * 扶摇失败时由 Tushare 等补齐。
+   */
   private async fundNavWithDepthFallback(
     code: string,
   ): Promise<QueryResult<Record<string, unknown>[]>> {
@@ -945,21 +949,27 @@ export class MarketDataEngine {
     )
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'profile')` */
+  regionalProfile(market: RegionalEquityMarket, symbol: string) {
+    return this.qScoped(market, 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, symbol)
+  }
+
   /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'snapshot')` */
   async regionalSnapshot(market: RegionalEquityMarket, symbol: string) {
-    const [quote, klines] = await Promise.all([
+    const [profile, quote, klines] = await Promise.all([
+      this.regionalProfile(market, symbol),
       this.regionalRealtime(market, symbol),
       this.regionalKline(market, symbol, 10),
     ])
     return {
-      success: quote.success || klines.success,
+      success: profile.success || quote.success || klines.success,
       data: {
         code: symbol,
-        profile: null,
+        profile: profile.data?.[0] ?? null,
         quote: quote.data?.[0] ?? null,
         recentKlines: klines.data ?? [],
       },
-      source: quote.source ?? klines.source,
+      source: profile.source ?? quote.source ?? klines.source,
     }
   }
 
@@ -1373,7 +1383,6 @@ export {
   BaostockDriver,
   ZzshareDriver,
   TonghuashunDriver,
-  StockIndexDriver,
   registerAllDrivers,
 } from './providers/register.js'
 export { loadTushareConfig, isTushareEnabled, saveTushareConfig, publicTushareConfig } from './providers/tushare/config.js'

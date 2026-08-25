@@ -1,3 +1,11 @@
+
+/** 关注项多命中候选 — 仅列表接口短暂带回，不持久化 */
+export interface DisambiguationCandidate {
+  instrument: import('./instrument').InstrumentRef
+  name: string | null
+  code: string
+}
+
 export interface WatchlistItem {
   code: string
   name: string

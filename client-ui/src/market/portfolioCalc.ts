@@ -22,7 +22,7 @@ import type { PortfolioTradeItem } from '../types/schemas'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import {
   instrumentKey,
-  parseInstrumentInput,
+  tryParseInstrumentInput,
   normalizeInstrumentRefLocal,
 } from './instrument'
 
@@ -46,7 +46,7 @@ export function holdingMatchesRef(
   holding: HoldingSnapshot,
   ref: InstrumentRef,
 ): boolean {
-  const parsed = parseInstrumentInput(holding.code.trim())
+  const parsed = tryParseInstrumentInput(holding.code.trim())
   const hRef = parsed
     ? normalizeInstrumentRefLocal(parsed)
     : normalizeInstrumentRefLocal({

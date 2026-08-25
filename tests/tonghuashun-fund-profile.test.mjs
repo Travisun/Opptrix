@@ -67,15 +67,17 @@ describe('tonghuashun fund profile parsers', () => {
     assert.equal(row.source, 'tonghuashun')
   })
 
-  it('mapFundNavRowsForFund normalizes nav rows', () => {
+  it('mapFundNavRowsForFund normalizes multi-day nav series', () => {
     const rows = mapFundNavRowsForFund('515150', [
+      { nav_date: Date.parse('2026-08-19'), unit_nav: 1.54, adj_nav: 1.54 },
       { nav_date: Date.parse('2026-08-20'), unit_nav: 1.552, adj_nav: 1.552 },
       { nav_date: Date.parse('2026-08-21'), unit_nav: 1.5604, adj_nav: 1.5604 },
     ])
-    assert.equal(rows.length, 2)
-    assert.equal(rows[1].date, '2026-08-21')
-    assert.equal(rows[1].nav, 1.5604)
+    assert.equal(rows.length, 3)
+    assert.equal(rows[2].date, '2026-08-21')
+    assert.equal(rows[2].nav, 1.5604)
     assert.ok(rows[1].changePct != null && rows[1].changePct > 0)
-    assert.equal(rows[1].source, 'tonghuashun')
+    assert.ok(rows[2].changePct != null && rows[2].changePct > 0)
+    assert.equal(rows[2].source, 'tonghuashun')
   })
 })

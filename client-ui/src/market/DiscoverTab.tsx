@@ -17,7 +17,7 @@ import {
 import { factorLabel } from './factorLabels'
 import {
   normalizeWatchlistItem,
-  parseInstrumentInput,
+  tryParseInstrumentInput,
   watchlistItemKey,
 } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'

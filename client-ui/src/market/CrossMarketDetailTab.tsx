@@ -1,5 +1,6 @@
 import type { WatchlistItem } from '../types/market'
 import CrossMarketSnapshotDetail from './CrossMarketSnapshotDetail'
+import CrossMarketDetailPlaceholder from './CrossMarketDetailPlaceholder'
 import { resolveWatchlistInstrument } from './instrument'
 
 interface Props {
@@ -13,5 +14,14 @@ interface Props {
 /** US / HK / JP / KR 详情 — 统一 instrument 快照 */
 export default function CrossMarketDetailTab(props: Props) {
   const ref = resolveWatchlistInstrument(props.stock)
+  if (!ref) {
+    return (
+      <CrossMarketDetailPlaceholder
+        stock={props.stock}
+        loading={props.loading}
+        localIndexed={props.localIndexed}
+      />
+    )
+  }
   return <CrossMarketSnapshotDetail {...props} instrumentRef={ref} />
 }

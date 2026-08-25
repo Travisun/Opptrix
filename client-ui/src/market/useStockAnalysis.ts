@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchStockAnalysis, getConfig, research, saveStockAnalysis } from '../api/client'
-import { displayCodeFromInstrument, instrumentKey, parseInstrumentInput } from './instrument'
+import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ApplicationCapability, InstrumentRef } from '../types/instrument'
 import type { RawDecisionPayload } from './useStockDecisionCard'
@@ -66,7 +66,7 @@ const STEP_HINTS: Record<string, string> = {
 
 export function useStockAnalysis(code: string | null, instrument?: InstrumentRef | null) {
   const instrumentRef = useMemo(
-    () => instrument ?? (code ? parseInstrumentInput(code) : null),
+    () => instrument ?? (code ? tryParseInstrumentInput(code) : null),
     [code, instrument],
   )
   const [status, setStatus] = useState<AnalysisJobStatus>('idle')
@@ -252,14 +252,19 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
       })
 
       await runStep('radar', STEP_HINTS.radar, async () => {
-        const ref = instrumentRef ?? (code ? parseInstrumentInput(code) : null)
+        const ref = instrumentRef ?? (code ? tryParseInstrumentInput(code) : null)
         const radarInput = ref ? displayCodeFromInstrument(ref) : (code ?? '')
         const resp = await research.watchlistRadar([radarInput], controller.signal)
-        const matchKey = ref ? instrumentKey(ref) : (code ? instrumentKey(parseInstrumentInput(code)) : '')
+        const matchKey = ref
+          ? instrumentKey(ref)
+          : (code ? (() => {
+            const p = tryParseInstrumentInput(code)
+            return p ? instrumentKey(p) : code
+          })() : '')
         const items = resp.success ? (resp.data?.items ?? []) : []
         payload.radar = items.find(item => item.code === matchKey)
           ?? items.find(item => {
-            const parsed = parseInstrumentInput(item.code)
+            const parsed = tryParseInstrumentInput(item.code)
             return parsed ? instrumentKey(parsed) === matchKey : false
           })
           ?? items[0]

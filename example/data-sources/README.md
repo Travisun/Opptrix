@@ -10,7 +10,7 @@
 
 不配置 Token 时，内置栈在多个 driver 间自动回退，例如：
 
-- tickflow、zzshare、baostock、stockindex 等
+- tickflow、zzshare、baostock 等
 
 适用于：实时/历史行情、部分 F10、公告等。免费接口可能延迟或限流，请勿作为唯一交易依据。
 

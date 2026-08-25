@@ -64,7 +64,7 @@ export function buildProviderCustomMethodPlaybook(): string {
   return [
     '【数据源扩展 — 仅当标准 API 无覆盖时使用】',
     '0) 板块概念、宏观序列、情绪榜单、龙虎榜等「非标准能力」→ 自定义方法',
-    '1) list_enabled_providers：确认 baostock / zzshare / stockindex / tonghuashun 等是否可用',
+    '1) list_enabled_providers：确认 baostock / zzshare / tonghuashun / tickflow 等是否可用',
     '2) list_provider_custom_methods：必须带 provider_id 或 keyword；禁止无过滤全量拉取',
     '3) invoke_provider_custom_method：provider_id + method + args（JSON 数组，顺序与 params 一致）',
     '4) args 中的 code/symbol 可传命名空间（CN:SZ.000009）、InstrumentRef、600519.SH、sh600519 等；引擎自动转为 Provider 裸代码格式',

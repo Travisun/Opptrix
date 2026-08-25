@@ -116,6 +116,14 @@ export class UserDataStore {
       key => this.hasMigration(key),
       key => this.markMigration(key),
     )
+    this.providerSettings.purgeRemovedStockindexProvider(
+      key => this.hasMigration(key),
+      key => this.markMigration(key),
+    )
+    this.providerSettings.migrateTickflowPublicFreeDefaultEnabled(
+      key => this.hasMigration(key),
+      key => this.markMigration(key),
+    )
   }
 
   static getInstance(): UserDataStore {

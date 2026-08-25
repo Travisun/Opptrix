@@ -1,19 +1,42 @@
 import type { InstrumentRef } from '@opptrix/shared'
-import { instrumentDisplayCode, parseCanonicalInstrumentInput } from '@opptrix/shared'
-import { inferCnAssetClass, instrumentId, toInstrumentRef } from '../core/instrument.js'
-import { normalizeCode, resolveStockMarketCode } from '../utils/helpers.js'
+import {
+  instrumentDisplayCode,
+  isAmbiguousNumericCode,
+  normalizeInstrumentRef,
+  parseCanonicalInstrumentInput,
+} from '@opptrix/shared'
+import { instrumentId } from '../core/instrument.js'
 import type { WatchlistItem } from './models.js'
 
-/** Stable dedupe key across markets */
+/** Stable dedupe key across markets — unresolved short codes use pending: prefix */
 export function watchlistItemKey(item: Pick<WatchlistItem, 'code' | 'instrument'>): string {
-  const ref = item.instrument ?? legacyToInstrument(String(item.code ?? ''))
-  return instrumentId(ref)
+  if (item.instrument?.market && item.instrument.symbol) {
+    return instrumentId(item.instrument)
+  }
+  const parsed = parseCanonicalInstrumentInput(String(item.code ?? ''))
+  if (parsed) return instrumentId(parsed)
+  const raw = String(item.code ?? '').trim()
+  return raw ? `pending:${raw}` : 'pending:'
 }
 
 export function displayCodeFromInstrument(ref: InstrumentRef): string {
   return instrumentDisplayCode(ref)
 }
 
+/**
+ * Legacy code → InstrumentRef。歧义 1–5 位裸数字不再 pad 成 CN。
+ * 无法权威解析时返回 null（调用方须搜索消歧或保留 pending）。
+ */
+export function tryLegacyToInstrument(code: string): InstrumentRef | null {
+  const raw = code.trim()
+  if (!raw) return null
+  return parseCanonicalInstrumentInput(raw)
+}
+
+/**
+ * @deprecated Prefer tryLegacyToInstrument / parseCanonicalInstrumentInput。
+ * 空串仍返回哨兵；歧义短码抛错，禁止假 CN 占位。
+ */
 export function legacyToInstrument(code: string): InstrumentRef {
   const raw = code.trim()
   if (!raw) {
@@ -21,24 +44,42 @@ export function legacyToInstrument(code: string): InstrumentRef {
   }
   const parsed = parseCanonicalInstrumentInput(raw)
   if (parsed) return parsed
-  if (/^(US|NYSE|NASDAQ|AMEX|CRYPTO|BINANCE|OKX|HK):/i.test(raw)) {
-    return toInstrumentRef(raw)
+  if (isAmbiguousNumericCode(raw)) {
+    throw new Error(`Ambiguous instrument code requires search: ${raw}`)
   }
-  if (/^\d+$/.test(raw) && raw.length <= 6) {
-    const sym = normalizeCode(raw)
-    return {
-      market: 'CN',
-      assetClass: inferCnAssetClass(sym),
-      symbol: sym,
-      exchange: resolveStockMarketCode(sym),
-    }
-  }
-  return toInstrumentRef(raw)
+  throw new Error(`Unable to parse instrument code: ${raw}`)
 }
 
 export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
-  const instrument = item.instrument ?? legacyToInstrument(String(item.code ?? ''))
-  const code = displayCodeFromInstrument(instrument)
+  if (item.instrument?.market && item.instrument.symbol) {
+    const instrument = normalizeInstrumentRef(item.instrument)
+    const code = displayCodeFromInstrument(instrument)
+    return {
+      code,
+      name: item.name?.trim() || code,
+      industry: item.industry?.trim() || undefined,
+      note: item.note?.trim() || undefined,
+      addedAt: item.addedAt,
+      addedPrice: item.addedPrice ?? null,
+      instrument,
+    }
+  }
+
+  const parsed = parseCanonicalInstrumentInput(String(item.code ?? ''))
+  if (parsed) {
+    const code = displayCodeFromInstrument(parsed)
+    return {
+      code,
+      name: item.name?.trim() || code,
+      industry: item.industry?.trim() || undefined,
+      note: item.note?.trim() || undefined,
+      addedAt: item.addedAt,
+      addedPrice: item.addedPrice ?? null,
+      instrument: parsed,
+    }
+  }
+
+  const code = String(item.code ?? '').trim()
   return {
     code,
     name: item.name?.trim() || code,
@@ -46,6 +87,6 @@ export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
     note: item.note?.trim() || undefined,
     addedAt: item.addedAt,
     addedPrice: item.addedPrice ?? null,
-    instrument,
+    instrument: undefined,
   }
 }

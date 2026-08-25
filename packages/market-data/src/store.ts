@@ -16,9 +16,15 @@ import {
   resolveCodeOrNsInput,
   stockProfilesUsesInstrumentNs,
 } from './instrument-ns.js'
+import {
+  INSTRUMENTS_HK_CANONICAL_PAD_V1,
+  planHkCanonicalPad,
+  type HkInstrumentRow,
+} from './repair-hk-canonical-pad.js'
 import type { InstrumentRef } from '@opptrix/shared'
 import {
   applySqliteMemoryPragmas,
+  canonicalHkSymbol,
   normalizeInstrumentRef,
   runSqliteLightMaintenance,
   tryEnableSqliteIncrementalAutoVacuum,
@@ -2525,6 +2531,155 @@ export class MarketDataStore {
     return { klines: klineCodes.length, industry }
   }
 
+  /**
+   * 幂等：HK instruments 短码 → 五位补零，同步 instrument_ns。
+   * 冲突保留名称更完整的行；失败不写 flag，下次可重试。禁止删用户无关数据。
+   */
+  repairInstrumentsHkCanonicalPad(): {
+    updated: number
+    merged: number
+    skipped: boolean
+  } {
+    if (isMarketSyncActive() || isDerivedMaintenanceActive()) {
+      return { updated: 0, merged: 0, skipped: true }
+    }
+    if (this.getCursorLastSuccess(INSTRUMENTS_HK_CANONICAL_PAD_V1)) {
+      return { updated: 0, merged: 0, skipped: true }
+    }
+
+    try {
+      const rows = this.loadHkInstrumentRowsForPad()
+      const plans = planHkCanonicalPad(rows)
+      let updated = 0
+      let merged = 0
+
+      for (const plan of plans) {
+        if (plan.kind === 'rename') {
+          this.applyHkPadRename(plan.source, plan.toCode, plan.toNs, plan.name)
+          updated++
+        } else {
+          this.applyHkPadMergeDropSource(plan.source, plan.target, plan.keepName)
+          merged++
+        }
+      }
+
+      this.flushDuckWritesSync({ throwOnError: false })
+      this.setCursor(INSTRUMENTS_HK_CANONICAL_PAD_V1, {
+        updated,
+        merged,
+        scanned: rows.length,
+      })
+      return { updated, merged, skipped: false }
+    } catch (err) {
+      console.warn(
+        '[market-data] instruments_hk_canonical_pad_v1 failed; will retry:',
+        err instanceof Error ? err.message : String(err),
+      )
+      return { updated: 0, merged: 0, skipped: true }
+    }
+  }
+
+  private loadHkInstrumentRowsForPad(): HkInstrumentRow[] {
+    const sql = `
+      SELECT market, exchange, code, asset_class, name, instrument_ns,
+             list_date, delist_date, status, extra
+      FROM instruments
+      WHERE market = 'HK'
+    `
+    try {
+      if (this.isDuckPrimaryReady()) {
+        return this.duckGateway().queryAllSync<HkInstrumentRow>(sql, [])
+      }
+    } catch {
+      /* fall through to sqlite */
+    }
+    return this.db.prepare(sql).all() as HkInstrumentRow[]
+  }
+
+  private applyHkPadRename(
+    source: HkInstrumentRow,
+    toCode: string,
+    toNs: string,
+    name: string | null,
+  ): void {
+    const exchange = normalizeInstrumentExchange(source.exchange)
+    const now = nowIso()
+    this.queueMarketWrite(
+      {
+        op: 'exec',
+        sql: `DELETE FROM instruments WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+        params: [source.market, exchange, source.code, source.asset_class],
+      },
+      () => {
+        this.db.prepare(
+          `DELETE FROM instruments WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+        ).run(source.market, exchange, source.code, source.asset_class)
+      },
+    )
+    this.upsertInstrument({
+      code: toCode,
+      market: 'HK',
+      assetClass: source.asset_class,
+      name: name ?? source.name,
+      exchange: exchange || 'HK',
+      listDate: source.list_date,
+      delistDate: source.delist_date,
+      status: source.status ?? 'active',
+      extra: source.extra,
+    })
+    // upsertInstrument 已写 canonical ns；若需强制 toNs 再补一次
+    if (toNs) {
+      this.queueMarketWrite(
+        {
+          op: 'exec',
+          sql: `UPDATE instruments SET instrument_ns = ?, updated_at = ? WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+          params: [toNs, now, 'HK', exchange || 'HK', toCode, source.asset_class],
+        },
+        () => {
+          this.db.prepare(
+            `UPDATE instruments SET instrument_ns = ?, updated_at = ? WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+          ).run(toNs, now, 'HK', exchange || 'HK', toCode, source.asset_class)
+        },
+      )
+    }
+  }
+
+  private applyHkPadMergeDropSource(
+    source: HkInstrumentRow,
+    target: HkInstrumentRow,
+    keepName: string | null,
+  ): void {
+    const exchange = normalizeInstrumentExchange(source.exchange)
+    const targetExchange = normalizeInstrumentExchange(target.exchange)
+    const now = nowIso()
+    this.queueMarketWrite(
+      {
+        op: 'exec',
+        sql: `DELETE FROM instruments WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+        params: [source.market, exchange, source.code, source.asset_class],
+      },
+      () => {
+        this.db.prepare(
+          `DELETE FROM instruments WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+        ).run(source.market, exchange, source.code, source.asset_class)
+      },
+    )
+    if (keepName && keepName !== (target.name ?? '')) {
+      this.queueMarketWrite(
+        {
+          op: 'exec',
+          sql: `UPDATE instruments SET name = ?, updated_at = ? WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+          params: [keepName, now, target.market, targetExchange, target.code, target.asset_class],
+        },
+        () => {
+          this.db.prepare(
+            `UPDATE instruments SET name = ?, updated_at = ? WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+          ).run(keepName, now, target.market, targetExchange, target.code, target.asset_class)
+        },
+      )
+    }
+  }
+
   replaceAnnouncements(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
@@ -2969,7 +3124,9 @@ export class MarketDataStore {
       ? normalizeUsSymbol(row.code)
       : row.market === 'CN'
         ? normalizeStockCode(row.code)
-        : row.code.trim()
+        : row.market === 'HK'
+          ? canonicalHkSymbol(row.code)
+          : row.code.trim()
     const exchange = normalizeInstrumentExchange(row.exchange)
     const now = nowIso()
     const baseNs = instrumentRefToNs(normalizeInstrumentRef({
@@ -3111,7 +3268,9 @@ export class MarketDataStore {
       ? normalizeUsSymbol(row.code)
       : row.market === 'CN'
         ? normalizeStockCode(row.code)
-        : row.code.trim()
+        : row.market === 'HK'
+          ? canonicalHkSymbol(row.code)
+          : row.code.trim()
     type Raw = {
       code: string
       market: string

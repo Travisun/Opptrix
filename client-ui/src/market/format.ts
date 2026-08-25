@@ -1,5 +1,5 @@
 import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
-import { parseInstrumentInput, normalizeInstrumentRefLocal } from './instrument'
+import { tryParseInstrumentInput, normalizeInstrumentRefLocal } from './instrument'
 
 export function formatPrice(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return '—'
@@ -66,10 +66,10 @@ export function normalizeCode(code: string): string {
 /** 持仓 map 键 — 与账本 holdings[].code 对齐（支持 CN:SH.xxx / US:xxx 命名空间） */
 export function portfolioHoldingsKey(code: string, market?: string): string {
   const trimmed = code.trim()
-  const parsed = parseInstrumentInput(trimmed)
+  const parsed = tryParseInstrumentInput(trimmed)
   if (parsed) return portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(parsed))
   if (market && market !== 'CN') return trimmed
-  if (/^\d+$/.test(trimmed) && trimmed.length <= 6) return normalizeCode(trimmed)
+  if (/^\d{6}$/.test(trimmed)) return normalizeCode(trimmed)
   return trimmed
 }
 
