@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import {
   REMOVED_SCRAPING_PROVIDER_IDS,
-  REMOVED_STOCKINDEX_PROVIDER_IDS,
+  REMOVED_TEMP_PROVIDER_IDS,
   type ProviderPriorityMode,
   type ProviderSettingsPatch,
   type ProviderSettingsRow,
@@ -9,16 +9,21 @@ import {
   type ProviderBindingOverridePatch,
 } from '@opptrix/shared'
 import {
+  assignSortOrders,
   defaultManifestTierPriority,
+  RECOMMENDED_PROVIDER_DISPLAY_ORDER,
   sortOrderToEffectivePriority,
 } from '@opptrix/shared'
 
 const MIGRATION_KEY = 'provider_settings_v1'
 const WEBFEED_REMOVED_KEY = 'webfeed_removed_v1'
 const SCRAPING_PROVIDERS_REMOVED_KEY = 'scraping_providers_removed_v2'
-const STOCKINDEX_REMOVED_KEY = 'stockindex_provider_removed_v1'
+/** 暂时下线 baostock / zzshare（源码保留） */
+export const TEMP_PROVIDERS_REMOVED_KEY = 'temp_providers_baostock_zzshare_removed_v1'
 /** 一次性：无 Key 的 tickflow 默认开启公开免费档 */
 export const TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY = 'tickflow_public_free_default_enabled_v1'
+/** 一次性：按推荐栈回写内置源 sortOrder，纠正旧脏序 / 缺序 */
+export const PROVIDER_RECOMMENDED_DISPLAY_ORDER_KEY = 'provider_recommended_display_order_v1'
 
 export function initProviderSettingsSchema(db: Database.Database) {
   db.exec(`
@@ -111,14 +116,14 @@ export class ProviderSettingsRepository {
     markMigration(WEBFEED_REMOVED_KEY)
   }
 
-  /** 清理已下线 OpptrixQuant（stockindex）在本地库中的配置与测速残留 */
-  purgeRemovedStockindexProvider(
+  /** 清理暂时下线的 baostock / zzshare 用户配置（源码仍保留，可加回） */
+  purgeRemovedTempProviders(
     hasMigration: (key: string) => boolean,
     markMigration: (key: string) => void,
   ) {
-    if (hasMigration(STOCKINDEX_REMOVED_KEY)) return
+    if (hasMigration(TEMP_PROVIDERS_REMOVED_KEY)) return
 
-    for (const id of REMOVED_STOCKINDEX_PROVIDER_IDS) {
+    for (const id of REMOVED_TEMP_PROVIDER_IDS) {
       this.db.prepare('DELETE FROM provider_binding_overrides WHERE provider_id = ?').run(id)
       this.db.prepare('DELETE FROM provider_settings WHERE provider_id = ?').run(id)
       this.db.prepare('DELETE FROM free_provider_throttle WHERE provider_id = ?').run(id)
@@ -127,8 +132,9 @@ export class ProviderSettingsRepository {
     }
     this.db.prepare('DELETE FROM provider_ranking_cache').run()
 
-    markMigration(STOCKINDEX_REMOVED_KEY)
+    markMigration(TEMP_PROVIDERS_REMOVED_KEY)
   }
+
 
   /**
    * 一次性：把「未配 Key 故关闭」的 tickflow 翻成公开免费档默认开启。
@@ -157,6 +163,25 @@ export class ProviderSettingsRepository {
     }
 
     markMigration(TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY)
+  }
+
+  /**
+   * 一次性：对仍存在的推荐栈内置 id 按固定顺序写入 sortOrder。
+   * 覆盖旧脏数据；无行的源跳过（展示侧用派生 key）。幂等。
+   * 用完整推荐表下标赋值，避免缺项时把后续源挤到错误位置。
+   */
+  migrateRecommendedProviderDisplayOrder(
+    hasMigration: (key: string) => boolean,
+    markMigration: (key: string) => void,
+  ) {
+    if (hasMigration(PROVIDER_RECOMMENDED_DISPLAY_ORDER_KEY)) return
+
+    for (const { providerId, sortOrder } of assignSortOrders([...RECOMMENDED_PROVIDER_DISPLAY_ORDER])) {
+      if (this.get(providerId) == null) continue
+      this.save(providerId, { sortOrder })
+    }
+
+    markMigration(PROVIDER_RECOMMENDED_DISPLAY_ORDER_KEY)
   }
 
   /** @deprecated 使用 purgeRemovedScrapingProviders */

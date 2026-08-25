@@ -370,7 +370,7 @@ export async function routeInstrumentSearch(
   const limit = params.limit != null ? Number(params.limit) : 30
   const markets = Array.isArray(params.markets) ? params.markets.map(String) : undefined
   // 默认合并本地名录（HK/US 中文名）；显式 include_local=false 可关闭
-  const includeLocal = params.include_local !== false
+  const includeLocal = params.include_local === true
   return handlers.searchInstruments(keyword, limit, markets, includeLocal)
 }
 

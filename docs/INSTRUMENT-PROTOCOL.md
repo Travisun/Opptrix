@@ -231,3 +231,19 @@ store.stockMetaLookupKey('000977', 'SZ')  // → 'SZ:000977'
 | Provider sec 双重前缀 | tencent/sinafinance 已修 `ensureCnSecSymbol` | 裸码 Provider 已扩展 `000977.SZ` wire |
 | JP/KR | Plan 返回 null | 接入时复用 registry + `ref` 模式 |
 | 裸码遗留调用 | Hub fallback / sync `de.xxx()` | 收敛为 `queryInstrumentData` + `cnEquityRef(code, { exchange })` |
+
+
+## OpptrixQuant instrument_id
+
+统一标的 ID（搜索权威源返回）：`{market}:{class_token}:{symbol}`
+
+| 示例 | 含义 |
+|------|------|
+| `CN:of:009049` | A 股场外基金 |
+| `CN:etf:510300` | A 股 ETF |
+| `CN:stock:600519` | A 股股票 |
+| `US:stock:AAPL` | 美股 |
+| `HK:stock:00700` | 港股 |
+
+`parseCanonicalInstrumentInput` / `parseOpptrixInstrumentId` 优先识别该格式；旧 `CN:SZ.xxxxxx` / `CN:PF.xxxxxx` 仍兼容。
+

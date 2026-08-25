@@ -48,11 +48,14 @@ test('matchesCryptoKeyword filters by pair or base', () => {
 })
 
 test('defaultProviderEnabled enables free providers and disables key-only providers', () => {
-  assert.equal(defaultProviderEnabled('baostock'), true)
-  assert.equal(defaultProviderEnabled('zzshare'), true)
+  // baostock / zzshare 暂时下线：无内置 manifest → 视为不默认启用
+  assert.equal(defaultProviderEnabled('baostock'), false)
+  assert.equal(defaultProviderEnabled('zzshare'), false)
   assert.equal(defaultProviderEnabled('binance'), true)
   assert.equal(defaultProviderEnabled('okx'), true)
   assert.equal(defaultProviderEnabled('tushare'), false)
-  assert.equal(defaultProviderEnabled('tickflow'), false)
+  // tickflow 公开免费档：apiKey 非必填 → 默认视为可启用
+  assert.equal(defaultProviderEnabled('tickflow'), true)
   assert.equal(defaultProviderEnabled('tonghuashun'), false)
+  assert.equal(defaultProviderEnabled('stockindex'), false)
 })

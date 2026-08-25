@@ -10,14 +10,12 @@ import { TUSHARE_MANIFEST } from './tushare/manifest.js'
 import { TICKFLOW_MANIFEST } from './tickflow/manifest.js'
 import { BINANCE_MANIFEST } from './binance/manifest.js'
 import { OKX_MANIFEST } from './okx/manifest.js'
-import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
-import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
+import { STOCKINDEX_MANIFEST } from './stockindex/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testTickflowConnection } from './tickflow/api/client.js'
-import { testBaostockConnection } from './baostock/api/client.js'
-import { testZzshareConnection } from './zzshare/api/client.js'
 import { testTonghuashunConnection } from './tonghuashun/api/client.js'
+import { testStockIndexConnection } from './stockindex/api/client.js'
 import type { ProviderConfigStore } from './config-store.js'
 import { getManifestRegistry, type ManifestRegistry } from './manifest-registry.js'
 import {
@@ -33,9 +31,8 @@ const BUILTIN_MANIFESTS = [
   TICKFLOW_MANIFEST,
   BINANCE_MANIFEST,
   OKX_MANIFEST,
-  BAOSTOCK_MANIFEST,
-  ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
+  STOCKINDEX_MANIFEST,
 ]
 
 function resolveDriverExport(mod: OpptrixProviderModule): RegistryProvider {
@@ -87,18 +84,17 @@ export class ProviderLoader {
       ).trim()
       return testTickflowConnection(apiKey)
     })
-    this.testHooks.set('baostock', async () => testBaostockConnection())
-    this.testHooks.set('zzshare', async ({ overrides, extra }) => {
-      const apiKey = String(
-        overrides?.apiKey ?? extra.apiKey ?? process.env.ZZSHARE_TOKEN ?? process.env.OPPTRIX_ZZSHARE_API_KEY ?? '',
-      ).trim()
-      return testZzshareConnection(apiKey || undefined)
-    })
     this.testHooks.set('tonghuashun', async ({ overrides, extra }) => {
       const apiKey = String(
         overrides?.apiKey ?? extra.apiKey ?? process.env.FUYAO_TOKEN ?? process.env.OPPTRIX_FUYAO_API_KEY ?? process.env.OPPTRIX_TONGHUASHUN_API_KEY ?? '',
       ).trim()
       return testTonghuashunConnection(apiKey)
+    })
+    this.testHooks.set('stockindex', async ({ overrides, extra }) => {
+      const apiKey = String(
+        overrides?.apiKey ?? extra.apiKey ?? process.env.OPPTRIX_STOCKINDEX_API_KEY ?? '',
+      ).trim()
+      return testStockIndexConnection(apiKey)
     })
   }
 

@@ -15,7 +15,7 @@ export const BINANCE_CAPS = [
 export const BINANCE_SPEC: ProviderManifestSpec = {
   id: 'binance',
   title: 'Binance',
-  subtitle: 'Binance 官方公开行情 API',
+  subtitle: '加密货币公开行情，无需密钥',
   marketGroup: 'CRYPTO',
   defaultPriority: 100,
   maxConcurrent: 5,
@@ -25,5 +25,5 @@ export const BINANCE_SPEC: ProviderManifestSpec = {
 }
 
 export const BINANCE_MANIFEST = providerManifestEntry(
-  'binance', 'Binance', 'Binance 官方公开行情 API', 'CRYPTO', 100, BINANCE_SETTINGS,
+  'binance', 'Binance', '加密货币公开行情，无需密钥', 'CRYPTO', 100, BINANCE_SETTINGS,
 )

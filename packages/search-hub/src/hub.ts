@@ -1,4 +1,5 @@
 import type { ResearchHub } from '@opptrix/research-hub'
+import { searchInstrumentsOnline } from '@opptrix/a-stock-layer'
 import type { SessionMeta } from '@opptrix/agent'
 import { SessionStore } from '@opptrix/agent'
 import { NewsFeedStore } from '@opptrix/news-feed'
@@ -68,7 +69,7 @@ export class SearchHub {
     store.setMetaFlag(INDEX_FLAG)
   }
 
-  search(query: string, limit = 20): UnifiedSearchResult {
+  async search(query: string, limit = 20): Promise<UnifiedSearchResult> {
     this.ensureIndexes()
     const q = query.trim()
     const cap = Math.min(Math.max(limit, 1), 50)
@@ -96,16 +97,23 @@ export class SearchHub {
       }
     })
 
-    // 本地统一名录（CN/HK/US…），code 为 instrument_ns；不再硬编码全是 CN
-    const stocks: StockSearchHit[] = q.length >= 2
-      ? this.hub.marketData.searchLocalInstruments(q, cap).map(h => ({
-        kind: 'stock' as const,
-        code: h.code,
-        name: h.name ?? h.code,
-        industry: '',
-        market: h.market,
-      }))
-      : []
+    // OpptrixQuant 在线标的搜索（主路径不再依赖本地名录）
+    let stocks: StockSearchHit[] = []
+    if (q.length >= 2) {
+      try {
+        const hits = await searchInstrumentsOnline(this.hub.de, q, cap)
+        stocks = hits.map(h => ({
+          kind: 'stock' as const,
+          code: h.code,
+          name: h.name ?? h.code,
+          industry: '',
+          market: h.market,
+        }))
+      } catch {
+        stocks = []
+      }
+    }
+
 
     const newsRows = q.length >= 1 ? store.searchNews(q, cap) : []
     const news: NewsSearchHit[] = newsRows.map(row => ({

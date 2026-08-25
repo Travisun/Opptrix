@@ -3,7 +3,7 @@ import type { ProviderSettingsDefinition } from '@opptrix/shared'
 export const ZZSHARE_SETTINGS: ProviderSettingsDefinition = {
   providerId: 'zzshare',
   title: '自在量化 Zzshare',
-  subtitle: '大部分接口可匿名访问；在 quant.zizizaizai.com 个人中心可免费获取 Token 以提高频率并解锁实时行情',
+  subtitle: '自在量化行情；可不填密钥也能用',
   marketGroup: 'CN',
   keywords: ['zzshare', '自在量化', 'zizizaizai', 'quant'],
   enableAffectsPriority: true,
@@ -13,11 +13,12 @@ export const ZZSHARE_SETTINGS: ProviderSettingsDefinition = {
     {
       key: 'apiKey',
       type: 'secret',
-      label: 'API Token',
+      label: '数据密钥（可选）',
       required: false,
       masked: true,
-      placeholder: '粘贴自在量化 Token（留空则匿名访问）',
-      description: '在 quant.zizizaizai.com 个人中心免费获取，用于提高调用频率并访问实时行情',
+      placeholder: '可不填；填写后频率更高，并解锁实时行情',
+      description: '不填也能用；填写后可提高频率并查看实时行情',
+      helpUrl: 'https://quant.zizizaizai.com/',
     },
   ],
 }

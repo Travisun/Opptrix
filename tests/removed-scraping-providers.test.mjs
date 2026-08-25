@@ -1,7 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
-import { REMOVED_SCRAPING_PROVIDER_IDS } from '@opptrix/shared'
+import {
+  REMOVED_SCRAPING_PROVIDER_IDS,
+  REMOVED_TEMP_PROVIDER_IDS,
+} from '@opptrix/shared'
 import {
   ProviderSettingsRepository,
   initProviderSettingsSchema,
@@ -83,5 +86,45 @@ describe('purge removed scraping providers', () => {
     )
 
     assert.equal(migrations.size, 2)
+  })
+})
+
+describe('purge removed temp providers (baostock/zzshare)', () => {
+  it('deletes stale provider config and is idempotent', () => {
+    const db = new Database(':memory:')
+    initProviderSettingsSchema(db)
+    initFreeProviderThrottleSchema(db)
+    initSpeedRankingSchema(db)
+
+    const repo = new ProviderSettingsRepository(db)
+    const migrations = new Set()
+    const now = new Date().toISOString()
+
+    for (const id of REMOVED_TEMP_PROVIDER_IDS) {
+      repo.save(id, { enabled: true })
+      db.prepare(
+        'INSERT INTO free_provider_throttle (provider_id, escalation_level, updated_at) VALUES (?, 1, ?)',
+      ).run(id, now)
+    }
+
+    repo.purgeRemovedTempProviders(
+      key => migrations.has(key),
+      key => migrations.add(key),
+    )
+
+    for (const id of REMOVED_TEMP_PROVIDER_IDS) {
+      assert.equal(repo.get(id), null)
+      assert.equal(
+        db.prepare('SELECT COUNT(*) AS n FROM free_provider_throttle WHERE provider_id = ?').get(id).n,
+        0,
+      )
+    }
+    assert.ok(migrations.has('temp_providers_baostock_zzshare_removed_v1'))
+
+    repo.purgeRemovedTempProviders(
+      key => migrations.has(key),
+      key => migrations.add(key),
+    )
+    assert.equal(migrations.size, 1)
   })
 })

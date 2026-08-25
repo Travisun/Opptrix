@@ -40,7 +40,7 @@ const EQUITY_CAPS = ZZSHARE_CAPS.filter(c => !INDEX_CAPS.includes(c))
 export const ZZSHARE_SPEC: ProviderManifestSpec = {
   id: 'zzshare',
   title: '自在量化',
-  subtitle: '自在量化行情数据服务',
+  subtitle: '自在量化行情；可不填密钥也能用',
   marketGroup: 'CN',
   defaultPriority: 110,
   maxConcurrent: 5,
@@ -59,7 +59,7 @@ export const ZZSHARE_SPEC: ProviderManifestSpec = {
 export const ZZSHARE_MANIFEST = providerManifestEntry(
   'zzshare',
   '自在量化',
-  '免费 A 股行情·涨停复盘·龙虎榜·情绪；Token 可选提升频率',
+  '自在量化行情；可不填密钥也能用',
   'CN',
   110,
   ZZSHARE_SETTINGS,

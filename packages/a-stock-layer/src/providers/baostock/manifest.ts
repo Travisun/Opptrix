@@ -31,7 +31,7 @@ export const BAOSTOCK_CAPS = [
 export const BAOSTOCK_SPEC: ProviderManifestSpec = {
   id: 'baostock',
   title: '证券宝 BaoStock',
-  subtitle: '免费开源 A 股历史数据，无需注册',
+  subtitle: '免费 A 股历史行情，无需密钥',
   marketGroup: 'CN',
   defaultPriority: 105,
   maxConcurrent: 1,
@@ -56,7 +56,7 @@ export const BAOSTOCK_SPEC: ProviderManifestSpec = {
 export const BAOSTOCK_MANIFEST = providerManifestEntry(
   'baostock',
   '证券宝 BaoStock',
-  '免费开源 A 股历史数据，无需注册',
+  '免费 A 股历史行情，无需密钥',
   'CN',
   105,
   BAOSTOCK_SETTINGS,

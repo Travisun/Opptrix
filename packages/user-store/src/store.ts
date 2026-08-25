@@ -116,11 +116,15 @@ export class UserDataStore {
       key => this.hasMigration(key),
       key => this.markMigration(key),
     )
-    this.providerSettings.purgeRemovedStockindexProvider(
+    this.providerSettings.purgeRemovedTempProviders(
       key => this.hasMigration(key),
       key => this.markMigration(key),
     )
     this.providerSettings.migrateTickflowPublicFreeDefaultEnabled(
+      key => this.hasMigration(key),
+      key => this.markMigration(key),
+    )
+    this.providerSettings.migrateRecommendedProviderDisplayOrder(
       key => this.hasMigration(key),
       key => this.markMigration(key),
     )

@@ -31,9 +31,29 @@ function swapProviderOrder(ids, a, b) {
 }
 
 describe('provider order → registry fallback', () => {
+  it('default catalog lists Opptrix量化 second and TickFlow before Tushare', () => {
+    const engine = new MarketDataEngine(false)
+    engine.providerLoader.registerBuiltins()
+    const ids = engine.listProviders().providers.map(p => p.providerId)
+    assert.ok(ids.includes('stockindex'))
+    assert.ok(ids.indexOf('tonghuashun') < ids.indexOf('stockindex'))
+    assert.ok(ids.indexOf('stockindex') < ids.indexOf('tickflow'))
+    assert.ok(ids.indexOf('tickflow') < ids.indexOf('tushare'))
+  })
+
   it('saveProviderOrder updates CN STOCK_KLINE fallback order for eligible providers', () => {
     const engine = new MarketDataEngine(false)
     engine.providerLoader.registerBuiltins()
+
+    // baostock/zzshare 暂时下线：用需 Key 的 CN K 线源（填伪密钥后参与排序）
+    engine.saveProviderConfig('tickflow', {
+      enabled: true,
+      extra: { apiKey: 'test-tickflow-key' },
+    })
+    engine.saveProviderConfig('tushare', {
+      enabled: true,
+      extra: { token: 'test-tushare-token' },
+    })
 
     const catalog = engine.listProviders()
     const ids = catalog.providers.map(p => p.providerId)
@@ -42,10 +62,10 @@ describe('provider order → registry fallback', () => {
     const cnKlineBefore = engine.registry
       .getProviders('CN', 'EQUITY', Capability.STOCK_KLINE)
       .map(d => d.name)
-    const candidates = ['zzshare', 'baostock'].filter(
+    const candidates = ['tickflow', 'tushare'].filter(
       id => cnKlineBefore.includes(id),
     )
-    assert.ok(candidates.length >= 2, `need >=2 free CN kline providers, got ${cnKlineBefore.join(', ')}`)
+    assert.ok(candidates.length >= 2, `need >=2 CN kline providers, got ${cnKlineBefore.join(', ')}`)
 
     const [first, second] = candidates
     const idxFirst = cnKlineBefore.indexOf(first)

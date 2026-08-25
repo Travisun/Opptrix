@@ -283,6 +283,55 @@ export function buildInstrumentNamespace(ref: InstrumentRef): string {
   }
 }
 
+
+export interface OpptrixInstrumentIdParts {
+  market: Market
+  assetClass: AssetClass
+  symbol: string
+  exchange?: string
+}
+
+/**
+ * 解析 OpptrixQuant instrument_id（`{market}:{class_token}:{symbol}`，如 `CN:of:009049`）。
+ * - CN:of / CN:fund → FUND + PF
+ * - CN:etf / CN:lof / CN:reit → ETF
+ * - CN:stock / US:stock / HK:stock 等 → EQUITY
+ * 保留对旧 `CN:SZ.xxxxxx` / `CN:PF.xxxxxx` 的兼容（见 parseInstrumentNamespace）。
+ */
+export function parseOpptrixInstrumentId(id: string): OpptrixInstrumentIdParts | null {
+  const parts = String(id ?? '').trim().split(':')
+  if (parts.length !== 3) return null
+  const market = String(parts[0] ?? '').toUpperCase() as Market
+  const cls = String(parts[1] ?? '').toLowerCase()
+  const symbol = String(parts[2] ?? '').trim()
+  if (!symbol) return null
+
+  switch (market) {
+    case 'CN':
+      if (cls === 'of' || cls === 'fund') {
+        return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }
+      }
+      if (cls === 'etf' || cls === 'lof' || cls === 'reit') {
+        return { market: 'CN', assetClass: 'ETF', symbol }
+      }
+      if (cls === 'stock' || cls === 'equity' || cls === 'index') {
+        return {
+          market: 'CN',
+          assetClass: cls === 'index' ? 'INDEX' : 'EQUITY',
+          symbol,
+        }
+      }
+      return { market: 'CN', assetClass: 'EQUITY', symbol }
+    case 'US':
+    case 'HK':
+    case 'JP':
+    case 'KR':
+      return { market, assetClass: 'EQUITY', symbol }
+    default:
+      return null
+  }
+}
+
 /** 解析 Stock-index 命名空间字符串 → InstrumentRef */
 export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
   const text = raw.trim()
@@ -367,6 +416,12 @@ export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
 export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null {
   const text = raw.trim()
   if (!text) return null
+
+  // OpptrixQuant 统一标的格式优先：CN:of:009049 / US:stock:AAPL / HK:stock:00700
+  const fromOpptrix = parseOpptrixInstrumentId(text)
+  if (fromOpptrix) {
+    return normalizeInstrumentRef(fromOpptrix)
+  }
 
   const fromNamespace = parseInstrumentNamespace(text)
   if (fromNamespace) return fromNamespace

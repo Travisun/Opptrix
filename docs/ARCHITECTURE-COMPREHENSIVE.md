@@ -518,7 +518,7 @@ bindingsFor: () => []
 
 ### 5.5 内置 Provider 审计（2026-08-22）
 
-> **已移除内置注册**（实现与注册均已删除）：`tencent`、`sinafinance`、`eastmoney`、`akshare`、`webfeed`、`stockindex`（OpptrixQuant）。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
+> **已移除内置注册**（实现与注册均已删除）：`tencent`、`sinafinance`、`eastmoney`、`akshare`、`webfeed`。标的搜索权威源为 `stockindex`（Opptrix量化）；baostock/zzshare 暂时下线（源码保留）。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
 
 | Provider | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|--------|----------|----------|--------|------|

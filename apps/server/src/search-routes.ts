@@ -14,7 +14,7 @@ export function registerSearchRoutes(
     const q = req.query.q ?? ''
     const limit = Number(req.query.limit ?? 20)
     searchHub.ensureIndexes()
-    return searchHub.search(q, Number.isFinite(limit) ? limit : 20)
+    return await searchHub.search(q, Number.isFinite(limit) ? limit : 20)
   })
 
   app.get('/api/search/browse', async () => {

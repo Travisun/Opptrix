@@ -36,7 +36,7 @@ const EQUITY_CAPS = TONGHUASHUN_CAPS.filter(c => !INDEX_CAPS.includes(c))
 export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   id: 'tonghuashun',
   title: '同花顺',
-  subtitle: '同花顺金融数据 API（fuyao.aicubes.cn），需 API Key',
+  subtitle: '同花顺行情与基本面数据',
   marketGroup: 'CN',
   defaultPriority: 120,
   maxConcurrent: 5,
@@ -62,7 +62,7 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
 export const TONGHUASHUN_MANIFEST = providerManifestEntry(
   'tonghuashun',
   '同花顺',
-  '同花顺金融数据 API（fuyao.aicubes.cn），需 API Key',
+  '同花顺行情与基本面数据',
   'CN',
   120,
   TONGHUASHUN_SETTINGS,

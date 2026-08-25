@@ -48,6 +48,8 @@ export interface ProviderSettingsField {
   options?: Array<{ value: string; label: string }>
   /** 是否为密码字段（输入时掩码，值不返回给前端） */
   masked?: boolean
+  /** 获取数据密钥的官方页面；设置页渲染为可点击外链 */
+  helpUrl?: string
 }
 
 /**
@@ -288,5 +290,6 @@ export const REMOVED_SCRAPING_PROVIDER_IDS = [
   'webfeed',
 ] as const
 
-/** 已下线 OpptrixQuant（stockindex）Provider */
-export const REMOVED_STOCKINDEX_PROVIDER_IDS = ['stockindex'] as const
+/** 暂时下线的内置源（源码保留，便于以后加回；启动时 purge 用户配置） */
+export const REMOVED_TEMP_PROVIDER_IDS = ['baostock', 'zzshare'] as const
+

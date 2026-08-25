@@ -5,6 +5,7 @@ export {
   tickflowSecretsOk,
   initProviderSettingsSchema,
   TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY,
+  PROVIDER_RECOMMENDED_DISPLAY_ORDER_KEY,
 } from './provider-settings.js'
 export { SpeedRankingRepository, initSpeedRankingSchema } from './speed-ranking.js'
 export {

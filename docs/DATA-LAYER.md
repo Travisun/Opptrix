@@ -328,7 +328,7 @@ registry.getDriversForCapability(Capability.STOCK_KLINE)
 
 // 目标
 registry.getProviders('CN', 'ETF', Capability.STOCK_KLINE)
-// → [tonghuashun(120), tushare(110), tickflow(100), zzshare(105), ...]
+// → [tonghuashun(120), stockindex(115), tickflow(110), tushare(105), ...]
 ```
 
 ### 6.3 MarketDataEngine 查询循环
@@ -733,7 +733,7 @@ interface ProviderCatalogResponse {
 | `CN` | A 股 | tonghuashun、tushare、zzshare、baostock |
 | `US` | 美股 | tickflow、polygon（Phase 2） |
 | `CRYPTO` | 加密货币 | binance、okx |
-| `GLOBAL` | 全球 / 宏观 | 标的搜索：扶摇+Tickflow+本地 |
+| `GLOBAL` | 全球 / 宏观 | 标的搜索：Opptrix量化（stockindex） |
 
 无 `settings.fields` 的 Provider 仍出现在列表，卡片仅显示说明 + 健康状态（如「BaoStock · 免费 · 默认启用」）。
 
@@ -1004,11 +1004,13 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 | Provider | manifest 默认 | 用户可调 | 说明 |
 |----------|---------------|----------|------|
 | tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0；**有 Key 时 CN ETF**（列表/概况/净值/持仓/行情）优先走 Fuyao `/api/fund/*`；**CN 个股 realtime** 并行 enrich `valuations/snapshot`（pe/pb）；**etfProfile** 并行 enrich `fund/holders/detail` |
-| tushare | 110 | ✅ | 需 Token；bulk/基本面 |
-| tickflow | 100（CN）/ 200（US·HK） | ✅ | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 升级实时；多市场 |
-| zzshare / baostock 等免费 | 105–110 | ✅ | 免费层（effective 低于需 Key 层） |
+| stockindex（Opptrix量化） | 115 | ✅ | 标的搜索权威源；需数据密钥 |
+| tickflow | 110（目录）/ CN binding 封顶 100 / US·HK ≥200 | ✅ | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 升级实时；多市场 |
+| tushare | 105 | ✅ | 需 Token；bulk/基本面 |
+| binance / okx | 100 / 90 | ✅ | CRYPTO；勿抢前四 |
 
-> **已移除**：`tencent` / `sinafinance` / `eastmoney` / `akshare` / `stockindex`（OpptrixQuant）不再出现在内置 Registry。
+> **已移除**：`tencent` / `sinafinance` / `eastmoney` / `akshare` 不再出现在内置 Registry。  
+> **暂时下线**（源码保留）：`baostock` / `zzshare` — 内置目录与 `registerAllDrivers` 不再注册，启动时 purge 用户旧配置。`stockindex`（Opptrix量化）为标的搜索权威源（基址固定 `https://quant.opptrix.net`，需数据密钥）。
 
 默认值在 **`manifest.ts` 的 `bindings()`** 里声明；用户未改时 `priority_mode = 'manifest'`，**不在 DB 重复存一份默认表**。
 
@@ -1036,9 +1038,11 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 ### 8.0 内置注册现状（2026-08）
 
-**已注册**（`register.ts`）：tonghuashun、tushare、tickflow、zzshare、baostock、binance、okx。
+**已注册**（`register.ts`）：tonghuashun、stockindex（Opptrix量化）、tickflow、tushare、binance、okx。
 
 **已移除内置注册**（实现与注册均已删除）：tencent、sinafinance、eastmoney、akshare、webfeed。
+
+**暂时下线**（源码保留于 `providers/baostock/`、`providers/zzshare/`，可加回）：baostock、zzshare。
 
 | 影响域 | 降级说明 |
 |--------|----------|
@@ -1051,11 +1055,11 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 | Provider | EQUITY | ETF | INDEX | 说明 |
 |----------|--------|-----|-------|------|
-| tonghuashun | ● 需 Key | ● | ○ | CN 主路径；扶摇 Fuyao ETF/基金 |
-| tushare | ● 需 token | ○ | ● | 批量/sync、基本面 |
-| zzshare | ● | ● | ○ | 免费层；板块/情绪 |
-| baostock | ● | ● | ● | 免费；历史 K 线/财报 |
-| tickflow | ○ | ● | ○ | 多市场；CN ETF；CN/HK/US 名录灌库 |
+| tonghuashun | ● 需 Key | ● | ○ | CN 主路径；扶摇 Fuyao ETF/基金；priority 120 |
+| stockindex | ○（搜索） | ○ | ○ | Opptrix量化；标的检索；priority 115 |
+| tickflow | ○ | ● | ○ | 多市场；CN ETF；名录灌库；目录 priority 110 |
+| tushare | ● 需 token | ○ | ● | 批量/sync、基本面；priority 105 |
+| baostock / zzshare | — | — | — | **暂时下线**（源码保留） |
 
 ### 8.1.1 标的搜索编排（2026-08）
 
@@ -1069,7 +1073,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 ● = 已支持；○ = 计划/可选
 
-> **历史**：eastmoney（资金流/两融/宏观/机构持仓）、tencent/sinafinance（行情爬虫）、stockindex/OpptrixQuant（搜索/名录）已自内置栈移除。
+> **历史**：eastmoney（资金流/两融/宏观/机构持仓）、tencent/sinafinance（行情爬虫）已自内置栈移除。baostock / zzshare **暂时下线**（源码保留）。Opptrix量化（stockindex）为标的搜索权威源。
 
 ### 8.2 美股（US）— Phase 2
 
@@ -1353,4 +1357,4 @@ A：不要。实现 `settings.ts` + 注册后，数据源 Tab 自动出现新卡
 
 ---
 
-*文档版本：2026-08-22 v2.2 — 移除内置爬虫源（tencent/sinafinance/eastmoney/akshare）；推荐栈 tonghuashun + tickflow + tushare + zzshare + baostock。*
+*文档版本：2026-08-25 — 暂时下线 baostock/zzshare；推荐栈顺位 tonghuashun(120) → Opptrix量化 stockindex(115) → tickflow(110) → tushare(105)。*
