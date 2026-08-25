@@ -18,7 +18,6 @@ import {
   mapFundManagerRow,
   mapFundDiagnosisRow,
   mapFundNewsRows,
-  mapFundFinancialsRow,
 } from '../../normalize/fund.js'
 import type { TonghuashunMarketHandler } from './handler.js'
 
@@ -146,10 +145,17 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
       ])
       const profile = profileData.item?.[0]
       if (!profile) return null
+      const companyId = String(
+        profile.mgmt_id ?? profile.company_id ?? profile.companyId ?? profile.mgmtId ?? '',
+      ).trim()
+      const companyData = companyId
+        ? await client.fundCompaniesDetail(companyId).catch(() => ({ item: [] as Record<string, unknown>[] }))
+        : { item: [] as Record<string, unknown>[] }
       const row = mapFundProfileToFundProfileRow(bare, profile, {
         navItems: navData.item ?? [],
         returns: returnsData.item?.[0] ?? null,
         holders: mapFundHoldersToProfileFields(holdersData.item ?? []),
+        company: companyData.item?.[0] ?? null,
       })
       return [row]
     })
@@ -304,7 +310,9 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundCorporateActionsDividends(fundType, thscode)
-      const rows = mapFundDividendRows(bare, data.item ?? [])
+      // 响应级汇总（若有）透出到行上；item 为分红列表
+      const meta = data as Record<string, unknown>
+      const rows = mapFundDividendRows(bare, data.item ?? [], meta)
       return rows.length ? rows : null
     })
   }
@@ -375,16 +383,11 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundFinancials = async function fundFinancials(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
-    if (!route) return null
-    return withFuyaoClient(async client => {
-      const { fundType, thscode } = route
-      const data = await client.fundFinancialsIndicators(fundType, thscode)
-      const row = mapFundFinancialsRow(bare, data.item ?? [])
-      return row ? [row] : null
-    })
+  /**
+   * 基金财务指标 — `@opptrix/fuyao` SDK / API_AUDIT §12 无 `/api/fund/financials/*`。
+   * 详情主路径直接返回 null（不依赖非 SDK rawGet）；Client 仍保留 rawGet 方法供 Agent 扩展。
+   */
+  p.fundFinancials = async function fundFinancials(_fundCode: string): Promise<Record<string, unknown>[] | null> {
+    return null
   }
 }

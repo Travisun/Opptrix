@@ -385,7 +385,31 @@ export function FundArchivePanel({
         <ArchiveMetric label="风险等级" value={profile.riskLevel || '—'} />
         <ArchiveMetric label="基金经理" value={profile.manager || '—'} />
         <ArchiveMetric label="管理人" value={profile.company || '—'} />
+        {profile.companyType ? (
+          <ArchiveMetric label="公司类型" value={profile.companyType} />
+        ) : null}
+        {profile.companyFundCount != null ? (
+          <ArchiveMetric label="旗下基金数" value={String(profile.companyFundCount)} />
+        ) : null}
+        {profile.companyScale != null ? (
+          <ArchiveMetric
+            label="公司管理规模"
+            value={`${formatCompactNumber(profile.companyScale)} 亿`}
+          />
+        ) : null}
+        {profile.companyEstablishDate ? (
+          <ArchiveMetric label="公司成立日" value={profile.companyEstablishDate} />
+        ) : null}
         <ArchiveMetric label="托管人" value={profile.custodian || '—'} />
+        {profile.managerStartDate ? (
+          <ArchiveMetric label="经理任职起" value={profile.managerStartDate} />
+        ) : null}
+        {profile.managerOfficeDays != null ? (
+          <ArchiveMetric label="任职天数" value={`${profile.managerOfficeDays}`} />
+        ) : null}
+        {profile.managerTenureReturn != null ? (
+          <ArchiveMetric label="任职回报" value={formatPct(profile.managerTenureReturn)} />
+        ) : null}
         <ArchiveMetric label="成立日期" value={profile.establishDate || '—'} />
         <ArchiveMetric
           label="规模"
@@ -655,6 +679,9 @@ export function FundManagerPanel({
       || (manager.representFunds?.length ?? 0) > 0
       || manager.scale != null
       || manager.performanceSummary
+      || manager.startDate
+      || manager.officeDays != null
+      || manager.tenureReturn != null
     ),
   )
   const managerFailed = failed.includes('经理') && !hasDetail && !name
@@ -683,6 +710,18 @@ export function FundManagerPanel({
               label="从业年限"
               value={manager?.years != null ? `${manager.years} 年` : '—'}
             />
+            {manager?.startDate ? (
+              <ArchiveMetric label="任职起始" value={manager.startDate} />
+            ) : null}
+            {manager?.endDate ? (
+              <ArchiveMetric label="任职结束" value={manager.endDate} />
+            ) : null}
+            {manager?.officeDays != null ? (
+              <ArchiveMetric label="任职天数" value={`${manager.officeDays}`} />
+            ) : null}
+            {manager?.tenureReturn != null ? (
+              <ArchiveMetric label="任职回报" value={formatPct(manager.tenureReturn)} />
+            ) : null}
             <ArchiveMetric
               label="投资风格"
               value={typeof manager?.style === 'string' ? (manager.style || '—') : '—'}
@@ -832,7 +871,13 @@ export function FundHoldersPanel({
   const top = holders?.top ?? []
   const hasStructure = Boolean(
     holders
-    && (holders.holderAmount != null || holders.instHolderRatio != null || holders.indivHolderRatio != null),
+    && (
+      holders.holderAmount != null
+      || holders.instHolderRatio != null
+      || holders.indivHolderRatio != null
+      || holders.mgmtStaffHoldRatio != null
+      || holders.avgHolderShare != null
+    ),
   )
   return (
     <PanelState
@@ -875,6 +920,12 @@ export function FundHoldersPanel({
                   <span className={s.metricValue}>{formatPct(holders.indivHolderRatio)}</span>
                 </div>
               ) : null}
+              {holders?.mgmtStaffHoldRatio != null ? (
+                <div className={s.metric}>
+                  <span className={s.metricLabel}>管理人持有占比</span>
+                  <span className={s.metricValue}>{formatPct(holders.mgmtStaffHoldRatio)}</span>
+                </div>
+              ) : null}
             </div>
           </>
         ) : null}
@@ -912,6 +963,8 @@ export function FundDividendsPanel({
   failed: string[]
 }) {
   const s = useStyles()
+  const summaryCount = dividends.find(d => d.dividendCount != null)?.dividendCount
+  const summaryTotal = dividends.find(d => d.dividendTotal != null)?.dividendTotal
   return (
     <PanelState
       loading={loading}
@@ -921,6 +974,13 @@ export function FundDividendsPanel({
     >
       <div className={s.section}>
         <Text className={s.sectionTitle}>历史分红</Text>
+        {(summaryCount != null || summaryTotal != null) ? (
+          <Text className={s.note}>
+            {summaryCount != null ? `累计 ${summaryCount} 次` : ''}
+            {summaryCount != null && summaryTotal != null ? ' · ' : ''}
+            {summaryTotal != null ? `合计每十份约 ${formatPrice(summaryTotal)}` : ''}
+          </Text>
+        ) : null}
         <div className={s.tableHead}>
           <span className={s.tableHeadCell}>除息日</span>
           <span className={s.tableHeadCell}>登记日</span>

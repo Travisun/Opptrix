@@ -491,6 +491,10 @@ export interface FundManagerData {
   representFunds?: string[]
   scale?: number | null
   performanceSummary?: string
+  startDate?: string
+  endDate?: string
+  officeDays?: number | null
+  tenureReturn?: number | null
 }
 
 /** 诊断单维 */
@@ -535,14 +539,23 @@ export interface FundProfileData {
   name?: string
   fullName?: string
   unitNav?: number | null
+  /** 扶摇路径下为复权净值（adj_nav），字段名历史兼容 */
   accNav?: number | null
   navDate?: string
   changePct?: number | null
   fundType?: string
   manager?: string
   managerId?: string
+  managerStartDate?: string
+  managerEndDate?: string
+  managerOfficeDays?: number | null
+  managerTenureReturn?: number | null
   company?: string
   companyId?: string
+  companyType?: string
+  companyFundCount?: number | null
+  companyScale?: number | null
+  companyEstablishDate?: string
   custodian?: string
   expenseRatio?: number | null
   rateInfo?: FundRateInfoItem[]
@@ -565,6 +578,7 @@ export interface FundProfileData {
   avgHolderShare?: number | null
   instHolderRatio?: number | null
   indivHolderRatio?: number | null
+  mgmtStaffHoldRatio?: number | null
   holderReportDate?: string
   source?: string
 }
@@ -621,6 +635,7 @@ export interface FundHoldersData {
   avgHolderShare?: number | null
   instHolderRatio?: number | null
   indivHolderRatio?: number | null
+  mgmtStaffHoldRatio?: number | null
   holderReportDate?: string
   top: FundHolderTopRow[]
 }
@@ -630,6 +645,8 @@ export interface FundDividendRow {
   recordDate?: string
   amount?: number | null
   type?: string
+  dividendCount?: number | null
+  dividendTotal?: number | null
 }
 
 export interface FundNavPoint {

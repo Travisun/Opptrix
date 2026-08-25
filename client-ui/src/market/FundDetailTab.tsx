@@ -289,6 +289,7 @@ export default function FundDetailTab({
       || holders.holderAmount != null
       || holders.instHolderRatio != null
       || holders.indivHolderRatio != null
+      || holders.mgmtStaffHoldRatio != null
     ),
   )
   const showDividendsTab = dividends.length > 0
@@ -414,7 +415,7 @@ export default function FundDetailTab({
               label={isListedFund ? '单位净值' : '净值'}
               value={formatPrice(unitNav)}
             />
-            <HeroCell label="累计净值" value={formatPrice(profile.accNav)} />
+            <HeroCell label="复权净值" value={formatPrice(profile.accNav)} />
             <HeroCell label="基金类型" value={profile.fundType ?? '—'} />
             <HeroCell
               label="规模"

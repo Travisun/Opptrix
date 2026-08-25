@@ -67,7 +67,7 @@ describe('mergeFundDetailParts', () => {
     assert.ok(r.data)
     assert.deepEqual(
       r.data.failed.sort(),
-      ['分红', '持仓', '持有人', '回撤', '业绩', '配置', '经理', '诊断', '资讯', '财务'].sort(),
+      ['分红', '持仓', '持有人', '回撤', '业绩', '配置', '经理', '诊断', '资讯'].sort(),
     )
     assert.equal(r.data.holdings.length, 0)
     assert.equal(r.data.returns?.performance?.w52, 12.5)

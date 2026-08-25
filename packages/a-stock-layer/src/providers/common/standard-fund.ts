@@ -17,8 +17,18 @@ export type StandardFundProfileRow = Record<string, unknown> & {
   fundType?: string
   manager?: string
   managerId?: string
+  /** 任职起止 / 天数 / 任职收益（来自 manager_info[0]） */
+  managerStartDate?: string
+  managerEndDate?: string
+  managerOfficeDays?: number | null
+  managerTenureReturn?: number | null
   company?: string
   companyId?: string
+  /** 管理人公司 enrich（companies/detail） */
+  companyType?: string
+  companyFundCount?: number | null
+  companyScale?: number | null
+  companyEstablishDate?: string
   custodian?: string
   expenseRatio?: number | null
   rateInfo?: StandardFundRateInfoItem[]
@@ -27,6 +37,9 @@ export type StandardFundProfileRow = Record<string, unknown> & {
   scale?: number | null
   totalShares?: number | null
   unitNav?: number | null
+  /**
+   * 历史字段名 accNav；扶摇路径下为 `adj_nav`（复权净值），**不是**累计净值。
+   */
   accNav?: number | null
   navDate?: string
   changePct?: number | null
@@ -50,6 +63,9 @@ export type StandardFundManagerRow = Record<string, unknown> & {
   education?: string
   resume?: string
   startDate?: string
+  endDate?: string
+  officeDays?: number | null
+  tenureReturn?: number | null
   workYears?: number | null
   /** UI：从业年限（与 workYears 同值） */
   years?: number | null
@@ -208,6 +224,8 @@ export type StandardFundHoldersRow = Record<string, unknown> & {
   avgHolderShare?: number | null
   instHolderRatio?: number | null
   indivHolderRatio?: number | null
+  /** 管理人持有占比 */
+  mgmtStaffHoldRatio?: number | null
   holderReportDate?: string
   top: StandardFundHolderTopRow[]
   source?: string
@@ -219,5 +237,8 @@ export type StandardFundDividendRow = Record<string, unknown> & {
   recordDate?: string
   amount?: number | null
   type?: string
+  /** 响应级汇总（可选，透出到行上供 UI） */
+  dividendCount?: number | null
+  dividendTotal?: number | null
   source?: string
 }

@@ -155,6 +155,30 @@ describe('fuyao fund profile', () => {
     assert.equal(perf?.w52, 10)
   })
 
+  it('mapFundReturnsDetail maps ranks with official peer_average / rank_total', () => {
+    const row = mapFundReturnsDetail('009049', {
+      return_year: 12.5,
+      peer_average_year: 9.1,
+      rank_year: 23,
+      rank_total_year: 520,
+    })
+    assert.equal(row.performance?.w52, 12.5)
+    assert.equal(row.peerAvg?.w52, 9.1)
+    assert.equal(row.ranks?.w52?.rank, 23)
+    assert.equal(row.ranks?.w52?.total, 520)
+  })
+
+  it('mapFundReturnsDetail falls back to avg_return / count_* aliases', () => {
+    const row = mapFundReturnsDetail('009049', {
+      return_year: 12.5,
+      avg_return_year: 8.2,
+      rank_year: 23,
+      count_year: 400,
+    })
+    assert.equal(row.peerAvg?.w52, 8.2)
+    assert.equal(row.ranks?.w52?.total, 400)
+  })
+
   it('mapFundReturnsDetail maps ranks', () => {
     const row = mapFundReturnsDetail('009049', {
       return_year: 12.5,
@@ -222,6 +246,24 @@ describe('fuyao fund profile', () => {
     assert.equal(row.reportDate, '2024-07-01')
   })
 
+  it('mapFundHoldersRow maps official hold_rate_pct and mgmt_staff_hold_rate', () => {
+    const row = mapFundHoldersRow('009049', [
+      {
+        holder_amount: 12000,
+        ins_position: 40,
+        psnl_rate: 60,
+        mgmt_staff_hold_rate: 1.2,
+        merge_scope: 'separate',
+        report_date_ms: 1719792000000,
+      },
+    ], [
+      { holder_name: '某银行', hold_share: 1e7, hold_rate_pct: 8.5 },
+    ])
+    assert.ok(row)
+    assert.equal(row.mgmtStaffHoldRatio, 1.2)
+    assert.equal(row.top[0]?.ratio, 8.5)
+  })
+
   it('mapFundHoldersRow maps structure and top holders', () => {
     const row = mapFundHoldersRow('009049', [
       { holder_amount: 12000, ins_position: 40, psnl_rate: 60, merge_scope: 'separate', report_date_ms: 1719792000000 },
@@ -233,6 +275,24 @@ describe('fuyao fund profile', () => {
     assert.equal(row.instHolderRatio, 40)
     assert.equal(row.top[0]?.name, '某银行')
     assert.equal(row.top[0]?.ratio, 8.5)
+  })
+
+  it('mapFundDividendRows maps official ex_dividend_date_ms / per_ten_cash / progress', () => {
+    const rows = mapFundDividendRows('009049', [
+      {
+        ex_dividend_date_ms: 1719792000000,
+        registration_date_ms: 1719705600000,
+        per_ten_cash_before_tax: 0.15,
+        progress: '已实施',
+      },
+    ], { dividend_count: 12, dividend_total: 1.8 })
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].date, '2024-07-01')
+    assert.equal(rows[0].recordDate, '2024-06-30')
+    assert.equal(rows[0].amount, 0.15)
+    assert.equal(rows[0].type, '已实施')
+    assert.equal(rows[0].dividendCount, 12)
+    assert.equal(rows[0].dividendTotal, 1.8)
   })
 
   it('mapFundDividendRows maps ex-date and amount', () => {
@@ -399,6 +459,14 @@ describe('fuyao fund profile', () => {
     assert.match(String(row.rateInfo?.[0]?.note ?? ''), /优惠费率/)
   })
 
+  it('mapFundNewsRows prefers publish_time_ms', () => {
+    const rows = mapFundNewsRows('009049', [
+      { title: '基金季报披露', publish_time_ms: 1719792000000, url: 'https://example.com/a', source: '财联社' },
+    ])
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].date, '2024-07-01')
+  })
+
   it('mapFundNewsRows maps article list', () => {
     const rows = mapFundNewsRows('009049', [
       { title: '基金季报披露', publish_date_ms: 1719792000000, url: 'https://example.com/a', source: '财联社' },
@@ -408,6 +476,35 @@ describe('fuyao fund profile', () => {
     assert.equal(rows[0].title, '基金季报披露')
     assert.equal(rows[0].date, '2024-07-01')
     assert.equal(rows[0].sourceName, '财联社')
+  })
+
+  it('mapFundProfileToFundProfileRow maps manager_info tenure and company enrich', () => {
+    const row = mapFundProfileToFundProfileRow('009049', {
+      fund_name: '测试基金',
+      manager_info: [{
+        manager_id: 'mgr-tenure',
+        manager_name: '赵六',
+        start_date_ms: 1609459200000,
+        office_days: 1800,
+        tenure_return: 42.5,
+      }],
+      mgmt_id: 'co-1',
+      mgmt_name: '示例基金',
+    }, {
+      company: {
+        company_type: '公募',
+        fund_count: 86,
+        scale: 5e10,
+        established_date_ms: 946684800000,
+      },
+    })
+    assert.equal(row.managerStartDate, '2021-01-01')
+    assert.equal(row.managerOfficeDays, 1800)
+    assert.equal(row.managerTenureReturn, 42.5)
+    assert.equal(row.companyType, '公募')
+    assert.equal(row.companyFundCount, 86)
+    assert.equal(row.companyScale, 500)
+    assert.equal(row.companyEstablishDate, '2000-01-01')
   })
 
   it('mapFundFinancialsRow maps indicator rows only', () => {

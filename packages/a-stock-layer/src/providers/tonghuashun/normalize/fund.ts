@@ -52,6 +52,8 @@ export function mapFundHoldersToProfileFields(
   avgHolderShare?: number | null
   instHolderRatio?: number | null
   indivHolderRatio?: number | null
+  /** 管理人持有占比（官方 `mgmt_staff_hold_rate`） */
+  mgmtStaffHoldRatio?: number | null
   holderReportDate?: string
 } | undefined {
   const row = pickFundHolderRow(items)
@@ -61,12 +63,16 @@ export function mapFundHoldersToProfileFields(
     avgHolderShare: safeFloat(row.avg_holder_share),
     instHolderRatio: safeFloat(row.ins_position),
     indivHolderRatio: safeFloat(row.psnl_rate),
+    mgmtStaffHoldRatio: pickFirstFloat(row, [
+      'mgmt_staff_hold_rate', 'mgmtStaffHoldRate', 'mgmt_hold_rate', 'manager_hold_rate',
+    ]),
     holderReportDate: msToYmd(row.report_date_ms) || undefined,
   }
   const hasValue = fields.holderAmount != null
     || fields.avgHolderShare != null
     || fields.instHolderRatio != null
     || fields.indivHolderRatio != null
+    || fields.mgmtStaffHoldRatio != null
   return hasValue ? fields : undefined
 }
 
@@ -90,17 +96,23 @@ export function mapFundReturnsToPerformance(
   return hasValue ? perf : undefined
 }
 
-const PERF_RANK_KEYS: Array<{ key: keyof NonNullable<ReturnType<typeof mapFundReturnsToPerformance>>; rank: string; total: string }> = [
-  { key: 'w1', rank: 'rank_week', total: 'count_week' },
-  { key: 'w4', rank: 'rank_month', total: 'count_month' },
-  { key: 'w13', rank: 'rank_tmonth', total: 'count_tmonth' },
-  { key: 'w26', rank: 'rank_hyear', total: 'count_hyear' },
-  { key: 'w52', rank: 'rank_year', total: 'count_year' },
-  { key: 'year', rank: 'rank_nowyear', total: 'count_nowyear' },
-  { key: 'year2', rank: 'rank_twoyear', total: 'count_twoyear' },
-  { key: 'year3', rank: 'rank_tyear', total: 'count_tyear' },
-  { key: 'year5', rank: 'rank_fyear', total: 'count_fyear' },
-  { key: 'total', rank: 'rank_now', total: 'count_now' },
+/** total 优先官方 `rank_total_*`，fallback 旧 `count_*` */
+const PERF_RANK_KEYS: Array<{
+  key: keyof NonNullable<ReturnType<typeof mapFundReturnsToPerformance>>
+  rank: string
+  totalOfficial: string
+  totalLegacy: string
+}> = [
+  { key: 'w1', rank: 'rank_week', totalOfficial: 'rank_total_week', totalLegacy: 'count_week' },
+  { key: 'w4', rank: 'rank_month', totalOfficial: 'rank_total_month', totalLegacy: 'count_month' },
+  { key: 'w13', rank: 'rank_tmonth', totalOfficial: 'rank_total_tmonth', totalLegacy: 'count_tmonth' },
+  { key: 'w26', rank: 'rank_hyear', totalOfficial: 'rank_total_hyear', totalLegacy: 'count_hyear' },
+  { key: 'w52', rank: 'rank_year', totalOfficial: 'rank_total_year', totalLegacy: 'count_year' },
+  { key: 'year', rank: 'rank_nowyear', totalOfficial: 'rank_total_nowyear', totalLegacy: 'count_nowyear' },
+  { key: 'year2', rank: 'rank_twoyear', totalOfficial: 'rank_total_twoyear', totalLegacy: 'count_twoyear' },
+  { key: 'year3', rank: 'rank_tyear', totalOfficial: 'rank_total_tyear', totalLegacy: 'count_tyear' },
+  { key: 'year5', rank: 'rank_fyear', totalOfficial: 'rank_total_fyear', totalLegacy: 'count_fyear' },
+  { key: 'total', rank: 'rank_now', totalOfficial: 'rank_total_now', totalLegacy: 'count_now' },
 ]
 
 export function mapFundReturnsToRanks(
@@ -108,30 +120,36 @@ export function mapFundReturnsToRanks(
 ): Record<string, { rank?: number | null; total?: number | null }> | undefined {
   if (!row || typeof row !== 'object') return undefined
   const ranks: Record<string, { rank?: number | null; total?: number | null }> = {}
-  for (const { key, rank, total } of PERF_RANK_KEYS) {
+  for (const { key, rank, totalOfficial, totalLegacy } of PERF_RANK_KEYS) {
     const r = safeFloat(row[rank] ?? row[`similar_${rank}`])
-    const t = safeFloat(row[total] ?? row.similar_count ?? row.rank_count)
+    const t = safeFloat(
+      row[totalOfficial]
+      ?? row[totalLegacy]
+      ?? row.similar_count
+      ?? row.rank_count,
+    )
     if (r == null && t == null) continue
     ranks[key] = { rank: r, total: t }
   }
   return Object.keys(ranks).length ? ranks : undefined
 }
 
+/** 同类均：优先官方 `peer_average_*`，fallback `avg_return_*` / `similar_avg_*` */
 export function mapFundReturnsToPeerAvg(
   row: Record<string, unknown> | null | undefined,
 ): Record<string, number | null> | undefined {
   if (!row || typeof row !== 'object') return undefined
   return mapFundReturnsToPerformance({
-    return_week: row.avg_return_week ?? row.similar_avg_week,
-    return_month: row.avg_return_month ?? row.similar_avg_month,
-    return_tmonth: row.avg_return_tmonth ?? row.similar_avg_tmonth,
-    return_hyear: row.avg_return_hyear ?? row.similar_avg_hyear,
-    return_year: row.avg_return_year ?? row.similar_avg_year,
-    return_nowyear: row.avg_return_nowyear ?? row.similar_avg_nowyear,
-    return_twoyear: row.avg_return_twoyear ?? row.similar_avg_twoyear,
-    return_tyear: row.avg_return_tyear ?? row.similar_avg_tyear,
-    return_fyear: row.avg_return_fyear ?? row.similar_avg_fyear,
-    return_now: row.avg_return_now ?? row.similar_avg_now,
+    return_week: row.peer_average_week ?? row.avg_return_week ?? row.similar_avg_week,
+    return_month: row.peer_average_month ?? row.avg_return_month ?? row.similar_avg_month,
+    return_tmonth: row.peer_average_tmonth ?? row.avg_return_tmonth ?? row.similar_avg_tmonth,
+    return_hyear: row.peer_average_hyear ?? row.avg_return_hyear ?? row.similar_avg_hyear,
+    return_year: row.peer_average_year ?? row.avg_return_year ?? row.similar_avg_year,
+    return_nowyear: row.peer_average_nowyear ?? row.avg_return_nowyear ?? row.similar_avg_nowyear,
+    return_twoyear: row.peer_average_twoyear ?? row.avg_return_twoyear ?? row.similar_avg_twoyear,
+    return_tyear: row.peer_average_tyear ?? row.avg_return_tyear ?? row.similar_avg_tyear,
+    return_fyear: row.peer_average_fyear ?? row.avg_return_fyear ?? row.similar_avg_fyear,
+    return_now: row.peer_average_now ?? row.avg_return_now ?? row.similar_avg_now,
   })
 }
 
@@ -274,7 +292,10 @@ export function mapFundHoldersRow(
   const top = topItems.map(row => ({
     name: String(row.holder_name ?? row.name ?? '').trim(),
     share: pickFirstFloat(row, ['hold_share', 'holder_share', 'share', 'hold_amount']),
-    ratio: pickFirstFloat(row, ['hold_ratio', 'holder_ratio', 'ratio']),
+    // 官方十大持有人占比为 hold_rate_pct；兼容 hold_ratio 等旧别名
+    ratio: pickFirstFloat(row, [
+      'hold_rate_pct', 'hold_ratio', 'holder_ratio', 'ratio', 'hold_pct',
+    ]),
   })).filter(r => r.name)
   if (!structure && !top.length) return null
   return {
@@ -285,18 +306,55 @@ export function mapFundHoldersRow(
   }
 }
 
+/**
+ * 分红行映射。官方字段：ex_dividend_date_ms / registration_date_ms / per_ten_cash_* / progress。
+ * @param meta 响应级汇总（dividend_count / dividend_total），透出到每行可选字段供 UI 小字
+ */
 export function mapFundDividendRows(
   code: string,
   items: Record<string, unknown>[],
+  meta?: Record<string, unknown> | null,
 ): import('../../common/standard-fund.js').StandardFundDividendRow[] {
   const c = normalizeCode(code)
+  const dividendCount = pickFirstFloat(meta ?? {}, [
+    'dividend_count', 'dividendCount', 'count', 'total_count',
+  ])
+  const dividendTotal = pickFirstFloat(meta ?? {}, [
+    'dividend_total', 'dividendTotal', 'total_amount', 'sum_amount',
+  ])
   return items.map(row => ({
     code: c,
-    date: msToYmd(row.ex_date_ms ?? row.pay_date_ms ?? row.dividend_date_ms)
-      || String(row.ex_date ?? row.pay_date ?? row.dividend_date ?? '').slice(0, 10),
-    recordDate: msToYmd(row.record_date_ms) || String(row.record_date ?? '').slice(0, 10) || undefined,
-    amount: pickFirstFloat(row, ['unit_dividend', 'dividend_per_unit', 'dividend_amount', 'bonus']),
-    type: String(row.bonus_type ?? row.dividend_type ?? row.type ?? '').trim() || undefined,
+    date: msToYmd(
+      row.ex_dividend_date_ms
+      ?? row.payment_date_ms
+      ?? row.registration_date_ms
+      ?? row.ex_date_ms
+      ?? row.pay_date_ms
+      ?? row.dividend_date_ms,
+    )
+      || String(
+        row.ex_dividend_date
+        ?? row.payment_date
+        ?? row.ex_date
+        ?? row.pay_date
+        ?? row.dividend_date
+        ?? '',
+      ).slice(0, 10),
+    recordDate: msToYmd(row.registration_date_ms ?? row.record_date_ms)
+      || String(row.registration_date ?? row.record_date ?? '').slice(0, 10)
+      || undefined,
+    // 每十份派现：优先税前，再税后；兼容旧 unit_dividend
+    amount: pickFirstFloat(row, [
+      'per_ten_cash_before_tax',
+      'per_ten_cash_after_tax',
+      'unit_dividend',
+      'dividend_per_unit',
+      'dividend_amount',
+      'bonus',
+    ]),
+    type: String(row.progress ?? row.bonus_type ?? row.dividend_type ?? row.type ?? '').trim() || undefined,
+    dividendCount: dividendCount ?? undefined,
+    dividendTotal: dividendTotal ?? undefined,
     source: 'tonghuashun',
   })).filter(r => r.date)
 }
@@ -721,6 +779,8 @@ export function mapFundProfileToFundProfileRow(
     navItems?: Record<string, unknown>[]
     returns?: Record<string, unknown> | null
     holders?: ReturnType<typeof mapFundHoldersToProfileFields>
+    /** 基金公司详情 enrich（companies/detail） */
+    company?: Record<string, unknown> | null
   },
 ): StandardFundProfileRow {
   const c = normalizeCode(code)
@@ -747,6 +807,23 @@ export function mapFundProfileToFundProfileRow(
   const managerName = pickStr(profile, ['manager_name', 'manager'])
     ?? (managerInfo0 ? pickStr(managerInfo0, ['manager_name', 'name']) : undefined)
   const tradeRules = mapTradeRules(profile.trade_rule)
+  const companyRow = opts?.company && isPlainRecord(opts.company) ? opts.company : null
+  const managerStartDate = managerInfo0
+    ? (msToYmd(managerInfo0.start_date_ms ?? managerInfo0.start_date ?? managerInfo0.office_date_ms)
+      || pickStr(managerInfo0, ['start_date', 'office_date']) || undefined)
+    : undefined
+  const managerEndDate = managerInfo0
+    ? (msToYmd(managerInfo0.end_date_ms ?? managerInfo0.end_date)
+      || pickStr(managerInfo0, ['end_date']) || undefined)
+    : undefined
+  const managerOfficeDays = managerInfo0
+    ? pickFirstFloat(managerInfo0, ['office_days', 'officeDays', 'tenure_days', 'manage_days'])
+    : null
+  const managerTenureReturn = managerInfo0
+    ? pickFirstFloat(managerInfo0, [
+      'tenure_return', 'tenure_return_pct', 'office_return', 'return_on_duty', 'manage_return',
+    ])
+    : null
   return {
     code: c,
     name: String(profile.fund_name ?? '').trim() || undefined,
@@ -754,8 +831,25 @@ export function mapFundProfileToFundProfileRow(
     fundType: String(profile.invest_type ?? profile.fund_type ?? '').trim() || undefined,
     manager: managerName,
     managerId,
-    company: String(profile.mgmt_name ?? '').trim() || undefined,
+    managerStartDate,
+    managerEndDate,
+    managerOfficeDays,
+    managerTenureReturn,
+    company: String(profile.mgmt_name ?? companyRow?.company_name ?? '').trim() || undefined,
     companyId: pickStr(profile, ['mgmt_id', 'company_id', 'companyId', 'mgmtId']),
+    companyType: companyRow
+      ? pickStr(companyRow, ['company_type', 'companyType', 'org_type', 'type'])
+      : undefined,
+    companyFundCount: companyRow
+      ? pickFirstFloat(companyRow, ['fund_count', 'fundCount', 'manage_fund_count', 'product_count'])
+      : null,
+    companyScale: companyRow
+      ? scaleToYi(companyRow.scale ?? companyRow.fund_scale ?? companyRow.manage_scale ?? companyRow.total_scale)
+      : null,
+    companyEstablishDate: companyRow
+      ? (msToYmd(companyRow.established_date_ms ?? companyRow.estab_date_ms ?? companyRow.establish_date_ms)
+        || pickStr(companyRow, ['established_date', 'estab_date', 'establish_date']) || undefined)
+      : undefined,
     custodian: String(profile.custodian_name ?? profile.custodian ?? '').trim() || undefined,
     expenseRatio,
     rateInfo: rateInfo.length ? rateInfo : undefined,
@@ -895,12 +989,46 @@ export function mapFundManagerRow(
   // UI：履历用 resume；经历摘要优先嵌套展平（与 resume 不同时才展示）
   const experienceForUi = nestedExperienceText || (!resume ? experienceText : undefined)
 
+  // profile.manager_info[0] 任职信息（官方常见键）
+  const managerInfo0 = profile && Array.isArray(profile.manager_info) && isPlainRecord(profile.manager_info[0])
+    ? profile.manager_info[0]
+    : null
+  const tenureStart = msToYmd(
+    detail?.start_date_ms ?? detail?.start_date ?? detail?.office_date
+    ?? managerInfo0?.start_date_ms ?? managerInfo0?.start_date ?? managerInfo0?.office_date_ms,
+  )
+    || pickStr(detail ?? {}, ['start_date', 'office_date'])
+    || (managerInfo0 ? pickStr(managerInfo0, ['start_date', 'office_date']) : undefined)
+    || undefined
+  const tenureEnd = msToYmd(
+    detail?.end_date_ms ?? detail?.end_date
+    ?? managerInfo0?.end_date_ms ?? managerInfo0?.end_date,
+  )
+    || pickStr(detail ?? {}, ['end_date'])
+    || (managerInfo0 ? pickStr(managerInfo0, ['end_date']) : undefined)
+    || undefined
+  const officeDays = pickFirstFloat(detail ?? {}, ['office_days', 'officeDays', 'tenure_days', 'manage_days'])
+    ?? (managerInfo0
+      ? pickFirstFloat(managerInfo0, ['office_days', 'officeDays', 'tenure_days', 'manage_days'])
+      : null)
+  const tenureReturn = pickFirstFloat(detail ?? {}, [
+    'tenure_return', 'tenure_return_pct', 'office_return', 'return_on_duty', 'manage_return',
+  ])
+    ?? (managerInfo0
+      ? pickFirstFloat(managerInfo0, [
+        'tenure_return', 'tenure_return_pct', 'office_return', 'return_on_duty', 'manage_return',
+      ])
+      : null)
+
   let performanceSummary: string | undefined
   const annual = pickFirstFloat(detail ?? {}, ['annual_return_pct', 'annual_return'])
   const maximum = pickFirstFloat(detail ?? {}, ['maximum_return_pct', 'max_return_pct', 'maximum_return'])
   const bits: string[] = []
   if (annual != null) bits.push(`年化收益 ${annual}%`)
   if (maximum != null) bits.push(`最大收益 ${maximum}%`)
+  if (tenureReturn != null && !bits.some(b => b.includes('任职'))) {
+    bits.push(`任职回报 ${tenureReturn}%`)
+  }
   if (!bits.length && performancePoint) {
     const y1 = safeFloat(
       performancePoint.manager_return_pct
@@ -930,9 +1058,10 @@ export function mapFundManagerRow(
     gender: pickStr(detail ?? {}, ['sex', 'gender']),
     education: pickStr(detail ?? {}, ['degree', 'education', 'edu']),
     resume,
-    startDate: msToYmd(detail?.start_date ?? detail?.start_date_ms ?? detail?.office_date)
-      || pickStr(detail ?? {}, ['start_date', 'office_date'])
-      || undefined,
+    startDate: tenureStart,
+    endDate: tenureEnd,
+    officeDays,
+    tenureReturn,
     workYears,
     years: workYears,
     style: styleText,
@@ -987,7 +1116,14 @@ export function mapFundNewsRows(
   for (const row of items) {
     const title = String(row.title ?? row.article_title ?? row.news_title ?? row.name ?? '').trim()
     if (!title) continue
-    const date = msToYmd(row.publish_time ?? row.publish_date_ms ?? row.date_ms ?? row.ctime)
+    // 官方资讯日期优先 publish_time_ms
+    const date = msToYmd(
+      row.publish_time_ms
+      ?? row.publish_time
+      ?? row.publish_date_ms
+      ?? row.date_ms
+      ?? row.ctime,
+    )
       || String(row.publish_date ?? row.date ?? row.pub_time ?? '').slice(0, 10)
       || undefined
     out.push({

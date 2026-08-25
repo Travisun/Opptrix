@@ -2,6 +2,7 @@
 
 > 官方文档：<https://fuyao.aicubes.cn/docs/api-reference/fund-profile/>
 > Provider ID：`tonghuashun`（同花顺金融数据，Base URL `https://fuyao.aicubes.cn`）
+> **字段与端点以 `@opptrix/fuyao` SDK + FuyaoNPM `API_AUDIT.md` §12 为准**；站点旧文档若与 SDK 冲突，以 SDK/审计为准。
 > **运行时 HTTP**：依赖 npm 包 `@opptrix/fuyao`（SDK）；`packages/.../tonghuashun/api/client.ts` 为薄适配层（保留历史方法名与 unwrap 后的 `{ item? }` 形状）。markets / Engine 边界仍为 `Standard*` 行与 `queryInstrumentData`，勿在 markets 直连 SDK。
 
 ## 认证与通用约定
@@ -46,11 +47,10 @@
 | 经理业绩 | `GET /api/fund/managers/performance` | `fundManagersPerformance` | ✅ `fundManager` |
 | 经理经历 | `GET /api/fund/managers/experience` | `fundManagersExperience` | ✅ `fundManager` |
 | 投资风格 | `GET /api/fund/managers/investment-style` | `fundManagersInvestmentStyle` | ✅ `fundManager` |
-| 基金公司 | `GET /api/fund/companies/detail` | `fundCompaniesDetail` | ✅ Client |
+| 基金公司 | `GET /api/fund/companies/detail` | `fundCompaniesDetail` | ✅ `fundProfile` enrich（有 `company_id` 时并行） |
 | 基金诊断 | `GET /api/fund/diagnostics/detail` | `fundDiagnosticsDetail` | ✅ `fundDiagnosis` |
-| 财务指标 | `GET /api/fund/financials/indicators` | `fundFinancialsIndicators` | ✅ `fundFinancials` |
-| 利润表 | `GET /api/fund/financials/income-statements` | `fundFinancialsIncomeStatements` | ✅ Client（整表未挂详情） |
-| 资产负债表 | `GET /api/fund/financials/balance-sheets` | `fundFinancialsBalanceSheets` | ✅ Client（整表未挂详情） |
+| 财务指标 | ~~`/api/fund/financials/*`~~ | `fundFinancialsIndicators`（rawGet） | ⚠️ **不在 SDK / API_AUDIT §12**；详情主路径 `fundFinancials` **直接返回 null**；Client rawGet 仅供 Agent 扩展 |
+| 利润表 / 资产负债表 | 同上 | rawGet | ⚠️ 非 SDK；未挂详情主路径 |
 | 场内快照 | `GET /api/fund/market/snapshot` | `fundMarketSnapshot` | ✅ ETF 路径；**场内公募基金 `fundQuote` 合并交易所价** |
 | 场内历史 | `GET /api/fund/market/historical` | `fundMarketHistorical` | ✅ ETF K 线 |
 | 资讯列表 | `GET /api/fund/news/article-list` | `fundNewsArticleList` | ✅ `fundNews` |
@@ -72,7 +72,7 @@
 | `FUND_MANAGER` | `fundManager` | CN / FUND | 120（经理 Tab；无 `manager_id` 返回 null） |
 | `FUND_DIAGNOSIS` | `fundDiagnosis` | CN / FUND | 120（诊断 Tab） |
 | `FUND_NEWS` | `fundNews` | CN / FUND | 120（资讯 Tab；limit≈15） |
-| `FUND_FINANCIALS` | `fundFinancials` | CN / FUND | 120（档案底部财务指标；仅 indicators） |
+| `FUND_FINANCIALS` | `fundFinancials` | CN / FUND | 120；**同花顺实现恒为 null**（非 SDK）；Hub **不**因财务空写入 `failed` |
 | `ETF_*` | `etfProfile` 等 | CN / ETF | 120（`fund_type=exchange`） |
 
 ### `get_fund_performance_nav` / `fundPerformanceNav` 的 `range` 分工
@@ -98,14 +98,15 @@ InstrumentRef (CN:PF)
         fund_manager / fund_diagnosis / fund_news / fund_financials
       快照失败 → 整页失败（UI 再回退 research.fundSnapshot）
       其余失败 → data.failed[]（如「持仓」「业绩」「经理」），不拖垮整页
-  → Hero：净值 / 涨跌 / 规模 / 经理（来自 snapshot.profile + quote）
-  → Tab「走势」→ 场内非 LOF：K 线；其余：FundNavChart（fund_nav，range=fyear）
-  → Tab「档案」→ snapshot.profile（资料 / 费率 rateInfo / 成立日 / 基准）+ fund_financials
-  → Tab「业绩」→ fund_returns + fund_drawdown（可回退 profile.performance）
+      财务空/失败 → 不写入 failed
+  → Hero：净值 / 涨跌 / 规模 / 经理；`accNav` 展示为「复权净值」
+  → Tab「走势」→ 场内非 LOF：K 线；其余：FundNavChart（图例「复权净值」）
+  → Tab「档案」→ snapshot.profile（含公司 enrich）+ 财务空态不吓人
+  → Tab「业绩」→ fund_returns + fund_drawdown（同类均 / 排名分母走官方字段）
   → Tab「持仓」→ fund_holdings + fund_allocation
-  → Tab「持有人」→ fund_holders（有结构或十大持有人时才显示）
-  → Tab「分红」→ fund_dividend（有记录才显示）
-  → Tab「经理」→ fund_manager（profile.`manager_id` 或 `manager_info[0]` 拉 detail/style/experience/performance）
+  → Tab「持有人」→ fund_holders（含管理人持有占比）
+  → Tab「分红」→ fund_dividend
+  → Tab「经理」→ fund_manager（含任职起止/天数/任职收益）
   → Tab「诊断」→ fund_diagnosis
   → Tab「资讯」→ fund_news
 ```
@@ -114,7 +115,7 @@ InstrumentRef (CN:PF)
 
 | 动作 | 上游调用 |
 |---|---|
-| 打开详情 | Hub 并行：snapshot 腿 + holdings + returns/drawdowns + allocation + holders + dividends + manager（含 profile→manager_id 再 4 路，performance 默认 `range=year`）+ diagnostics + news + financials indicators（单路失败不阻塞） |
+| 打开详情 | Hub 并行：snapshot 腿 + holdings + returns/drawdowns + allocation + holders + dividends + manager（含 profile→manager_id 再 4 路）+ diagnostics + news；`fund_financials` 同花顺恒空；profile 有 `mgmt_id` 时额外 `companies/detail` |
 | 点走势 | 场外/LOF：`performance/nav`（`range=fyear`，可复用缓存）；场内非 LOF：K 线通道 |
 
 **Hero / 档案字段来源**
@@ -122,52 +123,50 @@ InstrumentRef (CN:PF)
 | UI 字段 | Standard 字段 | 扶摇来源 |
 |---|---|---|
 | 头部净值 / 涨跌 | `unitNav`, `changePct`, `navDate` | `performance/nav` 最近两日 |
-| 场内交易所价 / 折溢价 | `exchangePrice`, `premiumPct` | `fundMarketSnapshot`（`fundQuote` / `fundSnapshot` 合并） |
+| **复权净值**（Hero / 图例） | `accNav` | `performance/nav` **`adj_nav`**（字段名历史兼容，**不是**累计净值） |
+| 场内交易所价 / 折溢价 | `exchangePrice`, `premiumPct` | `fundMarketSnapshot` |
 | 基金类型 | `fundType` | `profile/detail` |
 | 基金经理 / 公司 | `manager`, `company`, `managerId`, `companyId` | `profile/detail` |
+| 公司类型 / 旗下基金数 / 规模 / 成立日 | `companyType`, `companyFundCount`, `companyScale`, `companyEstablishDate` | `companies/detail` |
+| 经理任职 | `managerStartDate`, `managerOfficeDays`, `managerTenureReturn` | `manager_info[0]` |
 | 规模 / 份额 | `scale`（亿）, `totalShares` | `fund_scale` / `total_shares` |
-| 风险等级 | `riskLevel` | `risk_level` / `risk_grade` |
-| 成立日期 | `establishDate` | `estab_date` |
 | 近一年收益 | `return1y` | `returns.return_year` |
-| 托管人 / 费率 | `custodian`, `expenseRatio`, `rateInfo[]` | `profile` + 全量 `rate_info`（note 含收费模式/条件/优惠费率） |
-| 申购 / 赎回费 | `purchaseFee`, `redeemFee` | 独立字段（若有） |
-| 交易规则 | `tradeRules[]` | `trade_rule`（标题 + 展示时间） |
-| 理念 / 策略 | `investPhilosophy`, `investStrategy` | `invest_philosophy` / `invest_strategy` |
-| 业绩基准 | `benchmark` | `profile` |
-| 累计净值 | `accNav` | `performance/nav` `adj_nav` |
 
-### 字段映射要点（扶摇官方 → Opptrix）
+### 字段映射要点（官方 SDK → Opptrix，§12）
 
-| 能力 | 官方字段 | 说明 |
+| 能力 | 官方字段（优先） | 兼容 fallback |
 |---|---|---|
-| 回撤 | `week` / `month` / `year` / `now` … | 裸名；兼容旧别名 `drawdown_*` / `max_drawdown_*` |
-| 行业配置 | `industry_name` + `ratio_pct` | 亦认 `hold_ratio` / `weight` |
-| 资产配置 | `stock_ratio_pct` / `bond_ratio_pct` / `deposit_ratio_pct` / `other_ratio_pct` | 兼容无 `_pct` 旧键 |
-| 经理 ID | `manager_info[].manager_id`（或 `.id`） | profile **无**顶层 `manager_id` 时从数组取 |
-| 经理详情 | `sex` / `degree` / `resume` / `annual_return_pct` | 映射 gender / education / resume / 业绩摘要 |
-| 投资风格 | `investment_idea` / `representative_fund_name` / `total_fund_scale` | `style` 仅字符串；禁止 raw object |
-| 经理业绩 | **必须**传 `range`（默认 `year`） | 序列末点 `manager_return_pct` |
-| 诊断 | `dimensions` / `peer_dimensions` / `resilience` 为 object | 展平 score/label；空 `{}` 不产出 `[object Object]` |
-| 财务指标 | `distribution_profit` / `share_nav` / `nav_rate` / `asset_nav` … | 宽表键映射中文 label |
+| 同类均 | `peer_average_week`…`peer_average_now` | `avg_return_*` / `similar_avg_*` |
+| 排名分母 | `rank_total_week`…`rank_total_now` | `count_*` |
+| 十大持有人占比 | `hold_rate_pct` | `hold_ratio` / `ratio` |
+| 管理人持有占比 | `mgmt_staff_hold_rate` | → `mgmtStaffHoldRatio` |
+| 分红日 | `ex_dividend_date_ms` → `payment_date_ms` → `registration_date_ms` | `ex_date_ms` 等旧别名 |
+| 登记日 | `registration_date_ms` | `record_date_ms` |
+| 每十份派现 | `per_ten_cash_before_tax`（优先）/ `per_ten_cash_after_tax` | `unit_dividend` |
+| 分红进度 | `progress` | `bonus_type` |
+| 资讯日期 | `publish_time_ms` | `publish_date_ms` 等 |
+| 回撤 | `week` / `month` / `year` / `now` … | `drawdown_*` / `max_drawdown_*` |
+| 净值展示 | `adj_nav` → Standard `accNav` | UI 文案：**复权净值** |
 
 ## 实现文件索引
 
 | 路径 | 职责 |
 |---|---|
-| `providers/tonghuashun/api/client.ts` | 全量基金 REST 方法 |
+| `providers/tonghuashun/api/client.ts` | 全量基金 REST 方法（含非 SDK rawGet financials） |
 | `providers/tonghuashun/api/fund-symbols.ts` | `resolveFuyaoFundRoute` |
 | `providers/tonghuashun/normalize/fund.ts` | 标准化 `StandardFund*` 行 |
 | `providers/tonghuashun/markets/cn/fund.ts` | `mixTonghuashunFund` |
 | `providers/tonghuashun/manifest.ts` | `TONGHUASHUN_CN_FUND_CAPABILITIES` 绑定 |
-| `client-ui/src/market/FundDetailTab.tsx` | 右侧详情 UI（走势 / 档案 / 业绩 / 持仓 / 持有人 / 分红） |
+| `client-ui/src/market/FundDetailTab.tsx` | 右侧详情 UI |
 | `client-ui/src/market/fundDetailPanels.tsx` | 档案 / 业绩 / 持仓 / 持有人 / 分红面板 |
 | `packages/research-hub/src/fund-detail.ts` | Hub `fund_detail` 聚合 `mergeFundDetailParts` |
-| `client-ui/src/market/FundNavChart.tsx` | 历史净值折线图 |
+| `client-ui/src/market/FundNavChart.tsx` | 历史净值折线图（图例「复权净值」） |
 
 ## 验证
 
 ```bash
-npm run build:packages
+npm run build -w @opptrix/a-stock-layer
+npm run build -w @opptrix/research-hub
 npm run check:ui
 node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs tests/fund-detail-merge.test.mjs tests/instrument-fund-routing.test.mjs
 ```
@@ -176,8 +175,8 @@ node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs tests/fund-detail
 
 ## 已知限制
 
-- `adj_nav` 为复权净值，**不等同**累计净值；UI「累计净值」在扶摇路径下展示复权净值，与天天基金口径可能略有差异。
+- **`accNav` = `adj_nav`（复权净值）**，UI 已标「复权净值」；勿当作累计净值或伪造累计净值。
+- **基金 financials 不在 SDK / API_AUDIT §12**；详情主路径不依赖；档案财务区块无数据时静默空态。
 - `fundList` 未实现；名录/搜索走扶摇 + Tickflow + 本地；列表补路可走 Tushare 等现役栈。
 - `fundManager` 依赖 profile 的 `manager_id` 或 `manager_info[0].manager_id`；缺失时返回 null（不硬失败），UI 可回退档案姓名。
-- 利润表 / 资产负债表整表仍仅 Client，未挂标准 Capability（详情只用 `financials/indicators`）。
 - 诊断接口官方样例中 `dimensions` / `resilience` 可为空 object；归一化后无可用标量则整行返回 null，避免 UI 出现 `[object Object]`。
