@@ -386,7 +386,10 @@ export class FuyaoClient {
   }
 
   /**
-   * 基金净值序列
+   * 基金净值序列（GET /api/fund/performance/nav）
+   * - fund_type: otc | exchange | reits；thscode 须带后缀（.OF / .SH 等）
+   * - 不传 range → 最多最新 1 条；传 week|month|tmonth|hyear|year|twoyear|tyear|fyear → 区间序列
+   * - nav_type: unit | adj | unit,adj；响应 adj_nav 为复权净值（≠累计净值）
    * @sourceUrl https://fuyao.aicubes.cn/api/fund/performance/nav
    */
   fundPerformanceNav(

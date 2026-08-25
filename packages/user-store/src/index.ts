@@ -4,6 +4,7 @@ export {
   tushareSecretsOk,
   tickflowSecretsOk,
   initProviderSettingsSchema,
+  TICKFLOW_PUBLIC_FREE_DEFAULT_ENABLED_KEY,
 } from './provider-settings.js'
 export { SpeedRankingRepository, initSpeedRankingSchema } from './speed-ranking.js'
 export {

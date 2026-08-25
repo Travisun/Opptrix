@@ -6,7 +6,6 @@ import { OKX_MANIFEST } from './okx/manifest.js'
 import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
-import { STOCKINDEX_MANIFEST } from './stockindex/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
@@ -16,7 +15,6 @@ export { OKX_SETTINGS } from './okx/settings.js'
 export { BAOSTOCK_SETTINGS } from './baostock/settings.js'
 export { ZZSHARE_SETTINGS } from './zzshare/settings.js'
 export { TONGHUASHUN_SETTINGS } from './tonghuashun/settings.js'
-export { STOCKINDEX_SETTINGS } from './stockindex/settings.js'
 
 /** Static built-in manifests — registered into ManifestRegistry by ProviderLoader.registerBuiltins() */
 export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
@@ -27,7 +25,6 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   BAOSTOCK_MANIFEST,
   ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
-  STOCKINDEX_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */

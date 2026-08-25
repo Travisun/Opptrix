@@ -86,6 +86,8 @@ export class MarketSyncCoordinator {
   private incompleteBootstrapRetryAttempts = 0
   private static readonly INCOMPLETE_BOOTSTRAP_RETRY_MS = 45_000
   private static readonly INCOMPLETE_BOOTSTRAP_RETRY_MAX = 12
+  /** Jobs for the in-flight session (for search-universe single-flight coverage checks). */
+  private sessionJobs: string[] = []
 
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
@@ -168,6 +170,9 @@ export class MarketSyncCoordinator {
         if (this.running || isMarketSyncActive()) return
         try {
           this.store.repairBootstrapJobProgress()
+        } catch { /* best-effort */ }
+        try {
+          this.store.repairInstrumentsHkCanonicalPad()
         } catch { /* best-effort */ }
       })
     }
@@ -282,6 +287,11 @@ export class MarketSyncCoordinator {
     return this.running
   }
 
+  /** Current session job list while running; empty when idle. */
+  getSessionJobs(): readonly string[] {
+    return this.running ? this.sessionJobs : []
+  }
+
   /** 运行中读内存；结束后优先 DB，DB 空则回退内存（appendLog 失败时仍可见） */
   private logsForSnapshot(
     session: ReturnType<MarketDataStore['getLatestSession']>,
@@ -335,6 +345,7 @@ export class MarketSyncCoordinator {
     this.running = true
     setMarketSyncActive(true)
     const jobs = options.jobs?.length ? options.jobs : [...BOOTSTRAP_SYNC_JOBS]
+    this.sessionJobs = [...jobs]
     const latest = this.store.getLatestSession()
     const reuseSession = mode === 'resume'
       && latest != null
@@ -356,6 +367,7 @@ export class MarketSyncCoordinator {
 
     void this.runSession(sessionId, { ...options, mode, jobs }).finally(() => {
       this.running = false
+      this.sessionJobs = []
       setMarketSyncActive(false)
       this.dbStatusCache = null
     })

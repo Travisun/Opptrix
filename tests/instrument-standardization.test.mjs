@@ -21,7 +21,6 @@ import {
   resolveInstrumentQueryPlan,
 } from '../packages/a-stock-layer/dist/core/instrument-query.js'
 import { parseTickflowSymbol } from '../packages/a-stock-layer/dist/providers/tickflow/api/symbols.js'
-import { stockIndexItemToInstrumentRef } from '../packages/a-stock-layer/dist/providers/stockindex/normalize.js'
 
 test('resolveInstrumentFromParams — legacy code and explicit market', () => {
   const cn = resolveInstrumentFromParams({ code: '600519' })
@@ -252,13 +251,8 @@ test('parseTickflowSymbol keeps HK leading zeros', () => {
   assert.equal(parseTickflowSymbol('00700.HK').code, '00700')
 })
 
-test('stockIndexItemToInstrumentRef resolves HK:HK.00002 instrumentId', () => {
-  const ref = stockIndexItemToInstrumentRef({
-    market: 'HK',
-    code: '00002',
-    instrumentId: 'HK:HK.00002',
-    nameCn: '中电控股',
-  })
+test('parseInstrumentNamespace resolves HK:HK.00002', () => {
+  const ref = parseInstrumentNamespace('HK:HK.00002')
   assert.equal(ref?.market, 'HK')
   assert.equal(ref?.symbol, '00002')
 })

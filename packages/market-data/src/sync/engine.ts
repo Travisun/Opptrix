@@ -465,7 +465,7 @@ export class MarketDataSyncEngine {
     return daysSince(last) >= cfg.ttlDays
   }
 
-  /** 名录/行业等 StockIndex 任务 — 距上次成功不足 minIntervalMinutes 则跳过（force 除外） */
+  /** 名录/行业等任务 — 距上次成功不足 minIntervalMinutes 则跳过（force 除外） */
   private jobMinIntervalSkipReason(job: string, options: SyncOptions): string | null {
     if (options.force) return null
     const minMinutes = SYNC_JOB_CONFIG[job]?.minIntervalMinutes
@@ -912,7 +912,7 @@ export class MarketDataSyncEngine {
   }
 
   private async syncUsList(runId: number, options: SyncOptions, _mode: SyncMode): Promise<void> {
-    this.finishJobEmpty(runId, 'us_list', options, '跨市场名录已改 StockIndex 在线检索，跳过 us_list')
+    this.finishJobEmpty(runId, 'us_list', options, '跨市场名录已改 Tickflow / 在线检索，跳过 us_list')
   }
 
   private async syncUsQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -961,7 +961,7 @@ export class MarketDataSyncEngine {
     this.finishJobEmpty(runId, 'crypto_list', options, '跨市场名录已改在线检索，跳过 crypto_list')
   }
 
-  /** HK/JP/KR list sync — 已停用，改用 StockIndex / 在线 Provider */
+  /** HK/JP/KR list sync — 已停用，改用 Tickflow / 在线 Provider */
   private async syncRegionalList(
     runId: number,
     job: string,

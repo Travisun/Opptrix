@@ -22,7 +22,7 @@ export interface SyncProfileSettings {
 /** ~6 months of trading days for bootstrap K 线 */
 export const KLINE_BOOTSTRAP_DAYS = 130
 
-/** StockIndex 名录：A 股 ETF + 港股/美股（与 CN 名录同 API 源） */
+/** 名录灌库：A 股 ETF + 港股/美股（HK/US 走 Tickflow 成分；CN ETF 另见 initial_cn_etf） */
 export const STOCKINDEX_LIST_SYNC_JOBS = [
   'initial_cn_etf',
   'initial_hk_universe',
@@ -256,7 +256,7 @@ export function isTushareBackedSyncJob(job: string): boolean {
   return TUSHARE_PER_STOCK_JOBS.has(job)
 }
 
-/** StockIndex 名录/行业 — 手动重复同步最短间隔（分钟） */
+/** 名录/行业 — 手动重复同步最短间隔（分钟） */
 export const STOCKINDEX_MIN_RESYNC_MINUTES = 20
 
 export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
@@ -264,7 +264,7 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
-  /** 行业 — 已禁用（OpptrixQuant 无行业/板块接口；sync 为 no-op，job 名称保留以维持 readiness） */
+  /** 行业 — 已禁用（无可用行业/板块名录源；sync 为 no-op，job 名称保留以维持 readiness） */
   initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** 日频截面 — 每个交易日刷新 */

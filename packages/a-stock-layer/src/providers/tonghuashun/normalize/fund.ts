@@ -260,6 +260,7 @@ export function mapFundProfileToFundProfileRow(
   const latestNav = sortedNav[0]
   const prevNavRow = sortedNav[1]
   const unitNav = safeFloat(latestNav?.unit_nav) ?? safeFloat(profile.unit_nav)
+  // adj_nav = 复权净值（≠累计净值）；写入 accNav 为历史字段兼容
   const accNav = safeFloat(latestNav?.adj_nav)
   const navDate = msToYmd(latestNav?.nav_date)
   let changePct: number | null = null
@@ -301,6 +302,7 @@ export function mapFundNavRowsForFund(
   const sorted = [...items].sort((a, b) => Number(a.nav_date) - Number(b.nav_date))
   return sorted.map((row, i) => {
     const nav = safeFloat(row.unit_nav)
+    // adj_nav = 复权净值（≠累计净值）；写入 accNav 为历史字段兼容
     const accNav = safeFloat(row.adj_nav)
     const prev = i > 0 ? safeFloat(sorted[i - 1]?.unit_nav) : null
     const changePct = nav != null && prev != null && prev > 0

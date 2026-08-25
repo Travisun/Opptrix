@@ -462,7 +462,6 @@ packages/a-stock-layer/src/providers/
 ├── tickflow/                # TickFlow Provider
 ├── tonghuashun/             # 同花顺 Provider（CN 主路径，需扶摇 Key）
 ├── tushare/                 # Tushare Pro
-├── stockindex/              # 股票指数 Provider
 ├── catalog.ts               # Provider 目录服务
 ├── config-store.ts          # Provider 配置存储
 ├── installer.ts             # Provider 安装器
@@ -502,7 +501,7 @@ export abstract class BaseDriver {
 // CN 个股 + ETF + 指数
 bindingsFor: (p, mc) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, ETF_CAPS, mc)
 
-// 跨市场（OpptrixQuant stockindex / TickFlow）
+// 跨市场（TickFlow）
 bindingsFor: (p, mc) => [
   ...usEquityBindings(CAPS, p, mc),
   ...cnEquityEtfIndex(...),
@@ -519,11 +518,10 @@ bindingsFor: () => []
 
 ### 5.5 内置 Provider 审计（2026-08-22）
 
-> **已移除内置注册**（实现与注册均已删除）：`tencent`、`sinafinance`、`eastmoney`、`akshare`、`webfeed`。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
+> **已移除内置注册**（实现与注册均已删除）：`tencent`、`sinafinance`、`eastmoney`、`akshare`、`webfeed`、`stockindex`（OpptrixQuant）。详见 [PROVIDER-STANDARD-API.md §3.0](./PROVIDER-STANDARD-API.md)。
 
 | Provider | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|--------|----------|----------|--------|------|
-| stockindex（OpptrixQuant） | ✅ | ETF_LIST + FUND_* | ✅ | fundMetrics 绩效指标（板块/行业已下线） | 合规（需 API Key） |
 | tickflow | ✅ | ✅ | ✅ | 少量 custom | 标杆 |
 | baostock | CN | ✅ | ✅ | custom | 合规 |
 | tushare | CN | 弱 | ✅ | fund_* custom | 合规 |

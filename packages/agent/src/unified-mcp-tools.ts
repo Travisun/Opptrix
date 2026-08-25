@@ -690,7 +690,7 @@ export function buildUnifiedInstrumentTools(
       parameters: S({
         provider_id: {
           type: 'string',
-          description: '数据源 ID，如 baostock、zzshare、stockindex、tonghuashun；大数据源建议必填',
+          description: '数据源 ID，如 baostock、zzshare、tonghuashun；大数据源建议必填',
         },
         keyword: {
           type: 'string',
@@ -714,7 +714,7 @@ export function buildUnifiedInstrumentTools(
       parameters: S({
         provider_id: {
           type: 'string',
-          description: '数据源 ID（如 baostock、zzshare、stockindex）',
+          description: '数据源 ID（如 baostock、zzshare、tonghuashun）',
         },
         method: {
           type: 'string',

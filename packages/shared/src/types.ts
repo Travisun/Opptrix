@@ -92,7 +92,15 @@ export interface StockListItem {
   code: string
   name: string
   industry: string
+  /**
+   * 兼容字段：CN 时常为交易所 SH/SZ/BJ；HK/US 时常为 Opptrix market。
+   * 灌库请优先读 `region` + 本字段（作 exchange）+ `assetClass`。
+   */
   market: string
+  /** Opptrix market（CN / HK / US …）；Tickflow 映射应填写 */
+  region?: string
+  /** EQUITY / ETF / INDEX …；Tickflow type 推断 */
+  assetClass?: string
 }
 
 export interface FactorMeta {

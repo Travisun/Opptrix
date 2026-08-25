@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Badge,
   Input,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  ProgressBar,
   Spinner,
   Text,
   makeStyles,
@@ -21,7 +27,9 @@ import type { QuoteFailedReason } from './instrument-adapters'
 import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayChangeReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { displayCodeFromInstrument, hitToWatchlistItem, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
+import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, watchlistDisplayCode, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel } from './instrument'
+import { useWatchlist } from './useWatchlist'
+import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from './useInstrumentSearchWithUniversePrep'
 import { hasApplicationCapability } from './capabilities'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -177,6 +185,26 @@ const useStyles = makeStyles({
   resultsCentered: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  prepBanner: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: `6px ${ITEM_INNER_PAD}`,
+    marginBottom: '2px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixCssVars.accentSoft,
+  },
+  prepText: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.3,
+  },
+  prepFailText: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: MARKET_DOWN,
+    lineHeight: 1.3,
+    padding: `4px ${ITEM_INNER_PAD}`,
   },
   list: {
     flex: 1,
@@ -492,9 +520,14 @@ export default function WatchlistTab({
     dialogOpen,
     setDialogOpen,
   } = useWatchlistGroups()
+  const { disambiguationCandidates, clearDisambiguationCandidates } = useWatchlist()
   const [keyword, setKeyword] = useState('')
-  const [searching, setSearching] = useState(false)
-  const [searchHits, setSearchHits] = useState<WatchlistItem[]>([])
+  const {
+    hits: searchHits,
+    searching,
+    universePrep,
+    refreshingAfterPrep,
+  } = useInstrumentSearchWithUniversePrep({ keyword, limit: 20 })
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [radar, setRadar] = useState<Record<string, WatchlistRadarItem>>({})
   const [strategyByCode, setStrategyByCode] = useState<Record<string, string>>({})
@@ -538,7 +571,15 @@ export default function WatchlistTab({
     const silent = opts?.silent === true
     if (!silent) setLoadingQuotes(true)
     try {
-      const instruments = currentItems.map(resolveWatchlistInstrument)
+      const instruments = currentItems
+        .map(resolveWatchlistInstrument)
+        .filter((r): r is NonNullable<typeof r> => r != null)
+      if (!instruments.length) {
+        setQuotes({})
+        setFailedByKey({})
+        setQuoteError('')
+        return
+      }
       const resp = await research.instrumentQuotes(instruments)
       if (seq !== loadSeqRef.current) return
       if (!resp.success || !resp.data?.quotes) {
@@ -552,6 +593,7 @@ export default function WatchlistTab({
           code: q.code,
           name: q.name,
         })
+        if (!itemRef) continue
         const mq = unifiedQuoteToMarketQuote(q)
         const code = displayCodeFromInstrument(itemRef)
         const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
@@ -583,20 +625,27 @@ export default function WatchlistTab({
     const currentItems = itemsRef.current
     const cnItems = currentItems.filter(item => {
       const ref = resolveWatchlistInstrument(item)
-      return ref.market === 'CN' && hasApplicationCapability(ref, 'scorecard')
+      return ref != null && ref.market === 'CN' && hasApplicationCapability(ref, 'scorecard')
     })
     if (!cnItems.length) {
       setRadar({})
       return
     }
-    const cnCodes = cnItems.map(item => instrumentKey(resolveWatchlistInstrument(item)))
+    const cnCodes = cnItems.flatMap(item => {
+      const ref = resolveWatchlistInstrument(item)
+      return ref ? [instrumentKey(ref)] : []
+    })
     try {
       const resp = await research.watchlistRadar(cnCodes)
       if (resp.success && resp.data?.items) {
         const map: Record<string, WatchlistRadarItem> = {}
         for (const row of resp.data.items) {
-          const rowKey = instrumentKey(parseInstrumentInput(row.code))
-          const matchItem = cnItems.find(item => instrumentKey(resolveWatchlistInstrument(item)) === rowKey)
+          const parsedCode = tryParseInstrumentInput(row.code)
+          const rowKey = parsedCode ? instrumentKey(parsedCode) : row.code
+          const matchItem = cnItems.find(item => {
+            const ref = resolveWatchlistInstrument(item)
+            return ref != null && instrumentKey(ref) === rowKey
+          })
           if (matchItem) {
             map[watchlistItemKey(matchItem)] = row
             map[matchItem.code] = row
@@ -624,7 +673,7 @@ export default function WatchlistTab({
     )
     if (!item) return undefined
     const ref = resolveWatchlistInstrument(item)
-    if (!hasApplicationCapability(ref, 'strategy_signal')) return undefined
+    if (!ref || !hasApplicationCapability(ref, 'strategy_signal')) return undefined
     const key = item.code
     let cancelled = false
     void research.strategySignals(ref).then(resp => {
@@ -646,13 +695,14 @@ export default function WatchlistTab({
   useEffect(() => {
     for (const item of items) {
       if (item.addedPrice != null || patchedRef.current.has(item.code)) continue
+      const ref = resolveWatchlistInstrument(item)
       const price = quotes[item.code]?.price
         ?? quotes[watchlistItemKey(item)]?.price
-        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
+        ?? (ref ? quotes[instrumentKey(ref)]?.price : undefined)
       if (price == null) continue
       const preClose = quotes[item.code]?.preClose
         ?? quotes[watchlistItemKey(item)]?.preClose
-        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.preClose
+        ?? (ref ? quotes[instrumentKey(ref)]?.preClose : undefined)
       if (preClose != null && preClose > 0) {
         const ratio = price / preClose
         if (ratio > 5 || ratio < 0.2) continue
@@ -669,19 +719,20 @@ export default function WatchlistTab({
     for (const item of items) {
       const added = item.addedPrice
       if (added == null || added <= 0 || patchedRef.current.has(item.code)) continue
+      const ref = resolveWatchlistInstrument(item)
       const price = quotes[item.code]?.price
         ?? quotes[watchlistItemKey(item)]?.price
-        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.price
+        ?? (ref ? quotes[instrumentKey(ref)]?.price : undefined)
       if (price == null) continue
       const follow = followReturnPct(price, added)
       const day = dayChangeReturnPct(
         quotes[item.code]?.changePct
           ?? quotes[watchlistItemKey(item)]?.changePct
-          ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.changePct,
+          ?? (ref ? quotes[instrumentKey(ref)]?.changePct : undefined),
         price,
         quotes[item.code]?.preClose
           ?? quotes[watchlistItemKey(item)]?.preClose
-          ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.preClose,
+          ?? (ref ? quotes[instrumentKey(ref)]?.preClose : undefined),
       )
       if (follow != null) {
         if (day != null && Math.abs(follow - day) > 15) {
@@ -697,11 +748,12 @@ export default function WatchlistTab({
 
   useEffect(() => {
     for (const item of items) {
+      const ref = resolveWatchlistInstrument(item)
       const qName = quotes[item.code]?.name
         ?? quotes[watchlistItemKey(item)]?.name
-        ?? quotes[instrumentKey(resolveWatchlistInstrument(item))]?.name
+        ?? (ref ? quotes[instrumentKey(ref)]?.name : undefined)
       const itemKey = watchlistItemKey(item)
-      const rName = radar[itemKey]?.name ?? radar[instrumentKey(resolveWatchlistInstrument(item))]?.name
+      const rName = radar[itemKey]?.name ?? (ref ? radar[instrumentKey(ref)]?.name : undefined)
       const resolved = resolveDisplayStockName(item.code, qName, rName, item.name)
       if (resolved === item.name) continue
       const stored = item.name?.trim() ?? ''
@@ -731,6 +783,7 @@ export default function WatchlistTab({
           if (patchedRef.current.has(syncKey)) continue
           try {
             const ref = resolveWatchlistInstrument(item)
+            if (!ref) continue
             const lookup = displayCodeFromInstrument(ref)
             const resp = await research.searchInstruments(lookup, 12)
             if (cancelled) return
@@ -762,37 +815,10 @@ export default function WatchlistTab({
     }
   }, [itemsKey, onPatchItem])
 
-  useEffect(() => {
-    const q = keyword.trim()
-    if (q.length < 2) {
-      setSearchHits([])
-      return undefined
-    }
-
-    let cancelled = false
-    const timer = window.setTimeout(async () => {
-      setSearching(true)
-      try {
-        const resp = await research.searchInstruments(q, 20)
-        if (cancelled) return
-        const hits = (resp.data?.items ?? []).map(hitToWatchlistItem)
-        setSearchHits(hits)
-      } catch {
-        if (!cancelled) setSearchHits([])
-      } finally {
-        if (!cancelled) setSearching(false)
-      }
-    }, 280)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [keyword])
-
   const holdingCount = useMemo(
     () => items.filter(item => {
       const ref = resolveWatchlistInstrument(item)
+      if (!ref) return false
       return (lookupHoldingSnapshot(holdingsByCode, ref)?.shares ?? 0) > 0
     }).length,
     [items, holdingsByCode],
@@ -848,14 +874,32 @@ export default function WatchlistTab({
       </div>
 
       {keyword.trim().length >= 2 && (
-        <div className={mergeClasses(s.results, 'opptrix-scroll', !searching && searchHits.length === 0 && s.resultsCentered)}>
-          {searching && (
+        <div className={mergeClasses(s.results, 'opptrix-scroll', !searching && searchHits.length === 0 && !universePrep.status && s.resultsCentered)}>
+          {universePrep.status === 'preparing' && (
+            <div className={s.prepBanner}>
+              <Text className={s.prepText} block>
+                {refreshingAfterPrep ? UNIVERSE_PREP_COPY.refreshing : (universePrep.message || UNIVERSE_PREP_COPY.preparing)}
+              </Text>
+              <ProgressBar
+                value={Math.min(1, Math.max(0.03, (universePrep.percent || 0) / 100))}
+                thickness="medium"
+                color="brand"
+                shape="rounded"
+              />
+            </div>
+          )}
+          {universePrep.status === 'failed' && (
+            <Text className={s.prepFailText} block>
+              {universePrep.message || UNIVERSE_PREP_COPY.failed}
+            </Text>
+          )}
+          {searching && !searchHits.length && universePrep.status !== 'preparing' && (
             <div className={s.empty}>
               <Spinner size="tiny" />
               正在搜索…
             </div>
           )}
-          {!searching && searchHits.length === 0 && (
+          {!searching && searchHits.length === 0 && universePrep.status !== 'preparing' && (
             <SidebarListEmpty
               compact
               icon={<SearchRegular />}
@@ -863,7 +907,7 @@ export default function WatchlistTab({
               hint="试试输入完整代码，或换一个字再搜"
             />
           )}
-          {!searching && searchHits.map(hit => (
+          {searchHits.map(hit => (
             <button
               key={hit.code}
               type="button"
@@ -872,14 +916,13 @@ export default function WatchlistTab({
                 let addedPrice: number | null = null
                 try {
                   const ref = resolveWatchlistInstrument(hit)
-                  if (hasApplicationCapability(ref, 'batch_quote')) {
+                  if (ref && hasApplicationCapability(ref, 'batch_quote')) {
                     const q = await research.instrumentQuotes([ref])
                     addedPrice = q.data?.quotes?.[0]?.price ?? null
                   }
                 } catch { /* ignore */ }
                 onAdd(hit, { addedPrice })
                 setKeyword('')
-                setSearchHits([])
               }}
             >
               <div>
@@ -928,11 +971,14 @@ export default function WatchlistTab({
             </div>
             {filteredItems.map(item => {
               const ref = resolveWatchlistInstrument(item)
-              const quoteKey = instrumentKey(ref)
-              const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? quotes[quoteKey]
-              const failedReason = failedByKey[item.code] ?? failedByKey[watchlistItemKey(item)] ?? failedByKey[quoteKey]
+              const unresolved = ref == null
+              const candidates = disambiguationCandidates[item.code] ?? []
+              const hasCandidates = unresolved && candidates.length > 1
+              const quoteKey = ref ? instrumentKey(ref) : watchlistItemKey(item)
+              const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? (ref ? quotes[quoteKey] : undefined)
+              const failedReason = failedByKey[item.code] ?? failedByKey[watchlistItemKey(item)] ?? (ref ? failedByKey[quoteKey] : undefined)
               const failedCopy = failedReason ? QUOTE_FAILED_COPY[failedReason] : undefined
-              const holding = lookupHoldingSnapshot(holdingsByCode, ref)
+              const holding = ref ? lookupHoldingSnapshot(holdingsByCode, ref) : null
               const isHolding = (holding?.shares ?? 0) > 0
               const price = quote?.price ?? null
               const followPct = followReturnPct(price, item.addedPrice)
@@ -942,15 +988,25 @@ export default function WatchlistTab({
               const followTone = pctTone(followPct)
               const holdingTone = pctTone(holdingPct)
               const costBasis = holding != null && isHolding && holding.costBasis > 0 ? holding.costBasis : null
-              const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
-              const radarLine = formatWatchlistRadarLine(
-                item,
-                radarRow,
-                selectedCode === item.code ? strategyByCode[item.code] : null,
-              )
+              const radarRow = ref?.market === 'CN' ? radar[instrumentKey(ref)] : undefined
+              const radarLine = unresolved
+                ? (hasCandidates
+                  ? UNRESOLVED_INSTRUMENT_COPY.ambiguousHint
+                  : UNRESOLVED_INSTRUMENT_COPY.listHint)
+                : formatWatchlistRadarLine(
+                  item,
+                  radarRow,
+                  selectedCode === item.code ? strategyByCode[item.code] : null,
+                )
               const displayName = resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)
-              const displayCode = displayCodeFromInstrument(ref)
-              const rowTooltip = [failedCopy?.hint, radarLine, item.note?.trim()].filter(Boolean).join('\n') || undefined
+              const displayCode = watchlistDisplayCode(item)
+              const rowTooltip = [
+                unresolved
+                  ? (hasCandidates ? UNRESOLVED_INSTRUMENT_COPY.ambiguousHint : UNRESOLVED_INSTRUMENT_COPY.hint)
+                  : failedCopy?.hint,
+                radarLine,
+                item.note?.trim(),
+              ].filter(Boolean).join('\n') || undefined
 
               return (
                 <div
@@ -980,6 +1036,51 @@ export default function WatchlistTab({
                       {isHolding && (
                         <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
                       )}
+                      {unresolved && hasCandidates && (
+                        <Menu>
+                          <MenuTrigger disableButtonEnhancement>
+                            <Badge
+                              className={s.holdBadge}
+                              size="small"
+                              color="warning"
+                              appearance="outline"
+                              role="button"
+                              tabIndex={0}
+                              onClick={e => { e.stopPropagation() }}
+                              onKeyDown={e => e.stopPropagation()}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {UNRESOLVED_INSTRUMENT_COPY.ambiguousShort}
+                            </Badge>
+                          </MenuTrigger>
+                          <MenuPopover onClick={e => e.stopPropagation()}>
+                            <MenuList>
+                              {candidates.map(c => (
+                                <MenuItem
+                                  key={`${c.code}:${c.instrument.market}`}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    const prevCode = item.code
+                                    onPatchItem(prevCode, {
+                                      code: c.code,
+                                      name: c.name?.trim() || item.name,
+                                      instrument: c.instrument,
+                                    })
+                                    clearDisambiguationCandidates(prevCode)
+                                  }}
+                                >
+                                  {formatDisambiguationCandidateLabel(c)}
+                                </MenuItem>
+                              ))}
+                            </MenuList>
+                          </MenuPopover>
+                        </Menu>
+                      )}
+                      {unresolved && !hasCandidates && (
+                        <Badge className={s.holdBadge} size="small" color="warning" appearance="outline">
+                          {UNRESOLVED_INSTRUMENT_COPY.short}
+                        </Badge>
+                      )}
                     </div>
                     <span className={s.rowCode}>{displayCode}</span>
                   </div>
@@ -998,7 +1099,7 @@ export default function WatchlistTab({
                       ) : (
                         <>
                           <span className={mergeClasses(s.metricCell, s.metricPrice)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
-                            {formatPriceForMarket(ref.market, price)}
+                            {formatPriceForMarket(ref?.market, price)}
                           </span>
                           <span
                             className={mergeClasses(
@@ -1016,7 +1117,7 @@ export default function WatchlistTab({
                             className={mergeClasses(s.metricCell, costBasis == null && s.metricMuted)}
                             style={{ minWidth: METRIC_COLUMNS[2].minWidth }}
                           >
-                            {costBasis != null ? formatPriceForMarket(ref.market, costBasis) : '—'}
+                            {costBasis != null ? formatPriceForMarket(ref?.market, costBasis) : '—'}
                           </span>
                           <span
                             className={mergeClasses(

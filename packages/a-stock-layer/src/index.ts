@@ -11,7 +11,6 @@ export {
   PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest,
   ProviderLoader, createProviderLoader, getProviderLoader,
   ManifestRegistry, getManifestRegistry,
-  StockIndexDriver,
   QueryPlanExecutor, QUERY_PLANS, defaultCacheType, executeIntradaySessionsPlan,
   computeChipDistribution, computeLatestChipProfile,
 } from './engine.js'
@@ -86,9 +85,15 @@ export {
   testTickflowConnection,
   loadTickflowConfig,
   isTickflowEnabled,
+  TickflowClient,
   TICKFLOW_MANIFEST,
   TICKFLOW_SETTINGS,
 } from './providers/tickflow/index.js'
+export {
+  mapTickflowInstrumentToListItem,
+  mapTickflowInstrumentListItems,
+} from './providers/tickflow/normalize/instruments.js'
+export type { TickflowInstrument } from './providers/tickflow/api/client.js'
 
 export {
   BINANCE_MANIFEST,
@@ -131,7 +136,29 @@ export type { WatchlistItem } from './watchlist/models.js'
 export type { WatchlistGroup, WatchlistGroupsDocument } from './watchlist/groups-models.js'
 export { WATCHLIST_ALL_GROUP_ID, emptyWatchlistGroupsDocument } from './watchlist/groups-models.js'
 export { normalizeWatchlistGroupsDocument, WatchlistGroupsStore } from './watchlist/groups-store.js'
-export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument } from './watchlist/instrument.js'
+export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument, tryLegacyToInstrument } from './watchlist/instrument.js'
+export {
+  INSTRUMENT_ID_UNIFY_WATCHLIST_V1,
+  migrateWatchlistItemInstrumentIdV1,
+  migrateWatchlistItemsInstrumentIdV1,
+  looksLikeFakeCnPadFromShortCode,
+} from './watchlist/migrate-instrument-id.js'
+export {
+  INSTRUMENT_ID_UNIFY_WATCHLIST_V2,
+  watchlistItemNeedsDisambiguation,
+  disambiguateWatchlistItemsLocal,
+  disambiguateWatchlistItemFromHits,
+  disambiguateWatchlistItemFromOnlineHits,
+  disambiguateWatchlistItemOutcome,
+  listDisambiguationCandidates,
+  pickUniqueInstrumentRef,
+  filterExactDigitHits,
+  applyResolvedInstrument,
+  stripDigitBare,
+  type DisambiguationHit,
+  type DisambiguationCandidate,
+  type DisambiguateOutcome,
+} from './watchlist/disambiguate-instrument.js'
 
 export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, cnSecSymbol, secXueqiuSymbol } from './utils/helpers.js'
 export {
@@ -179,38 +206,13 @@ export {
 export type { RegionalEquityMarket } from './utils/regional-symbol.js'
 export { regionalTodayString, isRegionalTradingWeekday, isRegionalTradingDay, isRegionalHoliday, regionalHolidaysForYear } from './utils/regional-calendar.js'
 export {
-  STOCKINDEX_MANIFEST,
-  STOCKINDEX_SETTINGS,
-  STOCKINDEX_DEFAULT_BASE_URL,
-  STOCKINDEX_DEFAULT_BASE_URL as STOCK_INDEX_BASE_URL,
-  stockIndexApiKey,
-  opptrixInstrumentSearch,
-  opptrixGetInstrument,
-  opptrixFundNav,
-  opptrixFundQuoteBatch,
-  opptrixFundMetrics,
-  stockIndexListStocks,
-  stockIndexListEtfs,
-  opptrixInstrumentToStockIndexItem,
-  stockIndexItemsToListRows,
-  stockIndexItemToListRow,
-  stockIndexItemToInstrumentRef,
-  refLabelFromInstrument,
-  opptrixNavToStandardRows,
-  opptrixLatestNavToQuoteRow,
-  opptrixInstrumentToProfileRow,
-  opptrixMetricsToRow,
-  type StockIndexItem,
-  type StockIndexItem as StockIndexSearchItem,
-  type OpptrixInstrument,
-  type OpptrixNavRow,
-  type OpptrixFundLatestNavItem,
-  type OpptrixFundMetrics,
-} from './providers/stockindex/index.js'
-export {
   searchInstrumentsOnline,
   listInstrumentsOnline,
+  rankInstrumentSearchHits,
+  scoreInstrumentSearchHit,
+  resolveSearchAliasTargets,
   type InstrumentSearchHit,
+  type SearchAliasTarget,
 } from './search/instrument-search.js'
 export { parseCryptoPair, isCryptoPairNotation, normalizeCryptoBase } from './utils/crypto-market.js'
 export type { CryptoPairRef } from './utils/crypto-market.js'

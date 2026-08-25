@@ -3,11 +3,13 @@ import { instrumentRefKey, normalizeInstrumentRef, parseCanonicalInstrumentInput
 import { normalizeCode } from '../utils/helpers.js'
 import { normalizeHkEquityCode } from '../utils/hk-market.js'
 import { normalizeUsSymbol } from '../utils/us-market.js'
-import { legacyToInstrument } from '../watchlist/instrument.js'
+import { tryLegacyToInstrument } from '../watchlist/instrument.js'
 
 export function inferPortfolioMarket(code: string, market?: Market): Market {
   if (market) return market
-  return legacyToInstrument(code).market
+  const parsed = tryLegacyToInstrument(code)
+  if (parsed) return parsed.market
+  return 'CN'
 }
 
 export function normalizePortfolioSymbol(code: string, market: Market): string {
@@ -29,7 +31,11 @@ export function portfolioInstrumentRef(code: string, market?: Market): Instrumen
   if (parsed) return normalizeInstrumentRef(parsed)
   const m = inferPortfolioMarket(code, market)
   const symbol = normalizePortfolioSymbol(code, m)
-  if (m === 'CN') return legacyToInstrument(symbol)
+  if (m === 'CN') {
+    const fromLegacy = tryLegacyToInstrument(symbol)
+    if (fromLegacy) return fromLegacy
+    return normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: normalizeCode(symbol) })
+  }
   return normalizeInstrumentRef({ market: m, assetClass: 'EQUITY', symbol })
 }
 

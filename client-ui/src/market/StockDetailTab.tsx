@@ -17,6 +17,7 @@ import {
   normalizeWatchlistItem,
   resolveWatchlistInstrument,
   watchlistItemKey,
+  UNRESOLVED_INSTRUMENT_COPY,
 } from './instrument'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import type { StockDiscussPayload } from './StockDecisionCard'
@@ -208,7 +209,7 @@ function StockDetailTab({
     [stock],
   )
   const chartInstrument = useMemo(
-    () => (stock ? resolveWatchlistInstrument(stock) : undefined),
+    () => (stock ? resolveWatchlistInstrument(stock) ?? undefined : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by stockKey
     [stockKey],
   )
@@ -232,6 +233,12 @@ function StockDetailTab({
     setError('')
 
     const ref = resolveWatchlistInstrument(current)
+    if (!ref) {
+      setLoading(false)
+      setError(UNRESOLVED_INSTRUMENT_COPY.hint)
+      setDetail(null)
+      return undefined
+    }
     research.stockDetail(ref)
       .then(resp => {
         if (cancelled) return

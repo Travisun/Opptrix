@@ -48,7 +48,7 @@ const CN_FUND: ApplicationCapability[] = [
 ]
 
 const US_EQUITY: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily', 'strategy_signal',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
   'technical_indicators', 'discover_mine', 'portfolio_pnl',
 ]
 
@@ -58,7 +58,7 @@ const CRYPTO_SPOT: ApplicationCapability[] = [
 ]
 
 const HK_EQUITY: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily', 'strategy_signal',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
   'technical_indicators', 'discover_mine', 'portfolio_pnl',
 ]
 

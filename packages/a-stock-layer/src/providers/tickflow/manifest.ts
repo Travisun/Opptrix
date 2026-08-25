@@ -51,22 +51,31 @@ export const TICKFLOW_CAPS = [
 export const TICKFLOW_SPEC: ProviderManifestSpec = {
   id: 'tickflow',
   title: 'TickFlow',
-  subtitle: 'A股/港股/美股行情与 A 股分时，需 API Key（api.tickflow.org）',
+  subtitle: '免费日K/标的无需注册；配置 Key 可升级实时与分钟线',
   marketGroup: 'GLOBAL',
+  /** CN 保持 100，低于 tonghuashun(120)，不抢 A 股主路径 */
   defaultPriority: 100,
   maxConcurrent: 5,
   capabilities: TICKFLOW_CAPS,
-  bindingsFor: (p, maxConcurrent) => [
-    ...usEquityBindings([...TICKFLOW_EQUITY_CAPS, ...TICKFLOW_INTRADAY_CAPS], p, maxConcurrent),
-    ...cnEquityEtfIndex(
-      [...TICKFLOW_EQUITY_CAPS, ...TICKFLOW_CN_EXPERT_CAPS, ...TICKFLOW_INTRADAY_CAPS],
-      TICKFLOW_CN_INDEX_CAPS,
-      p,
-      TICKFLOW_FREE_ETF_CAPS,
-      maxConcurrent,
-    ),
-    ...regionalEquityBindings('HK', [...TICKFLOW_EQUITY_CAPS, ...TICKFLOW_INTRADAY_CAPS], p, maxConcurrent),
-  ],
+  bindingsFor: (p, maxConcurrent) => {
+    /** US/HK 明显高于其它跨市源，保证右侧美港主路径 */
+    const crossMarketPriority = Math.max(p, 200)
+    /** CN 保持与 defaultPriority 一致或更低，避免抢 Fuyao */
+    const cnPriority = Math.min(p, 100)
+    const equityCaps = [...TICKFLOW_EQUITY_CAPS]
+    return [
+      // 美港不展示/不绑分时：公开免费档与右侧产品均只做日周月季年 K
+      ...usEquityBindings(equityCaps, crossMarketPriority, maxConcurrent),
+      ...cnEquityEtfIndex(
+        [...equityCaps, ...TICKFLOW_CN_EXPERT_CAPS, ...TICKFLOW_INTRADAY_CAPS],
+        TICKFLOW_CN_INDEX_CAPS,
+        cnPriority,
+        TICKFLOW_FREE_ETF_CAPS,
+        maxConcurrent,
+      ),
+      ...regionalEquityBindings('HK', equityCaps, crossMarketPriority, maxConcurrent),
+    ]
+  },
   settings: TICKFLOW_SETTINGS,
   supportsTest: true,
 }
@@ -74,7 +83,7 @@ export const TICKFLOW_SPEC: ProviderManifestSpec = {
 export const TICKFLOW_MANIFEST = providerManifestEntry(
   'tickflow',
   'TickFlow',
-  'A股/港股/美股行情与 A 股分时，需 API Key（api.tickflow.org）',
+  '免费日K/标的无需注册；配置 Key 可升级实时与分钟线',
   'GLOBAL',
   100,
   TICKFLOW_SETTINGS,

@@ -698,7 +698,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'provider_custom_methods',
     miningEligible: false,
     usageGuide: '查找非标准 API（板块、宏观扩展、情绪、龙虎榜等）；须带 provider_id 或 keyword，禁止无过滤全量拉取。',
-    compliance: '只读；provider_id 如 baostock、zzshare、stockindex、tonghuashun；keyword 如 macro、concept；limit 默认 40。',
+    compliance: '只读；provider_id 如 baostock、zzshare、tonghuashun；keyword 如 macro、concept；limit 默认 40。',
   },
   invoke_provider_custom_method: {
     hubFeature: 'provider_invoke_custom',

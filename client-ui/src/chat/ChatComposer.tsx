@@ -655,6 +655,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
     moveActive: moveMentionActive,
     clampActiveIndex,
     setMentionActiveIndex,
+    universePrep: mentionUniversePrep,
+    refreshingAfterPrep: mentionRefreshingAfterPrep,
   } = useStockMention(watchlistItems)
 
   const {
@@ -720,9 +722,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
     refreshContentState()
   }, [draftSync, closeMention, closeSlash, refreshContentState])
 
-  const buildChipData = useCallback((item: WatchlistItem): InlineChipData => {
+  const buildChipData = useCallback((item: WatchlistItem): InlineChipData | null => {
     const row = normalizeWatchlistItem(item)
     const ref = resolveWatchlistInstrument(row)
+    if (!ref) return null
     const code = displayCodeFromInstrument(ref)
     const market = ref.market !== 'CN' ? marketDisplayName(ref.market) : null
     return {
@@ -741,6 +744,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
     const savedRange = caretRangeRef.current
     root.focus()
     const data = buildChipData(item)
+    if (!data) {
+      closeMention()
+      return
+    }
     if (collectChipKeys(root).includes(data.key)) {
       // 已存在同一标的：仅删除 @query 触发文本，不重复插入。
       const dup = createChipElement(data)
@@ -1283,6 +1290,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
         items={mentionMatches}
         activeIndex={mentionState.activeIndex}
         query={mentionState.query}
+        universePrep={mentionUniversePrep}
+        refreshingAfterPrep={mentionRefreshingAfterPrep}
         onSelect={handleSelectMention}
         onHover={setMentionActiveIndex}
         onClose={closeMention}

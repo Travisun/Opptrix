@@ -933,6 +933,22 @@ app.post('/api/market-data/ui-ready', async () => {
   return { ok: true }
 })
 
+/** Lightweight sync progress for search-universe prep UI (no heavy db_status). */
+app.get('/api/market-data/sync-state', async () => {
+  const snap = getMarketDataService().syncState()
+  return {
+    success: true,
+    data: {
+      running: snap.running,
+      overall_percent: snap.overall_percent,
+      message: snap.message,
+      current_job: snap.current_job,
+      jobs_completed: snap.jobs_completed,
+      jobs_total: snap.jobs_total,
+    },
+  }
+})
+
 app.patch<{ Body: { default_scorecard?: string; default_top_n?: number; default_model?: string } }>(
   '/api/config',
   async (req) => {

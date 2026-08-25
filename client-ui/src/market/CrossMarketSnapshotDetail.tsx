@@ -17,6 +17,7 @@ import {
   formatInstrumentLabel,
   marketDisplayName,
   resolveWatchlistInstrument,
+  UNRESOLVED_INSTRUMENT_COPY,
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import TradingViewChart from './TradingViewChart'
@@ -274,9 +275,16 @@ async function loadSnapshot(ref: InstrumentRef): Promise<EquityDetail | CryptoSn
   return resp.data as EquityDetail | CryptoSnapshotData
 }
 
-function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string } | null): string {
+function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string; sessionLabel?: string } | null): string {
   if (ref.market === 'CRYPTO') {
     return 'Crypto 行情 7×24 更新，约每 30 秒自动刷新。'
+  }
+  if (
+    (ref.market === 'US' || ref.market === 'HK')
+    && quote
+    && (quote.quoteSession === 'closed' || quote.sessionLabel === '收盘')
+  ) {
+    return '展示为收盘价与历史走势，盘中不实时更新。公司资料请通过助手查询。'
   }
   if (
     ref.market === 'US'
@@ -297,15 +305,16 @@ export default function CrossMarketSnapshotDetail({
 }: Props) {
   const s = useStyles()
   const ref = instrumentRef ?? resolveWatchlistInstrument(stock)
-  const label = marketDisplayName(ref.market)
-  const isCrypto = ref.market === 'CRYPTO'
-  const isEquity = ref.market === 'US' || ref.market === 'HK'
+  const label = ref ? marketDisplayName(ref.market) : ''
+  const isCrypto = ref?.market === 'CRYPTO'
+  const isEquity = ref?.market === 'US' || ref?.market === 'HK'
 
   const [snapshot, setSnapshot] = useState<EquityDetail | CryptoSnapshotData | null>(null)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!ref) return
     setFetching(true)
     setError(null)
     try {
@@ -319,11 +328,12 @@ export default function CrossMarketSnapshotDetail({
   }, [ref])
 
   useEffect(() => {
+    if (!ref) return undefined
     void load()
     const ms = isCrypto ? 30_000 : 90_000
     const timer = window.setInterval(() => { void load() }, ms)
     return () => window.clearInterval(timer)
-  }, [load, isCrypto])
+  }, [load, isCrypto, ref])
 
   const equity = isEquity ? (snapshot as EquityDetail | null) : null
   const crypto = isCrypto ? (snapshot as CryptoSnapshotData | null) : null
@@ -337,17 +347,40 @@ export default function CrossMarketSnapshotDetail({
     tone === 'flat' && s.pctFlat,
   )
   const priceDigits = isCrypto && (quote?.price ?? 0) < 1 ? 4 : 2
-  const fmtPrice = (v: number | null | undefined) => formatPriceForMarket(ref.market, v, priceDigits)
-  const fmtCompact = (v: number | null | undefined) => formatCompactNumberForMarket(ref.market, v)
+  const fmtPrice = (v: number | null | undefined) => (
+    ref ? formatPriceForMarket(ref.market, v, priceDigits) : '—'
+  )
+  const fmtCompact = (v: number | null | undefined) => (
+    ref ? formatCompactNumberForMarket(ref.market, v) : '—'
+  )
 
   const displayName = useMemo(() => {
+    if (!ref) return stock.name || stock.code
     if (equity?.name && equity.name !== equity.code) return equity.name
     if (stock.name && stock.name !== stock.code) return stock.name
     return quote?.name || displayCodeFromInstrument(ref)
   }, [equity, stock.name, stock.code, quote?.name, ref])
 
+  if (!ref) {
+    return (
+      <div className={s.root}>
+        <div className={s.hero}>
+          <Text className={s.name}>{stock.name}</Text>
+          <Text size={200} style={{ color: opptrixCssVars.textSecondary }}>
+            {UNRESOLVED_INSTRUMENT_COPY.hint}
+          </Text>
+        </div>
+      </div>
+    )
+  }
+
   const chartCode = formatInstrumentLabel(ref)
-  const footnote = detailFootnote(ref, quote && 'quoteSession' in quote ? quote : null)
+  const footnote = detailFootnote(
+    ref,
+    quote && ('quoteSession' in quote || 'sessionLabel' in quote)
+      ? quote as { quoteSession?: string; sessionLabel?: string }
+      : null,
+  )
 
   if (isCrypto) {
     return (

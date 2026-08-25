@@ -128,7 +128,7 @@ const SEED_RULES: SeedRule[] = [
   {
     pack: 'provider_ext',
     weight: 1,
-    patterns: [/自定义方法|provider|数据源扩展|baostock|zzshare|stockindex|tonghuashun/i],
+    patterns: [/自定义方法|provider|数据源扩展|baostock|zzshare|tonghuashun/i],
   },
   {
     // 轻度：明确制品意图才播种，避免研究话术过猛抢预算

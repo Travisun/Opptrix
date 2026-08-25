@@ -287,3 +287,6 @@ export const REMOVED_SCRAPING_PROVIDER_IDS = [
   'akshare',
   'webfeed',
 ] as const
+
+/** 已下线 OpptrixQuant（stockindex）Provider */
+export const REMOVED_STOCKINDEX_PROVIDER_IDS = ['stockindex'] as const

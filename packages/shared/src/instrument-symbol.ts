@@ -391,6 +391,25 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
     })
   }
 
+  // Tickflow / 行情后缀 — 显式消歧（00700.HK / AAPL.US）
+  const hkDotSuffix = /^(\d{1,5})\.HK$/i.exec(text)
+  if (hkDotSuffix) {
+    return normalizeInstrumentRef({
+      market: 'HK',
+      assetClass: 'EQUITY',
+      symbol: hkDotSuffix[1]!,
+      exchange: 'HK',
+    })
+  }
+  const usDotSuffix = /^([A-Z][A-Z0-9.-]{0,11})\.US$/i.exec(text)
+  if (usDotSuffix) {
+    return normalizeInstrumentRef({
+      market: 'US',
+      assetClass: 'EQUITY',
+      symbol: usDotSuffix[1]!,
+    })
+  }
+
   const prefixed = stripMarketPrefix(text)
   if (prefixed.market) {
     const market = prefixed.market
@@ -428,24 +447,14 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
     })
   }
 
-  // 6 位纯数字 → A 股（A 股代码段固定 6 位，CN 内部可继续区分 SH/SZ/BJ/ETF/INDEX），
-  // 本地解析无歧义。1-5 位数字属于跨市场歧义码（港股 5 位码如 00700、日韩代码、省略前导 0 的
-  // A 股短写）：不直接当错，兜底按 A 股原样 symbol 构造（不 padStart 到 6 位），
-  // 但调用方应优先经 instrument_search 跨市场搜索拿到带正确 market 的 ref。
-  // 可用 isAmbiguousNumericCode(text) 判断并走搜索路径。
+  // 6 位纯数字 → A 股（无歧义）。1-5 位裸数字跨市场歧义（港股 00700、日韩、A 股短写）→
+  // 返回 null，须经 instrument_search 消歧；禁止 pad 成假 CN 权威身份。
   if (isUnambiguousCnDigits(text)) {
     const symbol = canonicalCnSymbol(text)
     return resolveCnInstrumentIdentity({ market: 'CN', assetClass: 'EQUITY', symbol })
   }
   if (isAmbiguousNumericCode(text)) {
-    // 跨市场歧义的短数字码（1-5 位）：不经过 canonicalCnSymbol 规范化（避免 padStart 到 6 位
-    // 把 "700" 错当 "000700"），返回一个 symbol 为原码的 CN EQUITY ref 作为兜底。
-    // 调用方应优先用 isAmbiguousNumericCode(text) 判断并经 instrument_search 消歧。
-    return {
-      market: 'CN',
-      assetClass: 'EQUITY',
-      symbol: text.trim(),
-    }
+    return null
   }
 
   if (/^[A-Z][A-Z0-9.-]{0,11}$/i.test(text) && !/^\d+$/.test(text)) {
@@ -467,6 +476,12 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
 
   return null
 }
+
+/**
+ * 严格解析别名 — 与 `parseCanonicalInstrumentInput` 同语义。
+ * 歧义 1–5 位裸数字返回 `null`，调用方须走 instrument_search 消歧。
+ */
+export const tryParseInstrumentInput = parseCanonicalInstrumentInput
 
 /** @ 引用 / 搜索展示标签 — Stock-index 统一命名空间 */
 export function instrumentRefLabel(ref: InstrumentRef): string {

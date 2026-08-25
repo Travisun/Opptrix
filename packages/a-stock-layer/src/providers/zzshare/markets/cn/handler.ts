@@ -262,7 +262,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
    * @param _keyword 搜索关键词（未使用）
    * @param _page 分页（板块成分暂不分页）
    * @param _pageSize 分页大小
-   * @param boardKey 板块 key（stockindex 等）
+   * @param boardKey 板块 key
    * @param industryCode 行业/板块代码（zzshare plate_code，如 881101）
    */
   async stockList(

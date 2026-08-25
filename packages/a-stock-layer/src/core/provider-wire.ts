@@ -72,10 +72,6 @@ export function wireProviderSymbolArg(
       return cnTsCode(sym, ex)
     }
 
-    if (providerId === 'stockindex') {
-      return sym
-    }
-
     return sym
   }
 

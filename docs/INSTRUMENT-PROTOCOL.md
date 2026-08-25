@@ -58,9 +58,36 @@ interface InstrumentRef {
 
 禁止仅用裸码 `000977` 做详情/行情主路径（搜索命中除外，须尽快消歧为完整 Ref）。
 
-### 2.3 在线标的搜索（OpptrixQuant）
+### 2.2.1 歧义短码（1–5 位裸数字）
 
-UI 关注列表、顶栏、`instrument_search` / `search_instruments` 的**在线关键词搜索**唯一数据源为 OpptrixQuant `GET /api/v1/instruments`（CN / US / HK，需 API Key）。命中行经 `stockIndexItemToInstrumentRef` 映射为 `InstrumentRef`：**优先解析 `instrument_id`**（冒号格式 `CN:of:009049`、`US:stock:AAPL`，兼容旧点号 `CN:PF.009049`）；`class_token` / `sub_type` 为辅助信号。不经 Engine 二次路由、腾讯自定义搜索或 `fund_list` 补路。公募基金净值/档案等数据能力由各行情 Provider（含本 Provider 的 FUND_NAV / FUND_PROFILE / FUND_QUOTE）提供。
+`700` / `00700` 等 **1–5 位纯数字** 在本地无法无歧义判定市场（可能是港股五位码、日韩代码或省略前导 0 的 A 股短写）。
+
+| 规则 | 行为 |
+|------|------|
+| `parseCanonicalInstrumentInput` / `tryParseInstrumentInput` | 返回 `null`，**禁止** pad 成 `CN:*.000700` 作为权威身份 |
+| `isLikelyCnEquityInput` | 仅 **6 位**无歧义纯数字为 true |
+| Hub / 批量 `instrumentRefsFromList` | 歧义裸码跳过，不直接当 CN 下单 |
+| 正确路径 | 经 `instrument_search` / 统一搜索选中带 `market` + `exchange` 的 hit |
+
+显式前缀仍可解析：`HK:00700`、`00700.HK`、`CN:SZ.000700`（若存在）互为不同 `instrument_ns`，灌库互不覆盖。
+
+### 2.2.2 方案 B — UI 单一解析源与关注列表迁移
+
+| 能力 | 行为 |
+|------|------|
+| **UI 解析源** | `client-ui` 不再平行实现权威解析；`tryParseInstrumentInput` / `buildInstrumentNamespace` / `isAmbiguousNumericCode` 等 **re-export 或薄包装** `@opptrix/shared`。歧义短码经 `parseInstrumentInput` **抛错**（禁止假 CN），主路径一律 `tryParse` + 搜索消歧。 |
+| **顶栏 / `@` 提及** | 复用 `useInstrumentSearchWithUniversePrep`：名录 `preparing` 时展示「请稍等，正在准备标的库…」与进度；完成后自动同词重搜再选中/刷新候选项。改关键字取消旧轮询。 |
+| **关注列表迁移** | user-store meta 标记 `instrument_id_unify_watchlist_v1`（一次性、幂等）。合法 `instrument` / 可 parse 的 namespace → `normalizeInstrumentRef` + namespace `code`；1–5 位裸数字无可靠 market → **不瞎改成 CN**（可清历史假 CN pad）；有 industry / market 提示 HK/US 时规范化。失败保留原数据、不写 flag。 |
+| **HK 全表补零** | market-data 启动安全时机幂等 repair，`sync_cursor` flag `instruments_hk_canonical_pad_v1`：`market='HK'` 且 code 纯数字且与 `canonicalHkSymbol` 不一致 → 更新为五位并重算 `instrument_ns`；目标行已存在时合并并保留名称更完整的一行。 |
+| **未消歧自动消歧** | `instrument_id_unify_watchlist_v2` + 关注列表加载：对仍 unresolved 的短码，本地 `searchLocalInstruments`（及必要时 Tickflow `getInstruments` pad5 `.HK`）**唯一命中**时自动写回完整 `InstrumentRef`；**多命中**经 `disambiguation_candidates` 返回候选供用户点选写回；零命中保持空 instrument，UI 提示重新搜索选定。 |
+
+**方案 B 完备性**：HK 名录短码经全表 repair 对齐五位；关注历史脏项在可唯一判定时自动消歧写回，无法判定时不发明假 CN/JP。
+
+### 2.3 在线标的搜索（扶摇 + Tickflow + 本地）
+
+UI 关注列表、顶栏、`@` 提及、`instrument_search` / `search_instruments` 的在线关键词搜索编排为：**扶摇** `tickersSearch`（CN 名称/代码）+ **Tickflow** 精确代码补强（含 1–5 位港股 pad 五位）+ **本地名录**（Tickflow 灌库，`code`/`ref_label` 为 `instrument_ns`，含完整 `InstrumentRef`）+ 中文别名表。SearchHub 股票分支走 `searchLocalInstruments` 多市场名录，不再硬编码全是 CN。
+
+灌库：`mapTickflowInstrumentToListItem` 保留 Opptrix `region` + 交易所 + 推断 `assetClass`（stock→EQUITY，etf→ETF，index→INDEX）；`persistListRow` / `upsertInstrument` 写入正确 `asset_class` 与 `instrument_ns`（HK 五位、US 大写）。
 
 ---
 

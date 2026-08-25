@@ -4,7 +4,7 @@ import SidebarListEmpty from './SidebarListEmpty'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { formatPct, formatPrice, formatPriceForMarket, pctTone, portfolioHoldingsKey } from './format'
-import { instrumentKey, marketDisplayName, parseInstrumentInput } from './instrument'
+import { instrumentKey, marketDisplayName, tryParseInstrumentInput } from './instrument'
 import { displayPortfolioHoldingReturnPct } from './portfolioCalc'
 import type { Market } from '../types/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -273,13 +273,13 @@ export default function PortfolioTab({
               h.code === selectedCode
               || portfolioHoldingsKey(selectedCode, h.market) === displayCode
               || (() => {
-                const parsed = parseInstrumentInput(selectedCode)
+                const parsed = tryParseInstrumentInput(selectedCode)
                 if (!parsed) return false
                 const market = (h.market ?? 'CN') as Market
                 const holdingRef = market === 'CN'
-                  ? parseInstrumentInput(h.code)
+                  ? tryParseInstrumentInput(h.code)
                   : { market, assetClass: 'EQUITY' as const, symbol: h.code }
-                return instrumentKey(parsed) === instrumentKey(holdingRef)
+                return holdingRef ? instrumentKey(parsed) === instrumentKey(holdingRef) : false
               })()
             )
             const sharesLabel = formatShares(h.shares)

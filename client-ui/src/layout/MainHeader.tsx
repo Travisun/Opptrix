@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  makeStyles, Text, SearchBox, Button, Badge, Spinner,
+  makeStyles, Text, SearchBox, Button, Badge, Spinner, ProgressBar,
 } from '@fluentui/react-components'
 import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-icons'
-import { research } from '../api/client'
-import { hitToWatchlistItem, isAmbiguousNumericCode, parseInstrumentInput, tryParseInstrumentInput, toStockContext, marketDisplayName, normalizeWatchlistItem } from '../market/instrument'
+import { tryParseInstrumentInput, toStockContext, marketDisplayName, normalizeWatchlistItem } from '../market/instrument'
+import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from '../market/useInstrumentSearchWithUniversePrep'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -20,7 +20,29 @@ const useStyles = makeStyles({
     minHeight: '56px',
     flexShrink: 0,
   },
-  search: { width: '260px', maxWidth: '36vw' },
+  searchWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    width: '260px',
+    maxWidth: '36vw',
+  },
+  search: { width: '100%' },
+  prepRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  prepText: {
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.3,
+  },
+  prepFail: {
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.error,
+    lineHeight: 1.3,
+  },
   stockChip: {
     display: 'flex',
     alignItems: 'center',
@@ -38,60 +60,131 @@ interface Props {
   onRefresh?: () => void
 }
 
+function pickSearchHit(
+  q: string,
+  items: Array<ReturnType<typeof normalizeWatchlistItem>>,
+) {
+  if (!items.length) return null
+  const digits = q.replace(/\D/g, '')
+  let pick = items[0]!
+  if (digits && digits.length <= 5) {
+    const exact = items.find(it => {
+      const sym = it.instrument?.symbol ?? ''
+      return sym.replace(/^0+/, '') === digits || sym === digits.padStart(5, '0')
+    })
+    if (exact) pick = exact
+  }
+  return pick
+}
+
 export default function MainHeader({ onNavigate, onRefresh }: Props) {
   const s = useStyles()
   const { globalStock, setGlobalStock, agentOpen, setAgentOpen } = useApp()
   const [keyword, setKeyword] = useState('')
-  const [searching, setSearching] = useState(false)
+  const [activeSearch, setActiveSearch] = useState('')
+  const settledForRef = useRef('')
 
-  const handleSearch = async () => {
+  const {
+    hits,
+    searching,
+    universePrep,
+    refreshingAfterPrep,
+  } = useInstrumentSearchWithUniversePrep({
+    keyword: activeSearch,
+    limit: 10,
+    minLength: 1,
+    debounceMs: 80,
+    enabled: Boolean(activeSearch),
+  })
+
+  const handleSearch = () => {
     const q = keyword.trim()
     if (!q) return
-    setSearching(true)
-    try {
-      const resp = await research.searchInstruments(q, 10)
-      if (resp.success && resp.data?.items?.length) {
-        // 对纯数字短码，选择"symbol 精确匹配"的命中优先（避免 700 → 含 "700" 的名称匹配）；
-        // 若有多个市场精确同码（A/H 同时存在），默认取第一条（搜索已按 CN→HK 排序，
-        // 用户可从结果列表里再选港股，下方股票 chip 会显示市场后缀）。
-        const items = resp.data.items
-        const digits = q.replace(/\D/g, '')
-        let pick = items[0]!
-        if (digits && digits.length <= 5) {
-          const exact = items.find(it => it.instrument.symbol.replace(/^0+/, '') === digits
-            || it.instrument.symbol === digits.padStart(5, '0'))
-          if (exact) pick = exact
-        }
-        setGlobalStock(toStockContext(hitToWatchlistItem(pick)))
-      } else if (isAmbiguousNumericCode(q)) {
-        // 短数字码有跨市场歧义，不本地猜市场
-        return
-      } else {
-        const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
-        setGlobalStock(toStockContext(normalizeWatchlistItem({ code: q, name: '', instrument: ref })))
-      }
-      onNavigate('stock_research')
-    } catch {
-      if (!isAmbiguousNumericCode(q)) {
-        const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
-        setGlobalStock(toStockContext(normalizeWatchlistItem({ code: q, name: '', instrument: ref })))
-        onNavigate('stock_research')
-      }
-    }
-    setSearching(false)
+    settledForRef.current = ''
+    setActiveSearch(q)
   }
+
+  useEffect(() => {
+    if (!activeSearch) return
+    if (universePrep.status === 'preparing' || searching || refreshingAfterPrep) return
+    if (settledForRef.current === activeSearch) return
+    settledForRef.current = activeSearch
+
+    const pick = pickSearchHit(activeSearch, hits)
+    if (pick) {
+      setGlobalStock(toStockContext(pick))
+      onNavigate('stock_research')
+      setActiveSearch('')
+      return
+    }
+
+    const ref = tryParseInstrumentInput(activeSearch)
+    if (ref) {
+      setGlobalStock(toStockContext(normalizeWatchlistItem({
+        code: activeSearch,
+        name: '',
+        instrument: ref,
+      })))
+      onNavigate('stock_research')
+      setActiveSearch('')
+      return
+    }
+
+    // 歧义短码且无命中：不构造假 CN；结束本轮搜索
+    setActiveSearch('')
+  }, [
+    activeSearch,
+    hits,
+    searching,
+    universePrep.status,
+    refreshingAfterPrep,
+    setGlobalStock,
+    onNavigate,
+  ])
+
+  const showPrep = universePrep.status === 'preparing'
+  const showFail = universePrep.status === 'failed'
 
   return (
     <header className={s.root}>
-      <SearchBox
-        className={s.search}
-        size="medium"
-        placeholder="搜索股票代码或名称"
-        value={keyword}
-        onChange={(_, d) => setKeyword(d.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
-      />
-      {searching && <Spinner size="tiny" />}
+      <div className={s.searchWrap}>
+        <SearchBox
+          className={s.search}
+          size="medium"
+          placeholder="搜索股票代码或名称"
+          value={keyword}
+          onChange={(_, d) => {
+            setKeyword(d.value)
+            // 改关键字取消旧轮询（清空 activeSearch）
+            if (activeSearch && d.value.trim() !== activeSearch) {
+              settledForRef.current = ''
+              setActiveSearch('')
+            }
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
+        />
+        {showPrep && (
+          <div className={s.prepRow}>
+            <Text className={s.prepText}>
+              {refreshingAfterPrep
+                ? UNIVERSE_PREP_COPY.refreshing
+                : (universePrep.message || UNIVERSE_PREP_COPY.preparing)}
+            </Text>
+            <ProgressBar
+              value={Math.min(1, Math.max(0.03, (universePrep.percent || 0) / 100))}
+              thickness="medium"
+              color="brand"
+              shape="rounded"
+            />
+          </div>
+        )}
+        {showFail && (
+          <Text className={s.prepFail}>
+            {universePrep.message || UNIVERSE_PREP_COPY.failed}
+          </Text>
+        )}
+      </div>
+      {(searching || refreshingAfterPrep) && !showPrep && <Spinner size="tiny" />}
 
       {globalStock && (
         <div className={s.stockChip}>
