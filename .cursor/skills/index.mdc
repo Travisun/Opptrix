@@ -1,0 +1,16 @@
+---
+description: Cursor Skills 索引 — 完整 SKILL.md 在 ~/.projects-rules/Opptrix/.cursor/skills/
+alwaysApply: false
+---
+
+# Cursor Skills 索引
+
+**路径前缀**：`~/.projects-rules/Opptrix/.cursor/skills/`
+
+| Skill | 本地路径 |
+|-------|----------|
+| codegraph | `~/.projects-rules/Opptrix/.cursor/skills/codegraph/SKILL.md` |
+
+> MiMoCode 工程 skill 见 `.mimocode/skills/index.mdc`（另一套路径）。
+
+加载：任务匹配时 **Read** 上表路径，或 Cursor `@` 引用绝对路径。

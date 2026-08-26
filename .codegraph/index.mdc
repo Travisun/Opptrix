@@ -1,0 +1,19 @@
+---
+description: CodeGraph 本地索引说明 — 运行态在仓库 .codegraph/（gitignore），模板在 ~/.projects-rules/Opptrix/
+alwaysApply: false
+---
+
+# CodeGraph 索引
+
+## 运行态（本仓库 · 不提交）
+
+- 索引库：`{workspace}/.codegraph/codegraph.db`（已在 `.gitignore`）
+- MCP：`codegraph serve --mcp --path ${workspaceFolder}`
+
+## 本地备份 / 模板
+
+`~/.projects-rules/Opptrix/.codegraph/` — 仅 `.gitignore` 等参考文件，**不**替代工作区索引路径。
+
+## Hook
+
+会话启动时 `.cursor/hooks/ensure-codegraph.sh` 在工作区执行 `codegraph init/sync`。

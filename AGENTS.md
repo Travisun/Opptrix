@@ -1,17 +1,17 @@
 # Opptrix — Agent 工程规则
 
 > 本文件由 MiMoCode 自动注入 system instructions，每次会话生效。
-> 细则按场景在 `.mimocode/skills/`；动手前 `skill` 加载对应 skill。
-> `.cursor/rules/*.mdc` 为 Cursor IDE 专用，MiMoCode 不读取。
-> **Cursor 渐进式规则**：仅 `.cursor/rules/rules-index.mdc`（L0）常驻；其余按路径 globs（L1）或任务意图 Agent 拉取 / Read（L2）。每任务须先输出「规则加载计划」再动手。
-> **编码门禁**：功能/修复/改码类须加载 `.cursor/rules/task-architecture-gate.mdc`，完成 a–m 架构简报与 ≥3 方案并经用户选定后才写码。
+> 细则按场景在 `~/.projects-rules/Opptrix/.mimocode/skills/`（动手前 Read 对应 skill）；仓库内仅 `.mimocode/index.mdc` 索引。
+> `.cursor/rules/*.mdc` 完整版在 `~/.projects-rules/Opptrix/.cursor/rules/`；仓库内仅 `rules-index.mdc` + `index.mdc` 指引。
+> **Cursor 渐进式规则**：仅 `.cursor/rules/rules-index.mdc`（L0）常驻；L1/L2 须 **Read** 本地 `~/.projects-rules/Opptrix/.cursor/rules/`。每任务须先输出「规则加载计划」。
+> **编码门禁**：Read 本地 `task-architecture-gate.mdc`，完成 a–n 架构简报与 ≥3 方案并经用户选定后才写码。
 
 ---
 
 ## 核心信条
 
 1. **先规则计划，再动手**（Cursor：见 `rules-index.mdc`；MiMoCode：见对应 skill）
-2. **编码类先架构门禁**：a–m 简报 + ≥3 方案，用户选定后再改码（Cursor：`task-architecture-gate.mdc`）
+2. **编码类先架构门禁**：a–n 简报 + ≥3 方案，用户选定后再改码（Cursor：`task-architecture-gate.mdc`）
 3. **先理解，再动手**：重要修改前必须向用户提问确认需求
 4. **先探索，再修改**：CodeGraph 定位后才能改代码
 5. **代码即文档，文档即代码**：架构/API/调用方式变更后必须同步文档
@@ -281,17 +281,19 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 
 | 场景 | Skill | 关键文档 |
 |------|-------|---------|
-| 探索代码 / 定位符号 | `codegraph` | `codegraph explore` |
-| 改 `client-ui` | `client-ui` | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
-| 桌面发版 / 打标签 | `desktop-release` | `docs/DESKTOP-RELEASE.md` |
-| macOS 签名 / 公证 / 防漏签清单 | —（读规则） | `.cursor/rules/desktop-mac-signing.mdc`、`docs/DESKTOP-RELEASE.md` |
-| SQLite / 数据库 | `schema-migration` | `.cursor/rules/backward-compatibility.mdc` |
-| 行情 / Hub / 研究 API | `data-layer` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
-| Agent / MCP 工具接入 | —（读规则） | `.cursor/rules/mcp-tool-pack-routing.mdc`、`docs/AGENT-GUIDE.md` |
-| Agent 命令隔离 / 会话级 SRT | —（读规则） | `.cursor/rules/agent-shell-sandbox.mdc`、`docs/AGENT-GUIDE.md`、`docs/DESKTOP.md` |
-| Provider 实现 | `provider-docs` | `docs/PROVIDER-STANDARD-API.md` |
-| 架构设计 | `architecture` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| 质量保证 / 审计 | `quality-assurance` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| 多 Agent 编排（拆分 → 2–4 subagent → ID 登记 → 完成即停 → 主验收） | `multi-agent-orchestration.mdc` | `task-management` |
-| UI 文案规范 | `ui-copy-standard.mdc` | `docs/UI-DESIGN-SYSTEM.md` |
-| 多平台兼容 | —（读规则） | `.cursor/rules/cross-platform-compat.mdc` |
+| 探索代码 / 定位符号 | `codegraph` | `~/.projects-rules/Opptrix/.mimocode/skills/codegraph/SKILL.md` |
+| 改 `client-ui` | `client-ui` | 本地 skill + `docs/UI-DESIGN-SYSTEM.md` |
+| 桌面发版 / 打标签 | `desktop-release` | 本地 skill + `docs/DESKTOP-RELEASE.md` |
+| macOS 签名 / 公证 / 防漏签清单 | —（Read 本地规则） | `~/.projects-rules/Opptrix/.cursor/rules/desktop-mac-signing.mdc` |
+| SQLite / 数据库 | `schema-migration` | 本地 skill + `backward-compatibility.mdc` |
+| 行情 / Hub / 研究 API | `data-layer` | 本地 skill + `docs/DATA-LAYER.md` |
+| Agent / MCP 工具接入 | —（Read 本地规则） | `~/.projects-rules/Opptrix/.cursor/rules/mcp-tool-pack-routing.mdc` |
+| Agent 命令隔离 / 会话级 SRT | —（Read 本地规则） | `~/.projects-rules/Opptrix/.cursor/rules/agent-shell-sandbox.mdc` |
+| Provider 实现 | `provider-docs` | 本地 skill |
+| 架构设计 | `architecture` | 本地 skill + `docs/ARCHITECTURE-COMPREHENSIVE.md` |
+| 质量保证 / 审计 | `quality-assurance` | 本地 skill |
+| 多 Agent 编排 | Read 本地 `multi-agent-orchestration.mdc` | 本地 skill `task-management` |
+| UI 文案规范 | Read 本地 `ui-copy-standard.mdc` | `docs/UI-DESIGN-SYSTEM.md` |
+| 多平台兼容 | Read 本地 `cross-platform-compat.mdc` | — |
+
+> 首次克隆：确认 `~/.projects-rules/Opptrix/` 已存在（运行 `./author/scripts/bootstrap-local-rules.sh`）。

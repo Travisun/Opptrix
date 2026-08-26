@@ -1,0 +1,26 @@
+---
+description: MiMoCode 配置索引 — 完整 skills/配置在 ~/.projects-rules/Opptrix/.mimocode/
+alwaysApply: false
+---
+
+# MiMoCode 本地配置索引
+
+> **不入 Git。** canonical 副本：`~/.projects-rules/Opptrix/.mimocode/`
+
+| 内容 | 本地路径 |
+|------|----------|
+| 工程 Skills | `~/.projects-rules/Opptrix/.mimocode/skills/` |
+| 项目配置 | `~/.projects-rules/Opptrix/.mimocode/mimocode.jsonc` |
+| 计划草稿 | `~/.projects-rules/Opptrix/.mimocode/plans/` |
+
+## Skills 清单
+
+见 `~/.projects-rules/Opptrix/.mimocode/skills/` 各子目录 `SKILL.md`：
+
+- `architecture`, `client-ui`, `codegraph`, `data-layer`, `desktop-release`
+- `provider-docs`, `quality-assurance`, `schema-migration`, `task-management`
+
+## Agent 约定
+
+- 根目录 `AGENTS.md` 摘要仍生效；细则 **Read** 上表本地路径
+- 首次克隆后运行：`./author/scripts/bootstrap-local-rules.sh`

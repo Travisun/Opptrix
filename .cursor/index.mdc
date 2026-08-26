@@ -1,0 +1,31 @@
+---
+description: Cursor 本地配置索引 — 完整文件在 ~/.projects-rules/Opptrix/.cursor/，不入 Git
+alwaysApply: false
+---
+
+# Cursor 配置索引（仓库内仅指引）
+
+> **完整配置不在本仓库。**  canonical 副本：`~/.projects-rules/Opptrix/.cursor/`
+
+| 子目录 | 索引 | 本地完整路径 |
+|--------|------|----------------|
+| 规则 | `.cursor/rules/index.mdc` | `~/.projects-rules/Opptrix/.cursor/rules/` |
+| Skills | `.cursor/skills/index.mdc` | `~/.projects-rules/Opptrix/.cursor/skills/` |
+| Hooks | `.cursor/hooks/index.mdc` | `~/.projects-rules/Opptrix/.cursor/hooks/` |
+| MCP | 见下 | `~/.projects-rules/Opptrix/.cursor/mcp.json` |
+
+## Agent 加载约定
+
+1. **L0 常驻**：仅本仓库 `.cursor/rules/rules-index.mdc`（路由表）
+2. **L1 / L2 细则**：按 `rules-index` 表格，**Read** `~/.projects-rules/Opptrix/.cursor/rules/{文件名}`
+3. **禁止**凭记忆编造细则；本地文件缺失时提示用户运行 `author/scripts/bootstrap-local-rules.sh`
+
+## MCP（本机）
+
+将 `~/.projects-rules/Opptrix/.cursor/mcp.json` 合并到 Cursor 项目 MCP，或复制为 `.cursor/mcp.json`（该文件已 gitignore，勿提交）。
+
+## 首次 / 换机
+
+```bash
+./author/scripts/bootstrap-local-rules.sh
+```
