@@ -915,14 +915,25 @@ export class MarketDataEngine {
       .then(result => this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>))
   }
 
-  /** 场内基金 fundQuote 失败时，回退 A 股实时行情（交易所价） */
+  /** 场内基金 / REIT fundQuote 失败时，回退 A 股实时行情（交易所价） */
   private async listedFundQuoteFallback(
     code: string,
     primary: QueryResult<Record<string, unknown>[]>,
+    ref?: InstrumentRef,
   ): Promise<QueryResult<Record<string, unknown>[]>> {
     if (primary.success && primary.data?.length) return primary
-    if (!isCnListedFundSymbol(code)) return primary
-    const rt = await this.realtime(code, resolveStockMarketCode(code))
+    const normalized = ref ? normalizeInstrumentRef(ref) : null
+    const assetClass = normalized?.assetClass
+    const isReit = assetClass === 'REIT'
+    const isListed = isCnListedFundSymbol(code) || isReit
+    if (!isListed) return primary
+    const exRaw = normalized?.exchange?.toUpperCase()
+    const market = (exRaw === 'SH' || exRaw === 'SZ' || exRaw === 'BJ')
+      ? exRaw as import('./utils/helpers.js').StockMarket
+      : resolveStockMarketCode(code)
+    // REIT 尚无独立 STOCK_REALTIME binding 时，同码走 EQUITY 交易所快照
+    const rtClass: AssetClass = isReit ? 'EQUITY' : (assetClass ?? inferCnAssetClass(code))
+    const rt = await this.realtime(code, market, rtClass)
     const row = rt.data?.[0]
     if (!rt.success || !row) return primary
     return {
@@ -978,8 +989,8 @@ export class MarketDataEngine {
           15_000,
           normalized,
         ).then(result =>
-          assetClass === 'FUND'
-            ? this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>)
+          exchangeListed
+            ? this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>, normalized)
             : result as QueryResult<Record<string, unknown>[]>,
         )
         : Promise.resolve(null),
@@ -990,11 +1001,16 @@ export class MarketDataEngine {
       : undefined
     const success = profile.success || (exchangeListed && quoteRes?.success && quoteRow)
     if (!success) {
+      const quoteErr = quoteRes && !quoteRes.success && 'error' in quoteRes
+        ? String(quoteRes.error ?? '')
+        : ''
+      const err = [profile.error, quoteErr].filter(Boolean).join('; ')
+        || '基金档案与行情均不可用，请确认同花顺数据密钥已启用'
       return {
         success: false,
         data: null,
-        source: profile.source,
-        error: profile.error,
+        source: profile.source ?? quoteRes?.source,
+        error: err,
       }
     }
     const mergedProfile = profileRow ?? (quoteRow
@@ -1373,10 +1389,14 @@ export class MarketDataEngine {
           if (
             plan.capability === Capability.FUND_QUOTE
             && plan.market === 'CN'
-            && plan.assetClass === 'FUND'
+            && (plan.assetClass === 'FUND' || plan.assetClass === 'REIT')
           ) {
             const code = normalizeCode(String(plan.args[0] ?? ''))
-            return this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>)
+            return this.listedFundQuoteFallback(
+              code,
+              result as QueryResult<Record<string, unknown>[]>,
+              plan.ref,
+            )
           }
           return result
         })

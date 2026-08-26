@@ -14,9 +14,9 @@ export function isCnExchangeListedFundCode(code: string): boolean {
   return isCnListedFundSymbol(normalizeCode(code))
 }
 
-/** Opptrix ID 权威：ETF / LOF 走场内 fundMarketSnapshot */
+/** Opptrix ID 权威：ETF / LOF / REIT 走场内 fundMarketSnapshot */
 export function isCnExchangeListedFundAssetClass(assetClass?: AssetClass): boolean {
-  return assetClass === 'ETF' || assetClass === 'LOF'
+  return assetClass === 'ETF' || assetClass === 'LOF' || assetClass === 'REIT'
 }
 
 /**

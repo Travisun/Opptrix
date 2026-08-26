@@ -42,10 +42,27 @@ describe('cn lof instrument', () => {
 })
 
 describe('fuyao fund profile', () => {
-  it('resolveFuyaoFundRoute maps REIT to reits with listed suffix', () => {
+  it('tonghuashun manifest binds full fund capabilities for REIT', async () => {
+    const { TONGHUASHUN_SPEC } = await import('../packages/a-stock-layer/dist/providers/tonghuashun/manifest.js')
+    const { Capability } = await import('../packages/market-data-core/dist/core/capabilities.js')
+    const bindings = TONGHUASHUN_SPEC.bindingsFor(120, 5)
+    const key = b => `${b.market}:${b.assetClass}:${b.capability}`
+    for (const cap of [
+      Capability.FUND_PROFILE,
+      Capability.FUND_QUOTE,
+      Capability.FUND_ALLOCATION,
+      Capability.FUND_HOLDINGS,
+      Capability.STOCK_REALTIME,
+      Capability.STOCK_KLINE,
+    ]) {
+      assert.ok(bindings.some(b => key(b) === `CN:REIT:${cap}`), `missing CN:REIT:${cap}`)
+    }
+  })
+
+  it('resolveFuyaoFundRoute maps REIT to otc with listed suffix (Fuyao rejects reits+180102.SZ)', () => {
     assert.deepEqual(
       resolveFuyaoFundRoute('180102.SZ', { assetClass: 'REIT' }),
-      { fundType: 'reits', thscode: '180102.SZ' },
+      { fundType: 'otc', thscode: '180102.SZ' },
     )
   })
 

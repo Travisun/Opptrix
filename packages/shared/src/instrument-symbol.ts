@@ -32,16 +32,60 @@ export function isAmbiguousNumericCode(raw: string): boolean {
   return /^\d{1,5}$/.test(s)
 }
 
-/** 美股 ticker — 大写、去交易所前缀 */
+/**
+ * 修复 CLASS_TOKEN 误拼进 symbol 段（如 STOCKAAPL、STOCK00700）。
+ * 要求剩余段长度 ≥2，避免误伤美股单字母代码或 "STOCK" 本身。
+ */
+function stripLeakedStockClassPrefix(body: string, market: 'US' | 'HK'): string {
+  const raw = String(body ?? '').trim().toUpperCase()
+  const m = /^STOCK(.+)$/i.exec(raw)
+  if (!m) return raw
+  const rest = m[1]!.trim()
+  if (!rest) return raw
+  if (market === 'US') {
+    const ticker = rest.replace(/\.US$/i, '').replace(/[^A-Z0-9.-]/g, '')
+    if (ticker.length >= 2 && /^[A-Z][A-Z0-9.-]{0,11}$/.test(ticker)) {
+      return ticker
+    }
+    return raw
+  }
+  const digits = rest.replace(/\D/g, '')
+  if (digits.length >= 4 && digits.length <= 5 && /^\d+$/.test(digits)) {
+    return digits.length > 5 ? digits.slice(-5) : digits.padStart(5, '0')
+  }
+  return raw
+}
+
+/** 美股 ticker — 大写、去交易所前缀与 Tickflow `.US` 后缀（避免 buildOpptrixInstrumentId 变成 AAPL.US.US） */
 export function canonicalUsSymbol(symbol: string): string {
-  let s = symbol.trim().toUpperCase().replace(/^(US|NYSE|NASDAQ|AMEX):/i, '')
+  let s = String(symbol ?? '').trim().toUpperCase()
+  if (!s) return s
+
+  const opptrix = parseOpptrixInstrumentId(s)
+  if (opptrix?.market === 'US') {
+    return stripLeakedStockClassPrefix(opptrix.symbol, 'US')
+  }
+
+  s = s.replace(/^(US|NYSE|NASDAQ|AMEX):/i, '')
+  s = s.replace(/^STOCK:/i, '')
+  s = s.replace(/\.US$/i, '')
   s = s.replace(/[^A-Z0-9.-]/g, '')
-  return s
+  s = s.replace(/\.US$/i, '')
+  return stripLeakedStockClassPrefix(s, 'US')
 }
 
 /** 港股 5 位代码（如 00700） */
 export function canonicalHkSymbol(symbol: string): string {
-  const raw = symbol.trim().toUpperCase().replace(/^HK:/i, '')
+  let raw = symbol.trim().toUpperCase().replace(/^HK:/i, '')
+  raw = raw.replace(/^STOCK:/i, '')
+
+  const opptrix = raw.includes(':') ? parseOpptrixInstrumentId(raw) : null
+  if (opptrix?.market === 'HK') {
+    raw = opptrix.symbol
+  } else {
+    raw = stripLeakedStockClassPrefix(raw, 'HK')
+  }
+
   const digits = raw.replace(/\D/g, '')
   if (!digits) return raw
   return digits.length > 5 ? digits.slice(-5) : digits.padStart(5, '0')
@@ -436,7 +480,7 @@ function parseCnOpptrixParts(cls: string, symbolSeg: string): OpptrixInstrumentI
  * 解析 OpptrixQuant instrument_id（`{MARKET}:{CLASS_TOKEN}:{SYMBOL}`，大小写不敏感）。
  * - CN:STOCK:688981.SH、CN:IND:881121.TI、CN:OTC:000037.OF、CN:ETF:510050.SH、CN:LOF:160105.SZ、CN:REIT:508000.SH
  * - 兼容旧 token：of/fund/etf/lof/reit/stock/index（小写）
- * - REIT 保留 .SH/.SZ 后缀；扶摇 fund_type=reits（见 resolveFuyaoFundRoute）
+ * - REIT 保留 .SH/.SZ 后缀；扶摇 fund_type=otc（见 resolveFuyaoFundRoute）
  */
 export function parseOpptrixInstrumentId(id: string): OpptrixInstrumentIdParts | null {
   const parts = String(id ?? '').trim().split(':')

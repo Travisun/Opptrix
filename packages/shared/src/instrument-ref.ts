@@ -25,6 +25,8 @@ export function parseInstrumentRef(input: unknown): InstrumentRef | null {
   const row = input as Record<string, unknown>
   const symbolRaw = String(row.symbol ?? row.code ?? '').trim()
   if (symbolRaw) {
+    const fromCanonical = parseCanonicalInstrumentInput(symbolRaw)
+    if (fromCanonical) return fromCanonical
     const fromNs = parseInstrumentNamespace(symbolRaw)
     if (fromNs) return fromNs
   }

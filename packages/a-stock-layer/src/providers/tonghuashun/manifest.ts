@@ -3,7 +3,7 @@ import { CN_ETF_CAPABILITIES } from '../../core/bindings.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { TONGHUASHUN_SETTINGS } from './settings.js'
-import { cnEquityEtfIndex, cnLofBindings, cnReitBindings } from '../common/bindings.js'
+import { cnEquityEtfIndex, cnLofBindings } from '../common/bindings.js'
 import { TONGHUASHUN_CN_FUND_CAPABILITIES } from './fund-capabilities.js'
 
 export const TONGHUASHUN_CAPS = [
@@ -61,7 +61,20 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
       ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
     })),
     ...cnLofBindings(p, maxConcurrent),
-    ...cnReitBindings(p, maxConcurrent),
+    ...TONGHUASHUN_CN_FUND_CAPABILITIES.map(capability => ({
+      market: 'CN' as const,
+      assetClass: 'REIT' as const,
+      capability,
+      defaultPriority: p,
+      ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    })),
+    ...([Capability.STOCK_REALTIME, Capability.STOCK_KLINE] as const).map(capability => ({
+      market: 'CN' as const,
+      assetClass: 'REIT' as const,
+      capability,
+      defaultPriority: p,
+      ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    })),
   ],
   settings: TONGHUASHUN_SETTINGS,
   supportsTest: true,

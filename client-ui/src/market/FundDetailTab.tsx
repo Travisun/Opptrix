@@ -256,7 +256,8 @@ export default function FundDetailTab({
   )
   const stockCode = instrumentRef?.symbol ?? stock?.code ?? null
   const displayCode = stock?.code?.trim() ?? ''
-  const isListedFund = stockCode != null && isCnListedFundSymbol(stockCode)
+  const isReit = instrumentRef?.assetClass === 'REIT'
+  const isListedFund = stockCode != null && (isCnListedFundSymbol(stockCode) || isReit)
   const isLof = stockCode != null && isCnLofSymbol(stockCode)
 
   const chartInstrument = useMemo(() => {
@@ -264,7 +265,7 @@ export default function FundDetailTab({
     if (!isListedFund) return instrumentRef
     return {
       ...instrumentRef,
-      exchange: inferCnExchangeFromCode(instrumentRef.symbol),
+      exchange: instrumentRef.exchange ?? inferCnExchangeFromCode(instrumentRef.symbol),
     }
   }, [instrumentRef, isListedFund])
 
@@ -373,7 +374,9 @@ export default function FundDetailTab({
             <span className={s.name}>{displayName}</span>
             <span className={s.code}>{displayCode}</span>
             {isHolding && <Badge size="small" color="informative" appearance="outline">持有</Badge>}
-            <span className={s.badge}>{isListedFund ? '场内基金' : '场外基金'}</span>
+            <span className={s.badge}>
+              {isReit ? 'REIT' : isListedFund ? '场内基金' : '场外基金'}
+            </span>
           </div>
           <div className={s.quoteMain}>
             {onManage && (
@@ -437,7 +440,7 @@ export default function FundDetailTab({
 
       {tab === 'chart' ? (
         <div className={s.chartWrap}>
-          {instrumentRef && isListedFund && !isLof ? (
+          {instrumentRef && isListedFund && !isLof && !isReit ? (
             <TradingViewChart
               code={displayCode}
               instrument={chartInstrument}

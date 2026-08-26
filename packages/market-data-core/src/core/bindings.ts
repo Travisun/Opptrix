@@ -72,7 +72,7 @@ export function cnLofBindings(defaultPriority: number, maxConcurrent?: number): 
   }))
 }
 
-/** REIT — 公募 REITs，净值/档案走基金接口（扶摇 fund_type=reits） */
+/** REIT — 公募 REITs，净值/档案走基金接口（扶摇 fund_type=otc + .SH/.SZ thscode） */
 export function cnReitBindings(defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
   return CN_FUND_CAPABILITIES.map(capability => ({
     market: 'CN',

@@ -436,27 +436,32 @@ export class ResearchHub {
         case 'local_hk_screen': return this.localHkScreen(params, t0)
         case 'search_etfs': return await this.searchEtfs(params, t0)
         case 'us_realtime': {
-          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          const ref = resolveInstrumentFromParams(params)
+            ?? resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
           return await this.instrumentQuotes({ instruments: [ref] }, t0)
         }
         case 'us_kline': {
-          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          const ref = resolveInstrumentFromParams(params)
+            ?? resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
           return await this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
         }
         case 'us_profile': {
-          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          const ref = resolveInstrumentFromParams(params)
+            ?? resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
           return await this.usProfile(ref.symbol, t0)
         }
         case 'us_financials': {
-          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          const ref = resolveInstrumentFromParams(params)
+            ?? resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
           return await this.usFinancials(ref.symbol, params, t0)
         }
         case 'us_snapshot': {
-          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          const ref = resolveInstrumentFromParams(params)
+            ?? resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
           if (!ref) return fail('symbol 必填', t0)
           return await this.instrumentSnapshot({ instrument: ref }, t0)
         }
@@ -1281,8 +1286,8 @@ export class ResearchHub {
   }
 
   /**
-   * CN 场外基金批量净值行情 — OpptrixQuant POST /funds/nav/latest（10 只/批）；
-   * 非 batch 路径或 batch 失败时回退 queryInstrumentData(fund_quote)。
+   * CN 基金 / REIT 净值行情 — 经 Engine fund_quote（扶摇等同花顺源）。
+   * OpptrixQuant 仅负责标的搜索，不参与净值/行情。
    */
   private async fundQuotes(refs: InstrumentRef[], t0: number) {
     const unique = [...new Map(refs.map(r => [instrumentRefKey(r), r] as const)).values()]
@@ -1292,88 +1297,9 @@ export class ResearchHub {
     const failed: { code: string; reason: QuoteFailedReason }[] = []
     let firstError = ''
 
-    const batchable: InstrumentRef[] = []
-    const individual: InstrumentRef[] = []
-
-    const { assertCnPublicFundCode } = await import('@opptrix/a-stock-layer')
-
-    for (const ref of unique) {
-      if (
-        ref.market === 'CN'
-        && (ref.assetClass === 'FUND' || ref.assetClass === 'REIT')
-        && assertCnPublicFundCode(ref)
-      ) {
-        batchable.push(ref)
-      } else {
-        individual.push(ref)
-      }
-    }
-
-    const bareToRef = new Map<string, InstrumentRef>()
-    for (const ref of batchable) {
-      const bare = assertCnPublicFundCode(ref)
-      if (bare) bareToRef.set(bare, ref)
-    }
-
-    if (bareToRef.size > 0) {
-      const {
-        opptrixFundQuoteBatch,
-        opptrixLatestNavToQuoteRow,
-        StockIndexHttpClient,
-      } = await import('@opptrix/a-stock-layer')
-
-      if (StockIndexHttpClient.fromConfig()) {
-        const codes = [...bareToRef.keys()]
-        for (let i = 0; i < codes.length; i += 10) {
-          const chunk = codes.slice(i, i + 10)
-          try {
-            const items = await opptrixFundQuoteBatch(chunk)
-            if (items == null) {
-              for (const bare of chunk) {
-                const ref = bareToRef.get(bare)
-                if (ref) individual.push(ref)
-              }
-              continue
-            }
-            const returned = new Set<string>()
-            for (const item of items) {
-              const bare = String(item.product_code ?? '').trim()
-              if (!bare) continue
-              returned.add(bare)
-              const ref = bareToRef.get(bare)
-              if (!ref) continue
-              const row = opptrixLatestNavToQuoteRow(item)
-              const resolved = row
-                ? this.resolveFundQuoteRowWithStaleFallback(ref, row as unknown as Record<string, unknown>)
-                : this.resolveFundQuoteRowWithStaleFallback(ref, null)
-              if (resolved) quotes.push(resolved)
-              else failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
-            }
-            for (const bare of chunk) {
-              if (returned.has(bare)) continue
-              const ref = bareToRef.get(bare)
-              if (!ref) continue
-              const stale = this.resolveFundQuoteRowWithStaleFallback(ref, null)
-              if (stale) quotes.push(stale)
-              else failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
-            }
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
-            if (!firstError && msg.trim()) firstError = msg.trim()
-            for (const bare of chunk) {
-              const ref = bareToRef.get(bare)
-              if (ref) individual.push(ref)
-            }
-          }
-        }
-      } else {
-        individual.push(...batchable)
-      }
-    }
-
     const concurrency = 5
-    for (let i = 0; i < individual.length; i += concurrency) {
-      const chunk = individual.slice(i, i + concurrency)
+    for (let i = 0; i < unique.length; i += concurrency) {
+      const chunk = unique.slice(i, i + concurrency)
       await Promise.all(chunk.map(async ref => {
         const r = await this.de.queryInstrumentData(ref, 'fund_quote').catch((e: unknown) => ({
           success: false as const,
@@ -3576,7 +3502,7 @@ export class ResearchHub {
       settle('fund_holdings'),
       settle('fund_allocation'),
     ])
-    const merged = mergeFundDetailParts(ref.symbol, {
+    const merged = mergeFundDetailParts(instrumentHubCode(ref), {
       snapshot: snapshotPart,
       holdings: holdingsPart,
       allocation: allocationPart,
@@ -4170,7 +4096,7 @@ export class ResearchHub {
   }
 
   private async crossMarketStockDetail(market: 'US' | 'HK', symbol: string, t0: number) {
-    const ref: InstrumentRef = { market, assetClass: 'EQUITY', symbol }
+    const ref = normalizeInstrumentRef({ market, assetClass: 'EQUITY', symbol })
     const snapshotR = await this.de.queryInstrumentData(ref, 'snapshot')
     const snap = instrumentQueryData<Record<string, unknown>>(snapshotR)
 
@@ -4184,16 +4110,23 @@ export class ResearchHub {
     )
 
     const snapProfile = snap?.profile as Record<string, unknown> | null
-    const profile = snapProfile
-      ? normalizeCrossMarketProfile(market, symbol, snapProfile)
+    let profile = snapProfile
+      ? normalizeCrossMarketProfile(market, ref.symbol, snapProfile)
       : null
+    if (!profile) {
+      const profileR = await this.de.queryInstrumentData(ref, 'profile')
+      const row = instrumentQueryData<unknown[]>(profileR)?.[0]
+      if (row && typeof row === 'object') {
+        profile = normalizeCrossMarketProfile(market, ref.symbol, row as Record<string, unknown>)
+      }
+    }
 
     const quote = mergeCrossMarketQuote(
       (snap?.quote ?? null) as Record<string, unknown> | null,
       quoteR.data?.[0] ?? null,
     )
 
-    const payload = buildCrossMarketDetailPayload(market, symbol, snap ?? null, {
+    const payload = buildCrossMarketDetailPayload(market, ref.symbol, snap ?? null, {
       profile,
       quote,
       notices: [],

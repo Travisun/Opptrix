@@ -17,8 +17,6 @@ const { parseOpptrixInstrumentId, opptrixNavToStandardRows, opptrixLatestNavToQu
   await import('../packages/a-stock-layer/dist/providers/stockindex/normalize.js')
 const { STOCKINDEX_SETTINGS, STOCKINDEX_DEFAULT_BASE_URL, stockIndexBaseUrl, stockIndexApiKey } =
   await import('../packages/a-stock-layer/dist/providers/stockindex/settings.js')
-const { STOCKINDEX_METHOD_DOCS, STOCKINDEX_CUSTOM } =
-  await import('../packages/a-stock-layer/dist/providers/stockindex/custom-method-docs.js')
 const { STOCKINDEX_SPEC } =
   await import('../packages/a-stock-layer/dist/providers/stockindex/manifest.js')
 const { STOCKINDEX_HANDLER_CAPS } =
@@ -230,65 +228,39 @@ test('opptrixMetricsToRow — 绩效指标数值化', () => {
   assert.equal(row.source, 'stockindex')
 })
 
-test('manifest — 绑定含 CN FUND 三能力、CN ETF ETF_LIST、不含 SECTOR_LIST', () => {
+test('manifest — 仅 INSTRUMENT_SEARCH 绑定（CN/US/HK），不含行情/净值/名录', () => {
   assert.equal(STOCKINDEX_SPEC.title, 'Opptrix量化')
   assert.equal(STOCKINDEX_SPEC.defaultPriority, 115)
   const bindings = STOCKINDEX_SPEC.bindingsFor(115, 4)
   const key = b => `${b.market}:${b.assetClass}:${b.capability}`
 
-  for (const cap of [Capability.FUND_PROFILE, Capability.FUND_NAV, Capability.FUND_QUOTE]) {
-    assert.ok(bindings.some(b => key(b) === `CN:FUND:${cap}`), `missing CN:FUND:${cap}`)
-  }
-  // cnFundBindings 中的 FUND_LIST / FUND_HOLDINGS 被过滤
-  assert.ok(!bindings.some(b => key(b) === `CN:FUND:${Capability.FUND_LIST}`))
-  assert.ok(!bindings.some(b => key(b) === `CN:FUND:${Capability.FUND_HOLDINGS}`))
-  // SECTOR_LIST 移除
-  assert.ok(!bindings.some(b => b.capability === Capability.SECTOR_LIST))
-  // CN ETF ETF_LIST 保留
-  assert.ok(bindings.some(b => key(b) === `CN:ETF:${Capability.ETF_LIST}`))
-  // CN/US/HK EQUITY 搜索/列表
+  assert.equal(bindings.length, 3)
   for (const market of ['CN', 'US', 'HK']) {
-    assert.ok(bindings.some(b => key(b) === `${market}:EQUITY:${Capability.STOCK_LIST}`))
     assert.ok(bindings.some(b => key(b) === `${market}:EQUITY:${Capability.INSTRUMENT_SEARCH}`))
+    assert.ok(!bindings.some(b => key(b) === `${market}:EQUITY:${Capability.STOCK_LIST}`))
   }
+  for (const cap of [Capability.FUND_PROFILE, Capability.FUND_NAV, Capability.FUND_QUOTE, Capability.ETF_LIST]) {
+    assert.ok(!bindings.some(b => b.capability === cap), `unexpected capability ${cap}`)
+  }
+  assert.ok(!bindings.some(b => b.capability === Capability.SECTOR_LIST))
 })
 
-test('caps — 含三 FUND 能力、不含 SECTOR_LIST；etfList 保留', () => {
+test('caps — 仅 INSTRUMENT_SEARCH', () => {
   const caps = STOCKINDEX_HANDLER_CAPS
-  assert.ok(caps.includes(Capability.FUND_PROFILE))
-  assert.ok(caps.includes(Capability.FUND_NAV))
-  assert.ok(caps.includes(Capability.FUND_QUOTE))
-  assert.ok(caps.includes(Capability.ETF_LIST))
-  assert.ok(!caps.includes(Capability.SECTOR_LIST))
+  assert.deepEqual(caps, [Capability.INSTRUMENT_SEARCH])
 })
 
-test('custom methods — 含 fundMetrics 与 stockIndexListStocks，不含板块/行业', async () => {
+test('custom methods — OpptrixQuant 不提供行情/名录自定义方法', async () => {
   const { findCustomMethod } = await import('../packages/a-stock-layer/dist/core/custom-methods.js')
   const { listCustomMethodsForAgent } =
     await import('../packages/a-stock-layer/dist/core/custom-methods-agent.js')
 
-  assert.ok(findCustomMethod('stockindex', 'fundMetrics'))
-  assert.ok(findCustomMethod('stockindex', 'stockIndexListStocks'))
-  assert.equal(findCustomMethod('stockindex', 'stockIndexListBoards'), undefined)
-  assert.equal(findCustomMethod('stockindex', 'stockIndexListIndustries'), undefined)
-  assert.equal(findCustomMethod('stockindex', 'stockIndexListBoardStocks'), undefined)
-  assert.equal(findCustomMethod('stockindex', 'stockIndexListIndustryStocks'), undefined)
+  assert.equal(findCustomMethod('stockindex', 'fundMetrics'), undefined)
+  assert.equal(findCustomMethod('stockindex', 'stockIndexListStocks'), undefined)
 
   const listed = listCustomMethodsForAgent({ providerId: 'stockindex' })
-  const names = listed.providers[0]?.methods.map(m => m.method) ?? []
-  assert.ok(names.includes('fundMetrics'))
-  assert.ok(names.includes('stockIndexListStocks'))
-  assert.ok(!names.some(n => n.includes('Board') || n.includes('Industry')))
-})
-
-test('fundMetrics 文档字段齐全', () => {
-  const doc = STOCKINDEX_METHOD_DOCS.fundMetrics
-  assert.ok(doc)
-  assert.ok(doc.sourceUrl.includes('/api/v1/funds/{code}/metrics'))
-  assert.ok(doc.params.some(p => p.name === 'code' && p.required))
-  assert.ok(doc.usage.includes('fundMetrics'))
-  assert.ok(doc.example.includes('fundMetrics'))
-  assert.ok(STOCKINDEX_CUSTOM.some(m => m.method === 'fundMetrics'))
+  const methods = listed.providers.flatMap(p => p.methods)
+  assert.equal(methods.length, 0)
 })
 
 test('isFreeMarketDataProvider — stockindex 为付费源（需 API Key）', async () => {
@@ -310,7 +282,7 @@ test('live 联调开关 — 有 Key 时直接命中 009049', { skip: !HAS_KEY },
   registerAllDrivers(de.registry)
   try {
     const hits = await searchInstrumentsOnline(de, '009049', 8, ['CN'])
-    assert.ok(hits.some(h => h.code === 'CN:PF.009049'))
+    assert.ok(hits.some(h => h.code.includes('009049')))
   } catch (err) {
     if (err instanceof InstrumentSearchError && err.reason === 'quota_exceeded') return
     throw err
@@ -359,14 +331,15 @@ test('searchInstrumentsOnline — 默认跨市场仅单次 OpptrixQuant 检索�
   assert.doesNotMatch(src, /limit \* 2/)
 })
 
-test('stockList — 名录分页单页请求（maxPages: 1）', async () => {
+test('handler — 仅 instrumentSearch，不含 stockList 名录分页', async () => {
   const { readFileSync } = await import('node:fs')
   const handlerSrc = readFileSync(
     new URL('../packages/a-stock-layer/src/providers/stockindex/handler.ts', import.meta.url),
     'utf8',
   )
-  assert.match(handlerSrc, /maxPages:\s*1/)
-  assert.doesNotMatch(handlerSrc, /pageSize,\s*1\)\s*\*\s*Math\.max\(page/)
+  assert.match(handlerSrc, /async instrumentSearch/)
+  assert.doesNotMatch(handlerSrc, /async stockList/)
+  assert.doesNotMatch(handlerSrc, /fundProfile/)
 })
 
 test('resolveInstrumentNamesViaStockIndex — 导出且不用 search 关键词接口', async () => {

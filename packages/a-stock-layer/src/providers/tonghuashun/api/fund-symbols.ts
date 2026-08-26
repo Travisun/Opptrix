@@ -17,17 +17,19 @@ export function resolveFuyaoFundRoute(
 ): { fundType: FuyaoFundType; thscode: string } | null {
   const assetClass = opts?.assetClass
   if (assetClass === 'REIT') {
+    // 扶摇实测：REIT 档案/净值须 fund_type=otc + thscode 保留 .SH/.SZ（非 .OF）；
+    // fund_type=reits 会返回 1004（fund_type 与 thscode 分区不一致）。
     let raw = String(code ?? '').trim().toUpperCase()
     const listedMatch = /^(\d{6})\.(SH|SZ|BJ)$/i.exec(raw)
     if (listedMatch) {
-      return { fundType: 'reits', thscode: `${listedMatch[1]}.${listedMatch[2]}` }
+      return { fundType: 'otc', thscode: `${listedMatch[1]}.${listedMatch[2]}` }
     }
     raw = raw.replace(/\.(OF|SH|SZ|BJ|PF)$/i, '')
     const bare = normalizeCode(raw)
     if (!bare || !/^\d{6}$/.test(bare)) return null
     const ex = opts?.exchange?.toUpperCase()
     const suffix = ex === 'SH' || ex === 'SZ' || ex === 'BJ' ? ex : resolveMarket(bare)
-    return { fundType: 'reits', thscode: `${bare}.${suffix}` }
+    return { fundType: 'otc', thscode: `${bare}.${suffix}` }
   }
 
   let raw = String(code ?? '').trim().toUpperCase()

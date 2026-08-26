@@ -1,53 +1,26 @@
 import { Capability } from '../../core/capabilities.js'
 import type { ProviderBinding } from '@opptrix/shared'
-import { cnFundBindings, cnReitBindings } from '../../core/bindings.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { STOCKINDEX_SETTINGS } from './settings.js'
 import { STOCKINDEX_HANDLER_CAPS } from './handler.js'
 
-/** stockindex 已实现的基金能力（filter 掉 cnFundBindings 中的 FUND_LIST / FUND_HOLDINGS） */
-const STOCKINDEX_FUND_CAPS: string[] = [
-  Capability.FUND_PROFILE,
-  Capability.FUND_NAV,
-  Capability.FUND_QUOTE,
-]
-
-function crossMarketBindings(
+/** OpptrixQuant 仅登记标的搜索 — 不提供行情/净值/档案等数据能力 */
+function searchOnlyBindings(
   priority: number,
   maxConcurrent?: number,
 ): ProviderBinding[] {
   const markets = ['CN', 'US', 'HK'] as const
   const rows: ProviderBinding[] = []
   for (const market of markets) {
-    for (const capability of [
-      Capability.STOCK_LIST,
-      Capability.INSTRUMENT_SEARCH,
-    ]) {
-      rows.push({
-        market,
-        assetClass: 'EQUITY',
-        capability,
-        defaultPriority: priority,
-        ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
-      })
-    }
+    rows.push({
+      market,
+      assetClass: 'EQUITY',
+      capability: Capability.INSTRUMENT_SEARCH,
+      defaultPriority: priority,
+      ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    })
   }
-  rows.push({
-    market: 'CN',
-    assetClass: 'ETF',
-    capability: Capability.ETF_LIST,
-    defaultPriority: priority,
-    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
-  })
-  rows.push(
-    ...cnFundBindings(priority, maxConcurrent).filter(b =>
-      STOCKINDEX_FUND_CAPS.includes(b.capability),
-    ),
-    ...cnReitBindings(priority, maxConcurrent).filter(b =>
-      STOCKINDEX_FUND_CAPS.includes(b.capability),
-    ),
-  )
   return rows
 }
 
@@ -61,7 +34,7 @@ export const STOCKINDEX_SPEC: ProviderManifestSpec = {
   defaultPriority: 115,
   maxConcurrent: 4,
   capabilities: STOCKINDEX_CAPS,
-  bindingsFor: (p, maxConcurrent) => crossMarketBindings(p, maxConcurrent),
+  bindingsFor: (p, maxConcurrent) => searchOnlyBindings(p, maxConcurrent),
   settings: STOCKINDEX_SETTINGS,
 }
 

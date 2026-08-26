@@ -192,7 +192,9 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
-      const isListed = fundType === 'exchange' || fundType === 'reits'
+      const isListed = fundType === 'exchange'
+        || fundType === 'reits'
+        || (assetClass === 'REIT' && /\.(SH|SZ|BJ)$/i.test(thscode))
       const [navData, profileData, snapData] = await Promise.all([
         // range=month：取最近两日算涨跌；最新报价取排序后第一条
         client.fundPerformanceNav(fundType, thscode, { ...FUYAO_FUND_NAV_RECENT_OPTS }),

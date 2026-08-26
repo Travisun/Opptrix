@@ -116,4 +116,16 @@ test('resolveInstrumentQueryPlan routes REIT fund_snapshot with ref (not bare FU
     assert.equal(profilePlan.assetClass, 'REIT')
     assert.equal(profilePlan.method, 'fundProfile')
   }
+  const allocationPlan = resolveInstrumentQueryPlan(ref, 'fund_allocation')
+  assert.ok(allocationPlan)
+  if (allocationPlan?.kind === 'registry') {
+    assert.equal(allocationPlan.assetClass, 'REIT')
+    assert.equal(allocationPlan.method, 'fundAllocation')
+  }
+  const holdingsPlan = resolveInstrumentQueryPlan(ref, 'fund_holdings')
+  assert.ok(holdingsPlan)
+  if (holdingsPlan?.kind === 'registry') {
+    assert.equal(holdingsPlan.assetClass, 'REIT')
+    assert.equal(holdingsPlan.method, 'fundHoldings')
+  }
 })
