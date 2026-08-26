@@ -20,6 +20,8 @@ alwaysApply: true
 
 未输出计划不得进入实施。纯问答 / 单行 typo / 只读查文件 → 仅 L0，可跳过 L2。
 
+**编码 / 改码 / 功能 / 修复 / 重构**（非豁免）→ 规则加载计划中须包含 `task-architecture-gate.mdc`；先完成该规则的架构简报（a–m）与 **≥3 套方案** 并经用户选定后，才允许改业务代码。
+
 ## 三层加载模型（对齐 Cursor 机制）
 
 | 层 | Cursor 类型 | frontmatter | 成本 |
@@ -55,8 +57,9 @@ alwaysApply: true
 | 任务类型 | 必读规则 |
 |----------|----------|
 | **探索 / 查实现** | `codegraph.mdc` |
-| **架构 / 跨层改动** | `architecture-principles.mdc` |
-| **新功能 / 扩展能力** | `feature-completeness.mdc`, `requirement-clarification.mdc` |
+| **编码 / 修复 / 功能 / 重构（非豁免）** | `task-architecture-gate.mdc`（先于写码；≥3 方案选型） |
+| **架构 / 跨层改动** | `architecture-principles.mdc`（常与门禁同读） |
+| **新功能 / 扩展能力** | `feature-completeness.mdc`, `requirement-clarification.mdc`（选型**之后**完备交付） |
 | **多步骤实现 / 派 subagent** | `multi-agent-orchestration.mdc` |
 | **交付 / PR / 发版前** | `review-audit.mdc` |
 | **改代码后** | `doc-sync.mdc`（有架构/API 变更时） |
@@ -69,10 +72,11 @@ L2 未自动出现时：**Read** 对应 `.mdc`，勿凭记忆编造细则。
 ## 核心信条（L0 极简，细则见 L2）
 
 1. **先规则计划，再动手**
-2. **先 CodeGraph，再改码**（`codegraph_explore`；见 `codegraph.mdc`）
-3. **最小 diff**；新功能禁止半成品（见 `feature-completeness.mdc`）
-4. **密钥不进 Git**；外部输入须校验；Electron 沙箱隔离（见 `security.mdc`）
-5. **GitHub + Gitee** push/merge 后两端 tip 须一致（见 `dual-remote-sync.mdc`）
+2. **编码类先架构门禁**：a–m 简报 + ≥3 方案，用户选定后再改码（见 `task-architecture-gate.mdc`）
+3. **先 CodeGraph，再改码**（`codegraph_explore`；见 `codegraph.mdc`）
+4. **最小 diff**；新功能禁止半成品（见 `feature-completeness.mdc`）
+5. **密钥不进 Git**；外部输入须校验；Electron 沙箱隔离（见 `security.mdc`）
+6. **GitHub + Gitee** push/merge 后两端 tip 须一致（见 `dual-remote-sync.mdc`）
 
 ## 提交前速查（按需展开 L2）
 

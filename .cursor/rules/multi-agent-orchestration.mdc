@@ -5,7 +5,8 @@ alwaysApply: false
 
 # 多 Agent 编排与审计（硬性规则）
 
-> **规则加载**：本文件为 L2；编排类任务开始前须先完成 `rules-index.mdc` 中的「规则加载计划」。
+> **规则加载**：本文件为 L2；编排类任务开始前须先完成 `rules-index.mdc` 中的「规则加载计划」。  
+> **架构门禁**：实现/修复类在派 Implementer 之前，Main/Architect 须先完成 `task-architecture-gate.mdc`（a–m 简报 + ≥3 方案）并经用户选定；未选定不得派改码。
 
 ## 核心信条
 
