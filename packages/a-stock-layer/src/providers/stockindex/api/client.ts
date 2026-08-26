@@ -126,6 +126,10 @@ export async function opptrixInstrumentSearch(
     market?: string
     classToken?: string
     limit?: number
+    /** 起始页（默认 1）— 名录分页用 */
+    page?: number
+    /** 最多抓取页数（默认直到 limit；名录单页传 1） */
+    maxPages?: number
     /** 跨页间隔 ms — 批量名录同步时缓解日/月配额 */
     delayMs?: number
   } = {},
@@ -135,7 +139,9 @@ export async function opptrixInstrumentSearch(
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 5000)
   const pageSize = Math.min(OPPTRIX_PAGE_SIZE_CAP, limit)
   const all: OpptrixInstrument[] = []
-  let page = 1
+  let page = Math.max(opts.page ?? 1, 1)
+  const maxPages = Math.min(Math.max(opts.maxPages ?? OPPTRIX_MAX_PAGES, 1), OPPTRIX_MAX_PAGES)
+  let pagesFetched = 0
   for (;;) {
     const resp = await client.get<OpptrixPage<OpptrixInstrument>>('/api/v1/instruments', {
       q: q.trim() || undefined,
@@ -146,11 +152,13 @@ export async function opptrixInstrumentSearch(
     })
     const batch = resp?.data ?? []
     all.push(...batch)
+    pagesFetched += 1
     const pagination = resp?.pagination
     if (!batch.length) break
     if (!pagination?.has_more) break
     if (pagination && pagination.total > 0 && all.length >= pagination.total) break
     if (all.length >= limit) break
+    if (pagesFetched >= maxPages) break
     if (page >= OPPTRIX_MAX_PAGES) break
     page += 1
     if (opts.delayMs && opts.delayMs > 0) await sleep(opts.delayMs)

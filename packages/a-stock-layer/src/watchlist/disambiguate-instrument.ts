@@ -5,14 +5,16 @@
 import type { InstrumentRef } from '@opptrix/shared'
 import {
   buildInstrumentNamespace,
+  buildOpptrixInstrumentId,
   canonicalHkSymbol,
   isAmbiguousNumericCode,
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
+  parseOpptrixInstrumentId,
   instrumentRefKey,
 } from '@opptrix/shared'
 import type { WatchlistItem } from './models.js'
-import { normalizeWatchlistItem } from './instrument.js'
+import { isOpptrixInstrumentCode, normalizeWatchlistItem } from './instrument.js'
 
 /** user-store meta — 本地唯一消歧启动迁移已跑过一轮 */
 export const INSTRUMENT_ID_UNIFY_WATCHLIST_V2 = 'instrument_id_unify_watchlist_v2'
@@ -48,6 +50,7 @@ export function watchlistItemNeedsDisambiguation(item: WatchlistItem): boolean {
   }
   const code = String(item.code ?? '').trim()
   if (!code) return false
+  if (parseOpptrixInstrumentId(code)) return false
   if (parseCanonicalInstrumentInput(code)) return false
   if (isAmbiguousNumericCode(code)) return true
   const digits = code.replace(/\D/g, '')
@@ -106,11 +109,13 @@ export function applyResolvedInstrument(
   preferredName?: string | null,
 ): WatchlistItem {
   const normalized = normalizeInstrumentRef(ref)
-  const ns = buildInstrumentNamespace(normalized)
+  const code = isOpptrixInstrumentCode(String(item.code ?? ''))
+    ? buildOpptrixInstrumentId(normalized)
+    : buildInstrumentNamespace(normalized)
   return normalizeWatchlistItem({
     ...item,
-    code: ns,
-    name: item.name?.trim() || preferredName?.trim() || ns,
+    code,
+    name: item.name?.trim() || preferredName?.trim() || code,
     instrument: normalized,
   })
 }

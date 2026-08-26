@@ -10,6 +10,8 @@ import {
   buildOpptrixInstrumentId,
 } from '../packages/shared/dist/instrument-symbol.js'
 import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/tonghuashun/api/fund-symbols.js'
+import { resolveInstrumentQueryPlan } from '../packages/a-stock-layer/dist/core/instrument-query.js'
+import { usesCnExchangeFundRealtimeRoute } from '../packages/a-stock-layer/dist/core/instrument.js'
 
 test('REIT 扶摇 NAV：fund_type=otc，thscode 保留 .SH/.SZ 后缀', () => {
   const route = resolveFuyaoFundRoute('508000.SH', { assetClass: 'REIT' })
@@ -32,6 +34,26 @@ test('ETF / LOF 扶摇 NAV 走 exchange', () => {
   const lof = resolveFuyaoFundRoute('160105', { assetClass: 'LOF' })
   assert.ok(lof)
   assert.equal(lof.fundType, 'exchange')
+})
+
+test('LOF 走场内基金查询计划（etf_nav / exchange）', () => {
+  assert.ok(usesCnExchangeFundRealtimeRoute('160105', 'LOF'))
+  assert.ok(!usesCnExchangeFundRealtimeRoute('600519', 'EQUITY'))
+  assert.ok(usesCnExchangeFundRealtimeRoute('160105'))
+
+  const ref = normalizeInstrumentRef(parseOpptrixInstrumentId('CN:LOF:160105.SZ'))
+  assert.equal(ref.assetClass, 'LOF')
+
+  const navPlan = resolveInstrumentQueryPlan(ref, 'etf_nav')
+  assert.ok(navPlan)
+  assert.equal(navPlan.kind, 'registry')
+  assert.equal(navPlan.assetClass, 'LOF')
+  assert.equal(navPlan.method, 'etfNav')
+
+  const snapPlan = resolveInstrumentQueryPlan(ref, 'etf_snapshot')
+  assert.ok(snapPlan)
+  assert.equal(snapPlan.kind, 'composite_snapshot')
+  assert.equal(snapPlan.assetClass, 'LOF')
 })
 
 test('buildOpptrixInstrumentId — 在线搜索展示；内部键仍用命名空间', () => {

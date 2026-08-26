@@ -718,6 +718,11 @@ app.get<{ Querystring: { q?: string; keyword?: string; limit?: string; markets?:
   },
 )
 
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/resolve-names', async (req) => {
+  const r = await hub.dispatch('instrument_resolve_names', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.get('/api/instruments/summary', async () => ({
   success: false,
   message: '本地标的库索引已下线，请使用 /api/instruments/search（OpptrixQuant 在线）',

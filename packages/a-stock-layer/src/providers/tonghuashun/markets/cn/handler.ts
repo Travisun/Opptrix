@@ -2,7 +2,7 @@ import type {
   Dividend, DragonTiger, FinancialSummary, IndexKline, IndexRealtime,
   LimitUpDown, SentimentData, StockKline, StockListItem, StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
-import { isCnEtfCode } from '../../../../core/instrument.js'
+import { usesCnExchangeFundRealtimeRoute } from '../../../../core/instrument.js'
 import { isShIndexCode, normalizeCode, type StockMarket } from '../../../../utils/helpers.js'
 import { createNameCache } from '../../../../utils/lru-map.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
@@ -105,8 +105,12 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     return name
   }
 
-  async realtime(code: string, market?: StockMarket | null): Promise<StockRealtime[] | null> {
-    if (isCnEtfCode(code)) {
+  async realtime(
+    code: string,
+    market?: StockMarket | null,
+    assetClass?: import('@opptrix/shared').AssetClass,
+  ): Promise<StockRealtime[] | null> {
+    if (usesCnExchangeFundRealtimeRoute(code, assetClass)) {
       return this.withClient(async client => {
         const thscode = toThsCode(code, market)
         const [snap, name] = await Promise.all([
@@ -138,10 +142,16 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
   async batchRealtime(
     codes: string[],
     markets?: Record<string, StockMarket | undefined>,
+    assetClasses?: Record<string, import('@opptrix/shared').AssetClass | undefined>,
   ): Promise<StockRealtime[] | null> {
     if (!codes.length) return null
-    const etfCodes = codes.filter(c => isCnEtfCode(c))
-    const stockCodes = codes.filter(c => !isCnEtfCode(c))
+    const isListedFund = (c: string) => {
+      const key = normalizeCode(c)
+      const ac = assetClasses?.[key] ?? assetClasses?.[c]
+      return usesCnExchangeFundRealtimeRoute(c, ac)
+    }
+    const etfCodes = codes.filter(c => isListedFund(c))
+    const stockCodes = codes.filter(c => !isListedFund(c))
     const exchangeOf = (c: string) => markets?.[normalizeCode(c)] ?? markets?.[c]
     return this.withClient(async client => {
       const out: StockRealtime[] = []
@@ -213,12 +223,13 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     end = '',
     count?: number,
     market?: StockMarket | null,
+    assetClass?: import('@opptrix/shared').AssetClass,
   ): Promise<StockKline[] | null> {
     const p = period.toLowerCase()
     if (p !== 'daily' && p !== 'weekly' && p !== 'monthly' && p !== 'day' && p !== 'week' && p !== 'month') {
       return null
     }
-    if (isCnEtfCode(code)) {
+    if (usesCnExchangeFundRealtimeRoute(code, assetClass)) {
       return this.withClient(async client => {
         const thscode = toThsCode(code, market)
         const endMs = end ? ymdToMs(end, true) : Date.now()
@@ -295,7 +306,7 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
   }
 
   async profile(code: string): Promise<StockProfile[] | null> {
-    if (isCnEtfCode(code)) {
+    if (usesCnExchangeFundRealtimeRoute(code)) {
       return this.withClient(async client => {
         const data = await client.tickersSearch(normalizeCode(code), 5, 'fund-etf')
         const hit = (data.item ?? []).find(it => fromThsCode(String(it.thscode ?? '')) === normalizeCode(code))

@@ -7,9 +7,11 @@
 import type { InstrumentRef, Market } from '@opptrix/shared'
 import {
   buildInstrumentNamespace,
+  buildOpptrixInstrumentId,
   isAmbiguousNumericCode,
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
+  parseOpptrixInstrumentId,
   tryParseInstrumentInput,
 } from '@opptrix/shared'
 import type { WatchlistItem } from './models.js'
@@ -91,6 +93,13 @@ function refFromMarketHint(market: Market, rawSymbol: string): InstrumentRef | n
   return null
 }
 
+function opptrixCodeFromRef(ref: InstrumentRef, fallbackCode: string): string {
+  if (parseOpptrixInstrumentId(fallbackCode.trim())) {
+    return buildOpptrixInstrumentId(ref)
+  }
+  return buildInstrumentNamespace(ref)
+}
+
 /**
  * 单条幂等迁移。失败时原样返回（不丢数据）。
  */
@@ -98,6 +107,18 @@ export function migrateWatchlistItemInstrumentIdV1(item: WatchlistItem): Watchli
   try {
     const codeRaw = String(item.code ?? '').trim()
     const name = item.name?.trim() || codeRaw
+
+    const fromOpptrixOnly = parseOpptrixInstrumentId(codeRaw)
+    if (fromOpptrixOnly) {
+      const normalized = normalizeInstrumentRef(fromOpptrixOnly)
+      const code = buildOpptrixInstrumentId(normalized)
+      return {
+        ...item,
+        code,
+        name: item.name?.trim() || name || code,
+        instrument: normalized,
+      }
+    }
 
     // 1) 已有合法 instrument
     if (item.instrument && item.instrument.market && item.instrument.symbol) {
@@ -127,10 +148,11 @@ export function migrateWatchlistItemInstrumentIdV1(item: WatchlistItem): Watchli
         }
       }
       const normalized = normalizeInstrumentRef(item.instrument)
+      const code = opptrixCodeFromRef(normalized, codeRaw)
       return {
         ...item,
-        code: buildInstrumentNamespace(normalized),
-        name: item.name?.trim() || buildInstrumentNamespace(normalized),
+        code,
+        name: item.name?.trim() || code,
         instrument: normalized,
       }
     }

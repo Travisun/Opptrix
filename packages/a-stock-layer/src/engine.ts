@@ -35,7 +35,12 @@ import { getProviderConfigStore } from './providers/config-store.js'
 import { resolveProviderAlias } from './providers/common/provider-aliases.js'
 import { getUserDataStore } from '@opptrix/user-store'
 import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
-import { isCnEtfCode, inferCnAssetClass } from './core/instrument.js'
+import {
+  isCnExchangeListedFundAssetClass,
+  inferCnAssetClass,
+  instrumentId,
+  toInstrumentRef,
+} from './core/instrument.js'
 import { QueryPlanExecutor, defaultCacheType } from './core/query-plan.js'
 import { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
 import { normalizeUsSymbol } from './utils/us-market.js'
@@ -58,7 +63,6 @@ import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
 import { WatchlistManager } from './watchlist/manager.js'
 import { watchlistItemKey } from './watchlist/instrument.js'
-import { instrumentId } from './core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from './utils/helpers.js'
 import { isCnListedFundSymbol } from './core/fund-instrument.js'
 import {
@@ -384,7 +388,9 @@ export class MarketDataEngine {
       ).then(mapIndexRealtimeResultToStock)
     }
     // 关注列表标的启用 stock_realtime 短 TTL 缓存（见 watchlist-cache）；live 失败时可 stale 回退
-    return this.qScoped<StockRealtime>('CN', resolved, Capability.STOCK_REALTIME, 'realtime', true, code, market).then(result => {
+    return this.qScoped<StockRealtime>(
+      'CN', resolved, Capability.STOCK_REALTIME, 'realtime', true, code, market, resolved,
+    ).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
     })
@@ -392,8 +398,9 @@ export class MarketDataEngine {
   batchRealtime(
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+    assetClasses?: Record<string, AssetClass | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
-    return this.fetchBatchRealtime(codes, markets)
+    return this.fetchBatchRealtime(codes, markets, assetClasses)
   }
 
   kline(code: string, periodOrCount: number): Promise<QueryResult<StockKline[]>>
@@ -443,6 +450,7 @@ export class MarketDataEngine {
   private async fetchBatchRealtime(
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+    assetClasses?: Record<string, AssetClass | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
     if (!codes.length) {
       return { success: true, data: [] }
@@ -465,8 +473,19 @@ export class MarketDataEngine {
                 .filter((e): e is readonly [string, import('./utils/helpers.js').StockMarket] => e != null),
             )
             : undefined
+          const subsetAssetClasses = assetClasses
+            ? Object.fromEntries(
+              part
+                .map(c => {
+                  const key = normalizeCode(String(c))
+                  const ac = assetClasses[key] ?? assetClasses[c]
+                  return ac != null ? ([key, ac] as const) : null
+                })
+                .filter((e): e is readonly [string, AssetClass] => e != null),
+            )
+            : undefined
           try {
-            return await this.fetchBatchRealtimeChunk(part, subsetMarkets)
+            return await this.fetchBatchRealtimeChunk(part, subsetMarkets, subsetAssetClasses)
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e)
             return { success: false as const, error: msg, data: [] as StockRealtime[] }
@@ -492,7 +511,7 @@ export class MarketDataEngine {
         error: errors.length ? errors.join('; ') : '所有 batchRealtime 分片均失败',
       }
     }
-    return this.fetchBatchRealtimeChunk(codes, markets)
+    return this.fetchBatchRealtimeChunk(codes, markets, assetClasses)
   }
 
   private writeWatchlistStockRealtimeFromBatch(
@@ -528,21 +547,26 @@ export class MarketDataEngine {
   private async fetchBatchRealtimeChunk(
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+    assetClasses?: Record<string, AssetClass | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
-    const assetClass = codes.some(c => isCnEtfCode(String(c))) ? 'ETF' : 'EQUITY'
+    const batchAssetClass = codes.some(c => {
+      const key = normalizeCode(String(c))
+      const ac = assetClasses?.[key] ?? assetClasses?.[c]
+      return isCnExchangeListedFundAssetClass(ac)
+    }) ? 'ETF' : 'EQUITY'
     const result = await this.queryPlans.execute<StockRealtime>(
       this.queryPlans.getPlan('cn_equity_stock_realtime_batch'),
       {
         method: 'batchRealtime',
         cacheType: defaultCacheType(Capability.STOCK_REALTIME, 'batchRealtime'),
         useCache: false,
-        args: [codes, markets],
-        assetClass,
+        args: [codes, markets, assetClasses],
+        assetClass: batchAssetClass,
         mergeKey: item => normalizeCode(String((item as StockRealtime).code)),
       },
     )
     if (result.success && result.data?.length) {
-      this.writeWatchlistStockRealtimeFromBatch(result.data, assetClass, markets, result.source)
+      this.writeWatchlistStockRealtimeFromBatch(result.data, batchAssetClass, markets, result.source)
     }
     return result
   }
@@ -562,7 +586,7 @@ export class MarketDataEngine {
     const want = Math.max(1, count)
     const klineAssetClass = resolved === 'LOF'
       ? 'LOF'
-      : resolved === 'ETF' || isCnEtfCode(code)
+      : resolved === 'ETF'
         ? 'ETF'
         : 'EQUITY'
     // 读缓存保留（兼容旧盘）；写仅 watchlist，与 queryScoped 对齐，避免长 K 键空间爆炸
@@ -610,7 +634,7 @@ export class MarketDataEngine {
     }
     const klineAssetClass = resolved === 'LOF'
       ? 'LOF'
-      : resolved === 'ETF' || isCnEtfCode(code)
+      : resolved === 'ETF'
         ? 'ETF'
         : 'EQUITY'
     const writeCache = this.isWatchlistTarget('CN', klineAssetClass, [code])
@@ -983,16 +1007,51 @@ export class MarketDataEngine {
     }
   }
 
-  async etfSnapshot(etfCode: string) {
-    const code = normalizeCode(etfCode)
-    const exchange = resolveStockMarketCode(code)
-    const [profile, nav, quote] = await Promise.all([
-      this.etfProfile(code),
-      this.etfNav(code),
-      this.realtime(code, exchange),
+  async etfSnapshotFromRef(ref: InstrumentRef): Promise<{
+    success: boolean
+    data: {
+      code: string
+      profile: Record<string, unknown> | null
+      nav: ReturnType<typeof pickLatestNavRow> | null
+      quote: StockRealtime | null
+    }
+    source?: string
+  }> {
+    const normalized = normalizeInstrumentRef(ref)
+    const listedClass = normalized.assetClass === 'LOF' ? 'LOF' : 'ETF'
+    const code = normalized.symbol
+    const market = normalized.exchange as import('./utils/helpers.js').StockMarket | undefined
+    const [profile, nav, quote]: [
+      QueryResult<Record<string, unknown>[]>,
+      QueryResult<Record<string, unknown>[]>,
+      QueryResult<StockRealtime[]>,
+    ] = await Promise.all([
+      this.queryScoped<Record<string, unknown>>(
+        'CN',
+        listedClass,
+        Capability.ETF_PROFILE,
+        'etfProfile',
+        defaultCacheType(Capability.ETF_PROFILE, 'etfProfile'),
+        true,
+        [code],
+        15_000,
+        normalized,
+      ),
+      this.queryScoped<Record<string, unknown>>(
+        'CN',
+        listedClass,
+        Capability.ETF_NAV,
+        'etfNav',
+        defaultCacheType(Capability.ETF_NAV, 'etfNav'),
+        true,
+        [code],
+        15_000,
+        normalized,
+      ),
+      this.realtime(code, market, normalized.assetClass),
     ])
     return {
-      success: profile.success || nav.success || quote.success,
+      success: Boolean(profile.success || nav.success || quote.success),
       data: {
         code,
         profile: profile.data?.[0] ?? null,
@@ -1001,6 +1060,11 @@ export class MarketDataEngine {
       },
       source: profile.source ?? nav.source ?? quote.source,
     }
+  }
+
+  /** @deprecated 使用 etfSnapshotFromRef / queryInstrumentData(ref, 'etf_snapshot') */
+  async etfSnapshot(etfCode: string) {
+    return this.etfSnapshotFromRef(toInstrumentRef(etfCode, { market: 'CN' }))
   }
 
   // ── US equities (Phase 2) ──
@@ -1223,10 +1287,27 @@ export class MarketDataEngine {
       case 'composite_snapshot':
         if (plan.market === 'US') return this.usSnapshot(plan.symbol)
         if (plan.market === 'CRYPTO') return this.cryptoSnapshot(plan.symbol)
-        if (plan.market === 'CN' && plan.assetClass === 'ETF') return this.etfSnapshot(plan.symbol)
-        if (plan.market === 'CN' && plan.assetClass === 'LOF') return this.etfSnapshot(plan.symbol)
-        if (plan.market === 'CN' && plan.assetClass === 'REIT') return this.fundSnapshot(plan.symbol)
-        if (plan.market === 'CN' && plan.assetClass === 'FUND') return this.fundSnapshot(plan.symbol)
+        if (plan.market === 'CN' && (plan.assetClass === 'ETF' || plan.assetClass === 'LOF')) {
+          const snapRef = plan.ref ?? normalizeInstrumentRef({
+            market: 'CN',
+            assetClass: plan.assetClass,
+            symbol: plan.symbol,
+            exchange: resolveStockMarketCode(plan.symbol),
+          })
+          return this.etfSnapshotFromRef(snapRef)
+        }
+        if (plan.market === 'CN' && plan.assetClass === 'REIT') {
+          const snapRef = plan.ref ?? normalizeInstrumentRef({
+            market: 'CN', assetClass: 'REIT', symbol: plan.symbol,
+          })
+          return this.fundSnapshot(snapRef.symbol)
+        }
+        if (plan.market === 'CN' && plan.assetClass === 'FUND') {
+          const snapRef = plan.ref ?? normalizeInstrumentRef({
+            market: 'CN', assetClass: 'FUND', symbol: plan.symbol,
+          })
+          return this.fundSnapshot(snapRef.symbol)
+        }
         if (isRegionalEquityMarket(plan.market)) {
           return this.regionalSnapshot(plan.market, plan.symbol)
         }
@@ -1451,12 +1532,13 @@ export class MarketDataEngine {
 
     if (ref.market === 'CN') {
       const code = normalizeCode(ref.symbol)
-      const assetClass = ref.assetClass === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+      const assetClass = isCnExchangeListedFundAssetClass(ref.assetClass)
+        ? ref.assetClass
+        : 'EQUITY'
       const marketArg = ref.exchange as import('./utils/helpers.js').StockMarket | undefined
-      push('CN', assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg] : [code])
-      push('CN', assetClass, 'stock_realtime', 'realtime', [code])
-      if (assetClass === 'ETF') {
-        push('CN', 'ETF', 'stock_realtime', 'realtime', marketArg ? [code, marketArg] : [code])
+      push('CN', assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg, assetClass] : [code, undefined, assetClass])
+      if (isCnExchangeListedFundAssetClass(ref.assetClass)) {
+        push('CN', ref.assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg, ref.assetClass] : [code, undefined, ref.assetClass])
       }
       return out
     }

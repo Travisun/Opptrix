@@ -14,7 +14,7 @@ import {
 } from '@opptrix/shared'
 import type { MarketDataEngine } from '../engine.js'
 import { opptrixInstrumentSearch } from '../providers/stockindex/api/client.js'
-import { StockIndexHttpClient } from '../providers/stockindex/api/http-client.js'
+import { OpptrixQuantApiError, StockIndexHttpClient } from '../providers/stockindex/api/http-client.js'
 import {
   opptrixInstrumentToStockIndexItem,
   stockIndexItemToInstrumentRef,
@@ -33,9 +33,41 @@ export interface InstrumentSearchHit {
 }
 
 const SEARCH_CACHE_MS = 5 * 60 * 1000
-/** bump：恢复 OpptrixQuant 唯一在线搜索，去掉扶摇/Tickflow 编排 */
-const SEARCH_CACHE_VERSION = 7
+/** bump：OpptrixQuant 不传 market 即跨 CN/HK/US 单次检索 */
+const SEARCH_CACHE_VERSION = 9
 const searchCache = new Map<string, { expires: number; items: InstrumentSearchHit[] }>()
+
+export type InstrumentSearchErrorReason = 'no_api_key' | 'quota_exceeded' | 'auth' | 'upstream'
+
+/** 搜索不可用（缺密钥 / 配额 / 鉴权）— 须向用户展示，不可静默为空 */
+export class InstrumentSearchError extends Error {
+  readonly reason: InstrumentSearchErrorReason
+
+  constructor(message: string, reason: InstrumentSearchErrorReason) {
+    super(message)
+    this.name = 'InstrumentSearchError'
+    this.reason = reason
+  }
+}
+
+export function toInstrumentSearchError(err: unknown): InstrumentSearchError {
+  if (err instanceof InstrumentSearchError) return err
+  if (err instanceof OpptrixQuantApiError) {
+    if (err.status === 429) {
+      return new InstrumentSearchError('今日搜索次数已达上限，请明天再试', 'quota_exceeded')
+    }
+    if (err.status === 401 || err.status === 403) {
+      return new InstrumentSearchError('数据密钥无效或未授权，请在设置中重新填写', 'auth')
+    }
+    const upstream = err.message.replace(/^Opptrix量化[^：]*：?/, '').trim()
+    return new InstrumentSearchError(
+      upstream || '暂时无法搜索标的，请稍后再试',
+      'upstream',
+    )
+  }
+  const msg = err instanceof Error ? err.message.trim() : ''
+  return new InstrumentSearchError(msg || '暂时无法搜索标的，请稍后再试', 'upstream')
+}
 
 /** 常见中文别名 → 美/港标的（本地名录未灌满时兜底） */
 export interface SearchAliasTarget {
@@ -268,16 +300,33 @@ function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSea
   }
 }
 
-async function searchMarketViaStockIndex(
-  market: Market,
+const DEFAULT_ONLINE_SEARCH_MARKETS: Market[] = ['CN', 'US', 'HK']
+
+function normalizeOnlineSearchMarkets(markets?: Market[]): Market[] {
+  if (!markets?.length) return DEFAULT_ONLINE_SEARCH_MARKETS
+  return markets.filter(m => m === 'CN' || m === 'US' || m === 'HK')
+}
+
+async function searchStockIndexOnline(
   keyword: string,
   limit: number,
+  market?: Market,
 ): Promise<InstrumentSearchHit[]> {
-  if (!StockIndexHttpClient.fromConfig()) return []
-  const raw = await opptrixInstrumentSearch(keyword, {
-    market,
-    limit: Math.min(limit, 50),
-  })
+  if (!StockIndexHttpClient.fromConfig()) {
+    throw new InstrumentSearchError(
+      '请先在设置中填写 Opptrix量化 数据密钥，才能搜索标的',
+      'no_api_key',
+    )
+  }
+  let raw: Awaited<ReturnType<typeof opptrixInstrumentSearch>>
+  try {
+    raw = await opptrixInstrumentSearch(keyword, {
+      market,
+      limit: Math.min(limit, 50),
+    })
+  } catch (err) {
+    throw toInstrumentSearchError(err)
+  }
   if (!raw) return []
   return raw
     .map(opptrixInstrumentToStockIndexItem)
@@ -302,24 +351,23 @@ export async function searchInstrumentsOnline(
   const cached = searchCache.get(ck)
   if (cached && cached.expires > Date.now()) return cached.items.slice(0, limit)
 
-  const targetMarkets = markets?.length
-    ? markets.filter(m => m === 'CN' || m === 'US' || m === 'HK')
-    : (['CN', 'US', 'HK'] as Market[])
+  const targetMarkets = normalizeOnlineSearchMarkets(markets)
+  if (!targetMarkets.length) return []
+
+  // OpptrixQuant：market 为可选筛选；省略则一次查 CN+HK+US。仅单市场时才传 market。
+  const apiMarket = targetMarkets.length === 1 ? targetMarkets[0] : undefined
 
   const hits: InstrumentSearchHit[] = []
   const seen = new Set<string>()
+  const allowedMarkets = new Set(targetMarkets)
 
-  for (const market of targetMarkets) {
-    try {
-      for (const hit of await searchMarketViaStockIndex(market, kw, limit)) {
-        const key = instrumentRefKey(hit.instrument)
-        if (seen.has(key)) continue
-        seen.add(key)
-        hits.push(hit)
-      }
-    } catch {
-      // 单市场失败不阻断其他市场
-    }
+  for (const hit of await searchStockIndexOnline(kw, limit, apiMarket)) {
+    if (!allowedMarkets.has(hit.market)) continue
+    const key = instrumentRefKey(hit.instrument)
+    if (seen.has(key)) continue
+    seen.add(key)
+    hits.push(hit)
+    if (hits.length >= limit) break
   }
 
   const result = hits.slice(0, limit)

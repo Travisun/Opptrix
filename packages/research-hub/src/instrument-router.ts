@@ -15,7 +15,6 @@ import {
   resolveInstrumentCapabilities,
   resolveInstrumentFromParams,
   type InstrumentRef,
-  type LocalInstrumentInsights,
   type UnifiedInstrumentQuote,
   type UnifiedInstrumentSearchHit,
 } from '@opptrix/shared'
@@ -82,8 +81,6 @@ export type InstrumentRouteHandlers = {
     limit: number,
     markets?: string[],
   ) => Promise<ResearchResult>
-  /** CN 本地离线因子摘要 — 可选，不阻塞 snapshot */
-  localInsights?: (ref: InstrumentRef) => LocalInstrumentInsights | null
 }
 
 function wrapSnapshot(
@@ -92,11 +89,10 @@ function wrapSnapshot(
   handlers: InstrumentRouteHandlers,
 ): ResearchResult {
   if (!resp.success || !resp.data || typeof resp.data !== 'object') return resp
-  const insights = handlers.localInsights?.(ref) ?? null
   const snapshot = normalizeInstrumentSnapshot(
     ref,
     resp.data as Record<string, unknown>,
-    { localInsights: insights, source: insights ? 'mixed' : 'live' },
+    { source: 'live' },
   )
   return { ...resp, data: snapshot }
 }
@@ -150,7 +146,7 @@ export async function routeInstrumentSnapshot(
     return fail('该标的类型暂不支持快照')
   }
 
-  if (ref.market === 'CN' && ref.assetClass === 'ETF') {
+  if (ref.market === 'CN' && (ref.assetClass === 'ETF' || ref.assetClass === 'LOF')) {
     return wrapSnapshot(ref, await handlers.etfSnapshot(ref), handlers)
   }
   if (ref.market === 'CN' && ref.assetClass === 'FUND') {
@@ -286,8 +282,8 @@ async function collectRealtimeQuotesBounded(
   }
 }
 
-function localSourceFor(handlers: InstrumentRouteHandlers, ref: InstrumentRef): UnifiedInstrumentQuote['source'] {
-  return handlers.localInsights?.(ref) ? 'mixed' : 'live'
+function localSourceFor(_handlers: InstrumentRouteHandlers, ref: InstrumentRef): UnifiedInstrumentQuote['source'] {
+  return ref.market === 'CN' && (ref.assetClass === 'ETF' || ref.assetClass === 'LOF') ? 'mixed' : 'live'
 }
 
 export async function routeInstrumentQuotes(

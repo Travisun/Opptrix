@@ -113,14 +113,14 @@ export function isCnIndexCode(code: string, exchange?: string | null): boolean {
   return false
 }
 
-/** A 股 ETF 代码段（宽基/行业/跨境等） */
+/** A 股 ETF 代码段（宽基/行业/跨境等；不含 LOF 16xxxx — 见 isCnLofSymbol） */
 export function isCnEtfCode(code: string): boolean {
   const c = normalizeCode(code)
   if (c.length !== 6) return false
   const head2 = c.slice(0, 2)
   const head3 = c.slice(0, 3)
   if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return true
-  if (head3 === '159' || head2 === '16') return true
+  if (head3 === '159') return true
   return false
 }
 

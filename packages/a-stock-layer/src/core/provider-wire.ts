@@ -112,6 +112,12 @@ export function wireRegistryMethodArgs(
     copy[0] = wireProviderSymbolArg(providerId, paramName, method, ref)
   }
 
+  // 扶摇 CN 实时/K 线：第三参 assetClass（ETF/LOF→exchange 场内快照）
+  if (providerId === 'tonghuashun' && (method === 'realtime' || method === 'kline')) {
+    if (copy.length === 2) copy.push(ref.assetClass)
+    else if (copy.length >= 3) copy[2] = ref.assetClass
+  }
+
   // 扶摇基金接口：第二参传 assetClass，供 REIT→otc / ETF·LOF→exchange 路由
   if (method.startsWith('fund') && providerId === 'tonghuashun' && copy.length === 1) {
     copy.push(ref.assetClass)

@@ -4,9 +4,31 @@ import {
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
 } from '@opptrix/shared'
+import { isCnListedFundSymbol } from './fund-instrument.js'
 import { isShIndexCode, normalizeCode, resolveStockMarketCode, type StockMarket } from '../utils/helpers.js'
 import { isValidUsSymbol } from '../utils/us-market.js'
 import { isCryptoPairNotation, parseCryptoPair } from '../utils/crypto-market.js'
+
+/** 场内上市基金（ETF + LOF）— 走 exchange / fundMarketSnapshot */
+export function isCnExchangeListedFundCode(code: string): boolean {
+  return isCnListedFundSymbol(normalizeCode(code))
+}
+
+/** Opptrix ID 权威：ETF / LOF 走场内 fundMarketSnapshot */
+export function isCnExchangeListedFundAssetClass(assetClass?: AssetClass): boolean {
+  return assetClass === 'ETF' || assetClass === 'LOF'
+}
+
+/**
+ * 实时/批量行情 Provider 分流 — assetClass 优先；仅 legacy 裸码无 class 时回退代码段。
+ */
+export function usesCnExchangeFundRealtimeRoute(code: string, assetClass?: AssetClass): boolean {
+  if (isCnExchangeListedFundAssetClass(assetClass)) return true
+  if (!assetClass || assetClass === 'EQUITY') {
+    return isCnListedFundSymbol(normalizeCode(code))
+  }
+  return false
+}
 
 /** A 股 ETF 代码段（宽基/行业/跨境等；不含 LOF 16xxxx） */
 export function isCnEtfCode(code: string): boolean {

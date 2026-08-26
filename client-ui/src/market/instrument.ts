@@ -232,7 +232,7 @@ export function watchlistItemKey(item: WatchlistItem): string {
 export function toStockContext(
   item: WatchlistItem | Pick<WatchlistItem, 'code' | 'name' | 'instrument'>,
 ): StockContext {
-  const normalized = normalizeWatchlistItem({
+  const normalized = prepareWatchlistItemForStore({
     code: item.code,
     name: item.name,
     instrument: item.instrument,
@@ -255,8 +255,8 @@ export function resolveStockContextInstrument(
 }
 
 export function detailPanelKind(ref: InstrumentRef): DetailPanelKind {
-  if (ref.market === 'CN' && ref.assetClass === 'FUND') return 'cn-fund'
-  if (ref.market === 'CN' && ref.assetClass === 'ETF') return 'cn-etf'
+  if (ref.market === 'CN' && (ref.assetClass === 'FUND' || ref.assetClass === 'REIT')) return 'cn-fund'
+  if (ref.market === 'CN' && (ref.assetClass === 'ETF' || ref.assetClass === 'LOF')) return 'cn-etf'
   if (ref.market === 'CN') return 'cn-equity'
   if (ref.market === 'CRYPTO') return 'crypto'
   if (ref.market === 'US' || ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
@@ -286,6 +286,10 @@ export function formatInstrumentSearchHitSubtitle(item: WatchlistItem): string {
   const parts: string[] = [marketDisplayName(ref.market), code]
   if (ref.assetClass === 'ETF') {
     parts.push('ETF')
+  } else if (ref.assetClass === 'LOF') {
+    parts.push('LOF')
+  } else if (ref.assetClass === 'REIT') {
+    parts.push('REIT')
   } else if (ref.assetClass === 'FUND') {
     parts.push(isCnListedFundSymbol(ref.symbol) ? '场内基金' : '场外基金')
   } else if (ref.assetClass === 'INDEX') {

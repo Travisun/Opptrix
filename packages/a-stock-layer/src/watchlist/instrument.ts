@@ -1,12 +1,28 @@
 import type { InstrumentRef } from '@opptrix/shared'
 import {
+  buildOpptrixInstrumentId,
   instrumentDisplayCode,
   isAmbiguousNumericCode,
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
+  parseOpptrixInstrumentId,
 } from '@opptrix/shared'
 import { instrumentId } from '../core/instrument.js'
 import type { WatchlistItem } from './models.js'
+
+/** OpptrixQuant 统一 ID（CN:REIT:508000.SH 等） */
+export function isOpptrixInstrumentCode(code: string): boolean {
+  return parseOpptrixInstrumentId(String(code ?? '').trim()) != null
+}
+
+/** 展示/持久化 code：Opptrix ID 原样保留；旧项仍用命名空间 */
+function watchlistCodeFromRef(item: Pick<WatchlistItem, 'code'>, instrument: InstrumentRef): string {
+  const raw = String(item.code ?? '').trim()
+  if (isOpptrixInstrumentCode(raw)) {
+    return buildOpptrixInstrumentId(instrument)
+  }
+  return instrumentDisplayCode(instrument)
+}
 
 /** Stable dedupe key across markets — unresolved short codes use pending: prefix */
 export function watchlistItemKey(item: Pick<WatchlistItem, 'code' | 'instrument'>): string {
@@ -15,6 +31,8 @@ export function watchlistItemKey(item: Pick<WatchlistItem, 'code' | 'instrument'
   }
   const parsed = parseCanonicalInstrumentInput(String(item.code ?? ''))
   if (parsed) return instrumentId(parsed)
+  const opptrix = parseOpptrixInstrumentId(String(item.code ?? ''))
+  if (opptrix) return instrumentId(normalizeInstrumentRef(opptrix))
   const raw = String(item.code ?? '').trim()
   return raw ? `pending:${raw}` : 'pending:'
 }
@@ -53,7 +71,22 @@ export function legacyToInstrument(code: string): InstrumentRef {
 export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
   if (item.instrument?.market && item.instrument.symbol) {
     const instrument = normalizeInstrumentRef(item.instrument)
-    const code = displayCodeFromInstrument(instrument)
+    const code = watchlistCodeFromRef(item, instrument)
+    return {
+      code,
+      name: item.name?.trim() || code,
+      industry: item.industry?.trim() || undefined,
+      note: item.note?.trim() || undefined,
+      addedAt: item.addedAt,
+      addedPrice: item.addedPrice ?? null,
+      instrument,
+    }
+  }
+
+  const opptrix = parseOpptrixInstrumentId(String(item.code ?? ''))
+  if (opptrix) {
+    const instrument = normalizeInstrumentRef(opptrix)
+    const code = buildOpptrixInstrumentId(instrument)
     return {
       code,
       name: item.name?.trim() || code,

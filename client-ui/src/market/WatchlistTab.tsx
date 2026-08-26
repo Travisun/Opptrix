@@ -595,6 +595,7 @@ export default function WatchlistTab({
   const {
     hits: searchHits,
     searching,
+    searchError,
     universePrep,
     refreshingAfterPrep,
   } = useInstrumentSearchWithUniversePrep({ keyword, limit: 20 })
@@ -959,23 +960,26 @@ export default function WatchlistTab({
 
     const timer = window.setTimeout(() => {
       void (async () => {
-        for (const item of targets) {
-          if (cancelled) break
-          const syncKey = `index-name:${item.code}`
-          if (patchedRef.current.has(syncKey)) continue
-          try {
+        const refs = targets
+          .map(item => resolveWatchlistInstrument(item))
+          .filter((r): r is NonNullable<typeof r> => r != null)
+        if (!refs.length || cancelled) return
+
+        try {
+          const resp = await research.resolveInstrumentNames(refs)
+          if (cancelled) return
+          const hits = resp.data?.items ?? []
+          const nameByKey = new Map(
+            hits.map(hit => [instrumentKey(hit.instrument), hit.name?.trim() ?? '']),
+          )
+
+          for (const item of targets) {
+            if (cancelled) break
+            const syncKey = `index-name:${item.code}`
+            if (patchedRef.current.has(syncKey)) continue
             const ref = resolveWatchlistInstrument(item)
             if (!ref) continue
-            const lookup = displayCodeFromInstrument(ref)
-            const resp = await research.searchInstruments(lookup, 12)
-            if (cancelled) return
-            const hits = resp.data?.items ?? []
-            const refKey = instrumentKey(ref)
-            const match = hits.find(hit => {
-              const hitKey = instrumentKey(hit.instrument)
-              return hitKey === refKey || normalizeCode(hit.code) === normalizeCode(item.code)
-            })
-            const indexName = match?.name?.trim()
+            const indexName = nameByKey.get(instrumentKey(ref))
             if (!indexName) continue
             const stored = item.name?.trim() ?? ''
             if (indexName.length <= stored.length && stored !== item.code && hasCjkText(stored)) {
@@ -984,9 +988,9 @@ export default function WatchlistTab({
             }
             patchedRef.current.add(syncKey)
             onPatchItem(item.code, { name: indexName })
-          } catch {
-            /* 名录同步失败时保留已有名称 */
           }
+        } catch {
+          /* 名录同步失败时保留已有名称 */
         }
       })()
     }, 500)
@@ -1082,12 +1086,21 @@ export default function WatchlistTab({
             </div>
           )}
           {!searching && searchHits.length === 0 && universePrep.status !== 'preparing' && (
-            <SidebarListEmpty
-              compact
-              icon={<SearchRegular />}
-              title="没找到匹配的股票"
-              hint="试试输入完整代码，或换一个字再搜"
-            />
+            searchError ? (
+              <SidebarListEmpty
+                compact
+                icon={<SearchRegular />}
+                title="暂时无法搜索"
+                hint={searchError}
+              />
+            ) : (
+              <SidebarListEmpty
+                compact
+                icon={<SearchRegular />}
+                title="没找到匹配的股票"
+                hint="试试输入完整代码，或换一个字再搜"
+              />
+            )
           )}
           {searchHits.map(hit => (
             <button

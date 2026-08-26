@@ -302,11 +302,79 @@ test('isFreeMarketDataProvider — stockindex 为付费源（需 API Key）', as
 })
 
 test('live 联调开关 — 有 Key 时直接命中 009049', { skip: !HAS_KEY }, async () => {
-  const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
+  const { searchInstrumentsOnline, InstrumentSearchError } =
+    await import('../packages/a-stock-layer/dist/search/instrument-search.js')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')
   const de = new MarketDataEngine(false)
   registerAllDrivers(de.registry)
-  const hits = await searchInstrumentsOnline(de, '009049', 8, ['CN'])
-  assert.ok(hits.some(h => h.code === 'CN:PF.009049'))
+  try {
+    const hits = await searchInstrumentsOnline(de, '009049', 8, ['CN'])
+    assert.ok(hits.some(h => h.code === 'CN:PF.009049'))
+  } catch (err) {
+    if (err instanceof InstrumentSearchError && err.reason === 'quota_exceeded') return
+    throw err
+  }
+})
+
+test('toInstrumentSearchError — 429/401 映射为用户可读文案', async () => {
+  const { toInstrumentSearchError, InstrumentSearchError } =
+    await import('../packages/a-stock-layer/dist/search/instrument-search.js')
+  const { OpptrixQuantApiError } =
+    await import('../packages/a-stock-layer/dist/providers/stockindex/api/http-client.js')
+
+  const quota = toInstrumentSearchError(new OpptrixQuantApiError('账户今日请求已达上限(1000)', 429))
+  assert.equal(quota.reason, 'quota_exceeded')
+  assert.match(quota.message, /今日搜索次数已达上限/)
+
+  const auth = toInstrumentSearchError(new OpptrixQuantApiError('invalid api key', 401))
+  assert.equal(auth.reason, 'auth')
+  assert.match(auth.message, /数据密钥/)
+
+  assert.ok(toInstrumentSearchError(quota) instanceof InstrumentSearchError)
+})
+
+test('searchInstrumentsOnline — 无 API Key 时抛出 InstrumentSearchError', async () => {
+  const prevKey = process.env.OPPTRIX_STOCKINDEX_API_KEY
+  delete process.env.OPPTRIX_STOCKINDEX_API_KEY
+  try {
+    const { searchInstrumentsOnline, InstrumentSearchError } =
+      await import('../packages/a-stock-layer/dist/search/instrument-search.js')
+    const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
+    const de = new MarketDataEngine(false)
+    await assert.rejects(
+      () => searchInstrumentsOnline(de, '易方达', 5, ['CN']),
+      (err) => err instanceof InstrumentSearchError && err.reason === 'no_api_key',
+    )
+  } finally {
+    if (prevKey !== undefined) process.env.OPPTRIX_STOCKINDEX_API_KEY = prevKey
+  }
+})
+
+test('searchInstrumentsOnline — 默认跨市场仅单次 OpptrixQuant 检索（不传 market）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../packages/a-stock-layer/src/search/instrument-search.ts', import.meta.url), 'utf8')
+  assert.doesNotMatch(src, /for \(const market of targetMarkets\)/)
+  assert.match(src, /apiMarket = targetMarkets\.length === 1 \? targetMarkets\[0\] : undefined/)
+  assert.doesNotMatch(src, /limit \* 2/)
+})
+
+test('stockList — 名录分页单页请求（maxPages: 1）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const handlerSrc = readFileSync(
+    new URL('../packages/a-stock-layer/src/providers/stockindex/handler.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(handlerSrc, /maxPages:\s*1/)
+  assert.doesNotMatch(handlerSrc, /pageSize,\s*1\)\s*\*\s*Math\.max\(page/)
+})
+
+test('resolveInstrumentNamesViaStockIndex — 导出且不用 search 关键词接口', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../packages/a-stock-layer/src/search/instrument-resolve.ts', import.meta.url), 'utf8')
+  assert.match(src, /opptrixGetInstrument/)
+  assert.doesNotMatch(src, /opptrixInstrumentSearch/)
+  const { resolveInstrumentNamesViaStockIndex } =
+    await import('../packages/a-stock-layer/dist/search/instrument-resolve.js')
+  assert.equal(typeof resolveInstrumentNamesViaStockIndex, 'function')
 })

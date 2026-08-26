@@ -296,6 +296,7 @@ export class QueryPlanExecutor {
     }
 
     const markets = ctx.args[1] as Record<string, import('../utils/helpers.js').StockMarket | undefined> | undefined
+    const assetClasses = ctx.args[2] as Record<string, import('@opptrix/shared').AssetClass | undefined> | undefined
     const normalized = codes.map(c => normalizeCode(String(c)))
     const results: StockRealtime[] = []
     const seen = new Set<string>()
@@ -324,12 +325,13 @@ export class QueryPlanExecutor {
       const fn = driver.batchRealtime as (
         codes: string[],
         markets?: Record<string, import('../utils/helpers.js').StockMarket | undefined>,
+        assetClasses?: Record<string, import('@opptrix/shared').AssetClass | undefined>,
       ) => Promise<StockRealtime[] | null> | undefined
       if (typeof fn !== 'function') continue
 
       this.registry.notifyAcquire(driver.name)
       try {
-        const call = () => fn.apply(driver, [batch, markets]) as Promise<StockRealtime[] | null>
+        const call = () => fn.apply(driver, [batch, markets, assetClasses]) as Promise<StockRealtime[] | null>
         const t0 = Date.now()
         const result = driver.selfThrottled
           ? await call()

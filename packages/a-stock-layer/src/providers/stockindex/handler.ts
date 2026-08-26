@@ -68,17 +68,16 @@ export class StockIndexHandler extends MarketHandlerShell {
         )
       }
 
+      const size = Math.min(Math.max(pageSize, 1), 100)
       const raw = await opptrixInstrumentSearch('', {
         market,
         classToken: 'stock',
-        limit: Math.min(Math.max(pageSize, 1), 100) * Math.max(page, 1),
+        limit: size,
+        page,
+        maxPages: 1,
       })
       if (!raw) return null
-      const start = (page - 1) * pageSize
-      const rows = stockIndexItemsToListRows(raw.map(opptrixInstrumentToStockIndexItem)).slice(
-        start,
-        start + pageSize,
-      )
+      const rows = stockIndexItemsToListRows(raw.map(opptrixInstrumentToStockIndexItem))
       return rows.length ? rows : null
     } catch {
       return null

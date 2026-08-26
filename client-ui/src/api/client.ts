@@ -439,9 +439,13 @@ export const research = {
       code ? { code } : {},
     ),
 
-  etfSnapshot: async (code: string, signal?: AbortSignal): Promise<
+  etfSnapshot: async (
+    instrument: InstrumentRef,
+    signal?: AbortSignal,
+  ): Promise<
     import('../types/schemas').ApiResponse<import('../types/market').EtfSnapshotData>
   > => {
+    const code = instrument.symbol
     const fallback: import('../types/market').EtfSnapshotData = {
       code,
       profile: null,
@@ -450,7 +454,7 @@ export const research = {
     }
     const resp = await apiCall<
       import('../types/market').EtfSnapshotData | UnifiedInstrumentSnapshotDto
-    >('etf_snapshot', { code }, { signal }, 20000)
+    >('etf_snapshot', { instrument }, { signal }, 20000)
     if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
       return toApiResponse('etf_snapshot', resp, fallback, unifiedSnapshotToEtfSnapshot(resp.data))
     }
@@ -462,18 +466,18 @@ export const research = {
     )
   },
 
-  etfNav: (code: string, signal?: AbortSignal) =>
+  etfNav: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').EtfNavPoint[]; source?: string }>(
-      'local_etf_nav',
-      { code },
+      'etf_nav',
+      { instrument, code: instrument.symbol },
       { signal },
       20000,
     ),
 
-  etfHoldings: (code: string, signal?: AbortSignal) =>
+  etfHoldings: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').EtfHoldingRow[]; source?: string }>(
-      'local_etf_holdings',
-      { code },
+      'etf_holdings',
+      { instrument, code: instrument.symbol },
       { signal },
       20000,
     ),
@@ -545,6 +549,7 @@ export const research = {
   searchInstruments: (keyword: string, limit = 20, signal?: AbortSignal) =>
     jsonFetch<{
       success: boolean
+      message?: string
       data?: {
         items: import('../types/instrument').LocalInstrumentHit[]
         count: number
@@ -590,6 +595,12 @@ export const research = {
     }
     return resp
   },
+
+  resolveInstrumentNames: (instruments: InstrumentRef[], signal?: AbortSignal) =>
+    postInstrument<{
+      items: Array<{ instrument: InstrumentRef; name: string | null; code: string }>
+      count: number
+    }>('/instruments/resolve-names', { instruments }, signal),
 
   instrumentQuotes: (instruments: InstrumentRef[], signal?: AbortSignal) =>
     postInstrument<UnifiedInstrumentQuotesDto>(

@@ -138,7 +138,7 @@ export type { WatchlistItem } from './watchlist/models.js'
 export type { WatchlistGroup, WatchlistGroupsDocument } from './watchlist/groups-models.js'
 export { WATCHLIST_ALL_GROUP_ID, emptyWatchlistGroupsDocument } from './watchlist/groups-models.js'
 export { normalizeWatchlistGroupsDocument, WatchlistGroupsStore } from './watchlist/groups-store.js'
-export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument, tryLegacyToInstrument } from './watchlist/instrument.js'
+export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, isOpptrixInstrumentCode, legacyToInstrument, tryLegacyToInstrument } from './watchlist/instrument.js'
 export {
   INSTRUMENT_ID_UNIFY_WATCHLIST_V1,
   migrateWatchlistItemInstrumentIdV1,
@@ -169,7 +169,16 @@ export {
   DEFAULT_NAME_CACHE_MAX_ENTRIES,
 } from './utils/lru-map.js'
 export { instrumentRefKey } from '@opptrix/shared'
-export { isCnEtfCode, toInstrumentRef, inferCnAssetClass, inferMarketFromSymbol, instrumentId } from './core/instrument.js'
+export {
+  isCnEtfCode,
+  isCnExchangeListedFundCode,
+  isCnExchangeListedFundAssetClass,
+  usesCnExchangeFundRealtimeRoute,
+  toInstrumentRef,
+  inferCnAssetClass,
+  inferMarketFromSymbol,
+  instrumentId,
+} from './core/instrument.js'
 export {
   isCnPublicFundRef,
   toCnPublicFundRef,
@@ -220,6 +229,7 @@ export {
   opptrixFundMetrics,
   stockIndexListStocks,
   stockIndexListEtfs,
+  StockIndexHttpClient,
   opptrixInstrumentToStockIndexItem,
   stockIndexItemsToListRows,
   stockIndexItemToListRow,
@@ -242,9 +252,16 @@ export {
   rankInstrumentSearchHits,
   scoreInstrumentSearchHit,
   resolveSearchAliasTargets,
+  InstrumentSearchError,
+  toInstrumentSearchError,
   type InstrumentSearchHit,
+  type InstrumentSearchErrorReason,
   type SearchAliasTarget,
 } from './search/instrument-search.js'
+export {
+  resolveInstrumentNamesViaStockIndex,
+  type InstrumentNameResolveHit,
+} from './search/instrument-resolve.js'
 export { parseCryptoPair, isCryptoPairNotation, normalizeCryptoBase } from './utils/crypto-market.js'
 export type { CryptoPairRef } from './utils/crypto-market.js'
 export {

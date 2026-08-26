@@ -9,6 +9,7 @@ import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
 import { instrumentProviderSymbol, normalizeInstrumentRef } from '@opptrix/shared'
 import { Capability } from './capabilities.js'
 import { isCnEtfCode } from './instrument.js'
+import { isCnLofSymbol } from './fund-instrument.js'
 import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regional-symbol.js'
 
 /**
@@ -151,6 +152,7 @@ export type InstrumentQueryPlan =
     market: Market
     symbol: string
     assetClass?: AssetClass
+    ref?: InstrumentRef
   }
   | {
     /** A 股实时行情专用路径（EQUITY/ETF；INDEX 走 registry INDEX_REALTIME） */
@@ -206,6 +208,18 @@ function registryPlan(
 }
 
 /** INDEX 必须走指数 snapshot；禁止丢掉 assetClass 后再用裸码猜测。 */
+function cnListedFundQueryClass(
+  assetClass: AssetClass,
+  symbol: string,
+): 'ETF' | 'LOF' | null {
+  if (assetClass === 'LOF') return 'LOF'
+  if (assetClass === 'ETF') return 'ETF'
+  // legacy：命名空间 / 裸码无 class token
+  if (isCnLofSymbol(symbol)) return 'LOF'
+  if (isCnEtfCode(symbol)) return 'ETF'
+  return null
+}
+
 function cnRealtimePlan(
   normalized: InstrumentRef,
   symbol: string,
@@ -294,7 +308,7 @@ export function resolveInstrumentQueryPlan(
       switch (dataCap) {
         case 'snapshot':
         case 'fund_snapshot':
-          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'FUND' }
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'FUND', ref: normalized }
         case 'fund_profile':
         case 'profile':
           return registryPlan('CN', 'FUND', Capability.FUND_PROFILE, 'fundProfile', true, [symbol], normalized)
@@ -342,7 +356,7 @@ export function resolveInstrumentQueryPlan(
       switch (dataCap) {
         case 'snapshot':
         case 'fund_snapshot':
-          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'REIT' }
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'REIT', ref: normalized }
         case 'fund_profile':
         case 'profile':
           return registryPlan('CN', 'REIT', Capability.FUND_PROFILE, 'fundProfile', true, [symbol], normalized)
@@ -400,23 +414,29 @@ export function resolveInstrumentQueryPlan(
           end: opts.endDate,
         }
       case 'snapshot':
-        if (assetClass === 'ETF' || assetClass === 'LOF' || isCnEtfCode(symbol)) {
-          return {
-            kind: 'composite_snapshot',
-            market: 'CN',
-            symbol,
-            assetClass: assetClass === 'LOF' ? 'LOF' : 'ETF',
+        {
+          const listed = cnListedFundQueryClass(assetClass, symbol)
+          if (listed) {
+            return {
+              kind: 'composite_snapshot',
+              market: 'CN',
+              symbol,
+              assetClass: listed,
+              ref: normalized,
+            }
           }
         }
         return cnRealtimePlan(normalized, symbol, exchange, assetClass)
-      case 'profile':
-        if (assetClass === 'LOF') {
+      case 'profile': {
+        const listed = cnListedFundQueryClass(assetClass, symbol)
+        if (listed === 'LOF') {
           return registryPlan('CN', 'LOF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
         }
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+        if (listed === 'ETF') {
           return registryPlan('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
         }
         return registryPlan('CN', assetClass, Capability.STOCK_PROFILE, 'profile', true, [symbol], normalized)
+      }
       case 'financials':
         return registryPlan('CN', assetClass, Capability.FINANCIAL_SUMMARY, 'financials', true, [
           symbol, opts.reportDate ?? '', opts.reportType ?? 'annual',
@@ -477,33 +497,43 @@ export function resolveInstrumentQueryPlan(
           true,
           [opts.plateType ?? 'industries:CN'],
         )
-      case 'etf_list':
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return registryPlan('CN', 'ETF', Capability.ETF_LIST, 'etfList', true, [
+      case 'etf_list': {
+        const listed = cnListedFundQueryClass(assetClass, symbol)
+        if (listed) {
+          return registryPlan('CN', listed, Capability.ETF_LIST, 'etfList', true, [
             'CN', opts.keyword ?? '',
           ])
         }
         return null
-      case 'etf_profile':
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return registryPlan('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
+      }
+      case 'etf_profile': {
+        const listed = cnListedFundQueryClass(assetClass, symbol)
+        if (listed) {
+          return registryPlan('CN', listed, Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
         }
         return null
-      case 'etf_nav':
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return registryPlan('CN', 'ETF', Capability.ETF_NAV, 'etfNav', true, [symbol], normalized)
+      }
+      case 'etf_nav': {
+        const listed = cnListedFundQueryClass(assetClass, symbol)
+        if (listed) {
+          return registryPlan('CN', listed, Capability.ETF_NAV, 'etfNav', true, [symbol], normalized)
         }
         return null
-      case 'etf_holdings':
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return registryPlan('CN', 'ETF', Capability.ETF_HOLDINGS, 'etfHoldings', true, [symbol], normalized)
+      }
+      case 'etf_holdings': {
+        const listed = cnListedFundQueryClass(assetClass, symbol)
+        if (listed) {
+          return registryPlan('CN', listed, Capability.ETF_HOLDINGS, 'etfHoldings', true, [symbol], normalized)
         }
         return null
-      case 'etf_snapshot':
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'ETF' }
+      }
+      case 'etf_snapshot': {
+        const listed = cnListedFundQueryClass(assetClass, symbol)
+        if (listed) {
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: listed, ref: normalized }
         }
         return null
+      }
       case 'dividend':
         return registryPlan('CN', assetClass, Capability.DIVIDEND, 'dividend', true, [symbol], normalized)
       case 'news':

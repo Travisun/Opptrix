@@ -38,7 +38,7 @@ export async function searchInstrumentsUnified(
   const onlineHits: InstrumentSearchHit[] = await searchInstrumentsOnline(
     de,
     keyword,
-    Math.max(limit * 2, limit),
+    limit,
     markets,
   )
 

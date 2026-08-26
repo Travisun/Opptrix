@@ -26,6 +26,7 @@ export {
   type OpptrixFundLatestNavItem,
   type OpptrixFundMetrics,
 } from './api/client.js'
+export { StockIndexHttpClient } from './api/http-client.js'
 export {
   parseOpptrixInstrumentId,
   venueToExchange,

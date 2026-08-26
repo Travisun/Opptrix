@@ -350,7 +350,7 @@ export default function EtfDetailTab({ stock }: Props) {
   }
 
   useEffect(() => {
-    if (!stockCode) {
+    if (!chartInstrument) {
       setSnapshot(null)
       setNavRows([])
       setHoldings([])
@@ -363,7 +363,7 @@ export default function EtfDetailTab({ stock }: Props) {
     setTab('overview')
     setLoading(true)
     setError('')
-    research.etfSnapshot(stockCode)
+    research.etfSnapshot(chartInstrument)
       .then(resp => {
         if (cancelled) return
         if (!resp.success || !resp.data) {
@@ -383,7 +383,7 @@ export default function EtfDetailTab({ stock }: Props) {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode])
+  }, [chartInstrument])
 
   useEffect(() => {
     if (!stockCode || tab !== 'decision') return undefined
@@ -393,10 +393,10 @@ export default function EtfDetailTab({ stock }: Props) {
   }, [stockCode, tab])
 
   useEffect(() => {
-    if (!stockCode || tab !== 'nav') return undefined
+    if (!chartInstrument || tab !== 'nav') return undefined
     let cancelled = false
     setNavLoading(true)
-    research.etfNav(stockCode)
+    research.etfNav(chartInstrument)
       .then(resp => {
         if (cancelled) return
         const raw = resp.data as
@@ -413,13 +413,13 @@ export default function EtfDetailTab({ stock }: Props) {
         if (!cancelled) setNavLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode, tab])
+  }, [chartInstrument, tab])
 
   useEffect(() => {
-    if (!stockCode || tab !== 'holdings') return undefined
+    if (!chartInstrument || tab !== 'holdings') return undefined
     let cancelled = false
     setHoldingsLoading(true)
-    research.etfHoldings(stockCode)
+    research.etfHoldings(chartInstrument)
       .then(resp => {
         if (cancelled) return
         const raw = resp.data as
@@ -436,7 +436,7 @@ export default function EtfDetailTab({ stock }: Props) {
         if (!cancelled) setHoldingsLoading(false)
       })
     return () => { cancelled = true }
-  }, [stockCode, tab])
+  }, [chartInstrument, tab])
 
   const profile: EtfProfileData | null = snapshot?.profile ?? null
   const quote = snapshot?.quote

@@ -1,4 +1,4 @@
-import { isCnEtfCode } from '../../../../core/instrument.js'
+import { usesCnExchangeFundRealtimeRoute } from '../../../../core/instrument.js'
 import type { StockListItem } from '../../../../core/schema.js'
 import { normalizeCode } from '../../../../utils/helpers.js'
 import { FuyaoClient } from '../../api/client.js'
@@ -43,7 +43,7 @@ export function mixTonghuashunEtf(Driver: { prototype: TonghuashunMarketHandler 
   p.etfList = async function etfList(_market = 'CN', etfCode = ''): Promise<StockListItem[] | null> {
     const bare = etfCode.trim()
     if (bare) {
-      if (!isCnEtfCode(bare)) return null
+      if (!usesCnExchangeFundRealtimeRoute(bare)) return null
       return withFuyaoClient(async client => {
         const data = await client.tickersSearch(normalizeCode(bare), 5, 'fund-etf')
         const hit = (data.item ?? []).map(mapFundTickerToListItem).find(Boolean)
@@ -65,7 +65,7 @@ export function mixTonghuashunEtf(Driver: { prototype: TonghuashunMarketHandler 
   }
 
   p.etfProfile = async function etfProfile(etfCode: string): Promise<Record<string, unknown>[] | null> {
-    if (!isCnEtfCode(etfCode)) return null
+    if (!usesCnExchangeFundRealtimeRoute(etfCode)) return null
     const bare = normalizeCode(etfCode)
     const thscode = resolveExchangeThscode(bare)
     return withFuyaoClient(async client => {
@@ -93,7 +93,7 @@ export function mixTonghuashunEtf(Driver: { prototype: TonghuashunMarketHandler 
   }
 
   p.etfNav = async function etfNav(etfCode: string): Promise<Record<string, unknown>[] | null> {
-    if (!isCnEtfCode(etfCode)) return null
+    if (!usesCnExchangeFundRealtimeRoute(etfCode)) return null
     const bare = normalizeCode(etfCode)
     const thscode = resolveExchangeThscode(bare)
     return withFuyaoClient(async client => {
@@ -115,7 +115,7 @@ export function mixTonghuashunEtf(Driver: { prototype: TonghuashunMarketHandler 
   }
 
   p.etfHoldings = async function etfHoldings(etfCode: string): Promise<Record<string, unknown>[] | null> {
-    if (!isCnEtfCode(etfCode)) return null
+    if (!usesCnExchangeFundRealtimeRoute(etfCode)) return null
     const thscode = resolveExchangeThscode(normalizeCode(etfCode))
     return withFuyaoClient(async client => {
       const data = await client.fundPortfolioHoldings(FUYAO_EXCHANGE_FUND_TYPE, thscode)

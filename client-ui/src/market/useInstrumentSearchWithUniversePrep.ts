@@ -35,6 +35,8 @@ export interface UseInstrumentSearchWithUniversePrepOptions {
 export interface UseInstrumentSearchWithUniversePrepResult {
   hits: WatchlistItem[]
   searching: boolean
+  /** 搜索失败时的用户可读说明（配额/密钥等） */
+  searchError: string | null
   /** 恒为「无预热」空态 */
   universePrep: UniversePrepUi
   refreshingAfterPrep: boolean
@@ -57,6 +59,7 @@ export function useInstrumentSearchWithUniversePrep(
 
   const [hits, setHits] = useState<WatchlistItem[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const genRef = useRef(0)
   const mapHitRef = useRef(mapHit)
   mapHitRef.current = mapHit
@@ -67,6 +70,7 @@ export function useInstrumentSearchWithUniversePrep(
     if (!enabled) {
       setHits([])
       setSearching(false)
+      setSearchError(null)
       return undefined
     }
 
@@ -76,18 +80,30 @@ export function useInstrumentSearchWithUniversePrep(
     if (q.length < minLength) {
       setHits([])
       setSearching(false)
+      setSearchError(null)
       return undefined
     }
 
     const timer = window.setTimeout(() => {
       setSearching(true)
+      setSearchError(null)
       void research.searchInstruments(q, limitRef.current)
         .then(resp => {
           if (gen !== genRef.current) return
+          if (!resp.success) {
+            setHits([])
+            setSearchError(resp.message?.trim() || '暂时无法搜索，请稍后再试')
+            return
+          }
+          setSearchError(null)
           setHits((resp.data?.items ?? []).map(hit => mapHitRef.current(hit)))
         })
-        .catch(() => {
-          if (gen === genRef.current) setHits([])
+        .catch(err => {
+          if (gen !== genRef.current) return
+          setHits([])
+          setSearchError(err instanceof Error && err.message.trim()
+            ? err.message.trim()
+            : '暂时无法搜索，请稍后再试')
         })
         .finally(() => {
           if (gen === genRef.current) setSearching(false)
@@ -102,6 +118,7 @@ export function useInstrumentSearchWithUniversePrep(
   return {
     hits,
     searching,
+    searchError,
     universePrep: { status: null, percent: 0, message: '' },
     refreshingAfterPrep: false,
   }

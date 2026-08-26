@@ -142,7 +142,6 @@ import {
   normalizeUsShareholders,
 } from './cross-market-detail.js'
 import { searchInstrumentsUnified } from './instrument-search-unified.js'
-import type { LocalInstrumentInsights } from '@opptrix/shared'
 
 function cryptoRefFromPair(pair: string): import('@opptrix/shared').InstrumentRef {
   const p = parseCryptoPair(pair)
@@ -298,15 +297,8 @@ export class ResearchHub {
         case 'market_dynamics': return await this.marketDynamics(t0)
         case 'search_stocks':
           return await this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
-        case 'stock_quotes': {
-          const refs = instrumentRefsFromList(params.codes)
-          const list = refs.length
-            ? refs
-            : (params.codes as string[] | undefined)?.map(code =>
-              resolveInstrumentFromParams({ code, market: 'CN' }),
-            ).filter((r): r is InstrumentRef => r != null) ?? []
-          return await this.instrumentQuotes({ instruments: list.length ? list : params.codes, ...params }, t0)
-        }
+        case 'stock_quotes':
+          return await this.instrumentQuotes(params, t0)
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
         case 'watchlist_list': return this.watchlistList(t0)
         case 'watchlist_save': return this.watchlistSave(params, t0)
@@ -398,9 +390,9 @@ export class ResearchHub {
         case 'sector_list': return await this.sectorList(params, t0)
         case 'sector_constituents': return await this.sectorConstituents(params, t0)
         case 'market_session': return await this.marketSession(params, t0)
-        case 'local_etf_list': return await this.localEtfList(params, t0)
-        case 'local_etf_nav': return await this.localEtfNav(String(params.code ?? ''), params, t0)
-        case 'local_etf_holdings': return await this.localEtfHoldings(String(params.code ?? ''), params, t0)
+        case 'local_etf_list': return await this.etfList(params, t0)
+        case 'local_etf_nav': return await this.queryEtfInstrumentData(params, 'etf_nav', t0)
+        case 'local_etf_holdings': return await this.queryEtfInstrumentData(params, 'etf_holdings', t0)
         case 'etf_scorecard': {
           const ref = resolveInstrumentFromParams(params)
           if (!ref) return fail('instrument 或 code 必填', t0)
@@ -409,6 +401,7 @@ export class ResearchHub {
         case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
         case 'search_local_instruments':
         case 'instrument_search': return await this.instrumentSearch(params, t0)
+        case 'instrument_resolve_names': return await this.instrumentResolveNames(params, t0)
         case 'local_instruments_summary':
           return fail('本地标的库索引已下线，请使用 instrument_search（OpptrixQuant 在线）', t0)
         case 'instrument_snapshot': return await this.instrumentSnapshot(params, t0)
@@ -1241,10 +1234,6 @@ export class ResearchHub {
     return normalized
   }
 
-  private async fillMissingStockNames(_codes: string[]): Promise<void> {
-    // 名称由在线行情回填，不再读本地 universe
-  }
-
   private async stockQuotes(refs: (string | InstrumentRef)[] | undefined, t0: number) {
     const normalizedRefs = [...new Map(
       (refs ?? []).map(item => {
@@ -1253,7 +1242,6 @@ export class ResearchHub {
       }),
     ).values()]
     if (!normalizedRefs.length) return ok({ quotes: [] }, '暂无关注', t0)
-    await this.fillMissingStockNames(normalizedRefs.map(r => r.symbol))
     const batch = await this.stockBatchRealtime(normalizedRefs)
     // Sparse list: failed refs omitted. Callers (routeInstrumentQuotes) must match by code, not index.
     const quotes: Array<NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> & {
@@ -1291,8 +1279,8 @@ export class ResearchHub {
   }
 
   /**
-   * CN 场外基金批量净值行情 — 有界并发 queryInstrumentData(fund_quote)。
-   * price = unitNav（经 coerceInstrumentQuoteRow）；部分失败进 failed[]。
+   * CN 场外基金批量净值行情 — OpptrixQuant POST /funds/nav/latest（10 只/批）；
+   * 非 batch 路径或 batch 失败时回退 queryInstrumentData(fund_quote)。
    */
   private async fundQuotes(refs: InstrumentRef[], t0: number) {
     const unique = [...new Map(refs.map(r => [instrumentRefKey(r), r] as const)).values()]
@@ -1301,10 +1289,89 @@ export class ResearchHub {
     const quotes: Array<Record<string, unknown> & { instrument: InstrumentRef }> = []
     const failed: { code: string; reason: QuoteFailedReason }[] = []
     let firstError = ''
-    const concurrency = 5
 
-    for (let i = 0; i < unique.length; i += concurrency) {
-      const chunk = unique.slice(i, i + concurrency)
+    const batchable: InstrumentRef[] = []
+    const individual: InstrumentRef[] = []
+
+    const { assertCnPublicFundCode } = await import('@opptrix/a-stock-layer')
+
+    for (const ref of unique) {
+      if (
+        ref.market === 'CN'
+        && (ref.assetClass === 'FUND' || ref.assetClass === 'REIT')
+        && assertCnPublicFundCode(ref)
+      ) {
+        batchable.push(ref)
+      } else {
+        individual.push(ref)
+      }
+    }
+
+    const bareToRef = new Map<string, InstrumentRef>()
+    for (const ref of batchable) {
+      const bare = assertCnPublicFundCode(ref)
+      if (bare) bareToRef.set(bare, ref)
+    }
+
+    if (bareToRef.size > 0) {
+      const {
+        opptrixFundQuoteBatch,
+        opptrixLatestNavToQuoteRow,
+        StockIndexHttpClient,
+      } = await import('@opptrix/a-stock-layer')
+
+      if (StockIndexHttpClient.fromConfig()) {
+        const codes = [...bareToRef.keys()]
+        for (let i = 0; i < codes.length; i += 10) {
+          const chunk = codes.slice(i, i + 10)
+          try {
+            const items = await opptrixFundQuoteBatch(chunk)
+            if (items == null) {
+              for (const bare of chunk) {
+                const ref = bareToRef.get(bare)
+                if (ref) individual.push(ref)
+              }
+              continue
+            }
+            const returned = new Set<string>()
+            for (const item of items) {
+              const bare = String(item.product_code ?? '').trim()
+              if (!bare) continue
+              returned.add(bare)
+              const ref = bareToRef.get(bare)
+              if (!ref) continue
+              const row = opptrixLatestNavToQuoteRow(item)
+              const resolved = row
+                ? this.resolveFundQuoteRowWithStaleFallback(ref, row as unknown as Record<string, unknown>)
+                : this.resolveFundQuoteRowWithStaleFallback(ref, null)
+              if (resolved) quotes.push(resolved)
+              else failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+            }
+            for (const bare of chunk) {
+              if (returned.has(bare)) continue
+              const ref = bareToRef.get(bare)
+              if (!ref) continue
+              const stale = this.resolveFundQuoteRowWithStaleFallback(ref, null)
+              if (stale) quotes.push(stale)
+              else failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            if (!firstError && msg.trim()) firstError = msg.trim()
+            for (const bare of chunk) {
+              const ref = bareToRef.get(bare)
+              if (ref) individual.push(ref)
+            }
+          }
+        }
+      } else {
+        individual.push(...batchable)
+      }
+    }
+
+    const concurrency = 5
+    for (let i = 0; i < individual.length; i += concurrency) {
+      const chunk = individual.slice(i, i + concurrency)
       await Promise.all(chunk.map(async ref => {
         const r = await this.de.queryInstrumentData(ref, 'fund_quote').catch((e: unknown) => ({
           success: false as const,
@@ -1397,8 +1464,6 @@ export class ResearchHub {
         .map(ref => [instrumentRefKey(ref), ref] as const),
     ).values()]
     if (!refs.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无 A 股关注', t0)
-
-    await this.fillMissingStockNames(refs.map(r => r.symbol))
 
     const quoteByKey = new Map<string, { name?: string; pe?: number | null; pb?: number | null }>()
     try {
@@ -1884,7 +1949,13 @@ export class ResearchHub {
 
     // Provider 真批（Tickflow / 同花顺等）；Engine 对 >100 自动分片并隔离片失败。
     // 稀疏结果按 code+exchange 对齐槽位；禁止因整包 fail 丢掉已成功片。
-    const batch = await this.de.batchRealtime(codes, markets)
+    const assetClasses: Record<string, import('@opptrix/shared').AssetClass> = {}
+    for (const ref of normalizedRefs) {
+      const code = normalizeCode(ref.symbol)
+      assetClasses[code] = ref.assetClass
+    }
+
+    const batch = await this.de.batchRealtime(codes, markets, assetClasses)
     const batchError = instrumentQueryError(batch, '')
     const returned = batch.success
       ? (instrumentQueryData<Rt[]>(batch) ?? [])
@@ -3497,18 +3568,6 @@ export class ResearchHub {
     return ok(merged.data, merged.message, t0)
   }
 
-  private async localEtfList(params: Record<string, unknown>, t0: number) {
-    return this.etfList(params, t0)
-  }
-
-  private async localEtfNav(code: string, params: Record<string, unknown>, t0: number) {
-    return this.queryEtfInstrumentData({ ...params, code }, 'etf_nav', t0)
-  }
-
-  private async localEtfHoldings(code: string, params: Record<string, unknown>, t0: number) {
-    return this.queryEtfInstrumentData({ ...params, code }, 'etf_holdings', t0)
-  }
-
   private async etfScorecard(ref: InstrumentRef, t0: number) {
     const local = this.marketData.etfScorecard(ref.symbol)
     if (local) {
@@ -3593,10 +3652,6 @@ export class ResearchHub {
     return ok(this.marketData.etfScorecardSchema(), 'ETF 决策雷达评分维度', t0)
   }
 
-  private localInsightsForRef(_ref: InstrumentRef): LocalInstrumentInsights | null {
-    return null
-  }
-
   private async searchInstrumentsUnifiedHandler(
     keyword: string,
     limit: number,
@@ -3604,31 +3659,36 @@ export class ResearchHub {
     t0 = Date.now(),
   ) {
     const m = markets as import('@opptrix/shared').Market[] | undefined
-    const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, {
-      keyword,
-      limit,
-      markets: m,
-    })
-    const sourceLabel = sources.length ? sources.join('+') : 'online'
-    const items = rawItems.map(h => ({
-      code: h.code,
-      name: h.name,
-      market: h.market,
-      assetClass: h.asset_class,
-      exchange: h.exchange,
-      instrument: h.instrument,
-      refLabel: h.ref_label,
-      source: h.source,
-    }))
-    return ok(
-      {
-        items,
-        count: items.length,
-        source: sourceLabel,
-      },
-      `标的搜索 ${items.length} 条`,
-      t0,
-    )
+    try {
+      const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, {
+        keyword,
+        limit,
+        markets: m,
+      })
+      const sourceLabel = sources.length ? sources.join('+') : 'online'
+      const items = rawItems.map(h => ({
+        code: h.code,
+        name: h.name,
+        market: h.market,
+        assetClass: h.asset_class,
+        exchange: h.exchange,
+        instrument: h.instrument,
+        refLabel: h.ref_label,
+        source: h.source,
+      }))
+      return ok(
+        {
+          items,
+          count: items.length,
+          source: sourceLabel,
+        },
+        `标的搜索 ${items.length} 条`,
+        t0,
+      )
+    } catch (err) {
+      const { toInstrumentSearchError } = await import('@opptrix/a-stock-layer')
+      return fail(toInstrumentSearchError(err).message, t0)
+    }
   }
 
   private instrumentRouteHandlers(t0: number): InstrumentRouteHandlers {
@@ -3661,7 +3721,6 @@ export class ResearchHub {
       institutionReport: (params, groups) => this.institutionReport(params, groups, t0),
       searchInstruments: (keyword, limit, markets) =>
         this.searchInstrumentsUnifiedHandler(keyword, limit, markets, t0),
-      localInsights: ref => this.localInsightsForRef(ref),
     }
   }
 
@@ -3687,6 +3746,28 @@ export class ResearchHub {
 
   private async instrumentSearch(params: Record<string, unknown>, t0: number) {
     return routeInstrumentSearch(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private async instrumentResolveNames(params: Record<string, unknown>, t0: number) {
+    const rawList = params.instruments ?? params.refs
+    if (!Array.isArray(rawList) || !rawList.length) {
+      return fail('instruments 必填', t0)
+    }
+    const refs = instrumentRefsFromList(rawList)
+    if (!refs.length) return fail('instruments 无效', t0)
+    try {
+      const { resolveInstrumentNamesViaStockIndex } = await import('@opptrix/a-stock-layer')
+      const hits = await resolveInstrumentNamesViaStockIndex(refs)
+      const items = hits.map(h => ({
+        instrument: h.instrument,
+        name: h.name,
+        code: instrumentDisplayCode(h.instrument),
+      }))
+      return ok({ items, count: items.length }, `解析 ${items.length} 个标的名称`, t0)
+    } catch (err) {
+      const { toInstrumentSearchError } = await import('@opptrix/a-stock-layer')
+      return fail(toInstrumentSearchError(err).message, t0)
+    }
   }
 
   private instrumentCapabilities(params: Record<string, unknown>, t0: number) {
@@ -4143,15 +4224,20 @@ export class ResearchHub {
     const keyword = String(params.keyword ?? params.q ?? '').trim()
     if (keyword.length < 1) return fail('keyword 必填', t0)
     const limit = params.limit != null ? Number(params.limit) : 30
-    const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
-    const hits = await searchInstrumentsOnline(this.de, keyword, limit, ['US'])
-    const items = hits.map(hit => ({
-      code: hit.code,
-      name: hit.name ?? hit.code,
-      market: hit.market,
-    }))
-    const source = hits[0]?.source ?? 'stock_index'
-    return ok({ items, count: items.length, source }, `美股搜索 ${items.length} 条`, t0)
+    try {
+      const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
+      const hits = await searchInstrumentsOnline(this.de, keyword, limit, ['US'])
+      const items = hits.map(hit => ({
+        code: hit.code,
+        name: hit.name ?? hit.code,
+        market: hit.market,
+      }))
+      const source = hits[0]?.source ?? 'stock_index'
+      return ok({ items, count: items.length, source }, `美股搜索 ${items.length} 条`, t0)
+    } catch (err) {
+      const { toInstrumentSearchError } = await import('@opptrix/a-stock-layer')
+      return fail(toInstrumentSearchError(err).message, t0)
+    }
   }
 
   private async cryptoRealtime(pair: string, t0: number) {
