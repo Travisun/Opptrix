@@ -194,16 +194,19 @@ export function ComposerTooltipMenuItem({
   onMouseEnter,
   children,
   className,
+  title,
 }: {
   active?: boolean
   onClick: () => void
   onMouseEnter?: () => void
   children: ReactNode
   className?: string
+  title?: string
 }) {
   return (
     <button
       type="button"
+      title={title}
       className={mergeClasses(
         'opptrix-composer-tooltip-menu__item',
         active && 'opptrix-composer-tooltip-menu__item--active',

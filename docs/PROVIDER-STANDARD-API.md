@@ -39,9 +39,10 @@ dividend | news | notices | shareholders | money_flow | technical_analysis
 
 1. **`manifest.ts`**：`capabilities` 与 `bindingsFor(p, maxConcurrent)` 一致；每个 binding 含 `market` + `assetClass` + `capability`
 2. **标准方法名**：与 Engine `queryScoped` 调用的 `method` 字符串一致（`realtime`、`etfNav`、`instrumentSearch`…）
-3. **多市场**：同一 Driver 可为 CN/US/HK 分别生成 binding；方法内用 `market` 参数或 symbol 规范化区分底层 API
-4. **ETF / 个股 / 指数**：用 `cnEquityEtfIndex` / `cnEtfBindings` / `cnIndexBindings` 分拆 assetClass，禁止仅用 `EQUITY` 覆盖 ETF 专有 capability
-5. **自定义方法**：`custom-method-docs.ts` + `core/custom-methods.ts` 登记；`capabilities: []` 的纯自定义 Provider 仍须 `registerAllDrivers`
+3. **`batchRealtime` 自动分片**：大批量（>100）时 Provider（Tickflow POST / 同花顺 snapshot 等）与 Engine 均按片请求并隔离片失败；任一成功片即可返回稀疏成功子集，禁止整批空
+4. **多市场**：同一 Driver 可为 CN/US/HK 分别生成 binding；方法内用 `market` 参数或 symbol 规范化区分底层 API
+5. **ETF / 个股 / 指数**：用 `cnEquityEtfIndex` / `cnEtfBindings` / `cnIndexBindings` 分拆 assetClass，禁止仅用 `EQUITY` 覆盖 ETF 专有 capability
+6. **自定义方法**：`custom-method-docs.ts` + `core/custom-methods.ts` 登记；`capabilities: []` 的纯自定义 Provider 仍须 `registerAllDrivers`
 
 ### 2.1 推荐 binding 模板
 

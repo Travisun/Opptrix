@@ -1,4 +1,4 @@
-import type { Market, TradeSide } from '@opptrix/shared'
+import type { AssetClass, Market, TradeSide } from '@opptrix/shared'
 
 export type { TradeSide }
 
@@ -7,6 +7,8 @@ export type TradeRecord = {
   code: string
   name: string
   market?: Market
+  /** 可选；旧 JSON 无此字段时由 code 推断（FUND→CN:PF / ETF 代码段等） */
+  assetClass?: AssetClass
   tradeSide: TradeSide
   shares: number
   price: number
@@ -23,6 +25,8 @@ export interface HoldingPosition {
   code: string
   name: string
   market?: Market
+  /** 与成交行一致；旧数据无字段时从 code 推断 */
+  assetClass?: AssetClass
   shares: number
   costBasis: number
   totalCost: number

@@ -40,6 +40,7 @@ export type ApplicationCapability =
   | 'scorecard'
   | 'factor_screen'
   | 'strategy_signal'
+  | 'technical_indicators'
   | 'institution_rating'
   | 'cyq'
   | 'money_flow'

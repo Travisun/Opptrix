@@ -1,4 +1,4 @@
-import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
+import {   MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode, inferCnAssetClass,
@@ -12,6 +12,7 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   resolveCrossMarketKlineEngineQuery,
   crossMarketFiveDayMinuteCount,
   resampleOhlcKlines,
+  watchlistItemKey,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
@@ -53,6 +54,7 @@ import {
   coerceInstrumentQuoteRow,
   resolveInstrumentQuotePrice,
   resolveInstrumentQuotePreClose,
+  parseCanonicalInstrumentInput,
   type InstrumentRef,
   type InstrumentHubCapability,
 } from '@opptrix/shared'
@@ -94,6 +96,7 @@ import {
   routeInstrumentInstitutionRating,
   routeInstrumentInstitutionReport,
   routeInstrumentQuotes,
+  routeInstrumentQuote,
   routeInstrumentSearch,
   routeInstrumentSnapshot,
   type InstrumentRouteHandlers,
@@ -148,6 +151,15 @@ function cryptoRefFromPair(pair: string): import('@opptrix/shared').InstrumentRe
     return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: p.base, quote: p.quote }
   }
   return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: pair, quote: 'USDT' }
+}
+
+function instrumentRefFromWatchlistItem(
+  item: import('@opptrix/a-stock-layer').WatchlistItem,
+): InstrumentRef | null {
+  if (item.instrument?.market && item.instrument.symbol) {
+    return normalizeInstrumentRef(item.instrument)
+  }
+  return parseCanonicalInstrumentInput(String(item.code ?? ''))
 }
 
 function instrumentQueryError(r: { success: boolean }, fallback: string): string {
@@ -228,6 +240,8 @@ export class ResearchHub {
     return getMarketDataService()
   }
   private readonly stockNameCache = new Map<string, string>()
+  /** 进程内最近一次成功报价 — live 失败时回退，避免关注列表部分无价 */
+  private readonly lastInstrumentQuotes = new Map<string, Record<string, unknown>>()
 
   initMarketDataAutoSync(): void {
     this.notifyMarketDataUiReady()
@@ -399,6 +413,7 @@ export class ResearchHub {
         case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
         case 'instrument_snapshot': return await this.instrumentSnapshot(params, t0)
         case 'instrument_quotes': return await this.instrumentQuotes(params, t0)
+        case 'instrument_quote': return await this.instrumentQuote(params, t0)
         case 'instrument_chart': return await this.instrumentChart(params, t0)
         case 'instrument_search': return await this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
@@ -1249,17 +1264,20 @@ export class ResearchHub {
     let firstError = ''
     normalizedRefs.forEach((ref, i) => {
       const errorText = batch.errors?.[i] ?? ''
-      const quote = this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null)
+      const quote = this.resolveStockQuoteWithStaleFallback(ref, batch.data?.[i] ?? null)
       if (quote) {
         quotes.push({
           ...quote,
           exchange: quote.exchange ?? ref.exchange,
-          instrument: ref,
         })
         return
       }
       if (!firstError && errorText) firstError = errorText
-      failed.push({ code: instrumentDisplayCode(ref), reason: classifyQuoteFailureMessage(errorText) })
+      // 稀疏批缺席 → empty；有上游文案再归类（not_found / no_provider / error）
+      const reason: QuoteFailedReason = !errorText || errorText === 'empty'
+        ? 'empty'
+        : classifyQuoteFailureMessage(errorText)
+      failed.push({ code: instrumentDisplayCode(ref), reason })
     })
     if (!quotes.length) {
       // 全失败时把首个失败原因带进 message，供 routeInstrumentQuotes 归类（如 not_found）
@@ -1271,6 +1289,84 @@ export class ResearchHub {
     } = { quotes }
     if (failed.length) data.failed = failed
     return ok(data, `更新 ${quotes.length} 只`, t0)
+  }
+
+  /**
+   * CN 场外基金批量净值行情 — 有界并发 queryInstrumentData(fund_quote)。
+   * price = unitNav（经 coerceInstrumentQuoteRow）；部分失败进 failed[]。
+   */
+  private async fundQuotes(refs: InstrumentRef[], t0: number) {
+    const unique = [...new Map(refs.map(r => [instrumentRefKey(r), r] as const)).values()]
+    if (!unique.length) return ok({ quotes: [] }, '暂无关注', t0)
+
+    const quotes: Array<Record<string, unknown> & { instrument: InstrumentRef }> = []
+    const failed: { code: string; reason: QuoteFailedReason }[] = []
+    let firstError = ''
+    const concurrency = 5
+
+    for (let i = 0; i < unique.length; i += concurrency) {
+      const chunk = unique.slice(i, i + concurrency)
+      await Promise.all(chunk.map(async ref => {
+        const r = await this.de.queryInstrumentData(ref, 'fund_quote').catch((e: unknown) => ({
+          success: false as const,
+          error: e instanceof Error ? e.message : String(e),
+        }))
+        if (r.success) {
+          const rows = instrumentQueryData<Record<string, unknown>[]>(r)
+          const raw = Array.isArray(rows) ? rows[0] : null
+          const resolved = raw && typeof raw === 'object'
+            ? this.resolveFundQuoteRowWithStaleFallback(ref, raw)
+            : this.resolveFundQuoteRowWithStaleFallback(ref, null)
+          if (resolved) {
+            quotes.push(resolved)
+            return
+          }
+          failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+          return
+        }
+        const msg = instrumentQueryError(r, '基金行情获取失败')
+        if (!firstError && msg.trim()) firstError = msg.trim()
+        const stale = this.resolveFundQuoteRowWithStaleFallback(ref, null)
+        if (stale) {
+          quotes.push(stale)
+          return
+        }
+        failed.push({
+          code: instrumentDisplayCode(ref),
+          reason: classifyQuoteFailureMessage(msg),
+        })
+      }))
+    }
+
+    if (!quotes.length) {
+      return fail(`行情获取失败: ${firstError || '未知原因'}`, t0)
+    }
+    return ok(
+      { quotes, failed: failed.length ? failed : undefined },
+      `更新 ${quotes.length} 只`,
+      t0,
+    )
+  }
+
+  /** 单标的场外基金净值 — fundQuotes 缺省时 router 有界并发回退 */
+  private async fundRealtime(ref: InstrumentRef, t0: number) {
+    const r = await this.de.queryInstrumentData(ref, 'fund_quote')
+    if (!r.success) return fail(instrumentQueryError(r, '基金行情获取失败'), t0)
+    const rows = instrumentQueryData<Record<string, unknown>[]>(r)
+    const raw = Array.isArray(rows) ? rows[0] : null
+    if (!raw) return fail('基金行情为空', t0)
+    const coerced = coerceInstrumentQuoteRow({ ...raw })
+    const price = resolveInstrumentQuotePrice(coerced)
+    return ok(
+      {
+        ...coerced,
+        ...(price != null ? { price } : {}),
+        code: String(raw.code ?? ref.symbol),
+        instrument: ref,
+      },
+      `${ref.symbol} 基金行情`,
+      t0,
+    )
   }
 
   /** Lightweight batch insights for watchlist rows — prefers local market DB, then SnapshotStore. */
@@ -1569,6 +1665,127 @@ export class ResearchHub {
     return this.enrichQuote(normalized)
   }
 
+  private rememberInstrumentQuote(ref: InstrumentRef, row: Record<string, unknown>): void {
+    const coerced = coerceInstrumentQuoteRow({ ...row })
+    const price = resolveInstrumentQuotePrice(coerced)
+    if (price == null || !(price > 0)) return
+    this.lastInstrumentQuotes.set(instrumentRefKey(ref), {
+      ...row,
+      price,
+      instrument: ref,
+    })
+  }
+
+  private recallInstrumentQuoteRaw(ref: InstrumentRef): Record<string, unknown> | null {
+    return this.lastInstrumentQuotes.get(instrumentRefKey(ref)) ?? null
+  }
+
+  private resolveStockQuoteWithStaleFallback(
+    ref: InstrumentRef,
+    liveRaw: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0] | null,
+  ): (NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> & {
+    instrument: InstrumentRef
+    quoteSource?: string
+  }) | null {
+    const live = this.mergeQuoteWithLocal(ref.symbol, liveRaw)
+    if (live) {
+      const row = { ...live, instrument: ref, quoteSource: 'live' as const }
+      this.rememberInstrumentQuote(ref, row)
+      return row
+    }
+    const cached = this.de.peekInstrumentQuoteCache(ref)
+    if (cached) {
+      const fromCache = this.mergeQuoteWithLocal(ref.symbol, cached)
+      if (fromCache) {
+        return { ...fromCache, instrument: ref, quoteSource: 'cache' }
+      }
+    }
+    const recalled = this.recallInstrumentQuoteRaw(ref)
+    if (recalled) {
+      const fromMemory = this.mergeQuoteWithLocal(
+        ref.symbol,
+        recalled as unknown as NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0],
+      )
+      if (fromMemory) {
+        return { ...fromMemory, instrument: ref, quoteSource: 'memory' }
+      }
+    }
+    return null
+  }
+
+  private resolveFundQuoteRowWithStaleFallback(
+    ref: InstrumentRef,
+    liveRaw: Record<string, unknown> | null,
+  ): (Record<string, unknown> & { instrument: InstrumentRef; quoteSource?: string }) | null {
+    const build = (raw: Record<string, unknown>, quoteSource: string) => {
+      const coerced = coerceInstrumentQuoteRow({ ...raw })
+      const price = resolveInstrumentQuotePrice(coerced)
+      if (price == null || !(price > 0)) return null
+      return {
+        ...coerced,
+        ...(price != null ? { price } : {}),
+        code: String(raw.code ?? ref.symbol),
+        instrument: ref,
+        quoteSource,
+      }
+    }
+    if (liveRaw) {
+      const live = build(liveRaw, 'live')
+      if (live) {
+        this.rememberInstrumentQuote(ref, live)
+        return live
+      }
+    }
+    const cached = this.de.peekInstrumentQuoteCache(ref)
+    if (cached) {
+      const fromCache = build(cached as unknown as Record<string, unknown>, 'cache')
+      if (fromCache) return fromCache
+    }
+    const recalled = this.recallInstrumentQuoteRaw(ref)
+    if (recalled) {
+      const fromMemory = build(recalled, 'memory')
+      if (fromMemory) return fromMemory
+    }
+    return null
+  }
+
+  private resolveCrossMarketQuoteWithStaleFallback(
+    ref: InstrumentRef,
+    liveRaw: Record<string, unknown> | null,
+  ): (Record<string, unknown> & { instrument: InstrumentRef; quoteSource?: string }) | null {
+    const build = (raw: Record<string, unknown>, quoteSource: string) => {
+      const coerced = coerceInstrumentQuoteRow(raw)
+      const price = resolveInstrumentQuotePrice(coerced)
+      if (price == null || !(price > 0)) return null
+      return {
+        ...raw,
+        ...coerced,
+        ...(price != null ? { price } : {}),
+        code: String(raw.code ?? ref.symbol),
+        instrument: ref,
+        quoteSource,
+      }
+    }
+    if (liveRaw) {
+      const live = build(liveRaw, 'live')
+      if (live) {
+        this.rememberInstrumentQuote(ref, live)
+        return live
+      }
+    }
+    const cached = this.de.peekInstrumentQuoteCache(ref)
+    if (cached) {
+      const fromCache = build(cached as unknown as Record<string, unknown>, 'cache')
+      if (fromCache) return fromCache
+    }
+    const recalled = this.recallInstrumentQuoteRaw(ref)
+    if (recalled) {
+      const fromMemory = build(recalled, 'memory')
+      if (fromMemory) return fromMemory
+    }
+    return null
+  }
+
   private enrichQuote(quote: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0]) {
     const row = coerceInstrumentQuoteRow({ ...quote } as unknown as Record<string, unknown>)
     const price = resolveInstrumentQuotePrice(row) ?? quote.price
@@ -1632,19 +1849,47 @@ export class ResearchHub {
   }
 
   private async stockBatchRealtime(refs: (string | InstrumentRef)[]) {
+    type Rt = import('@opptrix/shared').StockRealtime
     const normalizedRefs = refs.map(r => resolveCnInstrumentRef(r))
-    // Keep one slot per ref (null on failure) so callers can merge by index.
-    const rows = await Promise.all(
-      normalizedRefs.map(async ref => {
-        const result = await this.stockRealtime(ref)
-        const data = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(result)
-        return { row: data?.[0] ?? null, error: instrumentQueryError(result, '') }
-      }),
-    )
+    if (!normalizedRefs.length) {
+      return { success: false as const, data: [] as Array<Rt | null>, errors: [] as string[] }
+    }
+
+    const codes = normalizedRefs.map(r => normalizeCode(r.symbol))
+    const markets: Record<string, StockMarket | undefined> = {}
+    for (const ref of normalizedRefs) {
+      const code = normalizeCode(ref.symbol)
+      markets[code] = this.resolveStockMarket(code, ref.exchange, ref)
+    }
+
+    // Provider 真批（Tickflow / 同花顺等）；Engine 对 >100 自动分片并隔离片失败。
+    // 稀疏结果按 code+exchange 对齐槽位；禁止因整包 fail 丢掉已成功片。
+    const batch = await this.de.batchRealtime(codes, markets)
+    const batchError = instrumentQueryError(batch, '')
+    const returned = batch.success
+      ? (instrumentQueryData<Rt[]>(batch) ?? [])
+      : []
+
+    const data: Array<Rt | null> = []
+    const errors: string[] = []
+    for (const ref of normalizedRefs) {
+      const code = normalizeCode(ref.symbol)
+      const wantEx = markets[code] ?? parseStockMarket(ref.exchange)
+      const hit = returned.find(row => {
+        if (normalizeCode(String(row.code ?? '')) !== code) return false
+        const rowEx = parseStockMarket(row.exchange)
+        if (!wantEx || !rowEx) return true
+        return rowEx === wantEx
+      }) ?? null
+      data.push(hit)
+      // 部分缺席：该槽 null + 文案；不因稀疏结果让整批 success=false
+      errors.push(hit ? '' : (batchError || 'empty'))
+    }
+
     return {
-      success: rows.some(row => row.row != null),
-      data: rows.map(row => row.row),
-      errors: rows.map(row => row.error),
+      success: data.some(row => row != null),
+      data,
+      errors,
     }
   }
 
@@ -3403,9 +3648,14 @@ export class ResearchHub {
       regionalSnapshot: (market, symbol) => this.regionalSnapshot(market, symbol, t0),
       cryptoSnapshot: pair => this.cryptoSnapshot(pair, t0),
       stockQuotes: refs => this.stockQuotes(refs, t0),
+      fundQuotes: refs => this.fundQuotes(refs, t0),
+      fundRealtime: ref => this.fundRealtime(ref, t0),
       usRealtime: symbol => this.usRealtime(symbol, t0),
       regionalRealtime: (market, symbol) => this.regionalRealtime(market, symbol, t0),
       cryptoRealtime: pair => this.cryptoRealtime(pair, t0),
+      usQuotes: refs => this.crossMarketBatchQuotes('US', refs, t0),
+      regionalQuotes: (market, refs) => this.crossMarketBatchQuotes(market, refs, t0),
+      cryptoQuotes: refs => this.crossMarketBatchQuotes('CRYPTO', refs, t0),
       stockChart: (code, period, count, before, tail, market) =>
         this.stockChart(code, period, count, before, tail, market, t0),
       usKline: (symbol, period, count, before, tail) =>
@@ -3434,6 +3684,14 @@ export class ResearchHub {
 
   private async instrumentQuotes(params: Record<string, unknown>, t0: number) {
     return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0), t0)
+  }
+
+  private async instrumentQuote(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 必填', t0)
+    const fresh = params.fresh !== false
+    if (fresh) this.de.invalidateInstrumentQuoteCache(ref)
+    return routeInstrumentQuote(params, this.instrumentRouteHandlers(t0), t0)
   }
 
   private async instrumentChart(params: Record<string, unknown>, t0: number) {
@@ -3553,6 +3811,108 @@ export class ResearchHub {
       return { code: String(it.code ?? ''), name: String(it.name ?? '') }
     })
     return ok({ items, count: items.length, source: 'online' }, `ETF 搜索 ${items.length} 条`, t0)
+  }
+
+
+  /**
+   * US/HK/CRYPTO 批量行情：优先 Engine.batchRealtimeByMarket（Tickflow 等一次 HTTP），
+   * 整批失败再回退逐标的 realtime（有界并发）。
+   */
+  private async crossMarketBatchQuotes(
+    market: 'US' | 'HK' | 'CRYPTO',
+    refs: InstrumentRef[],
+    t0: number,
+  ) {
+    const unique = [...new Map(refs.map(r => [instrumentRefKey(r), r] as const)).values()]
+    if (!unique.length) return ok({ quotes: [] }, '暂无', t0)
+
+    const symbols = unique.map(r => (
+      market === 'CRYPTO' ? instrumentDisplayCode(r) : r.symbol
+    ))
+    const batch = await this.de.batchRealtimeByMarket(market, symbols)
+    if (batch.success && batch.data?.length) {
+      const quotes: Record<string, unknown>[] = []
+      const failed: { code: string; reason: QuoteFailedReason }[] = []
+      for (const ref of unique) {
+        const row = (batch.data as Record<string, unknown>[]).find(item => {
+          const code = String(item.code ?? item.symbol ?? '')
+          if (!code) return false
+          if (code === ref.symbol) return true
+          const upper = code.toUpperCase()
+          const sym = ref.symbol.toUpperCase()
+          return upper === sym || upper.endsWith(sym) || sym.endsWith(upper)
+        })
+        if (row) {
+          const resolved = this.resolveCrossMarketQuoteWithStaleFallback(ref, row)
+          if (resolved) {
+            quotes.push(resolved)
+          } else {
+            failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+          }
+        } else {
+          const stale = this.resolveCrossMarketQuoteWithStaleFallback(ref, null)
+          if (stale) {
+            quotes.push(stale)
+          } else {
+            failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+          }
+        }
+      }
+      if (quotes.length) {
+        return ok(
+          { quotes, failed: failed.length ? failed : undefined },
+          `更新 ${quotes.length} 只`,
+          t0,
+        )
+      }
+    }
+
+    // 无 batch 或整批空：有界并发逐标的（注释标明无法批时的降级）
+    const quotes: Record<string, unknown>[] = []
+    const failed: { code: string; reason: QuoteFailedReason }[] = []
+    const concurrency = 5
+    for (let i = 0; i < unique.length; i += concurrency) {
+      const chunk = unique.slice(i, i + concurrency)
+      await Promise.all(chunk.map(async ref => {
+        const resp = market === 'US'
+          ? await this.usRealtime(ref.symbol, t0)
+          : market === 'HK'
+            ? await this.regionalRealtime('HK', ref.symbol, t0)
+            : await this.cryptoRealtime(instrumentDisplayCode(ref), t0)
+        if (resp.success && resp.data && typeof resp.data === 'object') {
+          const resolved = this.resolveCrossMarketQuoteWithStaleFallback(
+            ref,
+            resp.data as Record<string, unknown>,
+          )
+          if (resolved) {
+            quotes.push(resolved)
+            return
+          }
+        }
+        const stale = this.resolveCrossMarketQuoteWithStaleFallback(ref, null)
+        if (stale) {
+          quotes.push(stale)
+          return
+        }
+        failed.push({
+          code: instrumentDisplayCode(ref),
+          reason: classifyQuoteFailureMessage(String(resp.message ?? '')),
+        })
+      }))
+    }
+    if (!quotes.length) {
+      return fail(
+        batch.success === false
+          ? (batch.error || `${market} 行情获取失败`)
+          : `${market} 行情获取失败`,
+        t0,
+      )
+    }
+    return ok(
+      { quotes, failed: failed.length ? failed : undefined },
+      `更新 ${quotes.length} 只`,
+      t0,
+    )
   }
 
   private async usRealtime(symbol: string, t0: number) {
@@ -3955,10 +4315,17 @@ export class ResearchHub {
 
   private watchlistSave(params: Record<string, unknown>, t0: number) {
     const items = Array.isArray(params.items) ? params.items as import('@opptrix/a-stock-layer').WatchlistItem[] : []
+    const prevItems = this.de.watchlist.list()
     const saved = this.de.watchlist.replace(items)
     // Durable across process restart: debounce merges rapid in-process replaces,
     // but HTTP save must flush before the response returns.
     this.de.watchlist.flush()
+    const nextKeys = new Set(saved.map(item => watchlistItemKey(item)))
+    const removed = prevItems.filter(item => !nextKeys.has(watchlistItemKey(item)))
+    for (const item of removed) {
+      const ref = instrumentRefFromWatchlistItem(item)
+      if (ref) this.de.invalidateInstrumentQuoteCache(ref)
+    }
     return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
   }
 

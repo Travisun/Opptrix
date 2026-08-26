@@ -5,7 +5,6 @@ import { resolveWatchlistInstrument } from './instrument'
 
 interface Props {
   stock: WatchlistItem
-  localIndexed?: boolean | null
   loading?: boolean
   onManage?: () => void
   onSelectPeer?: (item: WatchlistItem) => void
@@ -19,7 +18,6 @@ export default function CrossMarketDetailTab(props: Props) {
       <CrossMarketDetailPlaceholder
         stock={props.stock}
         loading={props.loading}
-        localIndexed={props.localIndexed}
       />
     )
   }

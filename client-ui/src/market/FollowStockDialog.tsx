@@ -21,7 +21,7 @@ import {
   type PortfolioLedgerKind,
 } from '@opptrix/shared/portfolio-fees'
 import { formatCompactNumberForMarket, formatPct, formatPriceForMarket, pctTone, resolveCloseOnDate, resolveFundNavOnDate } from './format'
-import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrument'
+import { displayCodeFromInstrument, instrumentKey, resolveWatchlistInstrument } from './instrument'
 import PortfolioFeeEditor from './PortfolioFeeEditor'
 import {
   calcHoldingFromTrades,
@@ -398,6 +398,8 @@ interface Props {
   submitTrade: (payload: {
     code: string
     market?: string
+    assetClass?: string
+    instrument?: import('../types/instrument').InstrumentRef
     shares: number
     price: number
     side: 'buy' | 'sell'
@@ -447,6 +449,9 @@ export default function FollowStockDialog({
 
   const stockRef = stock ? resolveWatchlistInstrument(stock) : null
   const tradeCode = stockRef ? displayCodeFromInstrument(stockRef) : (stock?.code ?? '')
+  // 稳定 identity：勿把 stockRef / stock 对象放进 effect deps（每 render 新引用会狂打 API）
+  const stockIdentity = stockRef ? instrumentKey(stockRef) : (stock?.code ?? '')
+  const stockMarket = stockRef?.market
   const isFundRef = stockRef?.assetClass === 'FUND'
   const isExchangeLedger = stockRef ? resolvePortfolioLedgerKind(stockRef) === 'exchange' : false
   const isOtcFund = isFundRef && !isExchangeLedger
@@ -496,9 +501,10 @@ export default function FollowStockDialog({
     return () => window.clearTimeout(timer)
   }, [presented, finishClose])
 
+  // 打开 / 换标的时拉交易与重置表单；勿依赖 currentPrice 或 stockRef 对象引用
   useEffect(() => {
-    if (!open || !stock) return undefined
-    const initialNote = stock.note ?? ''
+    if (!open || !stockIdentity) return undefined
+    const initialNote = stock?.note ?? ''
     setNote(initialNote)
     lastSavedNoteRef.current = initialNote.trim()
     priceManualRef.current = false
@@ -517,7 +523,7 @@ export default function FollowStockDialog({
     }
     let cancelled = false
     setLoadingTrades(true)
-    void loadTrades(tradeCode, stockRef?.market).then(rows => {
+    void loadTrades(tradeCode, stockMarket).then(rows => {
       if (!cancelled) {
         setTrades(rows)
         setDialogTab(rows.length > 0 ? 'records' : 'trade')
@@ -526,28 +532,41 @@ export default function FollowStockDialog({
       if (!cancelled) setLoadingTrades(false)
     })
     return () => { cancelled = true }
-  }, [open, stock, tradeCode, stockRef?.market, currentPrice, loadTrades, portfolioEnabled, isOtcFund, stockRef])
+    // stock / stockRef / currentPrice 仅在 open/identity 切换时取快照；价格轮询见下方小 effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 故意不依赖对象引用与 currentPrice
+  }, [open, stockIdentity, tradeCode, stockMarket, loadTrades, portfolioEnabled, isOtcFund])
+
+  // 行情价变化只更新表单价，不重拉交易
+  useEffect(() => {
+    if (!open || isOtcFund || priceManualRef.current) return
+    if (currentPrice == null) return
+    setTradeForm(prev => {
+      const next = String(currentPrice)
+      return prev.price === next ? prev : { ...prev, price: next }
+    })
+  }, [open, isOtcFund, currentPrice])
 
   useEffect(() => {
-    if (!open || !stock || !portfolioEnabled || !stockRef) return undefined
+    if (!open || !stockIdentity || !portfolioEnabled || !stockMarket) return undefined
     let cancelled = false
-    void portfolioFeeInstrument(tradeCode, stockRef.market).then(resp => {
+    void portfolioFeeInstrument(tradeCode, stockMarket).then(resp => {
       if (cancelled || !resp.success || !resp.data) return
       setLedgerKind(resp.data.ledgerKind)
       setGlobalFees(resp.data.globalFees)
       setFeeOverrides(resp.data.overrides)
     })
     return () => { cancelled = true }
-  }, [open, stock, stockRef, tradeCode, portfolioEnabled])
+  }, [open, stockIdentity, tradeCode, stockMarket, portfolioEnabled])
 
   useEffect(() => {
-    if (!open || !stock || !isOtcFund || !stockRef) {
+    if (!open || !stockIdentity || !isOtcFund || !stockRef) {
       setFundNavRows([])
       return undefined
     }
+    const ref = stockRef
     let cancelled = false
     setLoadingFundNav(true)
-    void research.fundNav(stockRef).then(resp => {
+    void research.fundNav(ref).then(resp => {
       if (cancelled) return
       const items = resp.success && Array.isArray(resp.data?.items) ? resp.data.items : []
       setFundNavRows(items)
@@ -555,16 +574,18 @@ export default function FollowStockDialog({
       if (!cancelled) setLoadingFundNav(false)
     })
     return () => { cancelled = true }
-  }, [open, stock, isOtcFund, stockRef])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅跟 stockIdentity，勿跟 stockRef 对象
+  }, [open, stockIdentity, isOtcFund])
 
   useEffect(() => {
-    if (!open || !stockRef || !isExchangeLedger) {
+    if (!open || !stockIdentity || !stockRef || !isExchangeLedger) {
       setKlineBars([])
       return undefined
     }
+    const ref = stockRef
     let cancelled = false
     setLoadingKline(true)
-    void research.stockChart(stockRef, 'daily', 260).then(resp => {
+    void research.stockChart(ref, 'daily', 260).then(resp => {
       if (cancelled) return
       const bars = resp.success && resp.data?.bars
         ? resp.data.bars
@@ -576,7 +597,8 @@ export default function FollowStockDialog({
       if (!cancelled) setLoadingKline(false)
     })
     return () => { cancelled = true }
-  }, [open, stockRef, isExchangeLedger])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅跟 stockIdentity，勿跟 stockRef 对象
+  }, [open, stockIdentity, isExchangeLedger])
 
   useEffect(() => {
     if (priceManualRef.current) return
@@ -601,15 +623,17 @@ export default function FollowStockDialog({
   }, [isOtcFund, isExchangeLedger, fundNavRows, klineBars, tradeForm.date])
 
   useEffect(() => {
-    if (!open || !stock) return undefined
+    if (!open || !stockIdentity) return undefined
+    const code = stock?.code
+    if (!code) return undefined
     const timer = window.setTimeout(() => {
       const trimmed = note.trim()
       if (trimmed === lastSavedNoteRef.current) return
       lastSavedNoteRef.current = trimmed
-      onSaveNote(stock.code, trimmed)
+      onSaveNote(code, trimmed)
     }, NOTE_SAVE_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [note, open, stock, onSaveNote])
+  }, [note, open, stockIdentity, stock?.code, onSaveNote])
 
   const sortedTrades = useMemo(
     () => [...trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate) || b.id - a.id),
@@ -655,6 +679,8 @@ export default function FollowStockDialog({
       const rows = await submitTrade({
         code: tradeCode,
         market: stockRef?.market,
+        assetClass: stockRef?.assetClass,
+        instrument: stockRef ?? undefined,
         shares,
         price,
         side: tradeForm.side,

@@ -12,7 +12,7 @@ import { buildChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOp
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX, initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
 import { isLineChartPaneLabel } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
-import CyqProfileStrip from './CyqProfileStrip'
+import CyqProfileStrip, { CYQ_PROFILE_STRIP_WIDTH_PX } from './CyqProfileStrip'
 import { computeCyqPriceSpan, isCyqChartPeriod } from './cyqUtils'
 import { indicatorColors, getMaColors } from './chartTheme'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -226,6 +226,11 @@ const useStyles = makeStyles({
     minWidth: 0,
     display: 'flex',
     alignItems: 'stretch',
+  },
+  cyqSpacer: {
+    width: `${CYQ_PROFILE_STRIP_WIDTH_PX}px`,
+    flexShrink: 0,
+    alignSelf: 'stretch',
   },
   cyqMetrics: {
     display: 'flex',
@@ -719,10 +724,12 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
             <div className={s.paneRow}>
               <span className={s.paneLabel}>V</span>
               <div className={mergeClasses(s.panePlot, expanded ? s.paneVolExpanded : s.paneVol)} ref={volumeRef} />
+              {showCyq ? <div className={s.cyqSpacer} aria-hidden /> : null}
             </div>
             <div className={mergeClasses(s.paneRow, !showMacd && s.paneHidden)}>
               <span className={s.paneLabel}>M</span>
               <div className={mergeClasses(s.panePlot, expanded ? s.paneMacdExpanded : s.paneMacd)} ref={macdRef} />
+              {showCyq ? <div className={s.cyqSpacer} aria-hidden /> : null}
             </div>
           </div>
 

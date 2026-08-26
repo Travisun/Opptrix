@@ -63,6 +63,12 @@ import { watchlistItemKey } from './watchlist/instrument.js'
 import { instrumentId } from './core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from './utils/helpers.js'
 import { isCnListedFundSymbol } from './core/fund-instrument.js'
+import {
+  BATCH_REALTIME_CHUNK,
+  BATCH_REALTIME_ENGINE_CONCURRENCY,
+  chunkArray,
+  mapPool,
+} from './utils/batch-chunk.js'
 
 import {
   normalizePreOpenRealtimeQuote,
@@ -374,7 +380,8 @@ export class MarketDataEngine {
         'CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, code,
       ).then(mapIndexRealtimeResultToStock)
     }
-    return this.qScoped<StockRealtime>('CN', resolved, Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
+    // 关注列表标的启用 stock_realtime 短 TTL 缓存（见 watchlist-cache）；live 失败时可 stale 回退
+    return this.qScoped<StockRealtime>('CN', resolved, Capability.STOCK_REALTIME, 'realtime', true, code, market).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
     })
@@ -434,8 +441,93 @@ export class MarketDataEngine {
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
+    if (!codes.length) {
+      return { success: true, data: [] }
+    }
+    // 大批量：Engine 层再切片并行，片失败隔离；任一 chunk 成功则整体 success
+    if (codes.length > BATCH_REALTIME_CHUNK) {
+      const parts = chunkArray(codes, BATCH_REALTIME_CHUNK)
+      const chunkResults = await mapPool(
+        parts,
+        BATCH_REALTIME_ENGINE_CONCURRENCY,
+        async part => {
+          const subsetMarkets = markets
+            ? Object.fromEntries(
+              part
+                .map(c => {
+                  const key = normalizeCode(String(c))
+                  const m = markets[key] ?? markets[c]
+                  return m != null ? ([key, m] as const) : null
+                })
+                .filter((e): e is readonly [string, import('./utils/helpers.js').StockMarket] => e != null),
+            )
+            : undefined
+          try {
+            return await this.fetchBatchRealtimeChunk(part, subsetMarkets)
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false as const, error: msg, data: [] as StockRealtime[] }
+          }
+        },
+      )
+      const merged: StockRealtime[] = []
+      const errors: string[] = []
+      let source: string | undefined
+      for (const r of chunkResults) {
+        if (r.success && r.data?.length) {
+          merged.push(...r.data)
+          if (!source && r.source) source = r.source
+        } else if (!r.success && r.error) {
+          errors.push(r.error)
+        }
+      }
+      if (merged.length) {
+        return { success: true, data: merged, source }
+      }
+      return {
+        success: false,
+        error: errors.length ? errors.join('; ') : '所有 batchRealtime 分片均失败',
+      }
+    }
+    return this.fetchBatchRealtimeChunk(codes, markets)
+  }
+
+  private writeWatchlistStockRealtimeFromBatch(
+    rows: StockRealtime[],
+    assetClass: AssetClass,
+    markets: Record<string, import('./utils/helpers.js').StockMarket | undefined> | undefined,
+    source?: string,
+  ): void {
+    const ttl = watchlistCacheTtl('stock_realtime')
+    if (ttl <= 0) return
+    for (const row of rows) {
+      const code = normalizeCode(String(row.code ?? ''))
+      if (!code) continue
+      const marketArg = markets?.[code] ?? markets?.[String(row.code ?? '')]
+      const args: unknown[] = marketArg ? [code, marketArg] : [code]
+      if (!this.isWatchlistTarget('CN', assetClass, args)) continue
+      this.cache.setWithTtl(
+        'stock_realtime',
+        [row],
+        'realtime',
+        {
+          method: 'realtime',
+          market: 'CN',
+          assetClass,
+          args: JSON.stringify(args),
+        },
+        ttl,
+        source,
+      )
+    }
+  }
+
+  private async fetchBatchRealtimeChunk(
+    codes: string[],
+    markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+  ): Promise<QueryResult<StockRealtime[]>> {
     const assetClass = codes.some(c => isCnEtfCode(String(c))) ? 'ETF' : 'EQUITY'
-    return this.queryPlans.execute<StockRealtime>(
+    const result = await this.queryPlans.execute<StockRealtime>(
       this.queryPlans.getPlan('cn_equity_stock_realtime_batch'),
       {
         method: 'batchRealtime',
@@ -446,6 +538,10 @@ export class MarketDataEngine {
         mergeKey: item => normalizeCode(String((item as StockRealtime).code)),
       },
     )
+    if (result.success && result.data?.length) {
+      this.writeWatchlistStockRealtimeFromBatch(result.data, assetClass, markets, result.source)
+    }
+    return result
   }
 
   private fetchDailyKline(
@@ -779,7 +875,8 @@ export class MarketDataEngine {
 
   fundQuote(fundCode: string) {
     const code = normalizeCode(fundCode)
-    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, code)
+    // 与 resolveInstrumentQueryPlan(fund_quote) useCache 对齐：净值日更可缓存
+    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', true, code)
       .then(result => this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>))
   }
 
@@ -901,6 +998,81 @@ export class MarketDataEngine {
   usRealtime(symbol: string) {
     const sym = normalizeUsSymbol(symbol)
     return this.qScoped('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, sym)
+  }
+
+  /**
+   * US / HK / CRYPTO 批量实时。
+   * 优先走 Provider `batchRealtime`（如 Tickflow quotes 批量 HTTP）；
+   * 无 batch 实现的源会失败，由 Hub 回退到逐标的 realtime。
+   * symbols > BATCH_REALTIME_CHUNK 时 Engine 自动分片并行，片失败隔离。
+   */
+  async batchRealtimeByMarket(
+    market: 'US' | 'HK' | 'CRYPTO',
+    symbols: string[],
+  ) {
+    if (!symbols.length) {
+      return { success: true as const, data: [] as StockRealtime[] }
+    }
+    if (symbols.length > BATCH_REALTIME_CHUNK) {
+      const parts = chunkArray(symbols, BATCH_REALTIME_CHUNK)
+      const chunkResults = await mapPool(
+        parts,
+        BATCH_REALTIME_ENGINE_CONCURRENCY,
+        async part => {
+          try {
+            return await this.batchRealtimeByMarketChunk(market, part)
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false as const, error: msg, data: [] as StockRealtime[] }
+          }
+        },
+      )
+      const merged: StockRealtime[] = []
+      const errors: string[] = []
+      let source: string | undefined
+      for (const r of chunkResults) {
+        if (r.success && r.data?.length) {
+          merged.push(...(r.data as StockRealtime[]))
+          if (!source && r.source) source = r.source
+        } else if (!r.success && 'error' in r && r.error) {
+          errors.push(String(r.error))
+        }
+      }
+      if (merged.length) {
+        return { success: true as const, data: merged, source }
+      }
+      return {
+        success: false as const,
+        error: errors.length ? errors.join('; ') : '所有 batchRealtime 分片均失败',
+      }
+    }
+    return this.batchRealtimeByMarketChunk(market, symbols)
+  }
+
+  private batchRealtimeByMarketChunk(
+    market: 'US' | 'HK' | 'CRYPTO',
+    symbols: string[],
+  ) {
+    if (market === 'CRYPTO') {
+      return this.qCrypto<StockRealtime>(
+        Capability.STOCK_REALTIME,
+        'batchRealtime',
+        'crypto_realtime',
+        false,
+        symbols,
+      )
+    }
+    const normalized = market === 'US'
+      ? symbols.map(s => normalizeUsSymbol(s))
+      : symbols
+    return this.qScoped(
+      market,
+      'EQUITY',
+      Capability.STOCK_REALTIME,
+      'batchRealtime',
+      false,
+      normalized,
+    )
   }
 
   /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'kline')` */
@@ -1181,6 +1353,123 @@ export class MarketDataEngine {
   }
 
   // ── Cache / driver management ──
+  /**
+   * 关注列表增删后失效行情覆盖层缓存。
+   * 避免 membership 已变但 stock_realtime / fund_quote 仍按旧 watchlist 上下文命中。
+   */
+  invalidateWatchlistQuoteCache(): number {
+    let cleared = 0
+    cleared += this.cache.clearType('stock_realtime')
+    cleared += this.cache.clearType('fund_quote')
+    return cleared
+  }
+
+  /** live 拉价失败时：读 Engine 覆盖层缓存（含 TTL 内 + 过期宽限内的 stale） */
+  peekInstrumentQuoteCache(ref: InstrumentRef): StockRealtime | null {
+    const STALE_GRACE_MS = 86_400_000
+    const normalized = normalizeInstrumentRef(ref)
+    for (const candidate of this.instrumentQuoteCacheCandidates(normalized)) {
+      const entry = this.cache.peekEntry<StockRealtime[]>(
+        candidate.cacheType,
+        candidate.method,
+        candidate.cacheParams,
+      )
+      if (!entry) continue
+      const withinFresh = Date.now() <= entry.expires
+      const withinStaleGrace = Date.now() - entry.expires <= STALE_GRACE_MS
+      if (!withinFresh && !withinStaleGrace) continue
+      const row = entry.data?.[0]
+      if (row && this.isValidInstrumentQuoteRow(row)) return row
+    }
+    return null
+  }
+
+  private isValidInstrumentQuoteRow(row: StockRealtime): boolean {
+    return typeof row.price === 'number' && Number.isFinite(row.price) && row.price > 0
+  }
+
+  private instrumentQuoteCacheCandidates(ref: InstrumentRef): Array<{
+    cacheType: string
+    method: string
+    cacheParams: Record<string, unknown>
+  }> {
+    const out: Array<{ cacheType: string; method: string; cacheParams: Record<string, unknown> }> = []
+    const push = (
+      market: Market,
+      assetClass: AssetClass,
+      cacheType: string,
+      method: string,
+      args: unknown[],
+    ) => {
+      out.push({
+        cacheType,
+        method,
+        cacheParams: { method, market, assetClass, args: JSON.stringify(args) },
+      })
+    }
+
+    if (ref.market === 'CN' && ref.assetClass === 'FUND') {
+      const sym = normalizeCode(ref.symbol)
+      push('CN', 'FUND', 'fund_quote', 'fundQuote', [sym])
+      push('CN', 'FUND', 'fund_quote', 'fundQuote', [ref.symbol])
+      return out
+    }
+
+    if (ref.market === 'CRYPTO') {
+      const pair = instrumentProviderSymbol(ref)
+      push('CRYPTO', 'CRYPTO_SPOT', 'crypto_realtime', 'realtime', [pair])
+      push('CRYPTO', 'CRYPTO_SPOT', 'stock_realtime', 'realtime', [pair])
+      return out
+    }
+
+    if (ref.market === 'US') {
+      const sym = normalizeUsSymbol(ref.symbol)
+      push('US', 'EQUITY', 'stock_realtime', 'realtime', [sym])
+      push('US', 'EQUITY', 'stock_realtime', 'realtime', [ref.symbol])
+      return out
+    }
+
+    if (ref.market === 'HK') {
+      const sym = normalizeRegionalSymbol('HK', ref.symbol)
+      push('HK', 'EQUITY', 'stock_realtime', 'realtime', [sym])
+      push('HK', 'EQUITY', 'stock_realtime', 'realtime', [ref.symbol])
+      return out
+    }
+
+    if (ref.market === 'CN') {
+      const code = normalizeCode(ref.symbol)
+      const assetClass = ref.assetClass === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+      const marketArg = ref.exchange as import('./utils/helpers.js').StockMarket | undefined
+      push('CN', assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg] : [code])
+      push('CN', assetClass, 'stock_realtime', 'realtime', [code])
+      if (assetClass === 'ETF') {
+        push('CN', 'ETF', 'stock_realtime', 'realtime', marketArg ? [code, marketArg] : [code])
+      }
+      return out
+    }
+
+    return out
+  }
+
+  /** 单标的 fresh quote：失效其 stock_realtime / fund_quote 覆盖层缓存 */
+  invalidateInstrumentQuoteCache(ref: InstrumentRef): number {
+    const normalized = normalizeInstrumentRef(ref)
+    const needles = new Set<string>()
+    const pushNeedle = (raw: string | undefined | null) => {
+      const v = String(raw ?? '').trim()
+      if (v) needles.add(v)
+    }
+    pushNeedle(normalized.symbol)
+    pushNeedle(normalizeCode(normalized.symbol))
+    pushNeedle(instrumentProviderSymbol(normalized))
+    if (normalized.market === 'US') pushNeedle(normalizeUsSymbol(normalized.symbol))
+    if (normalized.market === 'HK') pushNeedle(normalizeRegionalSymbol('HK', normalized.symbol))
+    return this.cache.clearMatching((cacheType, _method, paramsJson) => {
+      if (cacheType !== 'stock_realtime' && cacheType !== 'fund_quote') return false
+      return [...needles].some(n => paramsJson.includes(n))
+    })
+  }
+
   clearCache(dataType?: string) {
     return dataType ? this.cache.clearType(dataType) : this.cache.clearAll()
   }

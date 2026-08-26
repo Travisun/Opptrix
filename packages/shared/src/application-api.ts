@@ -9,6 +9,8 @@ export const APPLICATION_HUB_FEATURES = {
   instrumentSnapshot: 'instrument_snapshot',
   /** InstrumentRef 统一入口：获取标的行情 */
   instrumentQuotes: 'instrument_quotes',
+  /** InstrumentRef 统一入口：单标的最新价（关注添加后立即拉价；默认 fresh） */
+  instrumentQuote: 'instrument_quote',
   /** InstrumentRef 统一入口：获取标的 K 线 */
   instrumentChart: 'instrument_chart',
   /** InstrumentRef 统一入口：搜索标的 */

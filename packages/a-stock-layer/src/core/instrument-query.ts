@@ -304,7 +304,8 @@ export function resolveInstrumentQueryPlan(
           return registryPlan('CN', 'FUND', Capability.FUND_HOLDINGS, 'fundHoldings', true, [symbol], normalized)
         case 'fund_quote':
         case 'realtime':
-          return registryPlan('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, [symbol], normalized)
+          // 净值日更：启用后端缓存（watchlist fund_quote TTL=600）
+          return registryPlan('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', true, [symbol], normalized)
         case 'fund_returns':
           return registryPlan('CN', 'FUND', Capability.FUND_RETURNS, 'fundReturns', true, [symbol], normalized)
         case 'fund_drawdown':

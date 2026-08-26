@@ -27,8 +27,16 @@ import type { QuoteFailedReason } from './instrument-adapters'
 import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayChangeReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, watchlistDisplayCode, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel } from './instrument'
-import { WATCHLIST_QUOTES_POLL_MS } from './watchlistQuotes'
+import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, watchlistDisplayCode, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel, formatInstrumentSearchHitSubtitle, normalizeWatchlistItem } from './instrument'
+import {
+  WATCHLIST_QUOTES_POLL_MS,
+  WatchlistQuoteBatchAbortError,
+  classifyWatchlistBatchFailReason,
+  isWatchlistItemWithinQuoteGrace,
+  mergeWatchlistQuoteRefresh,
+  runWatchlistQuoteBatches,
+  shouldSuppressWatchlistQuoteFailure,
+} from './watchlistQuotes'
 import { useWatchlist } from './useWatchlist'
 import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from './useInstrumentSearchWithUniversePrep'
 import { hasApplicationCapability } from './capabilities'
@@ -174,12 +182,12 @@ const useStyles = makeStyles({
   },
   results: {
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    maxHeight: '140px',
+    maxHeight: '176px',
     overflowY: 'auto',
     padding: `4px ${ITEM_BG_INSET}`,
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
+    gap: '4px',
     minHeight: '88px',
   },
   resultItem: {...ghostInteractive,
@@ -190,9 +198,9 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '8px',
-    padding: `6px ${ITEM_INNER_PAD}`,
-    minHeight: '30px',
+    gap: '10px',
+    padding: `7px ${ITEM_INNER_PAD}`,
+    minHeight: '44px',
     borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     textAlign: 'left',
@@ -200,6 +208,36 @@ const useStyles = makeStyles({
 ':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
+  },
+  resultMain: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  resultName: {
+    display: 'block',
+    width: '100%',
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 500,
+    lineHeight: 1.35,
+    color: opptrixCssVars.textPrimary,
+  },
+  resultSubtitle: {
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
+    color: opptrixCssVars.textTertiary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  resultAction: {
+    flexShrink: 0,
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.35,
+    color: opptrixCssVars.textTertiary,
+    whiteSpace: 'nowrap',
   },
   resultMeta: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -370,6 +408,15 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     fontWeight: 400,
   },
+  metricPending: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '4px',
+    color: opptrixCssVars.textTertiary,
+    fontWeight: 400,
+    fontSize: 'var(--opptrix-font-xs)',
+  },
   rowTrailing: {
     gridColumn: '3',
     gridRow: '1',
@@ -517,7 +564,7 @@ interface Props {
   holdingsByCode: Record<string, HoldingSnapshot>
   onSelect: (item: WatchlistItem) => void
   onManage: (item: WatchlistItem) => void
-  onAdd: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => void
+  onAdd: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => Promise<WatchlistItem> | WatchlistItem
   onRemove: (item: WatchlistItem) => void
   onPatchItem: (code: string, patch: Partial<WatchlistItem>) => void
 }
@@ -543,7 +590,7 @@ export default function WatchlistTab({
     dialogOpen,
     setDialogOpen,
   } = useWatchlistGroups()
-  const { disambiguationCandidates, clearDisambiguationCandidates } = useWatchlist()
+  const { disambiguationCandidates, clearDisambiguationCandidates, syncedItemsKey, subscribeQuotePatches } = useWatchlist()
   const [keyword, setKeyword] = useState('')
   const {
     hits: searchHits,
@@ -557,11 +604,16 @@ export default function WatchlistTab({
   const [loadingQuotes, setLoadingQuotes] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [failedByKey, setFailedByKey] = useState<Record<string, QuoteFailedReason>>({})
+  const [, setGraceTick] = useState(0)
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
   const itemsRef = useRef(items)
   itemsRef.current = items
   const loadSeqRef = useRef(0)
+  const quotesRef = useRef(quotes)
+  quotesRef.current = quotes
+  const failedByKeyRef = useRef(failedByKey)
+  failedByKeyRef.current = failedByKey
   const itemsKey = useMemo(
     () => items.map(watchlistItemKey).join('|'),
     [items],
@@ -587,6 +639,8 @@ export default function WatchlistTab({
     if (!currentItems.length) {
       setQuotes({})
       setFailedByKey({})
+      quotesRef.current = {}
+      failedByKeyRef.current = {}
       setQuoteError('')
       return
     }
@@ -600,45 +654,133 @@ export default function WatchlistTab({
       if (!instruments.length) {
         setQuotes({})
         setFailedByKey({})
+        quotesRef.current = {}
+        failedByKeyRef.current = {}
         setQuoteError('')
         return
       }
-      const resp = await research.instrumentQuotes(instruments)
-      if (seq !== loadSeqRef.current) return
-      if (!resp.success || !resp.data?.quotes) {
-        setQuoteError(watchlistQuoteErrorCopy(resp.message))
-        return
+
+      const itemByInstrumentKey = new Map<string, WatchlistItem>()
+      for (const item of currentItems) {
+        const itemRef = resolveWatchlistInstrument(item)
+        if (itemRef) itemByInstrumentKey.set(instrumentKey(itemRef), item)
       }
-      setQuoteError('')
-      const patch: Record<string, MarketQuote> = {}
-      for (const q of resp.data.quotes) {
-        const itemRef = q.instrument ?? resolveWatchlistInstrument({
-          code: q.code,
-          name: q.name,
+
+      const shouldMarkQuoteFailed = (itemRef: NonNullable<ReturnType<typeof resolveWatchlistInstrument>>) => {
+        const item = itemByInstrumentKey.get(instrumentKey(itemRef))
+        if (!item) return true
+        const cached = lookupWatchlistQuote(quotesRef.current, item, itemRef)
+        return !shouldSuppressWatchlistQuoteFailure(item, {
+          loadingQuotes: !silent,
+          hasPrice: cached?.price != null,
         })
-        if (!itemRef) continue
-        const mq = unifiedQuoteToMarketQuote(q)
-        const code = displayCodeFromInstrument(itemRef)
-        const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
-        const quote: MarketQuote = {
-          ...mq,
-          code,
-          name: mq.name ?? code,
+      }
+
+      const applyMerge = (
+        patch: Record<string, MarketQuote>,
+        failedMap: Record<string, QuoteFailedReason>,
+        touchUpdatedAt: boolean,
+      ) => {
+        const merged = mergeWatchlistQuoteRefresh({
+          prevQuotes: quotesRef.current,
+          prevFailed: failedByKeyRef.current,
+          patch,
+          failedMap,
+        })
+        quotesRef.current = merged.quotes
+        failedByKeyRef.current = merged.failedByKey
+        setQuotes(merged.quotes)
+        setFailedByKey(merged.failedByKey)
+        if (touchUpdatedAt) {
+          setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
         }
-        patch[code] = quote
-        patch[rowKey] = quote
-        patch[instrumentKey(itemRef)] = quote
       }
-      const failedMap: Record<string, QuoteFailedReason> = {}
-      for (const f of resp.data.failed ?? []) {
-        failedMap[f.code] = f.reason
-        failedMap[instrumentKey(f.instrument)] = f.reason
+
+      let lastBatchErrorMessage: string | undefined
+      const { okCount, failCount } = await runWatchlistQuoteBatches({
+        items: instruments,
+        shouldAbort: () => seq !== loadSeqRef.current,
+        onBatchError: (err) => {
+          if (err instanceof Error && err.message) {
+            lastBatchErrorMessage = err.message
+          }
+        },
+        runBatch: async (batch) => {
+          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+          const resp = await research.instrumentQuotes(batch)
+          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+
+          const quotesArr = resp.data?.quotes
+          const hasQuotesArray = Array.isArray(quotesArr)
+
+          // success:false 且无 quotes：软失败 — 写 failedMap，保留已有价，不 throw
+          if (!hasQuotesArray) {
+            const reason = classifyWatchlistBatchFailReason(resp.message)
+            const failedMap: Record<string, QuoteFailedReason> = {}
+            for (const itemRef of batch) {
+              if (!shouldMarkQuoteFailed(itemRef)) continue
+              const code = displayCodeFromInstrument(itemRef)
+              const rowKey = watchlistItemKey({ code, name: code, instrument: itemRef })
+              failedMap[code] = reason
+              failedMap[rowKey] = reason
+              failedMap[instrumentKey(itemRef)] = reason
+            }
+            if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+            applyMerge({}, failedMap, false)
+            return
+          }
+
+          const patch: Record<string, MarketQuote> = {}
+          for (const q of quotesArr) {
+            const itemRef = q.instrument ?? resolveWatchlistInstrument({
+              code: q.code,
+              name: q.name,
+            })
+            if (!itemRef) continue
+            const mq = unifiedQuoteToMarketQuote(q)
+            const code = displayCodeFromInstrument(itemRef)
+            const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
+            const quote: MarketQuote = {
+              ...mq,
+              code,
+              name: mq.name ?? code,
+            }
+            patch[code] = quote
+            patch[rowKey] = quote
+            patch[instrumentKey(itemRef)] = quote
+          }
+          const failedMap: Record<string, QuoteFailedReason> = {}
+          for (const f of resp.data?.failed ?? []) {
+            const itemRef = f.instrument ?? resolveWatchlistInstrument({ code: f.code, name: f.code })
+            if (itemRef && !shouldMarkQuoteFailed(itemRef)) continue
+            failedMap[f.code] = f.reason
+            if (itemRef) failedMap[instrumentKey(itemRef)] = f.reason
+          }
+          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+          applyMerge(patch, failedMap, Object.keys(patch).length > 0)
+        },
+      })
+
+      if (seq !== loadSeqRef.current) return
+      // 有成功批则清 footer；仅整轮无成功且确有硬失败才抬红字
+      if (okCount > 0) {
+        setQuoteError('')
+      } else if (failCount > 0) {
+        const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
+        if (!(silent && hasCachedQuote)) {
+          setQuoteError(watchlistQuoteErrorCopy(lastBatchErrorMessage))
+        }
+      } else {
+        setQuoteError('')
       }
-      setQuotes(prev => ({ ...prev, ...patch }))
-      setFailedByKey(failedMap)
-      setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
-      if (seq === loadSeqRef.current) setQuoteError('行情暂时繁忙，请稍后刷新')
+      // 外层兜底：不清空已有 quotes
+      if (seq === loadSeqRef.current) {
+        const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
+        if (!(silent && hasCachedQuote)) {
+          setQuoteError('行情暂时繁忙，请稍后刷新')
+        }
+      }
     } finally {
       if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }
@@ -708,12 +850,39 @@ export default function WatchlistTab({
     return () => { cancelled = true }
   }, [active, selectedCode, itemsKey])
 
+  const applyQuotePatch = useCallback((patch: Record<string, MarketQuote>) => {
+    if (!Object.keys(patch).length) return
+    const merged = mergeWatchlistQuoteRefresh({
+      prevQuotes: quotesRef.current,
+      prevFailed: failedByKeyRef.current,
+      patch,
+      failedMap: {},
+    })
+    quotesRef.current = merged.quotes
+    failedByKeyRef.current = merged.failedByKey
+    setQuotes(merged.quotes)
+    setFailedByKey(merged.failedByKey)
+    setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+  }, [])
+
+  useEffect(() => subscribeQuotePatches(applyQuotePatch), [subscribeQuotePatches, applyQuotePatch])
+
   useEffect(() => {
-    if (!active) return undefined
+    if (!active || syncedItemsKey !== itemsKey) return undefined
     void refreshQuotes()
     const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
-  }, [refreshQuotes, active, itemsKey])
+  }, [refreshQuotes, active, itemsKey, syncedItemsKey])
+
+  // 宽限期结束后及时从「加载中」切换到真实失败/价格态
+  useEffect(() => {
+    const hasGraceItem = items.some(item => isWatchlistItemWithinQuoteGrace(item))
+    if (!hasGraceItem) return undefined
+    const timer = window.setInterval(() => {
+      setGraceTick(t => t + 1)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [items])
 
   useEffect(() => {
     for (const item of items) {
@@ -920,31 +1089,27 @@ export default function WatchlistTab({
               hint="试试输入完整代码，或换一个字再搜"
             />
           )}
-          {searchHits.map(hit => (
-            <button
-              key={hit.code}
-              type="button"
-              className={s.resultItem}
-              onClick={async () => {
-                let addedPrice: number | null = null
-                try {
-                  const ref = resolveWatchlistInstrument(hit)
-                  if (ref && hasApplicationCapability(ref, 'batch_quote')) {
-                    const q = await research.instrumentQuotes([ref])
-                    addedPrice = q.data?.quotes?.[0]?.price ?? null
-                  }
-                } catch { /* ignore */ }
-                onAdd(hit, { addedPrice })
-                setKeyword('')
-              }}
-            >
-              <div>
-                <Text block style={{ fontSize: 'var(--opptrix-font-base)', fontWeight: 500 }}>{hit.name}</Text>
-                <span className={s.resultMeta}>{hit.code}{hit.industry ? ` · ${hit.industry}` : ''}</span>
-              </div>
-              <span className={s.resultMeta}>添加</span>
-            </button>
-          ))}
+          {searchHits.map(hit => {
+            const row = normalizeWatchlistItem(hit)
+            return (
+              <button
+                key={watchlistItemKey(row)}
+                type="button"
+                className={mergeClasses(s.resultItem, 'opptrix-hover-marquee-host')}
+                onClick={async () => {
+                  const row = normalizeWatchlistItem(hit)
+                  await Promise.resolve(onAdd(row, {}))
+                  setKeyword('')
+                }}
+              >
+                <div className={s.resultMain}>
+                  <HoverMarqueeText text={row.name} className={s.resultName} />
+                  <span className={s.resultSubtitle}>{formatInstrumentSearchHitSubtitle(row)}</span>
+                </div>
+                <span className={s.resultAction}>添加</span>
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -989,13 +1154,23 @@ export default function WatchlistTab({
               const hasCandidates = unresolved && candidates.length > 1
               const quote = lookupWatchlistQuote(quotes, item, ref)
               const failedReason = lookupWatchlistQuote(failedByKey, item, ref)
-              const failedCopy = failedReason ? QUOTE_FAILED_COPY[failedReason] : undefined
+              const livePrice = quote?.price ?? null
+              const suppressFailure = shouldSuppressWatchlistQuoteFailure(item, {
+                loadingQuotes,
+                hasPrice: livePrice != null,
+              })
+              const tentativePending = livePrice == null
+                && (loadingQuotes || isWatchlistItemWithinQuoteGrace(item))
+              const price = livePrice ?? (tentativePending && item.addedPrice != null ? item.addedPrice : null)
+              const failedCopy = failedReason && !suppressFailure && price == null
+                ? QUOTE_FAILED_COPY[failedReason]
+                : undefined
+              const quotePending = price == null && tentativePending && !failedCopy
               const holding = ref ? lookupHoldingSnapshot(holdingsByCode, ref) : null
               const isHolding = (holding?.shares ?? 0) > 0
-              const price = quote?.price ?? null
-              const followPct = followReturnPct(price, item.addedPrice)
+              const followPct = followReturnPct(livePrice, item.addedPrice)
               const holdingPct = isHolding
-                ? holdingReturnPctFromQuote(holding, price)
+                ? holdingReturnPctFromQuote(holding, livePrice)
                 : null
               const followTone = pctTone(followPct)
               const holdingTone = pctTone(holdingPct)
@@ -1104,13 +1279,34 @@ export default function WatchlistTab({
                       onMouseDown={stopRowActionPointer}
                       onClick={stopRowActionPointer}
                     >
-                      {failedCopy ? (
-                        <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                      {failedCopy && livePrice == null ? (
+                        <span
+                          className={mergeClasses(s.metricCell, s.metricMuted)}
+                          style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                          title={failedCopy.hint}
+                        >
                           {failedCopy.label}
+                        </span>
+                      ) : quotePending && livePrice == null ? (
+                        <span
+                          className={mergeClasses(s.metricCell, s.metricPending)}
+                          style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                          title="正在获取最新行情"
+                        >
+                          <Spinner size="extra-tiny" />
+                          正在获取行情…
                         </span>
                       ) : (
                         <>
-                          <span className={mergeClasses(s.metricCell, s.metricPrice)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                          <span
+                            className={mergeClasses(
+                              s.metricCell,
+                              s.metricPrice,
+                              quotePending && livePrice == null && item.addedPrice != null && s.metricMuted,
+                            )}
+                            style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                            title={failedCopy?.hint}
+                          >
                             {formatPriceForMarket(ref?.market, price)}
                           </span>
                           <span

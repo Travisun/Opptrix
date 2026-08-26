@@ -733,6 +733,11 @@ app.post<{ Body: Record<string, unknown> }>('/api/instruments/quotes', async (re
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/quote', async (req) => {
+  const r = await hub.dispatch('instrument_quote', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.post<{ Body: Record<string, unknown> }>('/api/instruments/chart', async (req) => {
   const r = await hub.dispatch('instrument_chart', req.body ?? {})
   return { success: r.success, data: r.data, message: r.message }
@@ -1992,16 +1997,39 @@ app.put<{ Body: { groups?: Array<{ id: string; title: string; sortOrder: number;
   },
 )
 
-app.post<{ Body: { code: string; shares: number; price: number; side?: string; date?: string; market?: string } }>(
+app.post<{ Body: {
+  code: string
+  shares: number
+  price: number
+  side?: string
+  date?: string
+  market?: string
+  assetClass?: string
+  instrument?: { market: string; assetClass: string; symbol: string; exchange?: string }
+} }>(
   '/api/portfolio/trade',
   async (req, reply) => {
-    const { code, shares, price, side = 'buy', date, market } = req.body ?? {}
+    const { code, shares, price, side = 'buy', date, market, assetClass, instrument } = req.body ?? {}
     if (!code || !shares || !price) return reply.code(400).send({ error: 'code, shares, price required' })
     const pm = hub.de.portfolio
     const m = market?.trim() || undefined
-    const result = side === 'sell'
-      ? await pm.sell(code, shares, price, date, '', m as import('@opptrix/shared').Market | undefined)
-      : await pm.buy(code, shares, price, date, '', m as import('@opptrix/shared').Market | undefined)
+    const ac = assetClass?.trim() || undefined
+    const inst = instrument && typeof instrument === 'object'
+      ? instrument as import('@opptrix/shared').InstrumentRef
+      : undefined
+    const result = await pm.recordTrade(
+      side === 'sell' ? 'sell' : 'buy',
+      code,
+      shares,
+      price,
+      {
+        date,
+        name: '',
+        market: m as import('@opptrix/shared').Market | undefined,
+        assetClass: ac as import('@opptrix/shared').AssetClass | undefined,
+        instrument: inst,
+      },
+    )
     return { success: true, trade: result }
   },
 )

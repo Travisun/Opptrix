@@ -47,14 +47,18 @@ export function holdingMatchesRef(
   ref: InstrumentRef,
 ): boolean {
   const parsed = tryParseInstrumentInput(holding.code.trim())
+  const holdingAssetClass = (holding as { assetClass?: InstrumentRef['assetClass'] }).assetClass
   const hRef = parsed
-    ? normalizeInstrumentRefLocal(parsed)
+    ? normalizeInstrumentRefLocal(
+      holdingAssetClass ? { ...parsed, assetClass: holdingAssetClass } : parsed,
+    )
     : normalizeInstrumentRefLocal({
       market: (holding.market ?? 'CN') as InstrumentRef['market'],
-      assetClass: 'EQUITY',
+      assetClass: holdingAssetClass ?? 'EQUITY',
       symbol: holding.code.trim(),
     })
-  return portfolioHoldingsStorageKey(hRef) === portfolioHoldingsStorageKey(ref)
+  // 命名空间键级匹配：含 FUND(CN:PF.xxx) vs 个股(CN:SH/SZ.xxx)，禁止一律当 EQUITY
+  return instrumentKey(hRef) === instrumentKey(ref)
 }
 
 export const DEFAULT_FEE_CONFIG = {
@@ -95,6 +99,14 @@ export function lookupHoldingSnapshot(
   ref: InstrumentRef,
 ): HoldingSnapshot | undefined {
   const keys = [portfolioHoldingsStorageKey(ref), instrumentKey(ref)]
+  // 历史场外基金可能仅以裸六位写入 map；lookup 侧 alias，不污染主键
+  if (
+    ref.market === 'CN'
+    && (ref.assetClass === 'FUND' || ref.exchange === 'PF' || ref.exchange === 'OF')
+  ) {
+    const bare = ref.symbol.replace(/\D/g, '').slice(-6).padStart(6, '0')
+    if (bare && !keys.includes(bare)) keys.push(bare)
+  }
   for (const k of keys) {
     const row = k ? map[k] : undefined
     if (row && holdingMatchesRef(row, ref)) return row

@@ -372,7 +372,26 @@ async query<T>(
 | **Fast-path override** | 特定 (market, cap) 的编排策略可配置 | TDX 优先 K 线 → 应改为 `TdxProvider` 的 binding priority + `mergeStrategy` |
 | **Cache-first** | 命中 QueryCache 则跳过 Provider | 已有 `CACHE_TYPE` |
 
-**多标的批量行情**（关注列表 `/instruments/quotes`，`routeInstrumentQuotes`）**多市场分组有界并行**：CN 个股 / ETF / 基金各一次批量 `stockQuotes`；US / HK / CRYPTO 组内有界并行（每块并发 ≤ 5，与 tickflow `maxConcurrent` 对齐），三组可同时启动；结果按 code / instrument 匹配，与顺序无关。失败项 `failed[].reason` 支持 `not_found`（上游明确未收录，如扶摇 `code 3001 Fund not found`）—— Provider 层抛专用错误、Engine 透传 error 文案、Hub `stockQuotes` 返回 failed 明细，Router 按文案归类，前端展示「该标的数据源暂未收录」。
+**多标的批量行情**（关注列表 `/instruments/quotes`，`routeInstrumentQuotes`）**分通道有界并行**：
+
+| 资产 | Hub 路径 | Provider / 能力 |
+|------|----------|-----------------|
+| CN EQUITY / INDEX | `stockQuotes` → `batchRealtime` | `pricesSnapshot` 等 |
+| CN ETF | `stockQuotes`(etf) → `batchRealtime` | `fundMarketSnapshot` |
+| CN FUND（场外） | **`fundQuotes`** → 有界并发 `queryInstrumentData(ref, 'fund_quote')` | Fuyao `fundQuote` / NAV；`price=unitNav` |
+| US / HK / CRYPTO | `usQuotes` / `regionalQuotes` / `cryptoQuotes`（或缺省有界并发 realtime） | Tickflow 等 |
+
+组内并发 ≤ 5（与 tickflow `maxConcurrent` 对齐），各组可同时启动；结果按 code / instrument 匹配。失败项 `failed[].reason` 支持 `not_found`（上游明确未收录，如扶摇 `code 3001 Fund not found`）。
+
+**Watchlist 覆盖层 TTL**（`WATCHLIST_INSTRUMENT_TTL`，秒）：
+
+| cacheType | TTL | 说明 |
+|-----------|-----|------|
+| `stock_realtime` | **45** | EQUITY 盘中短缓存，降批拉压力（非盘中冻结） |
+| `fund_quote` | **600** | 场外净值日更，10 分钟 |
+| `index_realtime` / `crypto_realtime` | **0** | 关闭覆盖层缓存，避免 24h 兜底冻结 |
+
+Engine `resolveInstrumentQueryPlan`：CN FUND 的 `fund_quote` / `realtime` 计划 **`useCache: true`**，与上表 `fund_quote` TTL 对齐。
 
 **建议**：将 TDX/Tushare 特殊路径从 Engine 抽到 **`QueryPlan`** 配置：
 
@@ -1376,3 +1395,17 @@ A：不要。实现 `settings.ts` + 注册后，数据源 Tab 自动出现新卡
 ---
 
 *文档版本：2026-08-25 — 暂时下线 baostock/zzshare；推荐栈顺位 tonghuashun(120) → Opptrix量化 stockindex(115) → tickflow(110) → tushare(105)。*
+
+## 持仓账本扩展（InstrumentRef 一等公民）
+
+账本键唯一事实源：`instrumentRefKey(normalizeInstrumentRef(ref))`（经 `portfolioInstrumentRef` / `portfolioLedgerKey`）。
+
+### 如何扩展新市场 / 资产类（3–5 步）
+
+1. **能力矩阵**：仅在 `packages/shared/src/instrument-capabilities.ts` 为 `market+assetClass` 登记是否开放 `portfolio_pnl`（INDEX / JP / KR / CRYPTO 默认关）；`client-ui/src/market/capabilities.ts` 从 `@opptrix/shared/instrument-capabilities` re-export，勿维护 duplicate 矩阵。
+2. **Portfolio Profile**：在 `packages/shared/src/portfolio-profile.ts` 的 `PORTFOLIO_PROFILE_TABLE` 加一行：`ledgerKind`（经 `resolvePortfolioLedgerKind`）、`quantityUnit`、`supportsPnl`、`markCapability`（FUND→`fund_quote`，其余 `realtime`）。
+3. **录入路径**：买卖 / Hub `/api/portfolio/trade` / `portfolioTrade` 传入 `assetClass` 或完整 `instrument`；`TradeRecord.assetClass` 可选持久化（旧 JSON 无字段时由 code 推断）。
+4. **标的解析**：`portfolioInstrumentRef(code, market?, assetClass?)` 或 `portfolioInstrumentRef(instrument)`；FUND 持久化为 `CN:PF.xxxxxx`，ETF 保持 ETF，勿默认 EQUITY。
+5. **盯市与匹配**：`fetchRealtimePrice` / `holdings` 用 `resolvePortfolioProfile(ref).markCapability`；UI `holdingMatchesRef`（经 `instrumentKey` / `instrumentRefKey`）与 `useFollowPortfolio` 用持仓行 `market+assetClass`（或解析后的 FUND）匹配。
+
+新增测例：`tests/portfolio-instrument.test.mjs`（ref+ledgerKey、基金不误配个股）、`tests/portfolio-return-calc.test.mjs`（加权成本）、`tests/portfolio-profile-ref.test.mjs`（FUND 盯市 mock）。

@@ -1,6 +1,7 @@
 import type { ResearchResult } from '@opptrix/shared'
 import {
   fail,
+  ok,
   hasApplicationCapability,
   instrumentDisplayCode,
   instrumentRefKey,
@@ -37,6 +38,16 @@ export type InstrumentRouteHandlers = {
   usRealtime: (symbol: string) => Promise<ResearchResult>
   regionalRealtime: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoRealtime: (pair: string) => Promise<ResearchResult>
+  /** CN 场外基金批量净值行情；缺省则回退 fundRealtime 有界并发 */
+  fundQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
+  /** CN 场外基金单标的净值（fund_quote）；仅 fundQuotes 缺省时使用 */
+  fundRealtime?: (ref: InstrumentRef) => Promise<ResearchResult>
+  /** US 批量实时（Tickflow quotes 等）；缺省则回退 usRealtime 有界并发 */
+  usQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
+  /** HK 批量实时；缺省则回退 regionalRealtime 有界并发 */
+  regionalQuotes?: (market: 'HK', refs: InstrumentRef[]) => Promise<ResearchResult>
+  /** CRYPTO 批量实时；缺省则回退 cryptoRealtime 有界并发 */
+  cryptoQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
   stockChart: (
     code: string,
     period: string,
@@ -311,42 +322,118 @@ export async function routeInstrumentQuotes(
   }
   const fundRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'FUND')
   if (fundRefs.length) {
-    tasks.push(handlers.stockQuotes(fundRefs).then(resp =>
-      collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
-    ))
+    // 场外基金走独立通道（Fuyao fundQuote / NAV），禁止 stockQuotes → A 股 batchRealtime
+    if (handlers.fundQuotes) {
+      tasks.push(handlers.fundQuotes(fundRefs).then(resp =>
+        collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
+      ))
+    } else if (handlers.fundRealtime) {
+      tasks.push(collectRealtimeQuotesBounded(
+        fundRefs.map(ref => ({ ref, call: () => handlers.fundRealtime!(ref) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    } else {
+      for (const ref of fundRefs) failed.push(failedQuoteForRef(ref, 'no_provider'))
+    }
   }
   const usRefs = refs.filter(r => r.market === 'US')
   if (usRefs.length) {
-    tasks.push(collectRealtimeQuotesBounded(
-      usRefs.map(ref => ({ ref, call: () => handlers.usRealtime(ref.symbol) })),
-      quotes,
-      failed,
-      noteError,
-    ))
+    if (handlers.usQuotes) {
+      tasks.push(handlers.usQuotes(usRefs).then(resp =>
+        collectCnBatchQuotes(usRefs, resp, quotes, failed, () => 'live', noteError),
+      ))
+    } else {
+      // 无 batch handler：有界并发逐标的（Tickflow maxConcurrent≈5）
+      tasks.push(collectRealtimeQuotesBounded(
+        usRefs.map(ref => ({ ref, call: () => handlers.usRealtime(ref.symbol) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    }
   }
   const hkRefs = refs.filter(r => r.market === 'HK')
   if (hkRefs.length) {
-    tasks.push(collectRealtimeQuotesBounded(
-      hkRefs.map(ref => ({ ref, call: () => handlers.regionalRealtime('HK', ref.symbol) })),
-      quotes,
-      failed,
-      noteError,
-    ))
+    if (handlers.regionalQuotes) {
+      tasks.push(handlers.regionalQuotes('HK', hkRefs).then(resp =>
+        collectCnBatchQuotes(hkRefs, resp, quotes, failed, () => 'live', noteError),
+      ))
+    } else {
+      tasks.push(collectRealtimeQuotesBounded(
+        hkRefs.map(ref => ({ ref, call: () => handlers.regionalRealtime('HK', ref.symbol) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    }
   }
   const cryptoRefs = refs.filter(r => r.market === 'CRYPTO')
   if (cryptoRefs.length) {
-    tasks.push(collectRealtimeQuotesBounded(
-      cryptoRefs.map(ref => ({ ref, call: () => handlers.cryptoRealtime(instrumentDisplayCode(ref)) })),
-      quotes,
-      failed,
-      noteError,
-    ))
+    if (handlers.cryptoQuotes) {
+      tasks.push(handlers.cryptoQuotes(cryptoRefs).then(resp =>
+        collectCnBatchQuotes(cryptoRefs, resp, quotes, failed, () => 'live', noteError),
+      ))
+    } else {
+      tasks.push(collectRealtimeQuotesBounded(
+        cryptoRefs.map(ref => ({ ref, call: () => handlers.cryptoRealtime(instrumentDisplayCode(ref)) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    }
   }
 
   await Promise.all(tasks)
 
   if (!quotes.length) return fail(firstError || '行情获取失败', t0)
   return { success: true, message: `更新 ${quotes.length} 只`, data: { quotes, failed }, elapsed: 0 }
+}
+
+/**
+ * 单标的最新价 — 关注添加后立即拉价用；默认 fresh 跳过覆盖层缓存。
+ * 返回 `{ quote, failed? }`，便于 UI 无缝展示。
+ */
+export async function routeInstrumentQuote(
+  params: Record<string, unknown>,
+  handlers: InstrumentRouteHandlers,
+  t0 = Date.now(),
+): Promise<ResearchResult> {
+  const ref = resolveInstrumentFromParams(params)
+  if (!ref) return fail('instrument 必填', t0)
+  if (ref.market === 'JP' || ref.market === 'KR') {
+    return fail(ref.market === 'JP' ? '日股暂未接入' : '韩股暂未接入', t0)
+  }
+
+  const batch = await routeInstrumentQuotes({ instruments: [ref] }, handlers, t0)
+  if (!batch.success || !batch.data || typeof batch.data !== 'object') {
+    return batch
+  }
+  const payload = batch.data as {
+    quotes?: UnifiedInstrumentQuote[]
+    failed?: FailedInstrumentRef[]
+  }
+  const key = instrumentRefKey(ref)
+  const quote = payload.quotes?.find(q => instrumentRefKey(q.instrument) === key)
+    ?? payload.quotes?.[0]
+    ?? null
+  const failed = payload.failed?.find(f => instrumentRefKey(f.instrument) === key)
+
+  if (!quote) {
+    const reason = failed?.reason
+    if (reason === 'unsupported') return fail('暂不支持该市场', t0)
+    if (reason === 'no_provider') return fail('行情源未配置', t0)
+    if (reason === 'not_found') return fail('该标的暂未收录', t0)
+    if (reason === 'empty') return fail('暂时无行情数据', t0)
+    return fail(batch.message || '暂时无法获取行情', t0)
+  }
+
+  return ok(
+    { quote, failed: failed ?? undefined },
+    '已更新最新价',
+    t0,
+  )
 }
 
 export async function routeInstrumentChart(

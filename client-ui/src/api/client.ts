@@ -598,6 +598,17 @@ export const research = {
       signal,
     ),
 
+  /** 单标的最新价 — 关注添加后立即拉价；默认 fresh 跳过覆盖层缓存 */
+  instrumentQuote: (
+    instrument: InstrumentRef,
+    opts?: { fresh?: boolean },
+    signal?: AbortSignal,
+  ) => postInstrument<{ quote: UnifiedInstrumentQuote; failed?: { code: string; reason: string } }>(
+    '/instruments/quote',
+    { instrument, fresh: opts?.fresh ?? true },
+    signal,
+  ),
+
   instrumentChart: async (
     instrument: InstrumentRef,
     period: ChartPeriod | 'daily' | 'weekly' | 'monthly' | 'intraday' = 'daily',
@@ -1276,7 +1287,14 @@ export async function reloadInstalledProvider(providerId: string) {
 }
 
 export async function portfolioTrade(payload: {
-  code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string; market?: string
+  code: string
+  shares: number
+  price: number
+  side?: 'buy' | 'sell'
+  date?: string
+  market?: string
+  assetClass?: string
+  instrument?: { market: string; assetClass: string; symbol: string; exchange?: string }
 }) {
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/trade`, {
     method: 'POST',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
@@ -15,11 +15,14 @@ import {
 import {
   displayCodeFromInstrument,
   formatInstrumentLabel,
+  instrumentKey,
   marketDisplayName,
   resolveWatchlistInstrument,
   UNRESOLVED_INSTRUMENT_COPY,
+  watchlistItemKey,
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
+import { isWatchlistItemWithinQuoteGrace } from './watchlistQuotes'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -27,6 +30,9 @@ import { ghostInteractive } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
 
 const CONTENT_PAD = '15px'
+const SNAPSHOT_INITIAL_MAX_RETRIES = 2
+const SNAPSHOT_INITIAL_RETRY_MS = 1500
+const SNAPSHOT_LOAD_ERROR_COPY = '暂时无法加载行情，请稍后重试'
 
 type EquityDetail = UsSnapshotData
 
@@ -217,7 +223,6 @@ const useStyles = makeStyles({
 interface Props {
   stock: WatchlistItem
   instrumentRef?: InstrumentRef
-  localIndexed?: boolean | null
   loading?: boolean
   onManage?: () => void
   onSelectPeer?: (item: WatchlistItem) => void
@@ -270,9 +275,19 @@ async function loadSnapshot(ref: InstrumentRef): Promise<EquityDetail | CryptoSn
   }
   const resp = await research.instrumentSnapshot(ref)
   if (!resp.success || !resp.data || typeof resp.data !== 'object') {
-    throw new Error(resp.message || '获取行情失败')
+    throw new Error(resp.message || SNAPSHOT_LOAD_ERROR_COPY)
   }
   return resp.data as EquityDetail | CryptoSnapshotData
+}
+
+/** 刷新成功但新 quote 为空时保留上一份，避免摘要闪没 */
+function mergeSnapshotPreserveQuote(
+  prev: EquityDetail | CryptoSnapshotData | null,
+  next: EquityDetail | CryptoSnapshotData,
+): EquityDetail | CryptoSnapshotData {
+  if (next.quote != null) return next
+  if (prev?.quote == null) return next
+  return { ...next, quote: prev.quote }
 }
 
 function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string; sessionLabel?: string } | null): string {
@@ -299,12 +314,34 @@ function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string; sess
 export default function CrossMarketSnapshotDetail({
   stock,
   instrumentRef,
-  localIndexed = null,
   loading = false,
   onManage,
 }: Props) {
   const s = useStyles()
-  const ref = instrumentRef ?? resolveWatchlistInstrument(stock)
+  /** 按标的身份稳定，避免父组件每次 render 新建 ref 对象导致轮询 effect 重跑 */
+  const instrumentIdentity = useMemo(() => {
+    if (instrumentRef) return instrumentKey(instrumentRef)
+    return watchlistItemKey(stock)
+  }, [
+    instrumentRef?.market,
+    instrumentRef?.assetClass,
+    instrumentRef?.symbol,
+    instrumentRef?.exchange,
+    instrumentRef?.quote,
+    stock.code,
+    stock.instrument?.market,
+    stock.instrument?.assetClass,
+    stock.instrument?.symbol,
+    stock.instrument?.exchange,
+    stock.instrument?.quote,
+    stock.industry,
+  ])
+  const ref = useMemo(
+    () => instrumentRef ?? resolveWatchlistInstrument(stock),
+    // identity 不变时保留同一对象引用
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by instrumentIdentity
+    [instrumentIdentity],
+  )
   const label = ref ? marketDisplayName(ref.market) : ''
   const isCrypto = ref?.market === 'CRYPTO'
   const isEquity = ref?.market === 'US' || ref?.market === 'HK'
@@ -312,20 +349,48 @@ export default function CrossMarketSnapshotDetail({
   const [snapshot, setSnapshot] = useState<EquityDetail | CryptoSnapshotData | null>(null)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [, setGraceTick] = useState(0)
+  const loadSeqRef = useRef(0)
+  const snapshotRef = useRef<EquityDetail | CryptoSnapshotData | null>(null)
+  const initialRetryRef = useRef(0)
+  snapshotRef.current = snapshot
 
   const load = useCallback(async () => {
     if (!ref) return
+    const seq = ++loadSeqRef.current
     setFetching(true)
-    setError(null)
+    let scheduleRetry = false
     try {
       const data = await loadSnapshot(ref)
-      setSnapshot(data)
+      if (seq !== loadSeqRef.current) return
+      setSnapshot(prev => mergeSnapshotPreserveQuote(prev, data))
+      setError(null)
+      initialRetryRef.current = 0
     } catch (e) {
-      setError(e instanceof Error ? e.message : '获取行情失败')
+      if (seq !== loadSeqRef.current) return
+      const hadQuote = snapshotRef.current?.quote != null
+      if (!hadQuote && initialRetryRef.current < SNAPSHOT_INITIAL_MAX_RETRIES) {
+        initialRetryRef.current += 1
+        scheduleRetry = true
+        window.setTimeout(() => {
+          void load()
+        }, SNAPSHOT_INITIAL_RETRY_MS * initialRetryRef.current)
+        return
+      }
+      setError(e instanceof Error ? e.message : SNAPSHOT_LOAD_ERROR_COPY)
     } finally {
-      setFetching(false)
+      if (seq === loadSeqRef.current && !scheduleRetry) {
+        setFetching(false)
+      }
     }
   }, [ref])
+
+  useEffect(() => {
+    setSnapshot(null)
+    setError(null)
+    initialRetryRef.current = 0
+    loadSeqRef.current += 1
+  }, [instrumentIdentity])
 
   useEffect(() => {
     if (!ref) return undefined
@@ -333,12 +398,23 @@ export default function CrossMarketSnapshotDetail({
     const ms = isCrypto ? 30_000 : 90_000
     const timer = window.setInterval(() => { void load() }, ms)
     return () => window.clearInterval(timer)
-  }, [load, isCrypto, ref])
+  }, [load, isCrypto, instrumentIdentity])
+
+  useEffect(() => {
+    if (!isWatchlistItemWithinQuoteGrace(stock)) return undefined
+    const timer = window.setInterval(() => {
+      setGraceTick(t => t + 1)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [stock.addedAt])
 
   const equity = isEquity ? (snapshot as EquityDetail | null) : null
   const crypto = isCrypto ? (snapshot as CryptoSnapshotData | null) : null
   const quote = equity?.quote ?? crypto?.quote ?? null
   const klines = equity?.recentKlines ?? crypto?.recentKlines ?? []
+  const withinQuoteGrace = isWatchlistItemWithinQuoteGrace(stock)
+  const pendingInitialQuote = !quote && (fetching || withinQuoteGrace)
+  const showQuoteError = Boolean(error && !quote && !fetching && !withinQuoteGrace)
 
   const tone = pctTone(quote?.changePct)
   const toneClass = mergeClasses(
@@ -398,14 +474,14 @@ export default function CrossMarketSnapshotDetail({
               </button>
             )}
           </div>
-          {loading || (fetching && !quote) ? (
+          {loading || pendingInitialQuote ? (
             <Spinner size="tiny" label="正在获取行情…" />
           ) : quote ? (
             <div className={s.quoteMain}>
               <span className={mergeClasses(s.price, toneClass)}>{fmtPrice(quote.price)}</span>
               <span className={mergeClasses(s.change, toneClass)}>{formatPct(quote.changePct)}</span>
             </div>
-          ) : error ? (
+          ) : showQuoteError ? (
             <Text className={s.error}>{error}</Text>
           ) : null}
         </div>
@@ -439,8 +515,8 @@ export default function CrossMarketSnapshotDetail({
                 备注
               </button>
             )}
-            {loading || (fetching && !quote) ? (
-              <Spinner size="tiny" />
+            {loading || pendingInitialQuote ? (
+              <Spinner size="tiny" label="正在获取行情…" />
             ) : quote ? (
               <>
                 <span className={mergeClasses(s.price, toneClass)}>{fmtPrice(quote.price)}</span>
@@ -471,7 +547,7 @@ export default function CrossMarketSnapshotDetail({
               <HeroCell label="流通值" value={fmtCompact(quote.circulatingMarketCap)} />
             ) : null}
           </div>
-        ) : error && !quote ? (
+        ) : showQuoteError ? (
           <Text className={s.error}>{error}</Text>
         ) : null}
       </div>
@@ -481,11 +557,6 @@ export default function CrossMarketSnapshotDetail({
           <TradingViewChart code={chartCode} instrument={ref} expanded active />
         </div>
         {error && quote ? <Text className={s.error}>刷新失败：{error}</Text> : null}
-        {localIndexed === false ? (
-          <Text className={s.muted} style={{ padding: `0 ${CONTENT_PAD}` }}>
-            在线名录暂未匹配到该代码；可用 US:AAPL、HK:00700 格式添加关注。
-          </Text>
-        ) : null}
         <Text className={s.foot} style={{ padding: `0 ${CONTENT_PAD} 10px` }}>{footnote}</Text>
       </div>
     </div>

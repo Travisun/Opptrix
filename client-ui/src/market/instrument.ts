@@ -249,6 +249,35 @@ export function marketDisplayName(market: Market): string {
   }
 }
 
+/** 搜索候选副标题 — 市场 · 代码 · 类型，单行 ellipsis 友好 */
+export function formatInstrumentSearchHitSubtitle(item: WatchlistItem): string {
+  const row = normalizeWatchlistItem(item)
+  const ref = row.instrument
+  const code = watchlistDisplayCode(row)
+  if (!ref) return row.industry?.trim() || code
+
+  const parts: string[] = [marketDisplayName(ref.market), code]
+  if (ref.assetClass === 'ETF') {
+    parts.push('ETF')
+  } else if (ref.assetClass === 'FUND') {
+    parts.push(isCnListedFundSymbol(ref.symbol) ? '场内基金' : '场外基金')
+  } else if (ref.assetClass === 'INDEX') {
+    parts.push('指数')
+  } else if (ref.assetClass === 'CRYPTO_SPOT' || ref.assetClass === 'CRYPTO_PERP') {
+    parts.push('Crypto')
+  } else if (ref.market === 'CN' && ref.exchange) {
+    const exLabel = ref.exchange === 'SH'
+      ? '上交所'
+      : ref.exchange === 'SZ'
+        ? '深交所'
+        : ref.exchange === 'BJ'
+          ? '北交所'
+          : ref.exchange
+    parts.push(exLabel)
+  }
+  return parts.join(' · ')
+}
+
 /** 消歧候选展示：如「港股 00700 腾讯控股」 */
 export function formatDisambiguationCandidateLabel(c: {
   instrument: InstrumentRef

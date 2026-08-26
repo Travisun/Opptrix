@@ -3,7 +3,6 @@ import CrossMarketSnapshotDetail from './CrossMarketSnapshotDetail'
 
 interface Props {
   stock: WatchlistItem
-  localIndexed?: boolean | null
   loading?: boolean
 }
 

@@ -73,14 +73,12 @@ interface Props {
   stock: WatchlistItem
   marketLabel?: string
   loading?: boolean
-  localIndexed?: boolean | null
 }
 
 export default function CrossMarketDetailPlaceholder({
   stock,
   marketLabel,
   loading = false,
-  localIndexed = null,
 }: Props) {
   const s = useStyles()
   const ref = resolveWatchlistInstrument(stock)
@@ -122,11 +120,7 @@ export default function CrossMarketDetailPlaceholder({
         ) : (
           <div className={s.card}>
             <Text className={s.muted}>
-              {localIndexed === true
-                ? '已匹配在线名录。实时行情、K 线与深度分析将在对应数据源接入后在此展示。'
-                : localIndexed === false
-                  ? '在线名录暂未匹配该代码，请核对代码或在对话中直接 @ 引用。'
-                  : '跨市场详情页已就绪；接入行情源后将在此展示概况、K 线与分析模块。'}
+              跨市场详情页已就绪；接入行情源后将在此展示概况、K 线与分析模块。
             </Text>
           </div>
         )}

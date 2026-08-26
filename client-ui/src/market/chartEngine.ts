@@ -30,8 +30,23 @@ const LINE_OPTS = {
   crosshairMarkerVisible: false,
 }
 
-/** Shared so K / Vol / MACD plot areas share the same horizontal origin. */
+/**
+ * Shared right price-scale width for K / Vol / MACD.
+ * lightweight-charts only exposes minimumWidth (can grow for labels);
+ * syncRightPriceScaleWidths() locks all panes to the same measured width.
+ */
 const PRICE_SCALE_MIN_WIDTH = 52
+
+function alignedRightPriceScale(
+  extra?: { scaleMargins?: { top: number; bottom: number } },
+) {
+  return {
+    borderVisible: false,
+    // Fixed shared floor; syncRightPriceScaleWidths raises all panes together.
+    minimumWidth: PRICE_SCALE_MIN_WIDTH,
+    ...extra,
+  }
+}
 
 function alignedTimeScaleBase(minuteChart: boolean, intradayChart: boolean) {
   const tight = minuteChart || intradayChart
@@ -95,10 +110,7 @@ export class ChartWorkspace {
           dateFormat: 'yyyy-MM-dd',
           timeFormatter: axisFormat.timeFormatter,
         },
-        rightPriceScale: {
-          borderVisible: false,
-          minimumWidth: PRICE_SCALE_MIN_WIDTH,
-        },
+        rightPriceScale: alignedRightPriceScale(),
         timeScale: {
           ...alignedTimeScaleBase(minuteChart, intradayChart),
           timeVisible: minuteChart || intradayChart,
@@ -122,11 +134,7 @@ export class ChartWorkspace {
       this.volumeChart = createChart(refs.volume, {
         layout: theme.layout,
         grid: theme.grid,
-        rightPriceScale: {
-          borderVisible: false,
-          minimumWidth: PRICE_SCALE_MIN_WIDTH,
-          scaleMargins: { top: 0.08, bottom: 0 },
-        },
+        rightPriceScale: alignedRightPriceScale({ scaleMargins: { top: 0.08, bottom: 0 } }),
         timeScale: {
           ...alignedTimeScaleBase(minuteChart, intradayChart),
           visible: false,
@@ -139,11 +147,7 @@ export class ChartWorkspace {
         this.macdChart = createChart(refs.macd, {
           layout: theme.layout,
           grid: theme.grid,
-          rightPriceScale: {
-            borderVisible: false,
-            minimumWidth: PRICE_SCALE_MIN_WIDTH,
-            scaleMargins: { top: 0.15, bottom: 0 },
-          },
+          rightPriceScale: alignedRightPriceScale({ scaleMargins: { top: 0.15, bottom: 0 } }),
           timeScale: {
             ...alignedTimeScaleBase(minuteChart, intradayChart),
             visible: false,
@@ -301,6 +305,28 @@ export class ChartWorkspace {
         row.dea == null ? { time: row.time } : { time: row.time, value: row.dea }
       ))))
     }
+
+    this.syncRightPriceScaleWidths()
+  }
+
+  /**
+   * LWC price scales can grow past minimumWidth (e.g. cyq 「90高/均成」 labels).
+   * Lock K / Vol / MACD to the same measured width so plot left edges stay aligned.
+   */
+  private syncRightPriceScaleWidths(): void {
+    if (!this.alive || !this.mainChart || !this.volumeChart) return
+    try {
+      const measured = Math.max(
+        PRICE_SCALE_MIN_WIDTH,
+        this.mainChart.priceScale('right').width(),
+        this.volumeChart.priceScale('right').width(),
+        this.macdChart?.priceScale('right').width() ?? 0,
+      )
+      const opts = { minimumWidth: measured }
+      this.mainChart.priceScale('right').applyOptions(opts)
+      this.volumeChart.priceScale('right').applyOptions(opts)
+      this.macdChart?.priceScale('right').applyOptions(opts)
+    } catch { /* ignore during teardown / pre-layout */ }
   }
 
   private applyRangeToPanes(range: LogicalRange): void {
@@ -405,6 +431,7 @@ export class ChartWorkspace {
       if (refs.macd && this.macdChart) {
         this.macdChart.applyOptions({ width: refs.macd.clientWidth, height: refs.macd.clientHeight })
       }
+      this.syncRightPriceScaleWidths()
       this.pushRangeToPanes()
     }
     this.doResize = resize

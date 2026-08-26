@@ -1,19 +1,21 @@
 /**
  * 关注列表个股数据缓存 TTL — 仅对 watchlist 内标的启用（见 MarketDataEngine.queryScoped）。
- * 变化慢的维度 TTL 更长；行情类不缓存。
+ * 变化慢的维度 TTL 更长；盘中价短 TTL 降批拉压力；净值类按日更节奏。
  */
 
 /** 秒 */
 export const WATCHLIST_INSTRUMENT_TTL: Record<string, number> = {
   /**
-   * 实时行情类 — TTL 0 即关闭 watchlist 覆盖层缓存。
-   * 若不在此列出，兜底 86400 会把 US/HK/CRYPTO 实时报价冻结 24h
-   * 且持久化到 ~/.aaashare/cache.json 重启也不失效；ttl<=0 时
-   * Cache.getWithTtl/setWithTtl 直接短路，保持与 DEFAULT_TTL 一致。
+   * 实时行情类：
+   * - stock_realtime=45：EQUITY 盘中短缓存，降关注列表批拉压力（非盘中冻结）
+   * - index_realtime / crypto_realtime=0：关闭覆盖层缓存，避免 24h 兜底冻结
+   * - fund_quote=600：场外基金净值日更，10 分钟缓存
+   * 若不在此列出，兜底 86400 会把报价冻结 24h 并持久化到 cache.json；
+   * ttl<=0 时 Cache.getWithTtl/setWithTtl 直接短路。
    */
-  stock_realtime: 0,
+  stock_realtime: 45,
   index_realtime: 0,
-  fund_quote: 0,
+  fund_quote: 600,
   crypto_realtime: 0,
   stock_profile: 86400 * 7,
   financial_summary: 86400 * 3,

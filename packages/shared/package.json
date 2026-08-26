@@ -22,6 +22,14 @@
       "types": "./dist/portfolio-return.d.ts",
       "import": "./dist/portfolio-return.js"
     },
+    "./portfolio-profile": {
+      "types": "./dist/portfolio-profile.d.ts",
+      "import": "./dist/portfolio-profile.js"
+    },
+    "./instrument-capabilities": {
+      "types": "./dist/instrument-capabilities.d.ts",
+      "import": "./dist/instrument-capabilities.js"
+    },
     "./instrument-symbol": {
       "types": "./dist/instrument-symbol.d.ts",
       "import": "./dist/instrument-symbol.js"

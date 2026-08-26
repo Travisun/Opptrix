@@ -52,6 +52,16 @@ test('resolveInstrumentQueryPlan routes FUND capabilities', () => {
   assert.ok(snapPlan)
   assert.equal(snapPlan?.kind, 'composite_snapshot')
 
+  for (const cap of ['fund_quote', 'realtime']) {
+    const quotePlan = resolveInstrumentQueryPlan(ref, cap)
+    assert.ok(quotePlan, cap)
+    assert.equal(quotePlan?.kind, 'registry', cap)
+    if (quotePlan?.kind === 'registry') {
+      assert.equal(quotePlan.method, 'fundQuote', cap)
+      assert.equal(quotePlan.useCache, true, `${cap} 应启用后端缓存`)
+    }
+  }
+
   const detailCaps = [
     ['fund_returns', 'fundReturns'],
     ['fund_drawdown', 'fundDrawdown'],

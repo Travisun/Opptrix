@@ -327,6 +327,20 @@ export class Cache {
     return e.data as T
   }
 
+  /**
+   * 读取缓存项（含已过期），用于 live 失败时的 stale 回退；不删除过期项。
+   */
+  peekEntry<T>(
+    cacheType: string,
+    method: string,
+    params: Record<string, unknown>,
+  ): { data: T; expires: number; source?: string } | null {
+    const k = this.key(cacheType, method, params)
+    const e = this.store.get(k)
+    if (!e) return null
+    return { data: e.data as T, expires: e.expires, source: e.source }
+  }
+
   set(
     cacheType: string,
     data: unknown,
@@ -387,6 +401,38 @@ export class Cache {
       }
     }
     this.flushNow()
+    return n
+  }
+
+  /** 按 cacheType / method / params 精确删除一条（不存在则 false） */
+  delete(cacheType: string, method: string, params: Record<string, unknown>): boolean {
+    const k = this.key(cacheType, method, params)
+    if (!this.store.has(k)) return false
+    this.deleteEntry(k)
+    this.flushNow()
+    return true
+  }
+
+  /**
+   * 删除满足条件的缓存项（用于单标的 fresh quote 失效）。
+   * predicate 接收 cacheType、method、params 的 JSON 字符串。
+   */
+  clearMatching(
+    predicate: (cacheType: string, method: string, paramsJson: string) => boolean,
+  ): number {
+    let n = 0
+    for (const k of [...this.store.keys()]) {
+      const colon = k.indexOf(':')
+      const second = k.indexOf(':', colon + 1)
+      if (colon < 0 || second < 0) continue
+      const cacheType = k.slice(0, colon)
+      const method = k.slice(colon + 1, second)
+      const paramsJson = k.slice(second + 1)
+      if (!predicate(cacheType, method, paramsJson)) continue
+      this.deleteEntry(k)
+      n++
+    }
+    if (n) this.flushNow()
     return n
   }
 
