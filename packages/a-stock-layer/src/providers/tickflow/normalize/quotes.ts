@@ -8,7 +8,10 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** TickFlow decimal ratio (0.01 → 1%) → Opptrix percent；已为百分数时不再乘 100 */
+  /**
+   * SDK 百分比原值（0.01 = 1%）→ Opptrix 百分数。
+   * 主路径 ×100；`|n| > 1.5` 视为已是百分数，避免双重放大。
+   */
 function pctFromDecimal(v: unknown): number | null {
   const n = num(v)
   if (n == null) return null

@@ -102,8 +102,9 @@ isFreeMarketDataProvider(providerId)
 |------|----------|------------------|--------------|
 | 免费 · 主路径合规 | `baostock` | TCP/SDK，**不经** `hostnameLimiter`；靠 `maxConcurrent: 1` | 是 |
 | 免费 · 出口缺口 | `zzshare`（Key 可选，仍算免费） | 现经 `httpGetWithRetry` → `outboundFetch`，**绕过**主机闸门（待修） | 是（若错误被吞则冷却失效） |
-| 付费可 bypass | `tushare` / `tickflow`（有 Key）/ `tonghuashun` | `ProviderHttpClient` + `bypassRateLimit: true` | 否 |
-| 付费可 bypass | `tushare` / `tickflow` / `tonghuashun` | `bypassRateLimit: true` | 否 |
+| 付费 / SDK 自限流 | `tushare` / `tonghuashun` | `ProviderHttpClient` + `bypassRateLimit: true` | 否 |
+| SDK 自限流 | `tickflow`（`@opptrix/tickflow-sdk` `intervalMs`） | **不经** `ProviderHttpClient` / 主机闸门 | 有 Key 否；无 Key 仍可走阶梯冷却（若错误上抛） |
+| 付费可 bypass | `tushare` / `tonghuashun` | `bypassRateLimit: true` | 否 |
 | 公开但当前 bypass | `binance` / `okx` | 当前为 `true`（加密货币公开 API；**不**按免费源阶梯冷却） | 判定为免费但不进冷却 |
 | **已移除内置** | `tencent` / `eastmoney` / `sinafinance` / `akshare` / `webfeed` | 不再注册；实现已删除 | — |
 

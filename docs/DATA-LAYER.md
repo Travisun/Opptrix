@@ -1023,7 +1023,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 |----------|---------------|----------|------|
 | tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0；**有 Key 时 CN ETF**（列表/概况/净值/持仓/行情）优先走 Fuyao `/api/fund/*`；**CN 个股 realtime** 并行 enrich `valuations/snapshot`（pe/pb）；**etfProfile** 并行 enrich `fund/holders/detail` |
 | stockindex（Opptrix量化） | 115 | ✅ | 标的搜索权威源；需数据密钥 |
-| tickflow | 110（目录）/ CN binding 封顶 100 / US·HK ≥200 | ✅ | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 升级实时；多市场 |
+| tickflow | 110（目录）/ CN binding 封顶 100 / US·HK ≥200 | ✅ | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 升级实时；多市场；出站 `@opptrix/tickflow-sdk` + `intervalMs` |
 | tushare | 105 | ✅ | 需 Token；bulk/基本面 |
 | binance / okx | 100 / 90 | ✅ | CRYPTO；勿抢前四 |
 

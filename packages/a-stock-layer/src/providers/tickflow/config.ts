@@ -2,8 +2,9 @@
  * TickFlow Provider 运行时配置 — API Key 和基地址。
  *
  * 用途：初始化 TickFlow 客户端时读取配置。
- * 公开免费档：https://free-api.tickflow.org（无需 Key，对齐官方 TickFlow.free()）
- * 付费档：https://api.tickflow.org（配置 apiKey 后自动切换）
+ * 公开免费档：https://free-api.tickflow.org（无需 Key；SDK `mode:'free'`）
+ * 付费档：https://api.tickflow.org（配置 apiKey → SDK `mode:'full'`）
+ * 出站经 `@opptrix/tickflow-sdk`，限流用 SDK `intervalMs`（非主机闸门）
  * 存储：provider_settings JSON 文件中 extra.apiKey 字段
  * 环境变量：TICKFLOW_API_KEY / OPPTRIX_TICKFLOW_API_KEY；
  *           TICKFLOW_FREE_BASE_URL / TICKFLOW_BASE_URL 可覆盖基地址

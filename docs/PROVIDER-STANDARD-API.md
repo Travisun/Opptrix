@@ -86,7 +86,7 @@ bindingsFor: () => []
 
 实现要求：
 
-1. HTTP 统一走 `ProviderHttpClient`，免费源 **`bypassRateLimit: false`**（仅 tushare / 带 Key 的 tickflow / tonghuashun / binance / okx 等可为 `true`（tickflow 公开免费档按免费源限流））
+1. HTTP 统一走 `ProviderHttpClient`，免费源 **`bypassRateLimit: false`**（仅 tushare / tonghuashun / binance / okx 等可为 `true`）。**tickflow** 出站改经 `@opptrix/tickflow-sdk`，限流用 SDK `intervalMs`（不再经主机闸门 / `ProviderHttpClient`）
 2. 上游 `403/429/5xx`、空响应体、`访问被拒绝` 等须 **抛到引擎**；`queryScoped` / `invokeCustomMethod` 的 `catch` 会 `recordProviderQueryError` → 阶梯冷却
 3. Handler 业务空结果可 `return null`；若 `catch` 吞错，必须先 `rethrowIfFreeProviderThrottleTrigger(e)`（`providers/common/free-provider-call.ts`）
 4. `invokeCustomMethod` 空结果走 `recordProviderQueryEmpty`，勿用成功路径误清冷却

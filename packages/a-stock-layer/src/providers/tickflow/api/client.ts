@@ -1,11 +1,33 @@
+/**
+ * TickFlow HTTP 适配层 — 对外保留历史 `TickflowClient` 方法名与 `{ data }` 信封形状；
+ * 实际出站经 `@opptrix/tickflow-sdk`（`TickFlowClient`）。限流仅用 SDK `intervalMs`。
+ * markets/* 勿直接 import SDK（除非 `import type`）。
+ */
+import {
+  TickFlowClient as SdkTickFlowClient,
+  ApiError as SdkApiError,
+  HttpError as SdkHttpError,
+  TimeoutError as SdkTimeoutError,
+  FreeTierError as SdkFreeTierError,
+  DEFAULT_BASE_URL as SDK_DEFAULT_BASE_URL,
+  FREE_BASE_URL as SDK_FREE_BASE_URL,
+  type AdjustType as SdkAdjustType,
+  type InstrumentType as SdkInstrumentType,
+  type Period as SdkPeriod,
+} from '@opptrix/tickflow-sdk'
+import { outboundFetch } from '@opptrix/shared'
 import {
   loadTickflowConfig,
   TICKFLOW_DEFAULT_BASE_URL,
   TICKFLOW_FREE_BASE_URL,
+  type TickflowRuntimeConfig,
 } from '../config.js'
-import { tickflowClient } from './http-client.js'
 import { recordTickflowPermissionDenial, resolveTickflowEffectiveCapabilities } from './permissions.js'
 import { probeTickflowPermissions } from './probe.js'
+
+/** SDK 相邻请求最小间隔（ms）；约 3 QPS，与扶摇适配层一致。 */
+const TICKFLOW_SDK_INTERVAL_MS = 300
+const TICKFLOW_SDK_TIMEOUT_MS = 20_000
 
 /**
  * TickFlow 地区标识 — 指定标的所属市场地区。
@@ -47,8 +69,6 @@ export type TickflowAdjustType = 'forward' | 'backward' | 'forward_additive' | '
  * - other: 其他
  */
 export type TickflowInstrumentType = 'stock' | 'etf' | 'index' | 'bond' | 'fund' | 'options' | 'other'
-
-type QueryValue = string | number | boolean | null | undefined
 
 /**
  * TickFlow 标的信息 — 单个金融标的的基础元数据。
@@ -241,6 +261,7 @@ export interface CompactKlineData {
  * TickFlow 行情查询参数 — GET /v1/quotes 的 query string 格式。
  *
  * 用途：查询单个或多个标的的最新行情。
+ * 适配层对外可继续接受 CSV 字符串，内部转为 `string[]` 再调 SDK。
  */
 export interface TickflowQuotesQuery {
   /** 逗号分隔的标的代码（如 "600519.SH,AAPL"） */
@@ -381,140 +402,163 @@ export interface TickflowUniverseBatchRequest {
   ids: string[]
 }
 
+/** CSV 或数组 → SDK `string[]`；空则 undefined。 */
+function toSymbolArray(value: string | string[] | null | undefined): string[] | undefined {
+  if (value == null) return undefined
+  const parts = Array.isArray(value)
+    ? value.map(s => String(s).trim()).filter(Boolean)
+    : String(value).split(',').map(s => s.trim()).filter(Boolean)
+  return parts.length ? parts : undefined
+}
+
+function asSdkPeriod(period: TickflowPeriod | undefined): SdkPeriod | undefined {
+  return period
+}
+
+function asSdkAdjust(adjust: TickflowAdjustType | undefined): SdkAdjustType | undefined {
+  return adjust
+}
+
+function asSdkInstrumentType(type: TickflowInstrumentType | undefined): SdkInstrumentType | undefined {
+  return type
+}
+
+function injectFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url
+  return outboundFetch(url, init ?? {})
+}
+
+function formatDetail(message?: string, code?: string): string | undefined {
+  if (!message && !code) return undefined
+  if (message && code) return `${message} (${code})`
+  return message ?? code
+}
+
+function rethrowSdkError(err: unknown): never {
+  if (err instanceof SdkApiError) {
+    if (err.httpStatus === 403) {
+      recordTickflowPermissionDenial(
+        err.message ? `${err.message} (${err.code})` : err.code,
+        err.code,
+      )
+    }
+    const detail = formatDetail(err.message, err.code)
+    if (err.httpStatus === 401) {
+      throw new Error(detail ? `TickFlow 认证失败：${detail}` : 'TickFlow API Key 无效或未授权')
+    }
+    if (err.httpStatus === 429) {
+      throw new Error(detail ? `TickFlow 请求过于频繁：${detail}` : 'TickFlow 请求过于频繁，请稍后再试')
+    }
+    if (err.httpStatus === 403) {
+      throw new Error(detail ? `TickFlow HTTP 403：${detail}` : 'TickFlow HTTP 403：无权限')
+    }
+    throw new Error(detail ? `TickFlow HTTP ${err.httpStatus}：${detail}` : `HTTP ${err.httpStatus}`)
+  }
+  if (err instanceof SdkFreeTierError) {
+    recordTickflowPermissionDenial(
+      `免费服务不支持该接口 (${err.path})`,
+      'FREE_TIER_RESTRICTED',
+    )
+    throw new Error(`TickFlow HTTP 403：免费服务不支持该接口 (FREE_TIER_RESTRICTED)`)
+  }
+  if (err instanceof SdkTimeoutError) {
+    throw new Error(`TickFlow 请求超时：${err.path}（${err.timeoutMs}ms）`)
+  }
+  if (err instanceof SdkHttpError) {
+    const status = err.status
+    if (status === 403) {
+      recordTickflowPermissionDenial(err.message)
+      throw new Error(`TickFlow HTTP 403：${err.message}`)
+    }
+    if (status != null) {
+      throw new Error(`TickFlow HTTP ${status}：${err.message}`)
+    }
+    throw new Error(`TickFlow 请求失败：${err.message}`)
+  }
+  throw err instanceof Error ? err : new Error(String(err))
+}
+
 /**
- * TickFlow REST API 客户端 — 对齐官方 OpenAPI。
+ * TickFlow REST API 客户端 — 薄壳适配 `@opptrix/tickflow-sdk`。
  *
- * 无 Key 时走免费端（free-api）；有 Key 时请求头带 `x-api-key` 走付费端。
+ * 无 Key 时 `mode:'free'`（free-api）；有 Key 时 `mode:'full'`（api + x-api-key）。
+ * 限流仅依赖 SDK `intervalMs`，不再经 ProviderHttpClient 主机闸门。
  */
 export class TickflowClient {
+  private readonly sdk: SdkTickFlowClient
+  /** 解析后的基地址（测试 / 调试可读） */
+  readonly baseUrl: string
+  /** SDK 模式：`free` | `full` */
+  readonly mode: 'free' | 'full'
+
   /**
-   * @param apiKey TickFlow API Key（可空；空则不发送鉴权头）
-   * @param baseUrl API 基地址，默认付费端 {@link TICKFLOW_DEFAULT_BASE_URL}
+   * @param apiKey TickFlow API Key（可空；空则 free 模式）
+   * @param baseUrl API 基地址；缺省按 mode 选择
    */
   constructor(
-    private readonly apiKey: string,
-    private readonly baseUrl = TICKFLOW_DEFAULT_BASE_URL,
-  ) {}
+    apiKey: string,
+    baseUrl?: string,
+  ) {
+    const key = apiKey.trim()
+    this.mode = key ? 'full' : 'free'
+    const resolvedBase = (baseUrl?.replace(/\/$/, '') || (key ? TICKFLOW_DEFAULT_BASE_URL : TICKFLOW_FREE_BASE_URL))
+      || (key ? SDK_DEFAULT_BASE_URL : SDK_FREE_BASE_URL)
+    this.baseUrl = resolvedBase
+    this.sdk = new SdkTickFlowClient({
+      mode: this.mode,
+      ...(key ? { apiKey: key } : {}),
+      baseUrl: resolvedBase,
+      timeoutMs: TICKFLOW_SDK_TIMEOUT_MS,
+      intervalMs: TICKFLOW_SDK_INTERVAL_MS,
+      fetch: injectFetch,
+    })
+  }
 
   /**
    * 从 Provider 运行时配置构造客户端；无 Key 时仍返回客户端（公开免费档）。
    */
-  static fromConfig(cfg = loadTickflowConfig()): TickflowClient | null {
+  static fromConfig(cfg: TickflowRuntimeConfig = loadTickflowConfig()): TickflowClient | null {
     return new TickflowClient(cfg.apiKey, cfg.baseUrl)
   }
 
-  private headers(): Record<string, string> {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-    }
-    const key = this.apiKey.trim()
-    if (key) headers['x-api-key'] = key
-    return headers
-  }
-
-  private url(path: string): string {
-    return path.startsWith('http') ? path : `${this.baseUrl}${path}`
-  }
-
-  private queryParams(query: Record<string, QueryValue> = {}): Record<string, string> {
-    const out: Record<string, string> = {}
-    for (const [key, value] of Object.entries(query)) {
-      if (value == null || value === '') continue
-      out[key] = String(value)
-    }
-    return out
-  }
-
-  private asQuery(query: object): Record<string, QueryValue> {
-    return query as Record<string, QueryValue>
-  }
-
-  private async parseErrorBody(resp: Response): Promise<{ message?: string; code?: string } | undefined> {
+  private async call<T>(fn: () => Promise<T>): Promise<T> {
     try {
-      const json = await resp.json() as { message?: string; code?: string }
-      if (json.message || json.code) return { message: json.message, code: json.code }
-    } catch {
-      // ignore
-    }
-    return undefined
-  }
-
-  private formatErrorDetail(detail?: { message?: string; code?: string }): string | undefined {
-    if (!detail?.message && !detail?.code) return undefined
-    if (detail.message && detail.code) return `${detail.message} (${detail.code})`
-    return detail.message ?? detail.code
-  }
-
-  private async handleResponse(resp: Response): Promise<Record<string, unknown>> {
-    if (resp.status === 401) {
-      const detail = this.formatErrorDetail(await this.parseErrorBody(resp))
-      throw new Error(detail ? `TickFlow 认证失败：${detail}` : 'TickFlow API Key 无效或未授权')
-    }
-    if (resp.status === 429) {
-      const detail = this.formatErrorDetail(await this.parseErrorBody(resp))
-      throw new Error(detail ? `TickFlow 请求过于频繁：${detail}` : 'TickFlow 请求过于频繁，请稍后再试')
-    }
-    if (resp.status === 403) {
-      const body = await this.parseErrorBody(resp)
-      recordTickflowPermissionDenial(
-        body?.message ? `${body.message} (${body.code ?? ''})` : body?.code,
-        body?.code,
-      )
-      const detail = this.formatErrorDetail(body)
-      throw new Error(detail ? `TickFlow HTTP 403：${detail}` : 'TickFlow HTTP 403：无权限')
-    }
-    if (!resp.ok) {
-      const detail = this.formatErrorDetail(await this.parseErrorBody(resp))
-      throw new Error(detail ? `TickFlow HTTP ${resp.status}：${detail}` : `HTTP ${resp.status}`)
-    }
-    const ct = resp.headers.get('content-type') ?? ''
-    if (ct.includes('json')) return resp.json() as Promise<Record<string, unknown>>
-    const text = await resp.text()
-    if (text.trimStart().startsWith('<')) throw new Error('TickFlow 返回 HTML 响应')
-    try {
-      return JSON.parse(text) as Record<string, unknown>
-    } catch {
-      throw new Error('TickFlow 响应不是有效 JSON')
+      return await fn()
+    } catch (e) {
+      rethrowSdkError(e)
     }
   }
 
-  /** 通用 GET — 对齐 OpenAPI path + query。 */
-  async get(path: string, query: Record<string, QueryValue> = {}): Promise<Record<string, unknown>> {
-    const qs = new URLSearchParams(this.queryParams(query))
-    const suffix = qs.toString()
-    const url = suffix ? `${this.url(path)}?${suffix}` : this.url(path)
-    const resp = await tickflowClient.fetch(url, {
-      method: 'GET',
-      headers: this.headers(),
-      timeoutMs: 20000,
-    })
-    return this.handleResponse(resp)
-  }
-
-  /** 通用 POST — JSON body。 */
-  async post(path: string, body: unknown): Promise<Record<string, unknown>> {
-    const resp = await tickflowClient.fetch(this.url(path), {
-      method: 'POST',
-      headers: {
-        ...this.headers(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      timeoutMs: 20000,
-    })
-    return this.handleResponse(resp)
+  private asRecord(value: unknown): Record<string, unknown> {
+    return value as Record<string, unknown>
   }
 
   // —— Quotes ——
 
   /** `GET /v1/quotes` — 查询实时行情（symbols 或 universes）。 */
   getQuotes(query: TickflowQuotesQuery = {}) {
-    return this.get('/v1/quotes', this.asQuery(query))
+    return this.call(async () => {
+      const res = await this.sdk.quotes.get({
+        symbols: toSymbolArray(query.symbols),
+        universes: toSymbolArray(query.universes),
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** `POST /v1/quotes` — 批量查询实时行情。 */
   postQuotes(body: TickflowQuotesRequest) {
-    return this.post('/v1/quotes', body)
+    return this.call(async () => {
+      const res = await this.sdk.quotes.batch({
+        symbols: toSymbolArray(body.symbols ?? undefined),
+        universes: toSymbolArray(body.universes ?? undefined),
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** @deprecated use getQuotes */
@@ -531,39 +575,90 @@ export class TickflowClient {
 
   /** `GET /v1/depth` — 单标的五档盘口。 */
   getDepth(symbol: string) {
-    return this.get('/v1/depth', { symbol })
+    return this.call(async () => this.asRecord(await this.sdk.depth.get({ symbol })))
   }
 
   /** `GET /v1/depth/batch` — 批量五档盘口。 */
   getDepthBatch(symbols: string) {
-    return this.get('/v1/depth/batch', { symbols })
+    return this.call(async () => {
+      const list = toSymbolArray(symbols)
+      if (!list?.length) throw new TypeError('TickFlow depth.batch: symbols 不能为空')
+      return this.asRecord(await this.sdk.depth.batch({ symbols: list }))
+    })
   }
 
   // —— Klines ——
 
   /** `GET /v1/klines` — 单标的历史 K 线。 */
   getKlines(query: TickflowKlinesQuery) {
-    return this.get('/v1/klines', this.asQuery(query))
+    return this.call(async () => {
+      const res = await this.sdk.klines.get({
+        symbol: query.symbol,
+        period: asSdkPeriod(query.period),
+        count: query.count,
+        start_time: query.start_time ?? undefined,
+        end_time: query.end_time ?? undefined,
+        adjust: asSdkAdjust(query.adjust),
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** `GET /v1/klines/batch` — 批量历史 K 线。 */
   getKlinesBatch(query: TickflowKlinesBatchQuery) {
-    return this.get('/v1/klines/batch', this.asQuery(query))
+    return this.call(async () => {
+      const symbols = toSymbolArray(query.symbols)
+      if (!symbols?.length) throw new TypeError('TickFlow klines.batch: symbols 不能为空')
+      const res = await this.sdk.klines.batch({
+        symbols,
+        period: asSdkPeriod(query.period),
+        count: query.count,
+        start_time: query.start_time ?? undefined,
+        end_time: query.end_time ?? undefined,
+        adjust: asSdkAdjust(query.adjust),
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** `GET /v1/klines/intraday` — 当日分钟 K 线。 */
   getKlinesIntraday(query: TickflowIntradayQuery) {
-    return this.get('/v1/klines/intraday', this.asQuery(query))
+    return this.call(async () => {
+      const res = await this.sdk.klines.intraday({
+        symbol: query.symbol,
+        period: asSdkPeriod(query.period),
+        count: query.count,
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** `GET /v1/klines/intraday/batch` — 批量当日分钟 K 线。 */
   getKlinesIntradayBatch(query: TickflowIntradayBatchQuery) {
-    return this.get('/v1/klines/intraday/batch', this.asQuery(query))
+    return this.call(async () => {
+      const symbols = toSymbolArray(query.symbols)
+      if (!symbols?.length) throw new TypeError('TickFlow klines.intradayBatch: symbols 不能为空')
+      const res = await this.sdk.klines.intradayBatch({
+        symbols,
+        period: asSdkPeriod(query.period),
+        count: query.count,
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** `GET /v1/klines/ex-factors` — 除权因子。 */
   getKlinesExFactors(query: TickflowExFactorsQuery) {
-    return this.get('/v1/klines/ex-factors', this.asQuery(query))
+    return this.call(async () => {
+      const symbols = toSymbolArray(query.symbols)
+      if (!symbols?.length) throw new TypeError('TickFlow klines.exFactors: symbols 不能为空')
+      const res = await this.sdk.klines.exFactors({
+        symbols,
+        start_time: query.start_time ?? undefined,
+        end_time: query.end_time ?? undefined,
+      })
+      return this.asRecord(res)
+    })
   }
 
   /** @deprecated use getKlines */
@@ -575,68 +670,96 @@ export class TickflowClient {
 
   /** `GET /v1/instruments` — 查询标的元数据。 */
   getInstruments(query: TickflowInstrumentsQuery) {
-    return this.get('/v1/instruments', this.asQuery(query))
+    return this.call(async () => {
+      const symbols = toSymbolArray(query.symbols)
+      if (!symbols?.length) throw new TypeError('TickFlow instruments.get: symbols 不能为空')
+      return this.asRecord(await this.sdk.instruments.get({ symbols }))
+    })
   }
 
   /** `POST /v1/instruments` — 批量查询标的元数据。 */
   postInstruments(body: TickflowInstrumentsRequest) {
-    return this.post('/v1/instruments', body)
+    return this.call(async () => {
+      const symbols = toSymbolArray(body.symbols)
+      if (!symbols?.length) throw new TypeError('TickFlow instruments.batch: symbols 不能为空')
+      return this.asRecord(await this.sdk.instruments.batch({ symbols }))
+    })
   }
 
   // —— Exchanges ——
 
   /** `GET /v1/exchanges` — 交易所列表。 */
   getExchanges() {
-    return this.get('/v1/exchanges')
+    return this.call(async () => this.asRecord(await this.sdk.exchanges.list()))
   }
 
-  /** `GET /v1/exchanges/{exchange}/instruments` — 交易所标的列表。 */
+  /**
+   * `GET /v1/exchanges/{exchange}/instruments` — 交易所标的列表。
+   * SDK 无 `{ data }` 信封，返回体本身含 `data: Instrument[]`，调用方继续用 `json.data`。
+   */
   getExchangeInstruments(exchange: string, type?: TickflowInstrumentType) {
-    return this.get(`/v1/exchanges/${encodeURIComponent(exchange)}/instruments`, type ? { type } : {})
+    return this.call(async () => {
+      const res = await this.sdk.exchanges.instruments(
+        exchange,
+        type ? { type: asSdkInstrumentType(type) } : undefined,
+      )
+      return this.asRecord(res)
+    })
   }
 
   // —— Universes ——
 
   /** `GET /v1/universes` — 标的池列表。 */
   getUniverses() {
-    return this.get('/v1/universes')
+    return this.call(async () => this.asRecord(await this.sdk.universes.list()))
   }
 
   /** `GET /v1/universes/{id}` — 单个标的池详情。 */
   getUniverse(id: string) {
-    return this.get(`/v1/universes/${encodeURIComponent(id)}`)
+    return this.call(async () => this.asRecord(await this.sdk.universes.get(id)))
   }
 
   /** `POST /v1/universes/batch` — 批量标的池详情。 */
   postUniversesBatch(body: TickflowUniverseBatchRequest) {
-    return this.post('/v1/universes/batch', body)
+    return this.call(async () => this.asRecord(await this.sdk.universes.batch({ ids: body.ids })))
   }
 
   // —— Financials ——
 
+  private financialParams(query: TickflowFinancialsQuery) {
+    const symbols = toSymbolArray(query.symbols)
+    if (!symbols?.length) throw new TypeError('TickFlow financials: symbols 不能为空')
+    return {
+      symbols,
+      start_date: query.start_date,
+      end_date: query.end_date,
+      latest: query.latest,
+    }
+  }
+
   /** `GET /v1/financials/income` — 利润表。 */
   getFinancialsIncome(query: TickflowFinancialsQuery) {
-    return this.get('/v1/financials/income', this.asQuery(query))
+    return this.call(async () => this.asRecord(await this.sdk.financials.income(this.financialParams(query))))
   }
 
   /** `GET /v1/financials/balance-sheet` — 资产负债表。 */
   getFinancialsBalanceSheet(query: TickflowFinancialsQuery) {
-    return this.get('/v1/financials/balance-sheet', this.asQuery(query))
+    return this.call(async () => this.asRecord(await this.sdk.financials.balanceSheet(this.financialParams(query))))
   }
 
   /** `GET /v1/financials/cash-flow` — 现金流量表。 */
   getFinancialsCashFlow(query: TickflowFinancialsQuery) {
-    return this.get('/v1/financials/cash-flow', this.asQuery(query))
+    return this.call(async () => this.asRecord(await this.sdk.financials.cashFlow(this.financialParams(query))))
   }
 
   /** `GET /v1/financials/metrics` — 核心财务指标。 */
   getFinancialsMetrics(query: TickflowFinancialsQuery) {
-    return this.get('/v1/financials/metrics', this.asQuery(query))
+    return this.call(async () => this.asRecord(await this.sdk.financials.metrics(this.financialParams(query))))
   }
 
   /** `GET /v1/financials/shares` — 股本结构。 */
   getFinancialsShares(query: TickflowFinancialsQuery) {
-    return this.get('/v1/financials/shares', this.asQuery(query))
+    return this.call(async () => this.asRecord(await this.sdk.financials.shares(this.financialParams(query))))
   }
 }
 

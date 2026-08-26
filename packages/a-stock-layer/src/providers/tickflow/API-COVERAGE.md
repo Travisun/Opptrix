@@ -8,18 +8,20 @@
 |---|---|
 | 数据源 | [TickFlow](https://api.tickflow.org) — A 股 / 港股 / 美股行情与 A 股财务 |
 | 传输 | HTTPS REST；公开免费 `https://free-api.tickflow.org`；付费 `https://api.tickflow.org` |
-| 鉴权 | 无 Key：不发送鉴权头（公开免费）；有 Key：`x-api-key` |
+| 客户端 | `@opptrix/tickflow-sdk`（`TickFlowClient`）；适配层 `TickflowClient` 薄壳 |
+| 限流 | SDK `intervalMs: 300`（约 3 QPS）；**不**经 `ProviderHttpClient` 主机闸门 |
+| 鉴权 | 无 Key：`mode:'free'`；有 Key：`mode:'full'` + `x-api-key` |
 | Provider ID | `tickflow`；`defaultPriority: 100` |
 | 配置 | `enabled` + 可选 `apiKey` + `permissionMode` + `plan` |
 
 **实现路径：**
 
 ```
-api/client.ts           → TickflowClient（19 个 OpenAPI 端点）
+api/client.ts           → TickflowClient 薄壳 → @opptrix/tickflow-sdk
 markets/handler.ts      → 行情 / K 线 / 指数
 markets/common.ts       → 列表 / 资料 / 财务 / 分时 / 股本
 markets/extensions.ts   → 扩展 API（盘口批量、标的池、除权因子等）
-normalize/*             → 行数据 → Opptrix schema
+normalize/*             → 行数据 → Opptrix schema（quotes 百分比按 SDK 0.01=1% ×100）
 driver.ts + manifest.ts → applyManifestSpec + bindingsFor
 ```
 
@@ -156,7 +158,8 @@ driver.ts + manifest.ts → applyManifestSpec + bindingsFor
 
 | 限制 | 详情 |
 |---|---|
-| **API Key 可选** | 无 Key 时 `fromConfig()` 仍返回客户端，基址为 `free-api.tickflow.org` |
+| **API Key 可选** | 无 Key 时 `fromConfig()` 仍返回客户端，SDK `mode:'free'`，基址 `free-api.tickflow.org` |
+| **出站 / 限流** | 经 `@opptrix/tickflow-sdk`；仅 `intervalMs` 限流，无自研 HTTP client |
 | **公开免费无实时** | quotes 403；右侧面板最新价由日 K 近似（`quoteSession=closed`） |
 | **公开免费无分钟线** | 解析为分钟 period 时直接 `return null`，不请求上游 |
 | **财务 / 股本** | 需付费 Key；manifest 仅绑定 CN/EQUITY |

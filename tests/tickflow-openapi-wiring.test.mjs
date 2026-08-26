@@ -84,6 +84,9 @@ test('TickflowClient implements all OpenAPI client methods', () => {
     assert.match(clientSrc, new RegExp(`\\b${method}\\(`), `client.ts defines ${method}`)
   }
   assert.equal(OPENAPI_TO_CLIENT.length, 21)
+  assert.match(clientSrc, /@opptrix\/tickflow-sdk/, 'client uses tickflow-sdk')
+  assert.match(clientSrc, /intervalMs/, 'SDK intervalMs rate limit')
+  assert.doesNotMatch(clientSrc, /http-client/, 'no ProviderHttpClient http-client import')
 })
 
 test('standard handlers wire quotes and klines endpoints', () => {

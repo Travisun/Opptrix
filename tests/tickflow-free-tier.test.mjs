@@ -28,20 +28,20 @@ test('fromConfig without apiKey returns client on free-api base', () => {
     plan: 'free',
   })
   assert.ok(client)
-  assert.equal(client.baseUrl ?? client['baseUrl'], TICKFLOW_FREE_BASE_URL)
+  assert.equal(client.mode, 'free')
+  assert.equal(client.baseUrl, TICKFLOW_FREE_BASE_URL)
 })
 
-test('headers omit x-api-key when apiKey empty', () => {
+test('empty apiKey uses SDK free mode', () => {
   const client = new TickflowClient('', TICKFLOW_FREE_BASE_URL)
-  const headers = client['headers']()
-  assert.equal(headers.Accept, 'application/json')
-  assert.equal('x-api-key' in headers, false)
+  assert.equal(client.mode, 'free')
+  assert.equal(client.baseUrl, TICKFLOW_FREE_BASE_URL)
 })
 
-test('headers include x-api-key when apiKey present', () => {
+test('apiKey present uses SDK full mode', () => {
   const client = new TickflowClient('test-key', TICKFLOW_DEFAULT_BASE_URL)
-  const headers = client['headers']()
-  assert.equal(headers['x-api-key'], 'test-key')
+  assert.equal(client.mode, 'full')
+  assert.equal(client.baseUrl, TICKFLOW_DEFAULT_BASE_URL)
 })
 
 test('isTickflowEnabled depends only on enabled', () => {
@@ -82,7 +82,7 @@ test('DEFAULTS and settings prefer enabled public free', async () => {
   assert.equal(enabledField?.default, true)
 })
 
-test('keyed paid path keeps default base', () => {
+test('keyed paid path keeps default base and full mode', () => {
   const client = TickflowClient.fromConfig({
     enabled: true,
     apiKey: 'secret',
@@ -91,6 +91,6 @@ test('keyed paid path keeps default base', () => {
     plan: 'paid',
   })
   assert.ok(client)
-  assert.equal(client['baseUrl'], TICKFLOW_DEFAULT_BASE_URL)
-  assert.equal(client['headers']()['x-api-key'], 'secret')
+  assert.equal(client.baseUrl, TICKFLOW_DEFAULT_BASE_URL)
+  assert.equal(client.mode, 'full')
 })

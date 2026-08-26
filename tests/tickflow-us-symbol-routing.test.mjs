@@ -54,3 +54,21 @@ test('mapTickflowQuote maps US session label and valuation fields from ext', () 
   assert.equal(row.currency, 'USD')
   assert.equal(row.changePct, 1)
 })
+
+test('mapTickflowQuote scales SDK decimal pct fields (0.01 = 1%)', () => {
+  const row = mapTickflowQuote({
+    symbol: '600519.SH',
+    last_price: 1800,
+    prev_close: 1780,
+    ext: {
+      name: '贵州茅台',
+      change_pct: 0.0112,
+      turnover_rate: 0.0045,
+      amplitude: 0.023,
+    },
+  })
+  assert.ok(row)
+  assert.equal(row.changePct, 1.12)
+  assert.equal(row.turnoverRate, 0.45)
+  assert.equal(row.amplitude, 2.3)
+})
