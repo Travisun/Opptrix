@@ -115,7 +115,12 @@ test('portfolioLedgerKey — US / HK equity refs', () => {
   assert.notEqual(portfolioLedgerKey('MSFT', 'US'), portfolioLedgerKey('00700', 'HK'))
 })
 
-test('portfolioCodesMatch — fund must not match unrelated equity', () => {
+test('portfolioCodesMatch — same fund with explicit assetClass on both sides', () => {
+  assert.ok(portfolioCodesMatch('CN:PF.009049', 'CN', '009049', 'CN', 'FUND', 'FUND'))
+  assert.ok(portfolioCodesMatch('CN:PF.009049', 'CN', 'CN:PF.009049', 'CN', 'FUND', 'FUND'))
+})
+
+test('portfolioCodesMatch — equity must not match fund bare code without fund side', () => {
   assert.ok(!portfolioCodesMatch('CN:PF.009049', 'CN', '600519', 'CN', 'FUND', 'EQUITY'))
   assert.ok(portfolioCodesMatch('CN:PF.009049', 'CN', '009049', 'CN', 'FUND', 'FUND'))
 })

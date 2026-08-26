@@ -27,6 +27,10 @@ function cnExtendedOhlc(ref: InstrumentRef, cnEquityChart: boolean): boolean {
   return ref.assetClass === 'EQUITY' || ref.assetClass === 'INDEX'
 }
 
+export function buildIndexChartPeriodOptions(_ref: InstrumentRef): ChartPeriodOption[] {
+  return BROKER_KLINE_OPTIONS
+}
+
 export function buildChartPeriodOptions(
   ref: InstrumentRef,
   opts: { cnEquityChart: boolean; crossMarketChart: boolean },

@@ -26,7 +26,7 @@ export interface InstrumentCapabilitySet {
   market: Market
   assetClass: AssetClass
   capabilities: readonly ApplicationCapability[]
-  detailPanelKind: 'cn-equity' | 'cn-etf' | 'cn-fund' | 'cross-market' | 'unsupported'
+  detailPanelKind: 'cn-equity' | 'cn-etf' | 'cn-fund' | 'cn-index' | 'cross-market' | 'unsupported'
 }
 
 const CN_EQUITY: ApplicationCapability[] = [
@@ -87,7 +87,7 @@ function capabilityRow(
 /** 静态能力矩阵 — 新市场在此登记一行即可驱动 UI gate */
 export const INSTRUMENT_CAPABILITY_MATRIX: InstrumentCapabilitySet[] = [
   capabilityRow('CN', 'EQUITY', CN_EQUITY, 'cn-equity'),
-  capabilityRow('CN', 'INDEX', CN_INDEX, 'cn-equity'),
+  capabilityRow('CN', 'INDEX', CN_INDEX, 'cn-index'),
   capabilityRow('CN', 'ETF', CN_ETF, 'cn-etf'),
   capabilityRow('CN', 'LOF', CN_ETF, 'cn-etf'),
   capabilityRow('CN', 'REIT', CN_FUND, 'cn-fund'),

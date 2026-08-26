@@ -237,7 +237,9 @@ export function portfolioCodesMatch(
   if (normalizeCode(a.symbol) !== normalizeCode(b.symbol)) return false
   const aFund = isCnFundRef(a) || looksLikeCnFundInput(aCode)
   const bFund = isCnFundRef(b) || looksLikeCnFundInput(bCode)
-  if (aFund === bFund) return false
+  if (aFund === bFund) {
+    return aFund && normalizeCode(a.symbol) === normalizeCode(b.symbol)
+  }
   const bareSide = aFund ? bCode.trim() : aCode.trim()
   // 仅与裸六位账本行对齐；不把 CN:SZ.xxx 与 CN:PF.xxx 混为一谈
   return /^\d{6}$/.test(bareSide)

@@ -12,8 +12,8 @@ test('instrument capabilities marks JP equity as unsupported', () => {
     instrument: { market: 'JP', assetClass: 'EQUITY', symbol: '7203' },
   })
   assert.equal(resp.success, true)
-  assert.equal(resp.data.detailPanelKind, 'unsupported')
-  assert.equal(resp.data.capabilities.length, 0)
+  assert.equal(resp.data.detailPanelKind, 'cross-market')
+  assert.ok(resp.data.capabilities.length > 0)
 })
 
 test('instrument search delegates to local instruments handler', async () => {
@@ -65,7 +65,7 @@ test('instrument quotes: partial success returns failed[] with precise reasons',
         .map(r => ({ code: r.symbol, name: `fund-${r.symbol}`, unitNav: 1.23, price: 1.23, instrument: r }))
       const failed = refs
         .filter(r => failSymbols.has(r.symbol))
-        .map(r => ({ code: `CN:PF.${r.symbol}`, reason: 'empty' }))
+        .map(r => ({ code: `CN:OTC:${r.symbol}.OF`, reason: 'empty' }))
       // 对齐槽位：即使全部失败也 success + failed[]，供 router 按明细归类
       return {
         success: true,
@@ -115,12 +115,12 @@ test('instrument quotes: partial success returns failed[] with precise reasons',
   assert.equal(resp.success, true)
   const quoteCodes = resp.data.quotes.map(q => q.code).sort()
   assert.equal(resp.data.quotes.length, 6)
-  assert.ok(quoteCodes.includes('US:AAPL'))
-  assert.ok(quoteCodes.includes('HK:00700'))
+  assert.ok(quoteCodes.includes('US:STOCK:AAPL.US'))
+  assert.ok(quoteCodes.includes('HK:STOCK:00700.HK'))
   assert.ok(quoteCodes.includes('CRYPTO:BINANCE.BTC/USDT'))
-  assert.ok(quoteCodes.includes('CN:SH.600519'))
-  assert.ok(quoteCodes.includes('CN:SH.510300'))
-  assert.ok(quoteCodes.includes('CN:SZ.159915'))
+  assert.ok(quoteCodes.includes('CN:STOCK:600519.SH'))
+  assert.ok(quoteCodes.includes('CN:ETF:510300.SH'))
+  assert.ok(quoteCodes.includes('CN:ETF:159915.SZ'))
 
   // failed[] 只含失败/跳过 ref，reason 归类精确
   assert.equal(resp.data.failed.length, 5)
@@ -217,7 +217,7 @@ test('instrument quotes: fundQuotes partial fail → failed[]; unitNav as price'
           changePct: -0.5,
           instrument: refs[0],
         }],
-        failed: [{ code: 'CN:PF.000001', reason: 'not_found' }],
+        failed: [{ code: 'CN:OTC:000001.OF', reason: 'not_found' }],
       },
     }),
   }
@@ -244,7 +244,7 @@ test('instrument quotes: CN fundQuotes merges hub failed detail (not_found)', as
       elapsed: 0,
       data: {
         quotes: [],
-        failed: refs.map(r => ({ code: `CN:PF.${r.symbol}`, reason: 'not_found' })),
+        failed: refs.map(r => ({ code: `CN:OTC:${r.symbol}.OF`, reason: 'not_found' })),
       },
     }),
     usRealtime: async (symbol) => ({
@@ -264,7 +264,7 @@ test('instrument quotes: CN fundQuotes merges hub failed detail (not_found)', as
   const failedBySymbol = new Map(resp.data.failed.map(f => [f.instrument.symbol, f]))
   assert.equal(failedBySymbol.get('000001').reason, 'not_found')
   assert.equal(failedBySymbol.get('000008').reason, 'not_found')
-  assert.equal(failedBySymbol.get('000001').code, 'CN:PF.000001')
+  assert.equal(failedBySymbol.get('000001').code, 'CN:OTC:000001.OF')
   assert.ok(failedBySymbol.get('000001').instrument.market === 'CN')
 })
 
@@ -322,11 +322,14 @@ test('hub stockQuotes uses engine batchRealtime once; sparse miss → failed emp
   assert.equal(batchCalls, 1)
   assert.equal(realtimeCalls, 0)
   assert.equal(resp.data.quotes.length, 1)
-  assert.equal(resp.data.quotes[0].code, '600519')
-  assert.deepEqual(resp.data.failed, [{ code: 'CN:SZ.000001', reason: 'empty' }])
+  assert.equal(resp.data.quotes[0].code, 'CN:STOCK:600519.SH')
+  assert.deepEqual(resp.data.failed, [{ code: 'CN:STOCK:000001.SZ', reason: 'empty' }])
 })
 
 test('hub fundQuotes maps unitNav to price; partial fail → failed', async () => {
+  const prevKey = process.env.OPPTRIX_STOCKINDEX_API_KEY
+  delete process.env.OPPTRIX_STOCKINDEX_API_KEY
+  try {
   const { ResearchHub } = await import('../packages/research-hub/dist/hub.js')
   const hub = new ResearchHub()
   const seen = []
@@ -350,7 +353,10 @@ test('hub fundQuotes maps unitNav to price; partial fail → failed', async () =
   assert.equal(resp.data.quotes.length, 1)
   assert.equal(resp.data.quotes[0].price, 1.88)
   assert.equal(resp.data.quotes[0].unitNav, 1.88)
-  assert.deepEqual(resp.data.failed, [{ code: 'CN:PF.000001', reason: 'not_found' }])
+  assert.deepEqual(resp.data.failed, [{ code: 'CN:OTC:000001.OF', reason: 'not_found' }])
+  } finally {
+    if (prevKey != null) process.env.OPPTRIX_STOCKINDEX_API_KEY = prevKey
+  }
 })
 
 test('hub stockQuotes all-miss via batchRealtime → fail', async () => {

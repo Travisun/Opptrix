@@ -37,6 +37,10 @@
     "./instrument-ref": {
       "types": "./dist/instrument-ref.d.ts",
       "import": "./dist/instrument-ref.js"
+    },
+    "./instrument-param": {
+      "types": "./dist/instrument-param.d.ts",
+      "import": "./dist/instrument-param.js"
     }
   },
   "scripts": {

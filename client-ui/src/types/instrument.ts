@@ -20,7 +20,7 @@ export interface InstrumentRef {
   quote?: string
 }
 
-export type DetailPanelKind = 'cn-equity' | 'cn-etf' | 'cn-fund' | 'crypto' | 'cross-market'
+export type DetailPanelKind = 'cn-equity' | 'cn-etf' | 'cn-fund' | 'cn-index' | 'crypto' | 'cross-market'
 
 export interface LocalInstrumentHit {
   code: string
@@ -55,7 +55,7 @@ export interface InstrumentCapabilitySet {
   market: Market
   assetClass: AssetClass
   capabilities: readonly ApplicationCapability[]
-  detailPanelKind: 'cn-equity' | 'cn-etf' | 'cn-fund' | 'cross-market' | 'unsupported'
+  detailPanelKind: 'cn-equity' | 'cn-etf' | 'cn-fund' | 'cn-index' | 'cross-market' | 'unsupported'
 }
 
 export interface UnifiedInstrumentQuote {

@@ -10,6 +10,7 @@ import {
   normalizeInstrumentRef,
   normalizeInstrumentSnapshot,
   canonicalSymbolForMarket,
+  buildInstrumentNamespace,
   parseInstrumentRef,
   quoteFromProviderRow,
   resolveInstrumentCapabilities,
@@ -23,6 +24,7 @@ import {
   isQuoteFailedReason,
   type QuoteFailedReason,
 } from './quote-failure.js'
+import { isCnPublicFundRef } from '@opptrix/a-stock-layer'
 
 export type { QuoteFailedReason } from './quote-failure.js'
 
@@ -149,7 +151,7 @@ export async function routeInstrumentSnapshot(
   if (ref.market === 'CN' && (ref.assetClass === 'ETF' || ref.assetClass === 'LOF')) {
     return wrapSnapshot(ref, await handlers.etfSnapshot(ref), handlers)
   }
-  if (ref.market === 'CN' && ref.assetClass === 'FUND') {
+  if (ref.market === 'CN' && isCnPublicFundRef(ref)) {
     return wrapSnapshot(ref, await handlers.fundSnapshot(ref), handlers)
   }
   if (ref.market === 'CN') {
@@ -230,6 +232,15 @@ function cnBatchHubFailed(resp: ResearchResult): Map<string, QuoteFailedReason> 
   return out
 }
 
+function hubFailedReasonForRef(
+  ref: InstrumentRef,
+  hubFailed: Map<string, QuoteFailedReason>,
+): QuoteFailedReason | undefined {
+  return hubFailed.get(instrumentDisplayCode(ref))
+    ?? hubFailed.get(buildInstrumentNamespace(ref))
+    ?? hubFailed.get(ref.symbol)
+}
+
 function collectCnBatchQuotes(
   refs: InstrumentRef[],
   resp: ResearchResult,
@@ -248,7 +259,7 @@ function collectCnBatchQuotes(
         continue
       }
       // 未命中行时优先用 hub 侧已归类的明细原因；无则按原语义记 empty
-      failed.push(failedQuoteForRef(ref, hubFailed.get(instrumentDisplayCode(ref)) ?? 'empty'))
+      failed.push(failedQuoteForRef(ref, hubFailedReasonForRef(ref, hubFailed) ?? 'empty'))
     }
     return
   }

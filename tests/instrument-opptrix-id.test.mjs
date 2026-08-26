@@ -13,16 +13,26 @@ import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/
 import { resolveInstrumentQueryPlan } from '../packages/a-stock-layer/dist/core/instrument-query.js'
 import { usesCnExchangeFundRealtimeRoute } from '../packages/a-stock-layer/dist/core/instrument.js'
 
-test('REIT 扶摇 NAV：fund_type=otc，thscode 保留 .SH/.SZ 后缀', () => {
+test('REIT 扶摇档案/净值：fund_type=otc，thscode 保留 .SH/.SZ 后缀', () => {
   const route = resolveFuyaoFundRoute('508000.SH', { assetClass: 'REIT' })
   assert.ok(route)
   assert.equal(route.fundType, 'otc')
   assert.equal(route.thscode, '508000.SH')
 
+  const reitSz = resolveFuyaoFundRoute('180102.SZ', { assetClass: 'REIT' })
+  assert.ok(reitSz)
+  assert.equal(reitSz.fundType, 'otc')
+  assert.equal(reitSz.thscode, '180102.SZ')
+
   const bare = resolveFuyaoFundRoute('508000', { assetClass: 'REIT' })
   assert.ok(bare)
   assert.equal(bare.fundType, 'otc')
   assert.match(bare.thscode, /^508000\.(SH|SZ)$/)
+
+  const bareWithEx = resolveFuyaoFundRoute('180102', { assetClass: 'REIT', exchange: 'SZ' })
+  assert.ok(bareWithEx)
+  assert.equal(bareWithEx.fundType, 'otc')
+  assert.equal(bareWithEx.thscode, '180102.SZ')
 })
 
 test('ETF / LOF 扶摇 NAV 走 exchange', () => {
@@ -71,4 +81,49 @@ test('buildOpptrixInstrumentId — 在线搜索展示；内部键仍用命名空
   assert.equal(ind.exchange, 'TI')
   assert.equal(buildOpptrixInstrumentId(ind), 'CN:IND:881121.TI')
   assert.equal(buildInstrumentNamespace(ind), 'CN:TI.881121')
+})
+
+test('US canonicalUsSymbol strips Tickflow .US suffix — no AAPL.US.US', () => {
+  const fromTickflow = normalizeInstrumentRef({
+    market: 'US',
+    assetClass: 'EQUITY',
+    symbol: 'AAPL.US',
+  })
+  assert.equal(fromTickflow.symbol, 'AAPL')
+  assert.equal(buildOpptrixInstrumentId(fromTickflow), 'US:STOCK:AAPL.US')
+
+  const fromLeak = normalizeInstrumentRef({
+    market: 'US',
+    assetClass: 'EQUITY',
+    symbol: 'STOCK:AAPL.US',
+  })
+  assert.equal(fromLeak.symbol, 'AAPL')
+  assert.equal(buildOpptrixInstrumentId(fromLeak), 'US:STOCK:AAPL.US')
+
+  const roundtrip = parseOpptrixInstrumentId('US:STOCK:AAPL.US')
+  assert.ok(roundtrip)
+  assert.equal(buildOpptrixInstrumentId(normalizeInstrumentRef(roundtrip)), 'US:STOCK:AAPL.US')
+
+  const leakedClassToken = normalizeInstrumentRef({
+    market: 'US',
+    assetClass: 'EQUITY',
+    symbol: 'STOCKAAPL',
+  })
+  assert.equal(leakedClassToken.symbol, 'AAPL')
+  assert.equal(buildOpptrixInstrumentId(leakedClassToken), 'US:STOCK:AAPL.US')
+
+  const leakedOpptrix = parseOpptrixInstrumentId('US:STOCK:STOCKAAPL.US.US')
+  assert.ok(leakedOpptrix)
+  assert.equal(leakedOpptrix.symbol, 'AAPL')
+  assert.equal(buildOpptrixInstrumentId(normalizeInstrumentRef(leakedOpptrix)), 'US:STOCK:AAPL.US')
+})
+
+test('HK canonicalHkSymbol strips leaked STOCK class token prefix', () => {
+  const leaked = normalizeInstrumentRef({
+    market: 'HK',
+    assetClass: 'EQUITY',
+    symbol: 'STOCK00700',
+  })
+  assert.equal(leaked.symbol, '00700')
+  assert.equal(buildOpptrixInstrumentId(leaked), 'HK:STOCK:00700.HK')
 })

@@ -3,6 +3,7 @@ import { makeStyles, mergeClasses, Text } from '@fluentui/react-components'
 import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
+import IndexDetailTab from './IndexDetailTab'
 import EtfDetailTab from './EtfDetailTab'
 import FundDetailTab from './FundDetailTab'
 import CryptoDetailTab from './CryptoDetailTab'
@@ -315,6 +316,7 @@ function RightMarketPanel({
     : null
 
   const detailRef = detailStock ? resolveWatchlistInstrument(detailStock) : null
+  const detailManageEnabled = detailRef != null && hasApplicationCapability(detailRef, 'portfolio_pnl')
   const detailHolding = detailStock && detailRef
     ? holdingsByCode[portfolioHoldingsKey(detailStock.code, detailRef.market)]
       ?? holdingsByCode[instrumentKey(detailRef)]
@@ -331,8 +333,9 @@ function RightMarketPanel({
   }, [handleSelect])
 
   const handleRemove = useCallback((item: WatchlistItem) => {
-    const ref = resolveWatchlistInstrument(normalizeWatchlistItem(item))
-    void clearPortfolioForCode(item.code, ref?.market)
+    const normalized = normalizeWatchlistItem(item)
+    const ref = resolveWatchlistInstrument(normalized)
+    void clearPortfolioForCode(item.code, ref?.market, ref?.assetClass)
     removeItemMembership(watchlistItemKey(normalizeWatchlistItem(item)))
     removeItem(item.code)
     const selectedKey = selected
@@ -488,23 +491,25 @@ function RightMarketPanel({
             onRetry={() => { void refreshHoldings() }}
           />
         </div>
-        {tab === 'detail' && detailStock && detailKind === 'cn-fund' ? (
+        {tab === 'detail' && detailStock && detailKind === 'cn-index' ? (
+          <IndexDetailTab stock={detailStock} />
+        ) : tab === 'detail' && detailStock && detailKind === 'cn-fund' ? (
           <FundDetailTab
             stock={detailStock}
             isHolding={(detailHolding?.shares ?? 0) > 0}
-            onManage={handleDetailManage}
+            onManage={detailManageEnabled ? handleDetailManage : undefined}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cn-etf' ? (
           <EtfDetailTab stock={detailStock} />
         ) : tab === 'detail' && detailStock && detailKind === 'crypto' ? (
           <CryptoDetailTab
             stock={detailStock}
-            onManage={handleDetailManage}
+            onManage={detailManageEnabled ? handleDetailManage : undefined}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cross-market' ? (
           <CrossMarketDetailTab
             stock={detailStock}
-            onManage={handleDetailManage}
+            onManage={detailManageEnabled ? handleDetailManage : undefined}
             onSelectPeer={handleSelectPeer}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cn-equity' ? (
@@ -512,7 +517,7 @@ function RightMarketPanel({
             stock={detailStock}
             isHolding={(detailHolding?.shares ?? 0) > 0}
             holding={detailHolding ?? null}
-            onManage={handleDetailManage}
+            onManage={detailManageEnabled ? handleDetailManage : undefined}
             onDiscussInChat={onDiscussInChat}
           />
         ) : tab === 'detail' && detailStock && !detailKind ? (

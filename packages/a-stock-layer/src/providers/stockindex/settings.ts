@@ -12,7 +12,7 @@ export const STOCKINDEX_SETTINGS: ProviderSettingsDefinition = {
   title: 'Opptrix量化',
   subtitle: 'Opptrix量化社区提供的标的检索接口',
   marketGroup: 'GLOBAL',
-  keywords: ['opptrixquant', 'stockindex', '标的搜索', '跨市场', '基金净值', '公募基金', '数据密钥'],
+  keywords: ['opptrixquant', 'stockindex', '标的搜索', '跨市场', '数据密钥'],
   enableAffectsPriority: true,
   supportsTest: true,
   fields: [

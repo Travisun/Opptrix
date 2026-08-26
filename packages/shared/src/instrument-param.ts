@@ -1,16 +1,29 @@
 import type { InstrumentRef, Market } from './market-data.js'
 import {
   instrumentRefFromParams,
+  isAssetClass,
   isLikelyCnEquityInput,
   isMarket,
   parseInstrumentRef,
 } from './instrument-ref.js'
 import {
+  buildOpptrixInstrumentId,
   inferCnAssetClassFromSymbol,
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
   parseInstrumentNamespace,
 } from './instrument-symbol.js'
+
+/** Hub/API 请求用全量标的 code — Opptrix ID（CN/US/HK）或命名空间 */
+export function instrumentHubCode(ref: InstrumentRef): string {
+  return buildOpptrixInstrumentId(normalizeInstrumentRef(ref))
+}
+
+/** Hub/API 标准请求体：instrument 权威 + code 全量 ID（禁止裸 6 位码） */
+export function instrumentHubParams(ref: InstrumentRef): { instrument: InstrumentRef; code: string } {
+  const instrument = normalizeInstrumentRef(ref)
+  return { instrument, code: instrumentHubCode(instrument) }
+}
 
 function isCryptoPairNotation(raw: string): boolean {
   const s = raw.trim().toUpperCase()
@@ -28,8 +41,12 @@ function isLikelyUsTicker(raw: string): boolean {
 
 /** Resolve InstrumentRef from Hub/API params — supports instrument object, market+symbol, legacy code */
 export function resolveInstrumentFromParams(params: Record<string, unknown>): InstrumentRef | null {
+  const hasInstrumentField = params.instrument != null
   const nested = instrumentRefFromParams(params)
   if (nested) return nested
+
+  // 已传 instrument 但未解析成功 — 禁止用裸 code 误推断（如 REIT 裸码 → EQUITY）
+  if (hasInstrumentField) return null
 
   const rawCode = String(params.code ?? params.symbol ?? params.pair ?? '').trim()
   const exchangeRaw = params.exchange != null ? String(params.exchange).trim().toUpperCase() : undefined
@@ -43,7 +60,7 @@ export function resolveInstrumentFromParams(params: Record<string, unknown>): In
       const base: InstrumentRef = marketRaw === 'CN'
         ? {
           market: 'CN',
-          assetClass: assetRaw === 'ETF' || assetRaw === 'INDEX' ? assetRaw as InstrumentRef['assetClass'] : inferCnAssetClassFromSymbol(rawCode, exchangeRaw),
+          assetClass: isAssetClass(assetRaw) ? assetRaw : inferCnAssetClassFromSymbol(rawCode, exchangeRaw),
           symbol: rawCode,
           exchange: exchangeRaw,
         }
@@ -111,7 +128,7 @@ export function normalizeInstrumentHubParams(
 ): Record<string, unknown> {
   const ref = resolveInstrumentFromParams(params)
   if (!ref) return params
-  return { ...params, instrument: ref }
+  return { ...params, ...instrumentHubParams(ref) }
 }
 
 /**

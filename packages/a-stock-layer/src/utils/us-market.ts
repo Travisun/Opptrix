@@ -1,5 +1,6 @@
 /** US market session & symbol helpers — America/New_York */
 
+import { canonicalUsSymbol as canonicalUsSymbolShared } from '@opptrix/shared'
 import { isUsTradingDay, isNyseHoliday, nyseHolidaysForYear } from './us-holidays.js'
 
 export { isUsTradingDay, isNyseHoliday, nyseHolidaysForYear }
@@ -7,9 +8,7 @@ export { isUsTradingDay, isNyseHoliday, nyseHolidaysForYear }
 const US_TZ = 'America/New_York'
 
 export function normalizeUsSymbol(symbol: string): string {
-  const raw = symbol.trim().toUpperCase()
-  const stripped = raw.replace(/^(US|NYSE|NASDAQ|AMEX):/i, '')
-  return stripped.replace(/[^A-Z0-9.-]/g, '')
+  return canonicalUsSymbolShared(symbol)
 }
 
 export function isValidUsSymbol(symbol: string): boolean {

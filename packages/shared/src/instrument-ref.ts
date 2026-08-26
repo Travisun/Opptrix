@@ -1,6 +1,7 @@
 import type { AssetClass, InstrumentRef, Market } from './market-data.js'
 import {
   buildInstrumentNamespace,
+  buildOpptrixInstrumentId,
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
   parseInstrumentNamespace,
@@ -8,7 +9,7 @@ import {
 } from './instrument-symbol.js'
 
 const MARKETS: Market[] = ['CN', 'US', 'HK', 'CRYPTO', 'JP', 'KR']
-const ASSET_CLASSES: AssetClass[] = ['EQUITY', 'ETF', 'INDEX', 'FUND', 'CRYPTO_SPOT', 'CRYPTO_PERP']
+const ASSET_CLASSES: AssetClass[] = ['EQUITY', 'ETF', 'LOF', 'REIT', 'INDEX', 'FUND', 'CRYPTO_SPOT', 'CRYPTO_PERP']
 
 export function isMarket(v: string): v is Market {
   return (MARKETS as string[]).includes(v)
@@ -24,6 +25,8 @@ export function parseInstrumentRef(input: unknown): InstrumentRef | null {
   const row = input as Record<string, unknown>
   const symbolRaw = String(row.symbol ?? row.code ?? '').trim()
   if (symbolRaw) {
+    const fromCanonical = parseCanonicalInstrumentInput(symbolRaw)
+    if (fromCanonical) return fromCanonical
     const fromNs = parseInstrumentNamespace(symbolRaw)
     if (fromNs) return fromNs
   }
@@ -31,6 +34,8 @@ export function parseInstrumentRef(input: unknown): InstrumentRef | null {
   const symbol = symbolRaw
   if (!symbol || !isMarket(marketRaw)) return null
   const assetRaw = String(row.assetClass ?? row.asset_class ?? 'EQUITY').trim().toUpperCase()
+  const hasExplicitAsset = row.assetClass != null || row.asset_class != null
+  if (hasExplicitAsset && !isAssetClass(assetRaw)) return null
   const assetClass = isAssetClass(assetRaw) ? assetRaw : 'EQUITY'
   const exchange = row.exchange != null ? String(row.exchange) : undefined
   const quote = row.quote != null ? String(row.quote) : undefined
@@ -68,9 +73,9 @@ export function instrumentRefKey(ref: InstrumentRef): string {
   return buildInstrumentNamespace(ref)
 }
 
-/** 全局标的展示码 — 本地名录 / 关注列表沿用命名空间；在线搜索单独用 Opptrix ID */
+/** 全局标的展示码 — OpptrixQuant 统一 ID（CN/US/HK）；其余市场回退命名空间 */
 export function instrumentDisplayCode(ref: InstrumentRef): string {
-  return buildInstrumentNamespace(ref)
+  return buildOpptrixInstrumentId(normalizeInstrumentRef(ref))
 }
 
 /** Legacy alias — prefer instrumentDisplayCode */

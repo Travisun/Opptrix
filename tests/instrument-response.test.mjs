@@ -24,7 +24,7 @@ test('quoteFromProviderRow normalizes camelCase provider row', () => {
     { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' },
     { name: 'Apple', price: 190, changePct: 1.2, volume: 1000 },
   )
-  assert.equal(q.code, 'US:AAPL')
+  assert.equal(q.code, 'US:STOCK:AAPL.US')
   assert.equal(q.change_pct, 1.2)
   assert.equal(q.market, 'US')
 })
@@ -62,7 +62,7 @@ test('quoteFromProviderRow maps fund unitNav to price', () => {
     { market: 'CN', assetClass: 'FUND', symbol: '000001', exchange: 'PF' },
     { name: '华夏成长', unitNav: 1.2345, prevNav: 1.22, changePct: 1.02 },
   )
-  assert.equal(q.code, 'CN:PF.000001')
+  assert.equal(q.code, 'CN:OTC:000001.OF')
   assert.equal(q.price, 1.2345)
   assert.equal(q.pre_close, 1.22)
   assert.equal(q.change_pct, 1.02)
@@ -95,7 +95,7 @@ test('quoteFromProviderRow preserves extended CN quote fields', () => {
       amount: 2e9,
     },
   )
-  assert.equal(q.code, 'CN:SH.600519')
+  assert.equal(q.code, 'CN:STOCK:600519.SH')
   assert.equal(q.open, 1690)
   assert.equal(q.pre_close, 1691)
   assert.equal(q.turnover_rate, 0.32)
@@ -120,7 +120,7 @@ test('normalizeInstrumentChart wraps cross-market kline items', () => {
       count: 1,
     },
   )
-  assert.equal(chart.code, 'US:AAPL')
+  assert.equal(chart.code, 'US:STOCK:AAPL.US')
   assert.equal(chart.bars.length, 1)
   assert.equal(chart.bars[0]?.close, 1.5)
 })
@@ -151,7 +151,7 @@ test('normalizeInstrumentChart passes cross-market indicators', () => {
       count: 1,
     },
   )
-  assert.equal(chart.code, 'HK:00700')
+  assert.equal(chart.code, 'HK:STOCK:00700.HK')
   assert.equal(chart.indicators?.length, 1)
   assert.equal(chart.indicators?.[0]?.ma5, 302)
   assert.equal(chart.indicators?.[0]?.macdHist, 0.4)

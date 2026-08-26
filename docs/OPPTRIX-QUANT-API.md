@@ -60,7 +60,7 @@
 | OTC | `FUND` | `PF` |
 | ETF | `ETF` | 上市交易所 |
 | LOF | `LOF` | 上市交易所 |
-| REIT | `REIT` | 上市交易所（**扶摇 NAV 仅 fund_type=otc**，后缀不变） |
+| REIT | `REIT` | 上市交易所（**扶摇 fund_type=otc**，thscode 保留 `.SH/.SZ`，非 `.OF`） |
 
 解析入口：`parseOpptrixInstrumentId` → `normalizeInstrumentRef`。
 
@@ -110,7 +110,7 @@ GET /api/v1/instruments?q=茅台&market=CN&class_token=STOCK
 | INDEX | 指数 `indexPrices*` | — |
 | ETF | 场内 `fundMarket*` / `prices*` | `exchange`（与 LOF 相同） |
 | LOF | 同 ETF | `exchange` |
-| REIT | **不走**个股 batch；`fund_quote` | **`otc`**（保留 `.SH/.SZ`，非 `exchange`） |
+| REIT | **不走**个股 batch；`fund_quote` | **`otc`**（thscode 保留 `.SH/.SZ`；勿用 `reits`，会 1004 冲突） |
 | FUND (OTC) | `fund_quote` | `otc` |
 
 实现：`resolveInstrumentQueryPlan` + `resolveFuyaoFundRoute(ref.assetClass)`。

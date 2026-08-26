@@ -140,7 +140,7 @@ bindingsFor: () => []
 | Provider | 注册 | Binding 结构 | 多市场 | ETF 分拆 | 标准 API | 自定义 | 结论 |
 |----------|------|--------------|--------|----------|----------|--------|------|
 | **tonghuashun** | ✅ | CN；**CN ETF 分拆**（priority 120）；**CN FUND** | CN | ✅ | ✅ | `ths*` / Fuyao | **合规（CN 主路径）** |
-| **stockindex** | ✅ | 跨市 STOCK_LIST / INSTRUMENT_SEARCH + CN ETF_LIST / FUND_* | CN/US/HK | ETF_LIST | ✅ 搜索 | 少量 | **Opptrix量化**；priority 115 |
+| **stockindex** | ✅ | 跨市 **INSTRUMENT_SEARCH**（仅标的搜索） | CN/US/HK | — | ✅ 搜索 | 无 | **Opptrix量化**；priority 115 |
 | **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆**；目录 priority 110；名录灌库 |
 | **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | fund_* 等 | **合规（CN）**；priority 105 |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |
@@ -195,7 +195,7 @@ bindingsFor: () => []
 
 ### stockindex（Opptrix量化）
 
-- **用途**：跨市场标的搜索权威源（`instrumentSearch` / 统一搜索在线路径）
+- **用途**：跨市场标的搜索权威源（`instrumentSearch` / 统一搜索在线路径）；**不提供**行情、净值、档案等数据能力
 - **基址**：固定 `https://quant.opptrix.net`（设置页不可改）
 - **认证**：数据密钥（`X-API-Key`）；在 [Opptrix量化社区](https://quant.opptrix.net/) 获取
 - **统一标的 ID / REST 契约**：见 [OPPTRIX-QUANT-API.md](./OPPTRIX-QUANT-API.md)（`STOCK/IND/OTC/ETF/LOF/REIT` + 后缀）

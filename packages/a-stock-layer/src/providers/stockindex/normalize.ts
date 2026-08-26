@@ -3,6 +3,7 @@ import {
   parseOpptrixInstrumentId,
   type OpptrixInstrumentIdParts,
   canonicalSymbolForMarket,
+  instrumentHubCode,
   instrumentRefLabel,
   normalizeInstrumentRef,
   parseInstrumentNamespace,
@@ -52,7 +53,7 @@ export function opptrixInstrumentToStockIndexItem(
   return {
     instrumentId: instrument.instrument_id,
     market: instrument.market,
-    code: instrument.symbol,
+    code: instrument.instrument_id || instrument.symbol,
     symbol: instrument.symbol,
     nameCn: instrument.name ?? null,
     industryName: instrument.sub_type ?? null,
@@ -133,7 +134,7 @@ export function stockIndexItemToListRow(item: StockIndexItem): StockListItem | n
     ? 'FUND'
     : (item.industryName ?? item.sub_type ?? '')
   return {
-    code: ref.symbol,
+    code: instrumentHubCode(ref),
     name: item.nameCn ?? item.code,
     industry,
     market: isFund ? 'PF' : (ref.exchange ?? ref.market),

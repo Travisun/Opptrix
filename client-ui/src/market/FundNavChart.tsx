@@ -13,7 +13,7 @@ import type { FundNavPoint } from '../types/market'
 import { useTheme } from '../theme/ThemeContext'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import { getChartTheme, getMaColors, stockPriceFormat } from './chartTheme'
-import { toChartBusinessDay } from './chartTime'
+import { compareChartTime, timeSortKey, toChartBusinessDay } from './chartTime'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
@@ -85,15 +85,15 @@ function navPointTime(date: string): Time | null {
 }
 
 function buildLineData(rows: FundNavPoint[], field: 'nav' | 'accNav'): LineData<Time>[] {
-  const out: LineData<Time>[] = []
+  const byTime = new Map<string, LineData<Time>>()
   for (const row of rows) {
     const value = field === 'nav' ? row.nav : row.accNav
     if (value == null || !Number.isFinite(value)) continue
     const time = navPointTime(row.date)
     if (!time) continue
-    out.push({ time, value })
+    byTime.set(String(timeSortKey(time)), { time, value })
   }
-  return out
+  return [...byTime.values()].sort((a, b) => compareChartTime(a.time, b.time))
 }
 
 export default function FundNavChart({ instrument, active = true }: Props) {
@@ -149,55 +149,63 @@ export default function FundNavChart({ instrument, active = true }: Props) {
     const el = containerRef.current
     if (!el || !active || unitLine.length === 0) return undefined
 
-    const theme = getChartTheme(resolvedScheme)
-    const chart = createChart(el, {
-      layout: theme.layout,
-      grid: theme.grid,
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
-      crosshair: { mode: 1 },
-      handleScroll: { vertTouchDrag: false },
-    })
-    chartRef.current = chart
+    let chart: IChartApi | null = null
+    try {
+      const theme = getChartTheme(resolvedScheme)
+      chart = createChart(el, {
+        layout: theme.layout,
+        grid: theme.grid,
+        rightPriceScale: { borderVisible: false },
+        timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
+        crosshair: { mode: 1 },
+        handleScroll: { vertTouchDrag: false },
+      })
+      chartRef.current = chart
 
-    const unitSeries = chart.addSeries(LineSeries, {
-      color: maColors.ma5,
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: true,
-      crosshairMarkerVisible: true,
-      priceFormat: stockPriceFormat,
-    })
-    unitSeries.setData(unitLine)
-
-    if (hasAccLine) {
-      const accSeries = chart.addSeries(LineSeries, {
-        color: maColors.ma10,
-        lineWidth: 1,
+      const unitSeries = chart.addSeries(LineSeries, {
+        color: maColors.ma5,
+        lineWidth: 2,
         priceLineVisible: false,
-        lastValueVisible: false,
+        lastValueVisible: true,
         crosshairMarkerVisible: true,
         priceFormat: stockPriceFormat,
       })
-      accSeries.setData(accLine)
+      unitSeries.setData(unitLine)
+
+      if (hasAccLine) {
+        const accSeries = chart.addSeries(LineSeries, {
+          color: maColors.ma10,
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: true,
+          priceFormat: stockPriceFormat,
+        })
+        accSeries.setData(accLine)
+      }
+
+      chart.timeScale().fitContent()
+    } catch (err) {
+      chart?.remove()
+      chartRef.current = null
+      setError(err instanceof Error ? err.message : '净值走势渲染失败')
+      return undefined
     }
 
-    chart.timeScale().fitContent()
-
     const ro = new ResizeObserver(() => {
-      if (containerRef.current) {
-        chart.applyOptions({
+      if (containerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
           width: containerRef.current.clientWidth,
           height: containerRef.current.clientHeight,
         })
       }
     })
     ro.observe(el)
-    chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })
+    chartRef.current?.applyOptions({ width: el.clientWidth, height: el.clientHeight })
 
     return () => {
       ro.disconnect()
-      chart.remove()
+      chartRef.current?.remove()
       chartRef.current = null
     }
   }, [active, unitLine, accLine, hasAccLine, resolvedScheme, maColors])

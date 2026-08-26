@@ -94,3 +94,38 @@ test('ETF assetClass does not route as FUND', () => {
   const plan = resolveInstrumentQueryPlan(ref, 'fund_nav')
   assert.equal(plan, null)
 })
+
+test('resolveInstrumentQueryPlan routes REIT fund_snapshot with ref (not bare FUND profile)', () => {
+  const ref = normalizeInstrumentRef({
+    market: 'CN',
+    assetClass: 'REIT',
+    symbol: '180102',
+    exchange: 'SZ',
+  })
+  const snapPlan = resolveInstrumentQueryPlan(ref, 'fund_snapshot')
+  assert.ok(snapPlan)
+  assert.equal(snapPlan?.kind, 'composite_snapshot')
+  if (snapPlan?.kind === 'composite_snapshot') {
+    assert.equal(snapPlan.assetClass, 'REIT')
+    assert.equal(snapPlan.ref?.assetClass, 'REIT')
+    assert.equal(snapPlan.ref?.exchange, 'SZ')
+  }
+  const profilePlan = resolveInstrumentQueryPlan(ref, 'fund_profile')
+  assert.ok(profilePlan)
+  if (profilePlan?.kind === 'registry') {
+    assert.equal(profilePlan.assetClass, 'REIT')
+    assert.equal(profilePlan.method, 'fundProfile')
+  }
+  const allocationPlan = resolveInstrumentQueryPlan(ref, 'fund_allocation')
+  assert.ok(allocationPlan)
+  if (allocationPlan?.kind === 'registry') {
+    assert.equal(allocationPlan.assetClass, 'REIT')
+    assert.equal(allocationPlan.method, 'fundAllocation')
+  }
+  const holdingsPlan = resolveInstrumentQueryPlan(ref, 'fund_holdings')
+  assert.ok(holdingsPlan)
+  if (holdingsPlan?.kind === 'registry') {
+    assert.equal(holdingsPlan.assetClass, 'REIT')
+    assert.equal(holdingsPlan.method, 'fundHoldings')
+  }
+})

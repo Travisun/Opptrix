@@ -22,7 +22,7 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
-import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrument'
+import { resolveWatchlistInstrument } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
@@ -205,7 +205,10 @@ function HeroCell({ label, value }: { label: string; value: string }) {
 
 function mergeProfile(snapshot: FundSnapshotData | null): FundProfileData | null {
   if (!snapshot) return null
-  const base = (snapshot.profile ?? {}) as FundProfileData
+  const rawProfile = snapshot.profile
+  if (rawProfile != null && typeof rawProfile !== 'object') return null
+  if (Array.isArray(rawProfile)) return null
+  const base = (rawProfile ?? {}) as FundProfileData
   const quote = snapshot.quote as Record<string, unknown> | null
   const nav = snapshot.nav as Record<string, unknown> | null
   return {
@@ -252,8 +255,9 @@ export default function FundDetailTab({
     [stock],
   )
   const stockCode = instrumentRef?.symbol ?? stock?.code ?? null
-  const displayCode = instrumentRef ? displayCodeFromInstrument(instrumentRef) : (stock?.code ?? '')
-  const isListedFund = stockCode != null && isCnListedFundSymbol(stockCode)
+  const displayCode = stock?.code?.trim() ?? ''
+  const isReit = instrumentRef?.assetClass === 'REIT'
+  const isListedFund = stockCode != null && (isCnListedFundSymbol(stockCode) || isReit)
   const isLof = stockCode != null && isCnLofSymbol(stockCode)
 
   const chartInstrument = useMemo(() => {
@@ -261,7 +265,7 @@ export default function FundDetailTab({
     if (!isListedFund) return instrumentRef
     return {
       ...instrumentRef,
-      exchange: inferCnExchangeFromCode(instrumentRef.symbol),
+      exchange: instrumentRef.exchange ?? inferCnExchangeFromCode(instrumentRef.symbol),
     }
   }, [instrumentRef, isListedFund])
 
@@ -370,7 +374,9 @@ export default function FundDetailTab({
             <span className={s.name}>{displayName}</span>
             <span className={s.code}>{displayCode}</span>
             {isHolding && <Badge size="small" color="informative" appearance="outline">持有</Badge>}
-            <span className={s.badge}>{isListedFund ? '场内基金' : '场外基金'}</span>
+            <span className={s.badge}>
+              {isReit ? 'REIT' : isListedFund ? '场内基金' : '场外基金'}
+            </span>
           </div>
           <div className={s.quoteMain}>
             {onManage && (
@@ -434,7 +440,7 @@ export default function FundDetailTab({
 
       {tab === 'chart' ? (
         <div className={s.chartWrap}>
-          {instrumentRef && isListedFund && !isLof ? (
+          {instrumentRef && isListedFund && !isLof && !isReit ? (
             <TradingViewChart
               code={displayCode}
               instrument={chartInstrument}

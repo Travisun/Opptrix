@@ -27,7 +27,7 @@ import type { QuoteFailedReason } from './instrument-adapters'
 import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayChangeReturnPct } from './portfolioCalc'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, watchlistDisplayCode, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel, formatInstrumentSearchHitSubtitle, normalizeWatchlistItem } from './instrument'
+import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel, formatInstrumentSearchHitSubtitle, normalizeWatchlistItem } from './instrument'
 import {
   WATCHLIST_QUOTES_POLL_MS,
   WatchlistQuoteBatchAbortError,
@@ -1195,7 +1195,8 @@ export default function WatchlistTab({
                   selectedCode === item.code ? strategyByCode[item.code] : null,
                 )
               const displayName = resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)
-              const displayCode = watchlistDisplayCode(item)
+              const displayCode = item.code.trim() || '—'
+              const portfolioEditEnabled = ref != null && hasApplicationCapability(ref, 'portfolio_pnl')
               const rowTooltip = [
                 unresolved
                   ? (hasCandidates ? UNRESOLVED_INSTRUMENT_COPY.ambiguousHint : UNRESOLVED_INSTRUMENT_COPY.hint)
@@ -1359,14 +1360,16 @@ export default function WatchlistTab({
                     onClick={stopRowActionPointer}
                   >
                     <span className={mergeClasses(s.rowActions, 'opptrix-follow-actions')}>
-                      <button
-                        type="button"
-                        className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
-                        aria-label={`修改 ${displayName}`}
-                        onClick={() => onManage(item)}
-                      >
-                        <EditRegular fontSize={14} />
-                      </button>
+                      {portfolioEditEnabled && (
+                        <button
+                          type="button"
+                          className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
+                          aria-label={`修改 ${displayName}`}
+                          onClick={() => onManage(item)}
+                        >
+                          <EditRegular fontSize={14} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}

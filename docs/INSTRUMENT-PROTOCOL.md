@@ -244,7 +244,7 @@ store.stockMetaLookupKey('000977', 'SZ')  // → 'SZ:000977'
 | `CN:OTC:000037.OF` | A 股场外基金 |
 | `CN:ETF:510300.SH` | A 股 ETF |
 | `CN:LOF:160105.SZ` | A 股 LOF |
-| `CN:REIT:508000.SH` | 公募 REITs（扶摇 NAV：fund_type=otc，后缀保留 .SH） |
+| `CN:REIT:508000.SH` | 公募 REITs（扶摇：`fund_type=otc`，thscode 保留 `.SH/.SZ`） |
 | `CN:IND:881121.TI` | 同花顺板块指数 |
 | `CN:STOCK:600519.SH` | A 股股票 |
 | `US:STOCK:AAPL.US` | 美股 |

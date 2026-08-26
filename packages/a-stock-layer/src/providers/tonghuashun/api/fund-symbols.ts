@@ -6,6 +6,8 @@ export type FuyaoFundType = 'otc' | 'exchange' | 'reits'
 
 export interface FuyaoFundRouteOpts {
   assetClass?: AssetClass
+  /** CN REIT 裸 6 位码时优先用 InstrumentRef.exchange 拼 thscode */
+  exchange?: string
 }
 
 /** 6 位公募基金代码 → 扶摇 fund_type + thscode */
@@ -15,6 +17,8 @@ export function resolveFuyaoFundRoute(
 ): { fundType: FuyaoFundType; thscode: string } | null {
   const assetClass = opts?.assetClass
   if (assetClass === 'REIT') {
+    // 扶摇实测：REIT 档案/净值须 fund_type=otc + thscode 保留 .SH/.SZ（非 .OF）；
+    // fund_type=reits 会返回 1004（fund_type 与 thscode 分区不一致）。
     let raw = String(code ?? '').trim().toUpperCase()
     const listedMatch = /^(\d{6})\.(SH|SZ|BJ)$/i.exec(raw)
     if (listedMatch) {
@@ -23,8 +27,9 @@ export function resolveFuyaoFundRoute(
     raw = raw.replace(/\.(OF|SH|SZ|BJ|PF)$/i, '')
     const bare = normalizeCode(raw)
     if (!bare || !/^\d{6}$/.test(bare)) return null
-    // REIT 保留上市后缀；仅 fund_type 传 otc
-    return { fundType: 'otc', thscode: `${bare}.${resolveMarket(bare)}` }
+    const ex = opts?.exchange?.toUpperCase()
+    const suffix = ex === 'SH' || ex === 'SZ' || ex === 'BJ' ? ex : resolveMarket(bare)
+    return { fundType: 'otc', thscode: `${bare}.${suffix}` }
   }
 
   let raw = String(code ?? '').trim().toUpperCase()

@@ -102,7 +102,16 @@ import {
   type UnifiedInstrumentQuotesDto,
   type UnifiedInstrumentSnapshotDto,
 } from '../market/instrument-adapters'
+import { instrumentHubParams } from '@opptrix/shared/instrument-param'
 import type { InstrumentRef, UnifiedInstrumentQuote } from '../types/instrument'
+
+function hubInstrumentBody(ref: InstrumentRef, extra: Record<string, unknown> = {}) {
+  return { ...instrumentHubParams(ref), ...extra }
+}
+
+function hubInstrumentCode(ref: InstrumentRef): string {
+  return instrumentHubParams(ref).code
+}
 import type {
   ChartPeriod,
   ChipDistributionPoint,
@@ -185,11 +194,11 @@ function ohlcBarsToKlines(code: string, bars: StockChartData['bars']): StockKlin
 export const research = {
   diagnose: (codeOrRef: string | InstrumentRef, scorecard?: string) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     return callInstrumentApi<StockDiagnosisData>(
       'stock_diagnosis',
       '/instruments/evaluation',
-      { instrument, ...(scorecard ? { scorecard } : {}) },
+      { ...hubInstrumentBody(instrument), ...(scorecard ? { scorecard } : {}) },
       {
         code,
         name: code,
@@ -208,11 +217,11 @@ export const research = {
 
   institutionRating: (codeOrRef: string | InstrumentRef, groups?: string[], signal?: AbortSignal) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     return callInstrumentApi<InstitutionRatingData>(
       'institution_rating',
       '/instruments/institution-rating',
-      { instrument, ...(groups?.length ? { groups } : {}) },
+      { ...hubInstrumentBody(instrument), ...(groups?.length ? { groups } : {}) },
       {
         code,
         name: code,
@@ -237,11 +246,11 @@ export const research = {
 
   strategySignals: (codeOrRef: string | InstrumentRef, signal?: AbortSignal) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     return callInstrumentApi<StrategySignalData>(
       'strategy_signal',
       '/instruments/strategy-signal',
-      { instrument },
+      hubInstrumentBody(instrument),
       {
         code,
         name: code,
@@ -266,14 +275,16 @@ export const research = {
       30000,
     ),
 
-  strategyVerify: (code: string, checkpoints = 30, forwardDays = 5) =>
-    callInstrumentApi<StrategyVerifyData>(
+  strategyVerify: (code: string, checkpoints = 30, forwardDays = 5) => {
+    const instrument = cnEquityRef(code)
+    const hubCode = hubInstrumentCode(instrument)
+    return callInstrumentApi<StrategyVerifyData>(
       'strategy_verify',
       '/instruments/strategy-verify',
-      { instrument: cnEquityRef(code), checkpoints, forward_days: forwardDays },
+      hubInstrumentBody(instrument, { checkpoints, forward_days: forwardDays }),
       {
-        code,
-        name: code,
+        code: hubCode,
+        name: hubCode,
         checkpoints,
         forward_days: forwardDays,
         date_range: [],
@@ -283,7 +294,8 @@ export const research = {
       },
       undefined,
       120000,
-    ),
+    )
+  },
 
   portfolioAnalysis: (holdings: [string, number][]) =>
     apiCall<PortfolioAnalysisData>('portfolio_analysis', { holdings }),
@@ -342,10 +354,10 @@ export const research = {
 
   stockKline: async (codeOrRef: string | InstrumentRef, count = 90) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     const resp = await postInstrument<StockChartData | UnifiedInstrumentChartDto>(
       '/instruments/chart',
-      { instrument, period: 'daily', count },
+      hubInstrumentBody(instrument, { period: 'daily', count }),
     )
     if (!resp.success || !resp.data) {
       return toApiResponse<StockKlineData>('stock_kline', resp, { code, klines: [] })
@@ -370,8 +382,8 @@ export const research = {
     tail?: number,
   ) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
-    const body: Record<string, unknown> = { instrument, period }
+    const code = hubInstrumentCode(instrument)
+    const body: Record<string, unknown> = { ...hubInstrumentBody(instrument), period }
     if (count != null) body.count = count
     if (before) body.before = before
     if (tail != null) body.tail = tail
@@ -393,12 +405,12 @@ export const research = {
 
   stockCyq: async (codeOrRef: string | InstrumentRef, signal?: AbortSignal) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     const resp = await postInstrument<{
       code: string
       rows: ChipDistributionPoint[]
       latest: ChipDistributionPoint
-    }>('/instruments/cyq', { instrument }, signal, 15000)
+    }>('/instruments/cyq', hubInstrumentBody(instrument), signal, 15000)
     return toApiResponse('stock_cyq', resp, {
       code,
       rows: [],
@@ -408,10 +420,10 @@ export const research = {
 
   stockDetail: async (codeOrRef: string | InstrumentRef) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     const resp = await postInstrument<StockDetailData | UnifiedInstrumentSnapshotDto>(
       '/instruments/snapshot',
-      { instrument },
+      hubInstrumentBody(instrument),
       undefined,
       30000,
     )
@@ -445,7 +457,7 @@ export const research = {
   ): Promise<
     import('../types/schemas').ApiResponse<import('../types/market').EtfSnapshotData>
   > => {
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     const fallback: import('../types/market').EtfSnapshotData = {
       code,
       profile: null,
@@ -454,7 +466,7 @@ export const research = {
     }
     const resp = await apiCall<
       import('../types/market').EtfSnapshotData | UnifiedInstrumentSnapshotDto
-    >('etf_snapshot', { instrument }, { signal }, 20000)
+    >('etf_snapshot', hubInstrumentBody(instrument), { signal }, 20000)
     if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
       return toApiResponse('etf_snapshot', resp, fallback, unifiedSnapshotToEtfSnapshot(resp.data))
     }
@@ -469,7 +481,7 @@ export const research = {
   etfNav: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').EtfNavPoint[]; source?: string }>(
       'etf_nav',
-      { instrument, code: instrument.symbol },
+      hubInstrumentBody(instrument),
       { signal },
       20000,
     ),
@@ -477,7 +489,7 @@ export const research = {
   etfHoldings: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').EtfHoldingRow[]; source?: string }>(
       'etf_holdings',
-      { instrument, code: instrument.symbol },
+      hubInstrumentBody(instrument),
       { signal },
       20000,
     ),
@@ -488,7 +500,7 @@ export const research = {
   ): Promise<
     import('../types/schemas').ApiResponse<import('../types/market').FundSnapshotData>
   > => {
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     const fallback: import('../types/market').FundSnapshotData = {
       code,
       profile: null,
@@ -497,7 +509,7 @@ export const research = {
     }
     const resp = await apiCall<import('../types/market').FundSnapshotData>(
       'fund_snapshot',
-      { instrument, code },
+      hubInstrumentBody(instrument),
       { signal },
       20000,
     )
@@ -507,7 +519,7 @@ export const research = {
   fundNav: (instrument: InstrumentRef, signal?: AbortSignal, limit = 500) =>
     apiCall<{ code: string; items: import('../types/market').FundNavPoint[]; source?: string }>(
       'fund_nav',
-      { instrument, code: instrument.symbol, limit },
+      hubInstrumentBody(instrument, { limit }),
       { signal },
       20000,
     ),
@@ -515,7 +527,7 @@ export const research = {
   fundHoldings: (instrument: InstrumentRef, signal?: AbortSignal) =>
     apiCall<{ code: string; items: import('../types/market').FundHoldingRow[]; source?: string }>(
       'local_fund_holdings',
-      { instrument, code: instrument.symbol },
+      hubInstrumentBody(instrument),
       { signal },
       20000,
     ),
@@ -526,7 +538,7 @@ export const research = {
   ) =>
     apiCall<import('../types/market').FundDetailData>(
       'fund_detail',
-      { instrument, code: instrument.symbol },
+      hubInstrumentBody(instrument),
       { signal },
       25000,
     ),
@@ -586,7 +598,7 @@ export const research = {
     } }>('/instruments/summary'),
 
   instrumentSnapshot: async (instrument: InstrumentRef, signal?: AbortSignal) => {
-    const resp = await postInstrument<UnifiedInstrumentSnapshotDto>('/instruments/snapshot', { instrument }, signal)
+    const resp = await postInstrument<UnifiedInstrumentSnapshotDto>('/instruments/snapshot', hubInstrumentBody(instrument), signal)
     if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
       return {
         ...resp,
@@ -616,7 +628,7 @@ export const research = {
     signal?: AbortSignal,
   ) => postInstrument<{ quote: UnifiedInstrumentQuote; failed?: { code: string; reason: string } }>(
     '/instruments/quote',
-    { instrument, fresh: opts?.fresh ?? true },
+    { ...hubInstrumentBody(instrument), fresh: opts?.fresh ?? true },
     signal,
   ),
 
@@ -628,14 +640,14 @@ export const research = {
     before?: string,
     tail?: number,
   ) => {
-    const body: Record<string, unknown> = { instrument, period, count }
+    const body: Record<string, unknown> = { ...hubInstrumentBody(instrument), period, count }
     if (before) body.before = before
     if (tail != null) body.tail = tail
     const resp = await postInstrument<UnifiedInstrumentChartDto>('/instruments/chart', body, signal)
     if (resp.success && resp.data && isUnifiedChart(resp.data)) {
       return {
         ...resp,
-        data: unifiedChartToStockChart(resp.data, instrument.symbol),
+        data: unifiedChartToStockChart(resp.data, hubInstrumentCode(instrument)),
       }
     }
     return resp
@@ -657,16 +669,16 @@ export const research = {
     signal?: AbortSignal,
   ) => postInstrument<unknown>(
     '/instruments/evaluation',
-    { instrument, scorecard },
+    hubInstrumentBody(instrument, { ...(scorecard ? { scorecard } : {}) }),
     signal,
     60000,
   ),
 
   instrumentStrategySignal: (instrument: InstrumentRef, signal?: AbortSignal) =>
-    postInstrument<unknown>('/instruments/strategy-signal', { instrument }, signal, 60000),
+    postInstrument<unknown>('/instruments/strategy-signal', hubInstrumentBody(instrument), signal, 60000),
 
   instrumentIndicators: (instrument: InstrumentRef, signal?: AbortSignal) =>
-    postInstrument<unknown>('/instruments/indicators', { instrument }, signal, 60000),
+    postInstrument<unknown>('/instruments/indicators', hubInstrumentBody(instrument), signal, 60000),
 
   instrumentStrategyVerify: (
     instrument: InstrumentRef,
@@ -675,7 +687,7 @@ export const research = {
     signal?: AbortSignal,
   ) => postInstrument<unknown>(
     '/instruments/strategy-verify',
-    { instrument, checkpoints, forward_days: forwardDays },
+    hubInstrumentBody(instrument, { checkpoints, forward_days: forwardDays }),
     signal,
     120000,
   ),
@@ -689,13 +701,13 @@ export const research = {
     'latest_evaluation',
     '/instruments/latest-evaluation',
     {
-      instrument,
+      ...hubInstrumentBody(instrument),
       ...(scorecard ? { scorecard } : {}),
       ...(force ? { force: true } : {}),
     },
     {
-      code: instrument.symbol,
-      name: instrument.symbol,
+      code: hubInstrumentCode(instrument),
+      name: hubInstrumentCode(instrument),
       timestamp: '',
       scorecard: scorecard ?? 'G=B+M',
       total_score: 0,
@@ -708,7 +720,7 @@ export const research = {
   instrumentCapabilities: (instrument: InstrumentRef, signal?: AbortSignal) =>
     postInstrument<import('../types/instrument').InstrumentCapabilitySet>(
       '/instruments/capabilities',
-      { instrument },
+      hubInstrumentBody(instrument),
       signal,
     ),
 
@@ -717,7 +729,7 @@ export const research = {
       code: string
       rows: ChipDistributionPoint[]
       latest: ChipDistributionPoint
-    }>('/instruments/cyq', { instrument }, signal, 15000),
+    }>('/instruments/cyq', hubInstrumentBody(instrument), signal, 15000),
 
   instrumentInstitutionRating: (
     instrument: InstrumentRef,
@@ -726,7 +738,7 @@ export const research = {
   ) =>
     postInstrument<InstitutionRatingData>(
       '/instruments/institution-rating',
-      { instrument, ...(groups?.length ? { groups } : {}) },
+      hubInstrumentBody(instrument, { ...(groups?.length ? { groups } : {}) }),
       signal,
       20000,
     ),
@@ -736,12 +748,12 @@ export const research = {
 
   latestEval: (codeOrRef: string | InstrumentRef, signal?: AbortSignal, scorecard?: string, force = false) => {
     const instrument = cnEquityRef(codeOrRef)
-    const code = instrument.symbol
+    const code = hubInstrumentCode(instrument)
     return callInstrumentApi<LatestEvalData>(
       'latest_evaluation',
       '/instruments/latest-evaluation',
       {
-        instrument,
+        ...hubInstrumentBody(instrument),
         ...(scorecard ? { scorecard } : {}),
         ...(force ? { force: true } : {}),
       },
@@ -1322,9 +1334,14 @@ export async function portfolioDeleteTrade(id: number) {
   return resp.json() as Promise<{ success: boolean }>
 }
 
-export async function portfolioClearInstrument(code: string, market?: string) {
+export async function portfolioClearInstrument(
+  code: string,
+  market?: string,
+  assetClass?: string,
+) {
   const qs = new URLSearchParams({ code: code.trim() })
   if (market) qs.set('market', market)
+  if (assetClass) qs.set('assetClass', assetClass)
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/instrument?${qs}`, { method: 'DELETE' })
   if (!resp.ok) throw new Error('clear portfolio instrument failed')
   return resp.json() as Promise<{ success: boolean; removed: number }>

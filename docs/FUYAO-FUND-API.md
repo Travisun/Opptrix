@@ -13,7 +13,7 @@
 | 请求头 | `X-api-key: <用户配置的 API Key>`（存于 Provider 设置，非代码硬编码；由 SDK 注入） |
 | 响应信封 | SDK 返回整包 `ApiResponse<T>`；适配层 unwrap 为 `data`，调用方继续用 `.item` |
 | 时间戳 | 毫秒 Unix，时区 `Asia/Shanghai` |
-| `fund_type` | `otc`（场外开放式）、`exchange`（场内 ETF/LOF）、`reits`（公募 REITs）；SDK 入参 camelCase `fundType` |
+| `fund_type` | `otc`（场外 / 含 REIT 上市码）、`exchange`（场内 ETF/LOF）；SDK 枚举亦含 `reits`，但 **`.SH/.SZ` REIT 须走 `otc` 分区**（见下方错误码 1004） |
 | `thscode` | 必须带后缀：`025480.OF`、`510300.SH`、`161725.SZ` |
 
 ### Opptrix 代码路由（`resolveFuyaoFundRoute`）
@@ -22,7 +22,7 @@
 |---|---|---|
 | 6 位场外基金（非场内代码表） | `otc` | `{code}.OF` |
 | 6 位场内基金 / ETF / LOF | `exchange` | `{code}.SH` 或 `.SZ` |
-| REIT（`assetClass=REIT`） | `otc` | **保留** `.SH` / `.SZ` 后缀（不改 `.OF`） |
+| REIT（`assetClass=REIT`） | `otc` | **保留** `.SH` / `.SZ` 后缀（非 `.OF`；`reits` 会 1004 冲突） |
 | 已带 `.OF` / `.SH` / `.SZ` | 按后缀推断 | 原样规范化 |
 
 ## 全量 REST 端点清单
@@ -167,6 +167,32 @@ node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs tests/fund-detail
 ```
 
 配置同花顺 API Key 并启用 Provider 后，打开 CN:PF 基金详情，`source` 应为 `tonghuashun`。
+
+## 业务错误码（基金场景）
+
+HTTP 仍为 200；SDK 在信封 `code !== 0` 时抛 `FuyaoApiError`。Opptrix `withFuyaoClient` 仅 **3001** 转 `FuyaoFundNotFoundError`；其余多数被吞为 `null` → Engine 报「空数据」。
+
+| code | 含义 | 基金场景 |
+|------|------|----------|
+| **1001** | 缺少必填参数 | 非行情接口缺少 `fund_type`，或缺少 `thscode`、`start`、`end` |
+| **1002** | 参数格式错误 | 历史行情 `thscode` 含逗号 |
+| **1003** | 参数值越界 | 枚举非法、`start > end` 或查询窗口超过 5 年 |
+| **1004** | 参数冲突 | `fund_type` 多选，或 **基金类型与 `thscode` 所在分区不一致** |
+| **3001** | 标的不存在 | 找不到该基金 |
+| **3002** | 数据未就绪 | 标的存在，但暂无可用业务数据 |
+| **3004** | 标的类型不支持该能力 | 该基金类型不支持所请求的能力 |
+
+### REIT（`CN:REIT:180102.SZ`）实测对照
+
+| 请求 | code | 解读 |
+|------|------|------|
+| `fund_type=reits` + `thscode=180102.SZ` | **1004** | 分区冲突：`.SH/.SZ` REIT 不属于 `reits` 分区 |
+| `fund_type=exchange` + `thscode=180102.SZ` | **1004** | 同上，不属于 `exchange` 分区 |
+| **`fund_type=otc` + `thscode=180102.SZ`** | **0** | ✅ 分区一致（`otc` + 上市后缀，非 `.OF`） |
+| `fundMarketSnapshot(180102.SZ)` | **3004** | REIT 不支持场内行情快照；报价走净值 + 可选 A 股实时降级 |
+| `fundPortfolioHoldings` | **3002** | 标的存在，持仓数据尚未就绪 |
+
+Opptrix 路由（`resolveFuyaoFundRoute`）：REIT → **`fund_type=otc`** + **保留 `.SH/.SZ`**，与扶摇分区规则一致。
 
 ## 已知限制
 

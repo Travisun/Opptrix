@@ -47,7 +47,7 @@ import { normalizeUsSymbol } from './utils/us-market.js'
 import { isRegionalEquityMarket, normalizeRegionalSymbol, type RegionalEquityMarket } from './utils/regional-symbol.js'
 import { parseCryptoPair } from './utils/crypto-market.js'
 import type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
-import { instrumentProviderSymbol, normalizeInstrumentRef } from '@opptrix/shared'
+import { instrumentProviderSymbol, normalizeInstrumentRef, buildOpptrixInstrumentId } from '@opptrix/shared'
 import {
   resolveInstrumentQueryPlan,
   unsupportedInstrumentCapabilityMessage,
@@ -915,14 +915,25 @@ export class MarketDataEngine {
       .then(result => this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>))
   }
 
-  /** 场内基金 fundQuote 失败时，回退 A 股实时行情（交易所价） */
+  /** 场内基金 / REIT fundQuote 失败时，回退 A 股实时行情（交易所价） */
   private async listedFundQuoteFallback(
     code: string,
     primary: QueryResult<Record<string, unknown>[]>,
+    ref?: InstrumentRef,
   ): Promise<QueryResult<Record<string, unknown>[]>> {
     if (primary.success && primary.data?.length) return primary
-    if (!isCnListedFundSymbol(code)) return primary
-    const rt = await this.realtime(code, resolveStockMarketCode(code))
+    const normalized = ref ? normalizeInstrumentRef(ref) : null
+    const assetClass = normalized?.assetClass
+    const isReit = assetClass === 'REIT'
+    const isListed = isCnListedFundSymbol(code) || isReit
+    if (!isListed) return primary
+    const exRaw = normalized?.exchange?.toUpperCase()
+    const market = (exRaw === 'SH' || exRaw === 'SZ' || exRaw === 'BJ')
+      ? exRaw as import('./utils/helpers.js').StockMarket
+      : resolveStockMarketCode(code)
+    // REIT 尚无独立 STOCK_REALTIME binding 时，同码走 EQUITY 交易所快照
+    const rtClass: AssetClass = isReit ? 'EQUITY' : (assetClass ?? inferCnAssetClass(code))
+    const rt = await this.realtime(code, market, rtClass)
     const row = rt.data?.[0]
     if (!rt.success || !row) return primary
     return {
@@ -948,23 +959,58 @@ export class MarketDataEngine {
     }
   }
 
-  async fundSnapshot(fundCode: string) {
-    const code = normalizeCode(fundCode)
-    const listed = isCnListedFundSymbol(code)
+  async fundSnapshotFromRef(ref: InstrumentRef) {
+    const normalized = normalizeInstrumentRef(ref)
+    const code = normalized.symbol
+    const assetClass = normalized.assetClass === 'REIT' ? 'REIT' : 'FUND'
+    const exchangeListed = assetClass === 'REIT' || isCnListedFundSymbol(code)
+
     const [profile, quoteRes] = await Promise.all([
-      this.fundProfile(code),
-      listed ? this.fundQuote(code) : Promise.resolve(null),
+      this.queryScoped<Record<string, unknown>>(
+        'CN',
+        assetClass,
+        Capability.FUND_PROFILE,
+        'fundProfile',
+        'fund_profile',
+        true,
+        [code],
+        15_000,
+        normalized,
+      ),
+      exchangeListed
+        ? this.queryScoped<Record<string, unknown>>(
+          'CN',
+          assetClass,
+          Capability.FUND_QUOTE,
+          'fundQuote',
+          'fund_quote',
+          true,
+          [code],
+          15_000,
+          normalized,
+        ).then(result =>
+          exchangeListed
+            ? this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>, normalized)
+            : result as QueryResult<Record<string, unknown>[]>,
+        )
+        : Promise.resolve(null),
     ])
     const profileRow = profile.data?.[0] as Record<string, unknown> | undefined
     const quoteRow = quoteRes?.success
       ? quoteRes.data?.[0] as Record<string, unknown> | undefined
       : undefined
-    const success = profile.success || (listed && quoteRes?.success && quoteRow)
+    const success = profile.success || (exchangeListed && quoteRes?.success && quoteRow)
     if (!success) {
+      const quoteErr = quoteRes && !quoteRes.success && 'error' in quoteRes
+        ? String(quoteRes.error ?? '')
+        : ''
+      const err = [profile.error, quoteErr].filter(Boolean).join('; ')
+        || '基金档案与行情均不可用，请确认同花顺数据密钥已启用'
       return {
         success: false,
         data: null,
-        source: profile.source,
+        source: profile.source ?? quoteRes?.source,
+        error: err,
       }
     }
     const mergedProfile = profileRow ?? (quoteRow
@@ -998,13 +1044,23 @@ export class MarketDataEngine {
     return {
       success: true,
       data: {
-        code,
+        code: buildOpptrixInstrumentId(normalized),
+        instrument: normalized,
         profile: mergedProfile ?? null,
         nav: latestNav ?? null,
         quote,
       },
       source: profile.source ?? quoteRes?.source,
     }
+  }
+
+  async fundSnapshot(fundCode: string) {
+    return this.fundSnapshotFromRef(normalizeInstrumentRef({
+      market: 'CN',
+      assetClass: 'FUND',
+      symbol: fundCode,
+      exchange: 'PF',
+    }))
   }
 
   async etfSnapshotFromRef(ref: InstrumentRef): Promise<{
@@ -1299,14 +1355,16 @@ export class MarketDataEngine {
         if (plan.market === 'CN' && plan.assetClass === 'REIT') {
           const snapRef = plan.ref ?? normalizeInstrumentRef({
             market: 'CN', assetClass: 'REIT', symbol: plan.symbol,
+            exchange: resolveStockMarketCode(plan.symbol),
           })
-          return this.fundSnapshot(snapRef.symbol)
+          return this.fundSnapshotFromRef(snapRef)
         }
         if (plan.market === 'CN' && plan.assetClass === 'FUND') {
           const snapRef = plan.ref ?? normalizeInstrumentRef({
             market: 'CN', assetClass: 'FUND', symbol: plan.symbol,
+            exchange: 'PF',
           })
-          return this.fundSnapshot(snapRef.symbol)
+          return this.fundSnapshotFromRef(snapRef)
         }
         if (isRegionalEquityMarket(plan.market)) {
           return this.regionalSnapshot(plan.market, plan.symbol)
@@ -1331,10 +1389,14 @@ export class MarketDataEngine {
           if (
             plan.capability === Capability.FUND_QUOTE
             && plan.market === 'CN'
-            && plan.assetClass === 'FUND'
+            && (plan.assetClass === 'FUND' || plan.assetClass === 'REIT')
           ) {
             const code = normalizeCode(String(plan.args[0] ?? ''))
-            return this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>)
+            return this.listedFundQuoteFallback(
+              code,
+              result as QueryResult<Record<string, unknown>[]>,
+              plan.ref,
+            )
           }
           return result
         })
