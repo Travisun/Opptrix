@@ -489,6 +489,8 @@ function RightMarketPanel({
             loading={portfolioLoading}
             error={portfolioError}
             onRetry={() => { void refreshHoldings() }}
+            watchlistItems={items}
+            holdingsByCode={holdingsByCode}
           />
         </div>
         {tab === 'detail' && detailStock && detailKind === 'cn-index' ? (

@@ -1,11 +1,20 @@
+import { useMemo } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { BriefcaseRegular } from '@fluentui/react-icons'
+import { BriefcaseRegular, SettingsRegular } from '@fluentui/react-icons'
 import SidebarListEmpty from './SidebarListEmpty'
 import type { PortfolioSummaryData } from '../types/schemas'
+import type { WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { formatPct, formatPrice, formatPriceForMarket, pctTone, portfolioHoldingsKey } from './format'
 import { instrumentKey, marketDisplayName, tryParseInstrumentInput } from './instrument'
 import { displayPortfolioHoldingReturnPct } from './portfolioCalc'
+import {
+  aggregatePortfolioScopeSummary,
+  resolvePortfolioHoldingsForGroup,
+} from './portfolioGroupCalc'
+import { useWatchlistGroups } from './WatchlistGroupsContext'
+import WatchlistGroupsDialog from './WatchlistGroupsDialog'
+import type { HoldingSnapshot } from './useFollowPortfolio'
 import type { Market } from '../types/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
@@ -23,6 +32,70 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minHeight: 0,
     height: '100%',
+  },
+  chipRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: `8px ${CONTENT_PAD} 6px`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    minWidth: 0,
+    minHeight: '34px',
+    boxSizing: 'border-box',
+    flexShrink: 0,
+  },
+  chipsWrap: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+  },
+  chip: {...ghostInteractive,
+    flexShrink: 0,
+    height: '26px',
+    padding: '0 10px',
+    border: 'none',
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 500,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
+  },
+  chipActive: {
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.accent,
+    ':hover': {
+      backgroundColor: opptrixCssVars.accentSoft,
+      color: opptrixCssVars.accent,
+    },
+  },
+  chipEditBtn: {...ghostInteractive,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '26px',
+    height: '26px',
+    padding: 0,
+    border: 'none',
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textTertiary,
+    cursor: 'pointer',
+    lineHeight: 0,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
   },
   summary: {
     flexShrink: 0,
@@ -143,6 +216,17 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     lineHeight: 1.2,
   },
+  footer: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    padding: `6px ${CONTENT_PAD} 8px`,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
+  },
   center: {
     display: 'flex',
     alignItems: 'center',
@@ -162,6 +246,8 @@ interface PortfolioTabProps {
   loading: boolean
   error: string
   onRetry: () => void
+  watchlistItems: WatchlistItem[]
+  holdingsByCode: Record<string, HoldingSnapshot>
 }
 
 function pnlColor(pct: number | null | undefined): string {
@@ -184,8 +270,59 @@ export default function PortfolioTab({
   loading,
   error,
   onRetry,
+  watchlistItems,
+  holdingsByCode,
 }: PortfolioTabProps) {
   const s = useStyles()
+  const {
+    groups,
+    membership,
+    selectedGroupId,
+    setSelectedGroupId,
+    dialogOpen,
+    setDialogOpen,
+    replaceDoc,
+  } = useWatchlistGroups()
+
+  const groupsDoc = useMemo(
+    () => ({ groups, membership }),
+    [groups, membership],
+  )
+
+  const selectedGroupTitle = useMemo(
+    () => groups.find(g => g.id === selectedGroupId)?.title ?? null,
+    [groups, selectedGroupId],
+  )
+
+  const allHoldings = summary?.holdings ?? []
+
+  const scopedHoldings = useMemo(
+    () => resolvePortfolioHoldingsForGroup(
+      allHoldings,
+      watchlistItems,
+      membership,
+      selectedGroupId,
+      holdingsByCode,
+    ),
+    [allHoldings, watchlistItems, membership, selectedGroupId, holdingsByCode],
+  )
+
+  const scopeSummary = useMemo(
+    () => (selectedGroupId
+      ? aggregatePortfolioScopeSummary(scopedHoldings)
+      : summary
+        ? {
+          totalCost: summary.totalCost,
+          totalMarketValue: summary.totalMarketValue,
+          totalUnrealizedPnl: summary.totalUnrealizedPnl,
+          totalRealizedPnl: summary.totalRealizedPnl,
+          totalPnl: summary.totalPnl,
+          totalPnlPct: summary.totalPnlPct,
+          holdingsCount: summary.holdingsCount,
+        }
+        : null),
+    [selectedGroupId, scopedHoldings, summary],
+  )
 
   if (!active) {
     return <div className={s.root} />
@@ -223,21 +360,60 @@ export default function PortfolioTab({
     )
   }
 
-  const data = summary
-  const holdings = data?.holdings ?? []
+  const holdings = selectedGroupId ? scopedHoldings : allHoldings
   const empty = holdings.length === 0
-  const totalPnlPct = isSanePortfolioReturnPct(data?.totalPnlPct) ? data?.totalPnlPct : null
+  const displaySummary = scopeSummary
+  const totalPnlPct = isSanePortfolioReturnPct(displaySummary?.totalPnlPct)
+    ? displaySummary?.totalPnlPct
+    : null
+  const showGroupChips = true
 
   return (
     <div className={s.root}>
-      {!empty && data ? (
+      {showGroupChips ? (
+        <div className={s.chipRow}>
+          <div className={mergeClasses(s.chipsWrap, 'opptrix-scroll-x')}>
+            <button
+              type="button"
+              className={mergeClasses(s.chip, !selectedGroupId && s.chipActive)}
+              onClick={() => setSelectedGroupId(null)}
+            >
+              全部
+            </button>
+            {groups.map(group => (
+              <button
+                key={group.id}
+                type="button"
+                className={mergeClasses(s.chip, selectedGroupId === group.id && s.chipActive)}
+                onClick={() => setSelectedGroupId(group.id)}
+              >
+                {group.title}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={s.chipEditBtn}
+            aria-label="管理分组"
+            onClick={() => setDialogOpen(true)}
+          >
+            <SettingsRegular fontSize={14} />
+          </button>
+        </div>
+      ) : null}
+
+      {!empty && displaySummary ? (
         <div className={s.summary}>
           <div className={s.metric}>
-            <Text className={s.metricLabel}>总市值</Text>
-            <Text className={s.metricValue}>{formatPrice(data.totalMarketValue)}</Text>
+            <Text className={s.metricLabel}>
+              {selectedGroupTitle ? `${selectedGroupTitle} · 市值` : '总市值'}
+            </Text>
+            <Text className={s.metricValue}>{formatPrice(displaySummary.totalMarketValue)}</Text>
           </div>
           <div className={s.metric}>
-            <Text className={s.metricLabel}>总收益</Text>
+            <Text className={s.metricLabel}>
+              {selectedGroupTitle ? '分组收益' : '总收益'}
+            </Text>
             <Text className={s.metricValue} style={{ color: pnlColor(totalPnlPct) }}>
               {formatPct(totalPnlPct)}
             </Text>
@@ -246,14 +422,14 @@ export default function PortfolioTab({
             <Text className={s.metricLabel}>浮动盈亏</Text>
             <Text
               className={s.metricValue}
-              style={{ color: pnlColor(data.totalUnrealizedPnl) }}
+              style={{ color: pnlColor(displaySummary.totalUnrealizedPnl) }}
             >
-              {formatPrice(data.totalUnrealizedPnl)}
+              {formatPrice(displaySummary.totalUnrealizedPnl)}
             </Text>
           </div>
           <div className={s.metric}>
             <Text className={s.metricLabel}>持仓</Text>
-            <Text className={s.metricValue}>{data.holdingsCount} 只</Text>
+            <Text className={s.metricValue}>{displaySummary.holdingsCount} 只</Text>
           </div>
         </div>
       ) : null}
@@ -262,8 +438,16 @@ export default function PortfolioTab({
         {empty ? (
           <SidebarListEmpty
             icon={<BriefcaseRegular />}
-            title="还没有持仓记录"
-            hint="在个股或 ETF 详情里录入买卖后，会在这里汇总市值与盈亏"
+            title={
+              selectedGroupTitle
+                ? `「${selectedGroupTitle}」暂无持仓`
+                : '还没有持仓记录'
+            }
+            hint={
+              selectedGroupTitle
+                ? '该分组内的关注标的尚未录入买卖，或切换到「全部」查看其他持仓'
+                : '在个股或 ETF 详情里录入买卖后，会在这里汇总市值与盈亏'
+            }
           />
         ) : (
           holdings.map((h, index) => {
@@ -321,6 +505,24 @@ export default function PortfolioTab({
           })
         )}
       </div>
+
+      {!empty && displaySummary ? (
+        <div className={s.footer}>
+          <span>
+            {selectedGroupTitle
+              ? `${holdings.length} 只 · ${selectedGroupTitle}`
+              : `${displaySummary.holdingsCount} 只 · 全部组合`}
+          </span>
+        </div>
+      ) : null}
+
+      <WatchlistGroupsDialog
+        open={dialogOpen}
+        items={watchlistItems}
+        doc={groupsDoc}
+        onClose={() => setDialogOpen(false)}
+        onSave={replaceDoc}
+      />
     </div>
   )
 }
