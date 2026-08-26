@@ -95,7 +95,7 @@ const INSTRUMENT_CAPS: Array<{
     id: 'cap.stock_list',
     title: '股票列表',
     summary: '市场股票目录/分页',
-    how: '标准层: queryInstrumentData(ref, "stock_list", { page, pageSize, boardKey })；Hub 本地摘要见 hub.local_instruments_summary',
+    how: '标准层: queryInstrumentData(ref, "stock_list", { page, pageSize, boardKey })；标的搜索见 hub.instrument_search（OpptrixQuant 在线）',
   },
   {
     id: 'cap.instrument_search',
@@ -309,22 +309,7 @@ const HUB_FEATURES: Array<{
   summary: string
   how: string
   notes?: string[]
-}> = [
-  {
-    id: 'hub.search_local_instruments',
-    title: 'search_local_instruments',
-    summary: '本地标的库关键词搜索（Hub）',
-    how: 'Hub.dispatch("search_local_instruments", { keyword, limit? })；当前无薄 Agent tool，catalog 收录备查',
-    notes: ['access=hub_feature', '行情主路径仍优先标准 Agent tools / queryInstrumentData'],
-  },
-  {
-    id: 'hub.local_instruments_summary',
-    title: 'local_instruments_summary',
-    summary: '本地标的库规模摘要（Hub）',
-    how: 'Hub.dispatch("local_instruments_summary", {})',
-    notes: ['access=hub_feature'],
-  },
-]
+}> = []
 
 const SHARED_PACKAGES: LocalDataApiDetail = {
   api_id: 'shared.packages',

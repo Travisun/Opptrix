@@ -61,6 +61,28 @@ export function cnFundBindings(defaultPriority: number, maxConcurrent?: number):
   }))
 }
 
+/** LOF — 场内 LOF，行情路由与 ETF 相同 */
+export function cnLofBindings(defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
+  return CN_ETF_CAPABILITIES.map(capability => ({
+    market: 'CN',
+    assetClass: 'LOF',
+    capability,
+    defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+  }))
+}
+
+/** REIT — 公募 REITs，净值/档案走基金接口（扶摇 fund_type=otc） */
+export function cnReitBindings(defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
+  return CN_FUND_CAPABILITIES.map(capability => ({
+    market: 'CN',
+    assetClass: 'REIT',
+    capability,
+    defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+  }))
+}
+
 export function cnIndexBindings(capabilities: Capability[], defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
   return capabilities
     .filter(c => [

@@ -68,7 +68,7 @@ export function instrumentRefKey(ref: InstrumentRef): string {
   return buildInstrumentNamespace(ref)
 }
 
-/** 全局标的标识 — 与 Stock-index instrumentId / ref_label 一致 */
+/** 全局标的展示码 — 本地名录 / 关注列表沿用命名空间；在线搜索单独用 Opptrix ID */
 export function instrumentDisplayCode(ref: InstrumentRef): string {
   return buildInstrumentNamespace(ref)
 }

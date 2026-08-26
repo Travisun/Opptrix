@@ -3,7 +3,6 @@ import {
   parseOpptrixInstrumentId,
   type OpptrixInstrumentIdParts,
   canonicalSymbolForMarket,
-  inferCnAssetClassFromSymbol,
   instrumentRefLabel,
   normalizeInstrumentRef,
   parseInstrumentNamespace,
@@ -24,7 +23,6 @@ import type {
   StandardFundProfileRow,
   StandardFundQuoteRow,
 } from '../common/standard-fund.js'
-import { stockIndexItemLooksLikeCnPublicFund } from '../../core/fund-instrument.js'
 
 const SOURCE = 'stockindex'
 
@@ -64,6 +62,17 @@ export function opptrixInstrumentToStockIndexItem(
   }
 }
 
+function assetClassFromOpptrixToken(assetType?: string): AssetClass | null {
+  const at = String(assetType ?? '').trim().toLowerCase()
+  if (at === 'stock' || at === 'equity') return 'EQUITY'
+  if (at === 'ind' || at === 'index') return 'INDEX'
+  if (at === 'otc' || at === 'of' || at === 'fund') return 'FUND'
+  if (at === 'etf') return 'ETF'
+  if (at === 'lof') return 'LOF'
+  if (at === 'reit') return 'REIT'
+  return null
+}
+
 export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentRef | null {
   const market = String(item.market ?? '').toUpperCase() as Market
   const code = String(item.code ?? '').trim()
@@ -83,24 +92,17 @@ export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentR
     ?? cnExchangeFromInstrumentId(instrumentIdStr)
 
   if (market === 'CN') {
-    if (fromId && (fromId.assetClass === 'FUND' || String(fromId.exchange ?? '').toUpperCase() === 'PF')) {
-      return normalizeInstrumentRef(fromId)
-    }
-    if (stockIndexItemLooksLikeCnPublicFund(item)) {
+    if (fromId) return normalizeInstrumentRef(fromId)
+    const fromToken = assetClassFromOpptrixToken(item.assetType)
+    if (fromToken) {
       return normalizeInstrumentRef({
         market: 'CN',
-        assetClass: 'FUND',
+        assetClass: fromToken,
         symbol: code,
-        exchange: 'PF',
+        exchange: exchange as InstrumentRef['exchange'],
       })
     }
-    if (fromId) return normalizeInstrumentRef(fromId)
-    return normalizeInstrumentRef({
-      market: 'CN',
-      assetClass: item.assetType === 'etf' ? 'ETF' : inferCnAssetClassFromSymbol(code, exchange ?? null),
-      symbol: code,
-      exchange: exchange as InstrumentRef['exchange'],
-    })
+    return null
   }
 
   if (market === 'US' || market === 'HK') {

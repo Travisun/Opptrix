@@ -235,15 +235,20 @@ store.stockMetaLookupKey('000977', 'SZ')  // → 'SZ:000977'
 
 ## OpptrixQuant instrument_id
 
-统一标的 ID（搜索权威源返回）：`{market}:{class_token}:{symbol}`
+统一标的 ID（搜索权威源返回）：`{MARKET}:{CLASS_TOKEN}:{SYMBOL}`（大写；查询大小写不敏感）
+
+完整 API 说明见 **[OPPTRIX-QUANT-API.md](./OPPTRIX-QUANT-API.md)**。
 
 | 示例 | 含义 |
 |------|------|
-| `CN:of:009049` | A 股场外基金 |
-| `CN:etf:510300` | A 股 ETF |
-| `CN:stock:600519` | A 股股票 |
-| `US:stock:AAPL` | 美股 |
-| `HK:stock:00700` | 港股 |
+| `CN:OTC:000037.OF` | A 股场外基金 |
+| `CN:ETF:510300.SH` | A 股 ETF |
+| `CN:LOF:160105.SZ` | A 股 LOF |
+| `CN:REIT:508000.SH` | 公募 REITs（扶摇 NAV：fund_type=otc，后缀保留 .SH） |
+| `CN:IND:881121.TI` | 同花顺板块指数 |
+| `CN:STOCK:600519.SH` | A 股股票 |
+| `US:STOCK:AAPL.US` | 美股 |
+| `HK:STOCK:00700.HK` | 港股 |
 
-`parseCanonicalInstrumentInput` / `parseOpptrixInstrumentId` 优先识别该格式；旧 `CN:SZ.xxxxxx` / `CN:PF.xxxxxx` 仍兼容。
+**须配置 Opptrix 量化数据密钥** 后在线搜索生效；`parseCanonicalInstrumentInput` / `parseOpptrixInstrumentId` 优先识别该格式；旧 `CN:SZ.xxxxxx` / `CN:PF.xxxxxx` 仍兼容。
 

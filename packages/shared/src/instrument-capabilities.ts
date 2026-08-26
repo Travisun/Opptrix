@@ -89,6 +89,8 @@ export const INSTRUMENT_CAPABILITY_MATRIX: InstrumentCapabilitySet[] = [
   capabilityRow('CN', 'EQUITY', CN_EQUITY, 'cn-equity'),
   capabilityRow('CN', 'INDEX', CN_INDEX, 'cn-equity'),
   capabilityRow('CN', 'ETF', CN_ETF, 'cn-etf'),
+  capabilityRow('CN', 'LOF', CN_ETF, 'cn-etf'),
+  capabilityRow('CN', 'REIT', CN_FUND, 'cn-fund'),
   capabilityRow('CN', 'FUND', CN_FUND, 'cn-fund'),
   capabilityRow('US', 'EQUITY', US_EQUITY, 'cross-market'),
   capabilityRow('US', 'ETF', US_ETF, 'cross-market'),

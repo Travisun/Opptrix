@@ -338,10 +338,57 @@ export function resolveInstrumentQueryPlan(
       }
     }
 
+    if (assetClass === 'REIT') {
+      switch (dataCap) {
+        case 'snapshot':
+        case 'fund_snapshot':
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'REIT' }
+        case 'fund_profile':
+        case 'profile':
+          return registryPlan('CN', 'REIT', Capability.FUND_PROFILE, 'fundProfile', true, [symbol], normalized)
+        case 'fund_nav':
+          return registryPlan('CN', 'REIT', Capability.FUND_NAV, 'fundNav', true, [symbol], normalized)
+        case 'fund_quote':
+        case 'realtime':
+          return registryPlan('CN', 'REIT', Capability.FUND_QUOTE, 'fundQuote', true, [symbol], normalized)
+        case 'fund_returns':
+          return registryPlan('CN', 'REIT', Capability.FUND_RETURNS, 'fundReturns', true, [symbol], normalized)
+        case 'fund_drawdown':
+          return registryPlan('CN', 'REIT', Capability.FUND_DRAWDOWN, 'fundDrawdown', true, [symbol], normalized)
+        case 'fund_allocation':
+          return registryPlan('CN', 'REIT', Capability.FUND_ALLOCATION, 'fundAllocation', true, [symbol], normalized)
+        case 'fund_holders':
+          return registryPlan('CN', 'REIT', Capability.FUND_HOLDERS, 'fundHolders', true, [symbol], normalized)
+        case 'fund_dividend':
+          return registryPlan('CN', 'REIT', Capability.FUND_DIVIDEND, 'fundDividend', true, [symbol], normalized)
+        case 'fund_manager':
+          return registryPlan('CN', 'REIT', Capability.FUND_MANAGER, 'fundManager', true, [symbol], normalized)
+        case 'fund_diagnosis':
+          return registryPlan('CN', 'REIT', Capability.FUND_DIAGNOSIS, 'fundDiagnosis', true, [symbol], normalized)
+        case 'fund_news':
+          return registryPlan('CN', 'REIT', Capability.FUND_NEWS, 'fundNews', true, [symbol], normalized)
+        case 'fund_financials':
+          return registryPlan('CN', 'REIT', Capability.FUND_FINANCIALS, 'fundFinancials', true, [symbol], normalized)
+        default:
+          return null
+      }
+    }
+
     switch (dataCap) {
       case 'realtime':
         return cnRealtimePlan(normalized, symbol, exchange, assetClass)
       case 'kline':
+        if (assetClass === 'INDEX') {
+          return registryPlan(
+            'CN',
+            'INDEX',
+            Capability.INDEX_KLINE,
+            'indexKline',
+            true,
+            [symbol, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count],
+            normalized,
+          )
+        }
         return {
           kind: 'cn_kline',
           symbol,
@@ -353,11 +400,19 @@ export function resolveInstrumentQueryPlan(
           end: opts.endDate,
         }
       case 'snapshot':
-        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'ETF' }
+        if (assetClass === 'ETF' || assetClass === 'LOF' || isCnEtfCode(symbol)) {
+          return {
+            kind: 'composite_snapshot',
+            market: 'CN',
+            symbol,
+            assetClass: assetClass === 'LOF' ? 'LOF' : 'ETF',
+          }
         }
         return cnRealtimePlan(normalized, symbol, exchange, assetClass)
       case 'profile':
+        if (assetClass === 'LOF') {
+          return registryPlan('CN', 'LOF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
+        }
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
           return registryPlan('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
         }

@@ -1,13 +1,10 @@
 /**
- * 关注列表未消歧 — 本地唯一 + 可选 Tickflow 在线补强。
- * 挂在 MarketDataService / research-hub，避免 a-stock-layer↔market-data 循环依赖细节泄漏到 store。
+ * 关注列表未消歧 — 在线 Tickflow 精确补强（港股短码等）。
  */
 import {
   TickflowClient,
   mapTickflowInstrumentToListItem,
   type WatchlistItem,
-  INSTRUMENT_ID_UNIFY_WATCHLIST_V2,
-  disambiguateWatchlistItemsLocal,
   disambiguateWatchlistItemOutcome,
   watchlistItemNeedsDisambiguation,
   type DisambiguationHit,
@@ -22,12 +19,6 @@ import {
   type InstrumentRef,
   type Market,
 } from '@opptrix/shared'
-import { getUserDataStore } from '@opptrix/user-store'
-
-export type LocalInstrumentSearch = (
-  keyword: string,
-  limit?: number,
-) => Array<{ instrument: InstrumentRef; name: string | null }>
 
 let lastOnlinePassAt = 0
 const ONLINE_THROTTLE_MS = 60_000
@@ -59,40 +50,6 @@ function tickflowRowToHit(inst: TickflowInstrument): DisambiguationHit | null {
   } catch {
     return null
   }
-}
-
-/**
- * 启动 / list 路径：本地唯一消歧；写 v2 flag（即使仍有未消歧项，表示已尝试一轮）。
- * 多命中候选放入 candidatesByCode，供 UI 点选。
- */
-export function runWatchlistLocalDisambiguationPass(
-  items: WatchlistItem[],
-  searchLocal: LocalInstrumentSearch,
-): {
-  items: WatchlistItem[]
-  resolved: number
-  wroteFlag: boolean
-  candidatesByCode: Record<string, DisambiguationCandidate[]>
-} {
-  const result = disambiguateWatchlistItemsLocal(items, kw =>
-    searchLocal(kw, 30).map(h => ({ instrument: h.instrument, name: h.name })),
-  )
-
-  const store = getUserDataStore()
-  let wroteFlag = false
-  if (!store.getMetaFlag(INSTRUMENT_ID_UNIFY_WATCHLIST_V2)) {
-    try {
-      store.setMetaFlag(INSTRUMENT_ID_UNIFY_WATCHLIST_V2)
-      wroteFlag = true
-    } catch (err) {
-      console.warn(
-        '[watchlist] instrument_id_unify_watchlist_v2 flag failed:',
-        err instanceof Error ? err.message : String(err),
-      )
-    }
-  }
-
-  return { ...result, wroteFlag }
 }
 
 /**

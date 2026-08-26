@@ -48,14 +48,12 @@ test('list_local_data_apis covers required categories', () => {
   for (const cat of [
     'instrument_standard',
     'agent_tools',
-    'hub_features',
     'shared_packages',
     'fuyao_dump',
     'workspace_fs',
   ]) {
     assert.ok(all.items.some(i => i.category === cat), `missing category ${cat}`)
   }
-  assert.ok(all.items.some(i => i.api_id === 'hub.search_local_instruments' && i.access === 'hub_feature'))
   assert.ok(all.items.some(i => i.api_id === 'cap.realtime'))
   assert.ok(all.items.some(i => i.api_id === 'fuyao.dump'))
 })
@@ -65,9 +63,6 @@ test('get_local_data_catalog returns how_to_call', () => {
   assert.ok(!('error' in detail))
   assert.match(detail.how_to_call, /prepare_fuyao_dump/)
   assert.ok(detail.examples?.length)
-  const hub = getLocalDataCatalog({ api_id: 'hub.search_local_instruments' })
-  assert.ok(!('error' in hub))
-  assert.equal(hub.access, 'hub_feature')
 })
 
 test('prepareFuyaoDump local_path with mock fetchUrl (no key in result)', async () => {

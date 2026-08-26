@@ -1,6 +1,6 @@
 import { Capability } from '../../core/capabilities.js'
 import type { ProviderBinding } from '@opptrix/shared'
-import { cnFundBindings } from '../../core/bindings.js'
+import { cnFundBindings, cnReitBindings } from '../../core/bindings.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { STOCKINDEX_SETTINGS } from './settings.js'
@@ -42,6 +42,9 @@ function crossMarketBindings(
   })
   rows.push(
     ...cnFundBindings(priority, maxConcurrent).filter(b =>
+      STOCKINDEX_FUND_CAPS.includes(b.capability),
+    ),
+    ...cnReitBindings(priority, maxConcurrent).filter(b =>
       STOCKINDEX_FUND_CAPS.includes(b.capability),
     ),
   )

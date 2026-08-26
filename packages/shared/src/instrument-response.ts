@@ -3,7 +3,6 @@ import type { StockKline } from './types.js'
 import type { UnifiedInstrumentQuote } from './application-api.js'
 import { instrumentDisplayCode } from './instrument-ref.js'
 import { buildInstrumentNamespace, normalizeInstrumentRef } from './instrument-symbol.js'
-
 /** 本地 L0 离线因子摘要 — 仅 CN 同步库就绪时有值；不替代 local_universe_screen */
 export interface LocalInstrumentInsights {
   trade_date: string | null
@@ -261,29 +260,6 @@ export function klinesToChartBars(
   })
 }
 
-export function localHitToSearchHit(hit: {
-  code: string
-  name: string | null
-  market: Market
-  assetClass: AssetClass
-  exchange: string | null
-  instrument: InstrumentRef
-  refLabel: string
-}): UnifiedInstrumentSearchHit {
-  const instrument = normalizeInstrumentRef(hit.instrument)
-  const ns = buildInstrumentNamespace(instrument)
-  return {
-    instrument,
-    code: ns,
-    ref_label: ns,
-    name: hit.name,
-    market: instrument.market,
-    asset_class: instrument.assetClass,
-    exchange: instrument.exchange ?? hit.exchange,
-    source: 'local',
-  }
-}
-
 export function onlineHitToSearchHit(hit: {
   code: string
   name: string | null
@@ -295,11 +271,10 @@ export function onlineHitToSearchHit(hit: {
   source: 'stock_index' | 'online'
 }): UnifiedInstrumentSearchHit {
   const instrument = normalizeInstrumentRef(hit.instrument)
-  const ns = buildInstrumentNamespace(instrument)
   return {
     instrument,
-    code: ns,
-    ref_label: ns,
+    code: hit.code,
+    ref_label: hit.refLabel,
     name: hit.name,
     market: instrument.market,
     asset_class: instrument.assetClass,

@@ -22,6 +22,7 @@
 |---|---|---|
 | 6 位场外基金（非场内代码表） | `otc` | `{code}.OF` |
 | 6 位场内基金 / ETF / LOF | `exchange` | `{code}.SH` 或 `.SZ` |
+| REIT（`assetClass=REIT`） | `otc` | **保留** `.SH` / `.SZ` 后缀（不改 `.OF`） |
 | 已带 `.OF` / `.SH` / `.SZ` | 按后缀推断 | 原样规范化 |
 
 ## 全量 REST 端点清单

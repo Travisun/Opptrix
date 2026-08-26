@@ -48,7 +48,7 @@ export const APPLICATION_HUB_FEATURES = {
 
   /** 市场数据包管理 */
   marketDataPacks: 'market_data_packs',
-  /** 跨市场本地标的搜索 */
+  /** @deprecated 本地标的库索引已下线；请用 instrumentSearch */
   searchLocalInstruments: 'search_local_instruments',
 } as const
 

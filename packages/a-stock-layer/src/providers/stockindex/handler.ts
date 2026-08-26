@@ -27,11 +27,15 @@ function opptrixMarket(raw: string | undefined): string {
   return OPPTRIX_MARKETS.has(m) ? m : 'CN'
 }
 
-/** 业务 assetType → OpptrixQuant class_token（stock/etf/fund/of/lof） */
+/** OpptrixQuant class_token → 搜索过滤参数 */
 function classTokenForAssetType(assetType?: string): string | undefined {
   const at = String(assetType ?? '').trim().toLowerCase()
-  if (at === 'stock' || at === 'etf' || at === 'fund' || at === 'of' || at === 'lof') return at
-  if (at === 'equity') return 'stock'
+  if (at === 'stock' || at === 'equity') return 'stock'
+  if (at === 'ind' || at === 'index') return 'ind'
+  if (at === 'otc' || at === 'of' || at === 'fund') return 'otc'
+  if (at === 'etf') return 'etf'
+  if (at === 'lof') return 'lof'
+  if (at === 'reit') return 'reit'
   return undefined
 }
 

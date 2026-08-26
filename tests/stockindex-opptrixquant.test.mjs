@@ -87,14 +87,31 @@ test('parseOpptrixInstrumentId — 冒号 instrument_id 分类映射', () => {
   assert.equal(fund?.assetClass, 'FUND')
   assert.equal(fund?.exchange, 'PF')
 
-  const etf = parseOpptrixInstrumentId('CN:etf:510300')
+  const etf = parseOpptrixInstrumentId('CN:ETF:510300.SH')
   assert.equal(etf?.assetClass, 'ETF')
+  assert.equal(etf?.exchange, 'SH')
+  assert.equal(etf?.symbol, '510300')
 
-  const lof = parseOpptrixInstrumentId('CN:lof:161725')
-  assert.equal(lof?.assetClass, 'ETF')
+  const lof = parseOpptrixInstrumentId('CN:LOF:161725.SZ')
+  assert.equal(lof?.assetClass, 'LOF')
+  assert.equal(lof?.exchange, 'SZ')
 
-  const reit = parseOpptrixInstrumentId('CN:reit:508000')
-  assert.equal(reit?.assetClass, 'ETF')
+  const reit = parseOpptrixInstrumentId('CN:REIT:508000.SH')
+  assert.equal(reit?.assetClass, 'REIT')
+  assert.equal(reit?.exchange, 'SH')
+
+  const ind = parseOpptrixInstrumentId('CN:IND:881121.TI')
+  assert.equal(ind?.assetClass, 'INDEX')
+  assert.equal(ind?.exchange, 'TI')
+  assert.equal(ind?.symbol, '881121')
+
+  const otc = parseOpptrixInstrumentId('CN:OTC:000037.OF')
+  assert.equal(otc?.assetClass, 'FUND')
+  assert.equal(otc?.exchange, 'PF')
+
+  const stock = parseOpptrixInstrumentId('cn:stock:688981.sh')
+  assert.equal(stock?.assetClass, 'EQUITY')
+  assert.equal(stock?.exchange, 'SH')
 
   const us = parseOpptrixInstrumentId('US:stock:AAPL')
   assert.equal(us?.assetClass, 'EQUITY')

@@ -107,9 +107,11 @@ export function isCnListedFundSymbol(symbol: string): boolean {
 /** 持仓记账类型：场内按交易所规则；场外按申赎费 */
 export function resolvePortfolioLedgerKind(ref: InstrumentRef): PortfolioLedgerKind {
   if (ref.market !== 'CN') return 'exchange'
+  if (ref.assetClass === 'REIT') return 'otc_fund'
   if (ref.assetClass === 'FUND') {
     return isCnListedFundSymbol(ref.symbol) ? 'exchange' : 'otc_fund'
   }
+  if (ref.assetClass === 'LOF' || ref.assetClass === 'ETF') return 'exchange'
   return 'exchange'
 }
 

@@ -40,14 +40,8 @@ const MAX_MEMORY_LOGS = 500
 const DB_STATUS_CACHE_MS_IDLE = 10_000
 const DB_STATUS_CACHE_MS_RUNNING = 12_000
 
-/** 名录/行业等 bootstrap 任务 — 运行中用内存进度覆盖 DB 聚合（避免 DuckDB 写入滞后） */
-const BOOTSTRAP_PROGRESS_JOBS = new Set([
-  'initial_cn_universe',
-  'initial_hk_universe',
-  'initial_us_universe',
-  'initial_cn_etf',
-  'initial_taxonomy',
-])
+/** bootstrap 任务 — 标的库 / 行业同步均已下线 */
+const BOOTSTRAP_PROGRESS_JOBS = new Set<string>()
 
 function computeOverallPercent(
   jobs: readonly string[],
@@ -502,8 +496,8 @@ export class MarketSyncCoordinator {
     if (this.incompleteBootstrapRetryTimer != null) clearTimeout(this.incompleteBootstrapRetryTimer)
     this.incompleteBootstrapRetryAttempts += 1
     const waitSec = Math.round(MarketSyncCoordinator.INCOMPLETE_BOOTSTRAP_RETRY_MS / 1000)
-    const hint = !bootstrap.initial_cn || !bootstrap.initial_taxonomy
-      ? '名录或行业分类待补全'
+    const hint = !bootstrap.initial_taxonomy
+      ? '行业分类待补全'
       : '基础数据等待补全'
     this.log(sessionId, `初选包构建中（${hint}），${waitSec} 秒后继续后台补全…`)
     this.incompleteBootstrapRetryTimer = setTimeout(() => {

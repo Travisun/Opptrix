@@ -1,6 +1,6 @@
 import { daysSince } from '../utils.js'
 
-/** 名录 / 行业维护间隔（错开：二者至少相隔一周） */
+/** 行业维护间隔 */
 export const CN_WEEKLY_MAINTENANCE_DAYS = 7
 
 /** A 股收盘（北京时间） */
@@ -72,56 +72,25 @@ export function mondayDateKeyOfWeek(clock: BeijingClock): string {
 }
 
 /**
- * A 股名录：每周至多一次；与行业错开（行业同步后 7 天内不跑名录）。
+ * @deprecated 标的库名录同步已下线，恒为 false
  */
 export function cnUniverseMaintenanceDue(
-  lastSync: Record<string, string | null>,
+  _lastSync: Record<string, string | null>,
 ): boolean {
-  if (!selfStale('initial_cn_universe', lastSync)) return false
-  const taxLast = lastSync.initial_taxonomy ?? null
-  if (taxLast && daysSince(taxLast) < CN_WEEKLY_MAINTENANCE_DAYS) return false
-  return true
+  return false
 }
 
-/**
- * A 股行业：每周至多一次；须晚于名录至少 7 天（与名录交替）。
- * 首次同步：名录完成后即可跑（bootstrap pipeline）。
- */
+/** @deprecated 行业分类同步已下线，恒为 false */
 export function cnTaxonomyMaintenanceDue(
-  lastSync: Record<string, string | null>,
+  _lastSync: Record<string, string | null>,
 ): boolean {
-  const taxLast = lastSync.initial_taxonomy ?? null
-  if (!taxLast) {
-    return !!(lastSync.initial_cn_universe ?? null)
-  }
-  if (!selfStale('initial_taxonomy', lastSync)) return false
-  const uniLast = lastSync.initial_cn_universe ?? null
-  if (!uniLast) return false
-  if (daysSince(uniLast) < CN_WEEKLY_MAINTENANCE_DAYS) return false
-  return true
+  return false
 }
 
-/** 就绪后维护任务（名录 / 行业错开一周；主库不再维护静态日 K） */
+/** 就绪后无自动维护任务 */
 export function cnMaintenanceJobsDue(
-  lastSync: Record<string, string | null>,
+  _lastSync: Record<string, string | null>,
   _now = new Date(),
 ): string[] {
-  const jobs: string[] = []
-  const universe = cnUniverseMaintenanceDue(lastSync)
-  const taxonomy = cnTaxonomyMaintenanceDue(lastSync)
-
-  if (universe && taxonomy) {
-    const uniDays = daysSince(lastSync.initial_cn_universe ?? null)
-    const taxDays = daysSince(lastSync.initial_taxonomy ?? null)
-    jobs.push(uniDays >= taxDays ? 'initial_cn_universe' : 'initial_taxonomy')
-  } else {
-    if (universe) jobs.push('initial_cn_universe')
-    if (taxonomy) jobs.push('initial_taxonomy')
-  }
-
-  for (const job of ['initial_cn_etf', 'initial_hk_universe', 'initial_us_universe'] as const) {
-    if (selfStale(job, lastSync)) jobs.push(job)
-  }
-
-  return jobs
+  return []
 }

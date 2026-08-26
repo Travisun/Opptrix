@@ -34,6 +34,8 @@ export type InstrumentRouteHandlers = {
   usSnapshot: (symbol: string) => Promise<ResearchResult>
   regionalSnapshot: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoSnapshot: (pair: string) => Promise<ResearchResult>
+  /** CN 单标的实时（指数 / 需 queryInstrumentData 路由的 CN 标的） */
+  cnInstrumentRealtime?: (ref: InstrumentRef) => Promise<ResearchResult>
   stockQuotes: (refs: InstrumentRef[]) => Promise<ResearchResult>
   usRealtime: (symbol: string) => Promise<ResearchResult>
   regionalRealtime: (market: 'HK', symbol: string) => Promise<ResearchResult>
@@ -79,7 +81,6 @@ export type InstrumentRouteHandlers = {
     keyword: string,
     limit: number,
     markets?: string[],
-    includeLocal?: boolean,
   ) => Promise<ResearchResult>
   /** CN 本地离线因子摘要 — 可选，不阻塞 snapshot */
   localInsights?: (ref: InstrumentRef) => LocalInstrumentInsights | null
@@ -308,19 +309,32 @@ export async function routeInstrumentQuotes(
   }
 
   const tasks: Promise<void>[] = []
-  const cnRefs = refs.filter(r => r.market === 'CN' && r.assetClass !== 'ETF' && r.assetClass !== 'FUND')
+  const cnRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'EQUITY')
+  const indexRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'INDEX')
+  const etfRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'ETF')
+  const lofRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'LOF')
+  const fundRefs = refs.filter(r => r.market === 'CN' && (r.assetClass === 'FUND' || r.assetClass === 'REIT'))
   if (cnRefs.length) {
     tasks.push(handlers.stockQuotes(cnRefs).then(resp =>
       collectCnBatchQuotes(cnRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
     ))
   }
-  const etfRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'ETF')
-  if (etfRefs.length) {
-    tasks.push(handlers.stockQuotes(etfRefs).then(resp =>
-      collectCnBatchQuotes(etfRefs, resp, quotes, failed, () => 'mixed', noteError),
+  if (indexRefs.length && handlers.cnInstrumentRealtime) {
+    tasks.push(collectRealtimeQuotesBounded(
+      indexRefs.map(ref => ({ ref, call: () => handlers.cnInstrumentRealtime!(ref) })),
+      quotes,
+      failed,
+      noteError,
+    ))
+  } else if (indexRefs.length) {
+    for (const ref of indexRefs) failed.push(failedQuoteForRef(ref, 'no_provider'))
+  }
+  const listedFundRefs = [...etfRefs, ...lofRefs]
+  if (listedFundRefs.length) {
+    tasks.push(handlers.stockQuotes(listedFundRefs).then(resp =>
+      collectCnBatchQuotes(listedFundRefs, resp, quotes, failed, () => 'mixed', noteError),
     ))
   }
-  const fundRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'FUND')
   if (fundRefs.length) {
     // 场外基金走独立通道（Fuyao fundQuote / NAV），禁止 stockQuotes → A 股 batchRealtime
     if (handlers.fundQuotes) {
@@ -481,9 +495,7 @@ export async function routeInstrumentSearch(
   if (keyword.length < 1) return fail('keyword 必填')
   const limit = params.limit != null ? Number(params.limit) : 30
   const markets = Array.isArray(params.markets) ? params.markets.map(String) : undefined
-  // 默认合并本地名录（HK/US 中文名）；显式 include_local=false 可关闭
-  const includeLocal = params.include_local === true
-  return handlers.searchInstruments(keyword, limit, markets, includeLocal)
+  return handlers.searchInstruments(keyword, limit, markets)
 }
 
 export function routeInstrumentCapabilities(params: Record<string, unknown>): ResearchResult {

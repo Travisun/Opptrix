@@ -22,31 +22,18 @@ export interface SyncProfileSettings {
 /** ~6 months of trading days for bootstrap K 线 */
 export const KLINE_BOOTSTRAP_DAYS = 130
 
-/** 名录灌库：A 股 ETF + 港股/美股（HK/US 走 Tickflow 成分；CN ETF 另见 initial_cn_etf） */
-export const STOCKINDEX_LIST_SYNC_JOBS = [
-  'initial_cn_etf',
-  'initial_hk_universe',
-  'initial_us_universe',
-] as const
+/** 名录灌库已下线 — 标的搜索走 OpptrixQuant 在线 */
+export const STOCKINDEX_LIST_SYNC_JOBS = [] as const
 
-/** 首次/未完成：A 股名录 → ETF/港美名录 → 行业（主库不再导入静态日 K） */
-export const CN_BOOTSTRAP_SYNC_JOBS = [
-  'initial_cn_universe',
-  ...STOCKINDEX_LIST_SYNC_JOBS,
-  'initial_taxonomy',
-] as const
+/** 名录 / 行业灌库均已下线 — 无自动 bootstrap job */
+export const CN_BOOTSTRAP_SYNC_JOBS = [] as const
 
-/** 就绪后按 TTL 自动维护 */
-export const CN_MAINTENANCE_SYNC_JOBS = [
-  'initial_cn_universe',
-  ...STOCKINDEX_LIST_SYNC_JOBS,
-  'initial_taxonomy',
-] as const
+/** 就绪后无自动维护任务 */
+export const CN_MAINTENANCE_SYNC_JOBS = [] as const
 
 /** @deprecated 使用 CN_BOOTSTRAP_SYNC_JOBS */
 export const CN_CORE_SYNC_JOBS = [
-  'initial_cn_universe',
-  'initial_taxonomy',
+  ...CN_BOOTSTRAP_SYNC_JOBS,
 ] as const
 
 /** 设置页手动「全量刷新」— 与自动 pipeline 一致 */
@@ -59,8 +46,8 @@ export const CN_AUTO_SYNC_JOB_UNIVERSE = [
   ...CN_BOOTSTRAP_SYNC_JOBS,
 ] as const
 
-/** @deprecated 使用 STOCKINDEX_LIST_SYNC_JOBS */
-export const LEGACY_INITIAL_SYNC_JOBS = [...STOCKINDEX_LIST_SYNC_JOBS] as const
+/** @deprecated 名录灌库已下线 */
+export const LEGACY_INITIAL_SYNC_JOBS = [] as const
 
 /** L0 bootstrap = A 股首次 pipeline（名录 + 行业） */
 export const INITIAL_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
@@ -71,23 +58,33 @@ export const DEFAULT_AUTO_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
 export const DEFAULT_DAILY_SYNC_JOBS = [...CN_MAINTENANCE_SYNC_JOBS] as const
 export const DAILY_SYNC_JOBS = [...CN_MAINTENANCE_SYNC_JOBS] as const
 
+/** 已下线的标的库同步 job — engine 遇则 skip */
+export const DEPRECATED_INSTRUMENT_CATALOG_SYNC_JOBS = [
+  'universe',
+  'initial_cn_universe',
+  'initial_hk_universe',
+  'initial_us_universe',
+  'initial_cn_etf',
+  'etf_list',
+  'fund_list',
+  'us_list',
+  'crypto_list',
+  'hk_list',
+  'jp_list',
+  'kr_list',
+  'initial_taxonomy',
+] as const
+
 /** L2 deep sync — only on full rebuild or explicit force. */
 export const DEEP_SYNC_JOBS = [
   'profiles',
-  'etf_list',
   'etf_nav',
   'etf_holdings',
-  'fund_list',
   'fund_nav',
-  'us_list',
   'us_quotes',
-  'crypto_list',
   'crypto_quotes',
-  'hk_list',
   'hk_quotes',
-  'jp_list',
   'jp_quotes',
-  'kr_list',
   'kr_quotes',
   'financials_quarterly',
   'business',
@@ -123,19 +120,15 @@ export const AUTO_BOOT_EXCLUDED_JOBS = new Set([
 /** Full legacy pipeline = bootstrap + deep. */
 export const ALL_SYNC_JOBS = [
   ...BOOTSTRAP_SYNC_JOBS,
+  ...DEPRECATED_INSTRUMENT_CATALOG_SYNC_JOBS,
   'profiles',
-  'etf_list',
   'etf_nav',
   'etf_holdings',
-  'us_list',
+  'fund_nav',
   'us_quotes',
-  'crypto_list',
   'crypto_quotes',
-  'hk_list',
   'hk_quotes',
-  'jp_list',
   'jp_quotes',
-  'kr_list',
   'kr_quotes',
   'financials_quarterly',
   'business',

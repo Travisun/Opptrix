@@ -24,7 +24,6 @@ import {
   computeGbmBreakdown,
 } from '@opptrix/stock-eval'
 import { getMarketDataService } from '@opptrix/market-data-store'
-import type { LocalInstrumentHit } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
   computeTurnoverVs20d, computeHv20Pct, momentumRegimeInputsFromKlines,
@@ -409,13 +408,13 @@ export class ResearchHub {
         }
         case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
         case 'search_local_instruments':
-          return await this.instrumentSearch(params, t0)
-        case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
+        case 'instrument_search': return await this.instrumentSearch(params, t0)
+        case 'local_instruments_summary':
+          return fail('本地标的库索引已下线，请使用 instrument_search（OpptrixQuant 在线）', t0)
         case 'instrument_snapshot': return await this.instrumentSnapshot(params, t0)
         case 'instrument_quotes': return await this.instrumentQuotes(params, t0)
         case 'instrument_quote': return await this.instrumentQuote(params, t0)
         case 'instrument_chart': return await this.instrumentChart(params, t0)
-        case 'instrument_search': return await this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
         case 'instrument_profile': return await this.queryInstrumentStandardData(params, 'profile', t0)
         case 'instrument_financials': return await this.queryInstrumentStandardData(params, 'financials', t0)
@@ -1348,6 +1347,26 @@ export class ResearchHub {
     )
   }
 
+  private async cnInstrumentRealtime(ref: InstrumentRef, t0: number) {
+    const r = await this.de.queryInstrumentData(ref, 'realtime')
+    if (!r.success) return fail(instrumentQueryError(r, '行情获取失败'), t0)
+    const rows = instrumentQueryData<Record<string, unknown>[]>(r)
+    const raw = Array.isArray(rows) ? rows[0] : null
+    if (!raw) return fail('暂时无行情数据', t0)
+    const coerced = coerceInstrumentQuoteRow({ ...raw })
+    const price = resolveInstrumentQuotePrice(coerced)
+    return ok(
+      {
+        ...coerced,
+        ...(price != null ? { price } : {}),
+        code: instrumentDisplayCode(ref),
+        instrument: ref,
+      },
+      `${ref.symbol} 行情`,
+      t0,
+    )
+  }
+
   /** 单标的场外基金净值 — fundQuotes 缺省时 router 有界并发回退 */
   private async fundRealtime(ref: InstrumentRef, t0: number) {
     const r = await this.de.queryInstrumentData(ref, 'fund_quote')
@@ -1821,6 +1840,7 @@ export class ResearchHub {
     const parsed = parseStockMarket(explicitMarket ?? ref?.exchange)
     if (parsed) return parsed
     if (ref?.assetClass === 'INDEX') {
+      if (ref.exchange === 'TI' || normalized.startsWith('88')) return 'SH'
       return ref.exchange === 'SZ' || normalized.startsWith('399') ? 'SZ' : 'SH'
     }
     if (inferCnAssetClass(normalized) === 'INDEX') {
@@ -3581,15 +3601,13 @@ export class ResearchHub {
     keyword: string,
     limit: number,
     markets?: string[],
-    includeLocal = false,
     t0 = Date.now(),
   ) {
     const m = markets as import('@opptrix/shared').Market[] | undefined
-    const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, this.marketData, {
+    const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, {
       keyword,
       limit,
       markets: m,
-      includeLocal,
     })
     const sourceLabel = sources.length ? sources.join('+') : 'online'
     const items = rawItems.map(h => ({
@@ -3613,32 +3631,6 @@ export class ResearchHub {
     )
   }
 
-  private async searchLocalInstruments(params: Record<string, unknown>, t0: number) {
-    const keyword = String(params.keyword ?? params.q ?? '').trim()
-    if (keyword.length < 1) return fail('keyword 必填', t0)
-    const limit = params.limit != null ? Number(params.limit) : 30
-    const markets = Array.isArray(params.markets)
-      ? params.markets.map(String) as import('@opptrix/shared').Market[]
-      : undefined
-    const hits = this.marketData.searchLocalInstruments(keyword, limit, markets)
-    const items = hits.map((h: LocalInstrumentHit) => ({
-      code: h.code,
-      name: h.name,
-      market: h.market,
-      assetClass: h.assetClass,
-      exchange: h.exchange,
-      instrument: h.instrument,
-      refLabel: h.refLabel,
-      source: 'local' as const,
-    }))
-    return ok({ items, count: items.length, source: 'local' }, `本地名录 ${items.length} 条`, t0)
-  }
-
-  private localInstrumentsSummary(t0: number) {
-    const items = this.marketData.localInstrumentsSummary()
-    return ok({ items, count: items.reduce((n: number, r: { count: number }) => n + r.count, 0) }, '本地名录汇总', t0)
-  }
-
   private instrumentRouteHandlers(t0: number): InstrumentRouteHandlers {
     return {
       stockDetail: ref => this.stockDetail(ref, t0),
@@ -3648,6 +3640,7 @@ export class ResearchHub {
       regionalSnapshot: (market, symbol) => this.regionalSnapshot(market, symbol, t0),
       cryptoSnapshot: pair => this.cryptoSnapshot(pair, t0),
       stockQuotes: refs => this.stockQuotes(refs, t0),
+      cnInstrumentRealtime: ref => this.cnInstrumentRealtime(ref, t0),
       fundQuotes: refs => this.fundQuotes(refs, t0),
       fundRealtime: ref => this.fundRealtime(ref, t0),
       usRealtime: symbol => this.usRealtime(symbol, t0),
@@ -3666,14 +3659,8 @@ export class ResearchHub {
       stockCyq: ref => this.stockCyq(ref, t0),
       institutionRating: (ref, groups) => this.institutionRating(ref, groups, t0),
       institutionReport: (params, groups) => this.institutionReport(params, groups, t0),
-      searchInstruments: (keyword, limit, markets, includeLocal) =>
-        this.searchInstrumentsUnifiedHandler(
-          keyword,
-          limit,
-          markets,
-          includeLocal === true,
-          t0,
-        ),
+      searchInstruments: (keyword, limit, markets) =>
+        this.searchInstrumentsUnifiedHandler(keyword, limit, markets, t0),
       localInsights: ref => this.localInsightsForRef(ref),
     }
   }

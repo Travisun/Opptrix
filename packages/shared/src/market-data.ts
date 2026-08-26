@@ -5,6 +5,8 @@ export type Market = 'CN' | 'US' | 'HK' | 'CRYPTO' | 'JP' | 'KR'
 export type AssetClass =
   | 'EQUITY'
   | 'ETF'
+  | 'LOF'
+  | 'REIT'
   | 'INDEX'
   | 'FUND'
   | 'CRYPTO_SPOT'

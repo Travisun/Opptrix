@@ -105,7 +105,13 @@ function resolveCnEngineAssetClass(
   market?: import('./utils/helpers.js').StockMarket,
   assetClass?: AssetClass,
 ): AssetClass {
-  if (assetClass === 'INDEX' || assetClass === 'ETF' || assetClass === 'EQUITY') return assetClass
+  if (
+    assetClass === 'INDEX'
+    || assetClass === 'ETF'
+    || assetClass === 'LOF'
+    || assetClass === 'REIT'
+    || assetClass === 'EQUITY'
+  ) return assetClass
   if (market) return inferCnAssetClassFromSymbol(code, market)
   return inferCnAssetClass(code)
 }
@@ -554,7 +560,11 @@ export class MarketDataEngine {
       return this.fetchIndexKline(code, count, period) as Promise<QueryResult<StockKline[]>>
     }
     const want = Math.max(1, count)
-    const klineAssetClass = resolved === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const klineAssetClass = resolved === 'LOF'
+      ? 'LOF'
+      : resolved === 'ETF' || isCnEtfCode(code)
+        ? 'ETF'
+        : 'EQUITY'
     // 读缓存保留（兼容旧盘）；写仅 watchlist，与 queryScoped 对齐，避免长 K 键空间爆炸
     const writeCache = this.isWatchlistTarget('CN', klineAssetClass, [code])
     return this.queryPlans.execute<StockKline>(
@@ -598,7 +608,11 @@ export class MarketDataEngine {
       if (primary.success && primary.data?.length) return primary
       return { success: false, error: '指数分钟 K 暂无数据' }
     }
-    const klineAssetClass = resolved === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const klineAssetClass = resolved === 'LOF'
+      ? 'LOF'
+      : resolved === 'ETF' || isCnEtfCode(code)
+        ? 'ETF'
+        : 'EQUITY'
     const writeCache = this.isWatchlistTarget('CN', klineAssetClass, [code])
     const viaPlan = await this.queryPlans.execute<StockKline>(
       this.queryPlans.getPlan('cn_equity_stock_kline_minute'),
@@ -1210,6 +1224,8 @@ export class MarketDataEngine {
         if (plan.market === 'US') return this.usSnapshot(plan.symbol)
         if (plan.market === 'CRYPTO') return this.cryptoSnapshot(plan.symbol)
         if (plan.market === 'CN' && plan.assetClass === 'ETF') return this.etfSnapshot(plan.symbol)
+        if (plan.market === 'CN' && plan.assetClass === 'LOF') return this.etfSnapshot(plan.symbol)
+        if (plan.market === 'CN' && plan.assetClass === 'REIT') return this.fundSnapshot(plan.symbol)
         if (plan.market === 'CN' && plan.assetClass === 'FUND') return this.fundSnapshot(plan.symbol)
         if (isRegionalEquityMarket(plan.market)) {
           return this.regionalSnapshot(plan.market, plan.symbol)

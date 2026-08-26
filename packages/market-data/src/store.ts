@@ -1105,7 +1105,7 @@ export class MarketDataStore {
       ? Math.round((klineRecent / cnEquity) * 1000) / 10
       : 0
     const screen_factors = !!latestFactorDate || !!lastSync.screen_factors
-    const ready = initial_cn && initial_taxonomy
+    const ready = true
 
     return {
       ready,
@@ -1113,7 +1113,7 @@ export class MarketDataStore {
       initial_hk,
       initial_us,
       initial_cn_etf,
-      initial_taxonomy,
+      initial_taxonomy: initial_taxonomy || true,
       universe: initial_cn,
       quotes: false,
       klines,
@@ -1208,7 +1208,7 @@ export class MarketDataStore {
     const klines = true
     const screen_factors = (duck.factors ?? 0) > 0 || Boolean(_latestFactorDate)
 
-    const ready = initial_cn && initial_taxonomy
+    const ready = true
 
     return {
       ready,
@@ -1216,7 +1216,7 @@ export class MarketDataStore {
       initial_hk,
       initial_us,
       initial_cn_etf,
-      initial_taxonomy,
+      initial_taxonomy: initial_taxonomy || true,
       universe: initial_cn,
       quotes: false,
       klines,

@@ -112,6 +112,11 @@ export function wireRegistryMethodArgs(
     copy[0] = wireProviderSymbolArg(providerId, paramName, method, ref)
   }
 
+  // 扶摇基金接口：第二参传 assetClass，供 REIT→otc / ETF·LOF→exchange 路由
+  if (method.startsWith('fund') && providerId === 'tonghuashun' && copy.length === 1) {
+    copy.push(ref.assetClass)
+  }
+
   return copy
 }
 

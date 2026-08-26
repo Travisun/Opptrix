@@ -79,11 +79,18 @@ export function canonicalCryptoParts(symbol: string, quote?: string): { symbol: 
 
 function isCnEtfSymbol(symbol: string): boolean {
   const c = canonicalCnSymbol(symbol)
+  if (isCnLofSymbol(c)) return false
   const head2 = c.slice(0, 2)
   const head3 = c.slice(0, 3)
   if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return true
-  if (head3 === '159' || head2 === '16') return true
+  if (head3 === '159') return true
   return false
+}
+
+/** 场内 LOF（16xxxx，不含 159xxx ETF 段） */
+export function isCnLofSymbol(symbol: string): boolean {
+  const c = canonicalCnSymbol(symbol)
+  return c.length === 6 && c.startsWith('16') && !c.startsWith('159')
 }
 
 /**
@@ -107,7 +114,7 @@ export function isKnownShCnIndexCode(symbol: string): boolean {
  */
 function isCnIndexSymbol(symbol: string): boolean {
   const c = canonicalCnSymbol(symbol)
-  if (c.startsWith('399')) return true
+  if (c.startsWith('399') || c.startsWith('88')) return true
   return isKnownShCnIndexCode(c)
 }
 
@@ -117,16 +124,18 @@ function isCnIndexSymbol(symbol: string): boolean {
  */
 export function isCnIndexSymbolByExchange(symbol: string, exchange?: string | null): boolean {
   const c = canonicalCnSymbol(symbol)
-  if (c.startsWith('399')) return true
-  if (exchange && exchange.toUpperCase() === 'SZ') return false
-  if (exchange && exchange.toUpperCase() === 'SH') {
+  if (c.startsWith('399') || c.startsWith('88')) return true
+  const ex = exchange?.toUpperCase()
+  if (ex === 'TI') return true
+  if (ex === 'SZ') return false
+  if (ex === 'SH') {
     return c.startsWith('000') && c.length === 6
   }
   return isKnownShCnIndexCode(c)
 }
 
 /** A 股交易所 — CN 标的内部身份的一部分，与 symbol 共同消歧 */
-export type CnExchange = 'SH' | 'SZ' | 'BJ' | 'OF' | 'PF'
+export type CnExchange = 'SH' | 'SZ' | 'BJ' | 'OF' | 'PF' | 'TI'
 
 /**
  * 无 exchange 时从代码段推断交易所（兜底，非权威）。
@@ -136,6 +145,7 @@ export function inferCnExchangeFromSymbol(symbol: string): CnExchange {
   const c = canonicalCnSymbol(symbol)
   if (c.startsWith('92') || c.startsWith('43') || c.startsWith('83') || c.startsWith('87')) return 'BJ'
   if (c.startsWith('399')) return 'SZ'
+  if (c.startsWith('88')) return 'TI'
   // 上证 ETF 代码段（51/52/56/58）；深证 ETF 为 159xxx / 16xxxx，走下方默认
   const head2 = c.slice(0, 2)
   if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return 'SH'
@@ -154,7 +164,44 @@ export function inferCnExchangeFromSymbol(symbol: string): CnExchange {
  */
 export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
   const symbol = canonicalCnSymbol(ref.symbol)
-  // 场内 ETF（51/52/159 等）须走交易所行情，不可落成 PF 公募基金
+  const ac = ref.assetClass
+
+  if (ac === 'FUND' || ref.exchange?.toUpperCase() === 'PF' || ref.exchange?.toUpperCase() === 'OF') {
+    return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }
+  }
+  if (ac === 'REIT') {
+    const exRaw = ref.exchange?.toUpperCase()
+    const exchange = (exRaw && exRaw !== 'PF' && exRaw !== 'OF' && exRaw !== 'TI')
+      ? exRaw as CnExchange
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'REIT', symbol, exchange }
+  }
+  if (ac === 'LOF') {
+    const exRaw = ref.exchange?.toUpperCase()
+    const exchange = (exRaw && exRaw !== 'PF' && exRaw !== 'OF')
+      ? exRaw as CnExchange
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'LOF', symbol, exchange }
+  }
+  if (ac === 'ETF') {
+    const exRaw = ref.exchange?.toUpperCase()
+    const exchange = (exRaw && exRaw !== 'PF' && exRaw !== 'OF')
+      ? exRaw as CnExchange
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'ETF', symbol, exchange }
+  }
+  if (ac === 'INDEX') {
+    const exRaw = ref.exchange?.toUpperCase()
+    const exchange = (exRaw === 'TI' || exRaw === 'SH' || exRaw === 'SZ' || exRaw === 'BJ')
+      ? exRaw as CnExchange
+      : symbol.startsWith('399')
+        ? 'SZ'
+        : symbol.startsWith('88')
+          ? 'TI'
+          : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'INDEX', symbol, exchange }
+  }
+  // 无显式 class 时禁止把 16xxxx LOF 误判为 ETF
   if (isCnEtfSymbol(symbol)) {
     const exRaw = ref.exchange?.toUpperCase()
     const exchange = (exRaw && exRaw !== 'PF' && exRaw !== 'OF')
@@ -162,10 +209,14 @@ export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
       : inferCnExchangeFromSymbol(symbol)
     return { market: 'CN', assetClass: 'ETF', symbol, exchange }
   }
-  const exRaw = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase()
-  if (ref.assetClass === 'FUND' || exRaw === 'PF' || exRaw === 'OF') {
-    return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }
+  if (isCnLofSymbol(symbol)) {
+    const exRaw = ref.exchange?.toUpperCase()
+    const exchange = (exRaw && exRaw !== 'PF' && exRaw !== 'OF')
+      ? exRaw as CnExchange
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'LOF', symbol, exchange }
   }
+  const exRaw = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase()
   const exchange = exRaw as CnExchange
   const assetClass = inferCnAssetClassFromSymbol(symbol, exchange)
   return { market: 'CN', assetClass, symbol, exchange }
@@ -180,7 +231,9 @@ export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
 export function inferCnAssetClassFromSymbol(symbol: string, exchange?: string | null): AssetClass {
   const c = canonicalCnSymbol(symbol)
   if (isCnEtfSymbol(c)) return 'ETF'
+  if (isCnLofSymbol(c)) return 'LOF'
   const ex = (exchange ?? inferCnExchangeFromSymbol(c)).toUpperCase() as CnExchange
+  if (ex === 'TI' || c.startsWith('88')) return 'INDEX'
   if (ex === 'SZ') return c.startsWith('399') ? 'INDEX' : 'EQUITY'
   if (ex === 'SH') return (c.startsWith('000') && c.length === 6) ? 'INDEX' : 'EQUITY'
   return 'EQUITY'
@@ -230,7 +283,7 @@ export function normalizeInstrumentRef(ref: InstrumentRef): InstrumentRef {
   }
 
   let assetClass = ref.assetClass
-  if (assetClass !== 'ETF' && assetClass !== 'INDEX') {
+  if (!['ETF', 'LOF', 'REIT', 'INDEX', 'FUND'].includes(assetClass)) {
     assetClass = 'EQUITY'
   }
 
@@ -291,45 +344,192 @@ export interface OpptrixInstrumentIdParts {
   exchange?: string
 }
 
+const OPPTRIX_CN_SUFFIX_EXCHANGE: Record<string, CnExchange> = {
+  SH: 'SH',
+  SZ: 'SZ',
+  BJ: 'BJ',
+  TI: 'TI',
+  OF: 'PF',
+}
+
+/** 拆分 Opptrix symbol 段后缀，如 688981.SH → body + SH */
+export function splitOpptrixSymbolSegment(raw: string): { body: string; suffix?: string } {
+  const s = String(raw ?? '').trim()
+  const m = /^(.+?)\.(SH|SZ|BJ|TI|OF|HK|US)$/i.exec(s)
+  if (m) return { body: m[1]!, suffix: m[2]!.toUpperCase() }
+  return { body: s }
+}
+
+function opptrixClassToAssetClass(cls: string, market: Market): AssetClass | null {
+  const c = cls.toLowerCase()
+  switch (c) {
+    case 'stock':
+    case 'equity':
+      return 'EQUITY'
+    case 'ind':
+    case 'index':
+      return 'INDEX'
+    case 'otc':
+    case 'of':
+    case 'fund':
+      return 'FUND'
+    case 'etf':
+      return 'ETF'
+    case 'lof':
+      return 'LOF'
+    case 'reit':
+      return 'REIT'
+    default:
+      return market === 'CN' ? null : 'EQUITY'
+  }
+}
+
+function parseCnOpptrixParts(cls: string, symbolSeg: string): OpptrixInstrumentIdParts | null {
+  const assetClass = opptrixClassToAssetClass(cls, 'CN')
+  if (!assetClass) return null
+  const { body, suffix } = splitOpptrixSymbolSegment(symbolSeg)
+  const symbol = canonicalCnSymbol(body)
+
+  if (assetClass === 'FUND') {
+    return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }
+  }
+  if (assetClass === 'REIT') {
+    const exchange = (suffix && OPPTRIX_CN_SUFFIX_EXCHANGE[suffix])
+      ? OPPTRIX_CN_SUFFIX_EXCHANGE[suffix]
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'REIT', symbol, exchange }
+  }
+  if (assetClass === 'LOF' || assetClass === 'ETF') {
+    const exchange = (suffix && OPPTRIX_CN_SUFFIX_EXCHANGE[suffix])
+      ? OPPTRIX_CN_SUFFIX_EXCHANGE[suffix]
+      : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass, symbol, exchange }
+  }
+  if (assetClass === 'INDEX') {
+    const exchange = suffix === 'TI'
+      ? 'TI'
+      : (suffix && OPPTRIX_CN_SUFFIX_EXCHANGE[suffix])
+        ? OPPTRIX_CN_SUFFIX_EXCHANGE[suffix]
+        : symbol.startsWith('399')
+          ? 'SZ'
+          : symbol.startsWith('88')
+            ? 'TI'
+            : inferCnExchangeFromSymbol(symbol)
+    return { market: 'CN', assetClass: 'INDEX', symbol, exchange }
+  }
+  // STOCK / EQUITY
+  const exchange = (suffix && OPPTRIX_CN_SUFFIX_EXCHANGE[suffix])
+    ? OPPTRIX_CN_SUFFIX_EXCHANGE[suffix]
+    : inferCnExchangeFromSymbol(symbol)
+  return { market: 'CN', assetClass: 'EQUITY', symbol, exchange }
+}
+
 /**
- * 解析 OpptrixQuant instrument_id（`{market}:{class_token}:{symbol}`，如 `CN:of:009049`）。
- * - CN:of / CN:fund → FUND + PF
- * - CN:etf / CN:lof / CN:reit → ETF
- * - CN:stock / US:stock / HK:stock 等 → EQUITY
- * 保留对旧 `CN:SZ.xxxxxx` / `CN:PF.xxxxxx` 的兼容（见 parseInstrumentNamespace）。
+ * 解析 OpptrixQuant instrument_id（`{MARKET}:{CLASS_TOKEN}:{SYMBOL}`，大小写不敏感）。
+ * - CN:STOCK:688981.SH、CN:IND:881121.TI、CN:OTC:000037.OF、CN:ETF:510050.SH、CN:LOF:160105.SZ、CN:REIT:508000.SH
+ * - 兼容旧 token：of/fund/etf/lof/reit/stock/index（小写）
+ * - REIT 保留 .SH/.SZ 后缀；扶摇 NAV 仅 fund_type=otc（见 resolveFuyaoFundRoute）
  */
 export function parseOpptrixInstrumentId(id: string): OpptrixInstrumentIdParts | null {
   const parts = String(id ?? '').trim().split(':')
   if (parts.length !== 3) return null
   const market = String(parts[0] ?? '').toUpperCase() as Market
-  const cls = String(parts[1] ?? '').toLowerCase()
-  const symbol = String(parts[2] ?? '').trim()
-  if (!symbol) return null
+  const cls = String(parts[1] ?? '').trim()
+  const symbolSeg = String(parts[2] ?? '').trim()
+  if (!symbolSeg) return null
 
-  switch (market) {
-    case 'CN':
-      if (cls === 'of' || cls === 'fund') {
-        return { market: 'CN', assetClass: 'FUND', symbol, exchange: 'PF' }
-      }
-      if (cls === 'etf' || cls === 'lof' || cls === 'reit') {
-        return { market: 'CN', assetClass: 'ETF', symbol }
-      }
-      if (cls === 'stock' || cls === 'equity' || cls === 'index') {
-        return {
-          market: 'CN',
-          assetClass: cls === 'index' ? 'INDEX' : 'EQUITY',
-          symbol,
-        }
-      }
-      return { market: 'CN', assetClass: 'EQUITY', symbol }
-    case 'US':
-    case 'HK':
-    case 'JP':
-    case 'KR':
-      return { market, assetClass: 'EQUITY', symbol }
-    default:
-      return null
+  if (market === 'CN') {
+    return parseCnOpptrixParts(cls, symbolSeg)
   }
+
+  const assetClass = opptrixClassToAssetClass(cls, market) ?? 'EQUITY'
+  const { body, suffix } = splitOpptrixSymbolSegment(symbolSeg)
+
+  if (market === 'US') {
+    return {
+      market: 'US',
+      assetClass: assetClass === 'ETF' ? 'ETF' : 'EQUITY',
+      symbol: canonicalUsSymbol(body),
+    }
+  }
+  if (market === 'HK') {
+    return {
+      market: 'HK',
+      assetClass: assetClass === 'ETF' ? 'ETF' : 'EQUITY',
+      symbol: canonicalHkSymbol(body),
+      exchange: 'HK',
+    }
+  }
+  if (market === 'JP' || market === 'KR') {
+    return { market, assetClass: 'EQUITY', symbol: body }
+  }
+
+  void suffix
+  return null
+}
+
+function assetClassToOpptrixClassToken(assetClass: AssetClass): string {
+  switch (assetClass) {
+    case 'INDEX':
+      return 'IND'
+    case 'FUND':
+      return 'OTC'
+    case 'ETF':
+      return 'ETF'
+    case 'LOF':
+      return 'LOF'
+    case 'REIT':
+      return 'REIT'
+    case 'EQUITY':
+    default:
+      return 'STOCK'
+  }
+}
+
+function buildOpptrixSymbolSegment(ref: InstrumentRef): string {
+  const n = normalizeInstrumentRef(ref)
+  if (n.market === 'CN') {
+    if (n.assetClass === 'FUND') {
+      return `${n.symbol}.OF`
+    }
+    const ex = (n.exchange ?? inferCnExchangeFromSymbol(n.symbol)).toUpperCase()
+    return `${n.symbol}.${ex}`
+  }
+  if (n.market === 'US') {
+    return `${n.symbol}.US`
+  }
+  if (n.market === 'HK') {
+    return `${canonicalHkSymbol(n.symbol)}.HK`
+  }
+  return n.symbol
+}
+
+/**
+ * OpptrixQuant 统一标的 ID — 搜索 / @ 引用 / UI 展示。
+ * CN/US/HK 走 `{MARKET}:{CLASS_TOKEN}:{SYMBOL}`；其余市场回退命名空间。
+ */
+export function buildOpptrixInstrumentId(ref: InstrumentRef): string {
+  const n = normalizeInstrumentRef(ref)
+  if (n.market !== 'CN' && n.market !== 'US' && n.market !== 'HK') {
+    return buildInstrumentNamespace(n)
+  }
+  const token = assetClassToOpptrixClassToken(n.assetClass)
+  return `${n.market}:${token}:${buildOpptrixSymbolSegment(n)}`
+}
+
+/** 搜索展示 code：优先上游 instrument_id，否则由 InstrumentRef 构建 Opptrix ID */
+export function resolveInstrumentSearchDisplayCode(
+  ref: InstrumentRef,
+  instrumentId?: string | null,
+): string {
+  const id = String(instrumentId ?? '').trim()
+  if (id) {
+    const parsed = parseOpptrixInstrumentId(id)
+    if (parsed) {
+      return buildOpptrixInstrumentId(normalizeInstrumentRef(parsed))
+    }
+  }
+  return buildOpptrixInstrumentId(ref)
 }
 
 /** 解析 Stock-index 命名空间字符串 → InstrumentRef */
@@ -538,7 +738,7 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
  */
 export const tryParseInstrumentInput = parseCanonicalInstrumentInput
 
-/** @ 引用 / 搜索展示标签 — Stock-index 统一命名空间 */
+/** @ 引用 / 搜索展示标签 — 本地与持久化沿用 Stock-index 命名空间 */
 export function instrumentRefLabel(ref: InstrumentRef): string {
   return buildInstrumentNamespace(ref)
 }

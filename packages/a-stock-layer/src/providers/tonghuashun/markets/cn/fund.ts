@@ -1,3 +1,4 @@
+import type { AssetClass } from '@opptrix/shared'
 import { assertCnPublicFundCode } from '../../../../core/fund-instrument.js'
 import { FuyaoClient, FuyaoApiError } from '../../api/client.js'
 import { resolveFuyaoFundRoute } from '../../api/fund-symbols.js'
@@ -23,6 +24,15 @@ import {
 import type { TonghuashunMarketHandler } from './handler.js'
 
 type Handler = TonghuashunMarketHandler & Record<string, unknown>
+
+function resolveFundRouteForCode(
+  fundCode: string,
+  assetClass?: AssetClass,
+): ReturnType<typeof resolveFuyaoFundRoute> {
+  const bare = assertCnPublicFundCode(fundCode, assetClass)
+  if (!bare) return null
+  return resolveFuyaoFundRoute(bare, { assetClass })
+}
 
 /**
  * 扶摇 GET /api/fund/performance/nav 查询选项。
@@ -130,11 +140,10 @@ function listedFundQuoteFromSnapshot(
 export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler }) {
   const p = Driver.prototype as Handler
 
-  p.fundProfile = async function fundProfile(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundProfile = async function fundProfile(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const [profileData, navData, returnsData, holdersData] = await Promise.all([
@@ -162,11 +171,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundNav = async function fundNav(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundNav = async function fundNav(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       // range=fyear：侧边栏历史净值走势；不传 range 时扶摇最多返回 1 条
@@ -178,11 +186,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundQuote = async function fundQuote(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundQuote = async function fundQuote(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const isListed = fundType === 'exchange'
@@ -230,11 +237,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundHoldings = async function fundHoldings(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundHoldings = async function fundHoldings(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundPortfolioHoldings(fundType, thscode)
@@ -243,11 +249,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundReturns = async function fundReturns(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundReturns = async function fundReturns(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundPerformanceReturns(fundType, thscode)
@@ -257,11 +262,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundDrawdown = async function fundDrawdown(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundDrawdown = async function fundDrawdown(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundPerformanceDrawdowns(fundType, thscode)
@@ -270,11 +274,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundAllocation = async function fundAllocation(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundAllocation = async function fundAllocation(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const assetData = await client.fundPortfolioAssetAllocation(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] }))
@@ -284,11 +287,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundHolders = async function fundHolders(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundHolders = async function fundHolders(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const [detailData, topData] = await Promise.all([
@@ -300,11 +302,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundDividend = async function fundDividend(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundDividend = async function fundDividend(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundCorporateActionsDividends(fundType, thscode)
@@ -315,11 +316,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundManager = async function fundManager(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundManager = async function fundManager(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const profileData = await client.fundProfileDetail(fundType, thscode)
@@ -355,11 +355,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundDiagnosis = async function fundDiagnosis(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundDiagnosis = async function fundDiagnosis(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundDiagnosticsDetail(fundType, thscode)
@@ -368,11 +367,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     })
   }
 
-  p.fundNews = async function fundNews(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundNews = async function fundNews(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundNewsArticleList(fundType, thscode, { limit: 15 })
@@ -385,11 +383,10 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
    * 基金财务指标 — `@opptrix/fuyao` `funds.financials.indicators`。
    * 无数据返回 null；错误由 withFuyaoClient 既有路径处理。
    */
-  p.fundFinancials = async function fundFinancials(fundCode: string): Promise<Record<string, unknown>[] | null> {
-    const bare = assertCnPublicFundCode(fundCode)
-    if (!bare) return null
-    const route = resolveFuyaoFundRoute(bare)
+  p.fundFinancials = async function fundFinancials(fundCode: string, assetClass?: AssetClass): Promise<Record<string, unknown>[] | null> {
+    const route = resolveFundRouteForCode(fundCode, assetClass)
     if (!route) return null
+    const bare = assertCnPublicFundCode(fundCode, assetClass)!
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
       const data = await client.fundFinancialsIndicators(fundType, thscode)

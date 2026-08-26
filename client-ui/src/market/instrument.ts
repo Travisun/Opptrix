@@ -75,7 +75,7 @@ export function displayCodeFromInstrument(ref: InstrumentRef): string {
   return instrumentDisplayCode(ref)
 }
 
-/** @ 引用标签 — Stock-index 统一命名空间 */
+/** @ 引用标签 — Stock-index 统一命名空间（与本地名录 / 关注列表一致） */
 export function formatInstrumentLabel(ref: InstrumentRef): string {
   return buildInstrumentNamespace(ref)
 }

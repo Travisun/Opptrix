@@ -27,6 +27,8 @@ type ProfileKey = `${Market}:${AssetClass}`
 const PORTFOLIO_PROFILE_TABLE: Partial<Record<ProfileKey, Omit<PortfolioProfile, 'ledgerKind'>>> = {
   'CN:EQUITY': { quantityUnit: 'share', supportsPnl: true, markCapability: 'realtime' },
   'CN:ETF': { quantityUnit: 'unit', supportsPnl: true, markCapability: 'realtime' },
+  'CN:LOF': { quantityUnit: 'unit', supportsPnl: true, markCapability: 'realtime' },
+  'CN:REIT': { quantityUnit: 'unit', supportsPnl: true, markCapability: 'fund_quote' },
   'CN:FUND': { quantityUnit: 'unit', supportsPnl: true, markCapability: 'fund_quote' },
   'CN:INDEX': { quantityUnit: 'share', supportsPnl: false, markCapability: 'realtime' },
   'US:EQUITY': { quantityUnit: 'share', supportsPnl: true, markCapability: 'realtime' },
@@ -46,10 +48,10 @@ function defaultProfile(ref: InstrumentRef): Omit<PortfolioProfile, 'ledgerKind'
   if (ref.assetClass === 'INDEX') {
     return { quantityUnit: 'share', supportsPnl: false, markCapability: 'realtime' }
   }
-  if (ref.assetClass === 'FUND') {
+  if (ref.assetClass === 'FUND' || ref.assetClass === 'REIT') {
     return { quantityUnit: 'unit', supportsPnl: true, markCapability: 'fund_quote' }
   }
-  if (ref.assetClass === 'ETF') {
+  if (ref.assetClass === 'ETF' || ref.assetClass === 'LOF') {
     return { quantityUnit: 'unit', supportsPnl: true, markCapability: 'realtime' }
   }
   if (ref.market === 'CRYPTO') {

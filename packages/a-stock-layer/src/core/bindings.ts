@@ -2,6 +2,8 @@ export {
   cnEquityBindings,
   cnEtfBindings,
   cnFundBindings,
+  cnLofBindings,
+  cnReitBindings,
   cnIndexBindings,
   usEquityBindings,
   cryptoSpotBindings,

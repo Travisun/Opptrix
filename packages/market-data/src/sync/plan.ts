@@ -44,23 +44,14 @@ export function dailyJobsNeedRefresh(status: MarketDbStatus): boolean {
   return cnMaintenanceJobsDue(status.last_sync).length > 0
 }
 
-/** 初选包 readiness 门槛是否仍未满足（与 TTL 无关，避免 cursor 已写但覆盖率不足时不再自动同步） */
-export function bootstrapReadinessIncomplete(status: MarketDbStatus): boolean {
-  if (status.is_ready) return false
-  const b = status.bootstrap
-  if (!b) return status.stock_count > 0
-  if (!b.initial_cn || !b.initial_taxonomy) return true
+/** 初选包 readiness 已无门槛（标的库 / 行业分类同步均已下线） */
+export function bootstrapReadinessIncomplete(_status: MarketDbStatus): boolean {
   return false
 }
 
-/** readiness 未达标时，仅挑选仍缺的 bootstrap job（尊重 TTL，不全量重跑） */
-function bootstrapJobsForIncompleteReadiness(status: MarketDbStatus): string[] {
-  const b = status.bootstrap
-  if (!b) return jobsNeedingRefresh([...CN_BOOTSTRAP_SYNC_JOBS], status.last_sync)
-  const jobs: string[] = []
-  if (!b.initial_cn) jobs.push('initial_cn_universe')
-  if (!b.initial_taxonomy) jobs.push('initial_taxonomy')
-  return jobs
+/** readiness 未达标时挑选 bootstrap job — 已无 job */
+function bootstrapJobsForIncompleteReadiness(_status: MarketDbStatus): string[] {
+  return []
 }
 
 /** 首次 pipeline 是否仍有 job 未跑过或已过期 */
@@ -72,8 +63,8 @@ export function bootstrapJobsNeedRefresh(status: MarketDbStatus): boolean {
 /**
  * Pick sync mode + job list from DB state.
  *
- * - 未完成 bootstrap → 名录 + 行业（按 TTL 跳过未到期项）
- * - 已就绪 → 维护：名录/行业每周交替
+ * - 未完成 bootstrap → 行业分类（按 TTL 跳过未到期项）
+ * - 已就绪 → 维护：行业分类按 TTL 刷新
  */
 export function resolveSyncPlan(
   status: MarketDbStatus,
@@ -107,7 +98,7 @@ export function resolveSyncPlan(
   if (jobs.length === 0 && bootstrapReadinessIncomplete(status)) {
     jobs = bootstrapJobsForIncompleteReadiness(status)
   }
-  if (jobs.length === 0 && status.stock_count === 0) {
+  if (jobs.length === 0 && !status.is_ready) {
     jobs = [...CN_BOOTSTRAP_SYNC_JOBS]
   }
   return {

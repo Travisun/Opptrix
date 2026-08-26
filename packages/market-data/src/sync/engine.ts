@@ -5,32 +5,27 @@ import { normalizeInstrumentRef } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
 import { daysSince, detectSt, minutesSince, normalizeStockCode, todayTradeDate } from '../utils.js'
 import {
-  cnTaxonomyMaintenanceDue,
-  cnUniverseMaintenanceDue,
-} from './schedule.js'
-import {
   ALL_SYNC_JOBS,
   BOOTSTRAP_SYNC_JOBS,
   DEFAULT_API_MIN_GAP_MS,
+  DEPRECATED_INSTRUMENT_CATALOG_SYNC_JOBS,
   EASTMONEY_HEAVY_JOBS,
   getSyncProfileSettings,
   getTushareSyncBoost,
   isTushareBackedSyncJob,
-  STOCKINDEX_LIST_SYNC_JOBS,
   type JobSyncConfig,
   type SyncSpeedProfile,
   SYNC_JOB_CONFIG,
 } from './config.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
-import { isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
+import { isRegionalQuotesJob, regionalQuotesJobMarket } from './regional-list-seeds.js'
 import { StandardInstrumentGateway } from './instrument-gateway.js'
-import type { InitialSyncCallbacks } from './initial-sync.js'
-import { syncInitialCnEtf } from './stockindex-etf.js'
-import { syncInitialStockIndexUniverse } from './stockindex-universe.js'
-import { syncAllInitialTaxonomy } from './stockindex-taxonomy.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
-import { cnEtfListRef, cnEtfRef, cnFundListRef, cnFundRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
+import { cnEtfRef, cnFundRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
+
+const DEPRECATED_CATALOG_JOB_SET = new Set<string>(DEPRECATED_INSTRUMENT_CATALOG_SYNC_JOBS)
+const CATALOG_SYNC_SKIP_MESSAGE = '标的库同步已下线，请使用 OpptrixQuant 在线检索'
 
 function equityInstrumentRef(
   market: 'US' | 'JP' | 'KR' | 'HK',
@@ -197,23 +192,13 @@ export class MarketDataSyncEngine {
       this.jobFinishedEmpty = false
       const runId = this.store.beginRun(job, mode)
       try {
+        if (DEPRECATED_CATALOG_JOB_SET.has(job)) {
+          this.finishJobEmpty(runId, job, options, CATALOG_SYNC_SKIP_MESSAGE)
+          results[job] = 'skipped'
+          options.onJobFinish?.(job, 'skipped', jobIndex)
+          continue
+        }
         switch (job) {
-          case 'universe':
-          case 'initial_cn_universe':
-            await this.syncInitialUniverseJob(runId, 'CN', job, options, mode)
-            break
-          case 'initial_hk_universe':
-            await this.syncInitialUniverseJob(runId, 'HK', job, options, mode)
-            break
-          case 'initial_us_universe':
-            await this.syncInitialUniverseJob(runId, 'US', job, options, mode)
-            break
-          case 'initial_cn_etf':
-            await this.syncInitialCnEtfJob(runId, options, mode)
-            break
-          case 'initial_taxonomy':
-            await this.syncInitialTaxonomyJob(runId, options, mode)
-            break
           case 'quotes':
             await this.syncQuotes(runId, mode, options)
             break
@@ -225,37 +210,20 @@ export class MarketDataSyncEngine {
           case 'profiles':
             await this.syncProfiles(runId, mode, options)
             break
-          case 'etf_list':
-            await this.syncEtfList(runId, options, mode)
-            break
           case 'etf_nav':
             await this.syncEtfNav(runId, mode, options)
             break
           case 'etf_holdings':
             await this.syncEtfHoldings(runId, mode, options)
             break
-          case 'fund_list':
-            await this.syncFundList(runId, options, mode)
-            break
           case 'fund_nav':
             await this.syncFundNav(runId, mode, options)
-            break
-          case 'us_list':
-            await this.syncUsList(runId, options, mode)
             break
           case 'us_quotes':
             await this.syncUsQuotes(runId, mode, options)
             break
-          case 'crypto_list':
-            await this.syncCryptoList(runId, options, mode)
-            break
           case 'crypto_quotes':
             await this.syncCryptoQuotes(runId, mode, options)
-            break
-          case 'hk_list':
-          case 'jp_list':
-          case 'kr_list':
-            await this.syncRegionalList(runId, job, options, mode)
             break
           case 'hk_quotes':
           case 'jp_quotes':
@@ -303,9 +271,6 @@ export class MarketDataSyncEngine {
         results[job] = this.jobFinishedEmpty ? 'skipped' : 'ok'
         if (!this.jobFinishedEmpty) {
           this.store.setCursor(job)
-          if ((STOCKINDEX_LIST_SYNC_JOBS as readonly string[]).includes(job)) {
-            this.store.clearJobProgressErrors(job)
-          }
         }
         options.onJobFinish?.(job, results[job], jobIndex)
       } catch (e) {
@@ -447,8 +412,6 @@ export class MarketDataSyncEngine {
 
     const { is_ready: ready, last_sync: lastSync } = status
     if (ready) {
-      if (job === 'initial_cn_universe') return cnUniverseMaintenanceDue(lastSync)
-      if (job === 'initial_taxonomy') return cnTaxonomyMaintenanceDue(lastSync)
       if (job === 'kline_bootstrap' || job === 'kline_daily' || job === 'etf_kline_bootstrap') {
         return false
       }
@@ -572,151 +535,10 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private initialCallbacks(job: string, options: SyncOptions): InitialSyncCallbacks {
-    return {
-      onLog: options.onLog,
-      onProgress: (current, total, label) => {
-        options.onProgress?.({ job, current, total, message: label })
-      },
-    }
-  }
-
-  private async syncInitialCnEtfJob(
-    runId: number,
-    options: SyncOptions,
-    mode: SyncMode,
-  ): Promise<void> {
-    const job = 'initial_cn_etf'
-    const cfg = this.cfg(job, options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess(job)
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, job, options, 'ETF 名录在 TTL 内，跳过')
-        return
-      }
-    }
-
-    const result = await syncInitialCnEtf(this.store, cfg, this.initialCallbacks(job, options))
-    this.store.finishRun(runId, 'success', {
-      total: result.total,
-      success: result.success,
-      error: Math.max(0, result.total - result.success),
-    })
-    await this.store.flushDuckWritesAsync()
-  }
-
-  private async syncInitialUniverseJob(
-    runId: number,
-    market: InitialEquityMarket,
-    job: string,
-    options: SyncOptions,
-    mode: SyncMode,
-  ): Promise<void> {
-    const cfg = this.cfg(job, options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess(job)
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, job, options, `${market} 名录在 TTL 内，跳过`)
-        return
-      }
-    }
-
-    const callbacks = this.initialCallbacks(job, options)
-    const result = await syncInitialStockIndexUniverse(
-      this.store,
-      market,
-      job,
-      cfg,
-      callbacks,
-    )
-    if (result.total === 0 && result.success === 0 && (market === 'HK' || market === 'US')) {
-      this.finishJobEmpty(runId, job, options, `${market} 名录暂无数据，已跳过`)
-      return
-    }
-    this.store.finishRun(runId, 'success', {
-      total: result.total,
-      success: result.success,
-      error: Math.max(0, result.total - result.success),
-    })
-    await this.store.flushDuckWritesAsync()
-  }
-
-  private async syncInitialTaxonomyJob(
-    runId: number,
-    options: SyncOptions,
-    mode: SyncMode,
-  ): Promise<void> {
-    const job = 'initial_taxonomy'
-    const cfg = this.cfg(job, options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess(job)
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, job, options, '行业/板块在 TTL 内，跳过')
-        return
-      }
-    }
-
-    const result = await syncAllInitialTaxonomy(this.store, cfg, this.initialCallbacks(job, options))
-    this.store.finishRun(runId, 'success', {
-      total: result.nodes,
-      success: result.nodes,
-      error: 0,
-    })
-    await this.store.flushDuckWritesAsync()
-  }
-
-  private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
-    await this.syncInitialUniverseJob(runId, 'CN', 'universe', options, mode)
-  }
-
   private etfCodes(options: SyncOptions): string[] {
     const all = this.store.listEtfCodes(true)
     if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
     return all
-  }
-
-  private async syncEtfList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
-    const cfg = this.cfg('etf_list', options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess('etf_list')
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, 'etf_list', options, 'ETF 列表在 TTL 内，跳过')
-        return
-      }
-    }
-
-    const resp = await this.callApi(
-      () => this.de.queryInstrumentData(cnEtfListRef(), 'etf_list') as Promise<QueryResult<StockListItem[]>>,
-      'default',
-    )
-    if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'etfList failed')
-    }
-
-    let total = resp.data.length
-    if (options.maxStocks) total = Math.min(total, options.maxStocks)
-    let success = 0
-    for (const [i, item] of resp.data.entries()) {
-      if (options.maxStocks && i >= options.maxStocks) break
-      const code = normalizeStockCode(String(item.code ?? ''))
-      if (!code) continue
-      this.store.upsertInstrument({
-        code,
-        market: 'CN',
-        assetClass: 'ETF',
-        name: String(item.name ?? ''),
-        exchange: resolveMarket(code),
-        status: 'active',
-      })
-      this.store.upsertEtfProfile(code, item as unknown as Record<string, unknown>)
-      this.markDone('etf_list', code, '')
-      success++
-      if (i % 50 === 0) {
-        options.onProgress?.({ job: 'etf_list', current: i + 1, total })
-      }
-    }
-    options.onProgress?.({ job: 'etf_list', current: success, total })
-    this.store.finishRun(runId, 'success', { total, success, error: total - success })
   }
 
   private async syncEtfNav(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -762,50 +584,6 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
-  }
-
-  private async syncFundList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
-    const cfg = this.cfg('fund_list', options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess('fund_list')
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, 'fund_list', options, '公募基金列表在 TTL 内，跳过')
-        return
-      }
-    }
-
-    const resp = await this.callApi(
-      () => this.de.queryInstrumentData(cnFundListRef(), 'fund_list') as Promise<QueryResult<StockListItem[]>>,
-      'default',
-    )
-    if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'fundList failed')
-    }
-
-    let total = resp.data.length
-    if (options.maxStocks) total = Math.min(total, options.maxStocks)
-    let success = 0
-    for (const [i, item] of resp.data.entries()) {
-      if (options.maxStocks && i >= options.maxStocks) break
-      const code = normalizeStockCode(String(item.code ?? ''))
-      if (!code) continue
-      this.store.upsertInstrument({
-        code,
-        market: 'CN',
-        assetClass: 'FUND',
-        name: String(item.name ?? ''),
-        exchange: 'PF',
-        status: 'active',
-      })
-      this.store.upsertFundProfile(code, item as unknown as Record<string, unknown>)
-      this.markDone('fund_list', code, '')
-      success++
-      if (i % 50 === 0) {
-        options.onProgress?.({ job: 'fund_list', current: i + 1, total })
-      }
-    }
-    options.onProgress?.({ job: 'fund_list', current: success, total })
-    this.store.finishRun(runId, 'success', { total, success, error: total - success })
   }
 
   private async syncFundNav(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -911,10 +689,6 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private async syncUsList(runId: number, options: SyncOptions, _mode: SyncMode): Promise<void> {
-    this.finishJobEmpty(runId, 'us_list', options, '跨市场名录已改 Tickflow / 在线检索，跳过 us_list')
-  }
-
   private async syncUsQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
     const cfg = this.cfg('us_quotes', options)
     const tradeDate = usTodayString()
@@ -955,20 +729,6 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
-  }
-
-  private async syncCryptoList(runId: number, options: SyncOptions, _mode: SyncMode): Promise<void> {
-    this.finishJobEmpty(runId, 'crypto_list', options, '跨市场名录已改在线检索，跳过 crypto_list')
-  }
-
-  /** HK/JP/KR list sync — 已停用，改用 Tickflow / 在线 Provider */
-  private async syncRegionalList(
-    runId: number,
-    job: string,
-    options: SyncOptions,
-    _mode: SyncMode,
-  ): Promise<void> {
-    this.finishJobEmpty(runId, job, options, `${job} 名录同步已停用，请使用在线搜索`)
   }
 
   /** HK/JP/KR quotes — requires a registered regional provider (no free scraper registered). */

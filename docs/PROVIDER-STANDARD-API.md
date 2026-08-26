@@ -198,5 +198,6 @@ bindingsFor: () => []
 - **用途**：跨市场标的搜索权威源（`instrumentSearch` / 统一搜索在线路径）
 - **基址**：固定 `https://quant.opptrix.net`（设置页不可改）
 - **认证**：数据密钥（`X-API-Key`）；在 [Opptrix量化社区](https://quant.opptrix.net/) 获取
+- **统一标的 ID / REST 契约**：见 [OPPTRIX-QUANT-API.md](./OPPTRIX-QUANT-API.md)（`STOCK/IND/OTC/ETF/LOF/REIT` + 后缀）
 - **默认**：未启用（需用户配置密钥后开启）
 - **defaultPriority**：115（推荐栈第 2，仅次于同花顺 120）

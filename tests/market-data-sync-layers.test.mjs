@@ -13,7 +13,7 @@ import {
   DEFAULT_DAILY_SYNC_JOBS,
   LEGACY_INITIAL_SYNC_JOBS,
   STOCKINDEX_LIST_SYNC_JOBS,
-  SYNC_JOB_CONFIG,
+  DEPRECATED_INSTRUMENT_CATALOG_SYNC_JOBS,
 } from '../packages/market-data/dist/sync/config.js'
 import {
   cnUniverseMaintenanceDue,
@@ -22,71 +22,31 @@ import {
   isCnMondayAfterMarketClose,
 } from '../packages/market-data/dist/sync/schedule.js'
 
-const daysAgo = n => new Date(Date.now() - n * 86400000).toISOString()
-
-test('CN auto sync: bootstrap is universe + taxonomy only (no static kline jobs)', () => {
-  assert.deepEqual(CN_BOOTSTRAP_SYNC_JOBS, [
-    'initial_cn_universe',
-    'initial_cn_etf',
-    'initial_hk_universe',
-    'initial_us_universe',
-    'initial_taxonomy',
-  ])
-  assert.deepEqual(CN_MAINTENANCE_SYNC_JOBS, [
-    'initial_cn_universe',
-    'initial_cn_etf',
-    'initial_hk_universe',
-    'initial_us_universe',
-    'initial_taxonomy',
-  ])
-  assert.deepEqual(CN_AUTO_SYNC_JOB_UNIVERSE, [...CN_BOOTSTRAP_SYNC_JOBS])
-  assert.deepEqual(CN_CORE_SYNC_JOBS, ['initial_cn_universe', 'initial_taxonomy'])
-  assert.deepEqual(INITIAL_SYNC_JOBS, [...CN_BOOTSTRAP_SYNC_JOBS])
-  assert.deepEqual(BOOTSTRAP_SYNC_JOBS, [...CN_BOOTSTRAP_SYNC_JOBS])
-  assert.deepEqual(DEFAULT_AUTO_SYNC_JOBS, [...CN_BOOTSTRAP_SYNC_JOBS])
-  assert.deepEqual(DEFAULT_DAILY_SYNC_JOBS, [...CN_MAINTENANCE_SYNC_JOBS])
-  assert.deepEqual(DAILY_SYNC_JOBS, [...CN_MAINTENANCE_SYNC_JOBS])
-  assert.deepEqual(CN_MANUAL_SYNC_JOBS, [...CN_BOOTSTRAP_SYNC_JOBS])
+test('CN auto sync: no bootstrap or maintenance jobs (catalog + taxonomy offline)', () => {
+  assert.deepEqual(CN_BOOTSTRAP_SYNC_JOBS, [])
+  assert.deepEqual(CN_MAINTENANCE_SYNC_JOBS, [])
+  assert.deepEqual(CN_AUTO_SYNC_JOB_UNIVERSE, [])
+  assert.deepEqual(CN_CORE_SYNC_JOBS, [])
+  assert.deepEqual(INITIAL_SYNC_JOBS, [])
+  assert.deepEqual(BOOTSTRAP_SYNC_JOBS, [])
+  assert.deepEqual(DEFAULT_AUTO_SYNC_JOBS, [])
+  assert.deepEqual(DEFAULT_DAILY_SYNC_JOBS, [])
+  assert.deepEqual(DAILY_SYNC_JOBS, [])
+  assert.deepEqual(CN_MANUAL_SYNC_JOBS, [])
   assert.ok(!BOOTSTRAP_SYNC_JOBS.includes('kline_bootstrap'))
   assert.ok(!CN_MAINTENANCE_SYNC_JOBS.includes('kline_daily'))
-  assert.ok(BOOTSTRAP_SYNC_JOBS.includes('initial_hk_universe'))
-  assert.deepEqual(STOCKINDEX_LIST_SYNC_JOBS, [
-    'initial_cn_etf',
-    'initial_hk_universe',
-    'initial_us_universe',
-  ])
-  assert.deepEqual(LEGACY_INITIAL_SYNC_JOBS, [...STOCKINDEX_LIST_SYNC_JOBS])
+  assert.ok(!BOOTSTRAP_SYNC_JOBS.includes('initial_cn_universe'))
+  assert.ok(!BOOTSTRAP_SYNC_JOBS.includes('initial_taxonomy'))
+  assert.deepEqual(STOCKINDEX_LIST_SYNC_JOBS, [])
+  assert.deepEqual(LEGACY_INITIAL_SYNC_JOBS, [])
+  assert.ok(DEPRECATED_INSTRUMENT_CATALOG_SYNC_JOBS.includes('initial_taxonomy'))
 })
 
-test('CN sync TTL: universe weekly, taxonomy weekly staggered', () => {
-  assert.equal(SYNC_JOB_CONFIG.initial_cn_universe.ttlDays, 7)
-  assert.equal(SYNC_JOB_CONFIG.initial_taxonomy.ttlDays, 7)
-})
-
-test('maintenance schedule: universe and taxonomy alternate weekly; no kline_daily', () => {
-  const base = {
-    initial_cn_universe: daysAgo(8),
-    initial_taxonomy: daysAgo(1),
-  }
-  assert.equal(cnUniverseMaintenanceDue(base), false)
-  assert.equal(cnTaxonomyMaintenanceDue(base), false)
-
-  const taxDue = {
-    initial_cn_universe: daysAgo(8),
-    initial_taxonomy: daysAgo(8),
-  }
-  const jobs = cnMaintenanceJobsDue(taxDue)
-  assert.ok(jobs.includes('initial_cn_universe') || jobs.includes('initial_taxonomy'))
-  assert.ok(jobs.includes('initial_cn_etf'))
-  assert.ok(jobs.includes('initial_hk_universe'))
-  assert.ok(jobs.includes('initial_us_universe'))
-  assert.ok(!jobs.includes('kline_daily'))
-
-  const firstTaxonomy = {
-    initial_cn_universe: daysAgo(1),
-    initial_taxonomy: null,
-  }
-  assert.equal(cnTaxonomyMaintenanceDue(firstTaxonomy), true)
+test('maintenance schedule: all catalog/taxonomy sync deprecated', () => {
+  assert.equal(cnUniverseMaintenanceDue({}), false)
+  assert.equal(cnTaxonomyMaintenanceDue({}), false)
+  assert.deepEqual(cnMaintenanceJobsDue({}), [])
+  assert.deepEqual(cnMaintenanceJobsDue({ initial_taxonomy: new Date().toISOString() }), [])
 })
 
 test('Monday after CN market close helper still works', () => {

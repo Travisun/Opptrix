@@ -24,7 +24,7 @@ export function isCnListedFundSymbol(symbol: string): boolean {
 
 export function isCnPublicFundRef(ref: InstrumentRef): boolean {
   const n = normalizeInstrumentRef(ref)
-  return n.market === 'CN' && n.assetClass === 'FUND'
+  return n.market === 'CN' && (n.assetClass === 'FUND' || n.assetClass === 'REIT')
 }
 
 /** StockIndex / 搜索命中行是否应落成 CN:PF 公募基金 */
@@ -82,10 +82,12 @@ export function assertCnPublicFundCode(
   assetClass?: AssetClass,
 ): string | null {
   if (typeof input === 'object' && input != null) {
-    if (!isCnPublicFundRef(input)) return null
-    return canonicalCnSymbol(input.symbol)
+    if (input.assetClass === 'REIT' || isCnPublicFundRef(input)) {
+      return canonicalCnSymbol(input.symbol)
+    }
+    return null
   }
-  if (assetClass && assetClass !== 'FUND') return null
+  if (assetClass && assetClass !== 'FUND' && assetClass !== 'REIT') return null
   return resolveCnPublicFundBareCode(input)
 }
 

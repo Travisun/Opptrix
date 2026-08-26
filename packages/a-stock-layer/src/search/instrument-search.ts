@@ -7,13 +7,14 @@ import type { AssetClass, InstrumentRef, Market, StockListItem } from '@opptrix/
 import {
   canonicalCnSymbol,
   canonicalSymbolForMarket,
-  buildInstrumentNamespace,
   inferCnAssetClassFromSymbol,
   instrumentRefKey,
   normalizeInstrumentRef,
+  resolveInstrumentSearchDisplayCode,
 } from '@opptrix/shared'
 import type { MarketDataEngine } from '../engine.js'
 import { opptrixInstrumentSearch } from '../providers/stockindex/api/client.js'
+import { StockIndexHttpClient } from '../providers/stockindex/api/http-client.js'
 import {
   opptrixInstrumentToStockIndexItem,
   stockIndexItemToInstrumentRef,
@@ -74,15 +75,15 @@ function makeHit(
     symbol,
     exchange: exchange ?? (market === 'HK' ? 'HK' : undefined),
   })
-  const ns = buildInstrumentNamespace(instrument)
+  const displayCode = resolveInstrumentSearchDisplayCode(instrument)
   return {
-    code: ns,
+    code: displayCode,
     name: name ?? symbol,
     market: instrument.market,
     assetClass: instrument.assetClass,
     exchange: instrument.exchange ?? exchange ?? null,
     instrument,
-    refLabel: ns,
+    refLabel: displayCode,
     source: 'stock_index',
   }
 }
@@ -201,15 +202,15 @@ function cacheKey(keyword: string, limit: number, markets?: Market[]): string {
 function hitFromStockIndexItem(item: Parameters<typeof stockIndexItemToInstrumentRef>[0]): InstrumentSearchHit | null {
   const instrument = stockIndexItemToInstrumentRef(item)
   if (!instrument) return null
-  const ns = buildInstrumentNamespace(instrument)
+  const displayCode = resolveInstrumentSearchDisplayCode(instrument, item.instrumentId)
   return {
-    code: ns,
+    code: displayCode,
     name: item.nameCn ?? item.code,
     market: instrument.market,
     assetClass: instrument.assetClass,
     exchange: instrument.exchange ?? item.exchange ?? null,
     instrument,
-    refLabel: ns,
+    refLabel: displayCode,
     source: 'stock_index',
   }
 }
@@ -231,15 +232,15 @@ function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSea
       symbol: code,
       exchange: 'PF',
     })
-    const ns = buildInstrumentNamespace(instrument)
+    const displayCode = resolveInstrumentSearchDisplayCode(instrument)
     return {
-      code: ns,
+      code: displayCode,
       name: row.name ?? code,
       market: 'CN',
       assetClass: 'FUND',
       exchange: 'PF',
       instrument,
-      refLabel: ns,
+      refLabel: displayCode,
       source: 'stock_index',
     }
   }
@@ -254,15 +255,15 @@ function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSea
     symbol: code,
     exchange,
   })
-  const ns = buildInstrumentNamespace(instrument)
+  const displayCode = resolveInstrumentSearchDisplayCode(instrument)
   return {
-    code: ns,
+    code: displayCode,
     name: row.name ?? code,
     market,
     assetClass: instrument.assetClass,
     exchange: instrument.exchange ?? exchange ?? null,
     instrument,
-    refLabel: ns,
+    refLabel: displayCode,
     source: 'stock_index',
   }
 }
@@ -272,6 +273,7 @@ async function searchMarketViaStockIndex(
   keyword: string,
   limit: number,
 ): Promise<InstrumentSearchHit[]> {
+  if (!StockIndexHttpClient.fromConfig()) return []
   const raw = await opptrixInstrumentSearch(keyword, {
     market,
     limit: Math.min(limit, 50),

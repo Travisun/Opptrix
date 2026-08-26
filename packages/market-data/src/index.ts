@@ -30,13 +30,7 @@ import { MarketDataLifecycle } from './sync/lifecycle.js'
 import { queryLocalLatestQuote } from './query/local-bars.js'
 import { searchUniverseStocks } from './query/search-stocks.js'
 import { buildEtfScorecardSchema, computeEtfScorecard, computeEtfScorecardFromOnline } from './query/etf-scorecard.js'
-import { searchLocalInstruments, listLocalInstrumentsSummary } from './query/search-instruments.js'
 import {
-  ensureSearchUniverseReady as ensureSearchUniverseReadyImpl,
-  type SearchUniverseReadyResult,
-} from './sync/search-universe-ready.js'
-import {
-  runWatchlistLocalDisambiguationPass,
   runWatchlistOnlineDisambiguationPass,
 } from './watchlist-disambiguate.js'
 
@@ -71,23 +65,15 @@ export class MarketDataService {
 
   /**
    * 搜索触发：检查 CN/HK/US 轻量名录是否就绪；缺则后台灌库（不 await 整次）。
-   * boot 路径不调用本方法。
+   * @deprecated 标的搜索已全量走 OpptrixQuant 在线，不再触发本地名录灌库。
    */
-  ensureSearchUniverseReady(): Promise<SearchUniverseReadyResult> {
-    return ensureSearchUniverseReadyImpl({
-      getCursorLastSuccess: job => this.store.getCursorLastSuccess(job),
-      countEquity: market => this.store.countEquityInstruments(market),
-      isRunning: () => this.coordinator.isRunning(),
-      getSnapshot: () => this.coordinator.getSnapshot(),
-      getSessionJobs: () => this.coordinator.getSessionJobs(),
-      start: async jobs => {
-        const result = await this.coordinator.start({
-          mode: 'incremental',
-          jobs,
-          background: true,
-        })
-        return { started: result.started, running: result.running }
-      },
+  ensureSearchUniverseReady(): Promise<{ status: 'ready'; started: false; jobs: []; percent: 100; message: '' }> {
+    return Promise.resolve({
+      status: 'ready',
+      started: false,
+      jobs: [],
+      percent: 100,
+      message: '',
     })
   }
 
@@ -177,12 +163,8 @@ export class MarketDataService {
     return buildEtfScorecardSchema()
   }
 
-  searchLocalInstruments(keyword: string, limit = 30, markets?: import('@opptrix/shared').Market[]) {
-    return searchLocalInstruments(this.store, keyword, limit, markets)
-  }
-
   /**
-   * 关注列表未消歧：本地唯一写回；可选后台 Tickflow 唯一补强。
+   * 关注列表未消歧：在线 Tickflow 精确补强（港股短码等）。
    * 返回最新列表（已写 user-store）。
    */
   disambiguateWatchlist(opts?: { online?: boolean }): {
@@ -192,25 +174,13 @@ export class MarketDataService {
     candidatesByCode: Record<string, import('@opptrix/a-stock-layer').DisambiguationCandidate[]>
   } {
     const current = this.de.watchlist.list()
-    const local = runWatchlistLocalDisambiguationPass(current, (kw, limit) =>
-      this.searchLocalInstruments(kw, limit ?? 30).map(h => ({
-        instrument: h.instrument,
-        name: h.name,
-      })),
-    )
-    let items = local.items
-    if (local.resolved > 0) {
-      items = this.de.watchlist.replace(local.items)
-      this.de.watchlist.flush()
-    }
-
-    const candidatesByCode = { ...local.candidatesByCode }
+    const candidatesByCode: Record<string, import('@opptrix/a-stock-layer').DisambiguationCandidate[]> = {}
 
     const wantOnline = opts?.online !== false
     let onlineStarted = false
     if (wantOnline) {
       onlineStarted = true
-      void runWatchlistOnlineDisambiguationPass(items).then(online => {
+      void runWatchlistOnlineDisambiguationPass(current).then(online => {
         if (online.resolved <= 0) return
         this.de.watchlist.replace(online.items)
         this.de.watchlist.flush()
@@ -223,15 +193,11 @@ export class MarketDataService {
     }
 
     return {
-      items,
-      resolvedLocal: local.resolved,
+      items: current,
+      resolvedLocal: 0,
       onlineStarted,
       candidatesByCode,
     }
-  }
-
-  localInstrumentsSummary() {
-    return listLocalInstrumentsSummary(this.store)
   }
 
   searchStocks(keyword: string, limit = 30) {
@@ -396,17 +362,6 @@ export {
 export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
-export type { LocalInstrumentHit } from './query/search-instruments.js'
-export {
-  ensureSearchUniverseReady,
-  listMissingSearchUniverseJobs,
-  SEARCH_UNIVERSE_JOB_SPECS,
-} from './sync/search-universe-ready.js'
-export type {
-  SearchUniverseReadyResult,
-  SearchUniversePrepStatus,
-  SearchUniverseJobName,
-} from './sync/search-universe-ready.js'
 export { buildEtfScorecardSchema, computeEtfScorecardFromOnline, ETF_SCORECARD_NAME } from './query/etf-scorecard.js'
 export type { EtfScorecardResult, EtfScorecardDimension } from './query/etf-scorecard.js'
 export { searchUniverseStocks } from './query/search-stocks.js'
@@ -527,6 +482,5 @@ export {
   type HkPadPlanItem,
 } from './repair-hk-canonical-pad.js'
 export {
-  runWatchlistLocalDisambiguationPass,
   runWatchlistOnlineDisambiguationPass,
 } from './watchlist-disambiguate.js'

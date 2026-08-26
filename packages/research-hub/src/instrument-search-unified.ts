@@ -1,4 +1,4 @@
-/** 统一标的搜索 — 默认仅 OpptrixQuant 在线；本地名录可选（includeLocal）。 */
+/** 统一标的搜索 — 仅 OpptrixQuant 在线（须配置数据密钥）。 */
 
 import type { Market } from '@opptrix/shared'
 import {
@@ -8,22 +8,15 @@ import {
 } from '@opptrix/shared'
 import type { MarketDataEngine } from '@opptrix/a-stock-layer'
 import type { InstrumentSearchHit } from '@opptrix/a-stock-layer'
-import type { MarketDataService } from '@opptrix/market-data-store'
 
 export interface UnifiedSearchOptions {
   keyword: string
   limit?: number
   markets?: Market[]
-  /**
-   * 是否合并本地名录；默认 false（搜索主路径仅 OpptrixQuant 在线）。
-   * 传 true 可附加本地名录结果。
-   */
-  includeLocal?: boolean
 }
 
 export async function searchInstrumentsUnified(
   de: MarketDataEngine,
-  marketData: MarketDataService,
   opts: UnifiedSearchOptions,
 ): Promise<{ items: UnifiedInstrumentSearchHit[]; sources: string[] }> {
   const keyword = opts.keyword.trim()
@@ -33,27 +26,6 @@ export async function searchInstrumentsUnified(
   const seen = new Set<string>()
   const merged: UnifiedInstrumentSearchHit[] = []
   const sources = new Set<string>()
-  const includeLocal = opts.includeLocal === true
-
-  if (includeLocal) {
-    const localHits = marketData.searchLocalInstruments(keyword, Math.max(limit * 2, limit), opts.markets)
-    for (const hit of localHits) {
-      const key = instrumentRefKey(hit.instrument)
-      if (seen.has(key)) continue
-      seen.add(key)
-      merged.push({
-        instrument: hit.instrument,
-        code: hit.code,
-        ref_label: hit.refLabel,
-        name: hit.name,
-        market: hit.market,
-        asset_class: hit.assetClass,
-        exchange: hit.exchange,
-        source: 'local',
-      })
-      sources.add('local')
-    }
-  }
 
   const {
     searchInstrumentsOnline,
@@ -95,7 +67,7 @@ export async function searchInstrumentsUnified(
           exchange: hit.exchange,
           instrument: hit.instrument,
           refLabel: hit.ref_label,
-          source: hit.source === 'local' ? 'online' : hit.source,
+          source: hit.source === 'stock_index' ? 'stock_index' : 'online',
         },
         keyword,
       ),
