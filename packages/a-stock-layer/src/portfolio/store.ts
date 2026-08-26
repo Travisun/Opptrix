@@ -1,4 +1,5 @@
-import type { Market } from '@opptrix/shared'
+import type { AssetClass, Market } from '@opptrix/shared'
+import { instrumentRefKey } from '@opptrix/shared/instrument-ref'
 import type { InstrumentFeeOverrides, PortfolioGlobalFees } from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { TradeRecord } from './trade-models.js'
@@ -7,9 +8,11 @@ import {
   migrateLegacyFeeState,
 } from './models.js'
 import {
+  inferTradeAssetClass,
   portfolioCodeAliases,
   portfolioCodesMatch,
   portfolioDisplayCode,
+  portfolioInstrumentRef,
 } from './instrument.js'
 import { recomputeAllTradeFees, recomputeTradeRecordFees } from './fee-recompute.js'
 
@@ -201,12 +204,24 @@ export class PortfolioStore {
   }
 
   /** Remove all trades and per-stock fee overrides when a watchlist symbol is removed. */
-  deleteTradesForCode(code: string, market?: Market) {
+  deleteTradesForCode(code: string, market?: Market, assetClass?: AssetClass) {
+    const ref = portfolioInstrumentRef(code, market, assetClass)
+    const targetKey = instrumentRefKey(ref)
+    const aliases = portfolioCodeAliases(code, market, assetClass)
     const before = this.state.trades.length
-    this.state.trades = this.state.trades.filter(
-      t => !portfolioCodesMatch(t.code, legacyTradeMarket(t), code, market),
-    )
-    for (const alias of portfolioCodeAliases(code, market)) {
+    this.state.trades = this.state.trades.filter(t => {
+      const tMarket = legacyTradeMarket(t)
+      const tAc = inferTradeAssetClass(t.code, tMarket, t.assetClass)
+      if (portfolioCodesMatch(t.code, tMarket, code, market, tAc, assetClass)) {
+        return false
+      }
+      const tRef = portfolioInstrumentRef(t.code, tMarket, tAc)
+      if (instrumentRefKey(tRef) === targetKey) return false
+      const tDisplay = portfolioDisplayCode(t.code, tMarket, tAc)
+      if (aliases.has(t.code) || aliases.has(tDisplay)) return false
+      return true
+    })
+    for (const alias of aliases) {
       delete this.state.instrumentFees[alias]
     }
     this.save()

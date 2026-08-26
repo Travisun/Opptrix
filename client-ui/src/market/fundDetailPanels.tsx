@@ -261,9 +261,11 @@ export function FundArchivePanel({
     )
   }
 
-  const rateInfo = profile.rateInfo?.filter(r => (r.label || r.name)?.trim()) ?? []
+  const rateInfo = profile.rateInfo?.filter(r => r && (r.label || r.name)?.trim()) ?? []
   const hasExpenseOnly = rateInfo.length === 0 && profile.expenseRatio != null
-  const tradeRules = profile.tradeRules?.filter(r => r.trim()) ?? []
+  const tradeRules = profile.tradeRules?.filter(
+    r => typeof r === 'string' && r.trim(),
+  ) ?? []
 
   return (
     <div className={s.section}>

@@ -13,6 +13,7 @@ import {   MarketDataEngine, computeIndicators, computeLatestChipProfile, comput
   crossMarketFiveDayMinuteCount,
   resampleOhlcKlines,
   watchlistItemKey,
+  isCnPublicFundRef,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
@@ -47,6 +48,7 @@ import {
   normalizeInstrumentHubParams,
   instrumentRefsFromList,
   normalizeInstrumentRef,
+  instrumentHubCode,
   instrumentRefKey,
   instrumentDisplayCode,
   buildInstrumentNamespace,
@@ -531,7 +533,7 @@ export class ResearchHub {
     }
     const valid = Object.values(snap.factors).filter(f => f?.value != null).length
     return ok({
-      code: buildInstrumentNamespace(cnRef), name: snap.name, total_score: snap.totalScore,
+      code: instrumentHubCode(cnRef), name: snap.name, total_score: snap.totalScore,
       scorecard_name: scorecardName,
       scorecard_dimensions: card.factors.map(({ name, weight }) => ({
         name, score: snap.scores[`${name}_score`] ?? 0, weight,
@@ -751,7 +753,7 @@ export class ResearchHub {
         const indicators = buildInstrumentIndicators(data)
         return ok({
           instrument: ref,
-          code: ref.symbol,
+          code: instrumentHubCode(ref),
           name: data.name ?? ref.symbol,
           ...indicators,
         }, `${data.name ?? ref.symbol} 技术指标`, t0)
@@ -824,7 +826,7 @@ export class ResearchHub {
 
     const holdingCost = Number(params.holding_cost)
     const brief = buildTrendBrief({
-      code: buildInstrumentNamespace(cnRef),
+      code: instrumentHubCode(cnRef),
       name,
       klines,
       indexKlines: indexKlines.length >= 60 ? indexKlines : undefined,
@@ -1447,7 +1449,7 @@ export class ResearchHub {
       {
         ...coerced,
         ...(price != null ? { price } : {}),
-        code: String(raw.code ?? ref.symbol),
+        code: String(raw.code ?? instrumentHubCode(ref)),
         instrument: ref,
       },
       `${ref.symbol} 基金行情`,
@@ -1497,7 +1499,7 @@ export class ResearchHub {
   ): Promise<WatchlistRadarItem> {
     const ref = resolveCnInstrumentRef(input)
     const symbol = normalizeCode(ref.symbol)
-    const ns = buildInstrumentNamespace(ref)
+    const ns = instrumentHubCode(ref)
     const stored = this.store.getLatest(symbol)
     const factors = stored?.factorValues ?? {}
     try {
@@ -1545,7 +1547,7 @@ export class ResearchHub {
 
   private async stockKline(input: string | InstrumentRef, count: number, t0: number) {
     const cnRef = resolveCnInstrumentRef(input)
-    const code = buildInstrumentNamespace(cnRef)
+    const code = instrumentHubCode(cnRef)
     const safeCount = Math.max(20, Math.min(count, 240))
     const result = await this.de.queryInstrumentData(cnRef, 'kline', { count: safeCount })
     if (!result.success) return fail(instrumentQueryError(result, 'K线获取失败'), t0)
@@ -1565,7 +1567,7 @@ export class ResearchHub {
     if (!rows.length) return fail('筹码分布计算失败', t0)
     const latest = rows[rows.length - 1]!
     return ok({
-      code: buildInstrumentNamespace(cnRef),
+      code: instrumentHubCode(cnRef),
       rows,
       latest,
     }, `${normalized} 筹码 ${rows.length} 日`, t0)
@@ -1720,7 +1722,7 @@ export class ResearchHub {
     )
 
     return ok({
-      code: buildInstrumentNamespace(cnRef),
+      code: instrumentHubCode(cnRef),
       name,
       quote,
       profile: null,
@@ -1773,7 +1775,12 @@ export class ResearchHub {
   }) | null {
     const live = this.mergeQuoteWithLocal(ref.symbol, liveRaw)
     if (live) {
-      const row = { ...live, instrument: ref, quoteSource: 'live' as const }
+      const row = {
+        ...live,
+        code: instrumentHubCode(ref),
+        instrument: ref,
+        quoteSource: 'live' as const,
+      }
       this.rememberInstrumentQuote(ref, row)
       return row
     }
@@ -1781,7 +1788,12 @@ export class ResearchHub {
     if (cached) {
       const fromCache = this.mergeQuoteWithLocal(ref.symbol, cached)
       if (fromCache) {
-        return { ...fromCache, instrument: ref, quoteSource: 'cache' }
+        return {
+          ...fromCache,
+          code: instrumentHubCode(ref),
+          instrument: ref,
+          quoteSource: 'cache',
+        }
       }
     }
     const recalled = this.recallInstrumentQuoteRaw(ref)
@@ -1791,7 +1803,12 @@ export class ResearchHub {
         recalled as unknown as NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0],
       )
       if (fromMemory) {
-        return { ...fromMemory, instrument: ref, quoteSource: 'memory' }
+        return {
+          ...fromMemory,
+          code: instrumentHubCode(ref),
+          instrument: ref,
+          quoteSource: 'memory',
+        }
       }
     }
     return null
@@ -1808,7 +1825,7 @@ export class ResearchHub {
       return {
         ...coerced,
         ...(price != null ? { price } : {}),
-        code: String(raw.code ?? ref.symbol),
+        code: String(raw.code ?? instrumentHubCode(ref)),
         instrument: ref,
         quoteSource,
       }
@@ -1845,7 +1862,7 @@ export class ResearchHub {
         ...raw,
         ...coerced,
         ...(price != null ? { price } : {}),
-        code: String(raw.code ?? ref.symbol),
+        code: String(raw.code ?? instrumentHubCode(ref)),
         instrument: ref,
         quoteSource,
       }
@@ -2724,7 +2741,7 @@ export class ResearchHub {
   ) {
     const ref = resolveInstrumentFromParams(params)
     if (!ref) return fail('instrument 或 code 必填', t0)
-    if (ref.assetClass !== 'FUND') {
+    if (!isCnPublicFundRef(ref)) {
       return fail('当前标的不是公募基金，请重新搜索并选择基金', t0)
     }
     const labels = {
@@ -2748,7 +2765,7 @@ export class ResearchHub {
     const rows = Array.isArray(data) ? data : []
     return ok(
       {
-        code: ref.symbol,
+        code: instrumentHubCode(ref),
         items: rows,
         source: 'queryInstrumentData',
       },
@@ -2831,7 +2848,7 @@ export class ResearchHub {
     const rows = Array.isArray(data) ? data : []
     return ok(
       {
-        code: ref.symbol,
+        code: instrumentHubCode(ref),
         items: rows,
         source: 'queryInstrumentData',
       },
@@ -3542,7 +3559,7 @@ export class ResearchHub {
   private async fundDetail(params: Record<string, unknown>, t0: number) {
     const ref = resolveInstrumentFromParams(params)
     if (!ref) return fail('instrument 或 code 必填', t0)
-    if (ref.assetClass !== 'FUND') {
+    if (!isCnPublicFundRef(ref)) {
       return fail('当前标的不是公募基金，请重新搜索并选择基金', t0)
     }
     const settle = (cap: 'fund_snapshot' | 'fund_holdings' | 'fund_allocation') =>
@@ -3620,7 +3637,7 @@ export class ResearchHub {
       const nav = etfLatestNavRow(navRows as Record<string, unknown>[])
 
       const online = this.marketData.etfScorecardFromOnline({
-        code: ref.symbol,
+        code: instrumentHubCode(ref),
         name: (profile?.name as string | undefined)
           ?? (quote?.name as string | undefined)
           ?? ref.symbol,

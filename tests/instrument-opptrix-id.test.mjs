@@ -13,16 +13,26 @@ import { resolveFuyaoFundRoute } from '../packages/a-stock-layer/dist/providers/
 import { resolveInstrumentQueryPlan } from '../packages/a-stock-layer/dist/core/instrument-query.js'
 import { usesCnExchangeFundRealtimeRoute } from '../packages/a-stock-layer/dist/core/instrument.js'
 
-test('REIT 扶摇 NAV：fund_type=otc，thscode 保留 .SH/.SZ 后缀', () => {
+test('REIT 扶摇档案/净值：fund_type=reits，thscode 保留 .SH/.SZ 后缀', () => {
   const route = resolveFuyaoFundRoute('508000.SH', { assetClass: 'REIT' })
   assert.ok(route)
-  assert.equal(route.fundType, 'otc')
+  assert.equal(route.fundType, 'reits')
   assert.equal(route.thscode, '508000.SH')
+
+  const reitSz = resolveFuyaoFundRoute('180102.SZ', { assetClass: 'REIT' })
+  assert.ok(reitSz)
+  assert.equal(reitSz.fundType, 'reits')
+  assert.equal(reitSz.thscode, '180102.SZ')
 
   const bare = resolveFuyaoFundRoute('508000', { assetClass: 'REIT' })
   assert.ok(bare)
-  assert.equal(bare.fundType, 'otc')
+  assert.equal(bare.fundType, 'reits')
   assert.match(bare.thscode, /^508000\.(SH|SZ)$/)
+
+  const bareWithEx = resolveFuyaoFundRoute('180102', { assetClass: 'REIT', exchange: 'SZ' })
+  assert.ok(bareWithEx)
+  assert.equal(bareWithEx.fundType, 'reits')
+  assert.equal(bareWithEx.thscode, '180102.SZ')
 })
 
 test('ETF / LOF 扶摇 NAV 走 exchange', () => {

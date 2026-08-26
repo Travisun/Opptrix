@@ -141,7 +141,7 @@ test('本地 hit 形态：namespace code + 完整 InstrumentRef', () => {
     exchange: 'HK',
   })
   const code = instrumentDisplayCode(instrument)
-  assert.equal(code, 'HK:00700')
+  assert.equal(code, 'HK:STOCK:00700.HK')
   assert.equal(instrument.market, 'HK')
   assert.equal(instrument.symbol, '00700')
 })

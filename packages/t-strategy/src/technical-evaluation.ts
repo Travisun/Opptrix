@@ -1,4 +1,5 @@
 import type { InstrumentRef } from '@opptrix/shared'
+import { instrumentHubCode } from '@opptrix/shared'
 import { isCnEtfCode } from '@opptrix/a-stock-layer'
 import type { StrategyData } from './base.js'
 import { lastRow, type IndicatorRow } from './indicators.js'
@@ -87,7 +88,7 @@ export function buildTechnicalEvaluation(data: StrategyData, ref?: InstrumentRef
   return {
     mode: 'technical_bundle' as const,
     instrument,
-    code: instrument.symbol,
+    code: instrumentHubCode(instrument),
     name: data.name ?? instrument.symbol,
     price: data.price ?? 0,
     total_score,

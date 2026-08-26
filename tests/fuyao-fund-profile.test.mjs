@@ -42,6 +42,13 @@ describe('cn lof instrument', () => {
 })
 
 describe('fuyao fund profile', () => {
+  it('resolveFuyaoFundRoute maps REIT to reits with listed suffix', () => {
+    assert.deepEqual(
+      resolveFuyaoFundRoute('180102.SZ', { assetClass: 'REIT' }),
+      { fundType: 'reits', thscode: '180102.SZ' },
+    )
+  })
+
   it('resolveFuyaoFundRoute maps OTC and exchange codes', () => {
     assert.deepEqual(resolveFuyaoFundRoute('009049'), { fundType: 'otc', thscode: '009049.OF' })
     assert.deepEqual(resolveFuyaoFundRoute('515150'), { fundType: 'exchange', thscode: '515150.SH' })

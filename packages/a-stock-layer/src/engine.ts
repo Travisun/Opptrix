@@ -47,7 +47,7 @@ import { normalizeUsSymbol } from './utils/us-market.js'
 import { isRegionalEquityMarket, normalizeRegionalSymbol, type RegionalEquityMarket } from './utils/regional-symbol.js'
 import { parseCryptoPair } from './utils/crypto-market.js'
 import type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
-import { instrumentProviderSymbol, normalizeInstrumentRef } from '@opptrix/shared'
+import { instrumentProviderSymbol, normalizeInstrumentRef, buildOpptrixInstrumentId } from '@opptrix/shared'
 import {
   resolveInstrumentQueryPlan,
   unsupportedInstrumentCapabilityMessage,
@@ -948,23 +948,53 @@ export class MarketDataEngine {
     }
   }
 
-  async fundSnapshot(fundCode: string) {
-    const code = normalizeCode(fundCode)
-    const listed = isCnListedFundSymbol(code)
+  async fundSnapshotFromRef(ref: InstrumentRef) {
+    const normalized = normalizeInstrumentRef(ref)
+    const code = normalized.symbol
+    const assetClass = normalized.assetClass === 'REIT' ? 'REIT' : 'FUND'
+    const exchangeListed = assetClass === 'REIT' || isCnListedFundSymbol(code)
+
     const [profile, quoteRes] = await Promise.all([
-      this.fundProfile(code),
-      listed ? this.fundQuote(code) : Promise.resolve(null),
+      this.queryScoped<Record<string, unknown>>(
+        'CN',
+        assetClass,
+        Capability.FUND_PROFILE,
+        'fundProfile',
+        'fund_profile',
+        true,
+        [code],
+        15_000,
+        normalized,
+      ),
+      exchangeListed
+        ? this.queryScoped<Record<string, unknown>>(
+          'CN',
+          assetClass,
+          Capability.FUND_QUOTE,
+          'fundQuote',
+          'fund_quote',
+          true,
+          [code],
+          15_000,
+          normalized,
+        ).then(result =>
+          assetClass === 'FUND'
+            ? this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>)
+            : result as QueryResult<Record<string, unknown>[]>,
+        )
+        : Promise.resolve(null),
     ])
     const profileRow = profile.data?.[0] as Record<string, unknown> | undefined
     const quoteRow = quoteRes?.success
       ? quoteRes.data?.[0] as Record<string, unknown> | undefined
       : undefined
-    const success = profile.success || (listed && quoteRes?.success && quoteRow)
+    const success = profile.success || (exchangeListed && quoteRes?.success && quoteRow)
     if (!success) {
       return {
         success: false,
         data: null,
         source: profile.source,
+        error: profile.error,
       }
     }
     const mergedProfile = profileRow ?? (quoteRow
@@ -998,13 +1028,23 @@ export class MarketDataEngine {
     return {
       success: true,
       data: {
-        code,
+        code: buildOpptrixInstrumentId(normalized),
+        instrument: normalized,
         profile: mergedProfile ?? null,
         nav: latestNav ?? null,
         quote,
       },
       source: profile.source ?? quoteRes?.source,
     }
+  }
+
+  async fundSnapshot(fundCode: string) {
+    return this.fundSnapshotFromRef(normalizeInstrumentRef({
+      market: 'CN',
+      assetClass: 'FUND',
+      symbol: fundCode,
+      exchange: 'PF',
+    }))
   }
 
   async etfSnapshotFromRef(ref: InstrumentRef): Promise<{
@@ -1299,14 +1339,16 @@ export class MarketDataEngine {
         if (plan.market === 'CN' && plan.assetClass === 'REIT') {
           const snapRef = plan.ref ?? normalizeInstrumentRef({
             market: 'CN', assetClass: 'REIT', symbol: plan.symbol,
+            exchange: resolveStockMarketCode(plan.symbol),
           })
-          return this.fundSnapshot(snapRef.symbol)
+          return this.fundSnapshotFromRef(snapRef)
         }
         if (plan.market === 'CN' && plan.assetClass === 'FUND') {
           const snapRef = plan.ref ?? normalizeInstrumentRef({
             market: 'CN', assetClass: 'FUND', symbol: plan.symbol,
+            exchange: 'PF',
           })
-          return this.fundSnapshot(snapRef.symbol)
+          return this.fundSnapshotFromRef(snapRef)
         }
         if (isRegionalEquityMarket(plan.market)) {
           return this.regionalSnapshot(plan.market, plan.symbol)

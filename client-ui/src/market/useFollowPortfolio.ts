@@ -172,9 +172,13 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     return loadTrades(code, market)
   }, [loadTrades, refreshHoldings])
 
-  const clearPortfolioForCode = useCallback(async (code: string, market?: string) => {
+  const clearPortfolioForCode = useCallback(async (
+    code: string,
+    market?: string,
+    assetClass?: string,
+  ) => {
     try {
-      await portfolioClearInstrument(code, market)
+      await portfolioClearInstrument(code, market, assetClass)
     } catch {
       /* best-effort cleanup when removing watchlist row */
     }
@@ -187,6 +191,9 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
       if (ref) {
         keys.add(portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(ref)))
         keys.add(instrumentKey(ref))
+      }
+      if (assetClass && ref) {
+        keys.add(instrumentKey({ ...ref, assetClass: assetClass as import('../types/instrument').InstrumentRef['assetClass'] }))
       }
       for (const k of keys) {
         if (k) delete next[k]

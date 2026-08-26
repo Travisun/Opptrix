@@ -22,7 +22,7 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
-import { displayCodeFromInstrument, resolveWatchlistInstrument } from './instrument'
+import { resolveWatchlistInstrument } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
@@ -205,7 +205,10 @@ function HeroCell({ label, value }: { label: string; value: string }) {
 
 function mergeProfile(snapshot: FundSnapshotData | null): FundProfileData | null {
   if (!snapshot) return null
-  const base = (snapshot.profile ?? {}) as FundProfileData
+  const rawProfile = snapshot.profile
+  if (rawProfile != null && typeof rawProfile !== 'object') return null
+  if (Array.isArray(rawProfile)) return null
+  const base = (rawProfile ?? {}) as FundProfileData
   const quote = snapshot.quote as Record<string, unknown> | null
   const nav = snapshot.nav as Record<string, unknown> | null
   return {
@@ -252,7 +255,7 @@ export default function FundDetailTab({
     [stock],
   )
   const stockCode = instrumentRef?.symbol ?? stock?.code ?? null
-  const displayCode = instrumentRef ? displayCodeFromInstrument(instrumentRef) : (stock?.code ?? '')
+  const displayCode = stock?.code?.trim() ?? ''
   const isListedFund = stockCode != null && isCnListedFundSymbol(stockCode)
   const isLof = stockCode != null && isCnLofSymbol(stockCode)
 

@@ -8,7 +8,7 @@ import { isCnListedFundSymbol } from './format'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
 import { buildChartSeries, isLineChartView, periodLabel } from './chartSeries'
-import { buildChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOptions'
+import { buildChartPeriodOptions, buildIndexChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOptions'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX, initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
 import { isLineChartPaneLabel } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
@@ -280,9 +280,17 @@ interface Props {
   expanded?: boolean
   /** Tab/panel visible — triggers chart resize after layout. */
   active?: boolean
+  /** 指数图：隐藏筹码/MACD，周期对齐券商指数页 */
+  chartVariant?: 'equity' | 'index'
 }
 
-export default function TradingViewChart({ code, instrument, expanded = false, active = true }: Props) {
+export default function TradingViewChart({
+  code,
+  instrument,
+  expanded = false,
+  active = true,
+  chartVariant = 'equity',
+}: Props) {
   const s = useStyles()
   /** 按标的身份稳定，避免父组件每次 render 新建 instrument 对象导致 loadChart abort */
   const instrumentIdentity = useMemo(
@@ -319,10 +327,13 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
       || listedCnFundChart)
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
+  const isIndexChart = chartVariant === 'index' || instrumentRef.assetClass === 'INDEX'
   const canChart = cnEquityChart || crossMarketChart
   const periodOptions = useMemo(
-    () => buildChartPeriodOptions(instrumentRef, { cnEquityChart, crossMarketChart }),
-    [instrumentRef, cnEquityChart, crossMarketChart],
+    () => (isIndexChart
+      ? buildIndexChartPeriodOptions(instrumentRef)
+      : buildChartPeriodOptions(instrumentRef, { cnEquityChart, crossMarketChart })),
+    [instrumentRef, cnEquityChart, crossMarketChart, isIndexChart],
   )
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
@@ -567,7 +578,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
 
   const paneMainLabel = isLineChartPaneLabel(period) ? '分' : 'K'
   const lineChartView = Boolean(data && data.period === period && isLineChartView(period, data.bars))
-  const showMacd = Boolean(
+  const showMacd = !isIndexChart && Boolean(
     data && !lineChartView
     && data.indicators.some(row => row.macd != null),
   )
@@ -578,7 +589,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
   const legendOhlc = !lineChartView && data
   const cyqLatest = data?.cyqLatest ?? null
   const cyqProfile = data?.cyqProfile ?? null
-  const showCyq = Boolean(
+  const showCyq = !isIndexChart && Boolean(
     isCyqChartPeriod(period)
     && cyqLatest
     && cyqProfile

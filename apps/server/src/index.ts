@@ -2047,11 +2047,17 @@ app.delete<{ Params: { id: string } }>('/api/portfolio/trade/:id', async (req, r
   return { success: true }
 })
 
-app.delete<{ Querystring: { code?: string; market?: string } }>('/api/portfolio/instrument', async (req, reply) => {
+app.delete<{ Querystring: { code?: string; market?: string; assetClass?: string } }>('/api/portfolio/instrument', async (req, reply) => {
   const code = String(req.query?.code ?? '').trim()
   if (!code) return reply.code(400).send({ error: 'code required' })
   const market = req.query?.market?.trim() || undefined
-  const { removed } = hub.de.portfolio.clearInstrument(code, market as import('@opptrix/shared').Market | undefined)
+  const assetClassRaw = req.query?.assetClass?.trim() || undefined
+  const assetClass = assetClassRaw as import('@opptrix/shared').AssetClass | undefined
+  const { removed } = hub.de.portfolio.clearInstrument(
+    code,
+    market as import('@opptrix/shared').Market | undefined,
+    assetClass,
+  )
   return { success: true, removed }
 })
 

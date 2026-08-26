@@ -76,9 +76,9 @@ export function displayCodeFromInstrument(ref: InstrumentRef): string {
   return instrumentDisplayCode(ref)
 }
 
-/** @ 引用标签 — Stock-index 统一命名空间（与本地名录 / 关注列表一致） */
+/** @ 引用标签 — OpptrixQuant 统一 ID（与搜索 / 关注列表 / 详情展示一致） */
 export function formatInstrumentLabel(ref: InstrumentRef): string {
-  return buildInstrumentNamespace(ref)
+  return displayCodeFromInstrument(ref)
 }
 
 /** 与 @opptrix/shared instrumentRefKey 保持一致 — Stock-index 命名空间 */
@@ -110,6 +110,11 @@ export function tryResolveWatchlistInstrument(item: WatchlistItem): InstrumentRe
       return null
     }
     return normalizeInstrumentRefLocal(item.instrument)
+  }
+  const rawCode = item.code.trim()
+  const opptrix = parseOpptrixInstrumentId(rawCode)
+  if (opptrix) {
+    return normalizeInstrumentRefLocal(opptrix as InstrumentRef)
   }
   const industry = item.industry?.trim() ?? ''
   if (industry.includes('公募基金')) {
@@ -171,25 +176,23 @@ export function isOpptrixInstrumentCode(code: string): boolean {
 export function prepareWatchlistItemForStore(item: WatchlistItem): WatchlistItem {
   const raw = item.code.trim()
   if (isOpptrixInstrumentCode(raw)) {
+    const parsed = parseOpptrixInstrumentId(raw)
+    const instrument = item.instrument
+      ? normalizeInstrumentRefLocal(item.instrument)
+      : parsed
+        ? normalizeInstrumentRefLocal(parsed as InstrumentRef)
+        : undefined
     return {
       ...item,
       code: raw,
-      name: item.name?.trim() || raw,
+      name: item.name?.trim() || (instrument ? displayCodeFromInstrument(instrument) : raw),
       industry: item.industry?.trim() || undefined,
       note: item.note?.trim() || undefined,
       addedPrice: item.addedPrice ?? null,
-      instrument: item.instrument ? normalizeInstrumentRefLocal(item.instrument) : undefined,
+      instrument,
     }
   }
   return normalizeWatchlistItem(item)
-}
-
-/** 展示用代码：Opptrix ID 直接展示；旧关注项用命名空间 */
-export function watchlistDisplayCode(item: WatchlistItem): string {
-  const raw = item.code.trim()
-  if (isOpptrixInstrumentCode(raw)) return raw
-  const ref = tryResolveWatchlistInstrument(item)
-  return ref ? displayCodeFromInstrument(ref) : (raw || '—')
 }
 
 export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
@@ -255,6 +258,7 @@ export function resolveStockContextInstrument(
 }
 
 export function detailPanelKind(ref: InstrumentRef): DetailPanelKind {
+  if (ref.market === 'CN' && ref.assetClass === 'INDEX') return 'cn-index'
   if (ref.market === 'CN' && (ref.assetClass === 'FUND' || ref.assetClass === 'REIT')) return 'cn-fund'
   if (ref.market === 'CN' && (ref.assetClass === 'ETF' || ref.assetClass === 'LOF')) return 'cn-etf'
   if (ref.market === 'CN') return 'cn-equity'
@@ -277,10 +281,10 @@ export function marketDisplayName(market: Market): string {
   }
 }
 
-/** 搜索候选副标题 — 市场 · 代码 · 类型（搜索 ID 不再 normalize） */
+/** 搜索候选副标题 — 市场 · 代码 · 类型 */
 export function formatInstrumentSearchHitSubtitle(item: WatchlistItem): string {
   const ref = item.instrument ?? tryResolveWatchlistInstrument(item)
-  const code = watchlistDisplayCode(item)
+  const code = item.code.trim() || '—'
   if (!ref) return item.industry?.trim() || code
 
   const parts: string[] = [marketDisplayName(ref.market), code]

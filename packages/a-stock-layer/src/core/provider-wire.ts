@@ -118,9 +118,20 @@ export function wireRegistryMethodArgs(
     else if (copy.length >= 3) copy[2] = ref.assetClass
   }
 
-  // 扶摇基金接口：第二参传 assetClass，供 REIT→otc / ETF·LOF→exchange 路由
-  if (method.startsWith('fund') && providerId === 'tonghuashun' && copy.length === 1) {
-    copy.push(ref.assetClass)
+  // 扶摇基金接口：第二参 assetClass；第三参 exchange（REIT/LOF 等须保留后缀路由）
+  if (method.startsWith('fund') && providerId === 'tonghuashun') {
+    if (copy.length === 1) copy.push(ref.assetClass)
+    if (copy.length === 2 && ref.market === 'CN') {
+      const ex = ref.exchange?.toUpperCase()
+      if (
+        ex
+        && ex !== 'PF'
+        && ex !== 'OF'
+        && (ref.assetClass === 'REIT' || ref.assetClass === 'LOF' || ref.assetClass === 'ETF')
+      ) {
+        copy.push(ex)
+      }
+    }
   }
 
   return copy

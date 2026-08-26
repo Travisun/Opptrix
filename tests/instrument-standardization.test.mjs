@@ -232,9 +232,9 @@ test('canonical symbol normalization across markets', () => {
   assert.equal(canonicalHkSymbol('2'), '00002')
   const hk = normalizeInstrumentRef({ market: 'HK', assetClass: 'EQUITY', symbol: '700' })
   assert.equal(hk.symbol, '00700')
-  assert.equal(instrumentRefLabel(hk), 'HK:00700')
+  assert.equal(instrumentRefLabel(hk), 'HK:STOCK:00700.HK')
   const hk2 = normalizeInstrumentRef({ market: 'HK', assetClass: 'EQUITY', symbol: '00002' })
-  assert.equal(instrumentRefLabel(hk2), 'HK:00002')
+  assert.equal(instrumentRefLabel(hk2), 'HK:STOCK:00002.HK')
   const cn = normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: '519' })
   assert.equal(cn.symbol, '000519')
 })
@@ -243,7 +243,7 @@ test('parseInstrumentNamespace accepts HK:HK.00002 StockIndex id', () => {
   const ref = parseInstrumentNamespace('HK:HK.00002')
   assert.equal(ref?.market, 'HK')
   assert.equal(ref?.symbol, '00002')
-  assert.equal(instrumentRefLabel(ref), 'HK:00002')
+  assert.equal(instrumentRefLabel(ref), 'HK:STOCK:00002.HK')
 })
 
 test('parseTickflowSymbol keeps HK leading zeros', () => {
@@ -286,7 +286,7 @@ test('parseInstrumentNamespace — CN:SZ.000009', async () => {
   assert.equal(ref?.symbol, '000009')
   assert.equal(ref?.exchange, 'SZ')
   assert.equal(buildInstrumentNamespace(ref), 'CN:SZ.000009')
-  assert.equal(instrumentRefLabel(ref), 'CN:SZ.000009')
+  assert.equal(instrumentRefLabel(ref), 'CN:STOCK:000009.SZ')
 })
 
 test('parseInstrumentNamespace — CN:SH.510300 ETF preserves exchange', async () => {
@@ -374,6 +374,48 @@ test('parseInstrumentRef resolves namespace in symbol field', async () => {
   assert.equal(ref?.exchange, 'SZ')
 })
 
+test('instrumentHubParams — REIT 全量 Opptrix ID', async () => {
+  const { instrumentHubParams, resolveInstrumentFromParams } = await import('../packages/shared/dist/instrument-param.js')
+  const ref = {
+    market: 'CN',
+    assetClass: 'REIT',
+    symbol: '180102',
+    exchange: 'SZ',
+  }
+  const params = instrumentHubParams(ref)
+  assert.equal(params.code, 'CN:REIT:180102.SZ')
+  assert.equal(params.instrument.assetClass, 'REIT')
+  const resolved = resolveInstrumentFromParams({
+    instrument: params.instrument,
+    code: '180102',
+  })
+  assert.equal(resolved?.assetClass, 'REIT')
+})
+
+test('resolveInstrumentFromParams — 有 instrument 时禁止裸 code 误解析', async () => {
+  const { resolveInstrumentFromParams } = await import('../packages/shared/dist/instrument-param.js')
+  const broken = resolveInstrumentFromParams({
+    instrument: { market: 'CN', assetClass: 'REIT', symbol: '180102', exchange: 'SZ' },
+    code: '180102',
+  })
+  assert.equal(broken?.assetClass, 'REIT')
+  const invalid = resolveInstrumentFromParams({
+    instrument: { market: 'CN', assetClass: 'NOT_A_CLASS', symbol: '180102' },
+    code: '180102',
+  })
+  assert.equal(invalid, null)
+})
+
+test('parseInstrumentRef — REIT / LOF assetClass 保留', async () => {
+  const { parseInstrumentRef } = await import('../packages/shared/dist/instrument-ref.js')
+  const { isCnPublicFundRef } = await import('../packages/a-stock-layer/dist/core/fund-instrument.js')
+  const reit = parseInstrumentRef({ market: 'CN', assetClass: 'REIT', symbol: '180102', exchange: 'SZ' })
+  assert.equal(reit?.assetClass, 'REIT')
+  assert.ok(isCnPublicFundRef(reit))
+  const lof = parseInstrumentRef({ market: 'CN', assetClass: 'LOF', symbol: '160105', exchange: 'SZ' })
+  assert.equal(lof?.assetClass, 'LOF')
+})
+
 test('listCustomMethodsForAgent supports provider filter and keyword', async () => {
   const { listCustomMethodsForAgent } = await import('../packages/a-stock-layer/dist/core/custom-methods-agent.js')
   const baostock = listCustomMethodsForAgent({ providerId: 'baostock' })
@@ -423,6 +465,15 @@ test('inferCnAssetClassFromSymbol — 000977 defaults to SZ equity without excha
   assert.equal(inferCnAssetClassFromSymbol('000977', 'SH'), 'INDEX')
   assert.equal(isCnIndexSymbolByExchange('000977', 'SH'), true)
   assert.equal(isCnIndexSymbolByExchange('000977', 'SZ'), false)
+})
+
+test('resolveCnInstrumentIdentity — INDEX 000001 without exchange maps to SH', async () => {
+  const { resolveCnInstrumentIdentity } = await import('../packages/shared/dist/instrument-symbol.js')
+  const shComposite = resolveCnInstrumentIdentity({
+    market: 'CN', assetClass: 'INDEX', symbol: '000001',
+  })
+  assert.equal(shComposite.exchange, 'SH')
+  assert.equal(shComposite.assetClass, 'INDEX')
 })
 
 test('inferCnAssetClassFromSymbol — 000001 defaults to equity, 000300 stays index', async () => {

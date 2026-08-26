@@ -1,7 +1,7 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
 import { isCnEtfCode } from '@opptrix/a-stock-layer'
 import type { InstrumentRef, StockKline, StockRealtime } from '@opptrix/shared'
-import { hasApplicationCapability } from '@opptrix/shared'
+import { hasApplicationCapability, instrumentHubCode } from '@opptrix/shared'
 import type { StrategyData } from './base.js'
 import { gatherAll } from './data.js'
 import { computeAll } from './indicators.js'
@@ -40,7 +40,7 @@ async function gatherCrossMarketMinimal(
   engine: AshareEngine,
   ref: InstrumentRef,
 ): Promise<StrategyData> {
-  const data: StrategyData = { code: ref.symbol }
+  const data: StrategyData = { code: instrumentHubCode(ref) }
   const row = await fetchRealtimeRow(engine, ref)
   if (row) {
     data.price = row.price
@@ -68,7 +68,7 @@ export async function gatherStrategyData(
     return gatherAll(engine, ref.symbol)
   }
   if (!hasApplicationCapability(ref, 'chart_daily')) {
-    return { code: ref.symbol, name: ref.symbol }
+    return { code: instrumentHubCode(ref), name: ref.symbol }
   }
   return gatherCrossMarketMinimal(engine, ref)
 }
