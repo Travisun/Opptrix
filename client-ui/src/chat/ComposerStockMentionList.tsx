@@ -2,7 +2,6 @@ import { ProgressBar, Text } from '@fluentui/react-components'
 import type { WatchlistItem } from '../types/market'
 import {
   formatInstrumentSearchHitSubtitle,
-  normalizeWatchlistItem,
   watchlistItemKey,
 } from '../market/instrument'
 import { UNIVERSE_PREP_COPY, type UniversePrepUi } from '../market/useInstrumentSearchWithUniversePrep'
@@ -78,20 +77,19 @@ export default function ComposerStockMentionList({
         </div>
       ) : null}
       {items.map((item, index) => {
-        const row = normalizeWatchlistItem(item)
         const active = index === activeIndex
-        const subtitle = formatInstrumentSearchHitSubtitle(row)
+        const subtitle = formatInstrumentSearchHitSubtitle(item)
         return (
           <ComposerTooltipMenuItem
-            key={watchlistItemKey(row)}
+            key={watchlistItemKey(item)}
             active={active}
             title={subtitle}
             className="opptrix-hover-marquee-host"
             onMouseEnter={() => onHover(index)}
-            onClick={() => onSelect(row)}
+            onClick={() => onSelect(item)}
           >
             <span className="opptrix-composer-tooltip-menu__item-main">
-              <HoverMarqueeText text={row.name} className="opptrix-composer-tooltip-menu__item-title" />
+              <HoverMarqueeText text={item.name} className="opptrix-composer-tooltip-menu__item-title" />
               <span className="opptrix-composer-tooltip-menu__item-meta">{subtitle}</span>
             </span>
           </ComposerTooltipMenuItem>

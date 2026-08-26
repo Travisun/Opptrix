@@ -13,6 +13,7 @@ import {
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
   parseInstrumentNamespace,
+  parseOpptrixInstrumentId,
   resolveCnInstrumentIdentity,
   tryParseInstrumentInput as sharedTryParse,
 } from '@opptrix/shared/instrument-symbol'
@@ -161,13 +162,40 @@ export const UNRESOLVED_INSTRUMENT_COPY = {
   ambiguousShort: '点选确认',
 } as const
 
-/** 展示用代码：已消歧用 namespace，否则保留原 code */
+/** OpptrixQuant 搜索 / 入库用的统一 ID（CN:REIT:508000.SH 等） */
+export function isOpptrixInstrumentCode(code: string): boolean {
+  return parseOpptrixInstrumentId(code.trim()) != null
+}
+
+/** 入库前：搜索 Opptrix ID 原样保留；旧关注项仍走 normalizeWatchlistItem */
+export function prepareWatchlistItemForStore(item: WatchlistItem): WatchlistItem {
+  const raw = item.code.trim()
+  if (isOpptrixInstrumentCode(raw)) {
+    return {
+      ...item,
+      code: raw,
+      name: item.name?.trim() || raw,
+      industry: item.industry?.trim() || undefined,
+      note: item.note?.trim() || undefined,
+      addedPrice: item.addedPrice ?? null,
+      instrument: item.instrument ? normalizeInstrumentRefLocal(item.instrument) : undefined,
+    }
+  }
+  return normalizeWatchlistItem(item)
+}
+
+/** 展示用代码：Opptrix ID 直接展示；旧关注项用命名空间 */
 export function watchlistDisplayCode(item: WatchlistItem): string {
+  const raw = item.code.trim()
+  if (isOpptrixInstrumentCode(raw)) return raw
   const ref = tryResolveWatchlistInstrument(item)
-  return ref ? displayCodeFromInstrument(ref) : (item.code.trim() || '—')
+  return ref ? displayCodeFromInstrument(ref) : (raw || '—')
 }
 
 export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
+  if (isOpptrixInstrumentCode(item.code)) {
+    return prepareWatchlistItemForStore(item)
+  }
   const resolved = tryResolveWatchlistInstrument(item)
   if (resolved) {
     const code = displayCodeFromInstrument(resolved)
@@ -249,12 +277,11 @@ export function marketDisplayName(market: Market): string {
   }
 }
 
-/** 搜索候选副标题 — 市场 · 代码 · 类型，单行 ellipsis 友好 */
+/** 搜索候选副标题 — 市场 · 代码 · 类型（搜索 ID 不再 normalize） */
 export function formatInstrumentSearchHitSubtitle(item: WatchlistItem): string {
-  const row = normalizeWatchlistItem(item)
-  const ref = row.instrument
-  const code = watchlistDisplayCode(row)
-  if (!ref) return row.industry?.trim() || code
+  const ref = item.instrument ?? tryResolveWatchlistInstrument(item)
+  const code = watchlistDisplayCode(item)
+  if (!ref) return item.industry?.trim() || code
 
   const parts: string[] = [marketDisplayName(ref.market), code]
   if (ref.assetClass === 'ETF') {
@@ -301,7 +328,7 @@ export function hitToWatchlistItem(hit: LocalInstrumentHit): WatchlistItem {
     : hit.market === 'CN' && hit.exchange
       ? `${marketDisplayName(hit.market)} · ${hit.exchange === 'SH' ? '上交所' : hit.exchange === 'SZ' ? '深交所' : hit.exchange === 'BJ' ? '北交所' : hit.exchange}`
       : marketDisplayName(hit.market)
-  return normalizeWatchlistItem({
+  return prepareWatchlistItemForStore({
     code: hit.code,
     name: hit.name ?? hit.code,
     industry,

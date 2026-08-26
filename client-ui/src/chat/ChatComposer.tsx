@@ -31,7 +31,7 @@ import type { PublicAgentSkill } from '../api/client'
 import {
   displayCodeFromInstrument,
   marketDisplayName,
-  normalizeWatchlistItem,
+  prepareWatchlistItemForStore,
   resolveWatchlistInstrument,
   watchlistItemKey,
 } from '../market/instrument'
@@ -723,7 +723,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   }, [draftSync, closeMention, closeSlash, refreshContentState])
 
   const buildChipData = useCallback((item: WatchlistItem): InlineChipData | null => {
-    const row = normalizeWatchlistItem(item)
+    const row = prepareWatchlistItemForStore(item)
     const ref = resolveWatchlistInstrument(row)
     if (!ref) return null
     const code = displayCodeFromInstrument(ref)

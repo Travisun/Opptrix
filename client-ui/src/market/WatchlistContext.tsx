@@ -14,6 +14,7 @@ import type { DisambiguationCandidate, WatchlistItem } from '../types/market'
 import {
   isAmbiguousNumericCode,
   normalizeWatchlistItem,
+  prepareWatchlistItemForStore,
   tryResolveWatchlistInstrument,
   watchlistItemKey,
 } from './instrument'
@@ -29,7 +30,7 @@ const DEFAULT_ITEMS: WatchlistItem[] = [
 ]
 
 function itemKey(item: WatchlistItem): string {
-  return watchlistItemKey(normalizeWatchlistItem(item))
+  return watchlistItemKey(prepareWatchlistItemForStore(item))
 }
 
 function computeItemsKey(list: WatchlistItem[]): string {
@@ -90,7 +91,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         const remote = await fetchWatchlist()
         if (cancelled) return
         if (remote.items.length > 0) {
-          const normalized = remote.items.map(normalizeWatchlistItem)
+          const normalized = remote.items.map(prepareWatchlistItemForStore)
           skipNextSync.current = true
           setItems(normalized)
           setSyncedItemsKey(computeItemsKey(normalized))
@@ -136,7 +137,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       void fetchWatchlist()
         .then(remote => {
           if (!remote.items.length) return
-          const normalized = remote.items.map(normalizeWatchlistItem)
+          const normalized = remote.items.map(prepareWatchlistItemForStore)
           skipNextSync.current = true
           setItems(normalized)
           setSyncedItemsKey(computeItemsKey(normalized))
@@ -161,12 +162,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [items])
 
   const addItem = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
-    const row = normalizeWatchlistItem(item)
+    const row = prepareWatchlistItemForStore(item)
     const key = itemKey(row)
     const now = new Date().toISOString()
     setItems(prev => {
       if (prev.some(x => itemKey(x) === key)) return prev
-      return [normalizeWatchlistItem({
+      return [prepareWatchlistItemForStore({
         ...row,
         addedAt: row.addedAt ?? now,
         addedPrice: opts?.addedPrice ?? row.addedPrice ?? null,
@@ -175,14 +176,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addItemAndSync = useCallback(async (item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
-    const row = normalizeWatchlistItem(item)
+    const row = prepareWatchlistItemForStore(item)
     const key = itemKey(row)
     const now = new Date().toISOString()
     const prev = itemsRef.current
     const existing = prev.find(x => itemKey(x) === key)
     if (existing) return existing
 
-    const added = normalizeWatchlistItem({
+    const added = prepareWatchlistItemForStore({
       ...row,
       addedAt: row.addedAt ?? now,
       addedPrice: opts?.addedPrice ?? row.addedPrice ?? null,
@@ -212,7 +213,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     setItems(prev => prev.map(item => {
       const match = item.code === code || itemKey(item) === code
       if (!match && item.code !== code) return item
-      return normalizeWatchlistItem({ ...item, ...patch, code: patch.code ?? item.code })
+      return prepareWatchlistItemForStore({ ...item, ...patch, code: patch.code ?? item.code })
     }))
   }, [])
 

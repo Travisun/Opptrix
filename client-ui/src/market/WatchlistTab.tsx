@@ -1089,27 +1089,23 @@ export default function WatchlistTab({
               hint="试试输入完整代码，或换一个字再搜"
             />
           )}
-          {searchHits.map(hit => {
-            const row = normalizeWatchlistItem(hit)
-            return (
-              <button
-                key={watchlistItemKey(row)}
-                type="button"
-                className={mergeClasses(s.resultItem, 'opptrix-hover-marquee-host')}
-                onClick={async () => {
-                  const row = normalizeWatchlistItem(hit)
-                  await Promise.resolve(onAdd(row, {}))
-                  setKeyword('')
-                }}
-              >
-                <div className={s.resultMain}>
-                  <HoverMarqueeText text={row.name} className={s.resultName} />
-                  <span className={s.resultSubtitle}>{formatInstrumentSearchHitSubtitle(row)}</span>
-                </div>
-                <span className={s.resultAction}>添加</span>
-              </button>
-            )
-          })}
+          {searchHits.map(hit => (
+            <button
+              key={watchlistItemKey(hit)}
+              type="button"
+              className={mergeClasses(s.resultItem, 'opptrix-hover-marquee-host')}
+              onClick={async () => {
+                await Promise.resolve(onAdd(hit, {}))
+                setKeyword('')
+              }}
+            >
+              <div className={s.resultMain}>
+                <HoverMarqueeText text={hit.name} className={s.resultName} />
+                <span className={s.resultSubtitle}>{formatInstrumentSearchHitSubtitle(hit)}</span>
+              </div>
+              <span className={s.resultAction}>添加</span>
+            </button>
+          ))}
         </div>
       )}
 

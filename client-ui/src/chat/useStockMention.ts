@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { WatchlistItem } from '../types/market'
-import { normalizeWatchlistItem, watchlistItemKey } from '../market/instrument'
+import { isOpptrixInstrumentCode, normalizeWatchlistItem, prepareWatchlistItemForStore, watchlistItemKey } from '../market/instrument'
 import {
   useInstrumentSearchWithUniversePrep,
   type UniversePrepUi,
@@ -84,7 +84,7 @@ export function useStockMention(items: WatchlistItem[]) {
     })
     const merged = new Map<string, WatchlistItem>()
     for (const item of [...local, ...remote]) {
-      const row = normalizeWatchlistItem(item)
+      const row = isOpptrixInstrumentCode(item.code) ? item : normalizeWatchlistItem(item)
       merged.set(watchlistItemKey(row), row)
     }
     return [...merged.values()].slice(0, 10)
@@ -113,7 +113,7 @@ export function useStockMention(items: WatchlistItem[]) {
   const selectActive = useCallback((text: string, cursor: number) => {
     const item = matches[state.activeIndex]
     if (!item) return null
-    return { ...applySelection(text, cursor), item: normalizeWatchlistItem(item) }
+    return { ...applySelection(text, cursor), item: prepareWatchlistItemForStore(item) }
   }, [applySelection, matches, state.activeIndex])
 
   const clampActiveIndex = useCallback(() => {
