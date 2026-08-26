@@ -102,7 +102,7 @@ import {
   type UnifiedInstrumentQuotesDto,
   type UnifiedInstrumentSnapshotDto,
 } from '../market/instrument-adapters'
-import { instrumentHubParams } from '@opptrix/shared'
+import { instrumentHubParams } from '@opptrix/shared/instrument-param'
 import type { InstrumentRef, UnifiedInstrumentQuote } from '../types/instrument'
 
 function hubInstrumentBody(ref: InstrumentRef, extra: Record<string, unknown> = {}) {
