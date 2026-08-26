@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   applyValuationToStockRealtime,
   buildValuationProfileMetrics,
+  mapLimitDownRow,
   mapValuationSnapshotItem,
 } from '../packages/a-stock-layer/dist/providers/tonghuashun/normalize/index.js'
 import {
@@ -34,6 +35,23 @@ test('mapValuationSnapshotItem maps pe_ttm→pe and pb_mrq→pb', () => {
   assert.equal(mapped.extras.pe_mrq, 20.8841)
   assert.equal(mapped.extras.ps_ttm, 10.3284)
   assert.equal(mapped.extras.pcf_ttm, 19.7716)
+})
+
+test('mapLimitDownRow maps type limit_down and aliases', () => {
+  const mapped = mapLimitDownRow({
+    thscode: '000001.SZ',
+    name: '平安银行',
+    trade_date: '2024-01-15',
+    price_change_ratio_pct: -9.98,
+    limit_down_reason: '大盘拖累',
+    last_limit_time: '09:35',
+  })
+  assert.equal(mapped.code, '000001')
+  assert.equal(mapped.name, '平安银行')
+  assert.equal(mapped.type, 'limit_down')
+  assert.equal(mapped.date, '2024-01-15')
+  assert.equal(mapped.changePct, -9.98)
+  assert.equal(mapped.reason, '大盘拖累')
 })
 
 test('applyValuationToStockRealtime merges pe/pb without breaking other fields', () => {

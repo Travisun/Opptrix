@@ -49,8 +49,9 @@
 | 投资风格 | `GET /api/fund/managers/investment-style` | `fundManagersInvestmentStyle` | ✅ `fundManager` |
 | 基金公司 | `GET /api/fund/companies/detail` | `fundCompaniesDetail` | ✅ `fundProfile` enrich（有 `company_id` 时并行） |
 | 基金诊断 | `GET /api/fund/diagnostics/detail` | `fundDiagnosticsDetail` | ✅ `fundDiagnosis` |
-| 财务指标 | ~~`/api/fund/financials/*`~~ | `fundFinancialsIndicators`（rawGet） | ⚠️ **不在 SDK / API_AUDIT §12**；详情主路径 `fundFinancials` **直接返回 null**；Client rawGet 仅供 Agent 扩展 |
-| 利润表 / 资产负债表 | 同上 | rawGet | ⚠️ 非 SDK；未挂详情主路径 |
+| 财务指标 | `GET /api/fund/financials/indicators` | `fundFinancialsIndicators`（`sdk.funds.financials.indicators`） | ✅ `fundFinancials` → `mapFundFinancialsRow` |
+| 利润表 | `GET /api/fund/financials/income-statements` | `fundFinancialsIncomeStatements`（SDK） | ✅ Client；详情主路径暂用 indicators |
+| 资产负债表 | `GET /api/fund/financials/balance-sheets` | `fundFinancialsBalanceSheets`（SDK） | ✅ Client；详情主路径暂用 indicators |
 | 场内快照 | `GET /api/fund/market/snapshot` | `fundMarketSnapshot` | ✅ ETF 路径；**场内公募基金 `fundQuote` 合并交易所价** |
 | 场内历史 | `GET /api/fund/market/historical` | `fundMarketHistorical` | ✅ ETF K 线 |
 | 资讯列表 | `GET /api/fund/news/article-list` | `fundNewsArticleList` | ✅ `fundNews` |
@@ -72,7 +73,7 @@
 | `FUND_MANAGER` | `fundManager` | CN / FUND | 120（经理 Tab；无 `manager_id` 返回 null） |
 | `FUND_DIAGNOSIS` | `fundDiagnosis` | CN / FUND | 120（诊断 Tab） |
 | `FUND_NEWS` | `fundNews` | CN / FUND | 120（资讯 Tab；limit≈15） |
-| `FUND_FINANCIALS` | `fundFinancials` | CN / FUND | 120；**同花顺实现恒为 null**（非 SDK）；Hub **不**因财务空写入 `failed` |
+| `FUND_FINANCIALS` | `fundFinancials` | CN / FUND | 120；同花顺经 SDK `funds.financials.indicators`；Hub 在 `success=false` 时 `mark(..., '财务')`，空数据不吓人 |
 | `ETF_*` | `etfProfile` 等 | CN / ETF | 120（`fund_type=exchange`） |
 
 ### `get_fund_performance_nav` / `fundPerformanceNav` 的 `range` 分工
@@ -115,7 +116,7 @@ InstrumentRef (CN:PF)
 
 | 动作 | 上游调用 |
 |---|---|
-| 打开详情 | Hub 并行：snapshot 腿 + holdings + returns/drawdowns + allocation + holders + dividends + manager（含 profile→manager_id 再 4 路）+ diagnostics + news；`fund_financials` 同花顺恒空；profile 有 `mgmt_id` 时额外 `companies/detail` |
+| 打开详情 | Hub 并行：snapshot 腿 + holdings + returns/drawdowns + allocation + holders + dividends + manager（含 profile→manager_id 再 4 路）+ diagnostics + news + financials（indicators）；profile 有 `mgmt_id` 时额外 `companies/detail` |
 | 点走势 | 场外/LOF：`performance/nav`（`range=fyear`，可复用缓存）；场内非 LOF：K 线通道 |
 
 **Hero / 档案字段来源**
@@ -152,7 +153,7 @@ InstrumentRef (CN:PF)
 
 | 路径 | 职责 |
 |---|---|
-| `providers/tonghuashun/api/client.ts` | 全量基金 REST 方法（含非 SDK rawGet financials） |
+| `providers/tonghuashun/api/client.ts` | 全量基金 REST 方法（financials 走 SDK；`get`/`rawGet` 仍供 dump 旁路） |
 | `providers/tonghuashun/api/fund-symbols.ts` | `resolveFuyaoFundRoute` |
 | `providers/tonghuashun/normalize/fund.ts` | 标准化 `StandardFund*` 行 |
 | `providers/tonghuashun/markets/cn/fund.ts` | `mixTonghuashunFund` |
@@ -176,7 +177,7 @@ node --import tsx/esm --test tests/fuyao-fund-profile.test.mjs tests/fund-detail
 ## 已知限制
 
 - **`accNav` = `adj_nav`（复权净值）**，UI 已标「复权净值」；勿当作累计净值或伪造累计净值。
-- **基金 financials 不在 SDK / API_AUDIT §12**；详情主路径不依赖；档案财务区块无数据时静默空态。
+- **基金 financials** 已由 `@opptrix/fuyao` ≥1.0.1 暴露；详情主路径用 indicators；无数据时档案财务区块静默空态，仅查询失败才进 `failed`。
 - `fundList` 未实现；名录/搜索走扶摇 + Tickflow + 本地；列表补路可走 Tushare 等现役栈。
 - `fundManager` 依赖 profile 的 `manager_id` 或 `manager_info[0].manager_id`；缺失时返回 null（不硬失败），UI 可回退档案姓名。
 - 诊断接口官方样例中 `dimensions` / `resilience` 可为空 object；归一化后无可用标量则整行返回 null，避免 UI 出现 `[object Object]`。

@@ -20,7 +20,7 @@
     "test:oppx": "npm run build && node scripts/test-oppx.mjs"
   },
   "dependencies": {
-    "@opptrix/fuyao": "^1.0.0",
+    "@opptrix/fuyao": "^1.0.1",
     "@opptrix/market-data-core": "*",
     "@opptrix/shared": "*",
     "@opptrix/user-store": "*",

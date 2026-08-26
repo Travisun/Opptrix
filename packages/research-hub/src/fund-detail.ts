@@ -138,8 +138,8 @@ export function mergeFundDetailParts(
   const news = asRows(parts.news)
   mark(parts.news.success, '资讯')
 
-  // financials：SDK 无端点，能力常返回空/失败；不写入 failed，避免详情「财务暂缺」吓人
   const financials = asRecord(parts.financials)
+  mark(parts.financials.success, '财务')
 
   const data: FundDetailData = {
     code,

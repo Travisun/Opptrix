@@ -18,6 +18,7 @@ import {
   mapFundManagerRow,
   mapFundDiagnosisRow,
   mapFundNewsRows,
+  mapFundFinancialsRow,
 } from '../../normalize/fund.js'
 import type { TonghuashunMarketHandler } from './handler.js'
 
@@ -384,10 +385,19 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
   }
 
   /**
-   * 基金财务指标 — `@opptrix/fuyao` SDK / API_AUDIT §12 无 `/api/fund/financials/*`。
-   * 详情主路径直接返回 null（不依赖非 SDK rawGet）；Client 仍保留 rawGet 方法供 Agent 扩展。
+   * 基金财务指标 — `@opptrix/fuyao` `funds.financials.indicators`。
+   * 无数据返回 null；错误由 withFuyaoClient 既有路径处理。
    */
-  p.fundFinancials = async function fundFinancials(_fundCode: string): Promise<Record<string, unknown>[] | null> {
-    return null
+  p.fundFinancials = async function fundFinancials(fundCode: string): Promise<Record<string, unknown>[] | null> {
+    const bare = assertCnPublicFundCode(fundCode)
+    if (!bare) return null
+    const route = resolveFuyaoFundRoute(bare)
+    if (!route) return null
+    return withFuyaoClient(async client => {
+      const { fundType, thscode } = route
+      const data = await client.fundFinancialsIndicators(fundType, thscode)
+      const row = mapFundFinancialsRow(bare, data.item ?? [])
+      return row ? [row] : null
+    })
   }
 }

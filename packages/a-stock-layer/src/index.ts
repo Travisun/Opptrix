@@ -80,6 +80,7 @@ export {
   FuyaoClient, testTonghuashunConnection,
   loadTonghuashunConfig, isTonghuashunEnabled,
 } from './providers/tonghuashun/index.js'
+export type { FuyaoDumpDownloadKind } from './providers/tonghuashun/index.js'
 
 export {
   testTickflowConnection,

@@ -19,6 +19,7 @@ import {
   mapIncomeStatementRows,
   mapBalanceSheetRows,
   mapCashFlowRows,
+  mapLimitDownRow,
   mapLimitUpRow,
   mapSnapshotToIndexRealtime,
   mapSnapshotToStockRealtime,
@@ -404,8 +405,15 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
   async limitUpdown(date = ''): Promise<LimitUpDown[] | null> {
     return this.withClient(async client => {
       const dateMs = date ? ymdToMs(date) : undefined
-      const data = await client.limitUpPool(dateMs, 1, 200)
-      const mapped = (data.item ?? []).map(mapLimitUpRow)
+      const empty: Record<string, unknown>[] = []
+      const [upItems, downItems] = await Promise.all([
+        client.limitUpPool(dateMs, 1, 200).then(d => d.item ?? empty).catch(() => empty),
+        client.limitDownPool(dateMs, 1, 200).then(d => d.item ?? empty).catch(() => empty),
+      ])
+      const mapped = [
+        ...upItems.map(mapLimitUpRow),
+        ...downItems.map(mapLimitDownRow),
+      ]
       return mapped.length ? mapped : null
     })
   }

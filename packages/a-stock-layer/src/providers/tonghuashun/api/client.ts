@@ -30,23 +30,15 @@ export class FuyaoApiError extends Error {
   }
 }
 
-type QueryValue = string | number | boolean | null | undefined
-
 type FuyaoTickerAssetType = 'a-share' | 'a-share-index' | 'fund-etf' | 'fund-lof'
+
+/** SDK dumps.downloadUrl kind；适配层内联，避免把 DumpKind 泄漏到 markets。 */
+export type FuyaoDumpDownloadKind = 'daily-k' | 'daily-k-10d' | 'adjustment-factors'
 
 const RETRY_CODES = new Set([4001, 5001, 5002, 5003])
 const TEN_YEARS_MS = Math.floor(10 * 365.25 * 86400 * 1000)
 const FIVE_YEARS_MS = Math.floor(5 * 365.25 * 86400 * 1000)
 const ONE_YEAR_MS = Math.floor(365.25 * 86400 * 1000)
-
-function cleanParams(params: Record<string, QueryValue>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(params)) {
-    if (v == null || v === '') continue
-    out[k] = String(v)
-  }
-  return out
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
@@ -81,15 +73,13 @@ function injectFetch(input: string, init?: RequestInit): Promise<Response> {
 
 export class FuyaoClient {
   private readonly sdk: SdkFuyaoClient
-  private readonly apiKey: string
-  private readonly baseUrl: string
 
   constructor(apiKey: string, baseUrl = FUYAO_BASE_URL) {
-    this.apiKey = apiKey.trim()
-    this.baseUrl = baseUrl.replace(/\/$/, '') || FUYAO_BASE_URL
+    const key = apiKey.trim()
+    const base = baseUrl.replace(/\/$/, '') || FUYAO_BASE_URL
     this.sdk = new SdkFuyaoClient({
-      apiKey: this.apiKey,
-      baseUrl: this.baseUrl,
+      apiKey: key,
+      baseUrl: base,
       timeoutMs: 30000,
       intervalMs: 300,
       fetch: injectFetch,
@@ -135,51 +125,11 @@ export class FuyaoClient {
   }
 
   /**
-   * SDK 未暴露的基金 financials 等：最小私有 GET（同一 fetch + 信封 unwrap）。
-   * 保持与旧 `get` 相同的重试与 `FuyaoApiError` 行为。
+   * market-dumps 预签名下载链接（经 SDK `dumps.downloadUrl`）。
+   * 返回 data 线材（`presigned_url` / `download_url`）；禁止把 Key 交给沙盒。
    */
-  private async rawGet<T = Record<string, unknown>>(
-    path: string,
-    params: Record<string, QueryValue> = {},
-  ): Promise<T> {
-    const qs = new URLSearchParams(cleanParams(params))
-    const suffix = qs.toString()
-    const base = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`
-    const url = suffix ? `${base}?${suffix}` : base
-    let lastErr: unknown
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const resp = await tonghuashunClient.fetch(url, {
-          method: 'GET',
-          headers: {
-            'X-api-key': this.apiKey,
-            Referer: 'https://fuyao.aicubes.cn/',
-          },
-          timeoutMs: 30000,
-        })
-        const payload = await resp.json() as {
-          code?: number
-          message?: string
-          request_id?: string
-          data?: T
-        }
-        const code = payload.code ?? -1
-        if (code === 0) return (payload.data ?? {}) as T
-        if (RETRY_CODES.has(code) && attempt < 2) {
-          await sleep(1000 * (2 ** attempt))
-          continue
-        }
-        throw new FuyaoApiError(code, String(payload.message ?? 'unknown'), payload.request_id)
-      } catch (e) {
-        lastErr = e
-        if (e instanceof FuyaoApiError) throw e
-        if (attempt < 2) {
-          await sleep(1000 * (2 ** attempt))
-          continue
-        }
-      }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
+  dumpDownloadUrl(kind: FuyaoDumpDownloadKind): Promise<Record<string, unknown>> {
+    return this.unwrap<Record<string, unknown>>(() => this.sdk.dumps.downloadUrl(kind))
   }
 
   tickersSearch(q: string, limit = 5, assetType: FuyaoTickerAssetType | string = 'a-share') {
@@ -369,6 +319,64 @@ export class FuyaoClient {
     return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
       this.sdk.specialData.limitUpPool({ dateMs, page, size }),
     )
+  }
+
+  /**
+   * 跌停股票池
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/limit-down-pool
+   */
+  limitDownPool(dateMs?: number, page = 1, size = 100) {
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.specialData.limitDownPool({ dateMs, page, size }),
+    )
+  }
+
+  /**
+   * 炸板股票池
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/limit-break-pool
+   */
+  limitBreakPool(dateMs?: number, page = 1, size = 100) {
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.specialData.limitBreakPool({ dateMs, page, size }),
+    )
+  }
+
+  /**
+   * 集合竞价快照
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/auction/snapshot
+   * @param stage live（实时）/ final（终态，默认）
+   */
+  auctionSnapshot(thscodes: string | string[], stage?: 'live' | 'final') {
+    return this.unwrap<{ item?: Record<string, unknown>[] } & Record<string, unknown>>(() =>
+      this.sdk.aShare.auction.snapshot({ thscodes, stage }),
+    )
+  }
+
+  /**
+   * 短线风向标竞价基准
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/auction/short-term-benchmark
+   */
+  auctionShortTermBenchmark(date?: string) {
+    return this.unwrap<{ item?: Record<string, unknown>[] } & Record<string, unknown>>(() =>
+      this.sdk.aShare.auction.shortTermBenchmark(date ? { date } : undefined),
+    )
+  }
+
+  /**
+   * 全市场行情快照自动翻页（便利方法）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/prices/snapshot
+   */
+  async pricesIterateAllSnapshot(pageSize = 100): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = []
+    try {
+      for await (const item of this.sdk.aShare.prices.iterateAllSnapshot({ pageSize })) {
+        all.push(item as unknown as Record<string, unknown>)
+      }
+    } catch (e) {
+      if (e instanceof SdkFuyaoApiError) throw FuyaoApiError.fromSdk(e)
+      throw e
+    }
+    return all
   }
 
   /**
@@ -562,27 +570,24 @@ export class FuyaoClient {
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/indicators — SDK 未暴露，走 rawGet */
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/indicators */
   fundFinancialsIndicators(fundType: string, thscode: string) {
-    return this.rawGet<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/financials/indicators',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.financials.indicators({ fundType: asFundType(fundType), thscode }),
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/income-statements — SDK 未暴露，走 rawGet */
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/income-statements */
   fundFinancialsIncomeStatements(fundType: string, thscode: string) {
-    return this.rawGet<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/financials/income-statements',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.financials.incomeStatements({ fundType: asFundType(fundType), thscode }),
     )
   }
 
-  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/balance-sheets — SDK 未暴露，走 rawGet */
+  /** @sourceUrl https://fuyao.aicubes.cn/api/fund/financials/balance-sheets */
   fundFinancialsBalanceSheets(fundType: string, thscode: string) {
-    return this.rawGet<{ item?: Record<string, unknown>[] }>(
-      '/api/fund/financials/balance-sheets',
-      { fund_type: fundType, thscode },
+    return this.unwrap<{ item?: Record<string, unknown>[] }>(() =>
+      this.sdk.funds.financials.balanceSheets({ fundType: asFundType(fundType), thscode }),
     )
   }
 
@@ -625,6 +630,31 @@ export class FuyaoClient {
         limit: opts?.limit,
       }),
     )
+  }
+
+  /**
+   * 基金资讯自动游标翻页（便利方法）
+   * @sourceUrl https://fuyao.aicubes.cn/api/fund/news/article-list
+   */
+  async fundsNewsIterateArticles(
+    fundType: string,
+    thscode: string,
+    pageSize?: number,
+  ): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = []
+    try {
+      for await (const item of this.sdk.funds.news.iterateArticles({
+        fundType: asFundType(fundType),
+        thscode,
+        pageSize,
+      })) {
+        all.push(item as unknown as Record<string, unknown>)
+      }
+    } catch (e) {
+      if (e instanceof SdkFuyaoApiError) throw FuyaoApiError.fromSdk(e)
+      throw e
+    }
+    return all
   }
 
   /**

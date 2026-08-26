@@ -16,7 +16,14 @@ export interface DumpImportResult {
   fromCache?: boolean
 }
 
-export type DumpHttpGet = <T = Record<string, unknown>>(path: string, params?: Record<string, string | number | boolean | null | undefined>) => Promise<T>
+/** SDK dumps.downloadUrl kind（与 FuyaoClient.dumpDownloadUrl 一致） */
+export type FuyaoDumpApiKind = 'daily-k' | 'daily-k-10d' | 'adjustment-factors'
+
+/**
+ * 取 dump 预签名链接：入参为 SDK kind，返回 data 线材（含 `presigned_url` / `download_url`）。
+ * 适配层入口：`(kind) => client.dumpDownloadUrl(kind)`；测试可 mock。
+ */
+export type DumpUrlFetcher = (kind: FuyaoDumpApiKind) => Promise<Record<string, unknown>>
 
 export interface DumpImportHooks {
   onPhase?: (label: string, percent: number) => void
@@ -25,6 +32,12 @@ export interface DumpImportHooks {
 const FULL_DUMP_TIMEOUT_MS = 25 * 60 * 1000
 const INCR_DUMP_TIMEOUT_MS = 5 * 60 * 1000
 const MIN_PARQUET_BYTES = 4096
+
+const DUMP_ID_TO_API_KIND: Record<string, FuyaoDumpApiKind> = {
+  a_share_daily_k_1d_none_10y: 'daily-k',
+  a_share_daily_k_1d_none_10d: 'daily-k-10d',
+  a_share_adjustment_factors_event_none_all: 'adjustment-factors',
+}
 
 function parquetCacheMaxAgeMs(): number {
   return DUMP_IMPORT_CONFIG.parquetCacheMaxAgeDays * 24 * 60 * 60 * 1000
@@ -65,17 +78,17 @@ export function isParquetCacheFresh(
   }
 }
 
-export async function fetchDownloadUrl(get: DumpHttpGet, dumpId: string): Promise<string> {
-  const pathMap: Record<string, string> = {
-    'a_share_daily_k_1d_none_10y': 'daily-k',
-    'a_share_daily_k_1d_none_10d': 'daily-k-10d',
-    'a_share_adjustment_factors_event_none_all': 'adjustment-factors',
-  }
-  const apiPath = pathMap[dumpId] ?? dumpId
-  const data = await get<{ presigned_url?: string; download_url?: string }>(
-    `/api/dump/market-dumps/${apiPath}/download-url`,
-  )
-  const url = data.presigned_url ?? data.download_url ?? ''
+function apiKindForDumpId(dumpId: string): FuyaoDumpApiKind {
+  const kind = DUMP_ID_TO_API_KIND[dumpId]
+  if (!kind) throw new Error(`未知 dumpId: ${dumpId}`)
+  return kind
+}
+
+export async function fetchDownloadUrl(fetchUrl: DumpUrlFetcher, dumpId: string): Promise<string> {
+  const data = await fetchUrl(apiKindForDumpId(dumpId))
+  const presigned = typeof data.presigned_url === 'string' ? data.presigned_url : ''
+  const download = typeof data.download_url === 'string' ? data.download_url : ''
+  const url = (presigned || download).trim()
   if (!url) throw new Error('未获取到下载链接')
   return url
 }
@@ -120,7 +133,7 @@ async function downloadToFile(
 
 export async function ensureParquetDownloaded(
   type: 'full' | 'incremental',
-  get: DumpHttpGet,
+  fetchUrl: DumpUrlFetcher,
   hooks?: DumpImportHooks,
   opts?: { forceRefresh?: boolean; destPath?: string },
 ): Promise<{ path: string; fromCache: boolean }> {
@@ -142,7 +155,7 @@ export async function ensureParquetDownloaded(
   try { fs.unlinkSync(tmpPath) } catch { /* ignore stale partial */ }
 
   hooks?.onPhase?.('获取下载链接', 5)
-  const url = await fetchDownloadUrl(get, dumpId)
+  const url = await fetchDownloadUrl(fetchUrl, dumpId)
   hooks?.onPhase?.(type === 'full' ? '下载全量包（约 170MB）' : '下载增量包', 15)
   await downloadToFile(url, timeoutMs, tmpPath, (loaded, total) => {
     if (total != null && total > 0) {
@@ -157,9 +170,12 @@ export async function ensureParquetDownloaded(
   return { path: cachePath, fromCache: false }
 }
 
-export async function importAdjustmentFactors(_store: MarketDataStore, get: DumpHttpGet): Promise<DumpImportResult> {
+export async function importAdjustmentFactors(
+  _store: MarketDataStore,
+  fetchUrl: DumpUrlFetcher,
+): Promise<DumpImportResult> {
   try {
-    const url = await fetchDownloadUrl(get, DUMP_IMPORT_CONFIG.adjustmentDumpId)
+    const url = await fetchDownloadUrl(fetchUrl, DUMP_IMPORT_CONFIG.adjustmentDumpId)
     const buffer = await fetch(url).then(r => r.arrayBuffer())
     void buffer
     return { type: 'adjustments', rowsImported: 0, success: true }
@@ -192,7 +208,7 @@ export async function prepareFuyaoDump(opts: {
   mode?: FuyaoDumpMode
   forceRefresh?: boolean
   destDir: string
-  get: DumpHttpGet
+  fetchUrl: DumpUrlFetcher
   hooks?: DumpImportHooks
 }): Promise<{
   ok: boolean
@@ -212,7 +228,7 @@ export async function prepareFuyaoDump(opts: {
 
   try {
     if (mode === 'presigned_url') {
-      const url = await fetchDownloadUrl(opts.get, dumpIdForKind(kind))
+      const url = await fetchDownloadUrl(opts.fetchUrl, dumpIdForKind(kind))
       return {
         ok: true,
         url,
@@ -238,7 +254,7 @@ export async function prepareFuyaoDump(opts: {
         }
       }
       opts.hooks?.onPhase?.('获取复权因子下载链接', 5)
-      const url = await fetchDownloadUrl(opts.get, DUMP_IMPORT_CONFIG.adjustmentDumpId)
+      const url = await fetchDownloadUrl(opts.fetchUrl, DUMP_IMPORT_CONFIG.adjustmentDumpId)
       const tmpPath = `${destPath}.tmp`
       try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
       opts.hooks?.onPhase?.('下载复权因子包', 20)
@@ -270,7 +286,7 @@ export async function prepareFuyaoDump(opts: {
 
     const { path: downloaded, fromCache } = await ensureParquetDownloaded(
       kind,
-      opts.get,
+      opts.fetchUrl,
       opts.hooks,
       { forceRefresh: opts.forceRefresh, destPath },
     )
@@ -322,6 +338,6 @@ export async function prepareFuyaoDumpForAgent(opts: {
   }
   return prepareFuyaoDump({
     ...opts,
-    get: client.get.bind(client),
+    fetchUrl: (kind) => client.dumpDownloadUrl(kind),
   })
 }
