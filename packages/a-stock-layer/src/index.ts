@@ -260,7 +260,9 @@ export {
   recordProviderQueryEmpty,
   recordProviderQueryError,
   isFreeMarketDataProvider,
+  classifyProviderQueryError,
 } from './core/free-provider-throttle.js'
+export type { ProviderQueryErrorClass } from './core/provider-query-error.js'
 export { invokeProviderDriverMethod } from './core/provider-driver-guard.js'
 export {
   wireProviderSymbolArg,

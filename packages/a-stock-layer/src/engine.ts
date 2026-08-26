@@ -10,15 +10,13 @@ import { CAP_METHOD } from './providers/common/base.js'
 import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
 import { getProviderHealthTracker, type HealthSnapshot } from './core/provider-health.js'
 import {
-  isPermissionDeniedError,
-  recordProviderPermissionDenial,
   getProviderPermissionDenialSnapshot,
   clearProviderPermissionDenials,
   clearAllProviderPermissionDenials,
+  isProviderCapabilityDenied,
 } from './providers/common/permission-denial.js'
 import {
   getFreeProviderThrottle,
-  isFreeMarketDataProvider,
   pickNextDriver,
   recordProviderQueryEmpty,
   recordProviderQueryError,
@@ -297,11 +295,10 @@ export class MarketDataEngine {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = appendProviderError(lastError, `${driver.name}: ${msg}`)
-        if (!isFreeMarketDataProvider(driver.name) && isPermissionDeniedError(e)) {
-          recordProviderPermissionDenial(driver.name, capStr, msg)
+        recordProviderQueryError(driver.name, capStr, e, health)
+        // auth denial 已在 record 内登记；重建索引以立刻踢出无钥/鉴权失败源
+        if (isProviderCapabilityDenied(driver.name, capStr)) {
           this.registry.rebuildIndicesWithRanking()
-        } else {
-          recordProviderQueryError(driver.name, capStr, e, health)
         }
         this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker.recordResult(driver.name, capStr, 0, false)
@@ -1647,11 +1644,9 @@ export class MarketDataEngine {
       const msg = e instanceof Error ? e.message : String(e)
       const health = getProviderHealthTracker()
       const capStr = `custom:${methodName}`
-      if (!isFreeMarketDataProvider(resolvedId) && isPermissionDeniedError(e)) {
-        recordProviderPermissionDenial(resolvedId, capStr, msg)
+      recordProviderQueryError(resolvedId, capStr, e, health)
+      if (isProviderCapabilityDenied(resolvedId, capStr)) {
         this.registry.rebuildIndicesWithRanking()
-      } else {
-        recordProviderQueryError(resolvedId, capStr, e, health)
       }
       return { success: false, error: msg }
     }
@@ -1680,7 +1675,9 @@ export {
   recordProviderQueryEmpty,
   recordProviderQueryError,
   isFreeMarketDataProvider,
+  classifyProviderQueryError,
 } from './core/free-provider-throttle.js'
+export type { ProviderQueryErrorClass } from './core/provider-query-error.js'
 export { invokeProviderDriverMethod } from './core/provider-driver-guard.js'
 export type { InterfaceHealth, HealthSnapshot } from './core/provider-health.js'
 export {

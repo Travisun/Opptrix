@@ -13,11 +13,20 @@ import {
 import { getUserDataStore } from '@opptrix/user-store'
 import { getProviderManifest } from '../providers/manifests.js'
 import { resolveProviderAlias } from '../providers/common/provider-aliases.js'
-import { isProviderCapabilityDenied } from '../providers/common/permission-denial.js'
+import {
+  isProviderCapabilityDenied,
+  recordProviderPermissionDenial,
+} from '../providers/common/permission-denial.js'
 import {
   getProviderHealthTracker,
   type ProviderHealthTracker,
 } from './provider-health.js'
+import {
+  classifyProviderQueryError,
+  type ProviderQueryErrorClass,
+} from './provider-query-error.js'
+
+export { classifyProviderQueryError, type ProviderQueryErrorClass }
 
 export function isFreeMarketDataProvider(providerId: string): boolean {
   const manifest = getProviderManifest(resolveProviderAlias(providerId))
@@ -257,11 +266,19 @@ export function recordProviderQueryError(
       getFreeProviderThrottle().recordTrigger(providerId, reason || msg)
       return
     }
-    health.recordFailure(providerId, capStr, msg)
+  }
+
+  const cls = classifyProviderQueryError(error)
+  if (cls === 'business' || cls === 'rate_limited') {
+    health.recordEmptyMiss(providerId, capStr, `${cls}:${msg}`)
     return
   }
 
+  // transport / auth → 计熔断
   health.recordFailure(providerId, capStr, msg)
+  if (cls === 'auth' && !isFreeMarketDataProvider(providerId)) {
+    recordProviderPermissionDenial(providerId, capStr, msg)
+  }
 }
 
 export function pickNextDriver<T extends { name: string }>(
