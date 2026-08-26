@@ -469,24 +469,208 @@ export interface EtfHoldingRow {
   assetType?: string
 }
 
+/** 费率条目 — 与数据层 profile.rateInfo 对齐（label 标准；name 兼容） */
+export interface FundRateInfoItem {
+  label?: string
+  name?: string
+  rate?: number | null
+  note?: string
+}
+
+/** 基金经理详情 — 与 fund_detail.manager 对齐 */
+export interface FundManagerData {
+  name?: string
+  managerId?: string
+  years?: number | null
+  gender?: string
+  education?: string
+  resume?: string
+  style?: string
+  philosophy?: string
+  experience?: string
+  experienceSections?: FundManagerExperienceSection[]
+  representFunds?: string[]
+  scale?: number | null
+  performanceSummary?: string
+  startDate?: string
+  endDate?: string
+  officeDays?: number | null
+  tenureReturn?: number | null
+}
+
+/** 诊断单维 */
+export interface FundDiagnosisDimension {
+  name: string
+  score?: number | null
+  label?: string
+  peerAvg?: number | null
+  detail?: string
+}
+
+export interface FundResilienceItem {
+  period: string
+  label: string
+  maxDrawdown?: number | null
+  sharpe?: number | null
+  peerMaxDrawdown?: number | null
+  peerSharpe?: number | null
+}
+
+/** 基金诊断 — 与 fund_detail.diagnosis 对齐 */
+export interface FundDiagnosisData {
+  dimensions?: FundDiagnosisDimension[]
+  resilience?: string | number | null
+  resilienceItems?: FundResilienceItem[]
+  summary?: string
+}
+
+export interface FundManagerExperienceItem {
+  primary: string
+  secondary?: string
+  meta?: string
+}
+
+export interface FundManagerExperienceSection {
+  title: string
+  items: FundManagerExperienceItem[]
+}
+
+/** 基金资讯 — 与 fund_detail.news 对齐 */
+export interface FundNewsItem {
+  title: string
+  date: string
+  url?: string
+}
+
+/** 财务摘要 — 可嵌在档案底部；indicators 为扶摇关键指标行 */
+export interface FundFinancialSummary {
+  reportDate?: string
+  revenue?: number | null
+  revenueYoy?: number | null
+  netProfit?: number | null
+  netProfitYoy?: number | null
+  eps?: number | null
+  roe?: number | null
+  grossMargin?: number | null
+  debtRatio?: number | null
+  indicators?: Array<{ label: string; value?: number | string | null; unit?: string }>
+}
+
 export interface FundProfileData {
   code: string
   name?: string
   fullName?: string
   unitNav?: number | null
+  /** 扶摇路径下为复权净值（adj_nav），字段名历史兼容 */
   accNav?: number | null
   navDate?: string
   changePct?: number | null
   fundType?: string
   manager?: string
+  managerId?: string
+  managerStartDate?: string
+  managerEndDate?: string
+  managerOfficeDays?: number | null
+  managerTenureReturn?: number | null
   company?: string
+  companyId?: string
+  companyType?: string
+  companyFundCount?: number | null
+  companyScale?: number | null
+  companyEstablishDate?: string
   custodian?: string
   expenseRatio?: number | null
+  rateInfo?: FundRateInfoItem[]
+  purchaseFee?: number | null
+  redeemFee?: number | null
+  riskLevel?: string
   scale?: number | null
+  totalShares?: number | null
   benchmark?: string
   establishDate?: string
   return1y?: number | null
+  investTarget?: string
+  investScope?: string
+  investPhilosophy?: string
+  investStrategy?: string
+  /** 交易规则（可读文案） */
+  tradeRules?: string[]
+  performance?: FundPerformance
+  ranks?: Partial<Record<keyof FundPerformance, FundRankCell>>
+  peerAvg?: FundPerformance
+  holderAmount?: number | null
+  avgHolderShare?: number | null
+  instHolderRatio?: number | null
+  indivHolderRatio?: number | null
+  mgmtStaffHoldRatio?: number | null
+  holderReportDate?: string
   source?: string
+}
+
+export interface FundPerformance {
+  w1?: number | null
+  w4?: number | null
+  w13?: number | null
+  w26?: number | null
+  w52?: number | null
+  year?: number | null
+  year2?: number | null
+  year3?: number | null
+  year5?: number | null
+  total?: number | null
+}
+
+export interface FundRankCell {
+  rank?: number | null
+  total?: number | null
+}
+
+export interface FundReturnsData {
+  performance?: FundPerformance
+  ranks?: Partial<Record<keyof FundPerformance, FundRankCell>>
+  peerAvg?: FundPerformance
+}
+
+export interface FundDrawdownRow {
+  period: string
+  label: string
+  value?: number | null
+}
+
+export interface FundAllocItem {
+  name: string
+  ratio?: number | null
+}
+
+export interface FundAllocationData {
+  reportDate?: string
+  assets: FundAllocItem[]
+  industries: FundAllocItem[]
+}
+
+export interface FundHolderTopRow {
+  name: string
+  share?: number | null
+  ratio?: number | null
+}
+
+export interface FundHoldersData {
+  holderAmount?: number | null
+  avgHolderShare?: number | null
+  instHolderRatio?: number | null
+  indivHolderRatio?: number | null
+  mgmtStaffHoldRatio?: number | null
+  holderReportDate?: string
+  top: FundHolderTopRow[]
+}
+
+export interface FundDividendRow {
+  date: string
+  recordDate?: string
+  amount?: number | null
+  type?: string
+  dividendCount?: number | null
+  dividendTotal?: number | null
 }
 
 export interface FundNavPoint {
@@ -511,6 +695,23 @@ export interface FundSnapshotData {
   profile: FundProfileData | Record<string, unknown> | null
   nav: FundNavPoint | Record<string, unknown> | null
   quote: Record<string, unknown> | null
+}
+
+export interface FundDetailData {
+  code: string
+  snapshot: FundSnapshotData | null
+  holdings: FundHoldingRow[]
+  returns: FundReturnsData | null
+  drawdowns: FundDrawdownRow[]
+  allocation: FundAllocationData | null
+  holders: FundHoldersData | null
+  dividends: FundDividendRow[]
+  /** 经理详情；无则仅档案里的姓名 */
+  manager?: FundManagerData | null
+  diagnosis?: FundDiagnosisData | null
+  news?: FundNewsItem[]
+  financials?: FundFinancialSummary | null
+  failed: string[]
 }
 
 export interface EtfSnapshotData {

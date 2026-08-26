@@ -5,13 +5,19 @@ import type { ColorScheme } from '../theme/tokens'
 import { getOpptrixTokens } from '../theme/tokens'
 import { CN_TIMEZONE } from '../utils/cnTime'
 import type { Time } from 'lightweight-charts'
+import {
+  alignVolumeToTimes,
+  chartTimeKey,
+  padLineToTimes,
+  padMacdToCandleTimes,
+  type LinePoint,
+  type MacdPoint,
+  type VolumePoint,
+} from './chartSeriesAlign'
+
+export type { LinePoint, MacdPoint, VolumePoint }
 
 export type ChartMode = 'ohlc' | 'intraday'
-
-export interface LinePoint {
-  time: Time
-  value: number
-}
 
 export interface CandlePoint {
   time: Time
@@ -19,20 +25,6 @@ export interface CandlePoint {
   high: number
   low: number
   close: number
-}
-
-export interface VolumePoint {
-  time: Time
-  value: number
-  color: string
-}
-
-export interface MacdPoint {
-  time: Time
-  hist: number
-  histColor: string
-  dif: number
-  dea: number
 }
 
 export interface ChartSeriesBundle {
@@ -59,20 +51,14 @@ function volumeColor(change: number | null | undefined, scheme: ColorScheme): st
   return change >= 0 ? MARKET_UP : MARKET_DOWN
 }
 
-function timeKey(time: Time): string {
-  if (typeof time === 'number') return String(time)
-  if (typeof time === 'string') return time
-  return `${time.year}-${String(time.month).padStart(2, '0')}-${String(time.day).padStart(2, '0')}`
-}
-
 function dedupeByTime<T extends { time: Time }>(rows: T[]): T[] {
   const map = new Map<string, T>()
-  for (const row of rows) map.set(timeKey(row.time), row)
+  for (const row of rows) map.set(chartTimeKey(row.time), row)
   return [...map.values()].sort((a, b) => compareChartTime(a.time, b.time))
 }
 
 function assertUniqueTimes(times: Time[], label: string, period: string): void {
-  const unique = new Set(times.map(timeKey))
+  const unique = new Set(times.map(chartTimeKey))
   if (unique.size === times.length || times.length === 0) return
   if (isMinuteOhlcPeriod(period)) {
     throw new Error(`${label} 时间轴异常（${times.length} 条/${unique.size} 个时间点），分钟 K 线数据不完整`)
@@ -144,7 +130,7 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
       time: chartTime(bar.time, data.period, tz),
       value: bar.avgPrice,
     })))
-    const volume = dedupeByTime(bars.map((bar, i) => {
+    const volumeRaw = dedupeByTime(bars.map((bar, i) => {
       const ref = i > 0 ? bars[i - 1].price : data.preClose
       const delta = ref == null ? null : bar.price - ref
       return {
@@ -153,6 +139,11 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
         color: volumeColor(delta, scheme),
       }
     }))
+    const volume = alignVolumeToTimes(
+      volumeRaw,
+      priceLine.map(p => p.time),
+      volumeColor(null, scheme),
+    )
 
     assertUniqueTimes(priceLine.map(p => p.time), '分时', data.period)
 
@@ -179,30 +170,39 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
   if (candles.length === 0 && bars.length > 0) {
     throw new Error(`${periodLabel(data.period)} 时间格式无法解析，请稍后重试`)
   }
-  const volume = dedupeByTime(
-    bars.flatMap(bar => {
-      const time = chartTime(bar.time, data.period, tz)
-      if (!isValidChartTime(time)) return []
-      return [{
-        time,
-        value: bar.volume,
-        color: volumeColor(bar.changePct, scheme),
-      }]
-    }),
+  const candleTimes = candles.map(c => c.time)
+  const volume = alignVolumeToTimes(
+    dedupeByTime(
+      bars.flatMap(bar => {
+        const time = chartTime(bar.time, data.period, tz)
+        if (!isValidChartTime(time)) return []
+        return [{
+          time,
+          value: bar.volume,
+          color: volumeColor(bar.changePct, scheme),
+        }]
+      }),
+    ),
+    candleTimes,
+    volumeColor(null, scheme),
   )
-  const macd = dedupeByTime(
-    data.indicators
-      .filter(row => row.macdHist != null && row.macd != null && row.macdSignal != null)
-      .map(row => ({
-        time: chartTime(row.time, data.period, tz),
-        hist: row.macdHist!,
-        histColor: row.macdHist! >= 0 ? MARKET_UP : MARKET_DOWN,
-        dif: row.macd!,
-        dea: row.macdSignal!,
-      })),
-  )
+  const macdRaw: MacdPoint[] = []
+  for (const row of data.indicators) {
+    const hist = row.macdHist
+    const dif = row.macd
+    const dea = row.macdSignal
+    if (hist == null || dif == null || dea == null) continue
+    macdRaw.push({
+      time: chartTime(row.time, data.period, tz),
+      hist,
+      histColor: hist >= 0 ? MARKET_UP : MARKET_DOWN,
+      dif,
+      dea,
+    })
+  }
+  const macd = padMacdToCandleTimes(dedupeByTime(macdRaw), candleTimes)
 
-  assertUniqueTimes(candles.map(c => c.time), periodLabel(data.period), data.period)
+  assertUniqueTimes(candleTimes, periodLabel(data.period), data.period)
 
   const latest = data.cyqLatest
   const cyqOverlay = latest ? {
@@ -213,28 +213,31 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
     cost70High: latest.cost70High,
   } : null
 
+  const maKeys = minuteOhlc
+    ? (['ma5', 'ma10'] as const)
+    : (['ma5', 'ma10', 'ma20', 'ma60'] as const)
+  const maLines = maKeys
+    .map(key => ({
+      key,
+      color: ma[key],
+      points: padLineToTimes(maPoints(data.indicators, key, data.period, tz), candleTimes),
+    }))
+    .filter(row => row.points.some(p => p.value != null))
+
   return {
     mode: 'ohlc',
     showMacd,
     candles,
     priceLine: [],
     avgLine: [],
-    maLines: minuteOhlc
-      ? [
-          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period, tz) },
-          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period, tz) },
-        ].filter(row => row.points.length > 0)
-      : [
-          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period, tz) },
-          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period, tz) },
-          { key: 'ma20', color: ma.ma20, points: maPoints(data.indicators, 'ma20', data.period, tz) },
-          { key: 'ma60', color: ma.ma60, points: maPoints(data.indicators, 'ma60', data.period, tz) },
-        ].filter(row => row.points.length > 0),
+    maLines,
     volume,
     macd,
     cyqOverlay,
   }
 }
+
+export { alignVolumeToTimes, padLineToTimes, padMacdToCandleTimes }
 
 export function periodLabel(period: ChartPeriod): string {
   return PERIOD_LABELS[period] ?? period

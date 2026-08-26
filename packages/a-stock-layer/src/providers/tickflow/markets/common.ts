@@ -151,12 +151,12 @@ function normalizeYmdTickflow(input: string): string {
 export abstract class TickflowCommonHandler extends MarketHandlerShell {
   protected abstract client(): TickflowClient | null
 
-  protected tickflowSymbol(code: string): string {
+  protected tickflowSymbol(code: string, exchange?: string | null): string {
     const raw = code.trim()
     if (/\.(SH|SZ|BJ|US|HK)$/i.test(raw)) return toTickflowSymbol(raw)
     const bare = raw.replace(/^(US|NYSE|NASDAQ|AMEX|HK):/i, '').trim()
     const market = inferMarketFromBareCode(bare)
-    return toTickflowSymbol(market, bare)
+    return toTickflowSymbol(market, bare, exchange)
   }
 
   /**
@@ -168,10 +168,11 @@ export abstract class TickflowCommonHandler extends MarketHandlerShell {
     start = '',
     end = '',
     countOverride?: number,
+    exchange?: string | null,
   ): Promise<StockKline[] | null> {
     const client = this.client()
     if (!client) return null
-    const symbol = this.tickflowSymbol(code)
+    const symbol = this.tickflowSymbol(code, exchange)
     const region = tickflowRegion(symbol)
     if (!region) return null
 

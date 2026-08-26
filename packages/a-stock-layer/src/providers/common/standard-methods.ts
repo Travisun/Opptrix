@@ -26,6 +26,7 @@ export const STANDARD_DRIVER_METHODS = [
   'managerInfo', 'shareholderPlans', 'buyback',
   'etfData', 'etfList', 'etfProfile', 'etfNav', 'etfHoldings',
   'fundList', 'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote',
+  'fundReturns', 'fundDrawdown', 'fundAllocation', 'fundHolders', 'fundDividend',
 ] as const
 
 /** CN 公募基金五件套 */
@@ -68,7 +69,10 @@ export const PROVIDER_ETF_COVERAGE: Record<string, readonly string[]> = {
 
 export const PROVIDER_FUND_COVERAGE: Record<string, readonly string[]> = {
   tushare: [...CN_FUND_STANDARD_METHODS],
-  tonghuashun: ['fundProfile', 'fundNav', 'fundHoldings', 'fundQuote'],
+  tonghuashun: [
+    'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote',
+    'fundReturns', 'fundDrawdown', 'fundAllocation', 'fundHolders', 'fundDividend',
+  ],
   baostock: ['fundList', 'fundProfile'],
   stockindex: ['fundProfile', 'fundNav', 'fundQuote'],
 }

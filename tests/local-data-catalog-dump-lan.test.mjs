@@ -70,7 +70,7 @@ test('get_local_data_catalog returns how_to_call', () => {
   assert.equal(hub.access, 'hub_feature')
 })
 
-test('prepareFuyaoDump local_path with mock get (no key in result)', async () => {
+test('prepareFuyaoDump local_path with mock fetchUrl (no key in result)', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-dump-'))
   const dest = path.join(tmp, 'dumps')
   await fs.mkdir(dest, { recursive: true })
@@ -87,7 +87,7 @@ test('prepareFuyaoDump local_path with mock get (no key in result)', async () =>
       mode: 'local_path',
       forceRefresh: true,
       destDir: dest,
-      get: async () => ({
+      fetchUrl: async () => ({
         presigned_url: `http://127.0.0.1:${port}/incr.parquet`,
       }),
     })
@@ -109,7 +109,7 @@ test('prepareFuyaoDump presigned_url mode returns url only', async () => {
     dumpKind: 'full',
     mode: 'presigned_url',
     destDir: os.tmpdir(),
-    get: async () => ({ download_url: 'https://example.com/full.parquet?sig=1' }),
+    fetchUrl: async () => ({ download_url: 'https://example.com/full.parquet?sig=1' }),
   })
   assert.equal(result.ok, true)
   assert.equal(result.url, 'https://example.com/full.parquet?sig=1')

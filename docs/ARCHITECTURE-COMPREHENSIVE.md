@@ -1018,12 +1018,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 CLOSED（正常）：
   - 请求正常通过
-  - 连续失败 ≥ 3 次 → 跳闸
+  - 连续**真实失败** ≥ 3 次 → 跳闸
+  - 业务空结果（`recordEmptyMiss` / `recordProviderQueryEmpty`）只记观测，**不**累加 `consecutiveFails`、不打开熔断
 
 OPEN（熔断）：
   - 请求短路，直接失败
   - 冷却期：min(30s × 2^连续失败次数, 最大值)
   - 冷却期结束 → HALF_OPEN
+  - `provider_test` 成功时对该 provider 调用 `resetProviderHealth`，立即清除熔断状态
 
 HALF_OPEN（探测）：
   - 允许 1 个探测请求
@@ -1035,7 +1037,7 @@ HALF_OPEN（探测）：
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| `FAILURE_THRESHOLD` | 3 | 连续失败次数触发熔断 |
+| `FAILURE_THRESHOLD` | 3 | 连续真实失败次数触发熔断（空结果不计） |
 | `BASE_COOLDOWN_MS` | 30,000 | 最小冷却期 30s |
 | `MAX_COOLDOWN_MS` | 300,000 | 最大冷却期 5min |
 | `HALF_OPEN_MAX_ATTEMPTS` | 1 | HALF_OPEN 状态允许的探测数 |

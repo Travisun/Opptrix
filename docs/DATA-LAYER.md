@@ -177,6 +177,24 @@ enum Capability {
 
 ETF 的 `STOCK_REALTIME` / `STOCK_KLINE` **复用**现有 Capability，通过 `assetClass: 'ETF'` 区分；专用维度走新 Capability。
 
+**公募基金详情 Capability（同花顺扶摇；HTTP 经 `@opptrix/fuyao`，`Standard*` 仍为 Engine 边界）**：
+
+```typescript
+enum Capability {
+  FUND_RETURNS = 'fund_returns',         // 区间收益 / 同类排名
+  FUND_DRAWDOWN = 'fund_drawdown',       // 区间最大回撤
+  FUND_ALLOCATION = 'fund_allocation',   // 资产配置 + 行业配置
+  FUND_HOLDERS = 'fund_holders',         // 持有人结构 / 十大持有人
+  FUND_DIVIDEND = 'fund_dividend',       // 历史分红
+  FUND_MANAGER = 'fund_manager',         // 经理详情（detail+style+experience+performance）
+  FUND_DIAGNOSIS = 'fund_diagnosis',     // 基金诊断
+  FUND_NEWS = 'fund_news',               // 资讯列表
+  FUND_FINANCIALS = 'fund_financials',   // 财务关键指标（非 IS/BS 全表）
+}
+```
+
+Hub `fund_detail` 并行 `queryInstrumentData` 聚合 `fund_snapshot` / `fund_holdings` / `fund_allocation`；区间收益、同类均/排名与持有人结构由 `fund_snapshot` 内 `fundProfile` 已拉取的 returns / holdersDetail 写入 profile 后派生。单路失败写入 `failed[]`（如「持仓」「配置」），快照失败则整页失败。`fund_returns` / `fund_holders` / `fund_dividend` / `fund_manager` / `fund_drawdown` / `fund_diagnosis` / `fund_financials` / `fund_news` 仍注册为独立 Capability（Agent 等直连），**不**纳入 `fund_detail` 并行腿。`fund_allocation` 仅拉资产配置（不拉行业）。UI `FundDetailTab` 经 `research.fundDetail` 消费。仅同花顺绑定这些扩展能力，Tushare 仍为五件套（profile / nav / holdings / quote / list）。
+
 ---
 
 ## 5. 目标架构
@@ -387,9 +405,9 @@ packages/a-stock-layer/src/providers/tonghuashun/
       index.ts          # bootCnHandlers() — 聚合 cn 下各 assetClass
       equity.ts         # 股票 realtime / kline / profile
       etf.ts            # ETF 列表 / 净值 / 持仓
-      fund.ts           # 公募基金 profile / nav / holdings
+      fund.ts           # 公募基金 profile / nav / holdings / 详情扩展
   api/
-    fuyao.ts            # 扶摇 HTTP Client
+    client.ts           # FuyaoClient 薄适配层（HTTP 经 @opptrix/fuyao）
     ths.ts              # 同花顺特色数据
   normalize/
     quote.ts

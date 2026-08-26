@@ -9,7 +9,9 @@ import {
   resolveTickflowKlineQuery,
 } from '../normalize/index.js'
 import { TickflowClient } from '../api/client.js'
+import { toTickflowIndexSymbol } from '../api/symbols.js'
 import { TickflowCommonHandler } from './common.js'
+import { normalizeCode, type StockMarket } from '../../../utils/helpers.js'
 
 /** GET /v1/quotes 批量 URL 长度友好上限（超出用 POST /v1/quotes） */
 const QUOTES_GET_MAX_SYMBOLS = 12
@@ -61,7 +63,10 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
   }
 
   /** 免费档：用最近日 K 合成「最新价」（非实时） */
-  private async realtimeFromDailyKline(code: string): Promise<StockRealtime[] | null> {
+  private async realtimeFromDailyKline(
+    code: string,
+    exchange?: string | null,
+  ): Promise<StockRealtime[] | null> {
     const [rows, name] = await Promise.all([
       this.fetchKlinesResolved(
         code,
@@ -69,6 +74,7 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
         '',
         '',
         2,
+        exchange,
       ),
       this.resolveInstrumentName(code),
     ])
@@ -106,13 +112,13 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
   }
 
   /** 实时行情 — 有 Key 走 quotes；免费档用日 K 近似 */
-  async realtime(code: string): Promise<StockRealtime[] | null> {
+  async realtime(code: string, market?: StockMarket | null): Promise<StockRealtime[] | null> {
     const client = this.client()
     if (!client) return null
     if (isTickflowFreeTier()) {
-      return this.realtimeFromDailyKline(code)
+      return this.realtimeFromDailyKline(code, market)
     }
-    const symbol = this.tickflowSymbol(code)
+    const symbol = this.tickflowSymbol(code, market)
     try {
       const json = await client.getQuotes({ symbols: symbol })
       const rows = mapTickflowQuotes(json.data)
@@ -123,18 +129,22 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
   }
 
   /** 批量实时行情 — 免费档逐个日 K 近似；有 Key 走 quotes */
-  async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
+  async batchRealtime(
+    codes: string[],
+    markets?: Record<string, StockMarket | undefined>,
+  ): Promise<StockRealtime[] | null> {
     const client = this.client()
     if (!client || !codes.length) return null
+    const exchangeOf = (c: string) => markets?.[normalizeCode(c)] ?? markets?.[c]
     if (isTickflowFreeTier()) {
       const out: StockRealtime[] = []
       for (const code of codes) {
-        const one = await this.realtimeFromDailyKline(code)
+        const one = await this.realtimeFromDailyKline(code, exchangeOf(code))
         if (one?.length) out.push(...one)
       }
       return out.length ? out : null
     }
-    const symbols = codes.map(c => this.tickflowSymbol(c))
+    const symbols = codes.map(c => this.tickflowSymbol(c, exchangeOf(c)))
     try {
       const json = symbols.length <= QUOTES_GET_MAX_SYMBOLS
         ? await client.getQuotes({ symbols: symbols.join(',') })
@@ -152,6 +162,7 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
     start = '',
     end = '',
     count?: number,
+    market?: StockMarket | null,
   ): Promise<StockKline[] | null> {
     const resolved = resolveTickflowKlineQuery(period, count)
     if (!resolved) return null
@@ -159,11 +170,11 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
     if (isTickflowFreeTier() && isIntradayTickflowPeriod(resolved.tfPeriod)) {
       return null
     }
-    return this.fetchKlinesResolved(code, resolved, start, end, count)
+    return this.fetchKlinesResolved(code, resolved, start, end, count, market)
   }
 
   async indexRealtime(code: string) {
-    const batch = await this.realtime(code)
+    const batch = await this.realtime(toTickflowIndexSymbol(code))
     if (!batch) return null
     return batch.map(x => ({
       code: x.code,
@@ -187,7 +198,7 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
     end = '',
     count?: number,
   ): Promise<IndexKline[] | null> {
-    const rows = await this.kline(code, period, start, end, count)
+    const rows = await this.kline(toTickflowIndexSymbol(code), period, start, end, count)
     if (!rows) return null
     return rows.map(r => ({
       code: r.code,

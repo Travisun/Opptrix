@@ -135,7 +135,7 @@ describe('fuyao dump job', () => {
       dumpKind: 'incremental',
       mode: 'local_path',
       destDir,
-      get: async () => {
+      fetchUrl: async () => {
         throw new Error('should not fetch when cache hit')
       },
     })
@@ -151,7 +151,7 @@ describe('fuyao dump job', () => {
       mode: 'local_path',
       forceRefresh: true,
       destDir,
-      get: async () => {
+      fetchUrl: async () => {
         fetchCalls += 1
         return { presigned_url: 'https://example.invalid/dump.parquet' }
       },
@@ -192,7 +192,7 @@ describe('fuyao dump job', () => {
       dumpKind: 'full',
       mode: 'presigned_url',
       destDir: join(dataDir, 'dumps2'),
-      get: async () => ({ download_url: 'https://cdn.example/full.parquet' }),
+      fetchUrl: async () => ({ download_url: 'https://cdn.example/full.parquet' }),
     })
     assert.equal(result.status, 'ready')
     assert.equal(result.ok, true)

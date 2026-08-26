@@ -218,6 +218,70 @@ export const TONGHUASHUN_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
       notes: '支持批量；裸代码自动转为 thscode，多码以逗号拼接请求上游。',
     },
   ),
+
+  thsLimitBreakPool: thsDoc(
+    'thsLimitBreakPool',
+    '炸板股票池（当日曾涨停后打开）',
+    '/api/a-share/special-data/limit-break-pool',
+    [
+      {
+        name: 'date',
+        type: 'string',
+        description: '交易日 YYYY-MM-DD；省略时取上游当前自然日',
+      },
+    ],
+    'Record<string, unknown>[] 炸板行，含 source=tonghuashun',
+    {
+      example: '{"provider":"tonghuashun","method":"thsLimitBreakPool","args":["2024-01-15"]}',
+      usage: INVOKE('thsLimitBreakPool', '["2024-01-15"]'),
+      notes: '返回上游原始/规范化行；勿硬塞入标准 LimitUpDown.type（仅 limit_up|limit_down）。',
+    },
+  ),
+
+  thsAuctionSnapshot: thsDoc(
+    'thsAuctionSnapshot',
+    'A 股集合竞价快照',
+    '/api/a-share/auction/snapshot',
+    [
+      {
+        name: 'codes',
+        type: 'string',
+        description: '单只代码、逗号分隔多码，或 invoke 时传 JSON 字符串数组',
+        required: true,
+      },
+      {
+        name: 'stage',
+        type: 'string',
+        description: '竞价阶段：live（实时）/ final（终态）',
+        default: 'final',
+      },
+    ],
+    'Record<string, unknown>[] 竞价快照行，含 source=tonghuashun',
+    {
+      example: '{"provider":"tonghuashun","method":"thsAuctionSnapshot","args":["600519,000001","final"]}',
+      usage: INVOKE('thsAuctionSnapshot', '["600519","live"]'),
+      notes: '裸代码自动转为 thscode；服务端按请求顺序去重返回。',
+    },
+  ),
+
+  thsAuctionShortTermBenchmark: thsDoc(
+    'thsAuctionShortTermBenchmark',
+    '短线风向标竞价基准',
+    '/api/a-share/auction/short-term-benchmark',
+    [
+      {
+        name: 'date',
+        type: 'string',
+        description: '查询日期 YYYY-MM-DD；省略时取上海当日',
+      },
+    ],
+    'Record<string, unknown>[] 基准行（含 auction_pct/tags），含 source=tonghuashun',
+    {
+      example: '{"provider":"tonghuashun","method":"thsAuctionShortTermBenchmark","args":["2024-01-15"]}',
+      usage: INVOKE('thsAuctionShortTermBenchmark', '["2024-01-15"]'),
+      notes: '显式指定非交易日时上游不自动回退。',
+    },
+  ),
 }
 
 export const TONGHUASHUN_CUSTOM = Object.values(TONGHUASHUN_METHOD_DOCS).map(toCustomMethodDef)

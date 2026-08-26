@@ -49,6 +49,11 @@ const FUND_REGISTRY_METHODS = [
   { capability: 'fund_nav', method: 'fundNav' },
   { capability: 'fund_quote', method: 'fundQuote' },
   { capability: 'fund_holdings', method: 'fundHoldings' },
+  { capability: 'fund_returns', method: 'fundReturns' },
+  { capability: 'fund_drawdown', method: 'fundDrawdown' },
+  { capability: 'fund_allocation', method: 'fundAllocation' },
+  { capability: 'fund_holders', method: 'fundHolders' },
+  { capability: 'fund_dividend', method: 'fundDividend' },
 ]
 
 test('CN:PF 标准命名空间 — 场内外解析与规范化', () => {
@@ -289,5 +294,8 @@ test('PROVIDER_FUND_COVERAGE — tushare 与 tonghuashun', async () => {
   )
   const expectedTushare = ['fundList', 'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote']
   assert.deepEqual(PROVIDER_FUND_COVERAGE.tushare, expectedTushare)
-  assert.deepEqual(PROVIDER_FUND_COVERAGE.tonghuashun, ['fundProfile', 'fundNav', 'fundHoldings', 'fundQuote'])
+  assert.deepEqual(PROVIDER_FUND_COVERAGE.tonghuashun, [
+    'fundProfile', 'fundNav', 'fundHoldings', 'fundQuote',
+    'fundReturns', 'fundDrawdown', 'fundAllocation', 'fundHolders', 'fundDividend',
+  ])
 })

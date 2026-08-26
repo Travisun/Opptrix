@@ -9,7 +9,7 @@ import {
   prepareFuyaoDump,
   isParquetCacheFresh,
   parquetCachePath,
-  type DumpHttpGet,
+  type DumpUrlFetcher,
   type DumpImportHooks,
   type FuyaoDumpKind,
   type FuyaoDumpMode,
@@ -197,7 +197,7 @@ function startBackgroundJob(opts: {
   mode: FuyaoDumpMode
   forceRefresh?: boolean
   destDir: string
-  get: DumpHttpGet
+  fetchUrl: DumpUrlFetcher
   hooks?: DumpImportHooks
 }): FuyaoDumpJobResult {
   pruneJobs()
@@ -233,7 +233,7 @@ function startBackgroundJob(opts: {
         mode: opts.mode,
         forceRefresh: opts.forceRefresh,
         destDir: opts.destDir,
-        get: opts.get,
+        fetchUrl: opts.fetchUrl,
         hooks: {
           onPhase: (label, percent) => {
             record.percent = Math.min(99, Math.max(5, percent))
@@ -274,7 +274,7 @@ export async function prepareFuyaoDumpMaybeAsync(opts: {
   mode?: FuyaoDumpMode
   forceRefresh?: boolean
   destDir: string
-  get: DumpHttpGet
+  fetchUrl: DumpUrlFetcher
   hooks?: DumpImportHooks
   jobId?: string
 }): Promise<FuyaoDumpJobResult> {
@@ -315,7 +315,7 @@ export async function prepareFuyaoDumpMaybeAsync(opts: {
     mode,
     forceRefresh: opts.forceRefresh,
     destDir: opts.destDir,
-    get: opts.get,
+    fetchUrl: opts.fetchUrl,
     hooks: opts.hooks,
   })
 }
@@ -355,7 +355,7 @@ export async function prepareFuyaoDumpForAgentAsync(opts: {
   }
   return prepareFuyaoDumpMaybeAsync({
     ...opts,
-    get: client.get.bind(client),
+    fetchUrl: (kind) => client.dumpDownloadUrl(kind),
   })
 }
 

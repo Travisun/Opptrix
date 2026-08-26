@@ -516,6 +516,17 @@ export const research = {
       20000,
     ),
 
+  fundDetail: (
+    instrument: InstrumentRef,
+    signal?: AbortSignal,
+  ) =>
+    apiCall<import('../types/market').FundDetailData>(
+      'fund_detail',
+      { instrument, code: instrument.symbol },
+      { signal },
+      25000,
+    ),
+
   etfScorecard: (code: string, signal?: AbortSignal) =>
     apiCall<import('../types/market').EtfScorecardData>(
       'etf_scorecard',

@@ -25,6 +25,7 @@ export function cnMarketFromCode(code: string): StockMarket {
 
 export function inferCnAssetClass(code: string): AssetClass {
   const c = normalizeCode(code)
+  // 无 exchange：000001 默认 EQUITY（平安银行）；上证指数须显式 assetClass=INDEX + exchange=SH
   if (isShIndexCode(c) || c.startsWith('399')) return 'INDEX'
   if (isCnEtfCode(c)) return 'ETF'
   return 'EQUITY'

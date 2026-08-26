@@ -98,6 +98,7 @@ import {
   routeInstrumentSnapshot,
   type InstrumentRouteHandlers,
 } from './instrument-router.js'
+import { mergeFundDetailParts } from './fund-detail.js'
 import {
   routeInstrumentEvaluation,
   routeInstrumentIndicators,
@@ -377,6 +378,7 @@ export class ResearchHub {
         case 'fund_nav': return await this.queryFundInstrumentData(params, 'fund_nav', t0)
         case 'fund_holdings': return await this.queryFundInstrumentData(params, 'fund_holdings', t0)
         case 'fund_profile': return await this.queryFundInstrumentData(params, 'fund_profile', t0)
+        case 'fund_detail': return await this.fundDetail(params, t0)
         case 'local_fund_list': return await this.localFundList(params, t0)
         case 'local_fund_nav': return await this.localFundNav(String(params.code ?? ''), params, t0)
         case 'local_fund_holdings': return await this.localFundHoldings(String(params.code ?? ''), params, t0)
@@ -1240,14 +1242,20 @@ export class ResearchHub {
     await this.fillMissingStockNames(normalizedRefs.map(r => r.symbol))
     const batch = await this.stockBatchRealtime(normalizedRefs)
     // Sparse list: failed refs omitted. Callers (routeInstrumentQuotes) must match by code, not index.
-    const quotes: NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>>[] = []
+    const quotes: Array<NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> & {
+      instrument?: InstrumentRef
+    }> = []
     const failed: { code: string; reason: QuoteFailedReason }[] = []
     let firstError = ''
     normalizedRefs.forEach((ref, i) => {
       const errorText = batch.errors?.[i] ?? ''
       const quote = this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null)
       if (quote) {
-        quotes.push(quote)
+        quotes.push({
+          ...quote,
+          exchange: quote.exchange ?? ref.exchange,
+          instrument: ref,
+        })
         return
       }
       if (!firstError && errorText) firstError = errorText
@@ -2268,6 +2276,10 @@ export class ResearchHub {
     const id = String(params.provider_id ?? '')
     try {
       const result = await this.de.testProviderConnection(id, params as Record<string, unknown>)
+      if (result.ok && id) {
+        // 测通后清掉该源进程内熔断，避免「连接正常但行情仍全失败」
+        this.de.resetProviderHealth(id)
+      }
       return ok(result, result.ok ? result.message : `连接失败: ${result.message}`, t0)
     } catch (e) {
       return fail(String(e), t0)
@@ -3191,6 +3203,35 @@ export class ResearchHub {
     return this.queryFundInstrumentData({ instrument: ref }, 'fund_snapshot', t0)
   }
 
+  private async fundDetail(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    if (ref.assetClass !== 'FUND') {
+      return fail('当前标的不是公募基金，请重新搜索并选择基金', t0)
+    }
+    const settle = (cap: 'fund_snapshot' | 'fund_holdings' | 'fund_allocation') =>
+      this.de.queryInstrumentData(ref, cap).catch((e: unknown) => ({
+        success: false as const,
+        error: e instanceof Error ? e.message : String(e),
+      }))
+    const [
+      snapshotPart,
+      holdingsPart,
+      allocationPart,
+    ] = await Promise.all([
+      settle('fund_snapshot'),
+      settle('fund_holdings'),
+      settle('fund_allocation'),
+    ])
+    const merged = mergeFundDetailParts(ref.symbol, {
+      snapshot: snapshotPart,
+      holdings: holdingsPart,
+      allocation: allocationPart,
+    })
+    if (!merged.success || !merged.data) return fail(merged.message, t0)
+    return ok(merged.data, merged.message, t0)
+  }
+
   private async localEtfList(params: Record<string, unknown>, t0: number) {
     return this.etfList(params, t0)
   }
@@ -3392,7 +3433,7 @@ export class ResearchHub {
   }
 
   private async instrumentQuotes(params: Record<string, unknown>, t0: number) {
-    return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0))
+    return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0), t0)
   }
 
   private async instrumentChart(params: Record<string, unknown>, t0: number) {

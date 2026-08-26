@@ -3,7 +3,7 @@ import type {
   LimitUpDown, SentimentData, StockKline, StockListItem, StockProfile, StockRealtime,
 } from '../../../core/schema.js'
 import { normalizeCode, safeFloat, resolveMarket } from '../../../utils/helpers.js'
-import { fromThsCode } from '../api/symbols.js'
+import { exchangeFromThsCode, fromThsCode } from '../api/symbols.js'
 
 function msToYmd(ms: unknown): string {
   const n = Number(ms)
@@ -118,13 +118,16 @@ export function mapSnapshotToStockRealtime(
   snap: Record<string, unknown>,
   name = '',
 ): StockRealtime {
-  const code = fromThsCode(String(snap.thscode ?? snap.ticker ?? ''))
+  const thscode = String(snap.thscode ?? snap.ticker ?? '')
+  const code = fromThsCode(thscode)
+  const exchange = exchangeFromThsCode(thscode) ?? undefined
   const prev = safeFloat(snap.prev_price)
   const price = safeFloat(snap.last_price)
   const changePct = safeFloat(snap.price_change_ratio_pct)
   return {
     code,
     name: name || code,
+    ...(exchange ? { exchange } : {}),
     price,
     changePct,
     change: safeFloat(snap.price_change),
@@ -311,6 +314,41 @@ export function mapLimitUpRow(row: Record<string, unknown>): LimitUpDown {
     reason: String(row.limit_up_reason ?? row.reason ?? '').trim() || undefined,
     continueDayText: continueDayText || undefined,
     continueDayCnt,
+  }
+}
+
+/** 解析跌停池日期字段：支持 ms / YYYY-MM-DD / yyyyMMdd；HH:MM 等非日期串返回空。 */
+function poolRowDate(row: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const raw = row[key]
+    if (raw == null || raw === '') continue
+    const fromMs = msToYmd(raw)
+    if (fromMs) return fromMs
+    const s = String(raw).trim()
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+    if (/^\d{8}$/.test(s)) {
+      return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+    }
+  }
+  return ''
+}
+
+export function mapLimitDownRow(row: Record<string, unknown>): LimitUpDown {
+  return {
+    code: fromThsCode(String(row.thscode ?? row.ticker ?? '')),
+    name: String(row.name ?? ''),
+    date: poolRowDate(
+      row,
+      'date_ms',
+      'trade_date',
+      'date',
+      'limit_down_time',
+      'last_limit_time',
+      'first_limit_time',
+    ),
+    type: 'limit_down',
+    changePct: safeFloat(row.price_change_ratio_pct ?? row.change_pct ?? row.pct_chg),
+    reason: String(row.limit_down_reason ?? row.reason ?? row.concepts ?? '').trim() || undefined,
   }
 }
 

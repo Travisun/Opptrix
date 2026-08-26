@@ -28,6 +28,7 @@ import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayC
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, watchlistDisplayCode, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel } from './instrument'
+import { WATCHLIST_QUOTES_POLL_MS } from './watchlistQuotes'
 import { useWatchlist } from './useWatchlist'
 import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from './useInstrumentSearchWithUniversePrep'
 import { hasApplicationCapability } from './capabilities'
@@ -66,6 +67,28 @@ const QUOTE_FAILED_COPY: Record<QuoteFailedReason, { label: string; hint: string
   empty: { label: '暂时无行情数据', hint: '可稍后刷新查看最新行情' },
   error: { label: '行情暂时获取失败', hint: '请稍后刷新重试' },
   not_found: { label: '该标的数据源暂未收录', hint: '可稍后再试，或添加其他行情源' },
+}
+
+/** 整表失败时的 footer 文案 — 可操作、禁 provider/熔断等技术词 */
+function watchlistQuoteErrorCopy(message?: string): string {
+  const raw = String(message ?? '')
+  if (/熔断|冷却|限流|繁忙|所有 provider 均失败/.test(raw)) {
+    return '行情暂时繁忙，请稍后刷新'
+  }
+  if (raw.includes('行情获取失败')) return '行情暂时繁忙，请稍后刷新'
+  return '行情暂时无法更新'
+}
+
+function lookupWatchlistQuote<T>(
+  bag: Record<string, T>,
+  item: WatchlistItem,
+  ref: ReturnType<typeof resolveWatchlistInstrument>,
+): T | undefined {
+  if (ref) {
+    const keyed = bag[instrumentKey(ref)]
+    if (keyed) return keyed
+  }
+  return bag[watchlistItemKey(item)] ?? bag[item.code]
 }
 
 const useStyles = makeStyles({
@@ -583,7 +606,7 @@ export default function WatchlistTab({
       const resp = await research.instrumentQuotes(instruments)
       if (seq !== loadSeqRef.current) return
       if (!resp.success || !resp.data?.quotes) {
-        setQuoteError('行情暂时无法更新')
+        setQuoteError(watchlistQuoteErrorCopy(resp.message))
         return
       }
       setQuoteError('')
@@ -615,7 +638,7 @@ export default function WatchlistTab({
       setFailedByKey(failedMap)
       setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
-      if (seq === loadSeqRef.current) setQuoteError('行情暂时无法更新')
+      if (seq === loadSeqRef.current) setQuoteError('行情暂时繁忙，请稍后刷新')
     } finally {
       if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }
@@ -688,7 +711,7 @@ export default function WatchlistTab({
   useEffect(() => {
     if (!active) return undefined
     void refreshQuotes()
-    const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, 15000)
+    const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
   }, [refreshQuotes, active, itemsKey])
 
@@ -696,13 +719,10 @@ export default function WatchlistTab({
     for (const item of items) {
       if (item.addedPrice != null || patchedRef.current.has(item.code)) continue
       const ref = resolveWatchlistInstrument(item)
-      const price = quotes[item.code]?.price
-        ?? quotes[watchlistItemKey(item)]?.price
-        ?? (ref ? quotes[instrumentKey(ref)]?.price : undefined)
+      const q = lookupWatchlistQuote(quotes, item, ref)
+      const price = q?.price
       if (price == null) continue
-      const preClose = quotes[item.code]?.preClose
-        ?? quotes[watchlistItemKey(item)]?.preClose
-        ?? (ref ? quotes[instrumentKey(ref)]?.preClose : undefined)
+      const preClose = q?.preClose
       if (preClose != null && preClose > 0) {
         const ratio = price / preClose
         if (ratio > 5 || ratio < 0.2) continue
@@ -720,19 +740,14 @@ export default function WatchlistTab({
       const added = item.addedPrice
       if (added == null || added <= 0 || patchedRef.current.has(item.code)) continue
       const ref = resolveWatchlistInstrument(item)
-      const price = quotes[item.code]?.price
-        ?? quotes[watchlistItemKey(item)]?.price
-        ?? (ref ? quotes[instrumentKey(ref)]?.price : undefined)
+      const q = lookupWatchlistQuote(quotes, item, ref)
+      const price = q?.price
       if (price == null) continue
       const follow = followReturnPct(price, added)
       const day = dayChangeReturnPct(
-        quotes[item.code]?.changePct
-          ?? quotes[watchlistItemKey(item)]?.changePct
-          ?? (ref ? quotes[instrumentKey(ref)]?.changePct : undefined),
+        q?.changePct,
         price,
-        quotes[item.code]?.preClose
-          ?? quotes[watchlistItemKey(item)]?.preClose
-          ?? (ref ? quotes[instrumentKey(ref)]?.preClose : undefined),
+        q?.preClose,
       )
       if (follow != null) {
         if (day != null && Math.abs(follow - day) > 15) {
@@ -749,9 +764,7 @@ export default function WatchlistTab({
   useEffect(() => {
     for (const item of items) {
       const ref = resolveWatchlistInstrument(item)
-      const qName = quotes[item.code]?.name
-        ?? quotes[watchlistItemKey(item)]?.name
-        ?? (ref ? quotes[instrumentKey(ref)]?.name : undefined)
+      const qName = lookupWatchlistQuote(quotes, item, ref)?.name
       const itemKey = watchlistItemKey(item)
       const rName = radar[itemKey]?.name ?? (ref ? radar[instrumentKey(ref)]?.name : undefined)
       const resolved = resolveDisplayStockName(item.code, qName, rName, item.name)
@@ -974,9 +987,8 @@ export default function WatchlistTab({
               const unresolved = ref == null
               const candidates = disambiguationCandidates[item.code] ?? []
               const hasCandidates = unresolved && candidates.length > 1
-              const quoteKey = ref ? instrumentKey(ref) : watchlistItemKey(item)
-              const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)] ?? (ref ? quotes[quoteKey] : undefined)
-              const failedReason = failedByKey[item.code] ?? failedByKey[watchlistItemKey(item)] ?? (ref ? failedByKey[quoteKey] : undefined)
+              const quote = lookupWatchlistQuote(quotes, item, ref)
+              const failedReason = lookupWatchlistQuote(failedByKey, item, ref)
               const failedCopy = failedReason ? QUOTE_FAILED_COPY[failedReason] : undefined
               const holding = ref ? lookupHoldingSnapshot(holdingsByCode, ref) : null
               const isHolding = (holding?.shares ?? 0) > 0
@@ -1170,12 +1182,12 @@ export default function WatchlistTab({
       <div className={s.footer}>
         <span className={mergeClasses(quoteError && !loadingQuotes && s.footerError)}>
           {loadingQuotes
-            ? '正在获取最新行情…'
+            ? '正在更新行情…'
             : quoteError
               ? quoteError
               : selectedGroupId
-                ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
-                : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
+                ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''} · 约每 1 分钟更新${updatedAt ? ` · ${updatedAt}` : ''}`
+                : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''} · 约每 1 分钟更新${updatedAt ? ` · ${updatedAt}` : ''}`}
         </span>
         <button
           type="button"

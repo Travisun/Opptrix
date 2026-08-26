@@ -96,17 +96,30 @@ function wrapChart(ref: InstrumentRef, period: string, resp: ResearchResult): Re
 }
 
 function quoteRowMatchesRef(row: Record<string, unknown>, ref: InstrumentRef): boolean {
+  const inst = row.instrument
+  if (inst && typeof inst === 'object') {
+    return instrumentRefKey(normalizeInstrumentRef(inst as InstrumentRef))
+      === instrumentRefKey(normalizeInstrumentRef(ref))
+  }
   const code = String(row.code ?? '')
   if (!code) return false
   if (code === ref.symbol) return true
   return canonicalSymbolForMarket(ref.market, code) === ref.symbol
 }
 
-/** Match a quote row to ref by symbol (+ exchange). Never trust sparse/filtered array index. */
+/** Match a quote row to ref by instrumentRefKey, then symbol + exchange. Never trust sparse/filtered array index. */
 function findQuoteRowForRef(
   rows: Record<string, unknown>[],
   ref: InstrumentRef,
 ): Record<string, unknown> | undefined {
+  const wantKey = instrumentRefKey(normalizeInstrumentRef(ref))
+  const byKey = rows.find(r => {
+    const inst = r.instrument
+    if (!inst || typeof inst !== 'object') return false
+    return instrumentRefKey(normalizeInstrumentRef(inst as InstrumentRef)) === wantKey
+  })
+  if (byKey) return byKey
+
   return rows.find(r => {
     if (!quoteRowMatchesRef(r, ref)) return false
     if (!ref.exchange || r.exchange == null || r.exchange === '') return true
@@ -215,6 +228,7 @@ function collectCnBatchQuotes(
   quotes: UnifiedInstrumentQuote[],
   failed: FailedInstrumentRef[],
   sourceFor: (ref: InstrumentRef) => UnifiedInstrumentQuote['source'],
+  noteError: (msg: string) => void,
 ): void {
   const rows = quoteRowsFromResponse(resp)
   if (rows) {
@@ -230,6 +244,7 @@ function collectCnBatchQuotes(
     }
     return
   }
+  if (!resp.success) noteError(String(resp.message ?? ''))
   const reason = classifyQuoteResponseFailure(resp)
   for (const ref of refs) failed.push(failedQuoteForRef(ref, reason))
 }
@@ -243,6 +258,7 @@ async function collectRealtimeQuotesBounded(
   items: RealtimeQuoteCall[],
   quotes: UnifiedInstrumentQuote[],
   failed: FailedInstrumentRef[],
+  noteError: (msg: string) => void,
 ): Promise<void> {
   for (let i = 0; i < items.length; i += MAX_QUOTE_GROUP_CONCURRENCY) {
     const chunk = items.slice(i, i + MAX_QUOTE_GROUP_CONCURRENCY)
@@ -252,6 +268,7 @@ async function collectRealtimeQuotesBounded(
         quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
         return
       }
+      if (!resp.success) noteError(String(resp.message ?? ''))
       failed.push(failedQuoteForRef(ref, classifyQuoteResponseFailure(resp)))
     }))
   }
@@ -264,12 +281,17 @@ function localSourceFor(handlers: InstrumentRouteHandlers, ref: InstrumentRef): 
 export async function routeInstrumentQuotes(
   params: Record<string, unknown>,
   handlers: InstrumentRouteHandlers,
+  t0 = Date.now(),
 ): Promise<ResearchResult> {
   const refs = resolveQuoteRefs(params)
-  if (!refs.length) return fail('instruments 必填')
+  if (!refs.length) return fail('instruments 必填', t0)
 
   const quotes: UnifiedInstrumentQuote[] = []
   const failed: FailedInstrumentRef[] = []
+  let firstError = ''
+  const noteError = (msg: string) => {
+    if (!firstError && msg.trim()) firstError = msg.trim()
+  }
   for (const ref of refs) {
     if (ref.market === 'JP' || ref.market === 'KR') failed.push(failedQuoteForRef(ref, 'unsupported'))
   }
@@ -278,19 +300,19 @@ export async function routeInstrumentQuotes(
   const cnRefs = refs.filter(r => r.market === 'CN' && r.assetClass !== 'ETF' && r.assetClass !== 'FUND')
   if (cnRefs.length) {
     tasks.push(handlers.stockQuotes(cnRefs).then(resp =>
-      collectCnBatchQuotes(cnRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref)),
+      collectCnBatchQuotes(cnRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
     ))
   }
   const etfRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'ETF')
   if (etfRefs.length) {
     tasks.push(handlers.stockQuotes(etfRefs).then(resp =>
-      collectCnBatchQuotes(etfRefs, resp, quotes, failed, () => 'mixed'),
+      collectCnBatchQuotes(etfRefs, resp, quotes, failed, () => 'mixed', noteError),
     ))
   }
   const fundRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'FUND')
   if (fundRefs.length) {
     tasks.push(handlers.stockQuotes(fundRefs).then(resp =>
-      collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref)),
+      collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
     ))
   }
   const usRefs = refs.filter(r => r.market === 'US')
@@ -299,6 +321,7 @@ export async function routeInstrumentQuotes(
       usRefs.map(ref => ({ ref, call: () => handlers.usRealtime(ref.symbol) })),
       quotes,
       failed,
+      noteError,
     ))
   }
   const hkRefs = refs.filter(r => r.market === 'HK')
@@ -307,6 +330,7 @@ export async function routeInstrumentQuotes(
       hkRefs.map(ref => ({ ref, call: () => handlers.regionalRealtime('HK', ref.symbol) })),
       quotes,
       failed,
+      noteError,
     ))
   }
   const cryptoRefs = refs.filter(r => r.market === 'CRYPTO')
@@ -315,12 +339,13 @@ export async function routeInstrumentQuotes(
       cryptoRefs.map(ref => ({ ref, call: () => handlers.cryptoRealtime(instrumentDisplayCode(ref)) })),
       quotes,
       failed,
+      noteError,
     ))
   }
 
   await Promise.all(tasks)
 
-  if (!quotes.length) return fail('行情获取失败')
+  if (!quotes.length) return fail(firstError || '行情获取失败', t0)
   return { success: true, message: `更新 ${quotes.length} 只`, data: { quotes, failed }, elapsed: 0 }
 }
 

@@ -68,6 +68,15 @@ export type InstrumentDataCapability =
   | 'fund_holdings'
   | 'fund_snapshot'
   | 'fund_quote'
+  | 'fund_returns'
+  | 'fund_drawdown'
+  | 'fund_allocation'
+  | 'fund_holders'
+  | 'fund_dividend'
+  | 'fund_manager'
+  | 'fund_diagnosis'
+  | 'fund_news'
+  | 'fund_financials'
   | 'dividend'
   | 'news'
   | 'notices'
@@ -144,16 +153,18 @@ export type InstrumentQueryPlan =
     assetClass?: AssetClass
   }
   | {
-    /** A 股实时行情专用路径 */
+    /** A 股实时行情专用路径（EQUITY/ETF；INDEX 走 registry INDEX_REALTIME） */
     kind: 'cn_realtime'
     symbol: string
     exchange?: string
+    assetClass: AssetClass
   }
   | {
     /** A 股 K 线专用路径 */
     kind: 'cn_kline'
     symbol: string
     exchange?: string
+    assetClass: AssetClass
     count: number
     period?: string
     start?: string
@@ -192,6 +203,27 @@ function registryPlan(
   ref?: InstrumentRef,
 ): InstrumentQueryPlan {
   return { kind: 'registry', market, assetClass, capability, method, useCache, args, ref }
+}
+
+/** INDEX 必须走指数 snapshot；禁止丢掉 assetClass 后再用裸码猜测。 */
+function cnRealtimePlan(
+  normalized: InstrumentRef,
+  symbol: string,
+  exchange: string | undefined,
+  assetClass: AssetClass,
+): InstrumentQueryPlan {
+  if (assetClass === 'INDEX') {
+    return registryPlan(
+      'CN',
+      'INDEX',
+      Capability.INDEX_REALTIME,
+      'indexRealtime',
+      false,
+      [symbol],
+      normalized,
+    )
+  }
+  return { kind: 'cn_realtime', symbol, exchange, assetClass }
 }
 
 function detailNewsPlan(
@@ -273,6 +305,24 @@ export function resolveInstrumentQueryPlan(
         case 'fund_quote':
         case 'realtime':
           return registryPlan('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, [symbol], normalized)
+        case 'fund_returns':
+          return registryPlan('CN', 'FUND', Capability.FUND_RETURNS, 'fundReturns', true, [symbol], normalized)
+        case 'fund_drawdown':
+          return registryPlan('CN', 'FUND', Capability.FUND_DRAWDOWN, 'fundDrawdown', true, [symbol], normalized)
+        case 'fund_allocation':
+          return registryPlan('CN', 'FUND', Capability.FUND_ALLOCATION, 'fundAllocation', true, [symbol], normalized)
+        case 'fund_holders':
+          return registryPlan('CN', 'FUND', Capability.FUND_HOLDERS, 'fundHolders', true, [symbol], normalized)
+        case 'fund_dividend':
+          return registryPlan('CN', 'FUND', Capability.FUND_DIVIDEND, 'fundDividend', true, [symbol], normalized)
+        case 'fund_manager':
+          return registryPlan('CN', 'FUND', Capability.FUND_MANAGER, 'fundManager', true, [symbol], normalized)
+        case 'fund_diagnosis':
+          return registryPlan('CN', 'FUND', Capability.FUND_DIAGNOSIS, 'fundDiagnosis', true, [symbol], normalized)
+        case 'fund_news':
+          return registryPlan('CN', 'FUND', Capability.FUND_NEWS, 'fundNews', true, [symbol], normalized)
+        case 'fund_financials':
+          return registryPlan('CN', 'FUND', Capability.FUND_FINANCIALS, 'fundFinancials', true, [symbol], normalized)
         case 'fund_list':
           return registryPlan('CN', 'FUND', Capability.FUND_LIST, 'fundList', true, [
             'CN', opts.keyword ?? '',
@@ -289,12 +339,13 @@ export function resolveInstrumentQueryPlan(
 
     switch (dataCap) {
       case 'realtime':
-        return { kind: 'cn_realtime', symbol, exchange }
+        return cnRealtimePlan(normalized, symbol, exchange, assetClass)
       case 'kline':
         return {
           kind: 'cn_kline',
           symbol,
           exchange,
+          assetClass,
           count,
           period: opts.period ?? 'daily',
           start: opts.startDate,
@@ -304,7 +355,7 @@ export function resolveInstrumentQueryPlan(
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
           return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'ETF' }
         }
-        return { kind: 'cn_realtime', symbol, exchange }
+        return cnRealtimePlan(normalized, symbol, exchange, assetClass)
       case 'profile':
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
           return registryPlan('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)

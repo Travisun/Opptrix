@@ -47,7 +47,7 @@ import {
   mapProfilesToEtfProfileRows,
 } from '../../../common/etf.js'
 
-const INDEX_CODES = new Set(['000001', '000016', '000300', '000688', '000905', '000906', '000852', '399001', '399006', '399005', '399330'])
+const INDEX_CODES = new Set(['000016', '000300', '000688', '000905', '000906', '000852', '399001', '399006', '399005', '399330'])
 
 function isIndexCode(code: string): boolean {
   const c = normalizeCode(code)

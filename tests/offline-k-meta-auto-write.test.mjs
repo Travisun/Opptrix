@@ -126,7 +126,7 @@ test('prepareFuyaoDump success + tryRecord writes meta under shared cache', asyn
         mode: 'local_path',
         forceRefresh: true,
         destDir: dest,
-        get: async () => ({
+        fetchUrl: async () => ({
           presigned_url: `http://127.0.0.1:${port}/full.parquet`,
         }),
       })
@@ -166,7 +166,7 @@ test('prepareFuyaoDump failure path does not write offline-k-meta', async () => 
       mode: 'local_path',
       forceRefresh: true,
       destDir: dest,
-      get: async () => {
+      fetchUrl: async () => {
         throw new Error('mock download-url failure')
       },
     })

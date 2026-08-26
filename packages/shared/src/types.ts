@@ -30,6 +30,8 @@ export interface QueryResult<T> {
 export interface StockRealtime {
   code: string
   name: string
+  /** CN 交易所（SH/SZ/BJ）；同码异名（000001）匹配时必填 */
+  exchange?: string
   price: number | null
   changePct: number | null
   pe: number | null

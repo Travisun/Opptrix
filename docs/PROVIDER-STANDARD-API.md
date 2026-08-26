@@ -18,6 +18,8 @@ realtime | kline | snapshot | profile | financials
 stock_list | instrument_search | sector_list
 etf_list | etf_nav | etf_holdings | etf_snapshot | etf_profile
 fund_list | fund_nav | fund_holdings | fund_snapshot | fund_profile | fund_quote
+fund_returns | fund_drawdown | fund_allocation | fund_holders | fund_dividend
+fund_manager | fund_diagnosis | fund_news | fund_financials
 dividend | news | notices | shareholders | money_flow | technical_analysis
 ```
 
@@ -115,7 +117,7 @@ bindingsFor: () => []
 
 | 顺位 | Provider | defaultPriority | 备注 |
 |------|----------|-----------------|------|
-| 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径 |
+| 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径；HTTP 经 `@opptrix/fuyao` SDK（`FuyaoClient` 适配层） |
 | 2 | **stockindex**（Opptrix量化） | 115 | 标的搜索权威源；需数据密钥；基址固定 `https://quant.opptrix.net` |
 | 3 | **tickflow** | 110 | **默认开启**公开免费档；配置 Key 可升级实时；US / HK / CN ETF；名录灌库 |
 | 4 | **tushare** | 105 | 需 Token；批量 / 基本面 |

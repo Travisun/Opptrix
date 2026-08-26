@@ -282,4 +282,73 @@ export function mixTonghuashunExt(Driver: { prototype: TonghuashunMarketHandler 
       return rows.length ? rows : null
     })
   }
+
+  /**
+   * 炸板股票池
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/limit-break-pool
+   * @pageUrl https://fuyao.aicubes.cn/
+   * @returns Record<string, unknown>[] 炸板行，含 source=tonghuashun
+   * @usage engine.invokeCustomMethod("tonghuashun", "thsLimitBreakPool", ["2024-01-15"])
+   * @remarks 可选交易日；无数据时返回 null。勿与标准 limitUpdown（涨跌停）混淆。
+   * @param date 交易日 YYYY-MM-DD（可选）
+   * @example {"provider":"tonghuashun","method":"thsLimitBreakPool","args":["2024-01-15"]}
+   */
+  p.thsLimitBreakPool = async function thsLimitBreakPool(date?: string) {
+    const d = String(date ?? '').trim().slice(0, 10)
+    const dateMs = d ? new Date(`${d}T00:00:00+08:00`).getTime() : undefined
+    if (d && !Number.isFinite(dateMs)) return null
+    return withFuyaoClient(async client => {
+      const data = await client.limitBreakPool(dateMs, 1, 200)
+      const rows = withSourceRows(data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  /**
+   * 集合竞价快照
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/auction/snapshot
+   * @pageUrl https://fuyao.aicubes.cn/
+   * @returns Record<string, unknown>[] 竞价行，含 source=tonghuashun
+   * @usage engine.invokeCustomMethod("tonghuashun", "thsAuctionSnapshot", ["600519","live"])
+   * @remarks 支持逗号分隔或数组；裸代码自动转 thscode。stage 默认 final。
+   * @param codes 单只代码、逗号分隔多码或 JSON 数组（必填）
+   * @param stage live（实时）/ final（终态，可选）
+   * @example {"provider":"tonghuashun","method":"thsAuctionSnapshot","args":["600519,000001","final"]}
+   */
+  p.thsAuctionSnapshot = async function thsAuctionSnapshot(
+    codes: string | string[],
+    stage?: 'live' | 'final' | string,
+  ) {
+    const bareList = parseCodesArg(codes)
+    if (!bareList.length) return null
+    const thscodes = bareList.map(c => resolveStockThscode(c)).filter(Boolean)
+    if (!thscodes.length) return null
+    const stageNorm = String(stage ?? '').trim().toLowerCase()
+    const stageOpt: 'live' | 'final' | undefined =
+      stageNorm === 'live' || stageNorm === 'final' ? stageNorm : undefined
+    return withFuyaoClient(async client => {
+      const data = await client.auctionSnapshot(thscodes, stageOpt)
+      const rows = withSourceRows(data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  /**
+   * 短线风向标竞价基准
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/auction/short-term-benchmark
+   * @pageUrl https://fuyao.aicubes.cn/
+   * @returns Record<string, unknown>[] 基准行，含 source=tonghuashun
+   * @usage engine.invokeCustomMethod("tonghuashun", "thsAuctionShortTermBenchmark", ["2024-01-15"])
+   * @remarks date 可选 YYYY-MM-DD；缺省取上海当日；无数据时返回 null。
+   * @param date 查询日期 YYYY-MM-DD（可选）
+   * @example {"provider":"tonghuashun","method":"thsAuctionShortTermBenchmark","args":["2024-01-15"]}
+   */
+  p.thsAuctionShortTermBenchmark = async function thsAuctionShortTermBenchmark(date?: string) {
+    const d = String(date ?? '').trim().slice(0, 10) || undefined
+    return withFuyaoClient(async client => {
+      const data = await client.auctionShortTermBenchmark(d)
+      const rows = withSourceRows(data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
 }
