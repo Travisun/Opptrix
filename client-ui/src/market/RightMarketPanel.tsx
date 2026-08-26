@@ -218,7 +218,7 @@ function RightMarketPanel({
   onDiscussInChat,
 }: Props) {
   const s = useStyles()
-  const { items, addItem, updateItem, removeItem } = useWatchlist()
+  const { items, addItemAndSync, updateItem, removeItem } = useWatchlist()
   const { removeItemMembership } = useWatchlistGroups()
   const { tab, setTab, selected, setSelected, selectDetail } = useMarketPanelUi()
   const {
@@ -242,9 +242,9 @@ function RightMarketPanel({
 
   const handleSelect = selectDetail
 
-  const handleAdd = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
-    addItem(item, opts)
-  }, [addItem])
+  const handleAdd = useCallback(async (item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
+    return addItemAndSync(item, opts)
+  }, [addItemAndSync])
 
   const handleManage = useCallback(async (item: WatchlistItem) => {
     const ref = resolveWatchlistInstrument(item)

@@ -231,6 +231,7 @@ GET /api/watchlist
 | GET | `/api/instruments/summary` | 本地 instruments 各市场计数摘要 |
 | POST | `/api/instruments/snapshot` | 单标的快照 |
 | POST | `/api/instruments/quotes` | `{ instruments: InstrumentRef[] }` 批量报价 |
+| POST | `/api/instruments/quote` | `{ instrument: InstrumentRef, fresh?: boolean }` 单标的最新价；`fresh` 默认 `true`，跳过 watchlist 覆盖层缓存，供关注添加后立即展示 |
 | POST | `/api/instruments/chart` | `{ instrument, period?, count? }` 日/周/月 K |
 | POST | `/api/instruments/capabilities` | 返回 UI 能力矩阵（`detailPanelKind` 等） |
 

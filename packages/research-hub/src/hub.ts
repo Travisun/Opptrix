@@ -1,4 +1,4 @@
-import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
+import {   MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode, inferCnAssetClass,
@@ -12,6 +12,7 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   resolveCrossMarketKlineEngineQuery,
   crossMarketFiveDayMinuteCount,
   resampleOhlcKlines,
+  watchlistItemKey,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
@@ -53,6 +54,7 @@ import {
   coerceInstrumentQuoteRow,
   resolveInstrumentQuotePrice,
   resolveInstrumentQuotePreClose,
+  parseCanonicalInstrumentInput,
   type InstrumentRef,
   type InstrumentHubCapability,
 } from '@opptrix/shared'
@@ -94,6 +96,7 @@ import {
   routeInstrumentInstitutionRating,
   routeInstrumentInstitutionReport,
   routeInstrumentQuotes,
+  routeInstrumentQuote,
   routeInstrumentSearch,
   routeInstrumentSnapshot,
   type InstrumentRouteHandlers,
@@ -148,6 +151,15 @@ function cryptoRefFromPair(pair: string): import('@opptrix/shared').InstrumentRe
     return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: p.base, quote: p.quote }
   }
   return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: pair, quote: 'USDT' }
+}
+
+function instrumentRefFromWatchlistItem(
+  item: import('@opptrix/a-stock-layer').WatchlistItem,
+): InstrumentRef | null {
+  if (item.instrument?.market && item.instrument.symbol) {
+    return normalizeInstrumentRef(item.instrument)
+  }
+  return parseCanonicalInstrumentInput(String(item.code ?? ''))
 }
 
 function instrumentQueryError(r: { success: boolean }, fallback: string): string {
@@ -228,6 +240,8 @@ export class ResearchHub {
     return getMarketDataService()
   }
   private readonly stockNameCache = new Map<string, string>()
+  /** 进程内最近一次成功报价 — live 失败时回退，避免关注列表部分无价 */
+  private readonly lastInstrumentQuotes = new Map<string, Record<string, unknown>>()
 
   initMarketDataAutoSync(): void {
     this.notifyMarketDataUiReady()
@@ -399,6 +413,7 @@ export class ResearchHub {
         case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
         case 'instrument_snapshot': return await this.instrumentSnapshot(params, t0)
         case 'instrument_quotes': return await this.instrumentQuotes(params, t0)
+        case 'instrument_quote': return await this.instrumentQuote(params, t0)
         case 'instrument_chart': return await this.instrumentChart(params, t0)
         case 'instrument_search': return await this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
@@ -1249,12 +1264,11 @@ export class ResearchHub {
     let firstError = ''
     normalizedRefs.forEach((ref, i) => {
       const errorText = batch.errors?.[i] ?? ''
-      const quote = this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null)
+      const quote = this.resolveStockQuoteWithStaleFallback(ref, batch.data?.[i] ?? null)
       if (quote) {
         quotes.push({
           ...quote,
           exchange: quote.exchange ?? ref.exchange,
-          instrument: ref,
         })
         return
       }
@@ -1300,15 +1314,11 @@ export class ResearchHub {
         if (r.success) {
           const rows = instrumentQueryData<Record<string, unknown>[]>(r)
           const raw = Array.isArray(rows) ? rows[0] : null
-          if (raw && typeof raw === 'object') {
-            const coerced = coerceInstrumentQuoteRow({ ...raw })
-            const price = resolveInstrumentQuotePrice(coerced)
-            quotes.push({
-              ...coerced,
-              ...(price != null ? { price } : {}),
-              code: String(raw.code ?? ref.symbol),
-              instrument: ref,
-            })
+          const resolved = raw && typeof raw === 'object'
+            ? this.resolveFundQuoteRowWithStaleFallback(ref, raw)
+            : this.resolveFundQuoteRowWithStaleFallback(ref, null)
+          if (resolved) {
+            quotes.push(resolved)
             return
           }
           failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
@@ -1316,6 +1326,11 @@ export class ResearchHub {
         }
         const msg = instrumentQueryError(r, '基金行情获取失败')
         if (!firstError && msg.trim()) firstError = msg.trim()
+        const stale = this.resolveFundQuoteRowWithStaleFallback(ref, null)
+        if (stale) {
+          quotes.push(stale)
+          return
+        }
         failed.push({
           code: instrumentDisplayCode(ref),
           reason: classifyQuoteFailureMessage(msg),
@@ -1648,6 +1663,127 @@ export class ResearchHub {
     const normalized = normalizePreOpenRealtimeQuote(coerced)
     if (!normalized) return null
     return this.enrichQuote(normalized)
+  }
+
+  private rememberInstrumentQuote(ref: InstrumentRef, row: Record<string, unknown>): void {
+    const coerced = coerceInstrumentQuoteRow({ ...row })
+    const price = resolveInstrumentQuotePrice(coerced)
+    if (price == null || !(price > 0)) return
+    this.lastInstrumentQuotes.set(instrumentRefKey(ref), {
+      ...row,
+      price,
+      instrument: ref,
+    })
+  }
+
+  private recallInstrumentQuoteRaw(ref: InstrumentRef): Record<string, unknown> | null {
+    return this.lastInstrumentQuotes.get(instrumentRefKey(ref)) ?? null
+  }
+
+  private resolveStockQuoteWithStaleFallback(
+    ref: InstrumentRef,
+    liveRaw: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0] | null,
+  ): (NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> & {
+    instrument: InstrumentRef
+    quoteSource?: string
+  }) | null {
+    const live = this.mergeQuoteWithLocal(ref.symbol, liveRaw)
+    if (live) {
+      const row = { ...live, instrument: ref, quoteSource: 'live' as const }
+      this.rememberInstrumentQuote(ref, row)
+      return row
+    }
+    const cached = this.de.peekInstrumentQuoteCache(ref)
+    if (cached) {
+      const fromCache = this.mergeQuoteWithLocal(ref.symbol, cached)
+      if (fromCache) {
+        return { ...fromCache, instrument: ref, quoteSource: 'cache' }
+      }
+    }
+    const recalled = this.recallInstrumentQuoteRaw(ref)
+    if (recalled) {
+      const fromMemory = this.mergeQuoteWithLocal(
+        ref.symbol,
+        recalled as unknown as NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0],
+      )
+      if (fromMemory) {
+        return { ...fromMemory, instrument: ref, quoteSource: 'memory' }
+      }
+    }
+    return null
+  }
+
+  private resolveFundQuoteRowWithStaleFallback(
+    ref: InstrumentRef,
+    liveRaw: Record<string, unknown> | null,
+  ): (Record<string, unknown> & { instrument: InstrumentRef; quoteSource?: string }) | null {
+    const build = (raw: Record<string, unknown>, quoteSource: string) => {
+      const coerced = coerceInstrumentQuoteRow({ ...raw })
+      const price = resolveInstrumentQuotePrice(coerced)
+      if (price == null || !(price > 0)) return null
+      return {
+        ...coerced,
+        ...(price != null ? { price } : {}),
+        code: String(raw.code ?? ref.symbol),
+        instrument: ref,
+        quoteSource,
+      }
+    }
+    if (liveRaw) {
+      const live = build(liveRaw, 'live')
+      if (live) {
+        this.rememberInstrumentQuote(ref, live)
+        return live
+      }
+    }
+    const cached = this.de.peekInstrumentQuoteCache(ref)
+    if (cached) {
+      const fromCache = build(cached as unknown as Record<string, unknown>, 'cache')
+      if (fromCache) return fromCache
+    }
+    const recalled = this.recallInstrumentQuoteRaw(ref)
+    if (recalled) {
+      const fromMemory = build(recalled, 'memory')
+      if (fromMemory) return fromMemory
+    }
+    return null
+  }
+
+  private resolveCrossMarketQuoteWithStaleFallback(
+    ref: InstrumentRef,
+    liveRaw: Record<string, unknown> | null,
+  ): (Record<string, unknown> & { instrument: InstrumentRef; quoteSource?: string }) | null {
+    const build = (raw: Record<string, unknown>, quoteSource: string) => {
+      const coerced = coerceInstrumentQuoteRow(raw)
+      const price = resolveInstrumentQuotePrice(coerced)
+      if (price == null || !(price > 0)) return null
+      return {
+        ...raw,
+        ...coerced,
+        ...(price != null ? { price } : {}),
+        code: String(raw.code ?? ref.symbol),
+        instrument: ref,
+        quoteSource,
+      }
+    }
+    if (liveRaw) {
+      const live = build(liveRaw, 'live')
+      if (live) {
+        this.rememberInstrumentQuote(ref, live)
+        return live
+      }
+    }
+    const cached = this.de.peekInstrumentQuoteCache(ref)
+    if (cached) {
+      const fromCache = build(cached as unknown as Record<string, unknown>, 'cache')
+      if (fromCache) return fromCache
+    }
+    const recalled = this.recallInstrumentQuoteRaw(ref)
+    if (recalled) {
+      const fromMemory = build(recalled, 'memory')
+      if (fromMemory) return fromMemory
+    }
+    return null
   }
 
   private enrichQuote(quote: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0]) {
@@ -3550,6 +3686,14 @@ export class ResearchHub {
     return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0), t0)
   }
 
+  private async instrumentQuote(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 必填', t0)
+    const fresh = params.fresh !== false
+    if (fresh) this.de.invalidateInstrumentQuoteCache(ref)
+    return routeInstrumentQuote(params, this.instrumentRouteHandlers(t0), t0)
+  }
+
   private async instrumentChart(params: Record<string, unknown>, t0: number) {
     return routeInstrumentChart(params, this.instrumentRouteHandlers(t0))
   }
@@ -3699,9 +3843,19 @@ export class ResearchHub {
           return upper === sym || upper.endsWith(sym) || sym.endsWith(upper)
         })
         if (row) {
-          quotes.push({ ...row, instrument: ref, code: String(row.code ?? ref.symbol) })
+          const resolved = this.resolveCrossMarketQuoteWithStaleFallback(ref, row)
+          if (resolved) {
+            quotes.push(resolved)
+          } else {
+            failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+          }
         } else {
-          failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+          const stale = this.resolveCrossMarketQuoteWithStaleFallback(ref, null)
+          if (stale) {
+            quotes.push(stale)
+          } else {
+            failed.push({ code: instrumentDisplayCode(ref), reason: 'empty' })
+          }
         }
       }
       if (quotes.length) {
@@ -3726,16 +3880,24 @@ export class ResearchHub {
             ? await this.regionalRealtime('HK', ref.symbol, t0)
             : await this.cryptoRealtime(instrumentDisplayCode(ref), t0)
         if (resp.success && resp.data && typeof resp.data === 'object') {
-          quotes.push({
-            ...(resp.data as Record<string, unknown>),
-            instrument: ref,
-          })
-        } else {
-          failed.push({
-            code: instrumentDisplayCode(ref),
-            reason: classifyQuoteFailureMessage(String(resp.message ?? '')),
-          })
+          const resolved = this.resolveCrossMarketQuoteWithStaleFallback(
+            ref,
+            resp.data as Record<string, unknown>,
+          )
+          if (resolved) {
+            quotes.push(resolved)
+            return
+          }
         }
+        const stale = this.resolveCrossMarketQuoteWithStaleFallback(ref, null)
+        if (stale) {
+          quotes.push(stale)
+          return
+        }
+        failed.push({
+          code: instrumentDisplayCode(ref),
+          reason: classifyQuoteFailureMessage(String(resp.message ?? '')),
+        })
       }))
     }
     if (!quotes.length) {
@@ -4153,10 +4315,19 @@ export class ResearchHub {
 
   private watchlistSave(params: Record<string, unknown>, t0: number) {
     const items = Array.isArray(params.items) ? params.items as import('@opptrix/a-stock-layer').WatchlistItem[] : []
+    const prevItems = this.de.watchlist.list()
+    const prevKeys = new Set(prevItems.map(item => watchlistItemKey(item)))
     const saved = this.de.watchlist.replace(items)
     // Durable across process restart: debounce merges rapid in-process replaces,
     // but HTTP save must flush before the response returns.
     this.de.watchlist.flush()
+    const nextKeys = new Set(saved.map(item => watchlistItemKey(item)))
+    const added = saved.filter(item => !prevKeys.has(watchlistItemKey(item)))
+    const removed = prevItems.filter(item => !nextKeys.has(watchlistItemKey(item)))
+    for (const item of [...added, ...removed]) {
+      const ref = instrumentRefFromWatchlistItem(item)
+      if (ref) this.de.invalidateInstrumentQuoteCache(ref)
+    }
     return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
   }
 

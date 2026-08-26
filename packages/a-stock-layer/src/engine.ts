@@ -380,7 +380,8 @@ export class MarketDataEngine {
         'CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, code,
       ).then(mapIndexRealtimeResultToStock)
     }
-    return this.qScoped<StockRealtime>('CN', resolved, Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
+    // 关注列表标的启用 stock_realtime 短 TTL 缓存（见 watchlist-cache）；live 失败时可 stale 回退
+    return this.qScoped<StockRealtime>('CN', resolved, Capability.STOCK_REALTIME, 'realtime', true, code, market).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
     })
@@ -1318,6 +1319,123 @@ export class MarketDataEngine {
   }
 
   // ── Cache / driver management ──
+  /**
+   * 关注列表增删后失效行情覆盖层缓存。
+   * 避免 membership 已变但 stock_realtime / fund_quote 仍按旧 watchlist 上下文命中。
+   */
+  invalidateWatchlistQuoteCache(): number {
+    let cleared = 0
+    cleared += this.cache.clearType('stock_realtime')
+    cleared += this.cache.clearType('fund_quote')
+    return cleared
+  }
+
+  /** live 拉价失败时：读 Engine 覆盖层缓存（含 TTL 内 + 过期宽限内的 stale） */
+  peekInstrumentQuoteCache(ref: InstrumentRef): StockRealtime | null {
+    const STALE_GRACE_MS = 86_400_000
+    const normalized = normalizeInstrumentRef(ref)
+    for (const candidate of this.instrumentQuoteCacheCandidates(normalized)) {
+      const entry = this.cache.peekEntry<StockRealtime[]>(
+        candidate.cacheType,
+        candidate.method,
+        candidate.cacheParams,
+      )
+      if (!entry) continue
+      const withinFresh = Date.now() <= entry.expires
+      const withinStaleGrace = Date.now() - entry.expires <= STALE_GRACE_MS
+      if (!withinFresh && !withinStaleGrace) continue
+      const row = entry.data?.[0]
+      if (row && this.isValidInstrumentQuoteRow(row)) return row
+    }
+    return null
+  }
+
+  private isValidInstrumentQuoteRow(row: StockRealtime): boolean {
+    return typeof row.price === 'number' && Number.isFinite(row.price) && row.price > 0
+  }
+
+  private instrumentQuoteCacheCandidates(ref: InstrumentRef): Array<{
+    cacheType: string
+    method: string
+    cacheParams: Record<string, unknown>
+  }> {
+    const out: Array<{ cacheType: string; method: string; cacheParams: Record<string, unknown> }> = []
+    const push = (
+      market: Market,
+      assetClass: AssetClass,
+      cacheType: string,
+      method: string,
+      args: unknown[],
+    ) => {
+      out.push({
+        cacheType,
+        method,
+        cacheParams: { method, market, assetClass, args: JSON.stringify(args) },
+      })
+    }
+
+    if (ref.market === 'CN' && ref.assetClass === 'FUND') {
+      const sym = normalizeCode(ref.symbol)
+      push('CN', 'FUND', 'fund_quote', 'fundQuote', [sym])
+      push('CN', 'FUND', 'fund_quote', 'fundQuote', [ref.symbol])
+      return out
+    }
+
+    if (ref.market === 'CRYPTO') {
+      const pair = instrumentProviderSymbol(ref)
+      push('CRYPTO', 'CRYPTO_SPOT', 'crypto_realtime', 'realtime', [pair])
+      push('CRYPTO', 'CRYPTO_SPOT', 'stock_realtime', 'realtime', [pair])
+      return out
+    }
+
+    if (ref.market === 'US') {
+      const sym = normalizeUsSymbol(ref.symbol)
+      push('US', 'EQUITY', 'stock_realtime', 'realtime', [sym])
+      push('US', 'EQUITY', 'stock_realtime', 'realtime', [ref.symbol])
+      return out
+    }
+
+    if (ref.market === 'HK') {
+      const sym = normalizeRegionalSymbol('HK', ref.symbol)
+      push('HK', 'EQUITY', 'stock_realtime', 'realtime', [sym])
+      push('HK', 'EQUITY', 'stock_realtime', 'realtime', [ref.symbol])
+      return out
+    }
+
+    if (ref.market === 'CN') {
+      const code = normalizeCode(ref.symbol)
+      const assetClass = ref.assetClass === 'ETF' || isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+      const marketArg = ref.exchange as import('./utils/helpers.js').StockMarket | undefined
+      push('CN', assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg] : [code])
+      push('CN', assetClass, 'stock_realtime', 'realtime', [code])
+      if (assetClass === 'ETF') {
+        push('CN', 'ETF', 'stock_realtime', 'realtime', marketArg ? [code, marketArg] : [code])
+      }
+      return out
+    }
+
+    return out
+  }
+
+  /** 单标的 fresh quote：失效其 stock_realtime / fund_quote 覆盖层缓存 */
+  invalidateInstrumentQuoteCache(ref: InstrumentRef): number {
+    const normalized = normalizeInstrumentRef(ref)
+    const needles = new Set<string>()
+    const pushNeedle = (raw: string | undefined | null) => {
+      const v = String(raw ?? '').trim()
+      if (v) needles.add(v)
+    }
+    pushNeedle(normalized.symbol)
+    pushNeedle(normalizeCode(normalized.symbol))
+    pushNeedle(instrumentProviderSymbol(normalized))
+    if (normalized.market === 'US') pushNeedle(normalizeUsSymbol(normalized.symbol))
+    if (normalized.market === 'HK') pushNeedle(normalizeRegionalSymbol('HK', normalized.symbol))
+    return this.cache.clearMatching((cacheType, _method, paramsJson) => {
+      if (cacheType !== 'stock_realtime' && cacheType !== 'fund_quote') return false
+      return [...needles].some(n => paramsJson.includes(n))
+    })
+  }
+
   clearCache(dataType?: string) {
     return dataType ? this.cache.clearType(dataType) : this.cache.clearAll()
   }

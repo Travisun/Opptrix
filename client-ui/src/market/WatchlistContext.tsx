@@ -28,11 +28,19 @@ function itemKey(item: WatchlistItem): string {
   return watchlistItemKey(normalizeWatchlistItem(item))
 }
 
+function computeItemsKey(list: WatchlistItem[]): string {
+  return list.map(item => itemKey(item)).join('|')
+}
+
 type WatchlistContextValue = {
   items: WatchlistItem[]
+  /** 已与后端 watchlist_save 对齐的 items 签名；行情批拉应在此匹配后再请求 */
+  syncedItemsKey: string
   /** 未消歧多命中候选（key = 原 code）；点选写回后清除 */
   disambiguationCandidates: Record<string, DisambiguationCandidate[]>
   addItem: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => void
+  /** 写入关注并等待后端 save 完成（供添加后立即 fresh 拉价） */
+  addItemAndSync: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => Promise<WatchlistItem>
   updateItem: (code: string, patch: Partial<WatchlistItem>) => void
   removeItem: (code: string) => void
   reorderItem: (code: string, direction: 'up' | 'down') => void
@@ -50,6 +58,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const hydrated = useRef(false)
   const skipNextSync = useRef(false)
   const unresolvedRefetchDone = useRef(false)
+  const itemsRef = useRef<WatchlistItem[]>([])
+  const [syncedItemsKey, setSyncedItemsKey] = useState('')
+  itemsRef.current = items
 
   useEffect(() => {
     let cancelled = false
@@ -58,8 +69,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         const remote = await fetchWatchlist()
         if (cancelled) return
         if (remote.items.length > 0) {
+          const normalized = remote.items.map(normalizeWatchlistItem)
           skipNextSync.current = true
-          setItems(remote.items.map(normalizeWatchlistItem))
+          setItems(normalized)
+          setSyncedItemsKey(computeItemsKey(normalized))
           setDisambiguationCandidates(remote.disambiguation_candidates ?? {})
         } else {
           const seeded = DEFAULT_ITEMS.map(row => normalizeWatchlistItem({
@@ -69,14 +82,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           await saveWatchlist(seeded)
           skipNextSync.current = true
           setItems(seeded)
+          setSyncedItemsKey(computeItemsKey(seeded))
           setDisambiguationCandidates({})
         }
       } catch {
         if (!cancelled) {
-          setItems(DEFAULT_ITEMS.map(row => normalizeWatchlistItem({
+          const fallback = DEFAULT_ITEMS.map(row => normalizeWatchlistItem({
             ...row,
             addedAt: new Date().toISOString(),
-          })))
+          }))
+          setItems(fallback)
+          setSyncedItemsKey('')
           setDisambiguationCandidates({})
         }
       } finally {
@@ -99,8 +115,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       void fetchWatchlist()
         .then(remote => {
           if (!remote.items.length) return
+          const normalized = remote.items.map(normalizeWatchlistItem)
           skipNextSync.current = true
-          setItems(remote.items.map(normalizeWatchlistItem))
+          setItems(normalized)
+          setSyncedItemsKey(computeItemsKey(normalized))
           setDisambiguationCandidates(remote.disambiguation_candidates ?? {})
         })
         .catch(() => {})
@@ -110,11 +128,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated.current) return
+    const key = computeItemsKey(items)
     if (skipNextSync.current) {
       skipNextSync.current = false
+      setSyncedItemsKey(key)
       return
     }
-    void saveWatchlist(items).catch(() => {})
+    void saveWatchlist(items)
+      .then(() => { setSyncedItemsKey(key) })
+      .catch(() => {})
   }, [items])
 
   const addItem = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
@@ -129,6 +151,30 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         addedPrice: opts?.addedPrice ?? row.addedPrice ?? null,
       }), ...prev]
     })
+  }, [])
+
+  const addItemAndSync = useCallback(async (item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
+    const row = normalizeWatchlistItem(item)
+    const key = itemKey(row)
+    const now = new Date().toISOString()
+    const prev = itemsRef.current
+    const existing = prev.find(x => itemKey(x) === key)
+    if (existing) return existing
+
+    const added = normalizeWatchlistItem({
+      ...row,
+      addedAt: row.addedAt ?? now,
+      addedPrice: opts?.addedPrice ?? row.addedPrice ?? null,
+    })
+    const next = [added, ...prev]
+    setItems(next)
+    try {
+      await saveWatchlist(next)
+      setSyncedItemsKey(computeItemsKey(next))
+    } catch {
+      /* 本地已更新；批拉会在 syncedItemsKey 对齐后重试 */
+    }
+    return added
   }, [])
 
   const updateItem = useCallback((code: string, patch: Partial<WatchlistItem>) => {
@@ -168,8 +214,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const value: WatchlistContextValue = {
     items,
+    syncedItemsKey,
     disambiguationCandidates,
     addItem,
+    addItemAndSync,
     updateItem,
     removeItem,
     reorderItem,
@@ -186,8 +234,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
 const EMPTY_WATCHLIST: WatchlistContextValue = {
   items: [],
+  syncedItemsKey: '',
   disambiguationCandidates: {},
   addItem: () => {},
+  addItemAndSync: async item => item,
   updateItem: () => {},
   removeItem: () => {},
   reorderItem: () => {},

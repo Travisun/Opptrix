@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Spinner, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../../api/client'
 import { formatPct, formatPriceForMarket, pctTone } from '../../market/format'
@@ -119,7 +119,11 @@ type Props = {
 
 export default function MarketWatchlistQuotes({ compact = false }: Props) {
   const s = useStyles()
-  const { items } = useWatchlist()
+  const { items, syncedItemsKey } = useWatchlist()
+  const itemsKey = useMemo(
+    () => items.map(watchlistItemKey).join('|'),
+    [items],
+  )
   const [quotes, setQuotes] = useState<WatchQuote[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -209,10 +213,11 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
   }, [items])
 
   useEffect(() => {
+    if (syncedItemsKey !== itemsKey) return undefined
     void refreshQuotes()
     const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
-  }, [refreshQuotes])
+  }, [refreshQuotes, itemsKey, syncedItemsKey])
 
   if (loading && !quotes.length) {
     return <div className={s.empty}><Spinner size="tiny" label="正在更新行情…" /></div>

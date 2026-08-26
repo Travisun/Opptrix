@@ -733,6 +733,11 @@ app.post<{ Body: Record<string, unknown> }>('/api/instruments/quotes', async (re
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/quote', async (req) => {
+  const r = await hub.dispatch('instrument_quote', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.post<{ Body: Record<string, unknown> }>('/api/instruments/chart', async (req) => {
   const r = await hub.dispatch('instrument_chart', req.body ?? {})
   return { success: r.success, data: r.data, message: r.message }

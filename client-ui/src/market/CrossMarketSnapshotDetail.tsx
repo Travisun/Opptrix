@@ -22,6 +22,7 @@ import {
   watchlistItemKey,
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
+import { isWatchlistItemWithinQuoteGrace } from './watchlistQuotes'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -29,6 +30,9 @@ import { ghostInteractive } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
 
 const CONTENT_PAD = '15px'
+const SNAPSHOT_INITIAL_MAX_RETRIES = 2
+const SNAPSHOT_INITIAL_RETRY_MS = 1500
+const SNAPSHOT_LOAD_ERROR_COPY = '暂时无法加载行情，请稍后重试'
 
 type EquityDetail = UsSnapshotData
 
@@ -271,7 +275,7 @@ async function loadSnapshot(ref: InstrumentRef): Promise<EquityDetail | CryptoSn
   }
   const resp = await research.instrumentSnapshot(ref)
   if (!resp.success || !resp.data || typeof resp.data !== 'object') {
-    throw new Error(resp.message || '暂时无法获取行情')
+    throw new Error(resp.message || SNAPSHOT_LOAD_ERROR_COPY)
   }
   return resp.data as EquityDetail | CryptoSnapshotData
 }
@@ -345,29 +349,46 @@ export default function CrossMarketSnapshotDetail({
   const [snapshot, setSnapshot] = useState<EquityDetail | CryptoSnapshotData | null>(null)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [, setGraceTick] = useState(0)
   const loadSeqRef = useRef(0)
+  const snapshotRef = useRef<EquityDetail | CryptoSnapshotData | null>(null)
+  const initialRetryRef = useRef(0)
+  snapshotRef.current = snapshot
 
   const load = useCallback(async () => {
     if (!ref) return
     const seq = ++loadSeqRef.current
     setFetching(true)
+    let scheduleRetry = false
     try {
       const data = await loadSnapshot(ref)
       if (seq !== loadSeqRef.current) return
       setSnapshot(prev => mergeSnapshotPreserveQuote(prev, data))
       setError(null)
+      initialRetryRef.current = 0
     } catch (e) {
       if (seq !== loadSeqRef.current) return
-      // 失败保留上一份 snapshot，不 clear
-      setError(e instanceof Error ? e.message : '暂时无法获取行情')
+      const hadQuote = snapshotRef.current?.quote != null
+      if (!hadQuote && initialRetryRef.current < SNAPSHOT_INITIAL_MAX_RETRIES) {
+        initialRetryRef.current += 1
+        scheduleRetry = true
+        window.setTimeout(() => {
+          void load()
+        }, SNAPSHOT_INITIAL_RETRY_MS * initialRetryRef.current)
+        return
+      }
+      setError(e instanceof Error ? e.message : SNAPSHOT_LOAD_ERROR_COPY)
     } finally {
-      if (seq === loadSeqRef.current) setFetching(false)
+      if (seq === loadSeqRef.current && !scheduleRetry) {
+        setFetching(false)
+      }
     }
   }, [ref])
 
   useEffect(() => {
     setSnapshot(null)
     setError(null)
+    initialRetryRef.current = 0
     loadSeqRef.current += 1
   }, [instrumentIdentity])
 
@@ -379,10 +400,21 @@ export default function CrossMarketSnapshotDetail({
     return () => window.clearInterval(timer)
   }, [load, isCrypto, instrumentIdentity])
 
+  useEffect(() => {
+    if (!isWatchlistItemWithinQuoteGrace(stock)) return undefined
+    const timer = window.setInterval(() => {
+      setGraceTick(t => t + 1)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [stock.addedAt])
+
   const equity = isEquity ? (snapshot as EquityDetail | null) : null
   const crypto = isCrypto ? (snapshot as CryptoSnapshotData | null) : null
   const quote = equity?.quote ?? crypto?.quote ?? null
   const klines = equity?.recentKlines ?? crypto?.recentKlines ?? []
+  const withinQuoteGrace = isWatchlistItemWithinQuoteGrace(stock)
+  const pendingInitialQuote = !quote && (fetching || withinQuoteGrace)
+  const showQuoteError = Boolean(error && !quote && !fetching && !withinQuoteGrace)
 
   const tone = pctTone(quote?.changePct)
   const toneClass = mergeClasses(
@@ -442,14 +474,14 @@ export default function CrossMarketSnapshotDetail({
               </button>
             )}
           </div>
-          {loading || (fetching && !quote) ? (
+          {loading || pendingInitialQuote ? (
             <Spinner size="tiny" label="正在获取行情…" />
           ) : quote ? (
             <div className={s.quoteMain}>
               <span className={mergeClasses(s.price, toneClass)}>{fmtPrice(quote.price)}</span>
               <span className={mergeClasses(s.change, toneClass)}>{formatPct(quote.changePct)}</span>
             </div>
-          ) : error ? (
+          ) : showQuoteError ? (
             <Text className={s.error}>{error}</Text>
           ) : null}
         </div>
@@ -483,8 +515,8 @@ export default function CrossMarketSnapshotDetail({
                 备注
               </button>
             )}
-            {loading || (fetching && !quote) ? (
-              <Spinner size="tiny" />
+            {loading || pendingInitialQuote ? (
+              <Spinner size="tiny" label="正在获取行情…" />
             ) : quote ? (
               <>
                 <span className={mergeClasses(s.price, toneClass)}>{fmtPrice(quote.price)}</span>
@@ -515,7 +547,7 @@ export default function CrossMarketSnapshotDetail({
               <HeroCell label="流通值" value={fmtCompact(quote.circulatingMarketCap)} />
             ) : null}
           </div>
-        ) : error && !quote ? (
+        ) : showQuoteError ? (
           <Text className={s.error}>{error}</Text>
         ) : null}
       </div>

@@ -1,14 +1,21 @@
 /** 右侧关注列表行情批量刷新间隔（非实时） */
 export const WATCHLIST_QUOTES_POLL_MS = 60_000
 
+export {
+  WATCHLIST_NEW_ITEM_QUOTE_GRACE_MS,
+  isWatchlistItemWithinQuoteGrace,
+  shouldSuppressWatchlistQuoteFailure,
+  watchlistItemAddedAtMs,
+} from './watchlistQuoteGrace'
+
+import type { QuoteFailedReason } from './instrument-adapters'
+import type { MarketQuote } from '../types/market'
+
 /** 大批量关注列表：每批请求标的数（与 UI 渐进刷新一致） */
 export const WATCHLIST_QUOTE_CHUNK_SIZE = 40
 
 /** 批间有界并发：同时进行的 instrumentQuotes 批次数 */
 export const WATCHLIST_QUOTE_CHUNK_CONCURRENCY = 2
-
-import type { QuoteFailedReason } from './instrument-adapters'
-import type { MarketQuote } from '../types/market'
 
 /** 关注列表一次刷新：merge 报价；失败项不抹掉已有价 */
 export function mergeWatchlistQuoteRefresh(input: {
@@ -26,9 +33,13 @@ export function mergeWatchlistQuoteRefresh(input: {
     delete failedByKey[key]
   }
   for (const [key, reason] of Object.entries(input.failedMap)) {
-    if (!(key in input.patch)) {
-      failedByKey[key] = reason
+    if (key in input.patch) continue
+    const cached = quotes[key]
+    if (cached?.price != null && Number.isFinite(cached.price) && cached.price > 0) {
+      delete failedByKey[key]
+      continue
     }
+    failedByKey[key] = reason
   }
   return { quotes, failedByKey }
 }

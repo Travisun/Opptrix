@@ -16,7 +16,14 @@ function mergeWatchlistQuoteRefresh({ prevQuotes, prevFailed, patch, failedMap }
   const failedByKey = { ...prevFailed }
   for (const key of Object.keys(patch)) delete failedByKey[key]
   for (const [key, reason] of Object.entries(failedMap)) {
-    if (!(key in patch)) failedByKey[key] = reason
+    if (!(key in patch)) {
+      const cached = quotes[key]
+      if (cached?.price != null && Number.isFinite(cached.price) && cached.price > 0) {
+        delete failedByKey[key]
+        continue
+      }
+      failedByKey[key] = reason
+    }
   }
   return { quotes, failedByKey }
 }
@@ -128,9 +135,22 @@ test('watchlist quote refresh keeps cached price when key fails', () => {
   })
   assert.equal(merged.quotes.AAPL.price, 191)
   assert.equal(merged.quotes.MSFT.price, 400)
-  assert.equal(merged.failedByKey.MSFT, 'error')
+  assert.equal(merged.failedByKey.MSFT, undefined)
   assert.equal(merged.failedByKey.TSLA, 'empty')
   assert.equal(merged.failedByKey.AAPL, undefined)
+})
+
+test('failedMap does not mark row failed when prev quote has valid price', () => {
+  const merged = mergeWatchlistQuoteRefresh({
+    prevQuotes: {
+      '600519': { code: '600519', price: 1800, name: '贵州茅台' },
+    },
+    prevFailed: { '600519': 'error' },
+    patch: {},
+    failedMap: { '600519': 'error' },
+  })
+  assert.equal(merged.quotes['600519'].price, 1800)
+  assert.equal(merged.failedByKey['600519'], undefined)
 })
 
 test('watchlist board rows keep previous price when missing from response', () => {
@@ -283,7 +303,7 @@ test('partial batch failure is not whole-table footer failure', async () => {
   assert.equal(shouldRaiseWatchlistQuoteFooter(result), false)
 })
 
-test('soft-fail merge keeps previous quote and marks failedByKey', () => {
+test('soft-fail merge keeps previous quote and clears failedByKey when price cached', () => {
   const reason = classifyWatchlistBatchFailReason('行情获取失败: 熔断冷却中')
   assert.equal(reason, 'error')
   const merged = mergeWatchlistQuoteRefresh({
@@ -297,7 +317,7 @@ test('soft-fail merge keeps previous quote and marks failedByKey', () => {
     },
   })
   assert.equal(merged.quotes['600519'].price, 1800)
-  assert.equal(merged.failedByKey['600519'], 'error')
+  assert.equal(merged.failedByKey['600519'], undefined)
   // 软失败已处理 → 计入 ok，不应抬整表 footer
   assert.equal(shouldRaiseWatchlistQuoteFooter({ okCount: 1, failCount: 0 }), false)
 })
