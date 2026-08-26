@@ -492,12 +492,42 @@ export class MarketDataEngine {
     return this.fetchBatchRealtimeChunk(codes, markets)
   }
 
-  private fetchBatchRealtimeChunk(
+  private writeWatchlistStockRealtimeFromBatch(
+    rows: StockRealtime[],
+    assetClass: AssetClass,
+    markets: Record<string, import('./utils/helpers.js').StockMarket | undefined> | undefined,
+    source?: string,
+  ): void {
+    const ttl = watchlistCacheTtl('stock_realtime')
+    if (ttl <= 0) return
+    for (const row of rows) {
+      const code = normalizeCode(String(row.code ?? ''))
+      if (!code) continue
+      const marketArg = markets?.[code] ?? markets?.[String(row.code ?? '')]
+      const args: unknown[] = marketArg ? [code, marketArg] : [code]
+      if (!this.isWatchlistTarget('CN', assetClass, args)) continue
+      this.cache.setWithTtl(
+        'stock_realtime',
+        [row],
+        'realtime',
+        {
+          method: 'realtime',
+          market: 'CN',
+          assetClass,
+          args: JSON.stringify(args),
+        },
+        ttl,
+        source,
+      )
+    }
+  }
+
+  private async fetchBatchRealtimeChunk(
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
     const assetClass = codes.some(c => isCnEtfCode(String(c))) ? 'ETF' : 'EQUITY'
-    return this.queryPlans.execute<StockRealtime>(
+    const result = await this.queryPlans.execute<StockRealtime>(
       this.queryPlans.getPlan('cn_equity_stock_realtime_batch'),
       {
         method: 'batchRealtime',
@@ -508,6 +538,10 @@ export class MarketDataEngine {
         mergeKey: item => normalizeCode(String((item as StockRealtime).code)),
       },
     )
+    if (result.success && result.data?.length) {
+      this.writeWatchlistStockRealtimeFromBatch(result.data, assetClass, markets, result.source)
+    }
+    return result
   }
 
   private fetchDailyKline(

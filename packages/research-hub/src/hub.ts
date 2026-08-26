@@ -4316,15 +4316,13 @@ export class ResearchHub {
   private watchlistSave(params: Record<string, unknown>, t0: number) {
     const items = Array.isArray(params.items) ? params.items as import('@opptrix/a-stock-layer').WatchlistItem[] : []
     const prevItems = this.de.watchlist.list()
-    const prevKeys = new Set(prevItems.map(item => watchlistItemKey(item)))
     const saved = this.de.watchlist.replace(items)
     // Durable across process restart: debounce merges rapid in-process replaces,
     // but HTTP save must flush before the response returns.
     this.de.watchlist.flush()
     const nextKeys = new Set(saved.map(item => watchlistItemKey(item)))
-    const added = saved.filter(item => !prevKeys.has(watchlistItemKey(item)))
     const removed = prevItems.filter(item => !nextKeys.has(watchlistItemKey(item)))
-    for (const item of [...added, ...removed]) {
+    for (const item of removed) {
       const ref = instrumentRefFromWatchlistItem(item)
       if (ref) this.de.invalidateInstrumentQuoteCache(ref)
     }

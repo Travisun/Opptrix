@@ -8,9 +8,11 @@ import { ghostInteractive } from '../../theme/mixins'
 import { useWatchlist } from '../../market/useWatchlist'
 import {
   displayCodeFromInstrument,
+  instrumentKey,
   resolveWatchlistInstrument,
   watchlistItemKey,
 } from '../../market/instrument'
+import type { MarketQuote } from '../../types/market'
 import {
   WATCHLIST_QUOTES_POLL_MS,
   mergeWatchlistBoardQuoteRows,
@@ -119,7 +121,7 @@ type Props = {
 
 export default function MarketWatchlistQuotes({ compact = false }: Props) {
   const s = useStyles()
-  const { items, syncedItemsKey } = useWatchlist()
+  const { items, syncedItemsKey, subscribeQuotePatches } = useWatchlist()
   const itemsKey = useMemo(
     () => items.map(watchlistItemKey).join('|'),
     [items],
@@ -211,6 +213,49 @@ export default function MarketWatchlistQuotes({ compact = false }: Props) {
       if (!silent) setLoading(false)
     }
   }, [items])
+
+  const applyBoardQuotePatch = useCallback((patch: Record<string, MarketQuote>) => {
+    if (!Object.keys(patch).length || !items.length) return
+    setQuotes(prev => {
+      const incoming = new Map<string, WatchQuote>()
+      for (const item of items) {
+        const ref = resolveWatchlistInstrument(item)
+        const key = watchlistItemKey(item)
+        const lookupKey = ref ? instrumentKey(ref) : key
+        const mq = patch[lookupKey]
+          ?? patch[key]
+          ?? (ref ? patch[displayCodeFromInstrument(ref)] : undefined)
+        if (!mq || mq.price == null) continue
+        incoming.set(key, {
+          key,
+          code: item.code,
+          name: mq.name ?? item.name ?? item.code,
+          market: ref?.market ?? 'CN',
+          price: mq.price,
+          changePct: mq.changePct ?? null,
+        })
+      }
+      if (!incoming.size) return prev
+      return mergeWatchlistBoardQuoteRows(
+        items.map(item => {
+          const ref = resolveWatchlistInstrument(item)
+          return {
+            key: watchlistItemKey(item),
+            code: item.code,
+            name: item.name ?? item.code,
+            market: ref?.market ?? 'CN',
+          }
+        }),
+        prev,
+        incoming,
+      )
+    })
+  }, [items])
+
+  useEffect(
+    () => subscribeQuotePatches(applyBoardQuotePatch),
+    [subscribeQuotePatches, applyBoardQuotePatch],
+  )
 
   useEffect(() => {
     if (syncedItemsKey !== itemsKey) return undefined

@@ -17,6 +17,10 @@ import {
   tryResolveWatchlistInstrument,
   watchlistItemKey,
 } from './instrument'
+import { buildWatchlistAddedPricePatch, prefetchWatchlistQuotePatch } from './watchlistQuotePrefetch'
+import type { MarketQuote } from '../types/market'
+
+export type WatchlistQuotePatchListener = (patch: Record<string, MarketQuote>) => void
 
 const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '600519', name: '贵州茅台', industry: '白酒' },
@@ -46,6 +50,8 @@ type WatchlistContextValue = {
   reorderItem: (code: string, direction: 'up' | 'down') => void
   setItems: Dispatch<SetStateAction<WatchlistItem[]>>
   clearDisambiguationCandidates: (code: string) => void
+  /** 订阅 addItemAndSync 后的即时报价 patch（组件 mount 时注册） */
+  subscribeQuotePatches: (listener: WatchlistQuotePatchListener) => () => void
 }
 
 const WatchlistContext = createContext<WatchlistContextValue | null>(null)
@@ -60,7 +66,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const unresolvedRefetchDone = useRef(false)
   const itemsRef = useRef<WatchlistItem[]>([])
   const [syncedItemsKey, setSyncedItemsKey] = useState('')
+  const quotePatchListenersRef = useRef(new Set<WatchlistQuotePatchListener>())
   itemsRef.current = items
+
+  const emitQuotePatch = useCallback((patch: Record<string, MarketQuote>) => {
+    if (!Object.keys(patch).length) return
+    for (const listener of quotePatchListenersRef.current) {
+      listener(patch)
+    }
+  }, [])
+
+  const subscribeQuotePatches = useCallback((listener: WatchlistQuotePatchListener) => {
+    quotePatchListenersRef.current.add(listener)
+    return () => {
+      quotePatchListenersRef.current.delete(listener)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -171,11 +192,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     try {
       await saveWatchlist(next)
       setSyncedItemsKey(computeItemsKey(next))
+      const ref = tryResolveWatchlistInstrument(added)
+      if (ref) {
+        void prefetchWatchlistQuotePatch(added, ref).then(patch => {
+          emitQuotePatch(patch)
+        })
+      }
     } catch {
       /* 本地已更新；批拉会在 syncedItemsKey 对齐后重试 */
+      const ref = tryResolveWatchlistInstrument(added)
+      if (ref && added.addedPrice != null && added.addedPrice > 0) {
+        emitQuotePatch(buildWatchlistAddedPricePatch(added, ref, added.addedPrice))
+      }
     }
     return added
-  }, [])
+  }, [emitQuotePatch])
 
   const updateItem = useCallback((code: string, patch: Partial<WatchlistItem>) => {
     setItems(prev => prev.map(item => {
@@ -223,6 +254,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     reorderItem,
     setItems,
     clearDisambiguationCandidates,
+    subscribeQuotePatches,
   }
 
   return (
@@ -243,6 +275,7 @@ const EMPTY_WATCHLIST: WatchlistContextValue = {
   reorderItem: () => {},
   setItems: () => {},
   clearDisambiguationCandidates: () => {},
+  subscribeQuotePatches: () => () => {},
 }
 
 export function useWatchlist(): WatchlistContextValue {

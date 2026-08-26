@@ -37,7 +37,6 @@ import {
   runWatchlistQuoteBatches,
   shouldSuppressWatchlistQuoteFailure,
 } from './watchlistQuotes'
-import { buildWatchlistQuotePatch, fetchFreshWatchlistInstrumentQuote } from './watchlistQuotePrefetch'
 import { useWatchlist } from './useWatchlist'
 import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from './useInstrumentSearchWithUniversePrep'
 import { hasApplicationCapability } from './capabilities'
@@ -591,7 +590,7 @@ export default function WatchlistTab({
     dialogOpen,
     setDialogOpen,
   } = useWatchlistGroups()
-  const { disambiguationCandidates, clearDisambiguationCandidates, syncedItemsKey } = useWatchlist()
+  const { disambiguationCandidates, clearDisambiguationCandidates, syncedItemsKey, subscribeQuotePatches } = useWatchlist()
   const [keyword, setKeyword] = useState('')
   const {
     hits: searchHits,
@@ -851,6 +850,23 @@ export default function WatchlistTab({
     return () => { cancelled = true }
   }, [active, selectedCode, itemsKey])
 
+  const applyQuotePatch = useCallback((patch: Record<string, MarketQuote>) => {
+    if (!Object.keys(patch).length) return
+    const merged = mergeWatchlistQuoteRefresh({
+      prevQuotes: quotesRef.current,
+      prevFailed: failedByKeyRef.current,
+      patch,
+      failedMap: {},
+    })
+    quotesRef.current = merged.quotes
+    failedByKeyRef.current = merged.failedByKey
+    setQuotes(merged.quotes)
+    setFailedByKey(merged.failedByKey)
+    setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+  }, [])
+
+  useEffect(() => subscribeQuotePatches(applyQuotePatch), [subscribeQuotePatches, applyQuotePatch])
+
   useEffect(() => {
     if (!active || syncedItemsKey !== itemsKey) return undefined
     void refreshQuotes()
@@ -1082,26 +1098,8 @@ export default function WatchlistTab({
                 className={mergeClasses(s.resultItem, 'opptrix-hover-marquee-host')}
                 onClick={async () => {
                   const row = normalizeWatchlistItem(hit)
-                  const ref = resolveWatchlistInstrument(row)
-                  const added = await Promise.resolve(onAdd(row, {}))
+                  await Promise.resolve(onAdd(row, {}))
                   setKeyword('')
-                  if (!ref || !hasApplicationCapability(ref, 'batch_quote')) return
-                  try {
-                    const unified = await fetchFreshWatchlistInstrumentQuote(ref)
-                    if (!unified || unified.price == null) return
-                    const patch = buildWatchlistQuotePatch(added, ref, unified)
-                    quotesRef.current = { ...quotesRef.current, ...patch }
-                    setQuotes(prev => ({ ...prev, ...patch }))
-                    setFailedByKey(prev => {
-                      const next = { ...prev }
-                      for (const k of Object.keys(patch)) delete next[k]
-                      return next
-                    })
-                    setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
-                    if (added.addedPrice == null && unified.price != null && unified.price > 0) {
-                      onPatchItem(added.code, { addedPrice: unified.price })
-                    }
-                  } catch { /* 整表刷新会补齐 */ }
                 }}
               >
                 <div className={s.resultMain}>

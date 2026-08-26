@@ -50,6 +50,31 @@ test('peekInstrumentQuoteCache returns stale row after TTL expires', async () =>
   assert.equal(hit?.price, 191)
 })
 
+test('peekInstrumentQuoteCache reads CN ETF per-symbol batch cache shape', () => {
+  const engine = new MarketDataEngine(false)
+  engine.watchlist.replace([{
+    code: '159855',
+    name: '游戏 ETF',
+    instrument: { market: 'CN', assetClass: 'ETF', symbol: '159855', exchange: 'SZ' },
+  }])
+  const ref = { market: 'CN', assetClass: 'ETF', symbol: '159855', exchange: 'SZ' }
+  engine.cache.setWithTtl(
+    'stock_realtime',
+    [{ code: '159855', price: 1.23, exchange: 'SZ' }],
+    'realtime',
+    {
+      method: 'realtime',
+      market: 'CN',
+      assetClass: 'ETF',
+      args: JSON.stringify(['159855', 'SZ']),
+    },
+    45,
+    'tonghuashun',
+  )
+  const hit = engine.peekInstrumentQuoteCache(ref)
+  assert.equal(hit?.price, 1.23)
+})
+
 test('invalidateInstrumentQuoteCache only clears matching symbol', () => {
   const engine = new MarketDataEngine(false)
   const aaplParams = {
