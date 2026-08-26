@@ -60,14 +60,24 @@ const METRIC_COLUMNS = [
   { key: 'holding', label: '持仓收益', minWidth: '68px' },
 ] as const
 
-/** 行内失败态文案 — reason → 产品级短文案 + title 提示（禁技术词） */
-const QUOTE_FAILED_COPY: Record<QuoteFailedReason, { label: string; hint: string }> = {
-  no_provider: { label: '行情源未配置', hint: '在设置中添加行情源后即可查看' },
-  unsupported: { label: '暂不支持该市场', hint: '该市场暂未开通实时行情' },
-  empty: { label: '暂时无行情数据', hint: '可稍后刷新查看最新行情' },
-  error: { label: '行情暂时获取失败', hint: '请稍后刷新重试' },
-  not_found: { label: '该标的数据源暂未收录', hint: '可稍后再试，或添加其他行情源' },
-}
+  /** 行内失败态文案 — reason → 产品级短文案 + title 提示（禁技术词） */
+  const QUOTE_FAILED_COPY: Record<QuoteFailedReason, { label: string; hint: string }> = {
+    no_provider: { label: '行情源未配置', hint: '在设置中添加行情源后即可查看' },
+    unsupported: { label: '暂不支持该市场', hint: '该市场暂未开通实时行情' },
+    empty: { label: '暂时无行情数据', hint: '可稍后刷新查看最新行情' },
+    error: { label: '行情暂时获取失败', hint: '请稍后刷新重试' },
+    not_found: { label: '该标的数据源暂未收录', hint: '可稍后再试，或添加其他行情源' },
+  }
+
+  /** 整表失败时的 footer 文案 — 可操作、禁 provider/熔断等技术词 */
+  function watchlistQuoteErrorCopy(message?: string): string {
+    const raw = String(message ?? '')
+    if (/熔断|冷却|限流|繁忙|所有 provider 均失败/.test(raw)) {
+      return '行情暂时繁忙，请稍后刷新'
+    }
+    if (raw.includes('行情获取失败')) return '行情暂时繁忙，请稍后刷新'
+    return '行情暂时无法更新'
+  }
 
 function lookupWatchlistQuote<T>(
   bag: Record<string, T>,
@@ -596,7 +606,7 @@ export default function WatchlistTab({
       const resp = await research.instrumentQuotes(instruments)
       if (seq !== loadSeqRef.current) return
       if (!resp.success || !resp.data?.quotes) {
-        setQuoteError('行情暂时无法更新')
+        setQuoteError(watchlistQuoteErrorCopy(resp.message))
         return
       }
       setQuoteError('')
@@ -628,7 +638,7 @@ export default function WatchlistTab({
       setFailedByKey(failedMap)
       setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
-      if (seq === loadSeqRef.current) setQuoteError('行情暂时无法更新')
+      if (seq === loadSeqRef.current) setQuoteError('行情暂时繁忙，请稍后刷新')
     } finally {
       if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }

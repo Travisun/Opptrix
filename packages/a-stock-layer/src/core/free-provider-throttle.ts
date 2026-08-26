@@ -223,8 +223,8 @@ export function recordProviderQueryEmpty(
   capStr: string,
   health: ProviderHealthTracker = getProviderHealthTracker(),
 ): void {
-  // 业务空结果（合法无数据）不触发免费源长冷却，仅计软失败并换源
-  health.recordInvalidResponse(providerId, capStr, 'empty_data')
+  // 业务空结果（合法无数据）：不触发免费源长冷却，也不推熔断 OPEN；仅观测 + 换源
+  health.recordEmptyMiss(providerId, capStr, 'empty_data')
 }
 
 export function recordProviderQueryInvalid(

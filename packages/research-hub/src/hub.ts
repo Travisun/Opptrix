@@ -2276,6 +2276,10 @@ export class ResearchHub {
     const id = String(params.provider_id ?? '')
     try {
       const result = await this.de.testProviderConnection(id, params as Record<string, unknown>)
+      if (result.ok && id) {
+        // 测通后清掉该源进程内熔断，避免「连接正常但行情仍全失败」
+        this.de.resetProviderHealth(id)
+      }
       return ok(result, result.ok ? result.message : `连接失败: ${result.message}`, t0)
     } catch (e) {
       return fail(String(e), t0)
@@ -3429,7 +3433,7 @@ export class ResearchHub {
   }
 
   private async instrumentQuotes(params: Record<string, unknown>, t0: number) {
-    return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0))
+    return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0), t0)
   }
 
   private async instrumentChart(params: Record<string, unknown>, t0: number) {

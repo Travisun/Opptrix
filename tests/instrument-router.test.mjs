@@ -135,6 +135,8 @@ test('classifyQuoteFailureMessage maps not found / no provider / other', () => {
   assert.equal(classifyQuoteFailureMessage('没有可用的 provider 支持 [CN/FUND/fundQuote]'), 'no_provider')
   assert.equal(classifyQuoteFailureMessage('tushare: 暂无数据'), 'no_provider')
   assert.equal(classifyQuoteFailureMessage('所有 provider 均失败: tushare: 空数据'), 'error')
+  assert.equal(classifyQuoteFailureMessage('tickflow: 熔断中 (连续失败3次, 30s后重试)'), 'error')
+  assert.equal(classifyQuoteFailureMessage('tonghuashun: 限流冷却中'), 'error')
   assert.equal(classifyQuoteFailureMessage(''), 'error')
 })
 
@@ -235,6 +237,27 @@ test('instrument quotes: all refs failed still returns fail', async () => {
   }, handlers)
   assert.equal(resp.success, false)
   assert.equal(resp.message, '行情获取失败')
+  assert.equal(typeof resp.elapsed, 'number')
+})
+
+test('instrument quotes: all-fail preserves first upstream error (circuit)', async () => {
+  const handlers = {
+    stockQuotes: async () => ({
+      success: false,
+      message: '行情获取失败: tickflow: 熔断中 (连续失败3次, 30s后重试)',
+      elapsed: 0.01,
+    }),
+  }
+  const t0 = Date.now()
+  const resp = await routeInstrumentQuotes({
+    instruments: [
+      { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },
+    ],
+  }, handlers, t0)
+  assert.equal(resp.success, false)
+  assert.match(resp.message, /熔断中/)
+  assert.equal(typeof resp.elapsed, 'number')
+  assert.equal(classifyQuoteFailureMessage(resp.message), 'error')
 })
 
 test('instrument quotes: US group bounded concurrency ≤ 5', async () => {

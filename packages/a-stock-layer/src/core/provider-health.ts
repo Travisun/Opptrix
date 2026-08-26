@@ -175,7 +175,22 @@ export class ProviderHealthTracker {
     }
   }
 
-  /** Record an invalid/empty response (counts as soft failure). */
+  /**
+   * Record a business-empty miss (合法无数据).
+   * Observability only — does NOT bump consecutiveFails or open the circuit.
+   * Real errors still go through recordFailure / recordInvalidResponse.
+   */
+  recordEmptyMiss(providerId: string, capability: string, reason = 'empty_data'): void {
+    const key = makeKey(providerId, capability)
+    const h = this.getOrCreate(key)
+    const now = Date.now()
+
+    h.totalFails++
+    h.lastFailAt = now
+    h.lastError = reason.slice(0, 200)
+  }
+
+  /** Record an invalid response (counts toward consecutiveFails / circuit). */
   recordInvalidResponse(providerId: string, capability: string, reason = 'invalid_response'): void {
     const key = makeKey(providerId, capability)
     const h = this.getOrCreate(key)
