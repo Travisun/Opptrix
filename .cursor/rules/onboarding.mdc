@@ -1,13 +1,6 @@
 ---
 description: 启动引导 — 首次使用/版本更新后的欢迎流程、发版激活参数与文案维护
-globs:
-  - client-ui/src/onboarding/**/*
-  - client-ui/vite.config.ts
-  - client-ui/src/pages/settings/aboutLinks.ts
-  - packages/shared/src/onboarding.ts
-  - apps/server/src/legal-document.ts
-  - apps/desktop/package.json
-  - client-ui/package.json
+globs: client-ui/src/onboarding/**/*,client-ui/vite.config.ts,client-ui/src/pages/settings/aboutLinks.ts,packages/shared/src/onboarding.ts,apps/server/src/legal-document.ts,apps/desktop/package.json,client-ui/package.json
 alwaysApply: false
 ---
 

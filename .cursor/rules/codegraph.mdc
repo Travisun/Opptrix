@@ -1,6 +1,6 @@
 ---
-description: 探索/查询本仓库 — 最高优先级 CodeGraph；禁止先全库 Grep/Read/扫目录
-alwaysApply: true
+description: 探索/查实现/找符号/跟调用链 — 必须先 CodeGraph（codegraph_explore）；禁止先全库 Grep/Read
+alwaysApply: false
 ---
 
 # CodeGraph 优先（代码探索最高优先级）

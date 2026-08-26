@@ -1,6 +1,6 @@
 ---
-description: 安全规范 — 敏感数据处理、输入校验、权限控制
-alwaysApply: true
+description: 安全规范 — 密钥、输入校验、Electron 沙箱、网络安全；涉及认证/IPC/外部输入时必读
+alwaysApply: false
 ---
 
 # 安全规范（全仓硬性）

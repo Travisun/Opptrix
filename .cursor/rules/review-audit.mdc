@@ -1,6 +1,6 @@
 ---
-description: 审查与审计 — 代码审查、质量门禁、发布前审计
-alwaysApply: true
+description: 审查与审计 — 代码审查清单、质量门禁、桌面发版 Phase A–D；交付/PR/发版前必读
+alwaysApply: false
 ---
 
 # 审查与审计

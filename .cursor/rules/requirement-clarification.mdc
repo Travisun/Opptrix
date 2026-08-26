@@ -1,6 +1,6 @@
 ---
-description: 需求澄清规则 — 重要修改前必须向用户提问以准确理解需求
-alwaysApply: true
+description: 需求澄清 — 新功能/架构/API/UI/Provider/Schema 等重要修改前必须向用户确认
+alwaysApply: false
 ---
 
 # 需求澄清规则（硬性）

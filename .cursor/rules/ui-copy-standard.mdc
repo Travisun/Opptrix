@@ -1,6 +1,7 @@
 ---
-description: UI 文案规范 — 所有面向用户的文案必须为产品级高端风格，禁止任何技术描述；统一 onboarding、按钮、空状态、报错、设置等全部 UI 文案标准
-alwaysApply: true
+description: UI 文案规范 — 用户可见文案须产品级风格，禁止技术术语；改 client-ui 或 onboarding 文案时适用
+globs: client-ui/**/*,**/onboarding/**/*
+alwaysApply: false
 ---
 
 # UI 文案规范（硬性规则，全仓生效）

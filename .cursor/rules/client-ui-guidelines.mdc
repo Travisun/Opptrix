@@ -1,7 +1,6 @@
 ---
 description: client-ui 工程规范 — UI/UX、桌面布局、面向用户文案
-globs:
-  - client-ui/**/*
+globs: client-ui/**/*
 alwaysApply: false
 ---
 

@@ -1,6 +1,6 @@
 ---
-description: 新功能完备性与高可信交付 — 技术/用户/产品三维完备、兼容审计、禁止半成品
-alwaysApply: true
+description: 新功能完备性 — 技术/用户/产品三维、兼容安全、禁止半成品；新增或扩展能力时必读
+alwaysApply: false
 ---
 
 # 新功能完备性与高可信交付（硬性）

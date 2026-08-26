@@ -1,6 +1,6 @@
 ---
-description: 多平台兼容 — macOS / Linux / Windows 功能、路径、原生与沙盒均须可运行或有明确降级
-alwaysApply: true
+description: 多平台兼容 — macOS/Linux/Windows 路径、原生、沙盒、打包；涉及 process.platform 或原生模块时必读
+alwaysApply: false
 ---
 
 # 多平台兼容（全仓硬性）

@@ -1,8 +1,6 @@
 ---
 description: 性能规范 — 异步、缓存、并发、内存管理
-globs:
-  - packages/**/*
-  - apps/**/*
+globs: packages/**/*,apps/**/*
 alwaysApply: false
 ---
 

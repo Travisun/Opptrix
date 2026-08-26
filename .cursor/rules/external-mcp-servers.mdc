@@ -1,11 +1,7 @@
 ---
 description: 外部 MCP Server 接入约束（优先级链、密钥、Agent 权限）
-globs:
-  - packages/agent/src/mcp/external/**
-  - packages/shared/src/mcp-servers.ts
-  - packages/user-store/src/mcp-servers.ts
-  - apps/server/src/mcp-server-routes.ts
-  - client-ui/src/pages/settings/McpServersSettingsSection.tsx
+globs: packages/agent/src/mcp/external/**/*,packages/shared/src/mcp-servers.ts,packages/user-store/src/mcp-servers.ts,apps/server/src/mcp-server-routes.ts,client-ui/src/pages/settings/McpServersSettingsSection.tsx
+alwaysApply: false
 ---
 
 # 外部 MCP Server

@@ -1,14 +1,6 @@
 ---
 description: 桌面端发版 — Agent 发布前必须逐步完成 Checklist（硬性）；版本号、更新日志、标签、onboarding、CI
-globs:
-  - apps/desktop/package.json
-  - apps/desktop/electron/**
-  - apps/desktop/scripts/**
-  - .github/workflows/release-desktop.yml
-  - docs/DESKTOP-RELEASE.md
-  - docs/releases/**
-  - scripts/assemble-release-notes.mjs
-  - client-ui/package.json
+globs: apps/desktop/package.json,apps/desktop/electron/**,apps/desktop/scripts/**,.github/workflows/release-desktop.yml,docs/DESKTOP-RELEASE.md,docs/releases/**,scripts/assemble-release-notes.mjs,client-ui/package.json
 alwaysApply: false
 ---
 

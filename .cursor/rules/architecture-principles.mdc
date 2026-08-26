@@ -1,6 +1,6 @@
 ---
-description: 架构设计原则 — 所有开发决策的根基；违反即驳回
-alwaysApply: true
+description: 架构设计原则 — 分层、注册模式、依赖倒置；跨层改动或新增能力前必读
+alwaysApply: false
 ---
 
 # 架构设计原则（全仓硬性）

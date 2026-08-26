@@ -1,7 +1,6 @@
 ---
 description: 改码后收尾验证 — client-ui TypeScript / ESLint / React 模式检查（硬性）
-globs:
-  - client-ui/**/*
+globs: client-ui/**/*
 alwaysApply: false
 ---
 

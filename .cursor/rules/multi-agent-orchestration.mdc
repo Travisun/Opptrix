@@ -1,9 +1,11 @@
 ---
-description: 多 Agent 编排 — 拆分后派 2–4 subagent；Main 维护 subagent ID 登记表；完成后即时停止回收；禁止后台僵尸空跑
-alwaysApply: true
+description: 多 Agent 编排 — 非豁免任务须拆分、派 2–4 subagent、ID 登记、完成即停回收；实现/修复类任务必读
+alwaysApply: false
 ---
 
 # 多 Agent 编排与审计（硬性规则）
+
+> **规则加载**：本文件为 L2；编排类任务开始前须先完成 `rules-index.mdc` 中的「规则加载计划」。
 
 ## 核心信条
 

@@ -1,6 +1,7 @@
 ---
-description: 文档规范 — API 文档、代码注释、更新日志
-alwaysApply: true
+description: 文档规范 — JSDoc、API 文档格式、Release Notes 文风；撰写或修改 docs 时适用
+globs: docs/**/*,**/*.md,**/custom-method-docs.ts,**/CHANGELOG.md
+alwaysApply: false
 ---
 
 # 文档规范
@@ -232,11 +233,4 @@ npm run test     # 测试
 
 ## 文档更新触发
 
-| 改动类型 | 必须更新的文档 |
-|----------|----------------|
-| 新增 Hub feature | `docs/API.md`、`AGENT-GUIDE.md` |
-| 新增/修改 Provider | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
-| 架构变更 | `docs/ARCHITECTURE.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| UI 组件 | `docs/UI-DESIGN-SYSTEM.md` |
-| 发版 | `docs/releases/{version}.md`、`DESKTOP-RELEASE.md` |
-| Schema 变更 | `docs/DATA-LAYER.md`、迁移测试 |
+完整触发表与检查清单见 **`doc-sync.mdc`**（改代码交付前加载）。

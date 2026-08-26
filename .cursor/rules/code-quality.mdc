@@ -1,9 +1,6 @@
 ---
 description: 代码质量标准 — 类型安全、错误处理、性能、可维护性
-globs:
-  - packages/**/*
-  - apps/**/*
-  - client-ui/**/*
+globs: packages/**/*,apps/**/*,client-ui/**/*
 alwaysApply: false
 ---
 

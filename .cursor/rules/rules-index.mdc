@@ -1,156 +1,91 @@
 ---
-description: Opptrix 规则索引 — 常驻薄层；细则按路径 glob 挂载或动手前 Read
+description: Opptrix 规则路由引擎 — 唯一常驻层；每任务开始前必先规划规则加载
 alwaysApply: true
 ---
 
-# Opptrix 规则索引
+# 规则路由引擎（L0 · 唯一常驻）
 
-## 硬性规则（全仓生效）
+> MiMoCode 路径见根目录 `AGENTS.md`；Cursor 细则在本目录，**禁止假设全部已加载**。
 
-| 规则 | 说明 | 文件 |
-|------|------|------|
-| **架构原则** | 分层架构、依赖倒置、注册模式、反模式 | `architecture-principles.mdc` |
-| **安全规范** | 敏感数据、输入校验、Electron 安全、网络安全 | `security.mdc` |
-| **审查与审计** | 代码审查、质量门禁、发布前审计 | `review-audit.mdc` |
-| **文档同步** | 架构/API/调用方式变更后必须同步更新文档 | `doc-sync.mdc` |
-| **需求澄清** | 重要修改前必须向用户提问确认需求 | `requirement-clarification.mdc` |
-| **UI 文案规范** | 所有用户可见文案必须为产品级高端风格，禁止技术描述 | `ui-copy-standard.mdc` |
-| **双远程同步** | push / merge 后 GitHub 与 Gitee 必须 tip 一致 | `dual-remote-sync.mdc` |
-| **功能完备性** | 新功能三维完备、兼容/安全、禁止半成品、交付前复审回炉 | `feature-completeness.mdc` |
-| **多平台兼容** | macOS / Linux / Windows 均可运行或明确降级；禁止本机单一依赖定制 | `cross-platform-compat.mdc` |
+## 前置条件（硬性 · 每任务第一步）
 
-## 场景规则（按 glob 自动挂载）
-
-| 场景 | 规则文件 | 关键文档 |
-|------|----------|----------|
-| **改 `client-ui`** | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc` | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
-| **桌面发版** | `desktop-release.mdc`、`onboarding.mdc` | `docs/DESKTOP-RELEASE.md`、`docs/releases/` |
-| **macOS 签名 / 公证** | `desktop-mac-signing.mdc` | `docs/DESKTOP-RELEASE.md`；清单 `apps/desktop/resources/mac-sign-checklist.json` |
-| **SQLite / 数据库** | `backward-compatibility.mdc`、`schema-migration.mdc` | `.cursor/rules/backward-compatibility.mdc` |
-| **行情 / 数据层** | `data-layer-standard-api.mdc` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
-| **Provider 实现** | `provider-standard-api.mdc`、`data-provider-docs.mdc` | `.cursor/rules/provider-standard-api.mdc` |
-| **Agent / MCP 工具** | `mcp-tool-pack-routing.mdc` | `docs/AGENT-GUIDE.md` |
-| **Agent 命令隔离 / SRT** | `agent-shell-sandbox.mdc` | `docs/AGENT-GUIDE.md`、`docs/DESKTOP.md` |
-| **代码质量** | `code-quality.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| **测试** | `testing.mdc` | `tests/` |
-| **性能** | `performance.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| **文档** | `documentation.mdc` | `docs/` |
-| **多 Agent 编排** | 拆分 → 派 2–4 subagent → Main 维护 ID 登记表 → 完成即停回收 → 主验收（`multi-agent-orchestration.mdc`） | - |
-
-## 核心流程
-
-### 开发工作流（完整）
+收到任务后、**调用工具或改代码之前**，须先输出简短 **规则加载计划**：
 
 ```
-0. 需求澄清 → 向用户提问确认需求（requirement-clarification.mdc）
-1. 探索代码 → codegraph_explore → 定位符号与调用链
-2. 理解实现 → Read 具体文件
-3. 设计方案 → 技术/用户/产品三维 + 兼容安全 + 外部参照（feature-completeness.mdc）
-4. 用户确认 → 方向与取舍确认（影响不可逆时必问）
-5. 实现代码 → 完整路径，禁止半成品
-6. 验证正确性 → 门禁 + 测试
-7. 交付前复审 → 按 feature-completeness 回炉直至达标
-8. 文档同步 → 更新对应文档（doc-sync.mdc）
-9. 提交代码 → commit + PR
+规则加载计划
+- 任务类型：问答 | 探索 | 小改 | 功能 | 发版 | Git | 审查
+- 将加载：{规则文件名}（L1 路径自动 | L2 Agent 拉取 | L2 Read 手动）
+- 豁免：{若无，写「无」}
 ```
 
-### 探索再改
+未输出计划不得进入实施。纯问答 / 单行 typo / 只读查文件 → 仅 L0，可跳过 L2。
 
-```
-1. codegraph_explore → 定位符号与调用链
-2. Read 具体文件 → 理解实现
-3. 确认方案 → 最小 diff 改动
-4. 运行检查 → 验证正确性
-```
+## 三层加载模型（对齐 Cursor 机制）
 
-### 多 Agent 编排
+| 层 | Cursor 类型 | frontmatter | 成本 |
+|----|-------------|-------------|------|
+| **L0** | Always Apply | `alwaysApply: true` | 每会话；**仅本文件** |
+| **L1** | Apply to Specific Files | `alwaysApply: false` + `globs` | 匹配文件入上下文时 |
+| **L2a** | Apply Intelligently | `alwaysApply: false` + `description`（无 globs） | Agent 按任务意图拉取 |
+| **L2b** | Manual | 无 description / globs | `@规则名` 或 `Read` 手动 |
 
-```
-1. 拆分可工作步骤 + AC（强制）
-2. 派 2–4 个执行 subagent（并行优先；含独立 Verifier）；**立刻写入 ID 登记表**
-3. 完成通知到达 → **同一回合停止并 `reclaimed`**（禁止后台空跑）
-4. 主 Agent 逐条验收审计
-5. 不通过 → 先回收无用者，再带反馈继续分派，直到可用
-6. 交付前清点登记表无 `running` → 交付
-```
+**反模式**：堆叠多个 `alwaysApply: true`（浪费上下文、中间规则易被忽略）。
 
-### 发布流程
+## L1 路径自动挂载
 
-```
-1. Read desktop-release.mdc + onboarding.mdc
-2. Phase A: 代码就绪（check:ui / build / audit）
-3. Phase B: 版本与文档（bump version / 写更新日志）
-4. Phase C: 兼容性（Schema / 旧客户端）
-5. Phase D: 发布（tag / push）
-```
+| 场景 | 规则 | 触发路径摘要 |
+|------|------|--------------|
+| client-ui | `client-ui-guidelines.mdc` | `client-ui/**/*` |
+| UI 收尾验证 | `post-edit-verification.mdc` | `client-ui/**/*` |
+| 浮层组件 | `ui-overlay-components.mdc` | `client-ui/**/*` |
+| UI 文案 | `ui-copy-standard.mdc` | `client-ui/**/*`, `**/onboarding/**/*` |
+| 数据层 | `data-layer-standard-api.mdc` | `a-stock-layer`, `research-hub`, `apps/server` |
+| Provider | `provider-standard-api.mdc`, `data-provider-docs.mdc` | `a-stock-layer/**/*` |
+| Agent 工具 | `mcp-tool-pack-routing.mdc` | `packages/agent/**/*` |
+| Agent 沙盒 | `agent-shell-sandbox.mdc` | `agent-workspace/shell`, workspace-tools |
+| 外部 MCP | `external-mcp-servers.mdc` | `mcp/external`, mcp-servers 配置 |
+| SQLite / 兼容 | `backward-compatibility.mdc`, `schema-migration.mdc` | store/schema/market-data |
+| 桌面发版 | `desktop-release.mdc`, `onboarding.mdc` | `apps/desktop/**`, releases |
+| macOS 签名 | `desktop-mac-signing.mdc` | after-pack/sign, mac-sign-checklist |
+| 代码质量 / 测试 / 性能 | `code-quality.mdc`, `testing.mdc`, `performance.mdc` | `packages/**`, `apps/**`, `tests/**` |
+| 写文档 | `documentation.mdc` | `docs/**/*`, `**/*.md` |
 
-## 硬性检查清单
+## L2 Agent 智能拉取（按任务类型选读）
 
-### 提交前
+| 任务类型 | 必读规则 |
+|----------|----------|
+| **探索 / 查实现** | `codegraph.mdc` |
+| **架构 / 跨层改动** | `architecture-principles.mdc` |
+| **新功能 / 扩展能力** | `feature-completeness.mdc`, `requirement-clarification.mdc` |
+| **多步骤实现 / 派 subagent** | `multi-agent-orchestration.mdc` |
+| **交付 / PR / 发版前** | `review-audit.mdc` |
+| **改代码后** | `doc-sync.mdc`（有架构/API 变更时） |
+| **安全敏感** | `security.mdc` |
+| **路径 / 原生 / 沙盒 / 打包** | `cross-platform-compat.mdc` |
+| **push / merge / PR** | `dual-remote-sync.mdc` |
 
-- [ ] 无 `any` 类型
-- [ ] 无 `@ts-ignore`
-- [ ] 错误处理完整
-- [ ] 测试通过
-- [ ] 文档已更新（如适用）
-- [ ] 架构/调用方式变更已同步文档（doc-sync.mdc）
-- [ ] 新功能已按 `feature-completeness.mdc` 复审（非半成品；三维完备；兼容/安全）
-- [ ] 涉及路径/原生/沙盒/shell/打包时已按 `cross-platform-compat.mdc` 自检三平台（或明确 skip/降级）
+L2 未自动出现时：**Read** 对应 `.mdc`，勿凭记忆编造细则。
 
-### client-ui 改动后
+## 核心信条（L0 极简，细则见 L2）
 
-- [ ] `npm run check:ui` 退出码 0
+1. **先规则计划，再动手**
+2. **先 CodeGraph，再改码**（`codegraph_explore`；见 `codegraph.mdc`）
+3. **最小 diff**；新功能禁止半成品（见 `feature-completeness.mdc`）
+4. **密钥不进 Git**；外部输入须校验；Electron 沙箱隔离（见 `security.mdc`）
+5. **GitHub + Gitee** push/merge 后两端 tip 须一致（见 `dual-remote-sync.mdc`）
 
-### packages 改动后
+## 提交前速查（按需展开 L2）
 
-- [ ] `npm run build:packages` 无错误
+- client-ui 改动 → `npm run check:ui`
+- packages 改动 → `npm run build:packages`
+- Schema → `SCHEMA_VERSION` + 迁移测试
+- 发版 → `desktop-release.mdc` + `audit:desktop-pack`
 
-### Schema 变更后
+## 规则文件索引
 
-- [ ] `SCHEMA_VERSION` 已 bump
-- [ ] `MIGRATION_STEPS` 已注册
-- [ ] 迁移测试通过
-
-### 发布前
-
-- [ ] `OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack` 退出码 0
-- [ ] `docs/releases/{version}.md` 已撰写
-- [ ] 用户确认后打标签
-
-### push / merge 后
-
-- [ ] GitHub 与 Gitee 对应分支 tip 一致（`dual-remote-sync.mdc`）
-- [ ] `gh pr merge` 后已 `git push gitee main` 并删除 Gitee 功能分支（如有）
-
-## 原文与扩展
-
-| Cursor 规则 | 路径 |
-|------------|------|
-| **架构原则** | `.cursor/rules/architecture-principles.mdc` |
-| **多 Agent 编排** | `.cursor/rules/multi-agent-orchestration.mdc` |
-| **代码质量** | `.cursor/rules/code-quality.mdc` |
-| **安全规范** | `.cursor/rules/security.mdc` |
-| **测试规范** | `.cursor/rules/testing.mdc` |
-| **文档规范** | `.cursor/rules/documentation.mdc` |
-| **审查与审计** | `.cursor/rules/review-audit.mdc` |
-| **性能规范** | `.cursor/rules/performance.mdc` |
-| **文档同步** | `.cursor/rules/doc-sync.mdc` |
-| **需求澄清** | `.cursor/rules/requirement-clarification.mdc` |
-| **UI 文案** | `.cursor/rules/ui-copy-standard.mdc` |
-| **双远程同步** | `.cursor/rules/dual-remote-sync.mdc` |
-| **功能完备性** | `.cursor/rules/feature-completeness.mdc` |
-| **多平台兼容** | `.cursor/rules/cross-platform-compat.mdc` |
-| CodeGraph | `.cursor/rules/codegraph.mdc` |
-| 兼容 | `.cursor/rules/backward-compatibility.mdc` |
-| Schema | `.cursor/rules/schema-migration.mdc` |
-| client-ui | `.cursor/rules/client-ui-guidelines.mdc` |
-| 收尾验证 | `.cursor/rules/post-edit-verification.mdc` |
-| 浮层组件 | `.cursor/rules/ui-overlay-components.mdc` |
-| 数据层 | `.cursor/rules/data-layer-standard-api.mdc` |
-| Provider | `.cursor/rules/provider-standard-api.mdc` |
-| Provider 文档 | `.cursor/rules/data-provider-docs.mdc` |
-| Agent / MCP 路由 | `.cursor/rules/mcp-tool-pack-routing.mdc` |
-| **Agent 命令隔离 / SRT** | `.cursor/rules/agent-shell-sandbox.mdc` |
-| 桌面发版 | `.cursor/rules/desktop-release.mdc` |
-| **macOS 签名 / 公证** | `.cursor/rules/desktop-mac-signing.mdc` |
-| Onboarding | `.cursor/rules/onboarding.mdc` |
+| 文件 | 加载层 |
+|------|--------|
+| `rules-index.mdc` | L0 |
+| 上表 L1 所列 | L1 |
+| 上表 L2 所列 | L2 |
+| 其余 `.mdc` | 按 description 或手动 |

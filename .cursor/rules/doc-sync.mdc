@@ -1,6 +1,6 @@
 ---
-description: 文档同步规则 — 架构/API/调用方式变更后必须同步更新对应文档
-alwaysApply: true
+description: 文档同步 — 架构/API/Hub/Provider/Schema/UI/Electron 变更后必须同步 docs；改代码交付前必读
+alwaysApply: false
 ---
 
 # 文档同步规则（硬性）

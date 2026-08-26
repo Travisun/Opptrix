@@ -1,9 +1,6 @@
 ---
 description: 测试规范 — 单元测试、集成测试、端到端测试
-globs:
-  - packages/**/*
-  - apps/**/*
-  - tests/**/*
+globs: packages/**/*,apps/**/*,tests/**/*
 alwaysApply: false
 ---
 

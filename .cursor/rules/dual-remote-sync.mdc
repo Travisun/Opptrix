@@ -1,6 +1,6 @@
 ---
-description: GitHub + Gitee 双远程同步 — 每次 push / merge 后必须两端一致
-alwaysApply: true
+description: GitHub + Gitee 双远程同步 — push/merge/发版 tag 后两端 tip 必须一致
+alwaysApply: false
 ---
 
 # 双远程同步（GitHub + Gitee）
