@@ -48,7 +48,7 @@ test('instrument search delegates to local instruments handler', async () => {
 })
 
 test('instrument quotes: partial success returns failed[] with precise reasons', async () => {
-  const calls = { stockQuotes: [], usRealtime: [], regionalRealtime: [], cryptoRealtime: [] }
+  const calls = { stockQuotes: [], fundQuotes: [], usRealtime: [], regionalRealtime: [], cryptoRealtime: [] }
   const failSymbols = new Set(['000001'])
   const handlers = {
     stockQuotes: async (refs) => {
@@ -57,6 +57,22 @@ test('instrument quotes: partial success returns failed[] with precise reasons',
         .filter(r => !failSymbols.has(r.symbol))
         .map(r => ({ code: r.symbol, name: `name-${r.symbol}`, price: 100 }))
       return { success: true, message: 'ok', elapsed: 0, data: { quotes } }
+    },
+    fundQuotes: async (refs) => {
+      calls.fundQuotes.push(refs.map(r => r.symbol))
+      const quotes = refs
+        .filter(r => !failSymbols.has(r.symbol))
+        .map(r => ({ code: r.symbol, name: `fund-${r.symbol}`, unitNav: 1.23, price: 1.23, instrument: r }))
+      const failed = refs
+        .filter(r => failSymbols.has(r.symbol))
+        .map(r => ({ code: `CN:PF.${r.symbol}`, reason: 'empty' }))
+      // 对齐槽位：即使全部失败也 success + failed[]，供 router 按明细归类
+      return {
+        success: true,
+        message: quotes.length ? 'ok' : '行情获取失败',
+        elapsed: 0,
+        data: { quotes, failed: failed.length ? failed : undefined },
+      }
     },
     usRealtime: async (symbol) => {
       calls.usRealtime.push(symbol)
@@ -119,10 +135,15 @@ test('instrument quotes: partial success returns failed[] with precise reasons',
     assert.ok(f.instrument && f.instrument.market, 'failed.instrument 应为 normalizeInstrumentRef')
   }
 
-  // CN ETF 合并为一次 stockQuotes 批量调用（个股 / ETF / 基金 各一次）
-  assert.equal(calls.stockQuotes.length, 3)
+  // CN 个股 / ETF 各一次 stockQuotes；FUND 走 fundQuotes，不进 stockQuotes
+  assert.equal(calls.stockQuotes.length, 2)
+  assert.equal(calls.fundQuotes.length, 1)
+  assert.deepEqual(calls.fundQuotes[0], ['000001'])
   const etfCall = calls.stockQuotes.find(c => c.includes('510300') && c.includes('159915'))
   assert.ok(etfCall, 'CN ETF 应合并为一次 stockQuotes 批量调用')
+  const equityCall = calls.stockQuotes.find(c => c.includes('600519'))
+  assert.ok(equityCall, 'CN EQUITY 应走 stockQuotes')
+  assert.ok(!calls.stockQuotes.some(c => c.includes('000001')), 'FUND 不得走 stockQuotes')
   assert.equal(calls.usRealtime.length, 3)
   assert.equal(calls.regionalRealtime.length, 1)
   assert.equal(calls.cryptoRealtime.length, 2)
@@ -140,9 +161,84 @@ test('classifyQuoteFailureMessage maps not found / no provider / other', () => {
   assert.equal(classifyQuoteFailureMessage(''), 'error')
 })
 
-test('instrument quotes: CN batch merges hub failed detail (not_found)', async () => {
+test('instrument quotes: FUND uses fundQuotes; never stockQuotes', async () => {
+  const calls = { stockQuotes: 0, fundQuotes: 0 }
   const handlers = {
-    stockQuotes: async (refs) => ({
+    stockQuotes: async () => {
+      calls.stockQuotes += 1
+      return { success: false, message: 'should not call stockQuotes for FUND', elapsed: 0 }
+    },
+    fundQuotes: async (refs) => {
+      calls.fundQuotes += 1
+      return {
+        success: true,
+        message: 'ok',
+        elapsed: 0,
+        data: {
+          quotes: refs.map(r => ({
+            code: r.symbol,
+            name: `基金${r.symbol}`,
+            unitNav: 1.05,
+            price: 1.05,
+            changePct: 0.12,
+            instrument: r,
+          })),
+        },
+      }
+    },
+    usRealtime: async () => ({ success: false, message: 'skip', elapsed: 0 }),
+  }
+  const resp = await routeInstrumentQuotes({
+    instruments: [
+      { market: 'CN', assetClass: 'FUND', symbol: '110022' },
+      { market: 'CN', assetClass: 'FUND', symbol: '000001' },
+    ],
+  }, handlers)
+  assert.equal(resp.success, true)
+  assert.equal(calls.stockQuotes, 0)
+  assert.equal(calls.fundQuotes, 1)
+  assert.equal(resp.data.quotes.length, 2)
+  assert.equal(resp.data.quotes[0].price, 1.05)
+  assert.ok(resp.data.quotes.every(q => q.asset_class === 'FUND'))
+})
+
+test('instrument quotes: fundQuotes partial fail → failed[]; unitNav as price', async () => {
+  const handlers = {
+    stockQuotes: async () => ({ success: false, message: 'should not', elapsed: 0 }),
+    fundQuotes: async (refs) => ({
+      success: true,
+      message: 'ok',
+      elapsed: 0,
+      data: {
+        quotes: [{
+          code: '110022',
+          name: '易方达消费',
+          unitNav: 2.34,
+          changePct: -0.5,
+          instrument: refs[0],
+        }],
+        failed: [{ code: 'CN:PF.000001', reason: 'not_found' }],
+      },
+    }),
+  }
+  const resp = await routeInstrumentQuotes({
+    instruments: [
+      { market: 'CN', assetClass: 'FUND', symbol: '110022' },
+      { market: 'CN', assetClass: 'FUND', symbol: '000001' },
+    ],
+  }, handlers)
+  assert.equal(resp.success, true)
+  assert.equal(resp.data.quotes.length, 1)
+  assert.equal(resp.data.quotes[0].price, 2.34)
+  assert.equal(resp.data.failed.length, 1)
+  assert.equal(resp.data.failed[0].instrument.symbol, '000001')
+  assert.equal(resp.data.failed[0].reason, 'not_found')
+})
+
+test('instrument quotes: CN fundQuotes merges hub failed detail (not_found)', async () => {
+  const handlers = {
+    stockQuotes: async () => ({ success: false, message: 'should not', elapsed: 0 }),
+    fundQuotes: async (refs) => ({
       success: true,
       message: 'ok',
       elapsed: 0,
@@ -172,9 +268,10 @@ test('instrument quotes: CN batch merges hub failed detail (not_found)', async (
   assert.ok(failedBySymbol.get('000001').instrument.market === 'CN')
 })
 
-test('instrument quotes: CN whole-batch fail with not found message → reason not_found', async () => {
+test('instrument quotes: CN fund whole-batch fail with not found message → reason not_found', async () => {
   const handlers = {
-    stockQuotes: async () => ({
+    stockQuotes: async () => ({ success: false, message: 'should not', elapsed: 0 }),
+    fundQuotes: async () => ({
       success: false,
       message: '所有 provider 均失败: tonghuashun: Fund not found: 000001.OF',
       elapsed: 0,
@@ -195,31 +292,79 @@ test('instrument quotes: CN whole-batch fail with not found message → reason n
   assert.equal(fundFailed.reason, 'not_found')
 })
 
-test('hub stockQuotes emits failed detail with not_found reason', async () => {
+test('hub stockQuotes uses engine batchRealtime once; sparse miss → failed empty', async () => {
   const { ResearchHub } = await import('../packages/research-hub/dist/hub.js')
   const hub = new ResearchHub()
-  const notFound = '所有 provider 均失败: tonghuashun: Fund not found: 000001.OF'
-  hub.de.queryInstrumentData = async (ref) => {
-    if (ref.symbol === '000001') {
-      return { success: false, error: notFound }
-    }
+  let batchCalls = 0
+  let realtimeCalls = 0
+  hub.de.batchRealtime = async (codes) => {
+    batchCalls += 1
+    assert.deepEqual([...codes].sort(), ['000001', '600519'])
     return {
       success: true,
       source: 'test',
+      // 稀疏：仅返回 600519，且顺序与请求不一致
       data: [{
         code: '600519', name: '贵州茅台', price: 1700, preClose: 1680,
-        changePct: 1.19, pe: 25, pb: 8, turnoverRate: 0.5,
+        changePct: 1.19, pe: 25, pb: 8, turnoverRate: 0.5, exchange: 'SH',
       }],
     }
   }
+  hub.de.queryInstrumentData = async () => {
+    realtimeCalls += 1
+    return { success: false, error: 'should not per-symbol realtime' }
+  }
   const resp = await hub.stockQuotes([
-    { market: 'CN', assetClass: 'FUND', symbol: '000001' },
+    { market: 'CN', assetClass: 'EQUITY', symbol: '000001' },
     { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },
   ], Date.now())
   assert.equal(resp.success, true)
+  assert.equal(batchCalls, 1)
+  assert.equal(realtimeCalls, 0)
   assert.equal(resp.data.quotes.length, 1)
   assert.equal(resp.data.quotes[0].code, '600519')
+  assert.deepEqual(resp.data.failed, [{ code: 'CN:SZ.000001', reason: 'empty' }])
+})
+
+test('hub fundQuotes maps unitNav to price; partial fail → failed', async () => {
+  const { ResearchHub } = await import('../packages/research-hub/dist/hub.js')
+  const hub = new ResearchHub()
+  const seen = []
+  hub.de.queryInstrumentData = async (ref, cap) => {
+    seen.push({ symbol: ref.symbol, cap })
+    assert.equal(cap, 'fund_quote')
+    if (ref.symbol === '000001') {
+      return { success: false, error: 'tonghuashun: Fund not found: 000001.OF' }
+    }
+    return {
+      success: true,
+      data: [{ code: ref.symbol, name: '易方达消费', unitNav: 1.88, changePct: 0.3 }],
+    }
+  }
+  const resp = await hub.fundQuotes([
+    { market: 'CN', assetClass: 'FUND', symbol: '110022' },
+    { market: 'CN', assetClass: 'FUND', symbol: '000001' },
+  ], Date.now())
+  assert.equal(resp.success, true)
+  assert.equal(seen.length, 2)
+  assert.equal(resp.data.quotes.length, 1)
+  assert.equal(resp.data.quotes[0].price, 1.88)
+  assert.equal(resp.data.quotes[0].unitNav, 1.88)
   assert.deepEqual(resp.data.failed, [{ code: 'CN:PF.000001', reason: 'not_found' }])
+})
+
+test('hub stockQuotes all-miss via batchRealtime → fail', async () => {
+  const { ResearchHub } = await import('../packages/research-hub/dist/hub.js')
+  const hub = new ResearchHub()
+  hub.de.batchRealtime = async () => ({
+    success: false,
+    error: '所有 provider 均失败: tonghuashun: Fund not found: 000001.OF',
+  })
+  const resp = await hub.stockQuotes([
+    { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },
+  ], Date.now())
+  assert.equal(resp.success, false)
+  assert.match(String(resp.message), /not found/i)
 })
 
 test('instrument quotes: all refs failed still returns fail', async () => {
@@ -279,4 +424,72 @@ test('instrument quotes: US group bounded concurrency ≤ 5', async () => {
   assert.equal(resp.success, true)
   assert.equal(resp.data.quotes.length, 12)
   assert.ok(maxInFlight <= 5, `US 组并发应 ≤5，实际 ${maxInFlight}`)
+})
+
+test('instrument quotes: usQuotes batch path preferred over per-symbol usRealtime', async () => {
+  const calls = { usQuotes: 0, usRealtime: 0 }
+  const handlers = {
+    stockQuotes: async () => ({ success: true, message: 'ok', elapsed: 0, data: { quotes: [] } }),
+    usRealtime: async (symbol) => {
+      calls.usRealtime += 1
+      return { success: true, message: 'ok', elapsed: 0, data: { code: symbol, price: 1 } }
+    },
+    regionalRealtime: async () => ({ success: false, message: 'skip', elapsed: 0 }),
+    cryptoRealtime: async () => ({ success: false, message: 'skip', elapsed: 0 }),
+    usQuotes: async (refs) => {
+      calls.usQuotes += 1
+      return {
+        success: true,
+        message: 'ok',
+        elapsed: 0,
+        data: {
+          quotes: refs.map(r => ({ code: r.symbol, name: r.symbol, price: 100, instrument: r })),
+        },
+      }
+    },
+  }
+  const resp = await routeInstrumentQuotes({
+    instruments: [
+      { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' },
+      { market: 'US', assetClass: 'EQUITY', symbol: 'MSFT' },
+      { market: 'US', assetClass: 'EQUITY', symbol: 'GOOG' },
+    ],
+  }, handlers)
+  assert.equal(resp.success, true)
+  assert.equal(resp.data.quotes.length, 3)
+  assert.equal(calls.usQuotes, 1)
+  assert.equal(calls.usRealtime, 0)
+})
+
+test('instrument quotes: CN stockQuotes fail does not drop US quotes', async () => {
+  const handlers = {
+    stockQuotes: async () => ({
+      success: false,
+      message: '行情获取失败: tickflow: 熔断中',
+      elapsed: 0,
+    }),
+    usQuotes: async (refs) => ({
+      success: true,
+      message: 'ok',
+      elapsed: 0,
+      data: {
+        quotes: refs.map(r => ({ code: r.symbol, name: r.symbol, price: 100, instrument: r })),
+      },
+    }),
+    usRealtime: async () => ({ success: false, message: 'skip', elapsed: 0 }),
+    regionalRealtime: async () => ({ success: false, message: 'skip', elapsed: 0 }),
+    cryptoRealtime: async () => ({ success: false, message: 'skip', elapsed: 0 }),
+  }
+  const resp = await routeInstrumentQuotes({
+    instruments: [
+      { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },
+      { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' },
+    ],
+  }, handlers)
+  assert.equal(resp.success, true)
+  assert.equal(resp.data.quotes.length, 1)
+  assert.equal(resp.data.quotes[0].instrument.symbol, 'AAPL')
+  const cnFailed = resp.data.failed.find(f => f.instrument.symbol === '600519')
+  assert.ok(cnFailed)
+  assert.equal(cnFailed.reason, 'error')
 })

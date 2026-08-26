@@ -1276,7 +1276,14 @@ export async function reloadInstalledProvider(providerId: string) {
 }
 
 export async function portfolioTrade(payload: {
-  code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string; market?: string
+  code: string
+  shares: number
+  price: number
+  side?: 'buy' | 'sell'
+  date?: string
+  market?: string
+  assetClass?: string
+  instrument?: { market: string; assetClass: string; symbol: string; exchange?: string }
 }) {
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/trade`, {
     method: 'POST',

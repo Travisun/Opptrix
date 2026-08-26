@@ -63,6 +63,12 @@ import { watchlistItemKey } from './watchlist/instrument.js'
 import { instrumentId } from './core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from './utils/helpers.js'
 import { isCnListedFundSymbol } from './core/fund-instrument.js'
+import {
+  BATCH_REALTIME_CHUNK,
+  BATCH_REALTIME_ENGINE_CONCURRENCY,
+  chunkArray,
+  mapPool,
+} from './utils/batch-chunk.js'
 
 import {
   normalizePreOpenRealtimeQuote,
@@ -434,6 +440,61 @@ export class MarketDataEngine {
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
+    if (!codes.length) {
+      return { success: true, data: [] }
+    }
+    // 大批量：Engine 层再切片并行，片失败隔离；任一 chunk 成功则整体 success
+    if (codes.length > BATCH_REALTIME_CHUNK) {
+      const parts = chunkArray(codes, BATCH_REALTIME_CHUNK)
+      const chunkResults = await mapPool(
+        parts,
+        BATCH_REALTIME_ENGINE_CONCURRENCY,
+        async part => {
+          const subsetMarkets = markets
+            ? Object.fromEntries(
+              part
+                .map(c => {
+                  const key = normalizeCode(String(c))
+                  const m = markets[key] ?? markets[c]
+                  return m != null ? ([key, m] as const) : null
+                })
+                .filter((e): e is readonly [string, import('./utils/helpers.js').StockMarket] => e != null),
+            )
+            : undefined
+          try {
+            return await this.fetchBatchRealtimeChunk(part, subsetMarkets)
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false as const, error: msg, data: [] as StockRealtime[] }
+          }
+        },
+      )
+      const merged: StockRealtime[] = []
+      const errors: string[] = []
+      let source: string | undefined
+      for (const r of chunkResults) {
+        if (r.success && r.data?.length) {
+          merged.push(...r.data)
+          if (!source && r.source) source = r.source
+        } else if (!r.success && r.error) {
+          errors.push(r.error)
+        }
+      }
+      if (merged.length) {
+        return { success: true, data: merged, source }
+      }
+      return {
+        success: false,
+        error: errors.length ? errors.join('; ') : '所有 batchRealtime 分片均失败',
+      }
+    }
+    return this.fetchBatchRealtimeChunk(codes, markets)
+  }
+
+  private fetchBatchRealtimeChunk(
+    codes: string[],
+    markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+  ): Promise<QueryResult<StockRealtime[]>> {
     const assetClass = codes.some(c => isCnEtfCode(String(c))) ? 'ETF' : 'EQUITY'
     return this.queryPlans.execute<StockRealtime>(
       this.queryPlans.getPlan('cn_equity_stock_realtime_batch'),
@@ -779,7 +840,8 @@ export class MarketDataEngine {
 
   fundQuote(fundCode: string) {
     const code = normalizeCode(fundCode)
-    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', false, code)
+    // 与 resolveInstrumentQueryPlan(fund_quote) useCache 对齐：净值日更可缓存
+    return this.qScoped('CN', 'FUND', Capability.FUND_QUOTE, 'fundQuote', true, code)
       .then(result => this.listedFundQuoteFallback(code, result as QueryResult<Record<string, unknown>[]>))
   }
 
@@ -901,6 +963,81 @@ export class MarketDataEngine {
   usRealtime(symbol: string) {
     const sym = normalizeUsSymbol(symbol)
     return this.qScoped('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, sym)
+  }
+
+  /**
+   * US / HK / CRYPTO 批量实时。
+   * 优先走 Provider `batchRealtime`（如 Tickflow quotes 批量 HTTP）；
+   * 无 batch 实现的源会失败，由 Hub 回退到逐标的 realtime。
+   * symbols > BATCH_REALTIME_CHUNK 时 Engine 自动分片并行，片失败隔离。
+   */
+  async batchRealtimeByMarket(
+    market: 'US' | 'HK' | 'CRYPTO',
+    symbols: string[],
+  ) {
+    if (!symbols.length) {
+      return { success: true as const, data: [] as StockRealtime[] }
+    }
+    if (symbols.length > BATCH_REALTIME_CHUNK) {
+      const parts = chunkArray(symbols, BATCH_REALTIME_CHUNK)
+      const chunkResults = await mapPool(
+        parts,
+        BATCH_REALTIME_ENGINE_CONCURRENCY,
+        async part => {
+          try {
+            return await this.batchRealtimeByMarketChunk(market, part)
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e)
+            return { success: false as const, error: msg, data: [] as StockRealtime[] }
+          }
+        },
+      )
+      const merged: StockRealtime[] = []
+      const errors: string[] = []
+      let source: string | undefined
+      for (const r of chunkResults) {
+        if (r.success && r.data?.length) {
+          merged.push(...(r.data as StockRealtime[]))
+          if (!source && r.source) source = r.source
+        } else if (!r.success && 'error' in r && r.error) {
+          errors.push(String(r.error))
+        }
+      }
+      if (merged.length) {
+        return { success: true as const, data: merged, source }
+      }
+      return {
+        success: false as const,
+        error: errors.length ? errors.join('; ') : '所有 batchRealtime 分片均失败',
+      }
+    }
+    return this.batchRealtimeByMarketChunk(market, symbols)
+  }
+
+  private batchRealtimeByMarketChunk(
+    market: 'US' | 'HK' | 'CRYPTO',
+    symbols: string[],
+  ) {
+    if (market === 'CRYPTO') {
+      return this.qCrypto<StockRealtime>(
+        Capability.STOCK_REALTIME,
+        'batchRealtime',
+        'crypto_realtime',
+        false,
+        symbols,
+      )
+    }
+    const normalized = market === 'US'
+      ? symbols.map(s => normalizeUsSymbol(s))
+      : symbols
+    return this.qScoped(
+      market,
+      'EQUITY',
+      Capability.STOCK_REALTIME,
+      'batchRealtime',
+      false,
+      normalized,
+    )
   }
 
   /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'kline')` */

@@ -68,12 +68,20 @@ export const DEFAULT_PORTFOLIO_GLOBAL_FEES: PortfolioGlobalFees = {
   },
 }
 
+function isCnFundHoldingsRef(ref: InstrumentRef): boolean {
+  const exUp = ref.exchange?.toUpperCase()
+  return ref.assetClass === 'FUND' || exUp === 'PF' || exUp === 'OF'
+}
+
 /** 持仓账本与 API 返回 holdings[].code 对齐的存储键 */
 export function portfolioHoldingsStorageKey(ref: InstrumentRef): string {
   const n = normalizeInstrumentRef(ref)
   switch (n.market) {
-    case 'CN':
-      return canonicalCnSymbol(n.symbol)
+    case 'CN': {
+      const bare = canonicalCnSymbol(n.symbol)
+      if (isCnFundHoldingsRef(n)) return `CN:PF.${bare}`
+      return bare
+    }
     case 'US':
       return n.symbol.trim().toUpperCase()
     case 'HK': {

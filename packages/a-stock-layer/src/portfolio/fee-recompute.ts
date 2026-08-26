@@ -2,7 +2,11 @@ import type { InstrumentFeeOverrides, PortfolioGlobalFees } from '@opptrix/share
 import { resolvePortfolioLedgerKind } from '@opptrix/shared'
 import { calcFeesFromSettings } from './models.js'
 import type { TradeRecord } from './trade-models.js'
-import { portfolioDisplayCode, portfolioInstrumentRef } from './instrument.js'
+import {
+  inferTradeAssetClass,
+  portfolioDisplayCode,
+  portfolioInstrumentRef,
+} from './instrument.js'
 
 function feesEqual(a: TradeRecord, b: TradeRecord): boolean {
   return a.commission === b.commission
@@ -15,7 +19,8 @@ function resolveOverridesForTrade(
   trade: TradeRecord,
   instrumentFees: Record<string, InstrumentFeeOverrides>,
 ): InstrumentFeeOverrides {
-  const key = portfolioDisplayCode(trade.code, trade.market)
+  const ac = inferTradeAssetClass(trade.code, trade.market, trade.assetClass)
+  const key = portfolioDisplayCode(trade.code, trade.market, ac)
   return instrumentFees[key] ?? instrumentFees[trade.code] ?? {}
 }
 
@@ -25,7 +30,8 @@ export function recomputeTradeRecordFees(
   instrumentFees: Record<string, InstrumentFeeOverrides>,
 ): TradeRecord {
   const overrides = resolveOverridesForTrade(trade, instrumentFees)
-  const ref = portfolioInstrumentRef(trade.code, trade.market)
+  const ac = inferTradeAssetClass(trade.code, trade.market, trade.assetClass)
+  const ref = portfolioInstrumentRef(trade.code, trade.market, ac)
   const ledgerKind = overrides.ledgerKind ?? resolvePortfolioLedgerKind(ref)
   const fees = calcFeesFromSettings(
     ledgerKind,
@@ -37,6 +43,7 @@ export function recomputeTradeRecordFees(
   )
   return {
     ...trade,
+    assetClass: trade.assetClass ?? ac,
     commission: fees.commission,
     stampDuty: fees.stampDuty,
     transferFee: fees.transferFee,

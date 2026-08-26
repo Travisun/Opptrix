@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
@@ -15,9 +15,11 @@ import {
 import {
   displayCodeFromInstrument,
   formatInstrumentLabel,
+  instrumentKey,
   marketDisplayName,
   resolveWatchlistInstrument,
   UNRESOLVED_INSTRUMENT_COPY,
+  watchlistItemKey,
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import TradingViewChart from './TradingViewChart'
@@ -217,7 +219,6 @@ const useStyles = makeStyles({
 interface Props {
   stock: WatchlistItem
   instrumentRef?: InstrumentRef
-  localIndexed?: boolean | null
   loading?: boolean
   onManage?: () => void
   onSelectPeer?: (item: WatchlistItem) => void
@@ -270,9 +271,19 @@ async function loadSnapshot(ref: InstrumentRef): Promise<EquityDetail | CryptoSn
   }
   const resp = await research.instrumentSnapshot(ref)
   if (!resp.success || !resp.data || typeof resp.data !== 'object') {
-    throw new Error(resp.message || '获取行情失败')
+    throw new Error(resp.message || '暂时无法获取行情')
   }
   return resp.data as EquityDetail | CryptoSnapshotData
+}
+
+/** 刷新成功但新 quote 为空时保留上一份，避免摘要闪没 */
+function mergeSnapshotPreserveQuote(
+  prev: EquityDetail | CryptoSnapshotData | null,
+  next: EquityDetail | CryptoSnapshotData,
+): EquityDetail | CryptoSnapshotData {
+  if (next.quote != null) return next
+  if (prev?.quote == null) return next
+  return { ...next, quote: prev.quote }
 }
 
 function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string; sessionLabel?: string } | null): string {
@@ -299,12 +310,34 @@ function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string; sess
 export default function CrossMarketSnapshotDetail({
   stock,
   instrumentRef,
-  localIndexed = null,
   loading = false,
   onManage,
 }: Props) {
   const s = useStyles()
-  const ref = instrumentRef ?? resolveWatchlistInstrument(stock)
+  /** 按标的身份稳定，避免父组件每次 render 新建 ref 对象导致轮询 effect 重跑 */
+  const instrumentIdentity = useMemo(() => {
+    if (instrumentRef) return instrumentKey(instrumentRef)
+    return watchlistItemKey(stock)
+  }, [
+    instrumentRef?.market,
+    instrumentRef?.assetClass,
+    instrumentRef?.symbol,
+    instrumentRef?.exchange,
+    instrumentRef?.quote,
+    stock.code,
+    stock.instrument?.market,
+    stock.instrument?.assetClass,
+    stock.instrument?.symbol,
+    stock.instrument?.exchange,
+    stock.instrument?.quote,
+    stock.industry,
+  ])
+  const ref = useMemo(
+    () => instrumentRef ?? resolveWatchlistInstrument(stock),
+    // identity 不变时保留同一对象引用
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by instrumentIdentity
+    [instrumentIdentity],
+  )
   const label = ref ? marketDisplayName(ref.market) : ''
   const isCrypto = ref?.market === 'CRYPTO'
   const isEquity = ref?.market === 'US' || ref?.market === 'HK'
@@ -312,20 +345,31 @@ export default function CrossMarketSnapshotDetail({
   const [snapshot, setSnapshot] = useState<EquityDetail | CryptoSnapshotData | null>(null)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const loadSeqRef = useRef(0)
 
   const load = useCallback(async () => {
     if (!ref) return
+    const seq = ++loadSeqRef.current
     setFetching(true)
-    setError(null)
     try {
       const data = await loadSnapshot(ref)
-      setSnapshot(data)
+      if (seq !== loadSeqRef.current) return
+      setSnapshot(prev => mergeSnapshotPreserveQuote(prev, data))
+      setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '获取行情失败')
+      if (seq !== loadSeqRef.current) return
+      // 失败保留上一份 snapshot，不 clear
+      setError(e instanceof Error ? e.message : '暂时无法获取行情')
     } finally {
-      setFetching(false)
+      if (seq === loadSeqRef.current) setFetching(false)
     }
   }, [ref])
+
+  useEffect(() => {
+    setSnapshot(null)
+    setError(null)
+    loadSeqRef.current += 1
+  }, [instrumentIdentity])
 
   useEffect(() => {
     if (!ref) return undefined
@@ -333,7 +377,7 @@ export default function CrossMarketSnapshotDetail({
     const ms = isCrypto ? 30_000 : 90_000
     const timer = window.setInterval(() => { void load() }, ms)
     return () => window.clearInterval(timer)
-  }, [load, isCrypto, ref])
+  }, [load, isCrypto, instrumentIdentity])
 
   const equity = isEquity ? (snapshot as EquityDetail | null) : null
   const crypto = isCrypto ? (snapshot as CryptoSnapshotData | null) : null
@@ -481,11 +525,6 @@ export default function CrossMarketSnapshotDetail({
           <TradingViewChart code={chartCode} instrument={ref} expanded active />
         </div>
         {error && quote ? <Text className={s.error}>刷新失败：{error}</Text> : null}
-        {localIndexed === false ? (
-          <Text className={s.muted} style={{ padding: `0 ${CONTENT_PAD}` }}>
-            在线名录暂未匹配到该代码；可用 US:AAPL、HK:00700 格式添加关注。
-          </Text>
-        ) : null}
         <Text className={s.foot} style={{ padding: `0 ${CONTENT_PAD} 10px` }}>{footnote}</Text>
       </div>
     </div>

@@ -49,13 +49,14 @@ import type {
   TickflowSharesRecord,
 } from '../normalize/financials.js'
 
+import { chunkArray } from '../../../utils/batch-chunk.js'
+
 const EXCHANGE_MARKETS = new Set(['SH', 'SZ', 'BJ', 'US', 'HK'])
 const CN_EXCHANGES = ['SH', 'SZ', 'BJ'] as const
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
+/** 分片工具（instruments POST 与 quotes POST 共用） */
+export function chunk<T>(items: T[], size: number): T[][] {
+  return chunkArray(items, size)
 }
 
 function isUniverseId(market: string): boolean {

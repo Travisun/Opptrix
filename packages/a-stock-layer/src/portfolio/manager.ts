@@ -1,5 +1,9 @@
-import type { InstrumentRef, Market } from '@opptrix/shared'
-import { resolveInstrumentQuotePrice, calcHoldingPnlFromTrades } from '@opptrix/shared'
+import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
+import {
+  resolveInstrumentQuotePrice,
+  calcHoldingPnlFromTrades,
+  resolvePortfolioProfile,
+} from '@opptrix/shared'
 import type { AshareEngine } from '../engine.js'
 import type { HoldingPosition, PnLSummary, TradeRecord, TradeSide } from './trade-models.js'
 import {
@@ -7,20 +11,34 @@ import {
   resolvePortfolioLedgerKind,
 } from './models.js'
 import {
+  inferTradeAssetClass,
   portfolioDisplayCode,
   portfolioInstrumentRef,
   portfolioLedgerKey,
 } from './instrument.js'
 import { PortfolioStore } from './store.js'
 
+export type PortfolioTradeOpts = {
+  date?: string
+  name?: string
+  market?: Market
+  assetClass?: AssetClass
+  /** 完整 InstrumentRef；优先于 code+market+assetClass */
+  instrument?: InstrumentRef
+}
+
 function calcPnlForStock(trades: TradeRecord[], currentPrice: number): HoldingPosition {
   const first = trades[0]
   const calc = calcHoldingPnlFromTrades(trades, currentPrice)
   const roundedPrice = Math.round(currentPrice * 100) / 100
+  const assetClass = first
+    ? inferTradeAssetClass(first.code, first.market, first.assetClass)
+    : undefined
   return {
     code: first?.code ?? '',
     name: first?.name ?? '',
     market: first?.market,
+    assetClass,
     shares: calc.shares,
     costBasis: calc.costBasis,
     totalCost: calc.totalCost,
@@ -39,14 +57,24 @@ export class PortfolioManager {
 
   constructor(private engine?: AshareEngine) {}
 
-  private equityRef(code: string, market?: Market): InstrumentRef {
-    return portfolioInstrumentRef(code, market)
+  private resolveTradeRef(
+    code: string,
+    market?: Market,
+    assetClass?: AssetClass,
+    instrument?: InstrumentRef,
+  ): InstrumentRef {
+    if (instrument) return portfolioInstrumentRef(instrument)
+    return portfolioInstrumentRef(code, market, assetClass)
+  }
+
+  private markCapability(ref: InstrumentRef): 'realtime' | 'fund_quote' {
+    return resolvePortfolioProfile(ref).markCapability
   }
 
   private async resolveName(ref: InstrumentRef, name = '') {
     if (name || !this.engine) return name
     try {
-      const r = await this.engine.queryInstrumentData(ref, 'realtime')
+      const r = await this.engine.queryInstrumentData(ref, this.markCapability(ref))
       const rows = 'data' in r && Array.isArray(r.data) ? r.data : []
       const row = rows[0] as { name?: unknown } | undefined
       return row?.name != null ? String(row.name) : name
@@ -55,10 +83,14 @@ export class PortfolioManager {
     }
   }
 
+  /**
+   * 始终经 queryInstrumentData(正确 ref)。
+   * FUND → fund_quote（禁止对 FUND 用 A 股 realtime 裸码）。
+   */
   private async fetchRealtimePrice(ref: InstrumentRef): Promise<number | null> {
     if (!this.engine) return null
     try {
-      const r = await this.engine.queryInstrumentData(ref, 'realtime')
+      const r = await this.engine.queryInstrumentData(ref, this.markCapability(ref))
       const rows = 'data' in r && Array.isArray(r.data) ? r.data : []
       const row = rows[0] as Record<string, unknown> | undefined
       const price = row ? resolveInstrumentQuotePrice(row) : null
@@ -68,15 +100,12 @@ export class PortfolioManager {
     }
   }
 
-  private tradeFees(
-    code: string,
-    market: Market | undefined,
-    amount: number,
-    side: TradeSide,
-  ) {
-    const ref = this.equityRef(code, market)
-    const overrides = this.store.getInstrumentFees(code, market)
-    const ledgerKind = overrides.ledgerKind ?? resolvePortfolioLedgerKind(ref)
+  private tradeFees(ref: InstrumentRef, amount: number, side: TradeSide) {
+    const feeCode = portfolioDisplayCode(ref.symbol, ref.market, ref.assetClass)
+    const overrides = this.store.getInstrumentFees(feeCode, ref.market)
+    const ledgerKind = overrides.ledgerKind
+      ?? resolvePortfolioProfile(ref).ledgerKind
+      ?? resolvePortfolioLedgerKind(ref)
     return calcFeesFromSettings(
       ledgerKind,
       amount,
@@ -95,11 +124,16 @@ export class PortfolioManager {
     return this.store.setGlobalFees(globalFees)
   }
 
-  getInstrumentFees(code: string, market?: Market) {
-    const ref = this.equityRef(code, market)
-    const overrides = this.store.getInstrumentFees(code, market)
+  getInstrumentFees(code: string, market?: Market, assetClass?: AssetClass) {
+    const ref = this.resolveTradeRef(code, market, assetClass)
+    const overrides = this.store.getInstrumentFees(
+      portfolioDisplayCode(code, market, assetClass),
+      market,
+    )
     return {
-      ledgerKind: overrides.ledgerKind ?? resolvePortfolioLedgerKind(ref),
+      ledgerKind: overrides.ledgerKind
+        ?? resolvePortfolioProfile(ref).ledgerKind
+        ?? resolvePortfolioLedgerKind(ref),
       overrides,
       globalFees: this.store.getGlobalFees(),
     }
@@ -120,38 +154,9 @@ export class PortfolioManager {
     date = '',
     name = '',
     market?: Market,
+    assetClass?: AssetClass,
   ) {
-    const ref = this.equityRef(code, market)
-    const displayCode = portfolioDisplayCode(code, ref.market)
-    const tradeDate = date || new Date().toISOString().slice(0, 10)
-    const amount = Math.round(shares * price * 100) / 100
-    const fees = this.tradeFees(code, market, amount, 'buy')
-    const stockName = await this.resolveName(ref, name)
-    const id = this.store.addTrade({
-      code: displayCode,
-      market: ref.market,
-      name: stockName,
-      tradeSide: 'buy',
-      shares,
-      price,
-      amount,
-      commission: fees.commission,
-      stampDuty: fees.stampDuty,
-      transferFee: fees.transferFee,
-      totalFee: fees.totalFee,
-      tradeDate,
-    })
-    return {
-      id,
-      code: displayCode,
-      market: ref.market,
-      name: stockName,
-      tradeSide: 'buy' as const,
-      shares,
-      price,
-      amount,
-      tradeDate,
-    }
+    return this.recordTrade('buy', code, shares, price, { date, name, market, assetClass })
   }
 
   async sell(
@@ -161,18 +166,31 @@ export class PortfolioManager {
     date = '',
     name = '',
     market?: Market,
+    assetClass?: AssetClass,
   ) {
-    const ref = this.equityRef(code, market)
-    const displayCode = portfolioDisplayCode(code, ref.market)
-    const tradeDate = date || new Date().toISOString().slice(0, 10)
+    return this.recordTrade('sell', code, shares, price, { date, name, market, assetClass })
+  }
+
+  /** 统一买卖入口 — 支持 assetClass / instrument，FUND/ETF 持久化类型 */
+  async recordTrade(
+    side: TradeSide,
+    code: string,
+    shares: number,
+    price: number,
+    opts: PortfolioTradeOpts = {},
+  ) {
+    const ref = this.resolveTradeRef(code, opts.market, opts.assetClass, opts.instrument)
+    const displayCode = portfolioDisplayCode(code || ref.symbol, ref.market, ref.assetClass)
+    const tradeDate = opts.date || new Date().toISOString().slice(0, 10)
     const amount = Math.round(shares * price * 100) / 100
-    const fees = this.tradeFees(code, market, amount, 'sell')
-    const stockName = await this.resolveName(ref, name)
+    const fees = this.tradeFees(ref, amount, side)
+    const stockName = await this.resolveName(ref, opts.name ?? '')
     const id = this.store.addTrade({
       code: displayCode,
       market: ref.market,
+      assetClass: ref.assetClass,
       name: stockName,
-      tradeSide: 'sell',
+      tradeSide: side,
       shares,
       price,
       amount,
@@ -186,8 +204,9 @@ export class PortfolioManager {
       id,
       code: displayCode,
       market: ref.market,
+      assetClass: ref.assetClass,
       name: stockName,
-      tradeSide: 'sell' as const,
+      tradeSide: side,
       shares,
       price,
       amount,
@@ -203,7 +222,8 @@ export class PortfolioManager {
     const all = this.store.getTrades()
     const byKey = new Map<string, TradeRecord[]>()
     for (const t of all) {
-      const key = portfolioLedgerKey(t.code, t.market)
+      const ac = inferTradeAssetClass(t.code, t.market, t.assetClass)
+      const key = portfolioLedgerKey(t.code, t.market, ac)
       if (!byKey.has(key)) byKey.set(key, [])
       byKey.get(key)!.push(t)
     }
@@ -212,10 +232,15 @@ export class PortfolioManager {
     for (const [, ts] of byKey) {
       ts.sort((a, b) => a.tradeDate.localeCompare(b.tradeDate) || a.id - b.id)
       let price = ts[ts.length - 1]!.price
+      const head = ts[0]!
+      const ac = inferTradeAssetClass(head.code, head.market, head.assetClass)
+      const ref = portfolioInstrumentRef(head.code, head.market, ac)
       if (refreshPrices && this.engine) {
-        const ref = portfolioInstrumentRef(ts[0]!.code, ts[0]!.market)
-        const live = await this.fetchRealtimePrice(ref)
-        if (live != null) price = live
+        const profile = resolvePortfolioProfile(ref)
+        if (profile.supportsPnl) {
+          const live = await this.fetchRealtimePrice(ref)
+          if (live != null) price = live
+        }
       }
       const pos = calcPnlForStock(ts, price)
       if (pos.shares > 0) results.push(pos)

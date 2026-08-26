@@ -6,9 +6,12 @@ import { priceToCanvasY } from './cyqUtils'
 import { opptrixCssVars } from '../theme/tokens'
 import { OPPTRIX_FONT_FAMILY_CHANGE_EVENT, resolveSansFontFamily } from '../theme/fontFamily'
 
+/** 筹码条宽度 — 与 V/M 行 spacer 同源，保证三行 plot 左缘对齐 */
+export const CYQ_PROFILE_STRIP_WIDTH_PX = 88
+
 const useStyles = makeStyles({
   root: {
-    width: '88px',
+    width: `${CYQ_PROFILE_STRIP_WIDTH_PX}px`,
     flexShrink: 0,
     alignSelf: 'stretch',
     height: '100%',

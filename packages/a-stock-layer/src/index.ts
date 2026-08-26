@@ -124,6 +124,7 @@ export {
 
 export { PortfolioManager } from './portfolio/manager.js'
 export {
+  inferTradeAssetClass,
   portfolioCodeAliases,
   portfolioDisplayCode,
   portfolioInstrumentRef,

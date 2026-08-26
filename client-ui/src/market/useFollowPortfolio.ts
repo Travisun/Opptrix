@@ -8,30 +8,53 @@ import {
   normalizeInstrumentRefLocal,
 } from './instrument'
 import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
-import type { Market } from '../types/instrument'
+import type { InstrumentRef, Market } from '../types/instrument'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
 
 function holdingRowRef(row: HoldingSnapshot) {
-  const parsed = tryParseInstrumentInput(row.code.trim())
+  const trimmed = row.code.trim()
+  const parsed = tryParseInstrumentInput(trimmed)
   if (parsed) return normalizeInstrumentRefLocal(parsed)
+  // CN:PF.xxx / xxx.OF 等场外基金命名（与 shared parse 对齐的兜底）
+  const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
+  if (fundNs) {
+    return normalizeInstrumentRefLocal({
+      market: 'CN',
+      assetClass: 'FUND',
+      symbol: fundNs[1]!,
+      exchange: 'PF',
+    })
+  }
+  const fundSuffix = /^(\d{6})\.(?:OF|PF)$/i.exec(trimmed)
+  if (fundSuffix) {
+    return normalizeInstrumentRefLocal({
+      market: 'CN',
+      assetClass: 'FUND',
+      symbol: fundSuffix[1]!,
+      exchange: 'PF',
+    })
+  }
   const market = (row.market ?? 'CN') as Market
+  const assetClass = (row as { assetClass?: InstrumentRef['assetClass'] }).assetClass
+  // 优先持仓行 assetClass；未知时仍默认 EQUITY，但六位裸码保留 market
   return normalizeInstrumentRefLocal({
     market,
-    assetClass: 'EQUITY',
-    symbol: row.code.trim(),
+    assetClass: assetClass ?? 'EQUITY',
+    symbol: trimmed,
   })
 }
 
 function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnapshot) {
   const ref = holdingRowRef(row)
-  const keys = [
-    portfolioHoldingsStorageKey(ref),
-    instrumentKey(ref),
-    portfolioHoldingsKey(row.code, row.market),
-  ]
-  for (const key of keys) {
-    if (key) map[key] = row
+  const primary = portfolioHoldingsStorageKey(ref)
+  map[primary] = row
+  const nsKey = instrumentKey(ref)
+  if (nsKey && nsKey !== primary) map[nsKey] = row
+  // 历史场外基金裸六位 alias：仅当槽位空闲，避免盖掉同码个股
+  if (ref.market === 'CN' && (ref.assetClass === 'FUND' || ref.exchange === 'PF')) {
+    const bare = ref.symbol.replace(/\D/g, '').slice(-6).padStart(6, '0')
+    if (bare && !map[bare]) map[bare] = row
   }
 }
 
@@ -43,17 +66,43 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const [error, setError] = useState('')
   const tradesCache = useRef<Record<string, PortfolioTradeItem[]>>({})
 
+  /** 与 store portfolioCodesMatch / 账本对齐的稳定缓存键 */
   const tradeCacheKey = (code: string, market?: string) => {
     const trimmed = code.trim()
-    if (/^CN:/i.test(trimmed)) {
-      const parsed = tryParseInstrumentInput(trimmed)
-      return parsed ? instrumentKey(parsed) : trimmed
+    const parsed = tryParseInstrumentInput(trimmed)
+    if (parsed) {
+      const ref = normalizeInstrumentRefLocal(parsed)
+      const storageKey = portfolioHoldingsStorageKey(ref)
+      if (ref.market === 'CN') {
+        return storageKey.startsWith('CN:') ? storageKey : `CN:${storageKey}`
+      }
+      return instrumentKey(ref)
     }
+    const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
+    if (fundNs) return `CN:PF.${fundNs[1]}`
+    const fundSuffix = /^(\d{6})\.(?:OF|PF)$/i.exec(trimmed)
+    if (fundSuffix) return `CN:PF.${fundSuffix[1]}`
+    if (market && market !== 'CN') return `${market}:${trimmed}`
+    if (/^\d{6}$/.test(trimmed)) return `CN:${normalizeCode(trimmed)}`
     return `${market ?? 'CN'}:${trimmed}`
   }
 
   const resolveTradeLookupCode = (code: string, market?: string) => {
     const trimmed = code.trim()
+    const parsed = tryParseInstrumentInput(trimmed)
+    if (parsed) {
+      const ref = normalizeInstrumentRefLocal(parsed)
+      if (ref.assetClass === 'FUND' || ref.exchange === 'PF' || ref.exchange === 'OF') {
+        const key = portfolioHoldingsStorageKey(ref)
+        return key.startsWith('CN:PF.') ? key : `CN:PF.${key}`
+      }
+      if (ref.market === 'CN') return portfolioHoldingsStorageKey(ref)
+      return ref.symbol
+    }
+    const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
+    if (fundNs) return `CN:PF.${fundNs[1]}`
+    const fundSuffix = /^(\d{6})\.(?:OF|PF)$/i.exec(trimmed)
+    if (fundSuffix) return `CN:PF.${fundSuffix[1]}`
     if (market && market !== 'CN') return trimmed
     if (/^CN:/i.test(trimmed)) return trimmed
     return normalizeCode(trimmed)
@@ -97,6 +146,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
         tradesCache.current[cacheKey] = resp.data.trades
         return resp.data.trades
       }
+      // 失败勿用空数组覆盖已有成功缓存
     } catch { /* ignore */ }
     return tradesCache.current[cacheKey] ?? []
   }, [])
@@ -104,6 +154,8 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const submitTrade = useCallback(async (payload: {
     code: string
     market?: string
+    assetClass?: string
+    instrument?: InstrumentRef
     shares: number
     price: number
     side: 'buy' | 'sell'

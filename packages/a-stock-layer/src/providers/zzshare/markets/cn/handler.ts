@@ -41,6 +41,15 @@ import {
   mapKlinesToEtfNavRows,
   mapProfilesToEtfProfileRows,
 } from '../../../common/etf.js'
+import {
+  BATCH_REALTIME_CHUNK_CONSERVATIVE,
+  BATCH_REALTIME_CONCURRENCY,
+  chunkArray,
+  mapPool,
+} from '../../../../utils/batch-chunk.js'
+
+/** rt_k 逗号拼接过长时的分片上限 */
+const RT_K_CHUNK = BATCH_REALTIME_CHUNK_CONSERVATIVE
 
 function todayYmd(): string {
   const d = new Date()
@@ -449,12 +458,25 @@ export class ZzshareCnHandler extends MarketHandlerShell {
       const out: StockRealtime[] = []
 
       if (hasZzshareToken() && normalized.length) {
-        const tsCodes = normalized.map(c => toTsCode(c, exchangeOf(c))).join(',')
-        const rows = await client.rt_k({ ts_code: tsCodes })
-        const quotes = mapZzshareRtKRows(rows)
-        for (const q of quotes) {
-          if (!q.name) q.name = this.nameCache.get(q.code) ?? q.code
-          out.push(q)
+        const tsCodes = normalized.map(c => toTsCode(c, exchangeOf(c)))
+        const parts = chunkArray(tsCodes, RT_K_CHUNK)
+        const partQuotes = await mapPool(
+          parts,
+          BATCH_REALTIME_CONCURRENCY,
+          async part => {
+            try {
+              const rows = await client.rt_k({ ts_code: part.join(',') })
+              return mapZzshareRtKRows(rows)
+            } catch {
+              return [] as StockRealtime[]
+            }
+          },
+        )
+        for (const quotes of partQuotes) {
+          for (const q of quotes) {
+            if (!q.name) q.name = this.nameCache.get(q.code) ?? q.code
+            out.push(q)
+          }
         }
         if (out.length) return out
       }

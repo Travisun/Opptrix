@@ -217,7 +217,8 @@ export class PortfolioStore {
     const sorted = [...this.state.trades].sort(
       (a, b) => b.tradeDate.localeCompare(a.tradeDate) || b.id - a.id,
     )
-    if (!code.trim()) return sorted.slice(0, 500)
+    // 无 code 过滤时返回全部（holdings/summary 依赖完整账本；禁止截断历史）
+    if (!code.trim()) return sorted
     return sorted
       .filter(t => portfolioCodesMatch(t.code, legacyTradeMarket(t), code, market))
       .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate) || a.id - b.id)
@@ -228,6 +229,11 @@ export class PortfolioStore {
     this.state.trades = []
     this.save()
     return n
+  }
+
+  /** Drop singleton without persisting (tests / OPPTRIX_DATA_DIR swap). */
+  static resetForTests() {
+    PortfolioStore.inst = null
   }
 }
 

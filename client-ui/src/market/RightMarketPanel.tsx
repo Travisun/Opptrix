@@ -236,8 +236,6 @@ function RightMarketPanel({
   })
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
   const [dialogPrice, setDialogPrice] = useState<number | null>(null)
-  const [localIndexed, setLocalIndexed] = useState<boolean | null>(null)
-  const [localIndexLoading, setLocalIndexLoading] = useState(false)
 
   const selectedCode = selected?.code ?? null
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
@@ -280,41 +278,8 @@ function RightMarketPanel({
     return ref ? detailPanelKind(ref) : null
   }, [detailStock])
 
-  const detailStockKey = useMemo(
-    () => (detailStock ? watchlistItemKey(normalizeWatchlistItem(detailStock)) : null),
-    [detailStock],
-  )
   const detailStockRef = useRef(detailStock)
   detailStockRef.current = detailStock
-
-  useEffect(() => {
-    if (!detailStockKey || detailKind === 'cn-equity' || detailKind === 'cn-etf' || detailKind === 'cn-fund') {
-      setLocalIndexed(null)
-      setLocalIndexLoading(false)
-      return
-    }
-    const current = detailStockRef.current
-    if (!current) {
-      setLocalIndexed(null)
-      setLocalIndexLoading(false)
-      return
-    }
-    let cancelled = false
-    setLocalIndexLoading(true)
-    void research.searchInstruments(current.code, 5)
-      .then(resp => {
-        if (cancelled) return
-        const hits = resp.data?.items ?? []
-        setLocalIndexed(hits.some(h => h.code.toUpperCase() === current.code.toUpperCase()))
-      })
-      .catch(() => {
-        if (!cancelled) setLocalIndexed(null)
-      })
-      .finally(() => {
-        if (!cancelled) setLocalIndexLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [detailStockKey, detailKind])
 
   const handlePortfolioSelect = useCallback((code: string, market?: string) => {
     const fromList = items.find(item => {
@@ -534,15 +499,11 @@ function RightMarketPanel({
         ) : tab === 'detail' && detailStock && detailKind === 'crypto' ? (
           <CryptoDetailTab
             stock={detailStock}
-            localIndexed={localIndexed}
-            loading={localIndexLoading}
             onManage={handleDetailManage}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cross-market' ? (
           <CrossMarketDetailTab
             stock={detailStock}
-            localIndexed={localIndexed}
-            loading={localIndexLoading}
             onManage={handleDetailManage}
             onSelectPeer={handleSelectPeer}
           />

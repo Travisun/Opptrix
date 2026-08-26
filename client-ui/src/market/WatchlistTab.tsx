@@ -28,7 +28,13 @@ import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayC
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, watchlistDisplayCode, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel } from './instrument'
-import { WATCHLIST_QUOTES_POLL_MS } from './watchlistQuotes'
+import {
+  WATCHLIST_QUOTES_POLL_MS,
+  WatchlistQuoteBatchAbortError,
+  classifyWatchlistBatchFailReason,
+  mergeWatchlistQuoteRefresh,
+  runWatchlistQuoteBatches,
+} from './watchlistQuotes'
 import { useWatchlist } from './useWatchlist'
 import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from './useInstrumentSearchWithUniversePrep'
 import { hasApplicationCapability } from './capabilities'
@@ -562,6 +568,10 @@ export default function WatchlistTab({
   const itemsRef = useRef(items)
   itemsRef.current = items
   const loadSeqRef = useRef(0)
+  const quotesRef = useRef(quotes)
+  quotesRef.current = quotes
+  const failedByKeyRef = useRef(failedByKey)
+  failedByKeyRef.current = failedByKey
   const itemsKey = useMemo(
     () => items.map(watchlistItemKey).join('|'),
     [items],
@@ -587,6 +597,8 @@ export default function WatchlistTab({
     if (!currentItems.length) {
       setQuotes({})
       setFailedByKey({})
+      quotesRef.current = {}
+      failedByKeyRef.current = {}
       setQuoteError('')
       return
     }
@@ -600,45 +612,114 @@ export default function WatchlistTab({
       if (!instruments.length) {
         setQuotes({})
         setFailedByKey({})
+        quotesRef.current = {}
+        failedByKeyRef.current = {}
         setQuoteError('')
         return
       }
-      const resp = await research.instrumentQuotes(instruments)
-      if (seq !== loadSeqRef.current) return
-      if (!resp.success || !resp.data?.quotes) {
-        setQuoteError(watchlistQuoteErrorCopy(resp.message))
-        return
-      }
-      setQuoteError('')
-      const patch: Record<string, MarketQuote> = {}
-      for (const q of resp.data.quotes) {
-        const itemRef = q.instrument ?? resolveWatchlistInstrument({
-          code: q.code,
-          name: q.name,
+
+      const applyMerge = (
+        patch: Record<string, MarketQuote>,
+        failedMap: Record<string, QuoteFailedReason>,
+        touchUpdatedAt: boolean,
+      ) => {
+        const merged = mergeWatchlistQuoteRefresh({
+          prevQuotes: quotesRef.current,
+          prevFailed: failedByKeyRef.current,
+          patch,
+          failedMap,
         })
-        if (!itemRef) continue
-        const mq = unifiedQuoteToMarketQuote(q)
-        const code = displayCodeFromInstrument(itemRef)
-        const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
-        const quote: MarketQuote = {
-          ...mq,
-          code,
-          name: mq.name ?? code,
+        quotesRef.current = merged.quotes
+        failedByKeyRef.current = merged.failedByKey
+        setQuotes(merged.quotes)
+        setFailedByKey(merged.failedByKey)
+        if (touchUpdatedAt) {
+          setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
         }
-        patch[code] = quote
-        patch[rowKey] = quote
-        patch[instrumentKey(itemRef)] = quote
       }
-      const failedMap: Record<string, QuoteFailedReason> = {}
-      for (const f of resp.data.failed ?? []) {
-        failedMap[f.code] = f.reason
-        failedMap[instrumentKey(f.instrument)] = f.reason
+
+      let lastBatchErrorMessage: string | undefined
+      const { okCount, failCount } = await runWatchlistQuoteBatches({
+        items: instruments,
+        shouldAbort: () => seq !== loadSeqRef.current,
+        onBatchError: (err) => {
+          if (err instanceof Error && err.message) {
+            lastBatchErrorMessage = err.message
+          }
+        },
+        runBatch: async (batch) => {
+          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+          const resp = await research.instrumentQuotes(batch)
+          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+
+          const quotesArr = resp.data?.quotes
+          const hasQuotesArray = Array.isArray(quotesArr)
+
+          // success:false 且无 quotes：软失败 — 写 failedMap，保留已有价，不 throw
+          if (!hasQuotesArray) {
+            const reason = classifyWatchlistBatchFailReason(resp.message)
+            const failedMap: Record<string, QuoteFailedReason> = {}
+            for (const itemRef of batch) {
+              const code = displayCodeFromInstrument(itemRef)
+              const rowKey = watchlistItemKey({ code, name: code, instrument: itemRef })
+              failedMap[code] = reason
+              failedMap[rowKey] = reason
+              failedMap[instrumentKey(itemRef)] = reason
+            }
+            if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+            applyMerge({}, failedMap, false)
+            return
+          }
+
+          const patch: Record<string, MarketQuote> = {}
+          for (const q of quotesArr) {
+            const itemRef = q.instrument ?? resolveWatchlistInstrument({
+              code: q.code,
+              name: q.name,
+            })
+            if (!itemRef) continue
+            const mq = unifiedQuoteToMarketQuote(q)
+            const code = displayCodeFromInstrument(itemRef)
+            const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
+            const quote: MarketQuote = {
+              ...mq,
+              code,
+              name: mq.name ?? code,
+            }
+            patch[code] = quote
+            patch[rowKey] = quote
+            patch[instrumentKey(itemRef)] = quote
+          }
+          const failedMap: Record<string, QuoteFailedReason> = {}
+          for (const f of resp.data?.failed ?? []) {
+            failedMap[f.code] = f.reason
+            failedMap[instrumentKey(f.instrument)] = f.reason
+          }
+          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+          applyMerge(patch, failedMap, Object.keys(patch).length > 0)
+        },
+      })
+
+      if (seq !== loadSeqRef.current) return
+      // 有成功批则清 footer；仅整轮无成功且确有硬失败才抬红字
+      if (okCount > 0) {
+        setQuoteError('')
+      } else if (failCount > 0) {
+        const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
+        if (!(silent && hasCachedQuote)) {
+          setQuoteError(watchlistQuoteErrorCopy(lastBatchErrorMessage))
+        }
+      } else {
+        setQuoteError('')
       }
-      setQuotes(prev => ({ ...prev, ...patch }))
-      setFailedByKey(failedMap)
-      setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
     } catch {
-      if (seq === loadSeqRef.current) setQuoteError('行情暂时繁忙，请稍后刷新')
+      // 外层兜底：不清空已有 quotes
+      if (seq === loadSeqRef.current) {
+        const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
+        if (!(silent && hasCachedQuote)) {
+          setQuoteError('行情暂时繁忙，请稍后刷新')
+        }
+      }
     } finally {
       if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }
@@ -1104,13 +1185,21 @@ export default function WatchlistTab({
                       onMouseDown={stopRowActionPointer}
                       onClick={stopRowActionPointer}
                     >
-                      {failedCopy ? (
-                        <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                      {failedCopy && price == null ? (
+                        <span
+                          className={mergeClasses(s.metricCell, s.metricMuted)}
+                          style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                          title={failedCopy.hint}
+                        >
                           {failedCopy.label}
                         </span>
                       ) : (
                         <>
-                          <span className={mergeClasses(s.metricCell, s.metricPrice)} style={{ minWidth: METRIC_COLUMNS[0].minWidth }}>
+                          <span
+                            className={mergeClasses(s.metricCell, s.metricPrice)}
+                            style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                            title={failedCopy?.hint}
+                          >
                             {formatPriceForMarket(ref?.market, price)}
                           </span>
                           <span

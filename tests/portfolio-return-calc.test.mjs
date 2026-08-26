@@ -31,6 +31,21 @@ test('portfolioHoldingsStorageKey aligns watchlist namespace with ledger code', 
   )
 })
 
+test('portfolioHoldingsStorageKey — CN FUND vs EQUITY same code must not collide', () => {
+  const fund = { market: 'CN', assetClass: 'FUND', symbol: '009049', exchange: 'PF' }
+  const equity = { market: 'CN', assetClass: 'EQUITY', symbol: '009049', exchange: 'SZ' }
+  assert.equal(portfolioHoldingsStorageKey(fund), 'CN:PF.009049')
+  assert.equal(portfolioHoldingsStorageKey(equity), '009049')
+  assert.notEqual(portfolioHoldingsStorageKey(fund), portfolioHoldingsStorageKey(equity))
+})
+
+test('portfolioHoldingsStorageKey — CN ETF stays bare six-digit', () => {
+  assert.equal(
+    portfolioHoldingsStorageKey({ market: 'CN', assetClass: 'ETF', symbol: '510300', exchange: 'SH' }),
+    '510300',
+  )
+})
+
 test('US exchange trades skip CN stamp duty and transfer fee', () => {
   const global = legacyFlatFeesToGlobal({
     commissionRate: 0.00025,

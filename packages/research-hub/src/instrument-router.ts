@@ -37,6 +37,16 @@ export type InstrumentRouteHandlers = {
   usRealtime: (symbol: string) => Promise<ResearchResult>
   regionalRealtime: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoRealtime: (pair: string) => Promise<ResearchResult>
+  /** CN 场外基金批量净值行情；缺省则回退 fundRealtime 有界并发 */
+  fundQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
+  /** CN 场外基金单标的净值（fund_quote）；仅 fundQuotes 缺省时使用 */
+  fundRealtime?: (ref: InstrumentRef) => Promise<ResearchResult>
+  /** US 批量实时（Tickflow quotes 等）；缺省则回退 usRealtime 有界并发 */
+  usQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
+  /** HK 批量实时；缺省则回退 regionalRealtime 有界并发 */
+  regionalQuotes?: (market: 'HK', refs: InstrumentRef[]) => Promise<ResearchResult>
+  /** CRYPTO 批量实时；缺省则回退 cryptoRealtime 有界并发 */
+  cryptoQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
   stockChart: (
     code: string,
     period: string,
@@ -311,36 +321,67 @@ export async function routeInstrumentQuotes(
   }
   const fundRefs = refs.filter(r => r.market === 'CN' && r.assetClass === 'FUND')
   if (fundRefs.length) {
-    tasks.push(handlers.stockQuotes(fundRefs).then(resp =>
-      collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
-    ))
+    // 场外基金走独立通道（Fuyao fundQuote / NAV），禁止 stockQuotes → A 股 batchRealtime
+    if (handlers.fundQuotes) {
+      tasks.push(handlers.fundQuotes(fundRefs).then(resp =>
+        collectCnBatchQuotes(fundRefs, resp, quotes, failed, ref => localSourceFor(handlers, ref), noteError),
+      ))
+    } else if (handlers.fundRealtime) {
+      tasks.push(collectRealtimeQuotesBounded(
+        fundRefs.map(ref => ({ ref, call: () => handlers.fundRealtime!(ref) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    } else {
+      for (const ref of fundRefs) failed.push(failedQuoteForRef(ref, 'no_provider'))
+    }
   }
   const usRefs = refs.filter(r => r.market === 'US')
   if (usRefs.length) {
-    tasks.push(collectRealtimeQuotesBounded(
-      usRefs.map(ref => ({ ref, call: () => handlers.usRealtime(ref.symbol) })),
-      quotes,
-      failed,
-      noteError,
-    ))
+    if (handlers.usQuotes) {
+      tasks.push(handlers.usQuotes(usRefs).then(resp =>
+        collectCnBatchQuotes(usRefs, resp, quotes, failed, () => 'live', noteError),
+      ))
+    } else {
+      // 无 batch handler：有界并发逐标的（Tickflow maxConcurrent≈5）
+      tasks.push(collectRealtimeQuotesBounded(
+        usRefs.map(ref => ({ ref, call: () => handlers.usRealtime(ref.symbol) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    }
   }
   const hkRefs = refs.filter(r => r.market === 'HK')
   if (hkRefs.length) {
-    tasks.push(collectRealtimeQuotesBounded(
-      hkRefs.map(ref => ({ ref, call: () => handlers.regionalRealtime('HK', ref.symbol) })),
-      quotes,
-      failed,
-      noteError,
-    ))
+    if (handlers.regionalQuotes) {
+      tasks.push(handlers.regionalQuotes('HK', hkRefs).then(resp =>
+        collectCnBatchQuotes(hkRefs, resp, quotes, failed, () => 'live', noteError),
+      ))
+    } else {
+      tasks.push(collectRealtimeQuotesBounded(
+        hkRefs.map(ref => ({ ref, call: () => handlers.regionalRealtime('HK', ref.symbol) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    }
   }
   const cryptoRefs = refs.filter(r => r.market === 'CRYPTO')
   if (cryptoRefs.length) {
-    tasks.push(collectRealtimeQuotesBounded(
-      cryptoRefs.map(ref => ({ ref, call: () => handlers.cryptoRealtime(instrumentDisplayCode(ref)) })),
-      quotes,
-      failed,
-      noteError,
-    ))
+    if (handlers.cryptoQuotes) {
+      tasks.push(handlers.cryptoQuotes(cryptoRefs).then(resp =>
+        collectCnBatchQuotes(cryptoRefs, resp, quotes, failed, () => 'live', noteError),
+      ))
+    } else {
+      tasks.push(collectRealtimeQuotesBounded(
+        cryptoRefs.map(ref => ({ ref, call: () => handlers.cryptoRealtime(instrumentDisplayCode(ref)) })),
+        quotes,
+        failed,
+        noteError,
+      ))
+    }
   }
 
   await Promise.all(tasks)

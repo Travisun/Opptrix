@@ -35,6 +35,16 @@ import {
   mapFundHistoricalBarsToKlines,
   mapFundMarketSnapshotToStockRealtime,
 } from '../../normalize/fund.js'
+import {
+  BATCH_REALTIME_CHUNK_CONSERVATIVE,
+  BATCH_REALTIME_CONCURRENCY,
+  BATCH_REALTIME_ITEM_CONCURRENCY,
+  chunkArray,
+  mapPool,
+} from '../../../../utils/batch-chunk.js'
+
+/** 个股 prices/valuations snapshot 单片上限 */
+const SNAPSHOT_CHUNK = BATCH_REALTIME_CHUNK_CONSERVATIVE
 
 function todayYmd(): string {
   const d = new Date()
@@ -137,33 +147,55 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
       const out: StockRealtime[] = []
 
       if (stockCodes.length) {
-        const thscodes = stockCodes.map(c => toThsCode(c, exchangeOf(c)))
-        const [snap, valSnap] = await Promise.all([
-          client.pricesSnapshot(thscodes),
-          client.valuationsSnapshot(thscodes).catch(() => ({ item: [] })),
-        ])
-        const valByThscode = indexValuationItems(valSnap.item ?? [])
-        for (const item of snap.item ?? []) {
-          const c = fromThsCode(String(item.thscode ?? ''))
-          const name = await this.resolveName(client, c, 'a-share')
-          const thscode = String(item.thscode ?? toThsCode(c, exchangeOf(c)))
-          const row = mapSnapshotToStockRealtime(item, name)
-          out.push(applyValuationToStockRealtime(row, valByThscode.get(thscode)))
+        const stockChunks = chunkArray(stockCodes, SNAPSHOT_CHUNK)
+        const chunkResults = await mapPool(
+          stockChunks,
+          BATCH_REALTIME_CONCURRENCY,
+          async part => {
+            try {
+              const thscodes = part.map(c => toThsCode(c, exchangeOf(c)))
+              const [snap, valSnap] = await Promise.all([
+                client.pricesSnapshot(thscodes),
+                client.valuationsSnapshot(thscodes).catch(() => ({ item: [] as Record<string, unknown>[] })),
+              ])
+              const valByThscode = indexValuationItems(valSnap.item ?? [])
+              const rows: StockRealtime[] = []
+              for (const item of snap.item ?? []) {
+                const c = fromThsCode(String(item.thscode ?? ''))
+                const name = await this.resolveName(client, c, 'a-share')
+                const thscode = String(item.thscode ?? toThsCode(c, exchangeOf(c)))
+                const row = mapSnapshotToStockRealtime(item, name)
+                rows.push(applyValuationToStockRealtime(row, valByThscode.get(thscode)))
+              }
+              return rows
+            } catch {
+              return [] as StockRealtime[]
+            }
+          },
+        )
+        for (const rows of chunkResults) {
+          if (rows.length) out.push(...rows)
         }
       }
 
       if (etfCodes.length) {
-        const etfRows = await Promise.all(
-          etfCodes.map(async c => {
-            const thscode = toThsCode(c, exchangeOf(c))
-            const [snap, name] = await Promise.all([
-              client.fundMarketSnapshot(thscode),
-              this.resolveName(client, c, 'fund-etf'),
-            ])
-            const item = snap.item?.[0]
-            if (!item) return null
-            return mapFundMarketSnapshotToStockRealtime(item, name)
-          }),
+        const etfRows = await mapPool(
+          etfCodes,
+          BATCH_REALTIME_ITEM_CONCURRENCY,
+          async c => {
+            try {
+              const thscode = toThsCode(c, exchangeOf(c))
+              const [snap, name] = await Promise.all([
+                client.fundMarketSnapshot(thscode),
+                this.resolveName(client, c, 'fund-etf'),
+              ])
+              const item = snap.item?.[0]
+              if (!item) return null
+              return mapFundMarketSnapshotToStockRealtime(item, name)
+            } catch {
+              return null
+            }
+          },
         )
         for (const row of etfRows) {
           if (row) out.push(row)

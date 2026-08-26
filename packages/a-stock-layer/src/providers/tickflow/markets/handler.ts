@@ -10,11 +10,20 @@ import {
 } from '../normalize/index.js'
 import { TickflowClient } from '../api/client.js'
 import { toTickflowIndexSymbol } from '../api/symbols.js'
-import { TickflowCommonHandler } from './common.js'
+import { TickflowCommonHandler, chunk } from './common.js'
 import { normalizeCode, type StockMarket } from '../../../utils/helpers.js'
+import {
+  BATCH_REALTIME_CHUNK,
+  BATCH_REALTIME_CONCURRENCY,
+  BATCH_REALTIME_ITEM_CONCURRENCY,
+  mapPool,
+} from '../../../utils/batch-chunk.js'
 
 /** GET /v1/quotes 批量 URL 长度友好上限（超出用 POST /v1/quotes） */
 const QUOTES_GET_MAX_SYMBOLS = 12
+
+/** POST /v1/quotes 单片上限（比 instruments 500 更保守） */
+const QUOTES_POST_CHUNK = BATCH_REALTIME_CHUNK
 
 /** TickFlow — CN / US / HK equities & indices（无 Key 走公开免费日K；有 Key 走付费端） */
 
@@ -128,7 +137,7 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
     }
   }
 
-  /** 批量实时行情 — 免费档逐个日 K 近似；有 Key 走 quotes */
+  /** 批量实时行情 — 免费档有界并发日 K 近似；有 Key 走 quotes（POST 自动分片） */
   async batchRealtime(
     codes: string[],
     markets?: Record<string, StockMarket | undefined>,
@@ -137,23 +146,52 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
     if (!client || !codes.length) return null
     const exchangeOf = (c: string) => markets?.[normalizeCode(c)] ?? markets?.[c]
     if (isTickflowFreeTier()) {
+      const parts = await mapPool(
+        codes,
+        BATCH_REALTIME_ITEM_CONCURRENCY,
+        async code => {
+          try {
+            return await this.realtimeFromDailyKline(code, exchangeOf(code))
+          } catch {
+            return null
+          }
+        },
+      )
       const out: StockRealtime[] = []
-      for (const code of codes) {
-        const one = await this.realtimeFromDailyKline(code, exchangeOf(code))
+      for (const one of parts) {
         if (one?.length) out.push(...one)
       }
       return out.length ? out : null
     }
     const symbols = codes.map(c => this.tickflowSymbol(c, exchangeOf(c)))
-    try {
-      const json = symbols.length <= QUOTES_GET_MAX_SYMBOLS
-        ? await client.getQuotes({ symbols: symbols.join(',') })
-        : await client.postQuotes({ symbols })
-      const rows = mapTickflowQuotes(json.data)
-      return rows.length ? rows : null
-    } catch {
-      return null
+    if (symbols.length <= QUOTES_GET_MAX_SYMBOLS) {
+      try {
+        const json = await client.getQuotes({ symbols: symbols.join(',') })
+        const rows = mapTickflowQuotes(json.data)
+        return rows.length ? rows : null
+      } catch {
+        return null
+      }
     }
+    // POST：按片请求；单片失败吞掉，合并其余成功行
+    const symbolChunks = chunk(symbols, QUOTES_POST_CHUNK)
+    const partRows = await mapPool(
+      symbolChunks,
+      BATCH_REALTIME_CONCURRENCY,
+      async part => {
+        try {
+          const json = await client.postQuotes({ symbols: part })
+          return mapTickflowQuotes(json.data)
+        } catch {
+          return [] as StockRealtime[]
+        }
+      },
+    )
+    const out: StockRealtime[] = []
+    for (const rows of partRows) {
+      if (rows.length) out.push(...rows)
+    }
+    return out.length ? out : null
   }
 
   async kline(
