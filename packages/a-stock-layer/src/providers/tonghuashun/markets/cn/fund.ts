@@ -277,11 +277,8 @@ export function mixTonghuashunFund(Driver: { prototype: TonghuashunMarketHandler
     if (!route) return null
     return withFuyaoClient(async client => {
       const { fundType, thscode } = route
-      const [assetData, industryData] = await Promise.all([
-        client.fundPortfolioAssetAllocation(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] })),
-        client.fundPortfolioIndustryAllocation(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] })),
-      ])
-      const row = mapFundAllocationRow(bare, assetData.item ?? [], industryData.item ?? [])
+      const assetData = await client.fundPortfolioAssetAllocation(fundType, thscode).catch(() => ({ item: [] as Record<string, unknown>[] }))
+      const row = mapFundAllocationRow(bare, assetData.item ?? [], [])
       if (!row.assets.length && !row.industries.length) return null
       return [row]
     })

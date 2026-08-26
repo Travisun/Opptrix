@@ -1,6 +1,11 @@
 /**
  * 基金详情聚合 — Hub `fund_detail` 将多路 queryInstrumentData 合并为单页载荷。
  * 快照失败则整页失败；其余维度失败写入 failed[]，不拖垮档案/业绩/持仓主路径。
+ *
+ * 详情页不展示时 Hub 不并行拉取：
+ * - fund_drawdown / fund_diagnosis / fund_financials / fund_news
+ * - fund_returns / fund_holders（快照 profile 已含区间收益与持有人结构）
+ * - fund_dividend / fund_manager（侧边栏无对应 Tab）
  */
 
 export type FundDetailQueryLike = {
@@ -55,20 +60,55 @@ function profileFromSnapshot(snapshot: Record<string, unknown> | null): Record<s
   return null
 }
 
+function returnsFromProfile(profile: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!profile) return null
+  const performance = profile.performance
+  const ranks = profile.ranks
+  const peerAvg = profile.peerAvg
+  if (
+    (performance == null || typeof performance !== 'object')
+    && (ranks == null || typeof ranks !== 'object')
+    && (peerAvg == null || typeof peerAvg !== 'object')
+  ) {
+    return null
+  }
+  return {
+    ...(performance && typeof performance === 'object'
+      ? { performance: performance as Record<string, unknown> }
+      : {}),
+    ...(ranks && typeof ranks === 'object' ? { ranks } : {}),
+    ...(peerAvg && typeof peerAvg === 'object' ? { peerAvg } : {}),
+  }
+}
+
+function holdersFromProfile(profile: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!profile) return null
+  if (
+    profile.holderAmount == null
+    && profile.instHolderRatio == null
+    && profile.indivHolderRatio == null
+    && profile.mgmtStaffHoldRatio == null
+    && profile.avgHolderShare == null
+  ) {
+    return null
+  }
+  return {
+    holderAmount: profile.holderAmount,
+    avgHolderShare: profile.avgHolderShare,
+    instHolderRatio: profile.instHolderRatio,
+    indivHolderRatio: profile.indivHolderRatio,
+    mgmtStaffHoldRatio: profile.mgmtStaffHoldRatio,
+    holderReportDate: profile.holderReportDate,
+    top: [],
+  }
+}
+
 export function mergeFundDetailParts(
   code: string,
   parts: {
     snapshot: FundDetailQueryLike
     holdings: FundDetailQueryLike
-    returns: FundDetailQueryLike
-    drawdown: FundDetailQueryLike
     allocation: FundDetailQueryLike
-    holders: FundDetailQueryLike
-    dividend: FundDetailQueryLike
-    manager: FundDetailQueryLike
-    diagnosis: FundDetailQueryLike
-    news: FundDetailQueryLike
-    financials: FundDetailQueryLike
   },
 ): { success: boolean; data: FundDetailData | null; message: string } {
   const snapshot = asRecord(parts.snapshot)
@@ -85,61 +125,24 @@ export function mergeFundDetailParts(
     if (!ok) failed.push(label)
   }
 
+  const profile = profileFromSnapshot(snapshot)
+
   const holdings = asRows(parts.holdings)
   mark(parts.holdings.success, '持仓')
 
-  let returns = asRecord(parts.returns)
-  mark(parts.returns.success, '业绩')
-  if (!returns) {
-    const profile = profileFromSnapshot(snapshot)
-    const performance = profile?.performance
-    if (performance && typeof performance === 'object') {
-      returns = { performance: performance as Record<string, unknown> }
-    }
-  }
+  const returns = returnsFromProfile(profile)
 
-  const drawdowns = asRows(parts.drawdown)
-  mark(parts.drawdown.success, '回撤')
-
+  const drawdowns: unknown[] = []
   const allocation = asRecord(parts.allocation)
   mark(parts.allocation.success, '配置')
 
-  let holders = asRecord(parts.holders)
-  mark(parts.holders.success, '持有人')
-  if (!holders) {
-    const profile = profileFromSnapshot(snapshot)
-    if (profile && (
-      profile.holderAmount != null
-      || profile.instHolderRatio != null
-      || profile.indivHolderRatio != null
-      || profile.mgmtStaffHoldRatio != null
-    )) {
-      holders = {
-        holderAmount: profile.holderAmount,
-        avgHolderShare: profile.avgHolderShare,
-        instHolderRatio: profile.instHolderRatio,
-        indivHolderRatio: profile.indivHolderRatio,
-        mgmtStaffHoldRatio: profile.mgmtStaffHoldRatio,
-        holderReportDate: profile.holderReportDate,
-        top: [],
-      }
-    }
-  }
+  const holders = holdersFromProfile(profile)
 
-  const dividends = asRows(parts.dividend)
-  mark(parts.dividend.success, '分红')
-
-  const manager = asRecord(parts.manager)
-  mark(parts.manager.success, '经理')
-
-  const diagnosis = asRecord(parts.diagnosis)
-  mark(parts.diagnosis.success, '诊断')
-
-  const news = asRows(parts.news)
-  mark(parts.news.success, '资讯')
-
-  const financials = asRecord(parts.financials)
-  mark(parts.financials.success, '财务')
+  const dividends: unknown[] = []
+  const manager: Record<string, unknown> | null = null
+  const diagnosis: Record<string, unknown> | null = null
+  const news: unknown[] = []
+  const financials: Record<string, unknown> | null = null
 
   const data: FundDetailData = {
     code,

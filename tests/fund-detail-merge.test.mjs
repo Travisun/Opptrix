@@ -1,5 +1,6 @@
 /**
- * Hub fund_detail 聚合：快照失败整页失败；其余维度失败写入 failed，不拖垮主路径。
+ * Hub fund_detail 聚合：快照失败整页失败；持仓/配置失败写入 failed，不拖垮主路径。
+ * 业绩与持有人结构由 snapshot.profile 派生，不再单独并行 fund_returns / fund_holders。
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
@@ -18,6 +19,8 @@ const snapshot = {
   profile: {
     name: '易方达消费行业',
     performance: { w52: 12.5 },
+    ranks: { w52: { rank: 10, total: 200 } },
+    peerAvg: { w52: 8.1 },
     holderAmount: 8000,
     instHolderRatio: 35,
   },
@@ -27,15 +30,7 @@ const snapshot = {
 
 const emptyParts = {
   holdings: ok([]),
-  returns: ok(null),
-  drawdown: ok([]),
   allocation: ok(null),
-  holders: ok(null),
-  dividend: ok([]),
-  manager: ok(null),
-  diagnosis: ok(null),
-  news: ok([]),
-  financials: ok(null),
 }
 
 describe('mergeFundDetailParts', () => {
@@ -49,31 +44,27 @@ describe('mergeFundDetailParts', () => {
     assert.match(r.message, /暂时无法加载基金信息/)
   })
 
-  it('holdings / returns 失败仍 success，failed 含对应标签', () => {
+  it('holdings / allocation 失败仍 success，failed 含对应标签；业绩与持有人来自 profile', () => {
     const r = mergeFundDetailParts('110022', {
       snapshot: ok(snapshot),
       holdings: fail('holdings down'),
-      returns: fail('returns down'),
-      drawdown: fail('drawdown down'),
       allocation: fail('alloc down'),
-      holders: fail('holders down'),
-      dividend: fail('div down'),
-      manager: fail('manager down'),
-      diagnosis: fail('diag down'),
-      news: fail('news down'),
-      financials: fail('fin down'),
     })
     assert.equal(r.success, true)
     assert.ok(r.data)
     assert.deepEqual(
       r.data.failed.sort(),
-      ['分红', '持仓', '持有人', '回撤', '业绩', '配置', '经理', '诊断', '资讯'].sort(),
+      ['持仓', '配置'].sort(),
     )
     assert.equal(r.data.holdings.length, 0)
     assert.equal(r.data.returns?.performance?.w52, 12.5)
+    assert.equal(r.data.returns?.ranks?.w52?.rank, 10)
+    assert.equal(r.data.returns?.peerAvg?.w52, 8.1)
     assert.equal(r.data.holders?.holderAmount, 8000)
+    assert.deepEqual(r.data.holders?.top, [])
     assert.equal(r.data.dividends.length, 0)
     assert.equal(r.data.manager, null)
+    assert.equal(r.data.drawdowns.length, 0)
     assert.equal(r.data.diagnosis, null)
     assert.equal(r.data.news.length, 0)
     assert.equal(r.data.financials, null)
@@ -83,40 +74,30 @@ describe('mergeFundDetailParts', () => {
     const r = mergeFundDetailParts('110022', {
       snapshot: ok(snapshot),
       holdings: ok([{ holdingSymbol: '600519', weight: 8 }]),
-      returns: ok({ performance: { w4: 1.2 } }),
-      drawdown: ok([{ period: 'w52', label: '近 1 年', value: -10 }]),
       allocation: ok({ assets: [{ name: '股票', ratio: 90 }], industries: [] }),
-      holders: ok({ top: [{ name: '机构A', ratio: 5 }] }),
-      dividend: ok([{ date: '2024-07-01', amount: 0.1 }]),
-      manager: ok({ name: '张三', managerId: 'm1' }),
-      diagnosis: ok({ score: 80, grade: '优秀' }),
-      news: ok([{ title: '公告', date: '2024-07-01' }]),
-      financials: ok({ reportDate: '2024-06-30', indicators: [{ label: '净资产', value: 1e9 }] }),
     })
     assert.equal(r.success, true)
     assert.deepEqual(r.data?.failed, [])
     assert.equal(r.data?.holdings.length, 1)
-    assert.equal(r.data?.returns?.performance?.w4, 1.2)
-    assert.equal(r.data?.drawdowns.length, 1)
+    assert.equal(r.data?.returns?.performance?.w52, 12.5)
+    assert.equal(r.data?.drawdowns.length, 0)
     assert.equal(r.data?.allocation?.assets[0]?.name, '股票')
-    assert.equal(r.data?.holders?.top[0]?.name, '机构A')
-    assert.equal(r.data?.dividends.length, 1)
-    assert.equal(r.data?.manager?.name, '张三')
-    assert.equal(r.data?.diagnosis?.score, 80)
-    assert.equal(r.data?.news.length, 1)
-    assert.equal(r.data?.financials?.indicators[0]?.label, '净资产')
+    assert.equal(r.data?.holders?.holderAmount, 8000)
+    assert.equal(r.data?.dividends.length, 0)
+    assert.equal(r.data?.manager, null)
+    assert.equal(r.data?.diagnosis, null)
+    assert.equal(r.data?.news.length, 0)
+    assert.equal(r.data?.financials, null)
   })
 
-  it('部分新维度失败仍 success', () => {
+  it('profile 无业绩与持有人时 returns / holders 为 null', () => {
     const r = mergeFundDetailParts('110022', {
-      snapshot: ok(snapshot),
+      snapshot: ok({ code: '110022', profile: { name: '测试' }, nav: null, quote: null }),
       ...emptyParts,
-      manager: fail('no manager'),
-      news: fail('news timeout'),
     })
     assert.equal(r.success, true)
-    assert.ok(r.data?.failed.includes('经理'))
-    assert.ok(r.data?.failed.includes('资讯'))
-    assert.ok(!r.data?.failed.includes('持仓'))
+    assert.equal(r.data?.returns, null)
+    assert.equal(r.data?.holders, null)
+    assert.deepEqual(r.data?.failed, [])
   })
 })

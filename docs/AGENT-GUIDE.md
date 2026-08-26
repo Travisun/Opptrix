@@ -354,7 +354,7 @@ Opptrix/
 - **与出站关系**：LAN 仅放宽私网/localhost **连接判定**；具体域名仍可能需 `network_egress` 确认（`http_fetch` / `opptrix_run` ping 等读有效 LAN）。
 
   - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
-  - **公募基金（CN:PF）**：`get_fund_list` / `get_fund_profile` / `get_fund_nav` / `get_fund_holdings`；须 `assetClass=FUND` 命名空间（兼容 `CN:OF`），勿与 ETF 行情工具混用。桌面详情页另经 Hub `fund_detail` 聚合区间收益/回撤/配置/持有人/分红/经理/诊断/资讯/财务指标（非 MCP 工具）
+  - **公募基金（CN:PF）**：`get_fund_list` / `get_fund_profile` / `get_fund_nav` / `get_fund_holdings`；须 `assetClass=FUND` 命名空间（兼容 `CN:OF`），勿与 ETF 行情工具混用。桌面详情页另经 Hub `fund_detail` 聚合快照/持仓/配置（业绩与持有人由快照 profile 派生；非 MCP 工具）；`fund_returns` / `fund_holders` / `fund_dividend` / `fund_manager` / 回撤 / 诊断 / 财务 / 资讯为独立 Capability，详情页不并行拉取
   - **对话调试 JSONL**（`preference/chat_debug_logging`，默认 `enabled=false`）：开启后按会话写入 `logs/chat-debug/*.jsonl`；单文件超限 rotate 为 `.1`（截断更旧），目录有会话数/总字节软顶并 prune 最旧会话，避免无限 append。
   - **会话时钟 / 前缀缓存**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）写入**本轮 turn-tail**（messages 末尾 ephemeral user），**不**写入稳定 system，以免破坏 DeepSeek 等前缀缓存；选型卡同理。有 `sessionId` 时请求体带稳定 `prompt_cache_key=opptrix-session:{id}`，chat-debug 仅记录 key / `cacheWarmth`（warm|cold|unknown），**不**因命中与否改写上下文。`get_current_time` 仅在用户明确问时刻时调用。未显式定制时输出额度 ladder：普模 32k、推理 32k、`reasoningEffort=high` 为 64k（显式可选 64k / 128k / 384k；显式等于历史默认 4096 或旧 16k 会抬升；更低显式值仍尊重）。上游 `reasoning_content` 会累积；工具轮写入会话并在下一请求 wire 回传（含空串占位）；**整轮思考时间线**以 `turns.reasoningSegments` 结构化分段持久化，并派生 `reasoningContent`（`---` 拼接）兼容旧读；live 推送 segments（末段流式）；UI 竖轴展示「第 N 段思路」，旧仅字符串会话可降级分段；messages 终轮仍仅写本轮 reasoning（wire 不变）；重开会话可在气泡内折叠查看「思考过程」；空正文时提示思考占用输出上限。
   - 调用未在本轮 tools 列表中的工具 → fail-closed，返回与冻结语义一致的提示（核对 tools / 选型卡，勿仪式 activate）

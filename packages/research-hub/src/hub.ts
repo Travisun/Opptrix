@@ -3205,7 +3205,7 @@ export class ResearchHub {
     if (ref.assetClass !== 'FUND') {
       return fail('当前标的不是公募基金，请重新搜索并选择基金', t0)
     }
-    const settle = (cap: 'fund_snapshot' | 'fund_holdings' | 'fund_returns' | 'fund_drawdown' | 'fund_allocation' | 'fund_holders' | 'fund_dividend' | 'fund_manager' | 'fund_diagnosis' | 'fund_news' | 'fund_financials') =>
+    const settle = (cap: 'fund_snapshot' | 'fund_holdings' | 'fund_allocation') =>
       this.de.queryInstrumentData(ref, cap).catch((e: unknown) => ({
         success: false as const,
         error: e instanceof Error ? e.message : String(e),
@@ -3213,40 +3213,16 @@ export class ResearchHub {
     const [
       snapshotPart,
       holdingsPart,
-      returnsPart,
-      drawdownPart,
       allocationPart,
-      holdersPart,
-      dividendPart,
-      managerPart,
-      diagnosisPart,
-      newsPart,
-      financialsPart,
     ] = await Promise.all([
       settle('fund_snapshot'),
       settle('fund_holdings'),
-      settle('fund_returns'),
-      settle('fund_drawdown'),
       settle('fund_allocation'),
-      settle('fund_holders'),
-      settle('fund_dividend'),
-      settle('fund_manager'),
-      settle('fund_diagnosis'),
-      settle('fund_news'),
-      settle('fund_financials'),
     ])
     const merged = mergeFundDetailParts(ref.symbol, {
       snapshot: snapshotPart,
       holdings: holdingsPart,
-      returns: returnsPart,
-      drawdown: drawdownPart,
       allocation: allocationPart,
-      holders: holdersPart,
-      dividend: dividendPart,
-      manager: managerPart,
-      diagnosis: diagnosisPart,
-      news: newsPart,
-      financials: financialsPart,
     })
     if (!merged.success || !merged.data) return fail(merged.message, t0)
     return ok(merged.data, merged.message, t0)

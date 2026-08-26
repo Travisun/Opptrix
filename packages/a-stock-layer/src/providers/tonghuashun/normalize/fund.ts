@@ -167,6 +167,148 @@ export function mapFundReturnsDetail(
 }
 
 /** 官方 drawdowns 字段为 week/month/…；旧别名 drawdown_* / max_drawdown_* 仍兼容 */
+const DIAGNOSIS_SCORE_FIELDS: Array<{ key: string; label: string }> = [
+  { key: 'performance_capability_score', label: '业绩能力' },
+  { key: 'anti_risk_score', label: '抗风险' },
+  { key: 'fundamentals_score', label: '基本面' },
+  { key: 'company_score', label: '公司' },
+  { key: 'manager_score', label: '经理' },
+  { key: 'integrate_score', label: '综合' },
+]
+
+const RESILIENCE_TIME_LABELS: Record<string, string> = {
+  oMonth: '近 1 月',
+  tMonth: '近 3 月',
+  hYear: '近半年',
+  oYear: '近 1 年',
+  twoYear: '近 2 年',
+  tYear: '近 3 年',
+}
+
+const RESILIENCE_TO_DRAWDOWN_PERIOD: Record<string, { period: string; label: string }> = {
+  oMonth: { period: 'w4', label: '近 1 月' },
+  tMonth: { period: 'w13', label: '近 3 月' },
+  hYear: { period: 'w26', label: '近半年' },
+  oYear: { period: 'w52', label: '近 1 年' },
+  twoYear: { period: 'year2', label: '近 2 年' },
+  tYear: { period: 'year3', label: '近 3 年' },
+}
+
+function formatDiagnosisYear(year: unknown): string {
+  const y = String(year ?? '').trim()
+  if (y === '1') return '近 1 年'
+  if (y === '3') return '近 3 年'
+  if (y === '5') return '近 5 年'
+  if (!y || y === 'null') return '任职以来'
+  return `近 ${y} 年`
+}
+
+function isYearBasedDimensionRow(row: Record<string, unknown>): boolean {
+  return DIAGNOSIS_SCORE_FIELDS.some(({ key }) => row[key] != null && row[key] !== '')
+}
+
+function parseYearBasedDiagnosisDimensions(
+  rows: Record<string, unknown>[],
+  peerRows: Record<string, unknown>[] = [],
+): import('../../common/standard-fund.js').StandardFundDiagnosisDimension[] {
+  const peerByYear = new Map<string, Record<string, unknown>>()
+  for (const peer of peerRows) {
+    peerByYear.set(String(peer.year ?? ''), peer)
+  }
+  const out: import('../../common/standard-fund.js').StandardFundDiagnosisDimension[] = []
+  for (const row of rows) {
+    const yearLabel = formatDiagnosisYear(row.year)
+    const peer = peerByYear.get(String(row.year ?? ''))
+    for (const { key, label } of DIAGNOSIS_SCORE_FIELDS) {
+      const score = safeFloat(row[key])
+      if (score == null) continue
+      const peerAvg = peer ? safeFloat(peer[key]) : null
+      out.push({
+        name: `${yearLabel} · ${label}`,
+        score,
+        peerAvg,
+      })
+    }
+  }
+  return out
+}
+
+function toDrawdownPct(raw: unknown): number | null {
+  const v = safeFloat(raw)
+  if (v == null) return null
+  return v === 0 ? 0 : -Math.abs(v)
+}
+
+export function parseFundResilienceItems(
+  raw: unknown,
+  peerRaw?: unknown,
+): import('../../common/standard-fund.js').StandardFundResilienceItem[] {
+  if (!Array.isArray(raw)) return []
+  const peerByType = new Map<string, Record<string, unknown>>()
+  if (Array.isArray(peerRaw)) {
+    for (const peer of peerRaw) {
+      if (isPlainRecord(peer)) peerByType.set(String(peer.time_type ?? ''), peer)
+    }
+  }
+  const out: import('../../common/standard-fund.js').StandardFundResilienceItem[] = []
+  for (const entry of raw) {
+    if (!isPlainRecord(entry)) continue
+    const period = String(entry.time_type ?? '').trim()
+    if (!period) continue
+    const label = RESILIENCE_TIME_LABELS[period] ?? period
+    const peer = peerByType.get(period)
+    const maxDrawdown = toDrawdownPct(entry.max_down ?? entry.max_drawdown)
+    const sharpe = safeFloat(entry.sharpe)
+    const peerMaxDrawdown = peer ? toDrawdownPct(peer.max_down ?? peer.max_drawdown) : null
+    const peerSharpe = peer ? safeFloat(peer.sharpe) : null
+    if (maxDrawdown == null && sharpe == null && peerMaxDrawdown == null && peerSharpe == null) continue
+    out.push({
+      period,
+      label,
+      maxDrawdown,
+      sharpe,
+      peerMaxDrawdown,
+      peerSharpe,
+    })
+  }
+  return out
+}
+
+export function mapFundDrawdownFromResilience(
+  code: string,
+  item: Record<string, unknown> | null | undefined,
+): import('../../common/standard-fund.js').StandardFundDrawdownRow[] {
+  if (!item) return []
+  const items = parseFundResilienceItems(item.resilience, item.peer_resilience)
+  const c = normalizeCode(code)
+  return items.flatMap(itemRow => {
+    const mapped = RESILIENCE_TO_DRAWDOWN_PERIOD[itemRow.period]
+    if (!mapped || itemRow.maxDrawdown == null) return []
+    return [{
+      code: c,
+      period: mapped.period,
+      label: mapped.label,
+      value: itemRow.maxDrawdown,
+      source: 'tonghuashun',
+    }]
+  })
+}
+
+function pickLatestReportPeriod(items: Record<string, unknown>[]): string | undefined {
+  const periods = items
+    .map(row => String(row.report_period ?? '').trim())
+    .filter(Boolean)
+  if (!periods.length) return undefined
+  return [...new Set(periods)].sort((a, b) => b.localeCompare(a))[0]
+}
+
+function filterRowsByLatestReportPeriod(items: Record<string, unknown>[]): Record<string, unknown>[] {
+  const latest = pickLatestReportPeriod(items)
+  if (!latest) return items
+  const filtered = items.filter(row => String(row.report_period ?? '').trim() === latest)
+  return filtered.length ? filtered : items
+}
+
 const DRAWDOWN_PERIODS: Array<{ period: string; label: string; keys: string[] }> = [
   { period: 'w1', label: '近 1 周', keys: ['week', 'drawdown_week', 'max_drawdown_week'] },
   { period: 'w4', label: '近 1 月', keys: ['month', 'drawdown_month', 'max_drawdown_month'] },
@@ -211,13 +353,15 @@ export function mapFundDrawdownRows(
     }).filter(r => r.value != null)
   }
   const blob = items[0] ?? {}
-  return DRAWDOWN_PERIODS.map(({ period, label, keys }) => ({
+  const rows = DRAWDOWN_PERIODS.map(({ period, label, keys }) => ({
     code: c,
     period,
     label,
     value: pickFirstFloat(blob, keys),
     source: 'tonghuashun',
   })).filter(r => r.value != null)
+  if (rows.length > 0 && rows.every(r => r.value === 0)) return []
+  return rows
 }
 
 const ASSET_NAME_KEYS: Array<{ keys: string[]; name: string }> = [
@@ -258,22 +402,25 @@ export function mapFundAllocationRow(
   industryItems: Record<string, unknown>[],
 ): import('../../common/standard-fund.js').StandardFundAllocationRow {
   const c = normalizeCode(code)
-  const assets = assetItems.flatMap(mapAllocItemsFromObject).filter(i => i.name)
-  const industries = industryItems.flatMap(row => {
+  const latestAssets = filterRowsByLatestReportPeriod(assetItems)
+  const latestIndustries = filterRowsByLatestReportPeriod(industryItems)
+  const assets = latestAssets.flatMap(mapAllocItemsFromObject).filter(i => i.name)
+  const industries = latestIndustries.flatMap(row => {
     const name = String(row.industry_name ?? row.sw_industry_name ?? row.name ?? '').trim()
     const ratio = pickFirstFloat(row, ALLOC_RATIO_KEYS)
     return name ? [{ name, ratio }] : []
   })
-  const reportMs = assetItems[0]?.report_date_ms ?? industryItems[0]?.report_date_ms
-    ?? assetItems[0]?.end_date_ms ?? industryItems[0]?.end_date_ms
-    ?? assetItems[0]?.report_date ?? industryItems[0]?.report_date
-  const reportPeriod = (() => {
-    for (const row of [...assetItems, ...industryItems]) {
-      const p = row.report_period
-      if (typeof p === 'string' && p.trim()) return p.trim()
-    }
-    return undefined
-  })()
+  const reportMs = latestAssets[0]?.report_date_ms ?? latestIndustries[0]?.report_date_ms
+    ?? latestAssets[0]?.end_date_ms ?? latestIndustries[0]?.end_date_ms
+    ?? latestAssets[0]?.report_date ?? latestIndustries[0]?.report_date
+  const reportPeriod = pickLatestReportPeriod([...latestAssets, ...latestIndustries])
+    ?? (() => {
+      for (const row of [...assetItems, ...industryItems]) {
+        const p = row.report_period
+        if (typeof p === 'string' && p.trim()) return p.trim()
+      }
+      return undefined
+    })()
   return {
     code: c,
     reportDate: msToYmd(reportMs) || reportPeriod || undefined,
@@ -512,6 +659,17 @@ function pickStr(row: Record<string, unknown>, keys: string[]): string | undefin
     const v = String(raw).trim()
     if (v) return v
   }
+  return undefined
+}
+
+/** 扶摇经理性别：m/f → 男性/女性；兼容男/女及已是中文全称 */
+export function formatManagerGender(raw: unknown): string | undefined {
+  if (raw == null) return undefined
+  const s = String(raw).trim()
+  if (!s) return undefined
+  const lower = s.toLowerCase()
+  if (lower === 'm' || lower === 'male' || s === '男' || s === '男性') return '男性'
+  if (lower === 'f' || lower === 'female' || s === '女' || s === '女性') return '女性'
   return undefined
 }
 
@@ -870,6 +1028,8 @@ export function mapFundProfileToFundProfileRow(
     establishDate: msToYmd(profile.estab_date) || undefined,
     riskLevel: pickStr(profile, ['risk_level', 'risk_grade', 'riskLevel', 'risk']),
     performance,
+    ranks: mapFundReturnsToRanks(opts?.returns),
+    peerAvg: mapFundReturnsToPeerAvg(opts?.returns),
     return1y: performance?.w52 ?? null,
     source: 'tonghuashun',
     ...opts?.holders,
@@ -894,6 +1054,126 @@ function collectFundNamesFromNested(value: unknown, out: string[], depth = 0): v
     if (out.length >= 8) break
     if (typeof v === 'object' && v != null) collectFundNamesFromNested(v, out, depth + 1)
   }
+}
+
+function mapManagerExperienceSections(
+  blob: Record<string, unknown> | null,
+): import('../../common/standard-fund.js').StandardFundManagerExperienceSection[] {
+  if (!blob) return []
+  const sections: import('../../common/standard-fund.js').StandardFundManagerExperienceSection[] = []
+
+  const awards = blob.awards
+  const awardEntries = Array.isArray(awards)
+    ? awards
+    : (isPlainRecord(awards) ? [awards] : [])
+  if (awardEntries.length) {
+    const items = awardEntries.flatMap(entry => {
+      if (!isPlainRecord(entry)) return []
+      const primary = pickStr(entry, ['award_name', 'name', 'title'])
+      if (!primary) return []
+      const secondary = [
+        pickStr(entry, ['award_year', 'year']),
+        pickStr(entry, ['company_name', 'company']),
+      ].filter(Boolean).join(' · ')
+      return [{ primary, secondary: secondary || undefined }]
+    })
+    if (items.length) sections.push({ title: '获奖记录', items })
+  }
+
+  const history = blob.investment_history
+  if (isPlainRecord(history)) {
+    const items = Object.values(history).flatMap(entry => {
+      if (!isPlainRecord(entry)) return []
+      const primary = pickStr(entry, ['name', 'fund_name']) ?? ''
+      if (!primary) return []
+      const code = pickStr(entry, ['code', 'fund_code'])
+      const fundType = pickStr(entry, ['type', 'fund_type'])
+      const start = pickStr(entry, ['start', 'start_date'])
+      const end = pickStr(entry, ['end', 'end_date'])
+      const tenure = isPlainRecord(entry.sy_info)
+        ? pickStr(entry.sy_info, ['days', 'years'])
+        : undefined
+      const returnPct = isPlainRecord(entry.sy_info)
+        ? pickStr(entry.sy_info, ['sy'])
+        : pickStr(entry, ['sh_rate', 'hs_rate'])
+      const maxDrawdown = isPlainRecord(entry.sy_info)
+        ? pickStr(entry.sy_info, ['zdhc'])
+        : undefined
+      const secondary = [
+        code,
+        fundType,
+        start && end ? `${start} — ${end}` : (start ?? end),
+        tenure ? `任职 ${tenure}` : undefined,
+      ].filter(Boolean).join(' · ')
+      const metaParts: string[] = []
+      if (returnPct) metaParts.push(`任职收益 ${returnPct}%`)
+      if (maxDrawdown) metaParts.push(`最大回撤 ${maxDrawdown}%`)
+      return [{
+        primary,
+        secondary: secondary || undefined,
+        meta: metaParts.length ? metaParts.join(' · ') : undefined,
+      }]
+    })
+    if (items.length) sections.push({ title: '管理基金', items })
+  } else if (Array.isArray(history)) {
+    const items = history.flatMap(entry => {
+      if (!isPlainRecord(entry)) return []
+      const primary = pickStr(entry, ['fund_name', 'name', 'title']) ?? ''
+      if (!primary) return []
+      const start = msToYmd(entry.start_date_ms ?? entry.start_date)
+        || pickStr(entry, ['start_date', 'start', 'period'])
+      const end = msToYmd(entry.end_date_ms ?? entry.end_date) || pickStr(entry, ['end_date', 'end'])
+      return [{
+        primary,
+        secondary: [start, end].filter(Boolean).join(' — ') || undefined,
+      }]
+    })
+    if (items.length) sections.push({ title: '管理基金', items })
+  }
+
+  const heavy = blob.heavy_assets
+  if (isPlainRecord(heavy)) {
+    const stockRows = Array.isArray(heavy.stock) ? heavy.stock : []
+    const fundRows = Array.isArray(heavy.fund) ? heavy.fund : []
+    const stockItems = stockRows.flatMap(entry => {
+      if (!isPlainRecord(entry)) return []
+      const primary = pickStr(entry, ['trade_name', 'name', 'stock_name']) ?? ''
+      if (!primary) return []
+      const code = pickStr(entry, ['trade_code', 'code', 'symbol'])
+      const scale = safeFloat(entry.scale ?? entry.ratio_pct ?? entry.weight)
+      return [{
+        primary,
+        secondary: code || undefined,
+        meta: scale != null ? `占比 ${scale.toFixed(2)}%` : undefined,
+      }]
+    })
+    if (stockItems.length) sections.push({ title: '重仓股票', items: stockItems })
+    const fundItems = fundRows.flatMap(entry => {
+      if (!isPlainRecord(entry)) return []
+      const primary = pickStr(entry, ['fund_name', 'name', 'trade_name']) ?? ''
+      if (!primary) return []
+      const code = pickStr(entry, ['fund_code', 'code', 'trade_code'])
+      const scale = safeFloat(entry.scale ?? entry.ratio_pct ?? entry.weight)
+      return [{
+        primary,
+        secondary: code || undefined,
+        meta: scale != null ? `占比 ${scale.toFixed(2)}%` : undefined,
+      }]
+    })
+    if (!fundItems.length) {
+      const fallbackFund = pickStr(heavy, ['fund_name', 'name', 'trade_name'])
+      if (fallbackFund) {
+        fundItems.push({
+          primary: fallbackFund,
+          secondary: pickStr(heavy, ['fund_code', 'code', 'trade_code']),
+          meta: undefined,
+        })
+      }
+    }
+    if (fundItems.length) sections.push({ title: '重仓基金', items: fundItems })
+  }
+
+  return sections
 }
 
 export function mapFundManagerRow(
@@ -931,6 +1211,7 @@ export function mapFundManagerRow(
     ? experienceRaw.filter(isPlainRecord)
     : (isPlainRecord(experienceRaw) ? [experienceRaw] : [])
   const experienceBlob = experienceList[0] ?? null
+  const experienceSections = mapManagerExperienceSections(experienceBlob)
 
   const representFunds: string[] = []
   const repName = styleObj
@@ -965,7 +1246,7 @@ export function mapFundManagerRow(
 
   const resume = pickStr(detail ?? {}, ['resume', 'introduction', 'intro', 'profile', 'biography'])
   let nestedExperienceText: string | undefined
-  if (experienceBlob) {
+  if (experienceBlob && !experienceSections.length) {
     const partsText: string[] = []
     const hist = flattenNestedText(experienceBlob.investment_history)
     if (hist) partsText.push(`从业经历：${hist}`)
@@ -986,8 +1267,9 @@ export function mapFundManagerRow(
     }
   }
   const experienceText = resume || nestedExperienceText
-  // UI：履历用 resume；经历摘要优先嵌套展平（与 resume 不同时才展示）
-  const experienceForUi = nestedExperienceText || (!resume ? experienceText : undefined)
+  const experienceForUi = experienceSections.length
+    ? undefined
+    : (nestedExperienceText || (!resume ? experienceText : undefined))
 
   // profile.manager_info[0] 任职信息（官方常见键）
   const managerInfo0 = profile && Array.isArray(profile.manager_info) && isPlainRecord(profile.manager_info[0])
@@ -1055,7 +1337,7 @@ export function mapFundManagerRow(
     code: normalizeCode(code),
     managerId,
     name: name || undefined,
-    gender: pickStr(detail ?? {}, ['sex', 'gender']),
+    gender: formatManagerGender(pickStr(detail ?? {}, ['sex', 'gender'])),
     education: pickStr(detail ?? {}, ['degree', 'education', 'edu']),
     resume,
     startDate: tenureStart,
@@ -1067,6 +1349,7 @@ export function mapFundManagerRow(
     style: styleText,
     philosophy,
     experienceList,
+    experienceSections: experienceSections.length ? experienceSections : undefined,
     experience: experienceForUi || experienceText,
     representFunds: uniqueFunds.length ? uniqueFunds : undefined,
     scale,
@@ -1081,27 +1364,54 @@ export function mapFundDiagnosisRow(
   item: Record<string, unknown> | null | undefined,
 ): import('../../common/standard-fund.js').StandardFundDiagnosisRow | null {
   if (!item || typeof item !== 'object') return null
-  const dimensions = flattenDiagnosisDimensions(
-    item.dimensions ?? item.radar ?? item.scores ?? item.indicators,
-  )
-  mergePeerDimensionAvgs(dimensions, item.peer_dimensions ?? item.peerDimensions)
+  const rawDimensions = item.dimensions ?? item.radar ?? item.scores ?? item.indicators
+  let dimensions: import('../../common/standard-fund.js').StandardFundDiagnosisDimension[] = []
+  if (
+    Array.isArray(rawDimensions)
+    && rawDimensions.length
+    && isPlainRecord(rawDimensions[0])
+    && isYearBasedDimensionRow(rawDimensions[0])
+  ) {
+    dimensions = parseYearBasedDiagnosisDimensions(
+      rawDimensions.filter(isPlainRecord),
+      Array.isArray(item.peer_dimensions)
+        ? item.peer_dimensions.filter(isPlainRecord)
+        : [],
+    )
+  } else {
+    dimensions = flattenDiagnosisDimensions(rawDimensions)
+    mergePeerDimensionAvgs(dimensions, item.peer_dimensions ?? item.peerDimensions)
+  }
 
+  const resilienceItems = parseFundResilienceItems(item.resilience, item.peer_resilience)
   const score = pickFirstFloat(item, ['score', 'total_score', 'diag_score', 'overall_score'])
   const grade = pickStr(item, ['grade', 'level', 'rating', 'diag_grade'])
   const summary = pickStr(item, ['summary', 'conclusion', 'comment', 'desc', 'description'])
-  const resilience = formatResilienceDisplay(item.resilience)
-    ?? formatResilienceDisplay(item.resilience_score)
-    ?? formatResilienceDisplay(item.toughness)
-    ?? pickFirstFloat(item, ['resilience_score'])
-    ?? null
+  const resilience = resilienceItems.length
+    ? undefined
+    : (
+      formatResilienceDisplay(item.resilience)
+      ?? formatResilienceDisplay(item.resilience_score)
+      ?? formatResilienceDisplay(item.toughness)
+      ?? pickFirstFloat(item, ['resilience_score'])
+      ?? null
+    )
 
-  if (score == null && !grade && !summary && resilience == null && !dimensions.length) return null
+  if (
+    score == null
+    && !grade
+    && !summary
+    && resilience == null
+    && !resilienceItems.length
+    && !dimensions.length
+  ) return null
   return {
     code: normalizeCode(code),
     score,
     grade,
     summary,
     resilience,
+    resilienceItems: resilienceItems.length ? resilienceItems : undefined,
     dimensions: dimensions.length ? dimensions : undefined,
     source: 'tonghuashun',
   }

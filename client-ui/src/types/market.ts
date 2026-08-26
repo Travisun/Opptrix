@@ -488,6 +488,7 @@ export interface FundManagerData {
   style?: string
   philosophy?: string
   experience?: string
+  experienceSections?: FundManagerExperienceSection[]
   representFunds?: string[]
   scale?: number | null
   performanceSummary?: string
@@ -506,11 +507,32 @@ export interface FundDiagnosisDimension {
   detail?: string
 }
 
+export interface FundResilienceItem {
+  period: string
+  label: string
+  maxDrawdown?: number | null
+  sharpe?: number | null
+  peerMaxDrawdown?: number | null
+  peerSharpe?: number | null
+}
+
 /** 基金诊断 — 与 fund_detail.diagnosis 对齐 */
 export interface FundDiagnosisData {
   dimensions?: FundDiagnosisDimension[]
   resilience?: string | number | null
+  resilienceItems?: FundResilienceItem[]
   summary?: string
+}
+
+export interface FundManagerExperienceItem {
+  primary: string
+  secondary?: string
+  meta?: string
+}
+
+export interface FundManagerExperienceSection {
+  title: string
+  items: FundManagerExperienceItem[]
 }
 
 /** 基金资讯 — 与 fund_detail.news 对齐 */
@@ -574,6 +596,8 @@ export interface FundProfileData {
   /** 交易规则（可读文案） */
   tradeRules?: string[]
   performance?: FundPerformance
+  ranks?: Partial<Record<keyof FundPerformance, FundRankCell>>
+  peerAvg?: FundPerformance
   holderAmount?: number | null
   avgHolderShare?: number | null
   instHolderRatio?: number | null

@@ -74,13 +74,26 @@ export type StandardFundManagerRow = Record<string, unknown> & {
   philosophy?: string
   /** 原始经历列表 */
   experienceList?: unknown[]
-  /** UI：经历摘要文案 */
+  /** UI：结构化经历区块（获奖 / 管理基金 / 重仓等） */
+  experienceSections?: StandardFundManagerExperienceSection[]
+  /** UI：经历摘要文案（兼容；优先用 experienceSections） */
   experience?: string
   representFunds?: string[]
   scale?: number | null
   performance?: Record<string, unknown> | null
   performanceSummary?: string
   source?: string
+}
+
+export type StandardFundManagerExperienceItem = {
+  primary: string
+  secondary?: string
+  meta?: string
+}
+
+export type StandardFundManagerExperienceSection = {
+  title: string
+  items: StandardFundManagerExperienceItem[]
 }
 
 export type StandardFundDiagnosisDimension = {
@@ -92,12 +105,22 @@ export type StandardFundDiagnosisDimension = {
   detail?: string
 }
 
+export type StandardFundResilienceItem = {
+  period: string
+  label: string
+  maxDrawdown?: number | null
+  sharpe?: number | null
+  peerMaxDrawdown?: number | null
+  peerSharpe?: number | null
+}
+
 export type StandardFundDiagnosisRow = Record<string, unknown> & {
   code: string
   score?: number | null
   grade?: string
   summary?: string
   resilience?: string | number | null
+  resilienceItems?: StandardFundResilienceItem[]
   dimensions?: StandardFundDiagnosisDimension[]
   source?: string
 }

@@ -193,7 +193,7 @@ enum Capability {
 }
 ```
 
-Hub `fund_detail` 并行 `queryInstrumentData` 聚合上述能力 + `fund_snapshot` / `fund_holdings`；单路失败写入 `failed[]`（含「经理」「诊断」「资讯」「财务」），快照失败则整页失败。UI `FundDetailTab` 经 `research.fundDetail` 消费。仅同花顺绑定这些扩展能力，Tushare 仍为五件套（profile / nav / holdings / quote / list）。
+Hub `fund_detail` 并行 `queryInstrumentData` 聚合 `fund_snapshot` / `fund_holdings` / `fund_allocation`；区间收益、同类均/排名与持有人结构由 `fund_snapshot` 内 `fundProfile` 已拉取的 returns / holdersDetail 写入 profile 后派生。单路失败写入 `failed[]`（如「持仓」「配置」），快照失败则整页失败。`fund_returns` / `fund_holders` / `fund_dividend` / `fund_manager` / `fund_drawdown` / `fund_diagnosis` / `fund_financials` / `fund_news` 仍注册为独立 Capability（Agent 等直连），**不**纳入 `fund_detail` 并行腿。`fund_allocation` 仅拉资产配置（不拉行业）。UI `FundDetailTab` 经 `research.fundDetail` 消费。仅同花顺绑定这些扩展能力，Tushare 仍为五件套（profile / nav / holdings / quote / list）。
 
 ---
 

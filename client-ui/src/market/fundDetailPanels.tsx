@@ -1,15 +1,11 @@
 import { type ReactNode } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Spinner, Text, makeStyles } from '@fluentui/react-components'
 import type {
   FundAllocationData,
   FundDetailData,
-  FundDiagnosisData,
-  FundDrawdownRow,
-  FundFinancialSummary,
   FundHoldingRow,
   FundHoldersData,
   FundManagerData,
-  FundNewsItem,
   FundProfileData,
   FundRateInfoItem,
   FundReturnsData,
@@ -20,9 +16,7 @@ import {
   formatPrice,
 } from './format'
 import { opptrixCssVars } from '../theme/tokens'
-import { ghostInteractive } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
-import { isHttpUrl, openExternalUrl } from '../platform/openUrl'
 
 const useStyles = makeStyles({
   section: {
@@ -108,38 +102,6 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
-  newsRow: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) 76px',
-    gap: '8px',
-    alignItems: 'baseline',
-    padding: '6px 0',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  newsRowClickable: {
-    ...ghostInteractive,
-    cursor: 'pointer',
-    borderRadius: '4px',
-    margin: '0 -4px',
-    padding: '6px 4px',
-  },
-  newsTitle: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
-    overflow: 'hidden',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-  },
-  newsDate: {
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textTertiary,
-    fontVariantNumeric: 'tabular-nums',
-    textAlign: 'right',
-    flexShrink: 0,
-  },
   tableHeadCell: {
     fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
@@ -177,13 +139,6 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
-  },
-  dimChip: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textSecondary,
   },
 })
 
@@ -290,74 +245,10 @@ function RateTable({ rates }: { rates: FundRateInfoItem[] }) {
   )
 }
 
-function FinancialSummaryBlock({ financials }: { financials: FundFinancialSummary | null | undefined }) {
-  const s = useStyles()
-  if (!financials) return null
-  const cells: Array<{ label: string; value: string }> = []
-  if (financials.revenue != null) {
-    cells.push({ label: '营业收入', value: formatCompactNumber(financials.revenue) })
-  }
-  if (financials.revenueYoy != null) {
-    cells.push({ label: '营收同比', value: formatPct(financials.revenueYoy) })
-  }
-  if (financials.netProfit != null) {
-    cells.push({ label: '净利润', value: formatCompactNumber(financials.netProfit) })
-  }
-  if (financials.netProfitYoy != null) {
-    cells.push({ label: '净利同比', value: formatPct(financials.netProfitYoy) })
-  }
-  if (financials.eps != null) {
-    cells.push({ label: '每股收益', value: formatPrice(financials.eps) })
-  }
-  if (financials.roe != null) {
-    cells.push({ label: '净资产收益率', value: formatPct(financials.roe) })
-  }
-  if (financials.grossMargin != null) {
-    cells.push({ label: '毛利率', value: formatPct(financials.grossMargin) })
-  }
-  if (financials.debtRatio != null) {
-    cells.push({ label: '资产负债率', value: formatPct(financials.debtRatio) })
-  }
-  if (!cells.length && financials.indicators?.length) {
-    for (const ind of financials.indicators.slice(0, 8)) {
-      if (!ind.label) continue
-      const raw = ind.value
-      const value = typeof raw === 'number'
-        ? formatCompactNumber(raw)
-        : (raw != null && String(raw).trim() ? String(raw) : '—')
-      cells.push({ label: ind.label, value })
-    }
-  }
-  if (!cells.length && !financials.reportDate) return null
-  return (
-    <div className={s.subSection}>
-      <Text className={s.sectionTitle}>财务摘要</Text>
-      {financials.reportDate ? (
-        <Text className={s.note}>报告期 {financials.reportDate}</Text>
-      ) : null}
-      {cells.length > 0 ? (
-        <div className={s.metricGrid}>
-          {cells.map(cell => (
-            <ArchiveMetric key={cell.label} label={cell.label} value={cell.value} />
-          ))}
-        </div>
-      ) : (
-        <Text className={s.emptyHint}>
-          还没有可展示的财务指标
-          {'\n'}
-          等定期报告更新后再来看
-        </Text>
-      )}
-    </div>
-  )
-}
-
 export function FundArchivePanel({
   profile,
-  financials,
 }: {
   profile: FundProfileData | null
-  financials?: FundFinancialSummary | null
 }) {
   const s = useStyles()
   if (!profile) {
@@ -473,20 +364,16 @@ export function FundArchivePanel({
           <Text className={s.note}>{profile.investStrategy}</Text>
         </div>
       ) : null}
-
-      <FinancialSummaryBlock financials={financials} />
     </div>
   )
 }
 
 export function FundPerformancePanel({
   returns,
-  drawdowns,
   loading,
   failed,
 }: {
   returns: FundReturnsData | null
-  drawdowns: FundDrawdownRow[]
   loading?: boolean
   failed: string[]
 }) {
@@ -500,19 +387,15 @@ export function FundPerformancePanel({
     || ranks?.[key]?.rank != null
   ))
   const hasPerf = perfRows.length > 0
-  const hasDrawdown = drawdowns.length > 0
   const returnsFailed = failed.includes('业绩') && !hasPerf
-  const drawdownFailed = failed.includes('回撤') && !hasDrawdown
 
   return (
     <PanelState
       loading={loading}
       loadingLabel="正在加载业绩…"
-      error={returnsFailed && drawdownFailed
-        ? '暂时无法获取业绩，请稍后重试'
-        : null}
-      empty={!hasPerf && !hasDrawdown
-        ? '还没有可展示的区间收益或回撤，可稍后再试'
+      error={returnsFailed ? '暂时无法获取业绩，请稍后重试' : null}
+      empty={!hasPerf
+        ? '还没有可展示的区间收益，可稍后再试'
         : null}
     >
       <div className={s.section}>
@@ -537,26 +420,6 @@ export function FundPerformancePanel({
         ) : returnsFailed ? (
           <Text className={s.emptyHint}>
             暂时无法获取区间收益
-            {'\n'}
-            请稍后重试
-          </Text>
-        ) : null}
-
-        {hasDrawdown ? (
-          <div className={s.subSection}>
-            <Text className={s.sectionTitle}>最大回撤</Text>
-            <div className={s.metricGrid}>
-              {drawdowns.map((row, index) => (
-                <div key={listRowKey(index, row.period, row.label)} className={s.metric}>
-                  <span className={s.metricLabel}>{row.label}</span>
-                  <span className={s.metricValue}>{formatPct(row.value ?? null)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : drawdownFailed ? (
-          <Text className={s.emptyHint}>
-            暂时无法获取回撤
             {'\n'}
             请稍后重试
           </Text>
@@ -604,8 +467,7 @@ export function FundHoldingsPanel({
   const s = useStyles()
   const holdingsFailed = failed.includes('持仓') && holdings.length === 0
   const assets = allocation?.assets ?? []
-  const industries = allocation?.industries ?? []
-  const hasAlloc = Boolean(assets.length || industries.length)
+  const hasAlloc = Boolean(assets.length)
   return (
     <PanelState
       loading={loading}
@@ -647,7 +509,6 @@ export function FundHoldingsPanel({
           </Text>
         ) : null}
         <AllocBlock title="资产配置" items={assets} />
-        <AllocBlock title="行业配置" items={industries} />
       </div>
     </PanelState>
   )
@@ -672,13 +533,11 @@ export function FundManagerPanel({
       manager.years != null
       || manager.style
       || manager.philosophy
-      || manager.experience
       || manager.resume
       || manager.education
       || manager.gender
       || (manager.representFunds?.length ?? 0) > 0
       || manager.scale != null
-      || manager.performanceSummary
       || manager.startDate
       || manager.officeDays != null
       || manager.tenureReturn != null
@@ -760,97 +619,6 @@ export function FundManagerPanel({
           <div className={s.subSection}>
             <Text className={s.sectionTitle}>投资理念</Text>
             <Text className={s.note}>{manager.philosophy}</Text>
-          </div>
-        ) : null}
-        {manager?.experience && manager.experience !== manager.resume ? (
-          <div className={s.subSection}>
-            <Text className={s.sectionTitle}>经历摘要</Text>
-            <Text className={s.note}>{manager.experience}</Text>
-          </div>
-        ) : null}
-        {manager?.performanceSummary ? (
-          <div className={s.subSection}>
-            <Text className={s.sectionTitle}>业绩概览</Text>
-            <Text className={s.note}>{manager.performanceSummary}</Text>
-          </div>
-        ) : null}
-      </div>
-    </PanelState>
-  )
-}
-
-export function FundDiagnosisPanel({
-  diagnosis,
-  loading,
-  failed,
-}: {
-  diagnosis: FundDiagnosisData | null | undefined
-  loading?: boolean
-  failed: string[]
-}) {
-  const s = useStyles()
-  const dims = diagnosis?.dimensions?.filter(d => d.name?.trim()) ?? []
-  const resilienceText = (() => {
-    const r = diagnosis?.resilience
-    if (r == null || r === '') return null
-    if (typeof r === 'object') return null
-    return String(r)
-  })()
-  const summaryText = (() => {
-    const s0 = diagnosis?.summary
-    if (s0 == null || s0 === '') return null
-    if (typeof s0 === 'object') return null
-    return String(s0)
-  })()
-  const hasContent = Boolean(
-    dims.length
-    || resilienceText
-    || summaryText,
-  )
-  const diagnosisFailed = failed.includes('诊断') && !hasContent
-
-  return (
-    <PanelState
-      loading={loading}
-      loadingLabel="正在加载诊断…"
-      error={diagnosisFailed ? '暂时无法获取诊断，请稍后重试' : null}
-      empty={!hasContent
-        ? '还没有诊断结果，等数据更新后再来看'
-        : null}
-    >
-      <div className={s.section}>
-        <Text className={s.sectionTitle}>综合诊断</Text>
-        {resilienceText ? (
-          <ArchiveMetric label="韧性" value={resilienceText} />
-        ) : null}
-        {summaryText ? (
-          <Text className={s.note}>{summaryText}</Text>
-        ) : null}
-        {dims.length > 0 ? (
-          <div className={s.subSection}>
-            <Text className={s.sectionTitle}>各维度</Text>
-            <div className={s.perfHead}>
-              <span className={s.tableHeadCell}>维度</span>
-              <span className={s.tableHeadCell}>得分</span>
-              <span className={s.tableHeadCell}>同类均</span>
-              <span className={s.tableHeadCell}>标签</span>
-            </div>
-            {dims.map((dim, index) => (
-              <div key={listRowKey(index, dim.name)} className={s.perfRow}>
-                <span className={s.tableCell} title={dim.detail || dim.name}>{dim.name}</span>
-                <span className={s.tableCell}>
-                  {dim.score != null ? String(dim.score) : '—'}
-                </span>
-                <span className={s.tableCell}>
-                  {dim.peerAvg != null ? String(dim.peerAvg) : '—'}
-                </span>
-                <span className={mergeClasses(s.tableCell, s.dimChip)}>
-                  {typeof dim.label === 'string' || typeof dim.label === 'number'
-                    ? String(dim.label)
-                    : '—'}
-                </span>
-              </div>
-            ))}
           </div>
         ) : null}
       </div>
@@ -995,59 +763,6 @@ export function FundDividendsPanel({
             <span className={s.tableCell}>{row.type || '—'}</span>
           </div>
         ))}
-      </div>
-    </PanelState>
-  )
-}
-
-export function FundNewsPanel({
-  news,
-  loading,
-  failed,
-}: {
-  news: FundNewsItem[]
-  loading?: boolean
-  failed: string[]
-}) {
-  const s = useStyles()
-  const items = news.slice(0, 15)
-  return (
-    <PanelState
-      loading={loading}
-      loadingLabel="正在加载资讯…"
-      error={failed.includes('资讯') && !items.length ? '暂时无法获取资讯，请稍后重试' : null}
-      empty={!items.length
-        ? '还没有相关资讯，有更新后会出现在这里'
-        : null}
-    >
-      <div className={s.section}>
-        <Text className={s.sectionTitle}>最新资讯</Text>
-        {items.map((item, index) => {
-          const url = item.url?.trim()
-          const canOpen = Boolean(url && isHttpUrl(url))
-          return (
-            <div
-              key={listRowKey(index, item.date, item.title)}
-              className={mergeClasses(s.newsRow, canOpen && s.newsRowClickable)}
-              role={canOpen ? 'link' : undefined}
-              tabIndex={canOpen ? 0 : undefined}
-              onClick={canOpen && url
-                ? (event) => openExternalUrl(url, event)
-                : undefined}
-              onKeyDown={canOpen && url
-                ? (event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      openExternalUrl(url, event)
-                    }
-                  }
-                : undefined}
-            >
-              <span className={s.newsTitle} title={item.title}>{item.title || '—'}</span>
-              <span className={s.newsDate}>{item.date || '—'}</span>
-            </div>
-          )
-        })}
       </div>
     </PanelState>
   )

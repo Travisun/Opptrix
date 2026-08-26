@@ -14,6 +14,8 @@ import {
   mapFundAllocationRow,
   mapFundDividendRows,
   mapFundDrawdownRows,
+  mapFundDrawdownFromResilience,
+  parseFundResilienceItems,
   mapFundHoldersRow,
   mapFundHoldingsToFundRows,
   mapFundNavRowsForFund,
@@ -22,6 +24,7 @@ import {
   mapFundReturnsToPerformance,
   mapFundRateInfo,
   mapFundManagerRow,
+  formatManagerGender,
   mapFundDiagnosisRow,
   mapFundNewsRows,
   mapFundFinancialsRow,
@@ -87,7 +90,7 @@ describe('fuyao fund profile', () => {
         { nav_date: 1752595200000, unit_nav: 1.01, adj_nav: 1.15 },
         { nav_date: 1752508800000, unit_nav: 1.0, adj_nav: 1.14 },
       ],
-      returns: { return_year: 8.5 },
+      returns: { return_year: 8.5, rank_year: 12, rank_total_year: 300, peer_average_year: 6.2 },
     })
     assert.equal(row.code, '009049')
     assert.equal(row.name, '测试基金')
@@ -103,6 +106,9 @@ describe('fuyao fund profile', () => {
     assert.equal(row.accNav, 1.15)
     assert.equal(row.changePct != null && Math.abs(row.changePct - 1) < 1e-6, true)
     assert.equal(row.return1y, 8.5)
+    assert.equal(row.ranks?.w52?.rank, 12)
+    assert.equal(row.ranks?.w52?.total, 300)
+    assert.equal(row.peerAvg?.w52, 6.2)
     assert.equal(row.scale, 50)
     assert.equal(row.expenseRatio, 1.2)
     assert.equal(row.purchaseFee, 1.5)
@@ -355,6 +361,15 @@ describe('fuyao fund profile', () => {
     assert.match(String(row.performanceSummary ?? ''), /近一年/)
   })
 
+  it('formatManagerGender maps m/f and 男/女 to 男性/女性', () => {
+    assert.equal(formatManagerGender('m'), '男性')
+    assert.equal(formatManagerGender('F'), '女性')
+    assert.equal(formatManagerGender('男'), '男性')
+    assert.equal(formatManagerGender('女'), '女性')
+    assert.equal(formatManagerGender('男性'), '男性')
+    assert.equal(formatManagerGender('unknown'), undefined)
+  })
+
   it('mapFundManagerRow maps official degree/sex/investment_idea/resume fields', () => {
     const row = mapFundManagerRow('009049', 'mgr-002', {
       detail: {
@@ -382,7 +397,7 @@ describe('fuyao fund profile', () => {
       ],
     })
     assert.ok(row)
-    assert.equal(row.gender, '男')
+    assert.equal(row.gender, '男性')
     assert.equal(row.education, '硕士')
     assert.equal(row.resume, '基金经理履历')
     assert.equal(row.philosophy, '注重长期配置与风险控制')
@@ -390,7 +405,8 @@ describe('fuyao fund profile', () => {
     assert.ok(row.representFunds?.includes('历史管理基金A'))
     assert.equal(row.scale, 123.456789)
     assert.match(String(row.performanceSummary ?? ''), /年化收益 8\.6%/)
-    assert.match(String(row.experience ?? ''), /金牛奖/)
+    assert.ok(row.experienceSections?.some(s => s.title === '获奖记录'))
+    assert.match(String(row.experienceSections?.[0]?.items?.[0]?.primary ?? ''), /金牛奖/)
     assert.equal(typeof row.style, 'string')
     assert.notEqual(String(row.style), '[object Object]')
   })
@@ -437,6 +453,82 @@ describe('fuyao fund profile', () => {
     assert.equal(nested.resilience, '中等 65')
     assert.notEqual(String(nested.resilience), '[object Object]')
     assert.notEqual(String(nested.summary ?? ''), '[object Object]')
+  })
+
+  it('mapFundDiagnosisRow parses official year-based dimensions and resilience arrays', () => {
+    const row = mapFundDiagnosisRow('009049', {
+      dimensions: [
+        {
+          year: '1',
+          performance_capability_score: '98',
+          anti_risk_score: '43',
+          integrate_score: '99',
+        },
+      ],
+      peer_dimensions: [
+        {
+          year: '1',
+          performance_capability_score: '50',
+          anti_risk_score: '49',
+        },
+      ],
+      resilience: [
+        { time_type: 'oYear', max_down: '27.47', sharpe: '1.64' },
+      ],
+      peer_resilience: [
+        { time_type: 'oYear', max_down: '10.48', sharpe: '0.13' },
+      ],
+    })
+    assert.ok(row)
+    assert.equal(row.dimensions?.find(d => d.name === '近 1 年 · 业绩能力')?.score, 98)
+    assert.equal(row.dimensions?.find(d => d.name === '近 1 年 · 业绩能力')?.peerAvg, 50)
+    assert.equal(row.resilienceItems?.length, 1)
+    assert.equal(row.resilienceItems?.[0]?.maxDrawdown, -27.47)
+    assert.equal(row.resilienceItems?.[0]?.peerMaxDrawdown, -10.48)
+    assert.equal(row.resilience, undefined)
+  })
+
+  it('mapFundDrawdownRows drops all-zero official blob', () => {
+    const rows = mapFundDrawdownRows('009049', [{
+      week: 0,
+      month: 0,
+      year: 0,
+      now: 0,
+    }])
+    assert.equal(rows.length, 0)
+  })
+
+  it('mapFundDrawdownFromResilience maps diagnosis resilience fallback', () => {
+    const rows = mapFundDrawdownFromResilience('009049', {
+      resilience: [
+        { time_type: 'oYear', max_down: '18.2', sharpe: '1.1' },
+        { time_type: 'hYear', max_down: '9.5', sharpe: '0.8' },
+      ],
+    })
+    assert.ok(rows.some(r => r.period === 'w52' && r.value === -18.2))
+    assert.ok(rows.some(r => r.period === 'w26' && r.value === -9.5))
+  })
+
+  it('mapFundAllocationRow keeps latest report period only', () => {
+    const row = mapFundAllocationRow('009049', [
+      { stock_ratio_pct: 80, report_period: '2024Q4' },
+      { stock_ratio_pct: 90, report_period: '2025Q4' },
+    ], [
+      { industry_name: '电子', ratio_pct: 12, report_period: '2024Q4' },
+      { industry_name: '通信', ratio_pct: 16, report_period: '2025Q4' },
+    ])
+    assert.equal(row.assets.find(a => a.name === '股票')?.ratio, 90)
+    assert.equal(row.industries.length, 1)
+    assert.equal(row.industries[0]?.name, '通信')
+    assert.equal(row.industries[0]?.ratio, 16)
+    assert.equal(row.reportDate, '2025Q4')
+  })
+
+  it('mapFundManagerRow maps m/f sex codes', () => {
+    const row = mapFundManagerRow('009049', 'mgr-mf', {
+      detail: { manager_name: '测试', sex: 'f' },
+    })
+    assert.equal(row?.gender, '女性')
   })
 
   it('mapFundProfileToFundProfileRow reads manager_info and trade_rule', () => {
