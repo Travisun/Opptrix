@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { pctTone } from '../../market/format'
 import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
@@ -12,7 +12,7 @@ function hashSeed(seed: string): number {
   return h || 1
 }
 
-function buildPoints(seed: string, tone: ReturnType<typeof pctTone>, count = 12): number[] {
+function buildPoints(seed: string, tone: ReturnType<typeof pctTone>, count = 16): number[] {
   const base = hashSeed(seed)
   const bias = tone === 'up' ? 0.62 : tone === 'down' ? 0.38 : 0.5
   const pts: number[] = []
@@ -30,6 +30,11 @@ const useStyles = makeStyles({
     display: 'block',
     flexShrink: 0,
   },
+  fluidWrap: {
+    display: 'block',
+    width: '100%',
+    minWidth: 0,
+  },
   lineUp: { stroke: MARKET_UP },
   lineDown: { stroke: MARKET_DOWN },
   lineFlat: { stroke: opptrixCssVars.textTertiary },
@@ -43,16 +48,18 @@ type Props = {
   changePct?: number | null
   width?: number
   height?: number
+  /** 撑满父容器宽度 */
+  fluid?: boolean
   className?: string
 }
 
-export default function CnMiniSparkline({
+function SparklineSvg({
   seed,
   changePct,
-  width = 72,
-  height = 28,
+  width,
+  height,
   className,
-}: Props) {
+}: Required<Pick<Props, 'seed' | 'width' | 'height'>> & Pick<Props, 'changePct' | 'className'>) {
   const s = useStyles()
   const tone = pctTone(changePct)
 
@@ -92,5 +99,52 @@ export default function CnMiniSparkline({
         strokeLinejoin="round"
       />
     </svg>
+  )
+}
+
+export default function CnMiniSparkline({
+  seed,
+  changePct,
+  width = 72,
+  height = 28,
+  fluid = false,
+  className,
+}: Props) {
+  const s = useStyles()
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [fluidWidth, setFluidWidth] = useState(width)
+
+  useLayoutEffect(() => {
+    if (!fluid) return
+    const el = wrapRef.current
+    if (!el) return
+    const sync = () => setFluidWidth(Math.max(48, Math.floor(el.clientWidth)))
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [fluid])
+
+  if (fluid) {
+    return (
+      <div ref={wrapRef} className={mergeClasses(s.fluidWrap, className)}>
+        <SparklineSvg
+          seed={seed}
+          changePct={changePct}
+          width={fluidWidth}
+          height={height}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <SparklineSvg
+      seed={seed}
+      changePct={changePct}
+      width={width}
+      height={height}
+      className={className}
+    />
   )
 }

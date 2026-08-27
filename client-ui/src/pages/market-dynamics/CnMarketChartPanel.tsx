@@ -1,50 +1,183 @@
-import { Text, makeStyles } from '@fluentui/react-components'
+import { useMemo } from 'react'
+import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { ChevronRightRegular } from '@fluentui/react-icons'
 import TradingViewChart from '../../market/TradingViewChart'
-import { formatPriceWithCurrency } from '../../market/format'
+import type { InstrumentRef } from '../../types/instrument'
+import type { MarketIndexQuote } from '../../types/schemas'
 import { opptrixCssVars } from '../../theme/tokens'
+import { pctTone } from '../../market/format'
+import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
+import {
+  formatIndexChangePoints,
+  formatIndexPoints,
+  resolveIndexChangeAmt,
+  resolveIndexDisplayCode,
+} from './cnIndexFormat'
 import CnChangePill from './CnChangePill'
-import CnDashboardPanel from './CnDashboardPanel'
 import { CN_DASH } from './cnDashboardTokens'
 
+const LEFT_COL_WIDTH = '172px'
+
 const useStyles = makeStyles({
-  hero: {
+  panel: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    backgroundColor: opptrixCssVars.surface,
+    borderRadius: CN_DASH.cardRadius,
+    border: CN_DASH.cardBorder,
+    overflow: 'hidden',
   },
-  heroPrice: {
-    fontSize: '32px',
+  split: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  leftCol: {
+    flexShrink: 0,
+    width: LEFT_COL_WIDTH,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    padding: '14px 14px 12px',
+    borderRight: `1px solid ${opptrixCssVars.separatorHairline}`,
+    minHeight: 0,
+    overflow: 'hidden',
+  },
+  breadcrumb: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    fontSize: '9px',
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.3,
+    flexWrap: 'wrap',
+  },
+  breadcrumbSep: {
+    lineHeight: 0,
+    opacity: 0.5,
+  },
+  breadcrumbActive: {
+    color: opptrixCssVars.textSecondary,
+  },
+  titleRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '8px',
+    minWidth: 0,
+  },
+  title: {
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 650,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.25,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    flex: 1,
+    minWidth: 0,
+  },
+  code: {
+    flexShrink: 0,
+    fontSize: '9px',
+    fontWeight: 650,
+    fontVariantNumeric: 'tabular-nums',
+    color: opptrixCssVars.textTertiary,
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: opptrixCssVars.surfaceMuted,
+    lineHeight: 1.3,
+  },
+  metricsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '10px 8px',
+    marginTop: 'auto',
+  },
+  metricCell: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+    minWidth: 0,
+  },
+  metricCellWide: {
+    gridColumn: '1 / -1',
+  },
+  metricLabel: {
+    fontSize: '9px',
+    fontWeight: 650,
+    letterSpacing: '0.04em',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.2,
+  },
+  metricValue: {
+    fontSize: '18px',
     fontWeight: 700,
     fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.05,
-    letterSpacing: '-0.03em',
+    lineHeight: 1.1,
+    letterSpacing: '-0.02em',
   },
-  heroMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '10px',
+  metricValueSm: {
+    fontSize: '12px',
+    fontWeight: 650,
+    lineHeight: 1.25,
   },
-  heroNote: {
-    fontSize: '11px',
+  metricUnit: {
+    fontSize: '10px',
+    fontWeight: 600,
     color: opptrixCssVars.textTertiary,
-    lineHeight: 1.35,
+    marginLeft: '2px',
   },
-  chartWrap: {
+  deltaUp: { color: MARKET_UP },
+  deltaDown: { color: MARKET_DOWN },
+  deltaFlat: { color: opptrixCssVars.textSecondary },
+  heroNote: {
+    fontSize: '10px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+  },
+  chartCol: {
     flex: 1,
-    minHeight: '240px',
+    minWidth: 0,
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    padding: '4px 8px 8px',
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
-  empty: {
+  emptySplit: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  emptyLeft: {
+    flexShrink: 0,
+    width: LEFT_COL_WIDTH,
+    padding: '14px',
+    borderRight: `1px solid ${opptrixCssVars.separatorHairline}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  emptyRight: {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '32px 20px',
+    padding: '24px',
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
@@ -52,56 +185,163 @@ const useStyles = makeStyles({
   },
 })
 
+function cnChartInstrument(item: MarketIndexQuote | null | undefined): InstrumentRef | undefined {
+  if (!item?.chart_symbol) return undefined
+  if (item.market === 'HK') {
+    return { market: 'HK', assetClass: 'ETF', symbol: item.chart_symbol }
+  }
+  if (item.market === 'US') {
+    return { market: 'US', assetClass: 'ETF', symbol: item.chart_symbol }
+  }
+  return undefined
+}
+
+function chartDisplayCode(
+  chartCode: string | null,
+  indexCode?: string | null,
+  instrument?: InstrumentRef,
+): string {
+  if (indexCode) return indexCode
+  if (instrument) return `${instrument.market}:${instrument.symbol}`
+  return chartCode ?? ''
+}
+
+function deltaClass(
+  s: ReturnType<typeof useStyles>,
+  changePct: number | null | undefined,
+): string {
+  const tone = pctTone(changePct)
+  if (tone === 'up') return s.deltaUp
+  if (tone === 'down') return s.deltaDown
+  return s.deltaFlat
+}
+
 type Props = {
   chartCode: string | null
+  activeIndex?: MarketIndexQuote | null
   title: string
+  indexCode?: string | null
   price?: number | null
   changePct?: number | null
   changeAmt?: number | null
   quoteTime?: string | null
+  tradeState?: string | null
 }
 
 export default function CnMarketChartPanel({
   chartCode,
+  activeIndex,
   title,
+  indexCode,
   price,
   changePct,
   changeAmt,
   quoteTime,
+  tradeState,
 }: Props) {
   const s = useStyles()
 
-  const hero = chartCode ? (
-    <div className={s.hero}>
-      <span className={s.heroPrice}>
-        {price != null ? formatPriceWithCurrency('CN', price, 2) : '—'}
-      </span>
-      <div className={s.heroMeta}>
-        <CnChangePill changePct={changePct} changeAmt={changeAmt} />
-        <span className={s.heroNote}>
-          {quoteTime ? `报价 ${quoteTime}` : '日 K 走势 · 点击顶部指数切换标的'}
-        </span>
+  const instrument = useMemo(
+    () => cnChartInstrument(activeIndex),
+    [activeIndex],
+  )
+
+  const chartInputCode = instrument
+    ? `${instrument.market}:${instrument.symbol}`
+    : chartCode ?? ''
+
+  const displayCode = activeIndex
+    ? resolveIndexDisplayCode(activeIndex)
+    : (indexCode ?? chartDisplayCode(chartCode, indexCode, instrument))
+
+  const resolvedChangeAmt = resolveIndexChangeAmt(price, changePct, changeAmt)
+  const changeAmtText = formatIndexChangePoints(resolvedChangeAmt, 2) || '—'
+
+  const breadcrumb = ['市场动态', '指数', title]
+
+  const leftMeta = (
+    <>
+      <div className={s.breadcrumb}>
+        {breadcrumb.map((crumb, i) => (
+          <span key={crumb} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+            {i > 0 ? <ChevronRightRegular className={s.breadcrumbSep} fontSize={9} /> : null}
+            <span className={i === breadcrumb.length - 1 ? s.breadcrumbActive : undefined}>
+              {crumb}
+            </span>
+          </span>
+        ))}
       </div>
-    </div>
-  ) : undefined
+      <div className={s.titleRow}>
+        <Text className={s.title} block>{title}</Text>
+        {displayCode ? <span className={s.code}>{displayCode}</span> : null}
+      </div>
+    </>
+  )
+
+  if (!chartCode) {
+    return (
+      <section className={mergeClasses(s.panel, 'opptrix-cn-chart-panel')}>
+        <div className={s.emptySplit}>
+          <div className={s.emptyLeft}>
+            {leftMeta}
+            <Text className={s.heroNote} block>
+              在顶部选择宽基指数，查看点位与走势
+            </Text>
+          </div>
+          <Text className={s.emptyRight} block>
+            点击顶部宽基指数卡片，查看点位与走势
+          </Text>
+        </div>
+      </section>
+    )
+  }
 
   return (
-    <CnDashboardPanel
-      title={title}
-      subtitle="指数走势分析"
-      breadcrumb={['市场动态', title]}
-      hero={hero}
-      fill
-    >
-      {chartCode ? (
-        <div className={s.chartWrap}>
-          <TradingViewChart code={chartCode} chartVariant="index" expanded active />
+    <section className={mergeClasses(s.panel, 'opptrix-cn-chart-panel')}>
+      <div className={s.split}>
+        <aside className={s.leftCol}>
+          {leftMeta}
+          <div className={s.metricsGrid}>
+            <div className={mergeClasses(s.metricCell, s.metricCellWide)}>
+              <span className={s.metricLabel}>最新点位</span>
+              <span>
+                <span className={s.metricValue}>{formatIndexPoints(price, 2)}</span>
+                <span className={s.metricUnit}>点</span>
+              </span>
+            </div>
+            <div className={s.metricCell}>
+              <span className={s.metricLabel}>今日涨跌</span>
+              <span className={mergeClasses(s.metricValueSm, deltaClass(s, changePct))}>
+                {changeAmtText}
+              </span>
+            </div>
+            <div className={s.metricCell}>
+              <span className={s.metricLabel}>涨跌幅</span>
+              <CnChangePill changePct={changePct} ghost compact />
+            </div>
+            <div className={mergeClasses(s.metricCell, s.metricCellWide)}>
+              <span className={s.metricLabel}>行情状态</span>
+              <span className={mergeClasses(s.metricValueSm, s.deltaFlat)}>
+                {quoteTime
+                  ? `更新 ${quoteTime}${tradeState ? ` · ${tradeState}` : ''}`
+                  : `${displayCode} · 日 K`}
+              </span>
+            </div>
+          </div>
+        </aside>
+        <div className={s.chartCol}>
+          <TradingViewChart
+            code={chartInputCode}
+            instrument={instrument}
+            chartVariant="index"
+            expanded
+            embedMode
+            active
+          />
         </div>
-      ) : (
-        <Text className={s.empty} block>
-          点击顶部宽基指数卡片，在此查看走势与报价
-        </Text>
-      )}
-    </CnDashboardPanel>
+      </div>
+    </section>
   )
 }
+
+export { cnChartInstrument }

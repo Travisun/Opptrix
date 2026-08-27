@@ -34,6 +34,14 @@ const useStyles = makeStyles({
     width: '100%',
     height: 'auto',
   },
+  rootEmbed: {
+    flex: 1,
+    minHeight: 0,
+    height: '100%',
+    maxHeight: 'none',
+    gap: 0,
+    width: '100%',
+  },
   toolbar: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -98,6 +106,13 @@ const useStyles = makeStyles({
     width: '100%',
     overflow: 'hidden',
   },
+  chartAreaEmbed: {
+    flex: 1,
+    minHeight: 0,
+    maxHeight: 'none',
+    width: '100%',
+    overflow: 'hidden',
+  },
   legendItem: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -123,6 +138,42 @@ const useStyles = makeStyles({
     minHeight: 0,
     maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX - 56}px`,
   },
+  chartFrameEmbed: {
+    flex: 1,
+    minHeight: 0,
+    maxHeight: 'none',
+    borderRadius: 0,
+    border: 'none',
+    backgroundColor: 'transparent',
+  },
+  chartToolbarOverlay: {
+    position: 'absolute',
+    top: '8px',
+    left: '8px',
+    zIndex: 3,
+    pointerEvents: 'auto',
+    maxWidth: 'calc(100% - 16px)',
+  },
+  periodGroupOverlay: {
+    backgroundColor: 'color-mix(in srgb, var(--opptrix-surface) 90%, transparent)',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+  },
+  chartLegendOverlay: {
+    position: 'absolute',
+    left: '8px',
+    bottom: '8px',
+    zIndex: 3,
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px 10px',
+    padding: '4px 8px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'color-mix(in srgb, var(--opptrix-surface) 90%, transparent)',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
+    pointerEvents: 'none',
+  },
   chartOverlay: {
     position: 'absolute',
     inset: 0,
@@ -144,6 +195,18 @@ const useStyles = makeStyles({
     maxHeight: `${DETAIL_PANEL_CHART_MAX_HEIGHT_PX - 72}px`,
     display: 'flex',
     flexDirection: 'column',
+  },
+  chartStackEmbed: {
+    flex: 1,
+    minHeight: 0,
+    maxHeight: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  paneRowEmbedMain: {
+    flex: 1,
+    minHeight: 0,
+    borderTop: 'none',
   },
   paneRowExpanded: {
     flexShrink: 0,
@@ -178,6 +241,11 @@ const useStyles = makeStyles({
   },
   paneMain: { height: '148px' },
   paneMainExpanded: { height: '252px', minHeight: '180px', flexShrink: 0 },
+  paneMainEmbed: {
+    flex: 1,
+    minHeight: '120px',
+    height: 'auto',
+  },
   paneVol: { height: '38px' },
   paneVolExpanded: { height: '46px', flexShrink: 0 },
   paneMacd: { height: '36px' },
@@ -282,6 +350,8 @@ interface Props {
   active?: boolean
   /** 指数图：隐藏筹码/MACD，周期对齐券商指数页 */
   chartVariant?: 'equity' | 'index'
+  /** 看板内嵌：周期浮于图内、占满父级高度、无提示文案 */
+  embedMode?: boolean
 }
 
 export default function TradingViewChart({
@@ -290,6 +360,7 @@ export default function TradingViewChart({
   expanded = false,
   active = true,
   chartVariant = 'equity',
+  embedMode = false,
 }: Props) {
   const s = useStyles()
   /** 按标的身份稳定，避免父组件每次 render 新建 instrument 对象导致 loadChart abort */
@@ -328,6 +399,8 @@ export default function TradingViewChart({
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
   const isIndexChart = chartVariant === 'index' || instrumentRef.assetClass === 'INDEX'
+  const showVolume = !isIndexChart
+  const useEmbedLayout = embedMode && expanded
   const canChart = cnEquityChart || crossMarketChart
   const periodOptions = useMemo(
     () => (isIndexChart
@@ -541,7 +614,7 @@ export default function TradingViewChart({
     addedBarsRef.current = 0
 
     try {
-      const series = buildChartSeries(data, resolvedScheme)
+      const series = buildChartSeries(data, resolvedScheme, { indexChart: isIndexChart })
       workspace.mount(
         {
           main: mainRef.current,
@@ -603,7 +676,27 @@ export default function TradingViewChart({
 
   const resetZoom = () => { workspaceRef.current.resetView() }
 
-  const chartLegend = (legendLine || legendOhlc) && (
+  const periodToolbar = (
+    <div className={mergeClasses(s.periodGroup, useEmbedLayout && s.periodGroupOverlay)}>
+      {periodOptions.map(item => {
+        const disabled = !cnEquityChart && !crossMarketChart
+        const activeTab = period === item.id
+        return (
+          <button
+            key={item.id}
+            type="button"
+            disabled={disabled}
+            className={mergeClasses(s.periodBtn, activeTab && s.periodBtnActive, disabled && s.periodBtnDisabled)}
+            onClick={() => { if (item.id !== period) setPeriod(item.id) }}
+          >
+            {item.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  const chartLegend = !useEmbedLayout && (legendLine || legendOhlc) && (
     <div className={mergeClasses(s.legend, s.chartLegend)}>
       {legendLine && (
         <>
@@ -616,7 +709,9 @@ export default function TradingViewChart({
           <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma5 }} />MA5</span>
           <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma10 }} />MA10</span>
           <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma20 }} />MA20</span>
-          <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma60 }} />MA60</span>
+          {!isIndexChart ? (
+            <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma60 }} />MA60</span>
+          ) : null}
           {showMacd && (
             <>
               <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.macd }} />DIF</span>
@@ -634,36 +729,30 @@ export default function TradingViewChart({
     </div>
   )
 
-  return (
-    <div className={mergeClasses(s.root, expanded && s.rootExpanded)}>
-      <div className={s.toolbar}>
-        <div className={s.periodGroup}>
-          {periodOptions.map(item => {
-            const disabled = !cnEquityChart && !crossMarketChart
-            const activeTab = period === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                disabled={disabled}
-                className={mergeClasses(s.periodBtn, activeTab && s.periodBtnActive, disabled && s.periodBtnDisabled)}
-                onClick={() => { if (item.id !== period) setPeriod(item.id) }}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+  const indexEmbedLegend = useEmbedLayout && isIndexChart && legendOhlc ? (
+    <div className={s.chartLegendOverlay}>
+      <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma5 }} />MA5</span>
+      <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma10 }} />MA10</span>
+      <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma20 }} />MA20</span>
+    </div>
+  ) : null
 
-      <div className={s.zoomRow}>
-        <Text className={s.hint}>
-          默认显示最新 {periodLabel(period)} · 滚轮缩放 · 左拖加载历史
-        </Text>
-        <button type="button" className={s.zoomBtn} onClick={resetZoom} disabled={!data}>
-          最近视图
-        </button>
-      </div>
+  return (
+    <div className={mergeClasses(s.root, expanded && s.rootExpanded, useEmbedLayout && s.rootEmbed)}>
+      {!useEmbedLayout ? (
+        <div className={s.toolbar}>{periodToolbar}</div>
+      ) : null}
+
+      {!useEmbedLayout ? (
+        <div className={s.zoomRow}>
+          <Text className={s.hint}>
+            默认显示最新 {periodLabel(period)} · 滚轮缩放 · 左拖加载历史
+          </Text>
+          <button type="button" className={s.zoomBtn} onClick={resetZoom} disabled={!data}>
+            最近视图
+          </button>
+        </div>
+      ) : null}
 
       {showCyq && cyqLatest && cyqProfile && (
         <div className={s.cyqMetrics}>
@@ -710,19 +799,43 @@ export default function TradingViewChart({
         <div className={mergeClasses(s.empty, expanded && s.emptyExpanded)}>{error}</div>
       )}
 
-      <div className={mergeClasses(s.chartArea, expanded && s.chartAreaExpanded, !canChart && s.paneHidden)}>
-        <div className={mergeClasses(s.chartFrame, expanded && s.chartFrameExpanded)}>
+      <div className={mergeClasses(
+        s.chartArea,
+        expanded && s.chartAreaExpanded,
+        useEmbedLayout && s.chartAreaEmbed,
+        !canChart && s.paneHidden,
+      )}>
+        <div className={mergeClasses(
+          s.chartFrame,
+          expanded && s.chartFrameExpanded,
+          useEmbedLayout && s.chartFrameEmbed,
+        )}>
           {refreshing && (
             <div className={s.chartOverlay}>
               <Spinner size="tiny" label={`加载 ${periodLabel(period)}…`} />
             </div>
           )}
 
-          <div className={mergeClasses(s.chartStack, expanded && s.chartStackExpanded)}>
-            <div className={mergeClasses(s.paneRow, expanded && s.paneRowExpanded)}>
-              <span className={s.paneLabel}>{paneMainLabel}</span>
+          {useEmbedLayout ? (
+            <div className={s.chartToolbarOverlay}>{periodToolbar}</div>
+          ) : null}
+
+          <div className={mergeClasses(
+            s.chartStack,
+            expanded && s.chartStackExpanded,
+            useEmbedLayout && s.chartStackEmbed,
+          )}>
+            <div className={mergeClasses(
+              s.paneRow,
+              expanded && s.paneRowExpanded,
+              useEmbedLayout && s.paneRowEmbedMain,
+            )}>
+              {!useEmbedLayout ? <span className={s.paneLabel}>{paneMainLabel}</span> : null}
               <div className={s.paneKSplit}>
-                <div className={mergeClasses(s.panePlot, expanded ? s.paneMainExpanded : s.paneMain)} ref={mainRef} />
+                <div className={mergeClasses(
+                  s.panePlot,
+                  useEmbedLayout ? s.paneMainEmbed : (expanded ? s.paneMainExpanded : s.paneMain),
+                )} ref={mainRef} />
                 {showCyq && cyqProfile && cyqLatest && cyqPriceSpan && (
                   <CyqProfileStrip
                     profile={cyqProfile}
@@ -732,7 +845,7 @@ export default function TradingViewChart({
                 )}
               </div>
             </div>
-            <div className={s.paneRow}>
+            <div className={mergeClasses(s.paneRow, !showVolume && s.paneHidden)}>
               <span className={s.paneLabel}>V</span>
               <div className={mergeClasses(s.panePlot, expanded ? s.paneVolExpanded : s.paneVol)} ref={volumeRef} />
               {showCyq ? <div className={s.cyqSpacer} aria-hidden /> : null}
@@ -745,6 +858,7 @@ export default function TradingViewChart({
           </div>
 
           {chartLegend}
+          {indexEmbedLegend}
         </div>
       </div>
 

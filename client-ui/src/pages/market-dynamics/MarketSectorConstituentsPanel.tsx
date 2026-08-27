@@ -44,6 +44,16 @@ const useStyles = makeStyles({
     maxHeight: 'min(36vh, 280px)',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
+  embeddedHead: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    padding: '6px 12px',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+  },
   head: {
     flexShrink: 0,
     display: 'flex',
@@ -282,7 +292,7 @@ export default function MarketSectorConstituentsPanel({
           </button>
         </div>
       ) : (
-        <div className={s.head}>
+        <div className={s.embeddedHead}>
           {!loading && !error ? (
             <Text className={s.meta} block>{countLabel}</Text>
           ) : null}

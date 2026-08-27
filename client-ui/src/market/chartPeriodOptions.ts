@@ -27,8 +27,12 @@ function cnExtendedOhlc(ref: InstrumentRef, cnEquityChart: boolean): boolean {
   return ref.assetClass === 'EQUITY' || ref.assetClass === 'INDEX'
 }
 
-export function buildIndexChartPeriodOptions(_ref: InstrumentRef): ChartPeriodOption[] {
-  return BROKER_KLINE_OPTIONS
+export function buildIndexChartPeriodOptions(ref: InstrumentRef): ChartPeriodOption[] {
+  const leading: ChartPeriodOption[] = []
+  if (hasApplicationCapability(ref, 'chart_intraday')) {
+    leading.push({ id: 'intraday', label: '分时' })
+  }
+  return [...leading, ...BROKER_KLINE_OPTIONS]
 }
 
 export function buildChartPeriodOptions(

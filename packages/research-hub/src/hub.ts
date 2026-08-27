@@ -877,6 +877,33 @@ export class ResearchHub {
     return ok(data, `组合 ${holdings.length} 只`, t0)
   }
 
+  private resolveIndexQuoteName(
+    configuredName: string | undefined,
+    rowName: string | undefined,
+    code: string,
+  ): string {
+    const configured = configuredName?.trim()
+    const fromApi = rowName?.trim()
+    const looksLikeCode = (value: string) => /^\d{4,6}$/.test(value) || /^[A-Z]{2,6}$/.test(value)
+    if (configured && !looksLikeCode(configured)) return configured
+    if (fromApi && fromApi !== code && !looksLikeCode(fromApi)) return fromApi
+    return configured || fromApi || code
+  }
+
+  private quoteChangeAmt(
+    row: import('@opptrix/shared').StockRealtime | undefined,
+    price: number | null,
+    changePct: number | null,
+  ): number | null {
+    if (row && typeof row.change === 'number' && Number.isFinite(row.change)) return row.change
+    if (price == null || changePct == null) return null
+    if (!Number.isFinite(price) || !Number.isFinite(changePct)) return null
+    const prev = price / (1 + changePct / 100)
+    if (!Number.isFinite(prev) || prev === 0) return null
+    const derived = price - prev
+    return Number.isFinite(derived) ? derived : null
+  }
+
   private async fetchCnIndexMarketItems(
     indices: Array<{ code: string; name?: string }>,
   ) {
@@ -888,14 +915,30 @@ export class ResearchHub {
       })
       const r = await this.de.queryInstrumentData(ref, 'realtime')
       const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
-      if (!row) return null
       const market = entry.code.startsWith('399') ? 'SZ' : 'SH'
+      const name = this.resolveIndexQuoteName(
+        entry.name,
+        row ? String(row.name ?? '') : undefined,
+        entry.code,
+      )
+      if (!row) {
+        return {
+          code: entry.code,
+          name,
+          price: null,
+          change_pct: null,
+          change_amt: null,
+          market,
+        }
+      }
+      const price = typeof row.price === 'number' ? row.price : null
+      const changePct = typeof row.changePct === 'number' ? row.changePct : null
       return {
         code: entry.code,
-        name: String(row.name ?? entry.name ?? entry.code).trim(),
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
-        change_amt: typeof row.change === 'number' ? row.change : null,
+        name,
+        price,
+        change_pct: changePct,
+        change_amt: this.quoteChangeAmt(row, price, changePct),
         market,
       }
     }))
@@ -908,22 +951,32 @@ export class ResearchHub {
       outCode: string
       displayName: string
       location: string
+      chartSymbol?: string
     }>,
   ) {
     const items = await Promise.all(proxies.map(async proxy => {
       const r = await this.de.queryInstrumentData(proxy.ref, 'realtime')
       const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
-      if (!row) return null
-      return {
+      const base = {
         code: proxy.outCode,
         name: proxy.displayName,
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        price: null as number | null,
+        change_pct: null as number | null,
         market: proxy.ref.market,
         location: proxy.location,
+        chart_symbol: proxy.chartSymbol ?? proxy.ref.symbol,
+      }
+      if (!row) return base
+      const price = typeof row.price === 'number' ? row.price : null
+      const changePct = typeof row.changePct === 'number' ? row.changePct : null
+      return {
+        ...base,
+        price,
+        change_pct: changePct,
+        change_amt: this.quoteChangeAmt(row, price, changePct),
       }
     }))
-    return items.filter((item): item is NonNullable<typeof item> => item != null)
+    return items
   }
 
   private async fetchThsIndexPriceSnapshots(thscodes: string[]): Promise<{
@@ -1081,6 +1134,9 @@ export class ResearchHub {
     const CN_MAJOR_CN = [
       { code: '000001', name: '上证指数' },
       { code: '399001', name: '深证成指' },
+      { code: '000300', name: '沪深300' },
+      { code: '000016', name: '上证50' },
+      { code: '000905', name: '中证500' },
       { code: '399006', name: '创业板指' },
       { code: '000688', name: '科创50' },
     ]
@@ -1089,6 +1145,7 @@ export class ResearchHub {
       outCode: 'HSI',
       displayName: '恒生指数',
       location: '香港',
+      chartSymbol: '2800',
     }
 
     const fetchEmotionLimitUp = async () => {

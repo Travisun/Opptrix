@@ -45,6 +45,8 @@ type Props = {
   changeAmt?: number | null
   /** 仅百分比，无 pill 背景 */
   ghost?: boolean
+  /** 顶栏紧凑：仅涨跌幅，不展示涨跌点数 */
+  compact?: boolean
   className?: string
 }
 
@@ -58,13 +60,14 @@ export default function CnChangePill({
   changePct,
   changeAmt,
   ghost = false,
+  compact = false,
   className,
 }: Props) {
   const s = useStyles()
   const tone = pctTone(changePct)
   const toneClass = tone === 'up' ? s.pillUp : tone === 'down' ? s.pillDown : s.pillFlat
   const Icon = tone === 'up' ? ArrowUpRegular : tone === 'down' ? ArrowDownRegular : SubtractRegular
-  const amt = formatChangeAmt(changeAmt)
+  const amt = compact ? '' : formatChangeAmt(changeAmt)
 
   return (
     <span className={mergeClasses(s.pill, toneClass, ghost && s.pillGhost, className)}>

@@ -24,13 +24,20 @@ const useStyles = makeStyles({
     overflow: 'hidden',
   },
   rootEmbedded: {
-    flex: '0 0 auto',
-    height: '300px',
-    minHeight: '280px',
+    flex: 1,
+    minHeight: 0,
+    height: 'auto',
   },
   rootCn: {
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gridTemplateRows: '1fr',
+  },
+  rootSingle: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
   col: {
     minWidth: 0,
@@ -49,12 +56,15 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '4px',
-    padding: `5px ${CONTENT_PAD} 4px`,
-    minHeight: '24px',
+    padding: `8px ${CONTENT_PAD} 6px`,
+    minHeight: '28px',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   colHeadTitle: {
-    fontSize: 'var(--opptrix-font-xs)',
-    fontWeight: 600,
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -65,17 +75,20 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
+    padding: `0 ${CONTENT_PAD} 6px`,
   },
   row: {
     ...ghostInteractive,
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-    gap: '4px 6px',
+    gap: '6px 8px',
     alignItems: 'center',
-    padding: '4px 6px',
-    minHeight: '24px',
-    borderRadius: '6px',
+    padding: '8px 4px',
+    minHeight: '32px',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    borderRadius: 0,
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+    ':last-child': { borderBottom: 'none' },
   },
   rowBody: {
     minWidth: 0,
@@ -195,6 +208,8 @@ type Props = {
   embedded?: boolean
   /** A股 Tab 仅展示涨跌两栏 */
   variant?: 'cn' | 'full'
+  /** 单栏全宽：涨幅或跌幅 */
+  single?: 'gainers' | 'losers'
 }
 
 export default function MarketBoardFocus({
@@ -202,8 +217,29 @@ export default function MarketBoardFocus({
   losers,
   embedded = false,
   variant = 'cn',
+  single,
 }: Props) {
   const s = useStyles()
+
+  if (single === 'gainers') {
+    return (
+      <div className={mergeClasses(s.rootSingle, embedded && s.rootEmbedded)}>
+        <div className={mergeClasses(s.colScroll, 'opptrix-scroll-hidden')}>
+          <MoverRows items={gainers} s={s} />
+        </div>
+      </div>
+    )
+  }
+
+  if (single === 'losers') {
+    return (
+      <div className={mergeClasses(s.rootSingle, embedded && s.rootEmbedded)}>
+        <div className={mergeClasses(s.colScroll, 'opptrix-scroll-hidden')}>
+          <MoverRows items={losers} s={s} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={mergeClasses(s.root, embedded && s.rootEmbedded, variant === 'cn' && s.rootCn)}>

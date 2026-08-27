@@ -112,8 +112,17 @@ export function isLineChartView(period: string, bars: StockChartData['bars']): b
   return isLineChartPeriod(period, bars)
 }
 
+export interface BuildChartSeriesOptions {
+  /** 指数图：对齐券商指数页，仅展示 MA5/10/20 三均线 */
+  indexChart?: boolean
+}
+
 /** Normalize API payload → chart-ready series (sorted, deduped, validated). */
-export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'light'): ChartSeriesBundle {
+export function buildChartSeries(
+  data: StockChartData,
+  scheme: ColorScheme = 'light',
+  options: BuildChartSeriesOptions = {},
+): ChartSeriesBundle {
   const intraday = isLineChartPeriod(data.period, data.bars)
   const minuteOhlc = isMinuteOhlcPeriod(data.period)
   const showMacd = !intraday && !minuteOhlc && data.indicators.some(row => row.macd != null)
@@ -215,7 +224,9 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
 
   const maKeys = minuteOhlc
     ? (['ma5', 'ma10'] as const)
-    : (['ma5', 'ma10', 'ma20', 'ma60'] as const)
+    : options.indexChart
+      ? (['ma5', 'ma10', 'ma20'] as const)
+      : (['ma5', 'ma10', 'ma20', 'ma60'] as const)
   const maLines = maKeys
     .map(key => ({
       key,

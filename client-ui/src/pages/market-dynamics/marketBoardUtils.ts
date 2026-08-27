@@ -1,6 +1,5 @@
 import type { MarketDynamicsSection, MarketIndexQuote } from '../../types/schemas'
 import { pctTone } from '../../market/format'
-import { indexChartCodeFromQuote } from './cnIndexChartStorage'
 
 export function computeMarketMood(sections: MarketDynamicsSection[]) {
   const all = sections.flatMap(sec => sec.items)
@@ -25,20 +24,31 @@ export function pickBoardStripIndices(sections: MarketDynamicsSection[]): Market
   return cnMajor.slice(0, STRIP_LIMIT)
 }
 
+/** 图表用代码：优先 chart_symbol（港/美代理），否则 6 位 A 股指数代码 */
+export function indexChartCodeFromQuote(item: Pick<MarketIndexQuote, 'code' | 'qt_code' | 'chart_symbol'>): string {
+  if (item.chart_symbol) return item.chart_symbol
+  const raw = item.qt_code || item.code || ''
+  const match = raw.match(/(\d{6})/)
+  if (match) return match[1]!
+  const digits = raw.replace(/\D/g, '')
+  return digits.length >= 6 ? digits.slice(-6) : digits.padStart(6, '0').slice(-6)
+}
+
 export function isCnChartableIndex(
   item: MarketIndexQuote,
   cnIndices: MarketIndexQuote[],
 ): boolean {
-  if (!cnIndices.length) return false
+  if (item.chart_symbol) return true
   const code = indexChartCodeFromQuote(item)
   if (!/^\d{6}$/.test(code)) return false
-  return cnIndices.some(row => indexChartCodeFromQuote(row) === code)
+  return cnIndices.some(row => !row.chart_symbol && indexChartCodeFromQuote(row) === code)
 }
 
 export function chartCodeFromIndex(
   item: MarketIndexQuote,
   cnIndices: MarketIndexQuote[],
 ): string | null {
+  if (item.chart_symbol) return item.chart_symbol
   if (!isCnChartableIndex(item, cnIndices)) return null
   return indexChartCodeFromQuote(item)
 }
