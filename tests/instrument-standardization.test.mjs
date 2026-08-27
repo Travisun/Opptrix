@@ -301,6 +301,19 @@ test('parseInstrumentNamespace — CN:SH.510300 ETF preserves exchange', async (
   assert.equal(buildInstrumentNamespace(ref), 'CN:SH.510300')
 })
 
+test('parseInstrumentNamespace — legacy CN:ETF.510300 on-exchange ETF', async () => {
+  const { parseInstrumentNamespace, buildOpptrixInstrumentId } = await import(
+    '../packages/shared/dist/instrument-symbol.js'
+  )
+  for (const code of ['CN:ETF.510300', 'CN:ETF:510300']) {
+    const ref = parseInstrumentNamespace(code)
+    assert.equal(ref?.market, 'CN', code)
+    assert.equal(ref?.assetClass, 'ETF', code)
+    assert.equal(ref?.symbol, '510300', code)
+    assert.equal(buildOpptrixInstrumentId(ref), 'CN:ETF:510300.SH', code)
+  }
+})
+
 test('resolveCnInstrumentRef — namespace and bare code', async () => {
   const { resolveCnInstrumentRef, instrumentRefKey } = await import('../packages/shared/dist/instrument-ref.js')
   const fromNs = resolveCnInstrumentRef('CN:SH.510300')
@@ -414,6 +427,17 @@ test('parseInstrumentRef — REIT / LOF assetClass 保留', async () => {
   assert.ok(isCnPublicFundRef(reit))
   const lof = parseInstrumentRef({ market: 'CN', assetClass: 'LOF', symbol: '160105', exchange: 'SZ' })
   assert.equal(lof?.assetClass, 'LOF')
+})
+
+test('parseInstrumentRef — INDEX / FUND 不被裸码误判为 EQUITY', async () => {
+  const { parseInstrumentRef } = await import('../packages/shared/dist/instrument-ref.js')
+  const index = parseInstrumentRef({ market: 'CN', assetClass: 'INDEX', symbol: '000001', exchange: 'SH' })
+  assert.equal(index?.assetClass, 'INDEX')
+  assert.equal(index?.exchange, 'SH')
+  assert.equal(index?.symbol, '000001')
+  const fund = parseInstrumentRef({ market: 'CN', assetClass: 'FUND', symbol: '007785', exchange: 'PF' })
+  assert.equal(fund?.assetClass, 'FUND')
+  assert.equal(fund?.exchange, 'PF')
 })
 
 test('listCustomMethodsForAgent supports provider filter and keyword', async () => {

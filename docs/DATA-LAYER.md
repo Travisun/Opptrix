@@ -140,7 +140,7 @@ interface InstrumentRef {
 function resolveInstrument(input: string | InstrumentRef): InstrumentRef
 ```
 
-落库主键为 `(market, exchange, code, asset_class)`，并维护 `instrument_ns`；**1–5 位裸数字须经搜索消歧**，禁止本地 pad 成 CN（详见 [INSTRUMENT-PROTOCOL.md](./INSTRUMENT-PROTOCOL.md) §2.2.1）。HK 历史短码由 `instruments_hk_canonical_pad_v1` 全表幂等补零；关注未消歧项仅在本地/Tickflow **唯一命中**时自动写回 `InstrumentRef`（§2.2.2）。
+落库主键为 `(market, exchange, code, asset_class)`，并维护 `instrument_ns`；**1–5 位裸数字须经搜索消歧**，禁止本地 pad 成 CN（详见 [INSTRUMENT-PROTOCOL.md](./INSTRUMENT-PROTOCOL.md) §2.2.1）。HK 历史短码由 `instruments_hk_canonical_pad_v1` 全表幂等补零；关注未消歧项仅在本地/Tickflow **唯一命中**时自动写回 `InstrumentRef`（§2.2.2）。组合账本对外 `code` 为 Opptrix ID（`MARKET:CLASS:SYMBOL`），迁移 `instrument_id_unify_portfolio_v1`（§2.2.3）。
 
 **符号对照（Phase 1 需实现）**：
 
@@ -1400,12 +1400,21 @@ A：不要。实现 `settings.ts` + 注册后，数据源 Tab 自动出现新卡
 
 账本键唯一事实源：`instrumentRefKey(normalizeInstrumentRef(ref))`（经 `portfolioInstrumentRef` / `portfolioLedgerKey`）。
 
+**身份约定（方案 A）** — 详见 [INSTRUMENT-PROTOCOL.md §2.2.3](./INSTRUMENT-PROTOCOL.md#223-方案-a--组合账本--关注--详情统一-instrumentref)：
+
+| 项 | 约定 |
+|----|------|
+| 权威身份 | `InstrumentRef`；禁止裸码作权威身份 |
+| 对外 / 持久化 `code` | Opptrix ID = `MARKET:CLASS:SYMBOL`（`trades[].code` / `holdings[].code`） |
+| 迁移 | user-store meta `instrument_id_unify_portfolio_v1`（幂等）；升格成交与费率键 |
+| 读兼容 | `portfolioCodeAliases` 一轮兼容旧裸码 / 命名空间 |
+
 ### 如何扩展新市场 / 资产类（3–5 步）
 
 1. **能力矩阵**：仅在 `packages/shared/src/instrument-capabilities.ts` 为 `market+assetClass` 登记是否开放 `portfolio_pnl`（INDEX / JP / KR / CRYPTO 默认关）；`client-ui/src/market/capabilities.ts` 从 `@opptrix/shared/instrument-capabilities` re-export，勿维护 duplicate 矩阵。
 2. **Portfolio Profile**：在 `packages/shared/src/portfolio-profile.ts` 的 `PORTFOLIO_PROFILE_TABLE` 加一行：`ledgerKind`（经 `resolvePortfolioLedgerKind`）、`quantityUnit`、`supportsPnl`、`markCapability`（FUND→`fund_quote`，其余 `realtime`）。
-3. **录入路径**：买卖 / Hub `/api/portfolio/trade` / `portfolioTrade` 传入 `assetClass` 或完整 `instrument`；`TradeRecord.assetClass` 可选持久化（旧 JSON 无字段时由 code 推断）。
-4. **标的解析**：`portfolioInstrumentRef(code, market?, assetClass?)` 或 `portfolioInstrumentRef(instrument)`；FUND 持久化为 `CN:PF.xxxxxx`，ETF 保持 ETF，勿默认 EQUITY。
-5. **盯市与匹配**：`fetchRealtimePrice` / `holdings` 用 `resolvePortfolioProfile(ref).markCapability`；UI `holdingMatchesRef`（经 `instrumentKey` / `instrumentRefKey`）与 `useFollowPortfolio` 用持仓行 `market+assetClass`（或解析后的 FUND）匹配。
+3. **录入路径**：买卖 / Hub `/api/portfolio/trade` / `portfolioTrade` 传入 `assetClass` 或完整 `instrument`；持久化 `code` 为 Opptrix ID，并强制写 `assetClass` + `instrument`（旧 JSON 无字段时由 code 推断）。
+4. **标的解析**：`portfolioInstrumentRef(code, market?, assetClass?)` 或 `portfolioInstrumentRef(instrument)`；`portfolioDisplayCode` → Opptrix；FUND 对应 `CN:OTC:….OF` / 内部 `CN:PF` 命名空间，ETF 保持 ETF，勿默认 EQUITY。
+5. **盯市与匹配**：`fetchRealtimePrice` / `holdings` 用 `resolvePortfolioProfile(ref).markCapability`；UI `holdingMatchesRef`（经 `instrumentKey` / `instrumentRefKey`）与 `useFollowPortfolio` 用持仓行 `market+assetClass`（或解析后的 FUND）匹配；查询/清仓经 alias 兼容旧裸码。
 
 新增测例：`tests/portfolio-instrument.test.mjs`（ref+ledgerKey、基金不误配个股）、`tests/portfolio-return-calc.test.mjs`（加权成本）、`tests/portfolio-profile-ref.test.mjs`（FUND 盯市 mock）。

@@ -45,10 +45,23 @@ export function followReturnPct(
 export type HoldingReturnInputs = {
   shares: number
   totalCost?: number
+  /** 每股成本；totalCost 缺失时用于回填 */
+  costBasis?: number
   realizedPnl?: number
   totalPnlPct?: number | null
   unrealizedPnlPct?: number | null
   currentPrice?: number | null
+}
+
+/** 持仓总成本 — 优先 totalCost，否则 costBasis × 股数 */
+export function resolveHoldingTotalCost(holding: HoldingReturnInputs): number {
+  if (holding.totalCost != null && Number.isFinite(holding.totalCost) && holding.totalCost > 0) {
+    return holding.totalCost
+  }
+  const shares = holding.shares ?? 0
+  const costBasis = holding.costBasis ?? 0
+  if (shares > 0 && costBasis > 0) return shares * costBasis
+  return 0
 }
 
 /** 持仓收益率（含已实现）— 与 PortfolioManager.calcPnlForStock 口径一致 */
@@ -63,7 +76,7 @@ export function holdingReturnPctFromQuote(
       ?? sanitizePortfolioReturnPct(holding.unrealizedPnlPct)
     return cached
   }
-  const totalCost = holding.totalCost ?? 0
+  const totalCost = resolveHoldingTotalCost(holding)
   const realizedPnl = holding.realizedPnl ?? 0
   const marketValue = livePrice * holding.shares
   const unrealizedPnl = marketValue - totalCost

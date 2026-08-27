@@ -1,10 +1,10 @@
 /**
- * 方案 B 遗留：关注列表未消歧项 — 唯一命中自动写回；多命中返回候选供用户点选；
+ * 方案 A：关注列表未消歧项 — 唯一命中自动写回；多命中返回候选供用户点选；
  * 零命中保持空 instrument，由 UI 提示重新搜索选定。
+ * 写回 code 一律 Opptrix ID（MARKET:CLASS:SYMBOL）。
  */
 import type { InstrumentRef } from '@opptrix/shared'
 import {
-  buildInstrumentNamespace,
   buildOpptrixInstrumentId,
   canonicalHkSymbol,
   isAmbiguousNumericCode,
@@ -14,7 +14,7 @@ import {
   instrumentRefKey,
 } from '@opptrix/shared'
 import type { WatchlistItem } from './models.js'
-import { isOpptrixInstrumentCode, normalizeWatchlistItem } from './instrument.js'
+import { normalizeWatchlistItem } from './instrument.js'
 
 /** user-store meta — 本地唯一消歧启动迁移已跑过一轮 */
 export const INSTRUMENT_ID_UNIFY_WATCHLIST_V2 = 'instrument_id_unify_watchlist_v2'
@@ -97,7 +97,7 @@ export function listDisambiguationCandidates(
     deduped.set(key, {
       instrument,
       name,
-      code: buildInstrumentNamespace(instrument),
+      code: buildOpptrixInstrumentId(instrument),
     })
   }
   return [...deduped.values()]
@@ -109,9 +109,7 @@ export function applyResolvedInstrument(
   preferredName?: string | null,
 ): WatchlistItem {
   const normalized = normalizeInstrumentRef(ref)
-  const code = isOpptrixInstrumentCode(String(item.code ?? ''))
-    ? buildOpptrixInstrumentId(normalized)
-    : buildInstrumentNamespace(normalized)
+  const code = buildOpptrixInstrumentId(normalized)
   return normalizeWatchlistItem({
     ...item,
     code,

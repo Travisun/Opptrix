@@ -1,19 +1,25 @@
 import { useMemo } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { BriefcaseRegular, SettingsRegular } from '@fluentui/react-icons'
+import { BriefcaseRegular } from '@fluentui/react-icons'
 import SidebarListEmpty from './SidebarListEmpty'
 import type { PortfolioSummaryData } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { formatPct, formatPrice, formatPriceForMarket, pctTone, portfolioHoldingsKey } from './format'
+import { formatMoney, formatPct, pctTone, portfolioHoldingsKey } from './format'
 import { instrumentKey, marketDisplayName, tryParseInstrumentInput } from './instrument'
 import { displayPortfolioHoldingReturnPct } from './portfolioCalc'
 import {
   aggregatePortfolioScopeSummary,
   resolvePortfolioHoldingsForGroup,
 } from './portfolioGroupCalc'
+import {
+  portfolioHoldingDisplayCode,
+  portfolioHoldingDisplayName,
+} from './portfolioWatchlist'
 import { useWatchlistGroups } from './WatchlistGroupsContext'
-import WatchlistGroupsDialog from './WatchlistGroupsDialog'
+import WatchlistGroupFilterBar from './WatchlistGroupFilterBar'
+import WatchlistGroupSummaryStrip from './WatchlistGroupSummaryStrip'
+import WatchlistGroupsDrawer from './WatchlistGroupsDrawer'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import type { Market } from '../types/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -28,6 +34,7 @@ const ITEM_INNER_PAD = '10px'
 
 const useStyles = makeStyles({
   root: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
@@ -366,72 +373,31 @@ export default function PortfolioTab({
   const totalPnlPct = isSanePortfolioReturnPct(displaySummary?.totalPnlPct)
     ? displaySummary?.totalPnlPct
     : null
-  const showGroupChips = true
 
   return (
     <div className={s.root}>
-      {showGroupChips ? (
-        <div className={s.chipRow}>
-          <div className={mergeClasses(s.chipsWrap, 'opptrix-scroll-x')}>
-            <button
-              type="button"
-              className={mergeClasses(s.chip, !selectedGroupId && s.chipActive)}
-              onClick={() => setSelectedGroupId(null)}
-            >
-              全部
-            </button>
-            {groups.map(group => (
-              <button
-                key={group.id}
-                type="button"
-                className={mergeClasses(s.chip, selectedGroupId === group.id && s.chipActive)}
-                onClick={() => setSelectedGroupId(group.id)}
-              >
-                {group.title}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className={s.chipEditBtn}
-            aria-label="管理分组"
-            onClick={() => setDialogOpen(true)}
-          >
-            <SettingsRegular fontSize={14} />
-          </button>
-        </div>
-      ) : null}
+      <WatchlistGroupFilterBar
+        groups={groups}
+        membership={membership}
+        items={watchlistItems}
+        selectedGroupId={selectedGroupId}
+        onSelectGroup={setSelectedGroupId}
+        onManage={() => setDialogOpen(true)}
+      />
 
       {!empty && displaySummary ? (
-        <div className={s.summary}>
-          <div className={s.metric}>
-            <Text className={s.metricLabel}>
-              {selectedGroupTitle ? `${selectedGroupTitle} · 市值` : '总市值'}
-            </Text>
-            <Text className={s.metricValue}>{formatPrice(displaySummary.totalMarketValue)}</Text>
-          </div>
-          <div className={s.metric}>
-            <Text className={s.metricLabel}>
-              {selectedGroupTitle ? '分组收益' : '总收益'}
-            </Text>
-            <Text className={s.metricValue} style={{ color: pnlColor(totalPnlPct) }}>
-              {formatPct(totalPnlPct)}
-            </Text>
-          </div>
-          <div className={s.metric}>
-            <Text className={s.metricLabel}>浮动盈亏</Text>
-            <Text
-              className={s.metricValue}
-              style={{ color: pnlColor(displaySummary.totalUnrealizedPnl) }}
-            >
-              {formatPrice(displaySummary.totalUnrealizedPnl)}
-            </Text>
-          </div>
-          <div className={s.metric}>
-            <Text className={s.metricLabel}>持仓</Text>
-            <Text className={s.metricValue}>{displaySummary.holdingsCount} 只</Text>
-          </div>
-        </div>
+        <WatchlistGroupSummaryStrip
+          mode="portfolio"
+          metrics={{ itemCount: 0, holdingCount: 0, holdingReturnPct: null }}
+          groupTitle={selectedGroupTitle}
+          portfolioSummary={displaySummary ? {
+            totalMarketValue: displaySummary.totalMarketValue,
+            totalPnlPct: totalPnlPct ?? null,
+            totalUnrealizedPnl: displaySummary.totalUnrealizedPnl,
+            holdingsCount: displaySummary.holdingsCount,
+          } : null}
+          formatMoney={formatMoney}
+        />
       ) : null}
 
       <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', empty && s.listCentered)}>
@@ -451,7 +417,8 @@ export default function PortfolioTab({
           />
         ) : (
           holdings.map((h, index) => {
-            const displayCode = portfolioHoldingsKey(h.code, h.market)
+            const displayCode = portfolioHoldingDisplayCode(h, watchlistItems)
+            const displayName = portfolioHoldingDisplayName(h, watchlistItems)
             const marketLabel = h.market && h.market !== 'CN' ? marketDisplayName(h.market as Market) : null
             const selected = selectedCode != null && (
               h.code === selectedCode
@@ -487,7 +454,7 @@ export default function PortfolioTab({
                 }}
               >
                 <div className={s.rowBody}>
-                  <Text className={s.rowTitle}>{h.name}</Text>
+                  <Text className={s.rowTitle}>{displayName}</Text>
                   <span className={s.rowNote}>{note}</span>
                 </div>
                 <div className={s.rowTrailing}>
@@ -495,9 +462,7 @@ export default function PortfolioTab({
                     {formatPct(rowReturnPct)}
                   </span>
                   <span className={s.quoteSecondary}>
-                    {h.market && h.market !== 'CN'
-                      ? formatPriceForMarket(h.market, h.marketValue)
-                      : formatPrice(h.marketValue)}
+                    {formatMoney(h.marketValue)}
                   </span>
                 </div>
               </div>
@@ -516,7 +481,7 @@ export default function PortfolioTab({
         </div>
       ) : null}
 
-      <WatchlistGroupsDialog
+      <WatchlistGroupsDrawer
         open={dialogOpen}
         items={watchlistItems}
         doc={groupsDoc}

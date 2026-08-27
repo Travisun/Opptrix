@@ -1,9 +1,23 @@
 import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
-import { tryParseInstrumentInput, normalizeInstrumentRefLocal } from './instrument'
+import {
+  buildOpptrixInstrumentId,
+  tryParseInstrumentInput,
+  normalizeInstrumentRefLocal,
+} from './instrument'
+import type { InstrumentRef } from '../types/instrument'
 
 export function formatPrice(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return '—'
   return value.toFixed(digits)
+}
+
+/** 金额千分位（组合市值 / 浮动盈亏等）；股价请继续用 formatPrice */
+export function formatMoney(value: number | null | undefined, digits = 2): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
 }
 
 /** 按市场格式化价格 — CN 保留小数；US/JP/KR/HK 同；Crypto 低价多小数位 */
@@ -63,14 +77,46 @@ export function normalizeCode(code: string): string {
   return code.trim().padStart(6, '0')
 }
 
-/** 持仓 map 键 — 与账本 holdings[].code 对齐（支持 CN:SH.xxx / US:xxx 命名空间） */
-export function portfolioHoldingsKey(code: string, market?: string): string {
+/**
+ * 持仓 map 主键 — 与 shared `portfolioHoldingsStorageKey` 对齐（CN 个股/指数为短码）。
+ * Opptrix ID / 命名空间输入会归一到同一 storageKey，便于与旧裸码账本互查。
+ * UI 副标题可继续用本函数展示短码；权威对外 ID 用 `buildOpptrixInstrumentId`。
+ */
+export function portfolioHoldingsKey(code: string, market?: string, assetClass?: InstrumentRef['assetClass']): string {
   const trimmed = code.trim()
   const parsed = tryParseInstrumentInput(trimmed)
-  if (parsed) return portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(parsed))
+  if (parsed) {
+    const ref = normalizeInstrumentRefLocal(
+      assetClass ? { ...parsed, assetClass } : parsed,
+    )
+    return portfolioHoldingsStorageKey(ref)
+  }
   if (market && market !== 'CN') return trimmed
   if (/^\d{6}$/.test(trimmed)) return normalizeCode(trimmed)
   return trimmed
+}
+
+/** 持仓 lookup 候选键（storageKey + Opptrix + 原串），供 map 多键命中 */
+export function portfolioHoldingsLookupKeys(
+  code: string,
+  market?: string,
+  assetClass?: InstrumentRef['assetClass'],
+): string[] {
+  const trimmed = code.trim()
+  const keys: string[] = []
+  const push = (k: string | undefined) => {
+    if (k && !keys.includes(k)) keys.push(k)
+  }
+  push(portfolioHoldingsKey(trimmed, market, assetClass))
+  push(trimmed)
+  const parsed = tryParseInstrumentInput(trimmed)
+  if (parsed) {
+    const ref = normalizeInstrumentRefLocal(
+      assetClass ? { ...parsed, assetClass } : parsed,
+    )
+    push(buildOpptrixInstrumentId(ref))
+  }
+  return keys
 }
 
 /** 无 exchange 时可安全判为上证指数的常见代码（不含 000001） */

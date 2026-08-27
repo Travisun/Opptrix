@@ -400,6 +400,7 @@ interface Props {
     market?: string
     assetClass?: string
     instrument?: import('../types/instrument').InstrumentRef
+    name?: string
     shares: number
     price: number
     side: 'buy' | 'sell'
@@ -681,6 +682,7 @@ export default function FollowStockDialog({
         market: stockRef?.market,
         assetClass: stockRef?.assetClass,
         instrument: stockRef ?? undefined,
+        name: stock.name?.trim() || undefined,
         shares,
         price,
         side: tradeForm.side,

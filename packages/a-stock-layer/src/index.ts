@@ -124,6 +124,16 @@ export {
 
 export { PortfolioManager } from './portfolio/manager.js'
 export {
+  INSTRUMENT_ID_UNIFY_PORTFOLIO_V1,
+  PORTFOLIO_PURGE_WATCHLIST_ORPHANS_V1,
+} from './portfolio/store.js'
+export {
+  loadWatchlistItemsForPurge,
+  purgePortfolioWatchlistOrphans,
+  tradeMatchesAnyWatchlistItem,
+  tradeMatchesWatchlistItem,
+} from './portfolio/purge-watchlist-orphans.js'
+export {
   inferTradeAssetClass,
   portfolioCodeAliases,
   portfolioDisplayCode,
@@ -145,6 +155,13 @@ export {
   migrateWatchlistItemsInstrumentIdV1,
   looksLikeFakeCnPadFromShortCode,
 } from './watchlist/migrate-instrument-id.js'
+export {
+  WATCHLIST_LEGACY_NAMESPACE_TO_OPTRIX_V1,
+  isLegacyWatchlistNamespaceCode,
+  migrateWatchlistLegacyNamespaceItem,
+  migrateWatchlistLegacyNamespaceItems,
+  watchlistItemNeedsLegacyNamespaceMigration,
+} from './watchlist/migrate-legacy-namespace.js'
 export {
   INSTRUMENT_ID_UNIFY_WATCHLIST_V2,
   watchlistItemNeedsDisambiguation,
@@ -227,6 +244,7 @@ export {
   opptrixFundNav,
   opptrixFundQuoteBatch,
   opptrixFundMetrics,
+  opptrixFxRmbLatest,
   stockIndexListStocks,
   stockIndexListEtfs,
   StockIndexHttpClient,
@@ -245,6 +263,8 @@ export {
   type OpptrixNavRow,
   type OpptrixFundLatestNavItem,
   type OpptrixFundMetrics,
+  type OpptrixRmbRate,
+  type OpptrixRmbLatestData,
 } from './providers/stockindex/index.js'
 export {
   searchInstrumentsOnline,

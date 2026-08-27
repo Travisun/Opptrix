@@ -1,5 +1,7 @@
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
 import {
+  buildInstrumentNamespace,
+  buildOpptrixInstrumentId,
   instrumentRefKey,
   isAssetClass,
   normalizeInstrumentRef,
@@ -175,22 +177,18 @@ export function portfolioLedgerKey(
 }
 
 /**
- * 账本持久化代码 — CN 个股/ETF 为六位；场外基金保留 CN:PF.xxxxxx，
- * 避免买入后落成裸码导致与 FUND 查询 ledgerKey 对不上。
+ * 账本持久化 / API 对外 code — Opptrix ID（MARKET:CLASS:SYMBOL）。
+ * 与关注列表一致；读路径仍经 portfolioCodeAliases 双读旧裸码。
  */
 export function portfolioDisplayCode(
   code: string,
   market?: Market,
   assetClass?: AssetClass,
 ): string {
-  const ref = portfolioInstrumentRef(code, market, assetClass)
-  if (ref.market === 'CN') {
-    if (isCnFundRef(ref)) return `CN:PF.${normalizeCode(ref.symbol)}`
-    return normalizeCode(ref.symbol)
-  }
-  return ref.symbol
+  return buildOpptrixInstrumentId(portfolioInstrumentRef(code, market, assetClass))
 }
 
+/** clear / fee lookup：Opptrix + 命名空间 + 旧裸码 / CN:PF 别名 */
 export function portfolioCodeAliases(
   code: string,
   market?: Market,
@@ -198,20 +196,34 @@ export function portfolioCodeAliases(
 ): Set<string> {
   const ref = portfolioInstrumentRef(code, market, assetClass)
   const aliases = new Set<string>()
+  const opptrix = buildOpptrixInstrumentId(ref)
+  const ns = buildInstrumentNamespace(ref)
+  aliases.add(opptrix)
+  aliases.add(ns)
   aliases.add(ref.symbol)
-  aliases.add(portfolioDisplayCode(code, market, assetClass))
   aliases.add(portfolioLedgerKey(code, market, assetClass))
   if (ref.market === 'CN') {
     const bare = normalizeCode(ref.symbol)
     aliases.add(bare)
     aliases.add(`CN:PF.${bare}`)
     aliases.add(`CN:OF.${bare}`)
+    aliases.add(`${bare}.OF`)
+    aliases.add(`${bare}.PF`)
+    const ex = ref.exchange?.toUpperCase()
+    if (ex && ex !== 'PF' && ex !== 'OF') {
+      aliases.add(`CN:${ex}.${bare}`)
+      aliases.add(`${bare}.${ex}`)
+    }
   }
   if (ref.market === 'HK') {
     aliases.add(`HK:${ref.symbol}`)
+    const stripped = ref.symbol.replace(/^0+/, '') || ref.symbol
+    aliases.add(stripped)
+    aliases.add(`${ref.symbol}.HK`)
   }
   if (ref.market === 'US') {
     aliases.add(`US:${ref.symbol}`)
+    aliases.add(`${ref.symbol}.US`)
   }
   return aliases
 }
@@ -224,15 +236,13 @@ export function portfolioCodesMatch(
   aAssetClass?: AssetClass,
   bAssetClass?: AssetClass,
 ): boolean {
-  if (
-    portfolioLedgerKey(aCode, aMarket, aAssetClass)
-    === portfolioLedgerKey(bCode, bMarket, bAssetClass)
-  ) {
+  const a = portfolioInstrumentRef(aCode, aMarket, aAssetClass)
+  const b = portfolioInstrumentRef(bCode, bMarket, bAssetClass)
+  // namespace key 不含 assetClass：须同 assetClass 才可按键相等判定（INDEX≠EQUITY）
+  if (a.assetClass === b.assetClass && instrumentRefKey(a) === instrumentRefKey(b)) {
     return true
   }
   // 兼容：历史场外基金可能存为裸六位，查询侧带 CN:PF.xxx / xxx.OF
-  const a = portfolioInstrumentRef(aCode, aMarket, aAssetClass)
-  const b = portfolioInstrumentRef(bCode, bMarket, bAssetClass)
   if (a.market !== 'CN' || b.market !== 'CN') return false
   if (normalizeCode(a.symbol) !== normalizeCode(b.symbol)) return false
   const aFund = isCnFundRef(a) || looksLikeCnFundInput(aCode)

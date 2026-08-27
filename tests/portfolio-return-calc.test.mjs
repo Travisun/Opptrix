@@ -16,33 +16,33 @@ import {
   calcHoldingPnlFromTrades,
 } from '@opptrix/shared'
 
-test('portfolioHoldingsStorageKey aligns watchlist namespace with ledger code', () => {
+test('portfolioHoldingsStorageKey aligns with Opptrix ledger code', () => {
   assert.equal(
     portfolioHoldingsStorageKey({ market: 'US', assetClass: 'EQUITY', symbol: 'aapl' }),
-    'AAPL',
+    'US:STOCK:AAPL.US',
   )
   assert.equal(
     portfolioHoldingsStorageKey({ market: 'CN', assetClass: 'EQUITY', symbol: '600519', exchange: 'SH' }),
-    '600519',
+    'CN:STOCK:600519.SH',
   )
   assert.equal(
     portfolioHoldingsStorageKey({ market: 'HK', assetClass: 'EQUITY', symbol: '700' }),
-    '00700',
+    'HK:STOCK:00700.HK',
   )
 })
 
 test('portfolioHoldingsStorageKey — CN FUND vs EQUITY same code must not collide', () => {
   const fund = { market: 'CN', assetClass: 'FUND', symbol: '009049', exchange: 'PF' }
   const equity = { market: 'CN', assetClass: 'EQUITY', symbol: '009049', exchange: 'SZ' }
-  assert.equal(portfolioHoldingsStorageKey(fund), 'CN:PF.009049')
-  assert.equal(portfolioHoldingsStorageKey(equity), '009049')
+  assert.equal(portfolioHoldingsStorageKey(fund), 'CN:OTC:009049.OF')
+  assert.equal(portfolioHoldingsStorageKey(equity), 'CN:STOCK:009049.SZ')
   assert.notEqual(portfolioHoldingsStorageKey(fund), portfolioHoldingsStorageKey(equity))
 })
 
-test('portfolioHoldingsStorageKey — CN ETF stays bare six-digit', () => {
+test('portfolioHoldingsStorageKey — CN ETF Opptrix', () => {
   assert.equal(
     portfolioHoldingsStorageKey({ market: 'CN', assetClass: 'ETF', symbol: '510300', exchange: 'SH' }),
-    '510300',
+    'CN:ETF:510300.SH',
   )
 })
 

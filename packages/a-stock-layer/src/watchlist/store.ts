@@ -5,11 +5,20 @@ import {
   INSTRUMENT_ID_UNIFY_WATCHLIST_V1,
   migrateWatchlistItemsInstrumentIdV1,
 } from './migrate-instrument-id.js'
+import {
+  migrateWatchlistLegacyNamespaceItems,
+  WATCHLIST_LEGACY_NAMESPACE_TO_OPTRIX_V1,
+} from './migrate-legacy-namespace.js'
 
 const NAMESPACE = 'watchlist'
 const DOC_ID = 'default'
 /** Merge rapid replace() calls into one SQLite write. */
 const SAVE_DEBOUNCE_MS = 200
+
+function watchlistStartupUpgradesComplete(store: ReturnType<typeof getUserDataStore>): boolean {
+  return store.getMetaFlag(INSTRUMENT_ID_UNIFY_WATCHLIST_V1)
+    && store.getMetaFlag(WATCHLIST_LEGACY_NAMESPACE_TO_OPTRIX_V1)
+}
 
 export class WatchlistStore {
   private static inst: WatchlistStore | null = null
@@ -42,6 +51,11 @@ export class WatchlistStore {
       const raw = store.getDocument<{ items?: WatchlistItem[] }>(NAMESPACE, DOC_ID)
       if (!Array.isArray(raw?.items)) return []
 
+      // 升级脚本均已跑完 — 直接读盘，不再逐条 normalize / 扫描
+      if (watchlistStartupUpgradesComplete(store)) {
+        return raw.items
+      }
+
       let items = raw.items.map(normalizeWatchlistItem)
 
       if (!store.getMetaFlag(INSTRUMENT_ID_UNIFY_WATCHLIST_V1)) {
@@ -54,6 +68,23 @@ export class WatchlistStore {
           // 失败保留原数据，不写 flag，下次启动可重试
           console.warn(
             '[watchlist] instrument_id_unify_watchlist_v1 failed; keeping original items:',
+            err instanceof Error ? err.message : String(err),
+          )
+        }
+      }
+
+      if (!store.getMetaFlag(WATCHLIST_LEGACY_NAMESPACE_TO_OPTRIX_V1)) {
+        try {
+          const { items: migrated, changed } = migrateWatchlistLegacyNamespaceItems(items)
+          items = migrated
+          store.setMetaFlag(WATCHLIST_LEGACY_NAMESPACE_TO_OPTRIX_V1)
+          if (changed > 0) {
+            store.setDocument(NAMESPACE, DOC_ID, { items })
+            console.info(`[watchlist] legacy namespace → Opptrix: updated ${changed} item(s)`)
+          }
+        } catch (err) {
+          console.warn(
+            '[watchlist] watchlist_legacy_namespace_to_opptrix_v1 failed; keeping original items:',
             err instanceof Error ? err.message : String(err),
           )
         }

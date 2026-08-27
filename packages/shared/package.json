@@ -22,6 +22,10 @@
       "types": "./dist/portfolio-return.d.ts",
       "import": "./dist/portfolio-return.js"
     },
+    "./fx-rates": {
+      "types": "./dist/fx-rates.d.ts",
+      "import": "./dist/fx-rates.js"
+    },
     "./portfolio-profile": {
       "types": "./dist/portfolio-profile.d.ts",
       "import": "./dist/portfolio-profile.js"

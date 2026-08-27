@@ -28,9 +28,9 @@ test('legacyToInstrument — CN:PF 直接解析', () => {
   assert.equal(buildInstrumentNamespace(ref), 'CN:PF.110022')
 })
 
-test('normalizeWatchlistItem — 旧 code CN:OF 规范为 CN:PF', () => {
+test('normalizeWatchlistItem — 旧 code CN:OF 规范为 Opptrix OTC', () => {
   const item = normalizeWatchlistItem({ code: 'CN:OF.009049', name: '某基金' })
-  assert.equal(item.code, 'CN:PF.009049')
+  assert.equal(item.code, 'CN:OTC:009049.OF')
   assert.equal(item.instrument?.assetClass, 'FUND')
   assert.equal(item.instrument?.exchange, 'PF')
 })

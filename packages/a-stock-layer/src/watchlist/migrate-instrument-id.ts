@@ -1,12 +1,11 @@
 /**
- * 方案 B：关注列表标的身份轻量迁移（幂等）。
- * — 合法 instrument / 可 parse 的 namespace → normalize + namespace code
+ * 方案 A：关注列表标的身份轻量迁移（幂等）。
+ * — 合法 instrument / 可 parse → normalize + Opptrix ID（MARKET:CLASS:SYMBOL）
  * — 1–5 位纯数字无可靠 market → 不瞎改成 CN；可清假 CN pad，保留原 code
  * — 有 industry / instrument.market 提示 HK/US 时规范化
  */
 import type { InstrumentRef, Market } from '@opptrix/shared'
 import {
-  buildInstrumentNamespace,
   buildOpptrixInstrumentId,
   isAmbiguousNumericCode,
   normalizeInstrumentRef,
@@ -93,11 +92,8 @@ function refFromMarketHint(market: Market, rawSymbol: string): InstrumentRef | n
   return null
 }
 
-function opptrixCodeFromRef(ref: InstrumentRef, fallbackCode: string): string {
-  if (parseOpptrixInstrumentId(fallbackCode.trim())) {
-    return buildOpptrixInstrumentId(ref)
-  }
-  return buildInstrumentNamespace(ref)
+function opptrixCodeFromRef(ref: InstrumentRef): string {
+  return buildOpptrixInstrumentId(ref)
 }
 
 /**
@@ -132,7 +128,7 @@ export function migrateWatchlistItemInstrumentIdV1(item: WatchlistItem): Watchli
           if (fixed) {
             return {
               ...item,
-              code: buildInstrumentNamespace(fixed),
+              code: opptrixCodeFromRef(fixed),
               name,
               instrument: fixed,
             }
@@ -148,7 +144,7 @@ export function migrateWatchlistItemInstrumentIdV1(item: WatchlistItem): Watchli
         }
       }
       const normalized = normalizeInstrumentRef(item.instrument)
-      const code = opptrixCodeFromRef(normalized, codeRaw)
+      const code = opptrixCodeFromRef(normalized)
       return {
         ...item,
         code,
@@ -157,12 +153,12 @@ export function migrateWatchlistItemInstrumentIdV1(item: WatchlistItem): Watchli
       }
     }
 
-    // 2) code 可权威 parse（含 HK:… / US:… / 6 位 CN / 命名空间）
+    // 2) code 可权威 parse（含 HK:… / US:… / 6 位 CN / 命名空间 / Opptrix）
     const parsed = parseCanonicalInstrumentInput(codeRaw)
     if (parsed) {
       return {
         ...item,
-        code: buildInstrumentNamespace(parsed),
+        code: opptrixCodeFromRef(parsed),
         name,
         instrument: parsed,
       }
@@ -176,7 +172,7 @@ export function migrateWatchlistItemInstrumentIdV1(item: WatchlistItem): Watchli
         if (fixed) {
           return {
             ...item,
-            code: buildInstrumentNamespace(fixed),
+            code: opptrixCodeFromRef(fixed),
             name,
             instrument: fixed,
           }

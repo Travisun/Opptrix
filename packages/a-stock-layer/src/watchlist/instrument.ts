@@ -15,13 +15,9 @@ export function isOpptrixInstrumentCode(code: string): boolean {
   return parseOpptrixInstrumentId(String(code ?? '').trim()) != null
 }
 
-/** 展示/持久化 code：Opptrix ID 原样保留；旧项仍用命名空间 */
-function watchlistCodeFromRef(item: Pick<WatchlistItem, 'code'>, instrument: InstrumentRef): string {
-  const raw = String(item.code ?? '').trim()
-  if (isOpptrixInstrumentCode(raw)) {
-    return buildOpptrixInstrumentId(instrument)
-  }
-  return instrumentDisplayCode(instrument)
+/** 展示/持久化 code：始终 Opptrix ID（与方案 A 一致） */
+function watchlistCodeFromRef(_item: Pick<WatchlistItem, 'code'>, instrument: InstrumentRef): string {
+  return buildOpptrixInstrumentId(instrument)
 }
 
 /** Stable dedupe key across markets — unresolved short codes use pending: prefix */
@@ -100,7 +96,7 @@ export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
 
   const parsed = parseCanonicalInstrumentInput(String(item.code ?? ''))
   if (parsed) {
-    const code = displayCodeFromInstrument(parsed)
+    const code = buildOpptrixInstrumentId(parsed)
     return {
       code,
       name: item.name?.trim() || code,

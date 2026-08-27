@@ -78,10 +78,26 @@ interface InstrumentRef {
 | **UI 解析源** | `client-ui` 不再平行实现权威解析；`tryParseInstrumentInput` / `buildInstrumentNamespace` / `isAmbiguousNumericCode` 等 **re-export 或薄包装** `@opptrix/shared`。歧义短码经 `parseInstrumentInput` **抛错**（禁止假 CN），主路径一律 `tryParse` + 搜索消歧。 |
 | **顶栏 / `@` 提及** | 复用 `useInstrumentSearchWithUniversePrep`：名录 `preparing` 时展示「请稍等，正在准备标的库…」与进度；完成后自动同词重搜再选中/刷新候选项。改关键字取消旧轮询。 |
 | **关注列表迁移** | user-store meta 标记 `instrument_id_unify_watchlist_v1`（一次性、幂等）。合法 `instrument` / 可 parse 的 namespace → `normalizeInstrumentRef` + namespace `code`；1–5 位裸数字无可靠 market → **不瞎改成 CN**（可清历史假 CN pad）；有 industry / market 提示 HK/US 时规范化。失败保留原数据、不写 flag。 |
+| **旧版命名空间升格** | meta `watchlist_legacy_namespace_to_opptrix_v1`：旧关注库 `CN:ETF.xxxxxx` / `CN:SH|SZ|BJ.xxxxxx` / `US:` / `HK:` / 裸六位·裸 ticker → 启动时升格为 Opptrix ID 并写回磁盘；已 Opptrix 的项不变。**两项关注 meta 均已打标后，后续启动直接读盘，不再逐条 normalize。** |
 | **HK 全表补零** | market-data 启动安全时机幂等 repair，`sync_cursor` flag `instruments_hk_canonical_pad_v1`：`market='HK'` 且 code 纯数字且与 `canonicalHkSymbol` 不一致 → 更新为五位并重算 `instrument_ns`；目标行已存在时合并并保留名称更完整的一行。 |
 | **未消歧自动消歧** | `instrument_id_unify_watchlist_v2` + 关注列表加载：对仍 unresolved 的短码，本地 `searchLocalInstruments`（及必要时 Tickflow `getInstruments` pad5 `.HK`）**唯一命中**时自动写回完整 `InstrumentRef`；**多命中**经 `disambiguation_candidates` 返回候选供用户点选写回；零命中保持空 instrument，UI 提示重新搜索选定。 |
 
 **方案 B 完备性**：HK 名录短码经全表 repair 对齐五位；关注历史脏项在可唯一判定时自动消歧写回，无法判定时不发明假 CN/JP。
+
+### 2.2.3 方案 A — 组合账本 / 关注 / 详情统一 InstrumentRef
+
+关注、组合、详情主路径均以 **`InstrumentRef` 为权威身份**；禁止裸码作权威身份（搜索消歧除外）。
+
+| 约定 | 说明 |
+|------|------|
+| **权威身份** | `InstrumentRef`（`normalizeInstrumentRef`）；稳定键 `instrumentRefKey` / 命名空间 |
+| **对外 Opptrix ID** | `MARKET:CLASS:SYMBOL`（`buildOpptrixInstrumentId` / `parseOpptrixInstrumentId`）；与量化搜索权威源一致，见文末「OpptrixQuant instrument_id」与 [OPPTRIX-QUANT-API.md](./OPPTRIX-QUANT-API.md) |
+| **组合持久化** | `trades[].code` / `holdings[].code` = Opptrix ID；新成交强制写 `assetClass` + `instrument` |
+| **迁移 meta** | user-store `instrument_id_unify_portfolio_v1`（一次性、**幂等**）：升格 `trades[].code` 与 `instrumentFees` 键为 Opptrix，并补 `instrument`；失败保留原数据、不写 flag |
+| **读兼容** | 迁移后权威写 Opptrix；读路径经 `portfolioCodeAliases` **一轮**兼容旧裸码 / 命名空间 / `CN:PF` 等别名（查询、清仓、费率） |
+| **启动开销** | 组合侧三项 meta（`portfolio_fee_market_aware_v1`、`instrument_id_unify_portfolio_v1`、`portfolio_purge_watchlist_orphans_v1`）均已打标后，**后续启动跳过全部升级检测**；仅在有实际数据变更时写盘。 |
+
+账本键事实源仍为 `instrumentRefKey(normalizeInstrumentRef(ref))`（`portfolioLedgerKey`）。扩展步骤见 [DATA-LAYER.md · 持仓账本扩展](./DATA-LAYER.md#持仓账本扩展instrumentref-一等公民)。
 
 ### 2.3 在线标的搜索（扶摇 + Tickflow + 本地）
 
@@ -203,6 +219,7 @@ store.stockMetaLookupKey('000977', 'SZ')  // → 'SZ:000977'
 - [x] 顶栏 / 搜索 Hub 选中结果
 - [x] 聊天 @ 标的引用
 - [x] 自选录入与展示（`normalizeWatchlistItem`）
+- [x] 组合账本 `trades` / `holdings`（Opptrix ID + `instrument`；§2.2.3）
 - [x] 详情页 `stockDetail` / `stockDetailQuote`
 - [x] `queryInstrumentData` registry 分支（CN/US/HK/CRYPTO 均带 `ref`）
 - [x] Agent 自定义方法 `normalizeCustomMethodArgs`

@@ -82,6 +82,28 @@ export interface OpptrixFundMetrics {
   product_name?: string | null
 }
 
+/** GET /api/v1/fx/rmb/latest 单条中间价（100 单位外币 = rate 元人民币） */
+export interface OpptrixRmbRate {
+  trade_date?: string
+  pair?: string
+  base?: string
+  quote?: string
+  currency?: string
+  name_zh?: string
+  rate: number
+  unit?: string
+  source?: string
+}
+
+/** GET /api/v1/fx/rmb/latest 返回的 data */
+export interface OpptrixRmbLatestData {
+  trade_date: string
+  unit?: string
+  source?: string
+  note?: string
+  rates: OpptrixRmbRate[]
+}
+
 /** 旧 StockIndex 行形态 — normalize / market-data 兼容层（新旧字段共存） */
 export interface StockIndexItem {
   instrumentId: string
@@ -300,6 +322,14 @@ export async function stockIndexListEtfs(
   }
 }
 
+
+/** 最新人民币中间价 — GET /api/v1/fx/rmb/latest（不传 pair 返回全量约 25 币种） */
+export async function opptrixFxRmbLatest(): Promise<OpptrixRmbLatestData | null> {
+  const client = clientOrNull()
+  if (!client) return null
+  const resp = await client.get<{ data?: OpptrixRmbLatestData }>('/api/v1/fx/rmb/latest')
+  return resp?.data ?? null
+}
 
 /** 测试 Opptrix量化 连接 — 用数据密钥发起一次轻量标的搜索 */
 export async function testStockIndexConnection(

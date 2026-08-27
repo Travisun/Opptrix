@@ -34,11 +34,15 @@ import {
 import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
 import { portfolioHoldingsKey } from './format'
+import { lookupHoldingSnapshot } from './portfolioCalc'
+import { portfolioHoldingDisplayName } from './portfolioWatchlist'
 import {
+  buildOpptrixInstrumentId,
   detailPanelKind,
   instrumentKey,
   normalizeWatchlistItem,
   tryParseInstrumentInput,
+  normalizeInstrumentRefLocal,
   resolveWatchlistInstrument,
   watchlistItemKey,
   UNRESOLVED_INSTRUMENT_COPY,
@@ -283,43 +287,65 @@ function RightMarketPanel({
   detailStockRef.current = detailStock
 
   const handlePortfolioSelect = useCallback((code: string, market?: string) => {
+    const holdingHint = holdingsByCode[portfolioHoldingsKey(code, market)]
+      ?? holdingsByCode[code.trim()]
+    const holdingAssetClass = holdingHint?.assetClass as
+      | import('../types/instrument').InstrumentRef['assetClass']
+      | undefined
+
     const fromList = items.find(item => {
       const ref = resolveWatchlistInstrument(item)
       if (!ref) return item.code === code
-      const itemKey = portfolioHoldingsKey(item.code, ref.market)
-      const targetKey = portfolioHoldingsKey(code, market ?? ref.market)
+      const itemKey = portfolioHoldingsKey(item.code, ref.market, ref.assetClass)
+      const targetKey = portfolioHoldingsKey(code, market ?? ref.market, holdingAssetClass ?? ref.assetClass)
       const parsedTarget = tryParseInstrumentInput(code)
-      const targetInstrumentKey = parsedTarget ? instrumentKey(parsedTarget) : itemKey
+      const targetInstrumentKey = parsedTarget
+        ? instrumentKey(normalizeInstrumentRefLocal(
+          holdingAssetClass ? { ...parsedTarget, assetClass: holdingAssetClass } : parsedTarget,
+        ))
+        : itemKey
       return itemKey === targetKey
         || instrumentKey(ref) === targetInstrumentKey
         || item.code === code
     })
-    const ref = fromList
-      ? resolveWatchlistInstrument(fromList)
-      : market
-        ? tryParseInstrumentInput(`${market}:${code}`)
-        : tryParseInstrumentInput(code)
+
+    let ref = fromList ? resolveWatchlistInstrument(fromList) : null
+    if (!ref) {
+      const parsed = tryParseInstrumentInput(code)
+        ?? (market ? tryParseInstrumentInput(`${market}:${code}`) : null)
+      if (parsed) {
+        ref = normalizeInstrumentRefLocal({
+          ...parsed,
+          ...(holdingHint?.market ? { market: holdingHint.market as import('../types/instrument').Market } : {}),
+          ...(holdingAssetClass ? { assetClass: holdingAssetClass } : {}),
+        })
+      }
+    }
     if (!ref) return
-    const holding = holdingsByCode[portfolioHoldingsKey(code, ref.market)] ?? holdingsByCode[code]
-    const item: WatchlistItem = fromList ?? normalizeWatchlistItem({
-      code,
-      name: holding?.name ?? code,
+
+    const holding = lookupHoldingSnapshot(holdingsByCode, ref)
+      ?? holdingHint
+      ?? null
+
+    // 禁止裸码进 selected：强制 Opptrix + instrument（保留 INDEX/FUND/REIT）
+    const item = normalizeWatchlistItem(fromList ?? {
+      code: buildOpptrixInstrumentId(ref),
+      name: holding ? portfolioHoldingDisplayName(holding, items) : code,
       instrument: ref,
     })
     setSelected(item)
     setTab('detail')
-  }, [items, holdingsByCode])
+  }, [items, holdingsByCode, setSelected, setTab])
 
   const manageRef = manageStock ? resolveWatchlistInstrument(manageStock) : null
   const manageHolding = manageStock && manageRef
-    ? holdingsByCode[portfolioHoldingsKey(manageStock.code, manageRef.market)] ?? null
+    ? lookupHoldingSnapshot(holdingsByCode, manageRef)
     : null
 
   const detailRef = detailStock ? resolveWatchlistInstrument(detailStock) : null
   const detailManageEnabled = detailRef != null && hasApplicationCapability(detailRef, 'portfolio_pnl')
   const detailHolding = detailStock && detailRef
-    ? holdingsByCode[portfolioHoldingsKey(detailStock.code, detailRef.market)]
-      ?? holdingsByCode[instrumentKey(detailRef)]
+    ? lookupHoldingSnapshot(holdingsByCode, detailRef)
     : null
 
   const handleDetailManage = useCallback(() => {
@@ -335,21 +361,24 @@ function RightMarketPanel({
   const handleRemove = useCallback((item: WatchlistItem) => {
     const normalized = normalizeWatchlistItem(item)
     const ref = resolveWatchlistInstrument(normalized)
-    void clearPortfolioForCode(item.code, ref?.market, ref?.assetClass)
-    removeItemMembership(watchlistItemKey(normalizeWatchlistItem(item)))
-    removeItem(item.code)
-    const selectedKey = selected
-      ? watchlistItemKey(normalizeWatchlistItem(selected))
-      : null
-    const removedKey = watchlistItemKey(normalizeWatchlistItem(item))
-    if (selected?.code === item.code || selectedKey === removedKey) {
-      setSelected(null)
-      setTab('watchlist')
-    }
-    if (manageStock?.code === item.code) {
-      setManageStock(null)
-      setDialogPrice(null)
-    }
+    const clearCode = ref ? buildOpptrixInstrumentId(ref) : normalized.code
+    void (async () => {
+      await clearPortfolioForCode(clearCode, ref?.market, ref?.assetClass)
+      removeItemMembership(watchlistItemKey(normalized))
+      removeItem(item.code)
+      const selectedKey = selected
+        ? watchlistItemKey(normalizeWatchlistItem(selected))
+        : null
+      const removedKey = watchlistItemKey(normalized)
+      if (selected?.code === item.code || selectedKey === removedKey) {
+        setSelected(null)
+        setTab('watchlist')
+      }
+      if (manageStock?.code === item.code) {
+        setManageStock(null)
+        setDialogPrice(null)
+      }
+    })()
   }, [clearPortfolioForCode, removeItem, removeItemMembership, selected, manageStock])
 
   const handleManageClick = useCallback((item: WatchlistItem) => {

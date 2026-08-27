@@ -780,6 +780,18 @@ export const research = {
     apiCall<import('../types/schemas').PortfolioSummaryData>('portfolio_summary', {}),
 }
 
+export async function fetchFxRatesToCny() {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: import('@opptrix/shared/fx-rates').FxRatesToCny
+    message?: string
+  }>('/market/fx-rates')
+  if (!resp.success || !resp.data) {
+    throw new Error(resp.message || '汇率暂时无法获取')
+  }
+  return resp.data
+}
+
 export async function fetchWatchlist() {
   const resp = await jsonFetch<{
     success: boolean
@@ -1315,14 +1327,27 @@ export async function portfolioTrade(payload: {
   price: number
   side?: 'buy' | 'sell'
   date?: string
+  name?: string
   market?: string
   assetClass?: string
   instrument?: { market: string; assetClass: string; symbol: string; exchange?: string }
 }) {
+  // 尽量带完整 instrument；code 优先 Opptrix（调用方已传则原样）
+  const body = {
+    code: payload.code,
+    name: payload.name,
+    shares: payload.shares,
+    price: payload.price,
+    side: payload.side,
+    date: payload.date,
+    market: payload.market ?? payload.instrument?.market,
+    assetClass: payload.assetClass ?? payload.instrument?.assetClass,
+    instrument: payload.instrument,
+  }
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/trade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
   if (!resp.ok) throw new Error('trade failed')
   return resp.json()
