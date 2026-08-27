@@ -1,4 +1,6 @@
 import type { Market } from '@opptrix/shared'
+import { toYahooFinanceSymbol } from '../../utils/regional-symbol.js'
+import { normalizeUsSymbol } from '../../utils/us-market.js'
 import { normalizeCode } from '../../utils/helpers.js'
 
 export type YfinanceGlobalIndex = {
@@ -15,6 +17,7 @@ export const YFINANCE_GLOBAL_INDICES: YfinanceGlobalIndex[] = [
   { outCode: 'DJI', yahoo: '^DJI', name: '道琼斯', market: 'US' },
   { outCode: 'HSI', yahoo: '^HSI', name: '恒生指数', market: 'HK' },
   { outCode: 'N225', yahoo: '^N225', name: '日经225', market: 'JP' },
+  { outCode: 'KOSPI', yahoo: '^KS11', name: '韩国综合', market: 'KR' },
   { outCode: 'FTSE', yahoo: '^FTSE', name: '富时100', market: 'UK' },
   { outCode: 'GDAXI', yahoo: '^GDAXI', name: '德国DAX', market: 'DE' },
   { outCode: 'FCHI', yahoo: '^FCHI', name: '法国CAC', market: 'FR' },
@@ -39,6 +42,9 @@ const ALIAS_TO_OUT: Record<string, string> = {
   n225: 'N225',
   nikkei: 'N225',
   '^n225': 'N225',
+  kospi: 'KOSPI',
+  ks11: 'KOSPI',
+  '^ks11': 'KOSPI',
   ftse: 'FTSE',
   '^ftse': 'FTSE',
   gdaxi: 'GDAXI',
@@ -84,9 +90,7 @@ export function resolveYahooIndexTicker(
 
   const mkt = market.toUpperCase()
   if (mkt === 'US') {
-    if (/^[A-Z]{1,5}$/.test(raw.toUpperCase()) && !raw.includes('.')) {
-      return `^${raw.toUpperCase()}`
-    }
+    if (raw.startsWith('^')) return raw
     return raw.toUpperCase()
   }
   if (mkt === 'HK') {
@@ -100,10 +104,36 @@ export function resolveYahooIndexTicker(
     const digits = normalizeCode(raw)
     return digits ? `${digits}.T` : `${raw}.T`
   }
+  if (mkt === 'KR') {
+    if (raw.toUpperCase() === 'KOSPI' || raw.toUpperCase() === 'KS11') return '^KS11'
+    const digits = normalizeCode(raw)
+    return digits ? `${digits}.KS` : `${raw}.KS`
+  }
   if (mkt === 'CN') {
     const bare = normalizeCode(raw)
     if (bare.startsWith('399')) return `${bare}.SZ`
     if (/^\d{6}$/.test(bare)) return `${bare}.SS`
   }
   return raw
+}
+
+/** 个股 Yahoo ticker */
+export function resolveYahooEquityTicker(market: Market, symbol: string): string | null {
+  const raw = symbol.trim()
+  if (!raw) return null
+  if (market === 'US') return normalizeUsSymbol(raw)
+  if (market === 'HK' || market === 'JP' || market === 'KR') {
+    return toYahooFinanceSymbol(market, raw)
+  }
+  return raw
+}
+
+/** Yahoo ticker → 展示用本地代码 */
+export function displayCodeFromYahooTicker(ticker: string, market: Market): string {
+  const t = ticker.trim()
+  if (market === 'HK' && t.endsWith('.HK')) return t.slice(0, -3).padStart(5, '0')
+  if (market === 'JP' && t.endsWith('.T')) return t.slice(0, -2)
+  if (market === 'KR' && t.endsWith('.KS')) return t.slice(0, -3).padStart(6, '0')
+  if (t.startsWith('^')) return resolveYfinanceGlobalIndex(t)?.outCode ?? t
+  return t
 }

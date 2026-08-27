@@ -1,5 +1,5 @@
 import type { StockKline, StockRealtime } from '@opptrix/shared'
-import type { GlobalIndex, IndexKline } from '../../core/schema.js'
+import type { GlobalIndex, IndexKline, StockProfile } from '../../core/schema.js'
 import type { YfinanceGlobalIndex } from './symbols.js'
 
 function n(v: unknown): number | null {
@@ -129,4 +129,79 @@ export function mapChartQuotesToIndexKlines(
     amount: row.amount,
     changePct: row.changePct,
   }))
+}
+
+type QuoteSummaryLike = {
+  price?: {
+    symbol?: string
+    shortName?: string
+    longName?: string
+    regularMarketPrice?: number
+    marketCap?: number
+  }
+  summaryProfile?: {
+    longName?: string
+    industry?: string
+    sector?: string
+    website?: string
+    fullTimeEmployees?: number
+    city?: string
+    state?: string
+    country?: string
+    longBusinessSummary?: string
+  }
+  assetProfile?: {
+    longName?: string
+    industry?: string
+    sector?: string
+    website?: string
+    fullTimeEmployees?: number
+    city?: string
+    state?: string
+    country?: string
+    longBusinessSummary?: string
+  }
+  summaryDetail?: {
+    marketCap?: number
+  }
+}
+
+export function mapQuoteSummaryToProfile(
+  displayCode: string,
+  summary: QuoteSummaryLike,
+): StockProfile {
+  const profile = summary.summaryProfile ?? summary.assetProfile
+  const price = summary.price
+  const name = price?.shortName ?? price?.longName ?? profile?.longName ?? displayCode
+  const industry = profile?.industry ?? profile?.sector
+  const marketCap = summary.summaryDetail?.marketCap ?? price?.marketCap ?? null
+  return {
+    code: displayCode,
+    name,
+    orgName: profile?.longName ?? price?.longName,
+    industry: industry ?? undefined,
+    industrySecondary: profile?.sector,
+    mainBusiness: profile?.longBusinessSummary?.slice(0, 200),
+    orgProfile: profile?.longBusinessSummary,
+    totalMarketCap: marketCap,
+    employees: profile?.fullTimeEmployees ?? null,
+    city: profile?.city,
+    province: profile?.state,
+    website: profile?.website,
+  }
+}
+
+export function mapSectorQuoteRow(
+  board: { code: string; name: string; market: string; tag?: string },
+  quote: YahooQuote,
+): Record<string, unknown> {
+  return {
+    code: board.code,
+    name: board.name,
+    market: board.market,
+    sector_tag: board.tag ?? 'sector',
+    price: n(quote.regularMarketPrice),
+    change_pct: pct(quote.regularMarketChangePercent),
+    chart_symbol: board.code,
+  }
 }

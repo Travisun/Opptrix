@@ -164,10 +164,12 @@ const useStyles = makeStyles({
 })
 
 function usChartInstrument(item: MarketIndexQuote): InstrumentRef {
+  const sym = item.chart_symbol ?? item.code
+  const isIndex = sym.startsWith('^') || ['SPX', 'IXIC', 'DJI', 'N225', 'KOSPI', 'HSI'].includes(item.code)
   return {
-    market: 'US',
-    assetClass: 'ETF',
-    symbol: item.chart_symbol ?? item.code,
+    market: (item.market ?? 'US') as 'US' | 'HK' | 'JP' | 'KR',
+    assetClass: isIndex ? 'INDEX' : 'EQUITY',
+    symbol: sym,
   }
 }
 
