@@ -21,27 +21,8 @@ export function computeMarketMood(sections: MarketDynamicsSection[]) {
 const STRIP_LIMIT = 8
 
 export function pickBoardStripIndices(sections: MarketDynamicsSection[]): MarketIndexQuote[] {
-  const spotlight = sections.find(sec => sec.id === 'spotlight')?.items ?? []
-  if (spotlight.length >= 4) return spotlight.slice(0, STRIP_LIMIT)
-
-  const merged: MarketIndexQuote[] = []
-  const seen = new Set<string>()
-  const push = (items: MarketIndexQuote[]) => {
-    for (const item of items) {
-      const key = item.qt_code || item.code || item.name
-      if (seen.has(key)) continue
-      seen.add(key)
-      merged.push(item)
-      if (merged.length >= STRIP_LIMIT) return
-    }
-  }
-
-  push(spotlight)
-  push(sections.find(sec => sec.id === 'cn_major')?.items ?? [])
-  push(sections.find(sec => sec.id === 'america')?.items ?? [])
-  push(sections.find(sec => sec.id === 'asia')?.items ?? [])
-
-  return merged.slice(0, STRIP_LIMIT)
+  const cnMajor = sections.find(sec => sec.id === 'cn_major')?.items ?? []
+  return cnMajor.slice(0, STRIP_LIMIT)
 }
 
 export function isCnChartableIndex(

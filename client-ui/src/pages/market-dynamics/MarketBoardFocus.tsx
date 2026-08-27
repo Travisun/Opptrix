@@ -28,6 +28,10 @@ const useStyles = makeStyles({
     height: '300px',
     minHeight: '280px',
   },
+  rootCn: {
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gridTemplateRows: '1fr',
+  },
   col: {
     minWidth: 0,
     minHeight: 0,
@@ -189,13 +193,20 @@ type Props = {
   losers: MarketStockMover[]
   /** 嵌入纵向滚动盘面时使用固定高度网格，避免与外层滚动冲突 */
   embedded?: boolean
+  /** A股 Tab 仅展示涨跌两栏 */
+  variant?: 'cn' | 'full'
 }
 
-export default function MarketBoardFocus({ gainers, losers, embedded = false }: Props) {
+export default function MarketBoardFocus({
+  gainers,
+  losers,
+  embedded = false,
+  variant = 'cn',
+}: Props) {
   const s = useStyles()
 
   return (
-    <div className={mergeClasses(s.root, embedded && s.rootEmbedded)}>
+    <div className={mergeClasses(s.root, embedded && s.rootEmbedded, variant === 'cn' && s.rootCn)}>
       <PanelCol title="涨幅" s={s}>
         <MoverRows items={gainers} s={s} />
       </PanelCol>
@@ -204,19 +215,23 @@ export default function MarketBoardFocus({ gainers, losers, embedded = false }: 
         <MoverRows items={losers} s={s} />
       </PanelCol>
 
-      <MarketUsTechWatchProvider>
-        <PanelCol
-          title="美股龙头"
-          s={s}
-          headAction={<MarketUsTechWatchManageButton />}
-        >
-          <MarketUsTechWatchList scrollable />
-        </PanelCol>
-      </MarketUsTechWatchProvider>
+      {variant === 'full' && (
+        <>
+          <MarketUsTechWatchProvider>
+            <PanelCol
+              title="美股龙头"
+              s={s}
+              headAction={<MarketUsTechWatchManageButton />}
+            >
+              <MarketUsTechWatchList scrollable />
+            </PanelCol>
+          </MarketUsTechWatchProvider>
 
-      <PanelCol title="我的关注" s={s}>
-        <MarketWatchlistQuotes />
-      </PanelCol>
+          <PanelCol title="我的关注" s={s}>
+            <MarketWatchlistQuotes />
+          </PanelCol>
+        </>
+      )}
     </div>
   )
 }

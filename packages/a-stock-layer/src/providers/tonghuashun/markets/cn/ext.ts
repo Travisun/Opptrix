@@ -85,6 +85,32 @@ export function mixTonghuashunExt(Driver: { prototype: TonghuashunMarketHandler 
   }
 
   /**
+   * 同花顺指数/板块行情快照（批量）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share-index/prices/snapshot
+   * @param thscodes 同花顺指数 thscode 或数组（如 885338.TI）；走 SDK index.pricesSnapshot
+   */
+  p.thsIndexPricesSnapshot = async function thsIndexPricesSnapshot(
+    thscodes: string | string[],
+  ) {
+    const raw = Array.isArray(thscodes) ? thscodes : parseCodesArg(thscodes)
+    const normalized = [...new Set(
+      raw.map(c => resolveIndexThscode(String(c))).filter(Boolean),
+    )]
+    if (!normalized.length) return null
+
+    const CHUNK = 50
+    return withFuyaoClient(async client => {
+      const rows: Record<string, unknown>[] = []
+      for (let i = 0; i < normalized.length; i += CHUNK) {
+        const part = normalized.slice(i, i + CHUNK)
+        const data = await client.indexPricesSnapshot(part)
+        rows.push(...withSourceRows(data.item ?? []))
+      }
+      return rows.length ? rows : null
+    })
+  }
+
+  /**
    * 同花顺指数/板块成分股列表
    * @sourceUrl https://fuyao.aicubes.cn/api/a-share-index/constituents/ths-stock-list
    * @pageUrl https://fuyao.aicubes.cn/
@@ -188,6 +214,18 @@ export function mixTonghuashunExt(Driver: { prototype: TonghuashunMarketHandler 
   p.thsSkyrocketList = async function thsSkyrocketList(period: 'day' | 'hour' = 'day') {
     return withFuyaoClient(async client => {
       const data = await client.skyrocketList(period)
+      const rows = withSourceRows(data.item ?? [])
+      return rows.length ? rows : null
+    })
+  }
+
+  /**
+   * 当日热股榜单
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/hot-stock-list
+   */
+  p.thsHotStockList = async function thsHotStockList(period: 'day' | 'hour' = 'day') {
+    return withFuyaoClient(async client => {
+      const data = await client.hotStockList(period)
       const rows = withSourceRows(data.item ?? [])
       return rows.length ? rows : null
     })
