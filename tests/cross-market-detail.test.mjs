@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildCrossMarketDetailPayload,
   mergeCrossMarketQuote,
+  quoteFromRecentKlines,
   normalizeCrossMarketArticles,
   normalizeCrossMarketNotices,
   normalizeCrossMarketRelatedStocks,
@@ -136,6 +137,16 @@ test('mergeCrossMarketQuote enriches week52 fields', () => {
   })
   assert.equal(merged?.week52High, 120)
   assert.equal(merged?.currency, 'USD')
+})
+
+test('quoteFromRecentKlines synthesizes basic quote from last bar', () => {
+  const quote = quoteFromRecentKlines([
+    { date: '2026-08-25', open: 380, high: 390, low: 378, close: 388, volume: 1_000_000 },
+    { date: '2026-08-26', open: 388, high: 392, low: 385, close: 390, changePct: 0.52 },
+  ])
+  assert.equal(quote?.price, 390)
+  assert.equal(quote?.open, 388)
+  assert.equal(quote?.sessionLabel, '收盘')
 })
 
 test('normalizeCrossMarketRelatedStocks maps peer rows', () => {

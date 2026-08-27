@@ -167,6 +167,37 @@ export function normalizeHkTencentProfile(
   }
 }
 
+/** 实时行情缺失时，用近期 K 线最后一根合成基本行情（开高低收量） */
+export function quoteFromRecentKlines(
+  klines: unknown[] | null | undefined,
+): Record<string, unknown> | null {
+  if (!Array.isArray(klines) || !klines.length) return null
+  const last = klines[klines.length - 1]
+  if (!last || typeof last !== 'object') return null
+  const row = last as Record<string, unknown>
+  const close = num(row.close ?? row.price)
+  if (close == null || !(close > 0)) return null
+  const open = num(row.open) ?? close
+  const high = num(row.high) ?? close
+  const low = num(row.low) ?? close
+  const preClose = num(row.preClose ?? row.pre_close)
+  const changePct = num(row.changePct ?? row.change_pct)
+  const volume = num(row.volume)
+  const change = preClose != null ? close - preClose : num(row.change)
+  return {
+    price: close,
+    open,
+    high,
+    low,
+    preClose,
+    change,
+    changePct,
+    volume,
+    quoteSession: 'closed',
+    sessionLabel: '收盘',
+  }
+}
+
 /** 合并实时 enrich（52 周高低、币种、估值等）到 snapshot quote */
 export function mergeCrossMarketQuote(
   base: Record<string, unknown> | null | undefined,

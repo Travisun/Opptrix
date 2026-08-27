@@ -254,8 +254,22 @@ function RightMarketPanel({
   const handleManage = useCallback(async (item: WatchlistItem) => {
     const ref = resolveWatchlistInstrument(item)
     setManageStock(item)
+    if (!ref) {
+      setDialogPrice(null)
+      return
+    }
     try {
-      if (ref && (hasApplicationCapability(ref, 'batch_quote') || hasApplicationCapability(ref, 'quote'))) {
+      if (hasApplicationCapability(ref, 'quote')) {
+        const resp = await research.instrumentQuote(ref, { fresh: true })
+        const price = resp.success && resp.data?.quote?.price != null
+          ? resp.data.quote.price
+          : null
+        if (price != null) {
+          setDialogPrice(price)
+          return
+        }
+      }
+      if (hasApplicationCapability(ref, 'batch_quote')) {
         const resp = await research.instrumentQuotes([ref])
         setDialogPrice(resp.data?.quotes?.[0]?.price ?? null)
       } else {

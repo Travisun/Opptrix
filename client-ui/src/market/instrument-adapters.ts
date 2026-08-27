@@ -164,7 +164,7 @@ function quoteDtoToMarketQuote(q: UnifiedInstrumentQuoteDto): MarketQuote {
   return unifiedQuoteToMarketQuote(q)
 }
 
-function quoteDtoToCrossMarket(q: UnifiedInstrumentQuoteDto): CrossMarketQuote {
+export function quoteDtoToCrossMarket(q: UnifiedInstrumentQuoteDto): CrossMarketQuote {
   return {
     code: q.code,
     name: q.name,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
+import { quoteDtoToCrossMarket } from './instrument-adapters'
 import type { CryptoSnapshotData, UsSnapshotData, WatchlistItem } from '../types/market'
 import type { InstrumentRef } from '../types/instrument'
 import {
@@ -25,6 +26,7 @@ import { hasApplicationCapability } from './capabilities'
 import { isWatchlistItemWithinQuoteGrace } from './watchlistQuotes'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
+import { mergeSnapshotPreserveQuote } from './detailSnapshotUtils'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
@@ -269,25 +271,33 @@ function MiniKline({
   )
 }
 
-async function loadSnapshot(ref: InstrumentRef): Promise<EquityDetail | CryptoSnapshotData> {
+async function loadSnapshot(
+  ref: InstrumentRef,
+  opts?: { fresh?: boolean },
+): Promise<EquityDetail | CryptoSnapshotData> {
   if (!hasApplicationCapability(ref, 'snapshot')) {
     throw new Error('该标的暂不支持快照')
   }
-  const resp = await research.instrumentSnapshot(ref)
+  const resp = await research.instrumentSnapshot(ref, { fresh: opts?.fresh })
   if (!resp.success || !resp.data || typeof resp.data !== 'object') {
     throw new Error(resp.message || SNAPSHOT_LOAD_ERROR_COPY)
   }
-  return resp.data as EquityDetail | CryptoSnapshotData
-}
-
-/** 刷新成功但新 quote 为空时保留上一份，避免摘要闪没 */
-function mergeSnapshotPreserveQuote(
-  prev: EquityDetail | CryptoSnapshotData | null,
-  next: EquityDetail | CryptoSnapshotData,
-): EquityDetail | CryptoSnapshotData {
-  if (next.quote != null) return next
-  if (prev?.quote == null) return next
-  return { ...next, quote: prev.quote }
+  const data = resp.data as EquityDetail | CryptoSnapshotData
+  if (!data.quote && (ref.market === 'US' || ref.market === 'HK')) {
+    try {
+      const quoteResp = await research.instrumentQuote(ref, { fresh: true })
+      const q = quoteResp.success && quoteResp.data?.quote
+        ? quoteResp.data.quote
+        : null
+      if (q) {
+        return {
+          ...data,
+          quote: quoteDtoToCrossMarket(q),
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return data
 }
 
 function detailFootnote(ref: InstrumentRef, quote: { quoteSession?: string; sessionLabel?: string } | null): string {
@@ -346,34 +356,43 @@ export default function CrossMarketSnapshotDetail({
   const isCrypto = ref?.market === 'CRYPTO'
   const isEquity = ref?.market === 'US' || ref?.market === 'HK'
 
-  const [snapshot, setSnapshot] = useState<EquityDetail | CryptoSnapshotData | null>(null)
+  const [snapshotByKey, setSnapshotByKey] = useState<Record<string, EquityDetail | CryptoSnapshotData>>({})
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [, setGraceTick] = useState(0)
   const loadSeqRef = useRef(0)
-  const snapshotRef = useRef<EquityDetail | CryptoSnapshotData | null>(null)
   const initialRetryRef = useRef(0)
-  snapshotRef.current = snapshot
+  const freshLoadedRef = useRef<Set<string>>(new Set())
+  const snapshotByKeyRef = useRef(snapshotByKey)
+  snapshotByKeyRef.current = snapshotByKey
+  const snapshot = snapshotByKey[instrumentIdentity] ?? null
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { fresh?: boolean }) => {
     if (!ref) return
     const seq = ++loadSeqRef.current
     setFetching(true)
     let scheduleRetry = false
     try {
-      const data = await loadSnapshot(ref)
+      const data = await loadSnapshot(ref, { fresh: opts?.fresh })
       if (seq !== loadSeqRef.current) return
-      setSnapshot(prev => mergeSnapshotPreserveQuote(prev, data))
+      setSnapshotByKey(prev => {
+        const prior = prev[instrumentIdentity] ?? null
+        return {
+          ...prev,
+          [instrumentIdentity]: mergeSnapshotPreserveQuote(prior, data),
+        }
+      })
       setError(null)
       initialRetryRef.current = 0
+      if (opts?.fresh) freshLoadedRef.current.add(instrumentIdentity)
     } catch (e) {
       if (seq !== loadSeqRef.current) return
-      const hadQuote = snapshotRef.current?.quote != null
+      const hadQuote = snapshotByKeyRef.current[instrumentIdentity]?.quote != null
       if (!hadQuote && initialRetryRef.current < SNAPSHOT_INITIAL_MAX_RETRIES) {
         initialRetryRef.current += 1
         scheduleRetry = true
         window.setTimeout(() => {
-          void load()
+          void load({ fresh: true })
         }, SNAPSHOT_INITIAL_RETRY_MS * initialRetryRef.current)
         return
       }
@@ -383,22 +402,22 @@ export default function CrossMarketSnapshotDetail({
         setFetching(false)
       }
     }
-  }, [ref])
+  }, [ref, instrumentIdentity])
 
   useEffect(() => {
-    setSnapshot(null)
-    setError(null)
-    initialRetryRef.current = 0
     loadSeqRef.current += 1
+    initialRetryRef.current = 0
+    setError(null)
   }, [instrumentIdentity])
 
   useEffect(() => {
     if (!ref) return undefined
-    void load()
+    const fresh = !freshLoadedRef.current.has(instrumentIdentity)
+    void load({ fresh })
     const ms = isCrypto ? 30_000 : 90_000
-    const timer = window.setInterval(() => { void load() }, ms)
+    const timer = window.setInterval(() => { void load({ fresh: false }) }, ms)
     return () => window.clearInterval(timer)
-  }, [load, isCrypto, instrumentIdentity])
+  }, [load, isCrypto, instrumentIdentity, ref])
 
   useEffect(() => {
     if (!isWatchlistItemWithinQuoteGrace(stock)) return undefined

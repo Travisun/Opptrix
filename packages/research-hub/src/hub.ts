@@ -132,6 +132,7 @@ import {
 import {
   buildCrossMarketDetailPayload,
   mergeCrossMarketQuote,
+  quoteFromRecentKlines,
   normalizeCrossMarketArticlesFromNews,
   normalizeCrossMarketDividends,
   normalizeCrossMarketFinancialHistory,
@@ -1610,15 +1611,29 @@ export class ResearchHub {
     return holderHistoryFromRows(rows)
   }
 
-  /** 详情页行情：标准 realtime，无第三方 enrich */
+  /** 详情页行情：标准 realtime + 覆盖层缓存 / 内存报价回退；指数可 K 线合成 */
   private async stockDetailQuote(ref: InstrumentRef) {
     const cnRef = resolveCnInstrumentRef(ref)
-    const code = cnRef.symbol
     const realtimeR = await this.de.queryInstrumentData(cnRef, 'realtime')
-    const merged = mergeDetailQuoteRows(
-      code,
-      null,
-      (instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(realtimeR)?.[0] ?? null) as Record<string, unknown> | null,
+    const liveRaw = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(realtimeR)?.[0] ?? null
+    const resolved = this.resolveStockQuoteWithStaleFallback(cnRef, liveRaw)
+    if (resolved) {
+      return normalizePreOpenRealtimeQuote(resolved as unknown as import('@opptrix/shared').StockRealtime)
+    }
+    if (cnRef.assetClass === 'INDEX') {
+      return this.stockDetailQuoteFromKlines(cnRef)
+    }
+    return null
+  }
+
+  private async stockDetailQuoteFromKlines(ref: InstrumentRef) {
+    const klineR = await this.de.queryInstrumentData(ref, 'kline', { count: 5 })
+    const klines = instrumentQueryData<unknown[]>(klineR)
+    const synthesized = quoteFromRecentKlines(klines)
+    if (!synthesized) return null
+    const merged = this.mergeQuoteWithLocal(
+      ref.symbol,
+      synthesized as unknown as NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0],
     )
     if (!merged) return null
     return normalizePreOpenRealtimeQuote(merged as unknown as import('@opptrix/shared').StockRealtime)
@@ -1639,17 +1654,16 @@ export class ResearchHub {
     const code = cnRef.symbol
     const quoteR = await this.stockDetailQuote(cnRef)
     const quote = quoteR ? this.enrichQuote(quoteR) : null
-    if (!quote) return fail('获取行情失败', t0)
 
     const name = this.resolveStockName(
       code,
       cnRef.exchange ?? null,
-      quote.name,
+      quote?.name,
     )
 
     return ok({
       code: instrumentHubCode(cnRef),
-      name,
+      name: name || code,
       quote,
       profile: null,
       financial: null,
@@ -1658,7 +1672,7 @@ export class ResearchHub {
       dividends: [],
       moneyFlow: [],
       shareholders: null,
-    }, `${name}(${code}) 行情`, t0)
+    }, `${name || code}(${code})${quote ? ' 行情' : ''}`, t0)
   }
 
   private mergeQuoteWithLocal(
@@ -3668,6 +3682,10 @@ export class ResearchHub {
   }
 
   private async instrumentSnapshot(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (ref && params.fresh === true) {
+      this.de.invalidateInstrumentQuoteCache(ref)
+    }
     return routeInstrumentSnapshot(params, this.instrumentRouteHandlers(t0))
   }
 
@@ -4121,10 +4139,24 @@ export class ResearchHub {
       }
     }
 
-    const quote = mergeCrossMarketQuote(
-      (snap?.quote ?? null) as Record<string, unknown> | null,
-      quoteR.data?.[0] ?? null,
+    const liveRow = quoteR.data?.[0] ?? null
+    const resolvedLive = this.resolveCrossMarketQuoteWithStaleFallback(
+      ref,
+      liveRow as Record<string, unknown> | null,
     )
+    let quote = mergeCrossMarketQuote(
+      (snap?.quote ?? null) as Record<string, unknown> | null,
+      resolvedLive,
+    )
+    if (!quote) {
+      quote = mergeCrossMarketQuote(
+        null,
+        this.resolveCrossMarketQuoteWithStaleFallback(ref, null),
+      )
+    }
+    if (!quote) {
+      quote = quoteFromRecentKlines(snap?.recentKlines as unknown[] | undefined)
+    }
 
     const payload = buildCrossMarketDetailPayload(market, ref.symbol, snap ?? null, {
       profile,

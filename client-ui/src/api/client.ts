@@ -418,12 +418,16 @@ export const research = {
     })
   },
 
-  stockDetail: async (codeOrRef: string | InstrumentRef) => {
+  stockDetail: async (codeOrRef: string | InstrumentRef, opts?: { fresh?: boolean }) => {
     const instrument = cnEquityRef(codeOrRef)
     const code = hubInstrumentCode(instrument)
+    const body = {
+      ...hubInstrumentBody(instrument),
+      ...(opts?.fresh ? { fresh: true } : {}),
+    }
     const resp = await postInstrument<StockDetailData | UnifiedInstrumentSnapshotDto>(
       '/instruments/snapshot',
-      hubInstrumentBody(instrument),
+      body,
       undefined,
       30000,
     )
@@ -453,6 +457,7 @@ export const research = {
 
   etfSnapshot: async (
     instrument: InstrumentRef,
+    opts?: { fresh?: boolean },
     signal?: AbortSignal,
   ): Promise<
     import('../types/schemas').ApiResponse<import('../types/market').EtfSnapshotData>
@@ -464,9 +469,13 @@ export const research = {
       nav: null,
       quote: null,
     }
+    const body = {
+      ...hubInstrumentBody(instrument),
+      ...(opts?.fresh ? { fresh: true } : {}),
+    }
     const resp = await apiCall<
       import('../types/market').EtfSnapshotData | UnifiedInstrumentSnapshotDto
-    >('etf_snapshot', hubInstrumentBody(instrument), { signal }, 20000)
+    >('etf_snapshot', body, { signal }, 20000)
     if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
       return toApiResponse('etf_snapshot', resp, fallback, unifiedSnapshotToEtfSnapshot(resp.data))
     }
@@ -597,8 +606,13 @@ export const research = {
       counts: { cn_stocks: number; cn_etfs: number; us: number; crypto: number }
     } }>('/instruments/summary'),
 
-  instrumentSnapshot: async (instrument: InstrumentRef, signal?: AbortSignal) => {
-    const resp = await postInstrument<UnifiedInstrumentSnapshotDto>('/instruments/snapshot', hubInstrumentBody(instrument), signal)
+  instrumentSnapshot: async (
+    instrument: InstrumentRef,
+    opts?: { fresh?: boolean },
+    signal?: AbortSignal,
+  ) => {
+    const body = { ...hubInstrumentBody(instrument), ...(opts?.fresh ? { fresh: true } : {}) }
+    const resp = await postInstrument<UnifiedInstrumentSnapshotDto>('/instruments/snapshot', body, signal)
     if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
       return {
         ...resp,

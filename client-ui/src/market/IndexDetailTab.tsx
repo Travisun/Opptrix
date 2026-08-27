@@ -19,6 +19,8 @@ import {
 } from './format'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
+import { mergeDetailPreserveQuote } from './detailSnapshotUtils'
+import { patchStockDetailQuoteIfMissing } from './detailQuoteFallback'
 import { WATCHLIST_QUOTES_POLL_MS } from './watchlistQuotes'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
@@ -182,10 +184,13 @@ function HeroCell({ label, value }: { label: string; value: string }) {
 
 function IndexDetailTab({ stock }: Props) {
   const s = useStyles()
-  const [detail, setDetail] = useState<StockDetailData | null>(null)
+  const [detailByKey, setDetailByKey] = useState<Record<string, StockDetailData>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [detailReload, setDetailReload] = useState(0)
+  const freshLoadedRef = useRef<Set<string>>(new Set())
+  const loadSeqRef = useRef(0)
+  const detailByKeyRef = useRef(detailByKey)
+  detailByKeyRef.current = detailByKey
   const stockRef = useRef(stock)
   stockRef.current = stock
 
@@ -203,46 +208,70 @@ function IndexDetailTab({ stock }: Props) {
     [stockKey],
   )
   const displayCode = stock?.code?.trim() ?? ''
+  const detail = stockKey ? (detailByKey[stockKey] ?? null) : null
 
   useEffect(() => {
     if (!stockKey || !instrumentRef) {
-      setDetail(null)
       setError(instrumentRef ? '' : UNRESOLVED_INSTRUMENT_COPY.hint)
       return undefined
     }
 
     let cancelled = false
+    const seq = ++loadSeqRef.current
+    const fresh = !freshLoadedRef.current.has(stockKey)
     setLoading(true)
     setError('')
 
-    research.stockDetail(instrumentRef)
-      .then(resp => {
-        if (cancelled) return
+    research.stockDetail(instrumentRef, { fresh })
+      .then(async resp => {
+        if (cancelled || seq !== loadSeqRef.current) return
         if (!resp.success || !resp.data) {
-          setError(resp.message || '暂时无法加载指数行情，请稍后再试')
-          setDetail(null)
+          if (!detailByKeyRef.current[stockKey]) {
+            setError(resp.message || '暂时无法加载指数行情，请稍后再试')
+          }
           return
         }
-        setDetail(resp.data)
+        if (fresh) freshLoadedRef.current.add(stockKey)
+        const patched = await patchStockDetailQuoteIfMissing(instrumentRef, resp.data)
+        if (cancelled || seq !== loadSeqRef.current) return
+        setDetailByKey(prev => ({
+          ...prev,
+          [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+        }))
+        setError('')
       })
       .catch(e => {
-        if (!cancelled) {
+        if (cancelled || seq !== loadSeqRef.current) return
+        if (!detailByKeyRef.current[stockKey]) {
           setError(e instanceof Error ? e.message : '暂时无法加载指数行情，请稍后再试')
-          setDetail(null)
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && seq === loadSeqRef.current) setLoading(false)
       })
 
     return () => { cancelled = true }
-  }, [stockKey, instrumentRef, detailReload])
+  }, [stockKey, instrumentRef])
 
   useEffect(() => {
-    if (!stockKey) return undefined
-    const timer = window.setInterval(() => setDetailReload(n => n + 1), WATCHLIST_QUOTES_POLL_MS)
-    return () => window.clearInterval(timer)
+    loadSeqRef.current += 1
+    setError('')
   }, [stockKey])
+
+  useEffect(() => {
+    if (!stockKey || !instrumentRef) return undefined
+    const timer = window.setInterval(() => {
+      void research.stockDetail(instrumentRef, { fresh: false }).then(async resp => {
+        if (!resp.success || !resp.data) return
+        const patched = await patchStockDetailQuoteIfMissing(instrumentRef, resp.data)
+        setDetailByKey(prev => ({
+          ...prev,
+          [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+        }))
+      })
+    }, WATCHLIST_QUOTES_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [stockKey, instrumentRef])
 
   if (!stock) {
     return <div className={s.center}>请在「关注」中选择一条指数</div>

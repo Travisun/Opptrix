@@ -996,9 +996,31 @@ export class MarketDataEngine {
         : Promise.resolve(null),
     ])
     const profileRow = profile.data?.[0] as Record<string, unknown> | undefined
-    const quoteRow = quoteRes?.success
+    let quoteRow = quoteRes?.success
       ? quoteRes.data?.[0] as Record<string, unknown> | undefined
       : undefined
+    if (!quoteRow && exchangeListed) {
+      const cached = this.peekInstrumentQuoteCache(normalized)
+      if (cached) {
+        quoteRow = {
+          code,
+          name: cached.name,
+          price: cached.price,
+          exchangePrice: cached.price,
+          changePct: cached.changePct,
+          change: cached.change,
+          open: cached.open,
+          high: cached.high,
+          low: cached.low,
+          preClose: cached.preClose,
+          volume: cached.volume,
+          amount: cached.amount,
+          exchangeVolume: cached.volume,
+          exchangeAmount: cached.amount,
+          source: 'cache',
+        }
+      }
+    }
     const success = profile.success || (exchangeListed && quoteRes?.success && quoteRow)
     if (!success) {
       const quoteErr = quoteRes && !quoteRes.success && 'error' in quoteRes
@@ -1112,7 +1134,9 @@ export class MarketDataEngine {
         code,
         profile: profile.data?.[0] ?? null,
         nav: pickLatestNavRow(nav.data as Record<string, unknown>[] | undefined) ?? null,
-        quote: quote.data?.[0] ?? null,
+        quote: quote.data?.[0]
+          ?? this.peekInstrumentQuoteCache(normalized)
+          ?? null,
       },
       source: profile.source ?? nav.source ?? quote.source,
     }
@@ -1594,14 +1618,27 @@ export class MarketDataEngine {
 
     if (ref.market === 'CN') {
       const code = normalizeCode(ref.symbol)
-      const assetClass = isCnExchangeListedFundAssetClass(ref.assetClass)
-        ? ref.assetClass
-        : 'EQUITY'
+      const assetClass = ref.assetClass === 'INDEX'
+        ? 'INDEX'
+        : isCnExchangeListedFundAssetClass(ref.assetClass)
+          ? ref.assetClass
+          : 'EQUITY'
       const marketArg = ref.exchange as import('./utils/helpers.js').StockMarket | undefined
+      if (ref.assetClass === 'INDEX') {
+        push('CN', 'INDEX', 'index_realtime', 'indexRealtime', [code])
+      }
       push('CN', assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg, assetClass] : [code, undefined, assetClass])
       if (isCnExchangeListedFundAssetClass(ref.assetClass)) {
         push('CN', ref.assetClass, 'stock_realtime', 'realtime', marketArg ? [code, marketArg, ref.assetClass] : [code, undefined, ref.assetClass])
       }
+      // 关注列表 batch 写入 per-symbol 缓存为 [code, exchange] 两参形态
+      if (marketArg) {
+        push('CN', assetClass, 'stock_realtime', 'realtime', [code, marketArg])
+        if (isCnExchangeListedFundAssetClass(ref.assetClass)) {
+          push('CN', ref.assetClass, 'stock_realtime', 'realtime', [code, marketArg])
+        }
+      }
+      push('CN', assetClass, 'stock_realtime', 'realtime', [code])
       return out
     }
 

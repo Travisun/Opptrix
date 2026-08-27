@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Tab, TabList, Text, Badge, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
@@ -22,7 +22,9 @@ import {
   pctTone,
   resolveDisplayStockName,
 } from './format'
-import { resolveWatchlistInstrument } from './instrument'
+import { resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
+import { mergeDetailPreserveQuote } from './detailSnapshotUtils'
+import { patchFundSnapshotQuoteIfMissing } from './detailQuoteFallback'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
@@ -245,10 +247,20 @@ export default function FundDetailTab({
 }: Props) {
   const s = useStyles()
   const [tab, setTab] = useState<FundTab>('chart')
-  const [snapshot, setSnapshot] = useState<FundSnapshotData | null>(null)
-  const [detail, setDetail] = useState<FundDetailData | null>(null)
+  const [snapshotByKey, setSnapshotByKey] = useState<Record<string, FundSnapshotData>>({})
+  const [detailByKey, setDetailByKey] = useState<Record<string, FundDetailData | null>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const loadSeqRef = useRef(0)
+  const snapshotByKeyRef = useRef(snapshotByKey)
+  snapshotByKeyRef.current = snapshotByKey
+
+  const stockKey = useMemo(
+    () => (stock ? watchlistItemKey(normalizeWatchlistItem(stock)) : null),
+    [stock],
+  )
+  const snapshot = stockKey ? (snapshotByKey[stockKey] ?? null) : null
+  const detail = stockKey ? (detailByKey[stockKey] ?? null) : null
 
   const instrumentRef = useMemo(
     () => (stock ? resolveWatchlistInstrument(stock) : null),
@@ -298,47 +310,63 @@ export default function FundDetailTab({
   }, [detail?.returns, profile])
 
   useEffect(() => {
-    if (!instrumentRef) {
-      setSnapshot(null)
-      setDetail(null)
+    if (!instrumentRef || !stockKey) {
       setError('')
       return undefined
     }
     let cancelled = false
+    const seq = ++loadSeqRef.current
     setTab('chart')
     setLoading(true)
     setError('')
-    setDetail(null)
     research.fundDetail(instrumentRef)
       .then(async resp => {
-        if (cancelled) return
+        if (cancelled || seq !== loadSeqRef.current) return
         if (resp.success && resp.data?.snapshot) {
-          setDetail(resp.data)
-          setSnapshot(snapshotFromDetail(resp.data))
+          const snap = snapshotFromDetail(resp.data)
+          setDetailByKey(prev => ({ ...prev, [stockKey]: resp.data! }))
+          if (snap) {
+            const patched = await patchFundSnapshotQuoteIfMissing(instrumentRef, snap)
+            if (cancelled || seq !== loadSeqRef.current) return
+            setSnapshotByKey(prev => ({
+              ...prev,
+              [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+            }))
+          }
           return
         }
         const snap = await research.fundSnapshot(instrumentRef)
-        if (cancelled) return
+        if (cancelled || seq !== loadSeqRef.current) return
         if (!snap.success || !snap.data) {
-          setError(resp.message || snap.message || '暂时无法加载基金信息，请稍后再试')
-          setSnapshot(null)
+          if (!snapshotByKeyRef.current[stockKey]) {
+            setError(resp.message || snap.message || '暂时无法加载基金信息，请稍后再试')
+          }
           return
         }
-        setSnapshot(snap.data)
-        setDetail(resp.data ?? null)
+        const patched = await patchFundSnapshotQuoteIfMissing(instrumentRef, snap.data)
+        if (cancelled || seq !== loadSeqRef.current) return
+        setSnapshotByKey(prev => ({
+          ...prev,
+          [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+        }))
+        setDetailByKey(prev => ({ ...prev, [stockKey]: resp.data ?? null }))
       })
       .catch(e => {
-        if (!cancelled) {
+        if (cancelled || seq !== loadSeqRef.current) return
+        if (!snapshotByKeyRef.current[stockKey]) {
           setError(e instanceof Error ? e.message : '暂时无法加载基金信息，请稍后重试')
-          setSnapshot(null)
-          setDetail(null)
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && seq === loadSeqRef.current) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [instrumentRef])
+  }, [instrumentRef, stockKey])
+
+  useEffect(() => {
+    loadSeqRef.current += 1
+    setError('')
+  }, [stockKey])
 
   useEffect(() => {
     if (tab === 'holders' && !showHoldersTab) setTab('chart')

@@ -13,6 +13,8 @@ import {
 } from './format'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
+import { mergeDetailPreserveQuote } from './detailSnapshotUtils'
+import { patchStockDetailQuoteIfMissing } from './detailQuoteFallback'
 import { WATCHLIST_QUOTES_POLL_MS } from './watchlistQuotes'
 import {
   normalizeWatchlistItem,
@@ -199,16 +201,20 @@ function StockDetailTab({
   onManage,
 }: Props) {
   const s = useStyles()
-  const [detail, setDetail] = useState<StockDetailData | null>(null)
+  const [detailByKey, setDetailByKey] = useState<Record<string, StockDetailData>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [detailReload, setDetailReload] = useState(0)
+  const freshLoadedRef = useRef<Set<string>>(new Set())
+  const loadSeqRef = useRef(0)
+  const detailByKeyRef = useRef(detailByKey)
+  detailByKeyRef.current = detailByKey
   const stockRef = useRef(stock)
   stockRef.current = stock
   const stockKey = useMemo(
     () => (stock ? watchlistItemKey(normalizeWatchlistItem(stock)) : null),
     [stock],
   )
+  const detail = stockKey ? (detailByKey[stockKey] ?? null) : null
   const chartInstrument = useMemo(
     () => (stock ? resolveWatchlistInstrument(stock) ?? undefined : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by stockKey
@@ -217,55 +223,81 @@ function StockDetailTab({
 
   useEffect(() => {
     if (!stockKey) {
-      setDetail(null)
       setError('')
       return undefined
     }
 
     const current = stockRef.current
     if (!current) {
-      setDetail(null)
       setError('')
       return undefined
     }
 
+    const ref = resolveWatchlistInstrument(current)
+    if (!ref) {
+      setError(UNRESOLVED_INSTRUMENT_COPY.hint)
+      return undefined
+    }
+
     let cancelled = false
+    const seq = ++loadSeqRef.current
+    const fresh = !freshLoadedRef.current.has(stockKey)
     setLoading(true)
     setError('')
 
-    const ref = resolveWatchlistInstrument(current)
-    if (!ref) {
-      setLoading(false)
-      setError(UNRESOLVED_INSTRUMENT_COPY.hint)
-      setDetail(null)
-      return undefined
-    }
-    research.stockDetail(ref)
-      .then(resp => {
-        if (cancelled) return
+    research.stockDetail(ref, { fresh })
+      .then(async resp => {
+        if (cancelled || seq !== loadSeqRef.current) return
         if (!resp.success || !resp.data) {
-          setError(resp.message || '加载失败，请稍后重试')
-          setDetail(null)
+          const hadDetail = Boolean(detailByKeyRef.current[stockKey])
+          if (!hadDetail) {
+            setError(resp.message || '加载失败，请稍后重试')
+          }
           return
         }
-        setDetail(resp.data)
+        if (fresh) freshLoadedRef.current.add(stockKey)
+        const patched = await patchStockDetailQuoteIfMissing(ref, resp.data)
+        if (cancelled || seq !== loadSeqRef.current) return
+        setDetailByKey(prev => ({
+          ...prev,
+          [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+        }))
+        setError('')
       })
       .catch(e => {
-        if (!cancelled) {
+        if (cancelled || seq !== loadSeqRef.current) return
+        if (!detailByKeyRef.current[stockKey]) {
           setError(e instanceof Error ? e.message : '加载失败，请稍后重试')
-          setDetail(null)
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && seq === loadSeqRef.current) setLoading(false)
       })
 
     return () => { cancelled = true }
-  }, [stockKey, detailReload])
+  }, [stockKey])
+
+  useEffect(() => {
+    loadSeqRef.current += 1
+    setError('')
+  }, [stockKey])
 
   useEffect(() => {
     if (!stockKey) return undefined
-    const timer = window.setInterval(() => setDetailReload(n => n + 1), WATCHLIST_QUOTES_POLL_MS)
+    const timer = window.setInterval(() => {
+      const current = stockRef.current
+      if (!current) return
+      const ref = resolveWatchlistInstrument(current)
+      if (!ref) return
+      void research.stockDetail(ref, { fresh: false }).then(async resp => {
+        if (!resp.success || !resp.data) return
+        const patched = await patchStockDetailQuoteIfMissing(ref, resp.data)
+        setDetailByKey(prev => ({
+          ...prev,
+          [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+        }))
+      })
+    }, WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
   }, [stockKey])
 

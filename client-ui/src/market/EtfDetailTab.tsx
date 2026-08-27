@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
 import type {
@@ -17,6 +17,8 @@ import {
   resolveDisplayStockName,
 } from './format'
 import { resolveWatchlistInstrument, watchlistItemKey, normalizeWatchlistItem } from './instrument'
+import { mergeDetailPreserveQuote } from './detailSnapshotUtils'
+import { patchEtfSnapshotQuoteIfMissing } from './detailQuoteFallback'
 import TradingViewChart from './TradingViewChart'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX } from './chartViewConfig'
 import EtfDecisionCard from './EtfDecisionCard'
@@ -302,7 +304,11 @@ function performanceRows(profile: EtfProfileData | null): Array<{ label: string;
 export default function EtfDetailTab({ stock }: Props) {
   const s = useStyles()
   const [tab, setTab] = useState<EtfTab>('overview')
-  const [snapshot, setSnapshot] = useState<EtfSnapshotData | null>(null)
+  const [snapshotByKey, setSnapshotByKey] = useState<Record<string, EtfSnapshotData>>({})
+  const freshLoadedRef = useRef<Set<string>>(new Set())
+  const loadSeqRef = useRef(0)
+  const snapshotByKeyRef = useRef(snapshotByKey)
+  snapshotByKeyRef.current = snapshotByKey
   const [navRows, setNavRows] = useState<EtfNavPoint[]>([])
   const [holdings, setHoldings] = useState<EtfHoldingRow[]>([])
   const [scorecard, setScorecard] = useState<EtfScorecardData | null>(null)
@@ -349,41 +355,54 @@ export default function EtfDetailTab({ stock }: Props) {
       })
   }
 
+  const snapshot = stockKey ? (snapshotByKey[stockKey] ?? null) : null
+
   useEffect(() => {
-    if (!chartInstrument) {
-      setSnapshot(null)
-      setNavRows([])
-      setHoldings([])
-      setScorecard(null)
+    if (!chartInstrument || !stockKey) {
       setError('')
       setScorecardError('')
       return undefined
     }
     let cancelled = false
+    const seq = ++loadSeqRef.current
+    const fresh = !freshLoadedRef.current.has(stockKey)
     setTab('overview')
     setLoading(true)
     setError('')
-    research.etfSnapshot(chartInstrument)
-      .then(resp => {
-        if (cancelled) return
+    research.etfSnapshot(chartInstrument, { fresh })
+      .then(async resp => {
+        if (cancelled || seq !== loadSeqRef.current) return
         if (!resp.success || !resp.data) {
-          setError(resp.message || '暂时无法加载 ETF 信息，请稍后再试')
-          setSnapshot(null)
+          if (!snapshotByKeyRef.current[stockKey]) {
+            setError(resp.message || '暂时无法加载 ETF 信息，请稍后再试')
+          }
           return
         }
-        setSnapshot(resp.data)
+        if (fresh) freshLoadedRef.current.add(stockKey)
+        const patched = await patchEtfSnapshotQuoteIfMissing(chartInstrument, resp.data)
+        if (cancelled || seq !== loadSeqRef.current) return
+        setSnapshotByKey(prev => ({
+          ...prev,
+          [stockKey]: mergeDetailPreserveQuote(prev[stockKey] ?? null, patched),
+        }))
+        setError('')
       })
       .catch(e => {
-        if (!cancelled) {
+        if (cancelled || seq !== loadSeqRef.current) return
+        if (!snapshotByKeyRef.current[stockKey]) {
           setError(e instanceof Error ? e.message : '加载失败')
-          setSnapshot(null)
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && seq === loadSeqRef.current) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [chartInstrument])
+  }, [chartInstrument, stockKey])
+
+  useEffect(() => {
+    loadSeqRef.current += 1
+    setError('')
+  }, [stockKey])
 
   useEffect(() => {
     if (!stockCode || tab !== 'decision') return undefined
