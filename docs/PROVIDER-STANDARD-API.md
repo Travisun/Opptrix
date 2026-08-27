@@ -120,6 +120,7 @@ bindingsFor: () => []
 |------|----------|-----------------|------|
 | 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径；HTTP 经 `@opptrix/fuyao` SDK（`FuyaoClient` 适配层） |
 | 2 | **stockindex**（Opptrix量化） | 115 | 标的搜索权威源；需数据密钥；基址固定 `https://quant.opptrix.net` |
+| 2b | **yfinance** | 118 | **默认开启**；全球指数 `GLOBAL_INDEX` + 美/港/日 `INDEX_REALTIME`/`INDEX_KLINE`；`yahoo-finance2`；无需密钥 |
 | 3 | **tickflow** | 110 | **默认开启**公开免费档；配置 Key 可升级实时；US / HK / CN ETF；名录灌库 |
 | 4 | **tushare** | 105 | 需 Token；批量 / 基本面 |
 | — | **binance** / **okx** | ≤100 | CRYPTO；勿抢前四 |
@@ -141,6 +142,7 @@ bindingsFor: () => []
 |----------|------|--------------|--------|----------|----------|--------|------|
 | **tonghuashun** | ✅ | CN；**CN ETF 分拆**（priority 120）；**CN FUND** | CN | ✅ | ✅ | `ths*` / Fuyao | **合规（CN 主路径）** |
 | **stockindex** | ✅ | 跨市 **INSTRUMENT_SEARCH**（仅标的搜索） | CN/US/HK | — | ✅ 搜索 | 无 | **Opptrix量化**；priority 115 |
+| **yfinance** | ✅ | **GLOBAL_INDEX** + US/HK/JP **INDEX_*** | US/HK/JP | — | ✅ 指数 | 无 | **全球指数**；priority 118；默认开启 |
 | **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆**；目录 priority 110；名录灌库 |
 | **tushare** | ✅ | CN cnEquityEtfIndex + **cnFundBindings** | CN | 弱（无 ETF_LIST） | ✅ | fund_* 等 | **合规（CN）**；priority 105 |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |

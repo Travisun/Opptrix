@@ -1155,9 +1155,9 @@ export class ResearchHub {
 
   private async marketDynamicsUs(t0: number) {
     const US_CORE_INDICES = [
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'SPY' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', chartSymbol: 'SPY' },
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'QQQ' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', chartSymbol: 'QQQ' },
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'DIA' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', chartSymbol: 'DIA' },
+      { ref: { market: 'US', assetClass: 'INDEX', symbol: '^GSPC' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', chartSymbol: '^GSPC' },
+      { ref: { market: 'US', assetClass: 'INDEX', symbol: '^IXIC' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', chartSymbol: '^IXIC' },
+      { ref: { market: 'US', assetClass: 'INDEX', symbol: '^DJI' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', chartSymbol: '^DJI' },
     ]
 
     const usItems = await this.fetchGlobalIndexProxyItems(
@@ -1175,7 +1175,7 @@ export class ResearchHub {
     const sections = usItems.length ? [{
       id: 'us_major',
       title: '美股主要指数',
-      hint: 'ETF 代理实时报价',
+      hint: '全球主要指数实时报价',
       items: usItems,
     }] : []
 
@@ -1198,11 +1198,11 @@ export class ResearchHub {
       { code: '000688', name: '科创50' },
     ]
     const HK_HSI_PROXY = {
-      ref: { market: 'HK', assetClass: 'ETF', symbol: '2800' } as import('@opptrix/shared').InstrumentRef,
+      ref: { market: 'HK', assetClass: 'INDEX', symbol: '^HSI' } as import('@opptrix/shared').InstrumentRef,
       outCode: 'HSI',
       displayName: '恒生指数',
       location: '香港',
-      chartSymbol: '2800',
+      chartSymbol: '^HSI',
     }
 
     const fetchEmotionLimitUp = async () => {

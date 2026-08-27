@@ -24,6 +24,7 @@
     "@opptrix/market-data-core": "*",
     "@opptrix/shared": "*",
     "@opptrix/user-store": "*",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "yahoo-finance2": "^4.0.2"
   }
 }

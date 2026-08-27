@@ -561,6 +561,24 @@ export function resolveInstrumentQueryPlan(
     }
   }
 
+  // ── 美股指数 ──
+  if (ref.market === 'US' && ref.assetClass === 'INDEX') {
+    const normalized = normalizeInstrumentRef(ref)
+    const sym = normalized.symbol
+    switch (dataCap) {
+      case 'realtime':
+        return registryPlan('US', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, 'US'], normalized)
+      case 'kline':
+        return registryPlan('US', 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, [
+          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, 'US',
+        ], normalized)
+      case 'snapshot':
+        return registryPlan('US', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, 'US'], normalized)
+      default:
+        return null
+    }
+  }
+
   // ── 美股市场 ──
   if (ref.market === 'US' && ref.assetClass === 'EQUITY') {
     const normalized = normalizeInstrumentRef(ref)
@@ -637,9 +655,25 @@ export function resolveInstrumentQueryPlan(
   // ── 区域市场（HK；JP/KR 暂不接入） ──
   if (isRegionalEquityMarket(ref.market)) {
     const market = ref.market as RegionalEquityMarket
-    if (market === 'JP' || market === 'KR') return null
     const normalized = normalizeInstrumentRef(ref)
     const sym = regionalSymbol(ref)
+
+    if (ref.assetClass === 'INDEX') {
+      switch (dataCap) {
+        case 'realtime':
+          return registryPlan(market, 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, market], normalized)
+        case 'kline':
+          return registryPlan(market, 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, [
+            sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, market,
+          ], normalized)
+        case 'snapshot':
+          return registryPlan(market, 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, market], normalized)
+        default:
+          return null
+      }
+    }
+
+    if (market === 'JP' || market === 'KR') return null
     switch (dataCap) {
       case 'realtime':
         return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym], normalized)
