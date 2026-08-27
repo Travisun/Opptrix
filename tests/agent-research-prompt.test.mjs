@@ -5,6 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildAgentSystemRules,
+  buildInstrumentNamespacePlaybook,
   buildResearchEpistemicPlaybook,
   buildResearchOutputPlaybook,
   buildResearchCompletenessLoop,
@@ -408,6 +409,24 @@ test('system rules include local programming playbook and catalog index', () => 
   assert.match(rules, /本地编程协议/)
   assert.match(rules, /本地数据目录/)
   assert.match(rules, /root_id=shared|公共复用区/)
+})
+
+test('instrument namespace playbook — OpptrixQuant ID parsing rules', () => {
+  const block = buildInstrumentNamespacePlaybook()
+  assert.match(block, /MARKET.*CLASS.*SYMBOL/)
+  assert.match(block, /STOCK.*688981\.SH/)
+  assert.match(block, /IND.*881121\.TI/)
+  assert.match(block, /OTC.*000037\.OF/)
+  assert.match(block, /ETF.*510050\.SH/)
+  assert.match(block, /LOF.*160105\.SZ/)
+  assert.match(block, /REIT.*508000\.SH/)
+  assert.match(block, /第三段才是真正代码/)
+  assert.match(block, /调 MCP.*前先解析|调 MCP \/ 本地工具前必须先解析/)
+
+  const rules = buildAgentSystemRules()
+  assert.match(rules, /OpptrixQuant ID/)
+  assert.match(rules, /CN:STOCK:600519\.SH/)
+  assert.ok(!rules.includes('Stock-index 命名空间（CN:SZ.000009）'))
 })
 
 test('assembleSystemPrompt embeds dataSourcingPolicy with remote MCP priority', () => {
