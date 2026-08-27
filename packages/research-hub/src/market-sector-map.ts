@@ -90,7 +90,11 @@ export function parseConstituentStockCode(row: Record<string, unknown>): string 
 
 export function mergeConstituentQuoteRow(
   row: Record<string, unknown>,
-  quote: { price: number | null; change_pct: number | null } | undefined,
+  quote: {
+    price: number | null
+    change_pct: number | null
+    change_amt?: number | null
+  } | undefined,
 ): Record<string, unknown> {
   if (!quote) return row
   return {
@@ -98,6 +102,7 @@ export function mergeConstituentQuoteRow(
     price: quote.price,
     change_pct: quote.change_pct,
     price_change_ratio_pct: quote.change_pct,
+    change_amt: quote.change_amt ?? null,
   }
 }
 

@@ -5,6 +5,7 @@ import { resolveIndexDisplayCode, resolveIndexDisplayName } from './cnIndexForma
 import CnQuoteUnitCard from './CnQuoteUnitCard'
 import { CN_DASH } from './cnDashboardTokens'
 import { useCnHeroCardStyles } from './cnSelectCardStyles'
+import { CnIndexStripSkeleton } from './cnDashboardSkeletons'
 
 const useStyles = makeStyles({
   strip: {
@@ -28,6 +29,7 @@ type Props = {
   indices: MarketIndexQuote[]
   cnIndices: MarketIndexQuote[]
   selectedCode?: string | null
+  loading?: boolean
   onSelect?: (item: MarketIndexQuote, chartCode: string) => void
 }
 
@@ -35,10 +37,15 @@ export default function CnHeroIndexStrip({
   indices,
   cnIndices,
   selectedCode,
+  loading = false,
   onSelect,
 }: Props) {
   const s = useStyles()
   const cardS = useCnHeroCardStyles()
+
+  if (loading && !indices.length) {
+    return <CnIndexStripSkeleton />
+  }
 
   return (
     <div className={mergeClasses(s.strip, 'opptrix-cn-hero-index-strip', 'opptrix-scroll-x')}>

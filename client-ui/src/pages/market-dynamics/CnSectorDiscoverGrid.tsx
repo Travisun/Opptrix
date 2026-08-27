@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { MarketIndexQuote } from '../../types/schemas'
 import { opptrixCssVars } from '../../theme/tokens'
 import { indexKey } from './marketBoardUtils'
 import { sectorIndexCode } from './MarketSectorStrip'
 import CnDashboardFlexPanel from './CnDashboardFlexPanel'
 import CnQuoteUnitCard from './CnQuoteUnitCard'
-import { useCnSelectCardStyles } from './cnSelectCardStyles'
+import { useCnHeroCardStyles } from './cnSelectCardStyles'
+import { CnSectorGridSkeleton } from './cnDashboardSkeletons'
 
 const TAG_TABS = [
   { id: 'all', label: '全部' },
@@ -30,7 +31,7 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    padding: '0 12px 12px',
+    padding: '10px 12px 12px',
   },
   grid: {
     flex: 1,
@@ -74,7 +75,7 @@ export default function CnSectorDiscoverGrid({
   onSelect,
 }: Props) {
   const s = useStyles()
-  const cardS = useCnSelectCardStyles()
+  const cardS = useCnHeroCardStyles()
   const [tag, setTag] = useState<TagFilter>('all')
 
   const items = useMemo(() => {
@@ -92,7 +93,7 @@ export default function CnSectorDiscoverGrid({
   }, [sectors, tag])
 
   const panelSubtitle = loading && !sectors.length
-    ? '正在同步板块指数…'
+    ? '板块指数'
     : `${items.length} 个板块 · 按涨跌幅排序`
 
   const filterTabs = TAG_TABS.map(tab => ({
@@ -113,13 +114,14 @@ export default function CnSectorDiscoverGrid({
       }}
     >
       <div className={s.scrollWrap}>
-        <div className={mergeClasses(s.grid, 'opptrix-scroll-hidden')}>
-          {loading && !sectors.length ? (
-            <div className={s.empty}><Spinner size="tiny" label="加载板块…" /></div>
-          ) : !items.length ? (
-            <Text className={s.empty} block>{emptyHint ?? '暂无板块数据'}</Text>
-          ) : (
-            items.map(item => {
+        {loading && !sectors.length ? (
+          <CnSectorGridSkeleton />
+        ) : (
+          <div className={mergeClasses(s.grid, 'opptrix-scroll-hidden')}>
+            {!items.length ? (
+              <Text className={s.empty} block>{emptyHint ?? '暂无板块数据'}</Text>
+            ) : (
+              items.map(item => {
               const code = sectorIndexCode(item)
               const active = selectedCode === code
               const tagLabel = item.sector_tag ? TAG_LABEL[item.sector_tag] ?? item.sector_tag : null
@@ -144,9 +146,10 @@ export default function CnSectorDiscoverGrid({
                   />
                 </button>
               )
-            })
-          )}
-        </div>
+              })
+            )}
+          </div>
+        )}
       </div>
     </CnDashboardFlexPanel>
   )

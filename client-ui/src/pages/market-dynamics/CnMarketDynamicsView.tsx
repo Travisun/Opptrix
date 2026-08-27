@@ -162,6 +162,7 @@ export default function CnMarketDynamicsView({
         indices={cnIndices}
         cnIndices={cnIndices}
         selectedCode={chartCode}
+        loading={loading}
         onSelect={handleIndexSelect}
       />
 
@@ -178,6 +179,7 @@ export default function CnMarketDynamicsView({
             <CnMarketChartPanel
               chartCode={chartCode}
               activeIndex={activeIndex}
+              loading={loading}
               title={activeIndex ? resolveIndexDisplayName(activeIndex) : '指数走势'}
               indexCode={activeIndex?.qt_code ?? activeIndex?.code}
               price={activeIndex?.price}
@@ -213,7 +215,7 @@ export default function CnMarketDynamicsView({
           <CnSectorDiscoverGrid
             sectors={sectorIndices}
             selectedCode={selectedSectorCode}
-            loading={loading && !data}
+            loading={loading}
             emptyHint={data?.cn_sector_hint}
             onSelect={handleSectorSelect}
           />

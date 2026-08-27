@@ -3,10 +3,10 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowDownRegular, ArrowUpRegular, SubtractRegular } from '@fluentui/react-icons'
 import type { MarketDynamicsData, MarketIndexQuote } from '../../types/schemas'
 import { opptrixCssVars } from '../../theme/tokens'
-import { formatPct } from '../../market/format'
 import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
 import { CN_DASH } from './cnDashboardTokens'
 import { useCnSelectCardStyles } from './cnSelectCardStyles'
+import { CnKpiRowSkeleton } from './cnDashboardSkeletons'
 
 export type CnKpiAction =
   | 'limit_up'
@@ -36,8 +36,8 @@ const useStyles = makeStyles({
     '&::-webkit-scrollbar': { display: 'none' },
   },
   chipInner: {
-    flex: '1 0 188px',
-    minWidth: '188px',
+    flex: '1 0 160px',
+    minWidth: '160px',
     display: 'grid',
     gridTemplateColumns: 'auto minmax(0, 1fr)',
     gap: '10px',
@@ -62,7 +62,7 @@ const useStyles = makeStyles({
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
+    gap: '4px',
   },
   label: {
     fontSize: '10px',
@@ -70,6 +70,13 @@ const useStyles = makeStyles({
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
     color: opptrixCssVars.textTertiary,
+  },
+  valueRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: '8px',
+    minWidth: 0,
   },
   value: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -79,14 +86,18 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   status: {
     fontSize: '10px',
     fontWeight: 600,
-    lineHeight: 1.35,
+    lineHeight: 1.3,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    textAlign: 'right',
+    flex: '1 1 auto',
+    minWidth: 0,
   },
   statusUp: { color: MARKET_UP },
   statusDown: { color: MARKET_DOWN },
@@ -111,17 +122,6 @@ export default function CnCompactKpiRow({
   const cardS = useCnSelectCardStyles()
 
   const chips = useMemo((): Chip[] => {
-    if (loading && !data) {
-      return [
-        { action: 'limit_up', label: '涨停', value: '…', status: '加载中', tone: 'flat' },
-        { action: 'limit_break', label: '炸板', value: '…', status: '加载中', tone: 'flat' },
-        { action: 'gainers', label: '涨幅榜', value: '…', status: '加载中', tone: 'flat' },
-        { action: 'losers', label: '跌幅榜', value: '…', status: '加载中', tone: 'flat' },
-        { action: 'ladder', label: '连板', value: '…', status: '加载中', tone: 'flat' },
-        { action: 'top_sector', label: '领涨板块', value: '…', status: '加载中', tone: 'flat' },
-      ]
-    }
-
     const limitUp = data?.cn_limit_up?.length ?? 0
     const limitBreak = data?.cn_limit_break?.length ?? 0
     const gainers = data?.cn_gainers?.length ?? 0
@@ -159,14 +159,14 @@ export default function CnCompactKpiRow({
         action: 'gainers',
         label: '涨幅榜',
         value: `${gainers} 只`,
-        status: gainers > 0 ? '涨幅前列个股' : '榜单待更新',
+        status: gainers > 0 ? '涨幅前列' : '榜单待更新',
         tone: gainers > 0 ? 'up' : 'flat',
       },
       {
         action: 'losers',
         label: '跌幅榜',
         value: `${losers} 只`,
-        status: losers > 0 ? '跌幅前列个股' : '榜单待更新',
+        status: losers > 0 ? '跌幅前列' : '榜单待更新',
         tone: losers > 0 ? 'down' : 'flat',
       },
       {
@@ -185,7 +185,7 @@ export default function CnCompactKpiRow({
         label: '领涨板块',
         value: top?.name ?? (sectors.length ? '待刷新' : '暂无'),
         status: top?.change_pct != null
-          ? formatPct(top.change_pct, 2)
+          ? `${top.change_pct > 0 ? '+' : ''}${top.change_pct.toFixed(2)}%`
           : sectors.length
             ? '涨跌待同步'
             : '请确认板块数据源',
@@ -196,7 +196,15 @@ export default function CnCompactKpiRow({
             : 'flat',
       },
     ]
-  }, [data, loading, sectors])
+  }, [data, sectors])
+
+  if (loading && !data) {
+    return (
+      <div className={mergeClasses(s.row, 'opptrix-cn-compact-kpi', 'opptrix-scroll-x')}>
+        <CnKpiRowSkeleton />
+      </div>
+    )
+  }
 
   return (
     <div className={mergeClasses(s.row, 'opptrix-cn-compact-kpi', 'opptrix-scroll-x')}>
@@ -233,8 +241,10 @@ export default function CnCompactKpiRow({
             </div>
             <div className={s.body}>
               <span className={s.label}>{chip.label}</span>
-              <span className={s.value}>{chip.value}</span>
-              <span className={mergeClasses(s.status, statusClass)}>{chip.status}</span>
+              <div className={s.valueRow}>
+                <span className={s.value}>{chip.value}</span>
+                <span className={mergeClasses(s.status, statusClass)}>{chip.status}</span>
+              </div>
             </div>
           </button>
         )

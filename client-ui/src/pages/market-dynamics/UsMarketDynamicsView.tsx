@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular, NewsRegular, OpenRegular } from '@fluentui/react-icons'
 import TradingViewChart from '../../market/TradingViewChart'
 import type { InstrumentRef } from '../../types/instrument'
@@ -17,6 +17,7 @@ import {
   MarketUsTechWatchManageButton,
   MarketUsTechWatchProvider,
 } from './MarketUsTechWatch'
+import { CnInsightListSkeleton, CnNewsListSkeleton } from './cnDashboardSkeletons'
 
 const DETAIL_TABS = [
   { value: 'indices' as const, label: '指数' },
@@ -249,7 +250,7 @@ export default function UsMarketDynamicsView({
         {detailTab === 'indices' ? (
           <div className={mergeClasses(s.scroll, 'opptrix-scroll-hidden')}>
             {loading && !indices.length ? (
-              <div className={s.empty}><Spinner size="small" label="正在加载美股指数…" /></div>
+              <CnInsightListSkeleton rowCount={6} fill />
             ) : (
               <>
                 <div className={s.indexList}>
@@ -280,7 +281,7 @@ export default function UsMarketDynamicsView({
         ) : (
           <div className={mergeClasses(s.scroll, 'opptrix-scroll-hidden')}>
             {insightsLoading && !articles.length ? (
-              <div className={s.empty}><Spinner size="tiny" label="加载资讯…" /></div>
+              <CnNewsListSkeleton />
             ) : !articles.length ? (
               <div className={s.empty}>
                 <NewsRegular fontSize={18} />

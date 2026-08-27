@@ -15,6 +15,7 @@ import {
 } from './cnIndexFormat'
 import CnChangePill from './CnChangePill'
 import { CN_DASH } from './cnDashboardTokens'
+import { CnChartPanelSkeleton } from './cnDashboardSkeletons'
 
 const LEFT_COL_WIDTH = '172px'
 
@@ -226,6 +227,7 @@ type Props = {
   changeAmt?: number | null
   quoteTime?: string | null
   tradeState?: string | null
+  loading?: boolean
 }
 
 export default function CnMarketChartPanel({
@@ -238,6 +240,7 @@ export default function CnMarketChartPanel({
   changeAmt,
   quoteTime,
   tradeState,
+  loading = false,
 }: Props) {
   const s = useStyles()
 
@@ -277,6 +280,10 @@ export default function CnMarketChartPanel({
       </div>
     </>
   )
+
+  if (loading) {
+    return <CnChartPanelSkeleton />
+  }
 
   if (!chartCode) {
     return (

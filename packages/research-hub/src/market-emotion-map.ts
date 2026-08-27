@@ -5,6 +5,8 @@ export type MarketLimitUpItem = {
   code: string
   name: string
   change_pct: number | null
+  price?: number | null
+  change_amt?: number | null
   reason?: string
   continue_day_text?: string
   board_label?: string
@@ -21,7 +23,14 @@ export type MarketHotItem = {
 export type MarketLimitLadderBoard = {
   key: string
   label: string
-  items: Array<{ code: string; name: string; board_num?: number }>
+  items: Array<{
+    code: string
+    name: string
+    board_num?: number
+    price?: number | null
+    change_pct?: number | null
+    change_amt?: number | null
+  }>
 }
 
 export type MarketLimitLadder = {

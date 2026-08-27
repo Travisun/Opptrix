@@ -904,6 +904,62 @@ export class ResearchHub {
     return Number.isFinite(derived) ? derived : null
   }
 
+  private bareCnStockCode(code: string): string {
+    const raw = String(code ?? '').trim()
+    if (!raw) return ''
+    const dot = raw.indexOf('.')
+    const base = dot >= 0 ? raw.slice(0, dot) : raw
+    const digits = normalizeCode(base).replace(/\D/g, '').slice(-6)
+    return /^\d{6}$/.test(digits) ? digits : ''
+  }
+
+  private async fetchCnStockQuoteMap(
+    codes: string[],
+  ): Promise<Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>> {
+    const unique = [...new Set(codes.map(code => this.bareCnStockCode(code)).filter(Boolean))]
+    const map = new Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>()
+    if (!unique.length) return map
+
+    const CHUNK = 100
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const chunk = unique.slice(i, i + CHUNK)
+      const batch = await this.stockBatchRealtime(chunk)
+      chunk.forEach((code, j) => {
+        const raw = batch.data?.[j] ?? null
+        const merged = this.mergeQuoteWithLocal(code, raw)
+        if (!merged) return
+        const price = merged.price ?? null
+        const change_pct = merged.changePct ?? null
+        map.set(code, {
+          price,
+          change_pct,
+          change_amt: this.quoteChangeAmt(merged, price, change_pct),
+        })
+      })
+    }
+    return map
+  }
+
+  private applyCnStockQuote<T extends {
+    code: string
+    price?: number | null
+    change_pct?: number | null
+    change_amt?: number | null
+  }>(
+    item: T,
+    quoteMap: Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>,
+  ): T {
+    const key = this.bareCnStockCode(item.code)
+    const quote = key ? quoteMap.get(key) : undefined
+    if (!quote) return item
+    return {
+      ...item,
+      price: item.price ?? quote.price,
+      change_pct: item.change_pct ?? quote.change_pct,
+      change_amt: item.change_amt ?? quote.change_amt,
+    }
+  }
+
   private async fetchCnIndexMarketItems(
     indices: Array<{ code: string; name?: string }>,
   ) {
@@ -1256,6 +1312,31 @@ export class ResearchHub {
 
     const cnDragonTiger = mapDragonTigerItems(dragonR)
 
+    const quoteCodes = [
+      ...cnMovers.gainers,
+      ...cnMovers.losers,
+      ...cnLimitUp,
+      ...cnLimitBreak,
+      ...cnDragonTiger,
+      ...(cnLimitLadder?.boards.flatMap(board => board.items) ?? []),
+    ].map(item => item.code)
+    const cnStockQuoteMap = await this.fetchCnStockQuoteMap(quoteCodes)
+
+    const cnGainers = cnMovers.gainers.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLosers = cnMovers.losers.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLimitUpQuoted = cnLimitUp.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLimitBreakQuoted = cnLimitBreak.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnDragonTigerQuoted = cnDragonTiger.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLimitLadderQuoted = cnLimitLadder
+      ? {
+          ...cnLimitLadder,
+          boards: cnLimitLadder.boards.map(board => ({
+            ...board,
+            items: board.items.map(item => this.applyCnStockQuote(item, cnStockQuoteMap)),
+          })),
+        }
+      : null
+
     const sections: Array<{
       id: string
       title: string
@@ -1291,27 +1372,27 @@ export class ResearchHub {
       })
     }
 
-    const hasEmotionData = cnLimitUp.length > 0
+    const hasEmotionData = cnLimitUpQuoted.length > 0
       || cnSkyrocket.length > 0
-      || cnLimitBreak.length > 0
+      || cnLimitBreakQuoted.length > 0
       || cnHotStocks.length > 0
       || cnAnomaly.length > 0
-      || (cnLimitLadder?.boards.length ?? 0) > 0
+      || (cnLimitLadderQuoted?.boards.length ?? 0) > 0
 
     return ok({
       market: 'cn' as const,
       refreshed_at: new Date().toISOString(),
       sections,
-      cn_gainers: cnMovers.gainers,
-      cn_losers: cnMovers.losers,
-      cn_dragon_tiger: cnDragonTiger,
-      cn_dragon_tiger_date: cnDragonTiger[0]?.date ?? null,
-      cn_limit_up: cnLimitUp.length ? cnLimitUp : undefined,
-      cn_limit_break: cnLimitBreak.length ? cnLimitBreak : undefined,
+      cn_gainers: cnGainers,
+      cn_losers: cnLosers,
+      cn_dragon_tiger: cnDragonTigerQuoted,
+      cn_dragon_tiger_date: cnDragonTigerQuoted[0]?.date ?? null,
+      cn_limit_up: cnLimitUpQuoted.length ? cnLimitUpQuoted : undefined,
+      cn_limit_break: cnLimitBreakQuoted.length ? cnLimitBreakQuoted : undefined,
       cn_skyrocket: cnSkyrocket.length ? cnSkyrocket : undefined,
       cn_hot_stocks: cnHotStocks.length ? cnHotStocks : undefined,
       cn_anomaly: cnAnomaly.length ? cnAnomaly : undefined,
-      cn_limit_ladder: cnLimitLadder,
+      cn_limit_ladder: cnLimitLadderQuoted,
       cn_emotion_source: hasEmotionData ? 'tonghuashun' as const : null,
       cn_sector_status: cnSectorPack.status,
       cn_sector_hint: cnSectorPack.hint,
@@ -3496,7 +3577,11 @@ export class ResearchHub {
       .map(row => ({ row, code: parseConstituentStockCode(row) }))
       .filter(entry => entry.code)
     const toQuote = indexed.slice(0, limit)
-    const quoteByCode = new Map<string, { price: number | null; change_pct: number | null }>()
+    const quoteByCode = new Map<string, {
+      price: number | null
+      change_pct: number | null
+      change_amt: number | null
+    }>()
 
     const CHUNK = 100
     for (let i = 0; i < toQuote.length; i += CHUNK) {
@@ -3510,6 +3595,7 @@ export class ResearchHub {
         quoteByCode.set(entry.code, {
           price: merged.price ?? null,
           change_pct: merged.changePct ?? null,
+          change_amt: this.quoteChangeAmt(merged, merged.price ?? null, merged.changePct ?? null),
         })
       })
     }

@@ -375,6 +375,7 @@ export interface IndexConstituentItem {
   price?: number | null
   weight?: number | null
   change_pct?: number | null
+  change_amt?: number | null
 }
 
 export interface IndexConstituentsData {
@@ -409,13 +410,17 @@ export interface MarketDragonTigerItem {
   buy_amount?: number | null
   sell_amount?: number | null
   net_amount?: number | null
+  price?: number | null
   change_pct?: number | null
+  change_amt?: number | null
 }
 
 export interface MarketLimitUpItem {
   code: string
   name: string
   change_pct: number | null
+  price?: number | null
+  change_amt?: number | null
   reason?: string
   continue_day_text?: string
   board_label?: string
@@ -432,7 +437,14 @@ export interface MarketHotItem {
 export interface MarketLimitLadderBoard {
   key: string
   label: string
-  items: Array<{ code: string; name: string; board_num?: number }>
+  items: Array<{
+    code: string
+    name: string
+    board_num?: number
+    price?: number | null
+    change_pct?: number | null
+    change_amt?: number | null
+  }>
 }
 
 export interface MarketLimitLadder {

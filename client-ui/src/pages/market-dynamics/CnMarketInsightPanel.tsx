@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import type { ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular, NewsRegular, OpenRegular } from '@fluentui/react-icons'
 import type {
   FeedArticle,
@@ -10,12 +11,10 @@ import type {
   MarketLimitUpItem,
   MarketStockMover,
 } from '../../types/schemas'
-import { formatPct, pctTone } from '../../market/format'
-import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
-import { opptrixCssVars } from '../../theme/tokens'
-import { ghostInteractive } from '../../theme/mixins'
 import { formatRelativeTime } from '../news/newsUtils'
 import { openExternalUrl } from '../../platform/openUrl'
+import { opptrixCssVars } from '../../theme/tokens'
+import { ghostInteractive } from '../../theme/mixins'
 import MarketBoardFocus from './MarketBoardFocus'
 import MarketDragonTigerList from './MarketDragonTigerList'
 import MarketEmotionBoard from './MarketEmotionBoard'
@@ -23,6 +22,10 @@ import MarketSectorConstituentsPanel from './MarketSectorConstituentsPanel'
 import CnDashboardFlexPanel from './CnDashboardFlexPanel'
 import { formatIndexPoints } from './cnIndexFormat'
 import CnChangePill from './CnChangePill'
+import { CnInsightListPad, CnInsightStockRow } from './cnInsightListStyles'
+import { CnInsightListSkeleton, CnNewsListSkeleton } from './cnDashboardSkeletons'
+import CnInsightSplitView from './CnInsightSplitView'
+import type { CnInsightStockPick } from './cnInsightStockUtils'
 
 type InsightTab =
   | 'constituents'
@@ -37,26 +40,11 @@ type InsightTab =
 export type CnInsightTab = InsightTab
 
 const useStyles = makeStyles({
-  sectorSummary: {
+  sectorHeadExtra: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '6px 12px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
-    backgroundColor: opptrixCssVars.canvasAlt,
-  },
-  sectorPoint: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 700,
-    fontVariantNumeric: 'tabular-nums',
-    color: opptrixCssVars.textPrimary,
-  },
-  sectorUnit: {
-    fontSize: '10px',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    marginLeft: '2px',
   },
   clearBtn: {
     ...ghostInteractive,
@@ -71,7 +59,7 @@ const useStyles = makeStyles({
     fontWeight: 600,
     padding: '4px 8px',
     borderRadius: '6px',
-    marginLeft: 'auto',
+    whiteSpace: 'nowrap',
     ':hover': { backgroundColor: opptrixCssVars.surfaceHover },
   },
   body: {
@@ -89,7 +77,7 @@ const useStyles = makeStyles({
   newsList: {
     display: 'flex',
     flexDirection: 'column',
-    padding: '4px 12px 12px',
+    padding: '10px 12px 12px',
   },
   newsRow: {
     ...ghostInteractive,
@@ -132,48 +120,6 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.55,
   },
-  sectionHead: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 12px 6px',
-    fontSize: '10px',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase',
-    color: opptrixCssVars.textTertiary,
-  },
-  quoteRow: {
-    ...ghostInteractive,
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
-    gap: '8px',
-    alignItems: 'center',
-    padding: '10px 12px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  quoteName: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  quoteMeta: {
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textTertiary,
-  },
-  quotePct: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 650,
-    fontVariantNumeric: 'tabular-nums',
-  },
-  pctUp: { color: MARKET_UP },
-  pctDown: { color: MARKET_DOWN },
-  pctFlat: { color: opptrixCssVars.textSecondary },
 })
 
 type Props = {
@@ -215,6 +161,7 @@ export default function CnMarketInsightPanel({
 }: Props) {
   const s = useStyles()
   const [internalTab, setInternalTab] = useState<InsightTab>('gainers')
+  const [selectedStock, setSelectedStock] = useState<CnInsightStockPick | null>(null)
   const tab = activeTab ?? internalTab
 
   const setTab = (next: InsightTab) => {
@@ -228,6 +175,22 @@ export default function CnMarketInsightPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- sector selection drives tab
   }, [selectedSector])
 
+  useEffect(() => {
+    setSelectedStock(null)
+  }, [tab])
+
+  const wrapStockList = useCallback((content: ReactNode) => {
+    if (tab === 'news') return content
+    return (
+      <CnInsightSplitView
+        selected={selectedStock}
+        onSelect={setSelectedStock}
+      >
+        {content}
+      </CnInsightSplitView>
+    )
+  }, [selectedStock, tab])
+
   const tabs = useMemo(() => {
     const base = [
       { value: 'gainers' as const, label: `涨幅 ${gainers.length}` },
@@ -235,7 +198,7 @@ export default function CnMarketInsightPanel({
       { value: 'limit_up' as const, label: `涨停 ${limitUp?.length ?? 0}` },
       { value: 'limit_break' as const, label: `炸板 ${limitBreak?.length ?? 0}` },
       { value: 'ladder' as const, label: '连板' },
-      { value: 'dragon' as const, label: `龙虎 ${dragonTiger.length}` },
+      { value: 'dragon' as const, label: dragonTigerDate ? `龙虎 ${dragonTigerDate}` : `龙虎 ${dragonTiger.length}` },
       { value: 'news' as const, label: `资讯 ${articles.length}` },
     ]
     if (selectedSector) {
@@ -245,6 +208,7 @@ export default function CnMarketInsightPanel({
   }, [
     articles.length,
     dragonTiger.length,
+    dragonTigerDate,
     gainers.length,
     limitBreak?.length,
     limitUp?.length,
@@ -252,12 +216,9 @@ export default function CnMarketInsightPanel({
     selectedSector,
   ])
 
-  const pctClass = (value: number | null | undefined) => {
-    const tone = pctTone(value)
-    if (tone === 'up') return s.pctUp
-    if (tone === 'down') return s.pctDown
-    return s.pctFlat
-  }
+  const panelSubtitle = selectedSector
+    ? `${selectedSector.name} · ${formatIndexPoints(selectedSector.price, 2)} 点`
+    : '涨幅、跌幅、涨停、连板、龙虎与资讯'
 
   const renderContent = () => {
     if (tab === 'constituents' && selectedSector && selectedSectorCode) {
@@ -273,7 +234,7 @@ export default function CnMarketInsightPanel({
 
     if (tab === 'gainers') {
       if (marketLoading && !gainers.length) {
-        return <div className={s.empty}><Spinner size="tiny" label="正在加载涨幅榜…" /></div>
+        return <CnInsightListSkeleton fill />
       }
       if (!gainers.length) {
         return (
@@ -292,7 +253,7 @@ export default function CnMarketInsightPanel({
 
     if (tab === 'losers') {
       if (marketLoading && !losers.length) {
-        return <div className={s.empty}><Spinner size="tiny" label="正在加载跌幅榜…" /></div>
+        return <CnInsightListSkeleton fill />
       }
       if (!losers.length) {
         return (
@@ -312,7 +273,7 @@ export default function CnMarketInsightPanel({
     if (tab === 'limit_up') {
       const count = limitUp?.length ?? 0
       if (marketLoading && !count) {
-        return <div className={s.empty}><Spinner size="tiny" label="正在加载涨停…" /></div>
+        return <CnInsightListSkeleton fill />
       }
       if (!count) {
         return (
@@ -330,6 +291,7 @@ export default function CnMarketInsightPanel({
             skyrocket={skyrocket ?? []}
             ladder={limitLadder}
             embedded
+            hideSectionHead
           />
         </div>
       )
@@ -338,7 +300,7 @@ export default function CnMarketInsightPanel({
     if (tab === 'limit_break') {
       const count = limitBreak?.length ?? 0
       if (marketLoading && !count) {
-        return <div className={s.empty}><Spinner size="tiny" label="正在加载炸板…" /></div>
+        return <CnInsightListSkeleton fill />
       }
       if (!count) {
         return (
@@ -349,26 +311,26 @@ export default function CnMarketInsightPanel({
         )
       }
       return (
-        <div className={mergeClasses(s.scroll, 'opptrix-scroll-hidden')}>
+        <CnInsightListPad fill>
           {(limitBreak ?? []).map(item => (
-            <div key={item.code} className={s.quoteRow}>
-              <div>
-                <div className={s.quoteName}>{item.name}</div>
-                <div className={s.quoteMeta}>{item.code}</div>
-              </div>
-              <span className={mergeClasses(s.quotePct, pctClass(item.change_pct))}>
-                {formatPct(item.change_pct ?? null, 2)}
-              </span>
-            </div>
+        <CnInsightStockRow
+          key={item.code}
+          code={item.code}
+          name={item.name}
+          meta={item.code}
+          price={item.price}
+          changePct={item.change_pct}
+          changeAmt={item.change_amt}
+        />
           ))}
-        </div>
+        </CnInsightListPad>
       )
     }
 
     if (tab === 'ladder') {
       const boards = limitLadder?.boards?.length ?? 0
       if (marketLoading && !boards) {
-        return <div className={s.empty}><Spinner size="tiny" label="正在加载连板天梯…" /></div>
+        return <CnInsightListSkeleton fill />
       }
       if (!boards) {
         return (
@@ -386,6 +348,7 @@ export default function CnMarketInsightPanel({
             skyrocket={skyrocket ?? []}
             ladder={limitLadder}
             embedded
+            hideSectionHead
           />
         </div>
       )
@@ -393,7 +356,7 @@ export default function CnMarketInsightPanel({
 
     if (tab === 'dragon') {
       if (marketLoading && !dragonTiger.length) {
-        return <div className={s.empty}><Spinner size="tiny" label="正在加载龙虎榜…" /></div>
+        return <CnInsightListSkeleton fill />
       }
       if (!dragonTiger.length) {
         return (
@@ -403,21 +366,11 @@ export default function CnMarketInsightPanel({
           </div>
         )
       }
-      return (
-        <>
-          <div className={s.sectionHead}>
-            <span>龙虎榜</span>
-            {dragonTigerDate ? <span>{dragonTigerDate}</span> : null}
-          </div>
-          <div className={mergeClasses(s.scroll, 'opptrix-scroll-hidden')}>
-            <MarketDragonTigerList items={dragonTiger} />
-          </div>
-        </>
-      )
+      return <MarketDragonTigerList items={dragonTiger} fill />
     }
 
     if (insightsLoading && !articles.length) {
-      return <div className={s.empty}><Spinner size="tiny" label="加载资讯…" /></div>
+      return <CnNewsListSkeleton />
     }
     if (!articles.length) {
       return (
@@ -461,7 +414,7 @@ export default function CnMarketInsightPanel({
   return (
     <CnDashboardFlexPanel
       title="数据明细"
-      subtitle="涨幅、跌幅、涨停、连板、龙虎与资讯"
+      subtitle={panelSubtitle}
       fill
       tabConfig={{
         tabs,
@@ -469,25 +422,21 @@ export default function CnMarketInsightPanel({
         onChange: setTab,
         ariaLabel: '数据明细',
       }}
-    >
-      {selectedSector ? (
-        <div className={s.sectorSummary}>
-          <Text block style={{ fontSize: 'var(--opptrix-font-xs)', fontWeight: 650, flex: 1, minWidth: 0 }}>
-            {selectedSector.name}
-          </Text>
-          <span>
-            <span className={s.sectorPoint}>{formatIndexPoints(selectedSector.price, 2)}</span>
-            <span className={s.sectorUnit}>点</span>
-          </span>
-          <CnChangePill changePct={selectedSector.change_pct} changeAmt={selectedSector.change_amt} ghost />
+      headExtra={selectedSector ? (
+        <div className={s.sectorHeadExtra}>
+          <CnChangePill
+            changePct={selectedSector.change_pct}
+            changeAmt={selectedSector.change_amt}
+            ghost
+          />
           <button type="button" className={s.clearBtn} onClick={onClearSector}>
             <DismissRegular fontSize={12} />
             取消板块
           </button>
         </div>
       ) : null}
-
-      <div className={s.body}>{renderContent()}</div>
+    >
+      <div className={s.body}>{wrapStockList(renderContent())}</div>
     </CnDashboardFlexPanel>
   )
 }

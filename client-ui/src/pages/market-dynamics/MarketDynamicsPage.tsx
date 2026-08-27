@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Spinner, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { opptrixCssVars } from '../../theme/tokens'
 import { formatCnDateTime } from '../../utils/cnTime'
 import MarketDynamicsHeader from './MarketDynamicsHeader'
@@ -25,12 +25,6 @@ const useStyles = makeStyles({
   },
   rootElectron: {
     backgroundColor: 'transparent',
-  },
-  loadingWrap: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   errorBanner: {
     flexShrink: 0,
@@ -92,32 +86,24 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
         chromeToolbarReserve={chromeToolbarReserve}
       />
 
-      {loading && !hasData ? (
-        <div className={s.loadingWrap}>
-          <Spinner size="medium" label={marketTab === 'us' ? '正在获取美股数据…' : '正在获取 A 股市场数据…'} />
-        </div>
-      ) : (
-        <>
-          {error && <div className={s.errorBanner}>{error}</div>}
-          <div className={s.content}>
-            {marketTab === 'cn' ? (
-              <CnMarketDynamicsView
-                data={data}
-                loading={loading}
-                articles={insights.articles}
-                insightsLoading={insights.loading}
-              />
-            ) : (
-              <UsMarketDynamicsView
-                data={data}
-                loading={loading}
-                articles={insights.articles}
-                insightsLoading={insights.loading}
-              />
-            )}
-          </div>
-        </>
-      )}
+      {error && <div className={s.errorBanner}>{error}</div>}
+      <div className={s.content}>
+        {marketTab === 'cn' ? (
+          <CnMarketDynamicsView
+            data={data}
+            loading={loading && !hasData}
+            articles={insights.articles}
+            insightsLoading={insights.loading}
+          />
+        ) : (
+          <UsMarketDynamicsView
+            data={data}
+            loading={loading && !hasData}
+            articles={insights.articles}
+            insightsLoading={insights.loading}
+          />
+        )}
+      </div>
     </div>
   )
 }
