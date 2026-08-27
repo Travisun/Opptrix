@@ -303,8 +303,25 @@ export const research = {
   marketRegime: (scope: 'cn' | 'us' = 'cn') =>
     apiCall<import('../types/schemas').MarketRegimeData>('market_regime', { profile_scope: scope }),
 
-  marketDynamics: () =>
-    apiCall<import('../types/schemas').MarketDynamicsData>('market_dynamics', {}, undefined, 20000),
+  marketDynamics: (opts?: { market?: 'cn' | 'us' }) =>
+    apiCall<import('../types/schemas').MarketDynamicsData>(
+      'market_dynamics',
+      { market: opts?.market ?? 'cn' },
+      undefined,
+      35000,
+    ),
+
+  indexConstituents: (indexCode: string, opts?: { withQuotes?: boolean; quoteLimit?: number }) =>
+    apiCall<import('../types/schemas').IndexConstituentsData>(
+      'index_constituents',
+      {
+        index_code: indexCode,
+        with_quotes: opts?.withQuotes !== false,
+        quote_limit: opts?.quoteLimit ?? 400,
+      },
+      undefined,
+      45000,
+    ),
 
   searchStocks: async (keyword: string) => {
     const resp = await jsonFetch<{

@@ -361,6 +361,30 @@ export interface MarketIndexQuote {
   location?: string
   trade_state_label?: string
   quote_time?: string
+  /** 美股 Tab：图表用 ETF ticker */
+  chart_symbol?: string
+  /** 同花顺板块/指数 thscode，用于成分股懒加载 */
+  index_thscode?: string
+  /** 板块分类：cn_concept | industry | tszs */
+  sector_tag?: 'cn_concept' | 'industry' | 'tszs' | 'region'
+}
+
+export interface IndexConstituentItem {
+  code: string
+  name: string
+  price?: number | null
+  weight?: number | null
+  change_pct?: number | null
+  change_amt?: number | null
+}
+
+export interface IndexConstituentsData {
+  index_code: string
+  items: Array<Record<string, unknown>>
+  count: number
+  quoted_count?: number
+  quote_limit?: number
+  source?: string
 }
 
 export interface MarketDynamicsSection {
@@ -386,13 +410,17 @@ export interface MarketDragonTigerItem {
   buy_amount?: number | null
   sell_amount?: number | null
   net_amount?: number | null
+  price?: number | null
   change_pct?: number | null
+  change_amt?: number | null
 }
 
 export interface MarketLimitUpItem {
   code: string
   name: string
   change_pct: number | null
+  price?: number | null
+  change_amt?: number | null
   reason?: string
   continue_day_text?: string
   board_label?: string
@@ -409,7 +437,14 @@ export interface MarketHotItem {
 export interface MarketLimitLadderBoard {
   key: string
   label: string
-  items: Array<{ code: string; name: string; board_num?: number }>
+  items: Array<{
+    code: string
+    name: string
+    board_num?: number
+    price?: number | null
+    change_pct?: number | null
+    change_amt?: number | null
+  }>
 }
 
 export interface MarketLimitLadder {
@@ -417,7 +452,16 @@ export interface MarketLimitLadder {
   boards: MarketLimitLadderBoard[]
 }
 
+export interface MarketAnomalyItem {
+  code: string
+  name: string
+  reason?: string
+  tag?: string
+  change_pct?: number | null
+}
+
 export interface MarketDynamicsData {
+  market?: 'cn' | 'us'
   refreshed_at: string
   sections: MarketDynamicsSection[]
   cn_gainers?: MarketStockMover[]
@@ -425,9 +469,15 @@ export interface MarketDynamicsData {
   cn_dragon_tiger?: MarketDragonTigerItem[]
   cn_dragon_tiger_date?: string | null
   cn_limit_up?: MarketLimitUpItem[]
+  cn_limit_break?: MarketLimitUpItem[]
   cn_skyrocket?: MarketHotItem[]
+  cn_hot_stocks?: MarketHotItem[]
+  cn_anomaly?: MarketAnomalyItem[]
   cn_limit_ladder?: MarketLimitLadder | null
   cn_emotion_source?: 'tonghuashun' | null
+  cn_sector_status?: 'ok' | 'empty' | 'error'
+  cn_sector_hint?: string
+  us_indices?: MarketIndexQuote[]
 }
 
 export interface StockSearchItem {

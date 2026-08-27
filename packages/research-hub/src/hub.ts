@@ -125,10 +125,24 @@ import {
   normalizeShareholderPayload,
 } from './stock-detail-normalize.js'
 import {
+  mapCnAnomalyItems,
+  mapCnHotStockItems,
+  mapCnLimitBreakItems,
   mapCnLimitUpItems,
   mapCnSkyrocketItems,
   parseCnLimitLadder,
 } from './market-emotion-map.js'
+import {
+  dedupeThsCatalogEntries,
+  indexSnapshotRows,
+  mapThsIndexSnapshotToQuote,
+  mergeConstituentQuoteRow,
+  parseConstituentStockCode,
+  parseThsIndexCatalogRow,
+  rankSectorIndexQuotes,
+  sortConstituentRowsByChangePct,
+  type ThsSectorTag,
+} from './market-sector-map.js'
 import {
   buildCrossMarketDetailPayload,
   mergeCrossMarketQuote,
@@ -297,7 +311,7 @@ export class ResearchHub {
         }
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
         case 'portfolio_analysis': return this.portfolioAnalysis(params, t0)
-        case 'market_dynamics': return await this.marketDynamics(t0)
+        case 'market_dynamics': return await this.marketDynamics(t0, params)
         case 'search_stocks':
           return await this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
         case 'stock_quotes':
@@ -863,6 +877,89 @@ export class ResearchHub {
     return ok(data, `组合 ${holdings.length} 只`, t0)
   }
 
+  private resolveIndexQuoteName(
+    configuredName: string | undefined,
+    rowName: string | undefined,
+    code: string,
+  ): string {
+    const configured = configuredName?.trim()
+    const fromApi = rowName?.trim()
+    const looksLikeCode = (value: string) => /^\d{4,6}$/.test(value) || /^[A-Z]{2,6}$/.test(value)
+    if (configured && !looksLikeCode(configured)) return configured
+    if (fromApi && fromApi !== code && !looksLikeCode(fromApi)) return fromApi
+    return configured || fromApi || code
+  }
+
+  private quoteChangeAmt(
+    row: import('@opptrix/shared').StockRealtime | undefined,
+    price: number | null,
+    changePct: number | null,
+  ): number | null {
+    if (row && typeof row.change === 'number' && Number.isFinite(row.change)) return row.change
+    if (price == null || changePct == null) return null
+    if (!Number.isFinite(price) || !Number.isFinite(changePct)) return null
+    const prev = price / (1 + changePct / 100)
+    if (!Number.isFinite(prev) || prev === 0) return null
+    const derived = price - prev
+    return Number.isFinite(derived) ? derived : null
+  }
+
+  private bareCnStockCode(code: string): string {
+    const raw = String(code ?? '').trim()
+    if (!raw) return ''
+    const dot = raw.indexOf('.')
+    const base = dot >= 0 ? raw.slice(0, dot) : raw
+    const digits = normalizeCode(base).replace(/\D/g, '').slice(-6)
+    return /^\d{6}$/.test(digits) ? digits : ''
+  }
+
+  private async fetchCnStockQuoteMap(
+    codes: string[],
+  ): Promise<Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>> {
+    const unique = [...new Set(codes.map(code => this.bareCnStockCode(code)).filter(Boolean))]
+    const map = new Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>()
+    if (!unique.length) return map
+
+    const CHUNK = 100
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const chunk = unique.slice(i, i + CHUNK)
+      const batch = await this.stockBatchRealtime(chunk)
+      chunk.forEach((code, j) => {
+        const raw = batch.data?.[j] ?? null
+        const merged = this.mergeQuoteWithLocal(code, raw)
+        if (!merged) return
+        const price = merged.price ?? null
+        const change_pct = merged.changePct ?? null
+        map.set(code, {
+          price,
+          change_pct,
+          change_amt: this.quoteChangeAmt(merged, price, change_pct),
+        })
+      })
+    }
+    return map
+  }
+
+  private applyCnStockQuote<T extends {
+    code: string
+    price?: number | null
+    change_pct?: number | null
+    change_amt?: number | null
+  }>(
+    item: T,
+    quoteMap: Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>,
+  ): T {
+    const key = this.bareCnStockCode(item.code)
+    const quote = key ? quoteMap.get(key) : undefined
+    if (!quote) return item
+    return {
+      ...item,
+      price: item.price ?? quote.price,
+      change_pct: item.change_pct ?? quote.change_pct,
+      change_amt: item.change_amt ?? quote.change_amt,
+    }
+  }
+
   private async fetchCnIndexMarketItems(
     indices: Array<{ code: string; name?: string }>,
   ) {
@@ -874,14 +971,30 @@ export class ResearchHub {
       })
       const r = await this.de.queryInstrumentData(ref, 'realtime')
       const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
-      if (!row) return null
       const market = entry.code.startsWith('399') ? 'SZ' : 'SH'
+      const name = this.resolveIndexQuoteName(
+        entry.name,
+        row ? String(row.name ?? '') : undefined,
+        entry.code,
+      )
+      if (!row) {
+        return {
+          code: entry.code,
+          name,
+          price: null,
+          change_pct: null,
+          change_amt: null,
+          market,
+        }
+      }
+      const price = typeof row.price === 'number' ? row.price : null
+      const changePct = typeof row.changePct === 'number' ? row.changePct : null
       return {
         code: entry.code,
-        name: String(row.name ?? entry.name ?? entry.code).trim(),
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
-        change_amt: typeof row.change === 'number' ? row.change : null,
+        name,
+        price,
+        change_pct: changePct,
+        change_amt: this.quoteChangeAmt(row, price, changePct),
         market,
       }
     }))
@@ -894,22 +1007,124 @@ export class ResearchHub {
       outCode: string
       displayName: string
       location: string
+      chartSymbol?: string
     }>,
   ) {
     const items = await Promise.all(proxies.map(async proxy => {
       const r = await this.de.queryInstrumentData(proxy.ref, 'realtime')
       const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
-      if (!row) return null
-      return {
+      const base = {
         code: proxy.outCode,
         name: proxy.displayName,
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        price: null as number | null,
+        change_pct: null as number | null,
         market: proxy.ref.market,
         location: proxy.location,
+        chart_symbol: proxy.chartSymbol ?? proxy.ref.symbol,
+      }
+      if (!row) return base
+      const price = typeof row.price === 'number' ? row.price : null
+      const changePct = typeof row.changePct === 'number' ? row.changePct : null
+      return {
+        ...base,
+        price,
+        change_pct: changePct,
+        change_amt: this.quoteChangeAmt(row, price, changePct),
       }
     }))
-    return items.filter((item): item is NonNullable<typeof item> => item != null)
+    return items
+  }
+
+  private async fetchThsIndexPriceSnapshots(thscodes: string[]): Promise<{
+    rows: Record<string, unknown>[]
+    error?: string
+  }> {
+    if (!thscodes.length) return { rows: [] }
+    try {
+      const r = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexPricesSnapshot', [thscodes])
+      if (!r.success) {
+        return { rows: [], error: r.error ?? '指数快照获取失败' }
+      }
+      return { rows: indexSnapshotRows(r.data) }
+    } catch (e) {
+      return {
+        rows: [],
+        error: e instanceof Error ? e.message : '指数快照获取失败',
+      }
+    }
+  }
+
+  /**
+   * 同花顺板块指数 — SDK 路由：
+   * 1) index.catalogThsIndexList(tag) → thsIndexList
+   * 2) index.pricesSnapshot(thscodes) → thsIndexPricesSnapshot（非 aShare.prices）
+   */
+  private async fetchCnThsSectorIndexItems(): Promise<{
+    items: import('./market-sector-map.js').SectorIndexQuote[]
+    status: 'ok' | 'empty' | 'error'
+    hint?: string
+  }> {
+    const TAGS: ThsSectorTag[] = ['cn_concept', 'industry', 'tszs']
+    const CATALOG_CAP = 80
+    const SNAPSHOT_CAP = 120
+    const DISPLAY_CAP = 36
+    const catalogErrors: string[] = []
+
+    const catalogEntries = (
+      await Promise.all(TAGS.map(async tag => {
+        try {
+          const r = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexList', [tag])
+          if (!r.success) {
+            if (r.error) catalogErrors.push(r.error)
+            return []
+          }
+          if (!Array.isArray(r.data)) return []
+          return r.data
+            .slice(0, CATALOG_CAP)
+            .map(row => parseThsIndexCatalogRow(row as Record<string, unknown>, tag))
+            .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+        } catch (e) {
+          catalogErrors.push(e instanceof Error ? e.message : String(e))
+          return []
+        }
+      }))
+    ).flat()
+
+    const unique = dedupeThsCatalogEntries(catalogEntries).slice(0, SNAPSHOT_CAP)
+    if (!unique.length) {
+      const hint = catalogErrors.length
+        ? catalogErrors[0]
+        : '同花顺板块目录暂不可用，请确认数据源已启用后刷新'
+      return { items: [], status: 'error', hint }
+    }
+
+    const { rows: snapshots, error: snapError } = await this.fetchThsIndexPriceSnapshots(
+      unique.map(entry => entry.thscode),
+    )
+    const snapByThscode = new Map(
+      snapshots.map(row => [String(row.thscode ?? '').trim().toUpperCase(), row]),
+    )
+
+    const quotes = unique.map(entry => mapThsIndexSnapshotToQuote(
+      entry,
+      snapByThscode.get(entry.thscode.trim().toUpperCase()),
+    ))
+    const items = rankSectorIndexQuotes(quotes, DISPLAY_CAP)
+    if (!items.length) {
+      return {
+        items: [],
+        status: 'empty',
+        hint: snapError ?? '板块行情暂不可用，请稍后刷新',
+      }
+    }
+    if (snapError && snapshots.length === 0) {
+      return {
+        items,
+        status: 'ok',
+        hint: '板块涨跌幅暂不可用，目录与名称仍可浏览',
+      }
+    }
+    return { items, status: 'ok' }
   }
 
   private async fetchCnLimitMovers() {
@@ -931,22 +1146,63 @@ export class ResearchHub {
     }
   }
 
-  private async marketDynamics(t0: number) {
-    const CN_CORE_INDICES = [
+  private async marketDynamics(t0: number, params: Record<string, unknown> = {}) {
+    const market = String(params.market ?? 'cn').trim().toLowerCase()
+    if (market === 'us') return this.marketDynamicsUs(t0)
+    return this.marketDynamicsCn(t0)
+  }
+
+  private async marketDynamicsUs(t0: number) {
+    const US_CORE_INDICES = [
+      { ref: { market: 'US', assetClass: 'ETF', symbol: 'SPY' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', chartSymbol: 'SPY' },
+      { ref: { market: 'US', assetClass: 'ETF', symbol: 'QQQ' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', chartSymbol: 'QQQ' },
+      { ref: { market: 'US', assetClass: 'ETF', symbol: 'DIA' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', chartSymbol: 'DIA' },
+    ]
+
+    const usItems = await this.fetchGlobalIndexProxyItems(
+      US_CORE_INDICES.map(row => ({
+        ref: row.ref,
+        outCode: row.outCode,
+        displayName: row.displayName,
+        location: '美国',
+      })),
+    ).then(items => items.map((item, idx) => ({
+      ...item,
+      chart_symbol: US_CORE_INDICES[idx]?.chartSymbol ?? item.code,
+    })))
+
+    const sections = usItems.length ? [{
+      id: 'us_major',
+      title: '美股主要指数',
+      hint: 'ETF 代理实时报价',
+      items: usItems,
+    }] : []
+
+    return ok({
+      market: 'us' as const,
+      refreshed_at: new Date().toISOString(),
+      sections,
+      us_indices: usItems,
+    }, '美股市场动态', t0)
+  }
+
+  private async marketDynamicsCn(t0: number) {
+    const CN_MAJOR_CN = [
       { code: '000001', name: '上证指数' },
       { code: '399001', name: '深证成指' },
-      { code: '399006', name: '创业板指' },
       { code: '000300', name: '沪深300' },
+      { code: '000016', name: '上证50' },
+      { code: '000905', name: '中证500' },
+      { code: '399006', name: '创业板指' },
+      { code: '000688', name: '科创50' },
     ]
-    const ASIA_PROXIES = [
-      { ref: { market: 'HK', assetClass: 'ETF', symbol: '02800' } as import('@opptrix/shared').InstrumentRef, outCode: 'HSI', displayName: '恒生指数', location: '香港' },
-      { ref: { market: 'JP', assetClass: 'ETF', symbol: '1321' } as import('@opptrix/shared').InstrumentRef, outCode: 'N225', displayName: '日经225', location: '日本' },
-    ]
-    const AMERICA_PROXIES = [
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'SPY' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', location: '美国' },
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'DIA' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', location: '美国' },
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'QQQ' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', location: '美国' },
-    ]
+    const HK_HSI_PROXY = {
+      ref: { market: 'HK', assetClass: 'ETF', symbol: '2800' } as import('@opptrix/shared').InstrumentRef,
+      outCode: 'HSI',
+      displayName: '恒生指数',
+      location: '香港',
+      chartSymbol: '2800',
+    }
 
     const fetchEmotionLimitUp = async () => {
       try {
@@ -978,27 +1234,64 @@ export class ResearchHub {
       }
     }
 
+    const fetchLimitBreak = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsLimitBreakPool', [])
+        if (!r.success) return []
+        return mapCnLimitBreakItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
+    const fetchHotStocks = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsHotStockList', ['day'])
+        if (!r.success) return []
+        return mapCnHotStockItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
+    const fetchAnomaly = async () => {
+      try {
+        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsAnomalyAnalysisList', [])
+        if (!r.success) return []
+        return mapCnAnomalyItems(r.data)
+      } catch {
+        return []
+      }
+    }
+
     const [
-      cnSpotlight,
-      cnMajor,
-      asiaItems,
-      americaItems,
+      cnMajorCn,
+      cnMajorHk,
+      cnSectorPack,
       cnMovers,
       dragonR,
       cnLimitUp,
       cnSkyrocket,
       cnLimitLadder,
+      cnLimitBreak,
+      cnHotStocks,
+      cnAnomaly,
     ] = await Promise.all([
-      this.fetchCnIndexMarketItems(CN_CORE_INDICES),
-      this.fetchCnIndexMarketItems(CN_CORE_INDICES),
-      this.fetchGlobalIndexProxyItems(ASIA_PROXIES),
-      this.fetchGlobalIndexProxyItems(AMERICA_PROXIES),
+      this.fetchCnIndexMarketItems(CN_MAJOR_CN),
+      this.fetchGlobalIndexProxyItems([HK_HSI_PROXY]),
+      this.fetchCnThsSectorIndexItems(),
       this.fetchCnLimitMovers(),
       this.de.dragonTiger(),
       fetchEmotionLimitUp(),
       fetchEmotionSkyrocket(),
       fetchEmotionLadder(),
+      fetchLimitBreak(),
+      fetchHotStocks(),
+      fetchAnomaly(),
     ])
+
+    const cnMajor = [...cnMajorCn, ...cnMajorHk]
+    const cnSectors = cnSectorPack.items
 
     const mapDragonTigerItems = (resp: { success: boolean; data?: unknown }) => {
       if (!resp.success || !Array.isArray(resp.data)) return []
@@ -1019,55 +1312,91 @@ export class ResearchHub {
 
     const cnDragonTiger = mapDragonTigerItems(dragonR)
 
-    const sections = [
-      {
-        id: 'spotlight',
-        title: '全球要闻',
-        hint: '主要市场指数一览，数据约每 30 秒刷新',
-        items: cnSpotlight,
-      },
-      {
-        id: 'cn_major',
-        title: 'A 股主要指数',
-        hint: '沪深市场核心宽基指数',
-        items: cnMajor,
-      },
-      {
-        id: 'asia',
-        title: '亚太市场',
-        hint: asiaItems.length ? undefined : '亚太指数需配置 Tickflow 等数据源后展示',
-        items: asiaItems,
-      },
-      {
-        id: 'europe',
-        title: '欧洲市场',
-        hint: '欧洲指数请通过 Agent MCP 宏观工具查询',
-        items: [],
-      },
-      {
-        id: 'america',
-        title: '美洲市场',
-        hint: americaItems.length ? undefined : '美洲指数需配置 Tickflow 等数据源后展示',
-        items: americaItems,
-      },
-    ].filter(section => section.items.length > 0 || section.id === 'europe')
+    const quoteCodes = [
+      ...cnMovers.gainers,
+      ...cnMovers.losers,
+      ...cnLimitUp,
+      ...cnLimitBreak,
+      ...cnDragonTiger,
+      ...(cnLimitLadder?.boards.flatMap(board => board.items) ?? []),
+    ].map(item => item.code)
+    const cnStockQuoteMap = await this.fetchCnStockQuoteMap(quoteCodes)
 
-    const hasEmotionData = cnLimitUp.length > 0
+    const cnGainers = cnMovers.gainers.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLosers = cnMovers.losers.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLimitUpQuoted = cnLimitUp.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLimitBreakQuoted = cnLimitBreak.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnDragonTigerQuoted = cnDragonTiger.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnLimitLadderQuoted = cnLimitLadder
+      ? {
+          ...cnLimitLadder,
+          boards: cnLimitLadder.boards.map(board => ({
+            ...board,
+            items: board.items.map(item => this.applyCnStockQuote(item, cnStockQuoteMap)),
+          })),
+        }
+      : null
+
+    const sections: Array<{
+      id: string
+      title: string
+      hint?: string
+      items: Array<{
+        code: string
+        name: string
+        price: number | null
+        change_pct: number | null
+        change_amt?: number | null
+        market?: string
+        location?: string
+        index_thscode?: string
+        sector_tag?: string
+      }>
+    }> = cnMajor.length ? [{
+      id: 'cn_major',
+      title: 'A 股主要指数',
+      hint: '沪深宽基与恒生参考',
+      items: cnMajor,
+    }] : []
+
+    if (cnSectors.length) {
+      sections.push({
+        id: 'cn_sectors',
+        title: '板块指数',
+        hint: '同花顺概念、行业与特色指数',
+        items: cnSectors.map(item => ({
+          ...item,
+          change_amt: item.change_amt ?? null,
+          market: 'CN',
+        })),
+      })
+    }
+
+    const hasEmotionData = cnLimitUpQuoted.length > 0
       || cnSkyrocket.length > 0
-      || (cnLimitLadder?.boards.length ?? 0) > 0
+      || cnLimitBreakQuoted.length > 0
+      || cnHotStocks.length > 0
+      || cnAnomaly.length > 0
+      || (cnLimitLadderQuoted?.boards.length ?? 0) > 0
 
     return ok({
+      market: 'cn' as const,
       refreshed_at: new Date().toISOString(),
       sections,
-      cn_gainers: cnMovers.gainers,
-      cn_losers: cnMovers.losers,
-      cn_dragon_tiger: cnDragonTiger,
-      cn_dragon_tiger_date: cnDragonTiger[0]?.date ?? null,
-      cn_limit_up: cnLimitUp.length ? cnLimitUp : undefined,
+      cn_gainers: cnGainers,
+      cn_losers: cnLosers,
+      cn_dragon_tiger: cnDragonTigerQuoted,
+      cn_dragon_tiger_date: cnDragonTigerQuoted[0]?.date ?? null,
+      cn_limit_up: cnLimitUpQuoted.length ? cnLimitUpQuoted : undefined,
+      cn_limit_break: cnLimitBreakQuoted.length ? cnLimitBreakQuoted : undefined,
       cn_skyrocket: cnSkyrocket.length ? cnSkyrocket : undefined,
-      cn_limit_ladder: cnLimitLadder,
+      cn_hot_stocks: cnHotStocks.length ? cnHotStocks : undefined,
+      cn_anomaly: cnAnomaly.length ? cnAnomaly : undefined,
+      cn_limit_ladder: cnLimitLadderQuoted,
       cn_emotion_source: hasEmotionData ? 'tonghuashun' as const : null,
-    }, '市场动态', t0)
+      cn_sector_status: cnSectorPack.status,
+      cn_sector_hint: cnSectorPack.hint,
+    }, 'A股市场动态', t0)
   }
 
   private async marketRegime(params: Record<string, unknown>, t0: number) {
@@ -3239,41 +3568,105 @@ export class ResearchHub {
     )
   }
 
+  private async enrichConstituentRowsWithQuotes(
+    rows: Record<string, unknown>[],
+    quoteLimit: number,
+  ): Promise<{ rows: Record<string, unknown>[]; quotedCount: number }> {
+    const limit = Math.min(Math.max(Math.floor(quoteLimit), 1), 500)
+    const indexed = rows
+      .map(row => ({ row, code: parseConstituentStockCode(row) }))
+      .filter(entry => entry.code)
+    const toQuote = indexed.slice(0, limit)
+    const quoteByCode = new Map<string, {
+      price: number | null
+      change_pct: number | null
+      change_amt: number | null
+    }>()
+
+    const CHUNK = 100
+    for (let i = 0; i < toQuote.length; i += CHUNK) {
+      const chunk = toQuote.slice(i, i + CHUNK)
+      const batch = await this.stockBatchRealtime(chunk.map(entry => entry.code))
+      chunk.forEach((entry, j) => {
+        const raw = batch.data?.[j] ?? null
+        if (!raw) return
+        const merged = this.mergeQuoteWithLocal(entry.code, raw)
+        if (!merged) return
+        quoteByCode.set(entry.code, {
+          price: merged.price ?? null,
+          change_pct: merged.changePct ?? null,
+          change_amt: this.quoteChangeAmt(merged, merged.price ?? null, merged.changePct ?? null),
+        })
+      })
+    }
+
+    const enriched = rows.map(row => {
+      const code = parseConstituentStockCode(row)
+      return mergeConstituentQuoteRow(row, code ? quoteByCode.get(code) : undefined)
+    })
+    return { rows: sortConstituentRowsByChangePct(enriched), quotedCount: quoteByCode.size }
+  }
+
   private async indexConstituents(params: Record<string, unknown>, t0: number) {
     const indexCode = String(params.index_code ?? params.code ?? params.symbol ?? '').trim()
     if (!indexCode) return fail('index_code 或 code 必填（如 000300、885338.TI）', t0)
 
+    const withQuotes = params.with_quotes !== false && params.with_quotes !== 'false'
+    const quoteLimitRaw = Number(params.quote_limit)
+    const quoteLimit = Number.isFinite(quoteLimitRaw) && quoteLimitRaw > 0
+      ? Math.min(500, Math.floor(quoteLimitRaw))
+      : 400
+
     const r = await this.de.indexConstituents(indexCode)
+    let rows: Record<string, unknown>[] = []
+    let source = 'indexConstituents'
+    let providerMethod: string | undefined
+
     if (r.success && Array.isArray(r.data) && r.data.length) {
-      return ok(
-        {
-          index_code: indexCode,
-          items: r.data,
-          count: r.data.length,
-          source: r.source ?? 'indexConstituents',
-        },
-        `指数成分 ${r.data.length} 条`,
-        t0,
-      )
+      rows = r.data.filter((row): row is Record<string, unknown> => row != null && typeof row === 'object')
+      source = r.source ?? source
+    } else {
+      const fallback = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexConstituents', [indexCode])
+      if (!fallback.success) {
+        return fail(r.error ?? fallback.error ?? '指数成分获取失败', t0)
+      }
+      const raw = fallback.data
+      rows = (Array.isArray(raw) ? raw : raw != null ? [raw] : [])
+        .filter((row): row is Record<string, unknown> => row != null && typeof row === 'object')
+      source = 'tonghuashun'
+      providerMethod = 'thsIndexConstituents'
     }
 
-    const fallback = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexConstituents', [indexCode])
-    if (!fallback.success) {
-      return fail(r.error ?? fallback.error ?? '指数成分获取失败', t0)
+    if (!rows.length) {
+      return fail('暂无成份股数据', t0)
     }
-    const raw = fallback.data
-    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
-    return ok(
-      {
-        index_code: indexCode,
-        items: rows,
-        count: rows.length,
-        source: 'tonghuashun',
-        provider_method: 'thsIndexConstituents',
-      },
-      `指数成分 ${rows.length} 条`,
-      t0,
-    )
+
+    let quotedCount = 0
+    let finalRows = rows
+    if (withQuotes) {
+      const enriched = await this.enrichConstituentRowsWithQuotes(rows, quoteLimit)
+      finalRows = enriched.rows
+      quotedCount = enriched.quotedCount
+    }
+
+    const payload: Record<string, unknown> = {
+      index_code: indexCode,
+      items: finalRows,
+      count: finalRows.length,
+      source,
+    }
+    if (providerMethod) payload.provider_method = providerMethod
+    if (withQuotes) {
+      payload.quoted_count = quotedCount
+      payload.quote_limit = quoteLimit
+    }
+
+    const quoteHint = withQuotes && quotedCount < finalRows.length
+      ? `，行情 ${quotedCount}/${finalRows.length}`
+      : withQuotes
+        ? `，行情 ${quotedCount} 只`
+        : ''
+    return ok(payload, `指数成分 ${finalRows.length} 条${quoteHint}`, t0)
   }
 
   private async dragonTigerList(params: Record<string, unknown>, t0: number) {

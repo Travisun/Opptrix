@@ -16,28 +16,6 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     overflowX: 'auto',
   },
-  moodCell: {
-    flex: '0 0 auto',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    gap: '1px',
-    padding: '8px 12px',
-    minWidth: '68px',
-    borderRight: `1px solid ${opptrixCssVars.separator}`,
-  },
-  moodLabel: {
-    fontSize: 'var(--opptrix-font-lg)',
-    fontWeight: 650,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.2,
-  },
-  moodMeta: {
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.35,
-    whiteSpace: 'nowrap',
-  },
   indexCell: {
     flex: '1 0 96px',
     display: 'flex',
@@ -66,7 +44,6 @@ const useStyles = makeStyles({
   indexCellClickable: {
     ...interactiveTransition,
     cursor: 'pointer',
-    // Keep flush with strip separators — no pill radius (CN indices sit first).
     borderRadius: 0,
     ...focusVisibleRing,
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
@@ -108,33 +85,28 @@ function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefi
   return s.pctFlat
 }
 
-type Mood = { up: number; down: number; label: string }
-
 type Props = {
   indices: MarketIndexQuote[]
   cnIndices: MarketIndexQuote[]
-  mood: Mood
   onIndexSelect?: (item: MarketIndexQuote) => void
 }
 
 export default function MarketBoardStrip({
   indices,
   cnIndices,
-  mood,
   onIndexSelect,
 }: Props) {
   const s = useStyles()
 
   return (
     <div className={mergeClasses(s.root, 'opptrix-market-board-strip', 'opptrix-scroll-x')}>
-      <div className={s.moodCell}>
-        <Text className={s.moodLabel} block>{mood.label}</Text>
-        <Text className={s.moodMeta} block>涨 {mood.up} · 跌 {mood.down}</Text>
-      </div>
-
       {indices.map(item => {
         const key = indexKey(item)
-        const clickable = Boolean(onIndexSelect && isCnChartableIndex(item, cnIndices))
+        const clickable = Boolean(onIndexSelect && (
+          isCnChartableIndex(item, cnIndices)
+          || item.chart_symbol
+          || item.market === 'US'
+        ))
         const select = onIndexSelect
 
         return (

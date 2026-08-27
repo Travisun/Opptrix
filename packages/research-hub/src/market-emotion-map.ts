@@ -5,6 +5,8 @@ export type MarketLimitUpItem = {
   code: string
   name: string
   change_pct: number | null
+  price?: number | null
+  change_amt?: number | null
   reason?: string
   continue_day_text?: string
   board_label?: string
@@ -21,7 +23,14 @@ export type MarketHotItem = {
 export type MarketLimitLadderBoard = {
   key: string
   label: string
-  items: Array<{ code: string; name: string; board_num?: number }>
+  items: Array<{
+    code: string
+    name: string
+    board_num?: number
+    price?: number | null
+    change_pct?: number | null
+    change_amt?: number | null
+  }>
 }
 
 export type MarketLimitLadder = {
@@ -155,6 +164,55 @@ export function mapCnLimitUpItems(rows: LimitUpDown[]): MarketLimitUpItem[] {
       }
     })
     .filter(item => item.code)
+}
+
+export type MarketAnomalyItem = {
+  code: string
+  name: string
+  reason?: string
+  tag?: string
+  change_pct?: number | null
+}
+
+export function mapCnLimitBreakItems(raw: unknown): MarketLimitUpItem[] {
+  if (!Array.isArray(raw)) return []
+  const out: MarketLimitUpItem[] = []
+  for (const row of raw) {
+    if (!isRecord(row)) continue
+    const code = bareCodeFromRow(row)
+    if (!code) continue
+    const name = strField(row, 'name', 'stock_name') || code
+    out.push({
+      code,
+      name,
+      change_pct: numField(row, 'price_change_ratio_pct', 'change_pct', 'changePct'),
+      reason: strField(row, 'reason', 'limit_break_reason', 'break_reason') || undefined,
+    })
+  }
+  return out
+}
+
+export function mapCnHotStockItems(raw: unknown): MarketHotItem[] {
+  return mapCnSkyrocketItems(raw)
+}
+
+export function mapCnAnomalyItems(raw: unknown): MarketAnomalyItem[] {
+  if (!Array.isArray(raw)) return []
+  const out: MarketAnomalyItem[] = []
+  for (const row of raw) {
+    if (!isRecord(row)) continue
+    const code = bareCodeFromRow(row)
+    if (!code) continue
+    const name = strField(row, 'name', 'stock_name') || code
+    out.push({
+      code,
+      name,
+      reason: strField(row, 'reason', 'anomaly_reason', 'content', 'title') || undefined,
+      tag: strField(row, 'tag', 'tag_name', 'anomaly_tag') || undefined,
+      change_pct: numField(row, 'price_change_ratio_pct', 'change_pct', 'changePct'),
+    })
+  }
+  return out
 }
 
 export function mapCnSkyrocketItems(raw: unknown): MarketHotItem[] {

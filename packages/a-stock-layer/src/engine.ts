@@ -817,7 +817,7 @@ export class MarketDataEngine {
   }
 
   indexConstituents(indexCode: string): Promise<QueryResult<Record<string, unknown>[]>> {
-    return this.q(Capability.INDEX_CONST, 'indexConstituents', true, indexCode)
+    return this.qScoped('CN', 'INDEX', Capability.INDEX_CONST, 'indexConstituents', true, indexCode)
   }
   insiderTrade(code: string): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.INSIDER_TRADE, 'insiderTrade', true, code)

@@ -1,11 +1,15 @@
 import { useState } from 'react'
-import { Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular, NewsRegular, OpenRegular } from '@fluentui/react-icons'
+import PanelTitleTabs from '../../components/PanelTitleTabs'
 import TradingViewChart from '../../market/TradingViewChart'
 import { opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
+import { formatPct, pctTone } from '../../market/format'
+import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
 import type {
   FeedArticle,
+  MarketAnomalyItem,
   MarketDragonTigerItem,
   MarketHotItem,
   MarketIndexQuote,
@@ -16,19 +20,28 @@ import type {
 import { openExternalUrl } from '../../platform/openUrl'
 import { formatRelativeTime } from '../news/newsUtils'
 import { indexChartCodeFromQuote } from './cnIndexChartStorage'
+import { MarketDynamicsSectionTabs } from './MarketDynamicsHeader'
 import MarketBoardFocus from './MarketBoardFocus'
 import MarketDragonTigerList from './MarketDragonTigerList'
 import MarketEmotionBoard from './MarketEmotionBoard'
 
 type DetailTab = 'board' | 'news'
-type BoardListId = 'movers' | 'limit_up' | 'skyrocket' | 'ladder' | 'dragon'
+type BoardListId = 'movers' | 'limit_up' | 'limit_break' | 'skyrocket' | 'ladder' | 'dragon' | 'hot' | 'anomaly'
 
 const BOARD_NAV: { id: BoardListId; label: string }[] = [
   { id: 'movers', label: '涨跌' },
   { id: 'limit_up', label: '涨停' },
+  { id: 'limit_break', label: '炸板' },
   { id: 'skyrocket', label: '飙升' },
   { id: 'ladder', label: '天梯' },
   { id: 'dragon', label: '龙虎' },
+  { id: 'hot', label: '热股' },
+  { id: 'anomaly', label: '异动' },
+]
+
+const DETAIL_TABS = [
+  { value: 'board' as const, label: '盘面' },
+  { value: 'news' as const, label: '资讯' },
 ]
 
 const CONTENT_PAD = '10px'
@@ -117,50 +130,27 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   chartWrap: {
-    flex: 1,
-    minHeight: 0,
+    flex: '0 0 auto',
+    height: 'min(42vh, 320px)',
+    minHeight: '220px',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
     padding: `6px ${CONTENT_PAD} 8px`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   boardBody: {
     flex: 1,
     minHeight: 0,
     display: 'flex',
-    flexDirection: 'row',
+    flexDirection: 'column',
     overflow: 'hidden',
   },
-  boardNav: {
+  boardTabsRow: {
     flexShrink: 0,
-    width: '76px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    padding: '6px 4px',
-    borderRight: `1px solid ${opptrixCssVars.separator}`,
-    overflowY: 'auto',
-  },
-  boardNavStacked: {
-    width: '64px',
-  },
-  boardNavItem: {
-    ...ghostInteractive,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    padding: '8px 4px',
-    borderRadius: '6px',
-    fontSize: 'var(--opptrix-font-xs)',
-    fontWeight: 600,
-    color: opptrixCssVars.textSecondary,
-    textAlign: 'center',
-    lineHeight: 1.3,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
-  },
-  boardNavItemActive: {
-    backgroundColor: opptrixCssVars.sidebarSelected,
-    color: opptrixCssVars.textPrimary,
+    padding: '0 12px',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    overflowX: 'auto',
   },
   boardMain: {
     flex: 1,
@@ -272,7 +262,83 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  simpleList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+    padding: `0 ${CONTENT_PAD} 10px`,
+  },
+  simpleRow: {
+    ...ghostInteractive,
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gap: '8px',
+    alignItems: 'start',
+    padding: '8px 8px',
+    borderRadius: '6px',
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+  },
+  simpleTitle: {
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+  },
+  simpleMeta: {
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.4,
+    marginTop: '2px',
+  },
+  simplePct: {
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+  },
+  pctUp: { color: MARKET_UP },
+  pctDown: { color: MARKET_DOWN },
+  pctFlat: { color: opptrixCssVars.textSecondary },
 })
+
+function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefined) {
+  const tone = pctTone(value)
+  if (tone === 'up') return s.pctUp
+  if (tone === 'down') return s.pctDown
+  return s.pctFlat
+}
+
+function SimpleQuoteList({
+  items,
+  emptyLabel,
+}: {
+  items: Array<{ code: string; name: string; change_pct?: number | null; reason?: string; tag?: string }>
+  emptyLabel: string
+}) {
+  const s = useStyles()
+  if (!items.length) {
+    return <div className={s.empty}>{emptyLabel}</div>
+  }
+  return (
+    <div className={mergeClasses(s.simpleList, 'opptrix-scroll-hidden')}>
+      {items.map(item => (
+        <div key={item.code} className={s.simpleRow}>
+          <div>
+            <div className={s.simpleTitle}>{item.name}</div>
+            <div className={s.simpleMeta}>
+              {[item.tag, item.reason, item.code].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          {'change_pct' in item && (
+            <span className={mergeClasses(s.simplePct, pctClass(s, item.change_pct ?? null))}>
+              {formatPct(item.change_pct ?? null, 2)}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 type Props = {
   cnIndices: MarketIndexQuote[]
@@ -283,12 +349,14 @@ type Props = {
   dragonTiger: MarketDragonTigerItem[]
   dragonTigerDate?: string | null
   limitUp?: MarketLimitUpItem[]
+  limitBreak?: MarketLimitUpItem[]
   skyrocket?: MarketHotItem[]
+  hotStocks?: MarketHotItem[]
+  anomaly?: MarketAnomalyItem[]
   limitLadder?: MarketLimitLadder | null
   marketLoading: boolean
   articles: FeedArticle[]
   insightsLoading: boolean
-  stacked?: boolean
 }
 
 export default function MarketDynamicsDetail({
@@ -300,12 +368,14 @@ export default function MarketDynamicsDetail({
   dragonTiger,
   dragonTigerDate,
   limitUp = [],
+  limitBreak = [],
   skyrocket = [],
+  hotStocks = [],
+  anomaly = [],
   limitLadder,
   marketLoading,
   articles,
   insightsLoading,
-  stacked = false,
 }: Props) {
   const s = useStyles()
   const [detailTab, setDetailTab] = useState<DetailTab>('board')
@@ -315,25 +385,34 @@ export default function MarketDynamicsDetail({
 
   const moversLoading = marketLoading && !gainers.length && !losers.length
   const limitUpLoading = marketLoading && !limitUp.length
+  const limitBreakLoading = marketLoading && !limitBreak.length
   const skyrocketLoading = marketLoading && !skyrocket.length
+  const hotLoading = marketLoading && !hotStocks.length
+  const anomalyLoading = marketLoading && !anomaly.length
   const ladderLoading = marketLoading && !limitLadder?.boards.length
   const dragonLoading = marketLoading && !dragonTiger.length
 
   const boardListLoading =
     boardList === 'movers' ? moversLoading
       : boardList === 'limit_up' ? limitUpLoading
-        : boardList === 'skyrocket' ? skyrocketLoading
-          : boardList === 'ladder' ? ladderLoading
-            : dragonLoading
+        : boardList === 'limit_break' ? limitBreakLoading
+          : boardList === 'skyrocket' ? skyrocketLoading
+            : boardList === 'hot' ? hotLoading
+              : boardList === 'anomaly' ? anomalyLoading
+                : boardList === 'ladder' ? ladderLoading
+                  : dragonLoading
 
   const renderBoardContent = () => {
     if (boardListLoading) {
       const loadingLabel =
         boardList === 'movers' ? '正在加载涨跌榜…'
           : boardList === 'limit_up' ? '正在加载涨停…'
-            : boardList === 'skyrocket' ? '正在加载飙升榜…'
-              : boardList === 'ladder' ? '正在加载连板天梯…'
-                : '正在加载龙虎榜…'
+            : boardList === 'limit_break' ? '正在加载炸板…'
+              : boardList === 'skyrocket' ? '正在加载飙升榜…'
+                : boardList === 'hot' ? '正在加载热股…'
+                  : boardList === 'anomaly' ? '正在加载异动…'
+                    : boardList === 'ladder' ? '正在加载连板天梯…'
+                      : '正在加载龙虎榜…'
       return (
         <div className={s.loading}><Spinner size="tiny" label={loadingLabel} /></div>
       )
@@ -341,7 +420,7 @@ export default function MarketDynamicsDetail({
 
     switch (boardList) {
       case 'movers':
-        return <MarketBoardFocus gainers={gainers} losers={losers} />
+        return <MarketBoardFocus gainers={gainers} losers={losers} embedded variant="cn" />
       case 'limit_up':
         return (
           <MarketEmotionBoard
@@ -351,6 +430,13 @@ export default function MarketDynamicsDetail({
             ladder={limitLadder}
           />
         )
+      case 'limit_break':
+        return (
+          <SimpleQuoteList
+            items={limitBreak}
+            emptyLabel="暂无炸板数据，请确认已配置扶摇数据源"
+          />
+        )
       case 'skyrocket':
         return (
           <MarketEmotionBoard
@@ -358,6 +444,24 @@ export default function MarketDynamicsDetail({
             limitUp={limitUp}
             skyrocket={skyrocket}
             ladder={limitLadder}
+          />
+        )
+      case 'hot':
+        return (
+          <SimpleQuoteList
+            items={hotStocks.map(row => ({
+              code: row.code,
+              name: row.name,
+              reason: row.rank != null ? `热度 #${row.rank}` : undefined,
+            }))}
+            emptyLabel="暂无热股榜单"
+          />
+        )
+      case 'anomaly':
+        return (
+          <SimpleQuoteList
+            items={anomaly}
+            emptyLabel="暂无异动解读"
           />
         )
       case 'ladder':
@@ -399,64 +503,47 @@ export default function MarketDynamicsDetail({
             onClick={() => onChartCodeChange(null)}
           >
             <span className={s.iconBox}><DismissRegular fontSize={14} /></span>
-            返回看板
+            收起图表
           </button>
         </div>
       ) : (
-        <div className={s.chrome}>
-          <Text className={s.chromeMeta}>观察</Text>
-          <TabList
-            className={s.tabList}
-            size="small"
-            appearance="subtle"
-            selectedValue={detailTab}
-            onTabSelect={(_, d) => setDetailTab(String(d.value) as DetailTab)}
-          >
-            <Tab value="board">盘面</Tab>
-            <Tab value="news">资讯</Tab>
-          </TabList>
-        </div>
+        <MarketDynamicsSectionTabs
+          tabs={DETAIL_TABS}
+          value={detailTab}
+          onChange={setDetailTab}
+        />
       )}
 
       <div className={s.body}>
         {showChart && chartCode ? (
           <div className={s.pane}>
             <div className={s.chartWrap}>
-              <TradingViewChart code={chartCode} expanded active />
+              <TradingViewChart code={chartCode} chartVariant="index" expanded active />
             </div>
           </div>
-        ) : detailTab === 'board' ? (
+        ) : null}
+
+        {!showChart && detailTab === 'board' ? (
           <div className={s.pane}>
             <div className={s.boardBody}>
-              <nav
-                className={mergeClasses(
-                  s.boardNav,
-                  stacked && s.boardNavStacked,
-                  'opptrix-scroll-hidden',
-                )}
-                aria-label="盘面列表"
-              >
-                {BOARD_NAV.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={mergeClasses(
-                      s.boardNavItem,
-                      boardList === item.id && s.boardNavItemActive,
-                    )}
-                    aria-current={boardList === item.id ? 'page' : undefined}
-                    onClick={() => setBoardList(item.id)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </nav>
+              <div className={s.boardTabsRow}>
+                <PanelTitleTabs
+                  tabs={BOARD_NAV.map(item => ({ value: item.id, label: item.label }))}
+                  value={boardList}
+                  onChange={setBoardList}
+                  ariaLabel="盘面列表"
+                />
+              </div>
               <div className={s.boardMain}>
-                {renderBoardContent()}
+                <div className={mergeClasses(s.boardMainScroll, 'opptrix-scroll-hidden')}>
+                  {renderBoardContent()}
+                </div>
               </div>
             </div>
           </div>
-        ) : (
+        ) : null}
+
+        {!showChart && detailTab === 'news' ? (
           <div className={s.pane}>
             <div className={s.newsHead}>
               <span className={s.newsHeadTitle}>最新资讯</span>
@@ -467,7 +554,7 @@ export default function MarketDynamicsDetail({
             ) : !articles.length ? (
               <div className={s.empty}>
                 <span className={s.iconBox}><NewsRegular fontSize={18} /></span>
-                <div>暂无资讯，可在新闻中心添加订阅</div>
+                <div>暂无相关资讯，可在新闻中心添加订阅</div>
               </div>
             ) : (
               <div className={mergeClasses(s.newsScroll, 'opptrix-scroll-hidden')}>
@@ -498,7 +585,27 @@ export default function MarketDynamicsDetail({
               </div>
             )}
           </div>
-        )}
+        ) : null}
+
+        {showChart && chartCode ? (
+          <div className={s.pane}>
+            <div className={s.boardBody}>
+              <div className={s.boardTabsRow}>
+                <PanelTitleTabs
+                  tabs={BOARD_NAV.map(item => ({ value: item.id, label: item.label }))}
+                  value={boardList}
+                  onChange={setBoardList}
+                  ariaLabel="盘面列表"
+                />
+              </div>
+              <div className={s.boardMain}>
+                <div className={mergeClasses(s.boardMainScroll, 'opptrix-scroll-hidden')}>
+                  {renderBoardContent()}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

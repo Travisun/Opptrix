@@ -63,6 +63,26 @@ export const TONGHUASHUN_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     },
   ),
 
+  thsIndexPricesSnapshot: thsDoc(
+    'thsIndexPricesSnapshot',
+    '同花顺指数/板块行情快照（支持批量 thscode）',
+    '/api/a-share-index/prices/snapshot',
+    [
+      {
+        name: 'thscodes',
+        type: 'string',
+        description: '同花顺指数 thscode，如 885338.TI；批量传数组或 JSON 数组字符串',
+        required: true,
+      },
+    ],
+    'Record<string, unknown>[] 含 last_price、price_change_ratio_pct 等（SDK index.pricesSnapshot）',
+    {
+      example: '{"provider":"tonghuashun","method":"thsIndexPricesSnapshot","args":[["885338.TI","881121.TI"]]}',
+      usage: INVOKE('thsIndexPricesSnapshot', '[["885338.TI"]]'),
+      notes: '须使用 a-share-index 域，不可调用 aShare.prices.snapshot；服务端按批去重，建议每批 ≤50。',
+    },
+  ),
+
   thsIndexConstituents: thsDoc(
     'thsIndexConstituents',
     '同花顺指数/板块成分股列表',

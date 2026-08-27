@@ -19,8 +19,4 @@ export function writeCnIndexChartCode(code: string): void {
   }
 }
 
-export function indexChartCodeFromQuote(item: { code?: string; qt_code?: string }): string {
-  const raw = item.qt_code || item.code || ''
-  const match = raw.match(/(\d{6})/)
-  return match ? match[1]! : raw.replace(/\D/g, '').padStart(6, '0').slice(-6)
-}
+export { indexChartCodeFromQuote } from './marketBoardUtils'

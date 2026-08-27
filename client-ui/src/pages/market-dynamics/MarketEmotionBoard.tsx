@@ -9,6 +9,11 @@ import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
 import { opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
 import { listRowKey } from '../../utils/listRowKey'
+import {
+  CnInsightGroupLabel,
+  CnInsightListPad,
+  CnInsightStockRow,
+} from './cnInsightListStyles'
 
 const CONTENT_PAD = '8px'
 const MAX_LIMIT_UP = 20
@@ -292,6 +297,11 @@ function limitUpMetaText(item: MarketLimitUpItem): string {
   return item.code
 }
 
+function formatLadderBoardBadge(boardNum?: number, fallback?: string): string {
+  if (boardNum != null && boardNum > 0) return `${Math.round(boardNum)}连板`
+  return fallback ?? ''
+}
+
 export type EmotionBoardSection = 'all' | 'limit_up' | 'skyrocket' | 'ladder'
 
 type Props = {
@@ -302,6 +312,8 @@ type Props = {
   embedded?: boolean
   /** 仅渲染指定区块；默认 all 保持纵向堆叠兼容 */
   section?: EmotionBoardSection
+  /** 嵌入单区块时隐藏内部区块标题 */
+  hideSectionHead?: boolean
 }
 
 export default function MarketEmotionBoard({
@@ -310,9 +322,11 @@ export default function MarketEmotionBoard({
   ladder,
   embedded = false,
   section = 'all',
+  hideSectionHead = false,
 }: Props) {
   const s = useStyles()
   const isSingle = section !== 'all'
+  const showSectionHead = !hideSectionHead
   const hasAny = limitUp.length > 0 || skyrocket.length > 0 || (ladder?.boards.length ?? 0) > 0
 
   if (section === 'all' && !hasAny) {
@@ -328,37 +342,32 @@ export default function MarketEmotionBoard({
 
   const limitUpBlock = (
     <section className={mergeClasses(s.section, isSingle && s.sectionFill)}>
-      <div className={s.sectionHead}>
-        <span className={s.sectionTitle}>今日涨停</span>
-        {limitUpRows.length > 0 && (
-          <span className={s.sectionMeta}>{limitUpRows.length} 只</span>
-        )}
-      </div>
+      {showSectionHead ? (
+        <div className={s.sectionHead}>
+          <span className={s.sectionTitle}>今日涨停</span>
+          {limitUpRows.length > 0 && (
+            <span className={s.sectionMeta}>{limitUpRows.length} 只</span>
+          )}
+        </div>
+      ) : null}
       {limitUpRows.length ? (
-        <div className={mergeClasses(s.list, isSingle && s.listScroll, isSingle && 'opptrix-scroll-hidden')}>
+        <CnInsightListPad fill={isSingle}>
           {limitUpRows.map((item, index) => {
             const badge = limitUpBadgeLabel(item)
-            const meta = limitUpMetaText(item)
             return (
-              <div key={listRowKey(index, item.code)} className={s.limitUpRow}>
-                <div className={s.limitUpBody}>
-                  <div className={s.limitUpTopRow}>
-                    <span className={mergeClasses(s.rowTitle, s.limitUpTitle)} title={item.name}>
-                      {item.name}
-                    </span>
-                    {badge ? <span className={s.limitUpBadge}>{badge}</span> : null}
-                    <span className={mergeClasses(s.rowPct, pctClass(s, item.change_pct))}>
-                      {formatPct(item.change_pct, 2)}
-                    </span>
-                  </div>
-                  <span className={s.rowMeta} title={item.reason ?? item.code}>
-                    {meta}
-                  </span>
-                </div>
-              </div>
+              <CnInsightStockRow
+                key={listRowKey(index, item.code)}
+                code={item.code}
+                name={item.name}
+                meta={limitUpMetaText(item)}
+                price={item.price}
+                changePct={item.change_pct}
+                changeAmt={item.change_amt}
+                badge={badge || undefined}
+              />
             )
           })}
-        </div>
+        </CnInsightListPad>
       ) : (
         <div className={s.emptySection}>今日暂无涨停数据</div>
       )}
@@ -367,12 +376,14 @@ export default function MarketEmotionBoard({
 
   const skyrocketBlock = (
     <section className={mergeClasses(s.section, isSingle && s.sectionFill)}>
-      <div className={s.sectionHead}>
-        <span className={s.sectionTitle}>热度飙升</span>
-        {skyrocketRows.length > 0 && (
-          <span className={s.sectionMeta}>{skyrocketRows.length} 只</span>
-        )}
-      </div>
+      {showSectionHead ? (
+        <div className={s.sectionHead}>
+          <span className={s.sectionTitle}>热度飙升</span>
+          {skyrocketRows.length > 0 && (
+            <span className={s.sectionMeta}>{skyrocketRows.length} 只</span>
+          )}
+        </div>
+      ) : null}
       {skyrocketRows.length ? (
         <div className={mergeClasses(s.list, isSingle && s.listScroll, isSingle && 'opptrix-scroll-hidden')}>
           {skyrocketRows.map((item, index) => {
@@ -410,31 +421,34 @@ export default function MarketEmotionBoard({
 
   const ladderBlock = (
     <section className={mergeClasses(s.section, isSingle && s.sectionFill)}>
-      <div className={s.sectionHead}>
-        <span className={s.sectionTitle}>连板天梯</span>
-        {ladder?.date && (
-          <span className={s.sectionMeta}>{ladder.date}</span>
-        )}
-      </div>
+      {showSectionHead ? (
+        <div className={s.sectionHead}>
+          <span className={s.sectionTitle}>连板天梯</span>
+          {ladder?.date && (
+            <span className={s.sectionMeta}>{ladder.date}</span>
+          )}
+        </div>
+      ) : null}
       {ladder?.boards.length ? (
-        <div className={mergeClasses(s.ladderWrap, isSingle && s.ladderScroll, isSingle && 'opptrix-scroll-hidden')}>
+        <CnInsightListPad fill={isSingle} className={mergeClasses(isSingle && 'opptrix-scroll-hidden')}>
           {ladder.boards.map(board => (
-            <div key={board.key} className={s.ladderBoard}>
-              <span className={s.ladderLabel}>{board.label}</span>
-              <div className={s.chipRow}>
-                {board.items.map((item, index) => (
-                  <span
-                    key={listRowKey(index, item.code)}
-                    className={s.chip}
-                    title={item.name}
-                  >
-                    {item.name}
-                  </span>
-                ))}
-              </div>
+            <div key={board.key}>
+              <CnInsightGroupLabel>{board.label}</CnInsightGroupLabel>
+              {board.items.map((item, index) => (
+                <CnInsightStockRow
+                  key={listRowKey(index, item.code)}
+                  code={item.code}
+                  name={item.name}
+                  meta={item.code}
+                  price={item.price}
+                  changePct={item.change_pct}
+                  changeAmt={item.change_amt}
+                  badge={formatLadderBoardBadge(item.board_num, board.label)}
+                />
+              ))}
             </div>
           ))}
-        </div>
+        </CnInsightListPad>
       ) : (
         <div className={s.emptySection}>暂无连板天梯数据</div>
       )}

@@ -70,7 +70,7 @@
 | 概览 | Dashboard | Stat 行 + Module 网格 |
 | 个股研究 | StockResearch | PageHeader + Tab + 内容卡片 |
 | 机会与组合 | PortfolioHub | Tab + 表格/表单卡片 |
-| 市场动态 | MarketDynamicsPage | 左侧指数栏 + 右侧观察区（**盘面** / **资讯** 两 Tab）；盘面内左栏切换涨跌/涨停/飙升/天梯/龙虎，右侧仅渲染当前列表；开图时顶栏仅指数名 + 返回看板（换指数靠左侧栏） |
+| 市场动态 | MarketDynamicsPage | A股 **Stocky 式 Dashboard**：英雄指数卡（大价 + 涨跌 Pill + Sparkline）→ 紧凑 KPI 条 → 主区左（面包屑 + 大价 K 线 + 数据明细 Tab 表）/ 右（板块发现 2×N 网格）；美股不变 |
 | 投研写作 | StockWriter | 双栏 Editor 卡片 |
 | 设置 | Settings | 表单卡片堆叠 |
 | 新闻中心 | NewsCenter | 侧栏入口；feed / reader 双模式 |

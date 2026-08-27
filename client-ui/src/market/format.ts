@@ -11,6 +11,13 @@ export function formatPrice(value: number | null | undefined, digits = 2): strin
   return value.toFixed(digits)
 }
 
+/** 涨跌额（元），带正负号 */
+export function formatChangeAmt(value: number | null | undefined, digits = 2): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${value.toFixed(digits)}`
+}
+
 /** 金额千分位（组合市值 / 浮动盈亏等）；股价请继续用 formatPrice */
 export function formatMoney(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return '—'
