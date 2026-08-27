@@ -35,8 +35,8 @@ const WATCHLIST_FOUR = [
     assetClass: 'FUND',
     markPrice: 1.35,
     markCap: 'fund_quote',
-    queryCode: 'CN:PF.009049',
-    displayCode: 'CN:PF.009049',
+    queryCode: 'CN:OTC:009049.OF',
+    displayCode: 'CN:OTC:009049.OF',
   },
   {
     label: 'HK 个股',

@@ -3,19 +3,32 @@ import { portfolioClearInstrument, portfolioDeleteTrade, portfolioTrade, researc
 import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
 import { normalizeCode, portfolioHoldingsKey } from './format'
 import {
+  buildOpptrixInstrumentId,
   instrumentKey,
   tryParseInstrumentInput,
   normalizeInstrumentRefLocal,
 } from './instrument'
-import { portfolioHoldingsStorageKey } from '@opptrix/shared/portfolio-fees'
+import {
+  portfolioHoldingsStorageKey,
+  portfolioHoldingsStorageKeyAliases,
+} from '@opptrix/shared/portfolio-fees'
 import type { InstrumentRef, Market } from '../types/instrument'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
 
+export function portfolioHoldingRef(row: HoldingSnapshot) {
+  return holdingRowRef(row)
+}
+
 function holdingRowRef(row: HoldingSnapshot) {
   const trimmed = row.code.trim()
   const parsed = tryParseInstrumentInput(trimmed)
-  if (parsed) return normalizeInstrumentRefLocal(parsed)
+  const assetClass = row.assetClass as InstrumentRef['assetClass'] | undefined
+  if (parsed) {
+    return normalizeInstrumentRefLocal(
+      assetClass ? { ...parsed, assetClass } : parsed,
+    )
+  }
   // CN:PF.xxx / xxx.OF 等场外基金命名（与 shared parse 对齐的兜底）
   const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
   if (fundNs) {
@@ -36,7 +49,6 @@ function holdingRowRef(row: HoldingSnapshot) {
     })
   }
   const market = (row.market ?? 'CN') as Market
-  const assetClass = (row as { assetClass?: InstrumentRef['assetClass'] }).assetClass
   // 优先持仓行 assetClass；未知时仍默认 EQUITY，但六位裸码保留 market
   return normalizeInstrumentRefLocal({
     market,
@@ -51,6 +63,16 @@ function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnaps
   map[primary] = row
   const nsKey = instrumentKey(ref)
   if (nsKey && nsKey !== primary) map[nsKey] = row
+  // Opptrix 对外 ID：关注列表用 CN:STOCK:… 查持仓时须命中
+  const opptrixKey = buildOpptrixInstrumentId(ref)
+  if (opptrixKey && opptrixKey !== primary && opptrixKey !== nsKey) {
+    map[opptrixKey] = row
+  }
+  // 账本原样 code（旧裸码或新 Opptrix）双写，兼容 packages 迁移前后
+  const raw = row.code.trim()
+  if (raw && raw !== primary && raw !== nsKey && raw !== opptrixKey) {
+    map[raw] = row
+  }
   // 历史场外基金裸六位 alias：仅当槽位空闲，避免盖掉同码个股
   if (ref.market === 'CN' && (ref.assetClass === 'FUND' || ref.exchange === 'PF')) {
     const bare = ref.symbol.replace(/\D/g, '').slice(-6).padStart(6, '0')
@@ -156,14 +178,38 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     market?: string
     assetClass?: string
     instrument?: InstrumentRef
+    name?: string
     shares: number
     price: number
     side: 'buy' | 'sell'
     date?: string
   }) => {
-    await portfolioTrade(payload)
+    const instrument = payload.instrument
+      ? normalizeInstrumentRefLocal(payload.instrument)
+      : (() => {
+        const parsed = tryParseInstrumentInput(payload.code)
+        return parsed
+          ? normalizeInstrumentRefLocal(
+            payload.assetClass
+              ? { ...parsed, assetClass: payload.assetClass as InstrumentRef['assetClass'] }
+              : parsed,
+          )
+          : undefined
+      })()
+    const code = instrument ? buildOpptrixInstrumentId(instrument) : payload.code.trim()
+    await portfolioTrade({
+      code,
+      name: payload.name,
+      shares: payload.shares,
+      price: payload.price,
+      side: payload.side,
+      date: payload.date,
+      market: payload.market ?? instrument?.market,
+      assetClass: payload.assetClass ?? instrument?.assetClass,
+      instrument,
+    })
     await refreshHoldings()
-    return loadTrades(payload.code, payload.market)
+    return loadTrades(code, payload.market ?? instrument?.market)
   }, [loadTrades, refreshHoldings])
 
   const deleteTrade = useCallback(async (id: number, code: string, market?: string) => {
@@ -185,15 +231,31 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     delete tradesCache.current[tradeCacheKey(code, market)]
     setHoldingsByCode(prev => {
       const next = { ...prev }
-      const ref = tryParseInstrumentInput(code)
-      const keys = new Set<string>()
-      keys.add(portfolioHoldingsKey(code, market))
-      if (ref) {
-        keys.add(portfolioHoldingsStorageKey(normalizeInstrumentRefLocal(ref)))
-        keys.add(instrumentKey(ref))
+      const parsed = tryParseInstrumentInput(code)
+      let ref: InstrumentRef | null = null
+      if (parsed) {
+        ref = normalizeInstrumentRefLocal(
+          assetClass
+            ? { ...parsed, assetClass: assetClass as InstrumentRef['assetClass'] }
+            : parsed,
+        )
+      } else if (market) {
+        ref = normalizeInstrumentRefLocal({
+          market: market as Market,
+          assetClass: (assetClass as InstrumentRef['assetClass']) ?? 'EQUITY',
+          symbol: code.trim(),
+        })
       }
-      if (assetClass && ref) {
-        keys.add(instrumentKey({ ...ref, assetClass: assetClass as import('../types/instrument').InstrumentRef['assetClass'] }))
+      const keys = new Set<string>()
+      keys.add(portfolioHoldingsKey(code, market, assetClass as InstrumentRef['assetClass'] | undefined))
+      keys.add(code.trim())
+      if (ref) {
+        for (const alias of portfolioHoldingsStorageKeyAliases(ref)) {
+          keys.add(alias)
+        }
+        keys.add(instrumentKey(ref))
+        keys.add(buildOpptrixInstrumentId(ref))
+        keys.add(portfolioHoldingsStorageKey(ref))
       }
       for (const k of keys) {
         if (k) delete next[k]
@@ -204,7 +266,17 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
   }, [refreshHoldings])
 
   const isHolding = useCallback((code: string, market?: string) => {
-    const row = holdingsByCode[portfolioHoldingsKey(code, market)]
+    const trimmed = code.trim()
+    const parsed = tryParseInstrumentInput(trimmed)
+    if (parsed) {
+      const ref = normalizeInstrumentRefLocal(parsed)
+      const row = holdingsByCode[portfolioHoldingsStorageKey(ref)]
+        ?? holdingsByCode[instrumentKey(ref)]
+        ?? holdingsByCode[buildOpptrixInstrumentId(ref)]
+        ?? holdingsByCode[trimmed]
+      return Boolean(row && row.shares > 0)
+    }
+    const row = holdingsByCode[portfolioHoldingsKey(code, market)] ?? holdingsByCode[trimmed]
     return Boolean(row && row.shares > 0)
   }, [holdingsByCode])
 

@@ -4,7 +4,7 @@ import { calcFeesFromSettings } from './models.js'
 import type { TradeRecord } from './trade-models.js'
 import {
   inferTradeAssetClass,
-  portfolioDisplayCode,
+  portfolioCodeAliases,
   portfolioInstrumentRef,
 } from './instrument.js'
 
@@ -20,8 +20,11 @@ function resolveOverridesForTrade(
   instrumentFees: Record<string, InstrumentFeeOverrides>,
 ): InstrumentFeeOverrides {
   const ac = inferTradeAssetClass(trade.code, trade.market, trade.assetClass)
-  const key = portfolioDisplayCode(trade.code, trade.market, ac)
-  return instrumentFees[key] ?? instrumentFees[trade.code] ?? {}
+  for (const alias of portfolioCodeAliases(trade.code, trade.market, ac)) {
+    const overrides = instrumentFees[alias]
+    if (overrides) return overrides
+  }
+  return {}
 }
 
 export function recomputeTradeRecordFees(

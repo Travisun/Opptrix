@@ -107,7 +107,7 @@ test('关注消歧：唯一 HK 本地命中可写回；多命中不写；跑两�
   const unique = disambiguateWatchlistItemFromHits(unresolved, [hkHit])
   assert.equal(unique.instrument?.market, 'HK')
   assert.equal(unique.instrument?.symbol, '00700')
-  assert.equal(unique.code, 'HK:00700')
+  assert.equal(unique.code, 'HK:STOCK:00700.HK')
 
   const ambiguous = disambiguateWatchlistItemFromHits(unresolved, [hkHit, cnHit])
   assert.equal(ambiguous.instrument, undefined)

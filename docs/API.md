@@ -134,13 +134,13 @@
 | POST | `/api/search` | `{ "keyword" }` |
 | POST | `/api/signal` | `{ "code" }` |
 | POST | `/api/strategy/report` | `{ "code" }` |
-| GET | `/api/portfolio/trades` | `?code=` 可选 |
-| GET | `/api/portfolio/summary` | 账本汇总 |
+| GET | `/api/portfolio/trades` | `?code=` 可选（Opptrix ID / 兼容旧裸码一轮） |
+| GET | `/api/portfolio/summary` | 账本汇总（`holdings[].code` = Opptrix ID） |
 | GET | `/api/watchlist` | 关注列表（含 `items`；新客户端只读合并 `groups` + `membership`） |
 | PUT | `/api/watchlist` | `{ items: WatchlistItem[] }` 全量替换关注项（**不**覆盖分组元数据） |
 | GET | `/api/watchlist/groups` | 关注分组 `{ groups, membership }` |
 | PUT | `/api/watchlist/groups` | 全量保存分组与成员关系 |
-| POST | `/api/portfolio/trade` | `{ code, shares, price, side?, date? }` |
+| POST | `/api/portfolio/trade` | `{ code, shares, price, side?, date?, market?, assetClass?, instrument? }`；`code` 持久化为 Opptrix（`MARKET:CLASS:SYMBOL`），权威身份为 `InstrumentRef`（见 [INSTRUMENT-PROTOCOL.md §2.2.3](./INSTRUMENT-PROTOCOL.md#223-方案-a--组合账本--关注--详情统一-instrumentref)） |
 | GET | `/api/stock-analysis/:instrumentKey` | 个股分析最近一次报告（本地用户库；无则 `data: null`） |
 | PUT | `/api/stock-analysis/:instrumentKey` | 写入/覆盖最近一次报告 `{ analyzedAt, raw }` |
 

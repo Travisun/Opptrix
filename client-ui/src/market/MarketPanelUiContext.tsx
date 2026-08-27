@@ -9,6 +9,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { WatchlistItem } from '../types/market'
+import { normalizeWatchlistItem } from './instrument'
 
 /**
  * Workspace-level UI state for the right market panel (tab + selected instrument).
@@ -34,7 +35,8 @@ export function MarketPanelUiProvider({ children }: { children: ReactNode }) {
   const [selected, setSelected] = useState<WatchlistItem | null>(null)
 
   const selectDetail = useCallback((item: WatchlistItem) => {
-    setSelected(item)
+    // 已解析强制 Opptrix + instrument；pending 短码原样保留
+    setSelected(normalizeWatchlistItem(item))
     setTab('detail')
   }, [])
 

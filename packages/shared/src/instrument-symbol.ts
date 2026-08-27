@@ -586,6 +586,24 @@ export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
   const text = raw.trim()
   if (!text) return null
 
+  const cnEtf = /^CN:ETF[.:](\d{6})$/i.exec(text)
+  if (cnEtf) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      assetClass: 'ETF',
+      symbol: cnEtf[1]!,
+    })
+  }
+
+  const cnLof = /^CN:LOF[.:](\d{6})$/i.exec(text)
+  if (cnLof) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      assetClass: 'LOF',
+      symbol: cnLof[1]!,
+    })
+  }
+
   const cn = /^CN:(SH|SZ|BJ)[.:](\d{6})$/i.exec(text)
   if (cn) {
     return normalizeInstrumentRef({

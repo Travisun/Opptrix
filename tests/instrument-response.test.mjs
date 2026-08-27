@@ -19,6 +19,21 @@ test('resolveInstrumentQuoteChangePct recovers from absurd upstream change_pct',
   assert.equal(pct, 1.06)
 })
 
+test('resolveInstrumentQuoteChangePct converts decimal ratio to percent', () => {
+  // 指数源偶发返回 -0.00076677（比率）而非 -0.08（百分数）
+  const pct = resolveInstrumentQuoteChangePct(
+    { change_pct: -0.00076677, price: 3912.49, preClose: 3915.49 },
+    3912.49,
+    3915.49,
+  )
+  assert.ok(pct != null && Math.abs(pct + 0.08) < 0.02)
+  // 已是百分数时不得再 ×100
+  assert.equal(
+    resolveInstrumentQuoteChangePct({ change_pct: -0.73, price: 6.78, preClose: 6.83 }, 6.78, 6.83),
+    -0.73,
+  )
+})
+
 test('quoteFromProviderRow normalizes camelCase provider row', () => {
   const q = quoteFromProviderRow(
     { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' },

@@ -13,18 +13,22 @@ import {
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { DismissRegular, DeleteRegular, EditRegular, SearchRegular, SettingsRegular, StarRegular } from '@fluentui/react-icons'
+import { DismissRegular, DeleteRegular, EditRegular, SearchRegular, StarRegular } from '@fluentui/react-icons'
 import SidebarListEmpty from './SidebarListEmpty'
-import WatchlistGroupsDialog from './WatchlistGroupsDialog'
+import WatchlistGroupFilterBar from './WatchlistGroupFilterBar'
+import WatchlistGroupSummaryStrip from './WatchlistGroupSummaryStrip'
+import WatchlistGroupsDrawer from './WatchlistGroupsDrawer'
+import { computeWatchlistGroupSummary } from './watchlistGroupCalc'
 import { filterWatchlistByGroup, useWatchlistGroups } from './WatchlistGroupsContext'
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import HoverMarqueeText from '../chat/HoverMarqueeText'
-import { formatPct, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText, normalizeCode } from './format'
+import { formatPct, formatPrice, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText, normalizeCode } from './format'
 import { unifiedQuoteToMarketQuote } from './instrument-adapters'
 import type { QuoteFailedReason } from './instrument-adapters'
-import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctFromQuote, dayChangeReturnPct } from './portfolioCalc'
+import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctInCny, convertMarketAmountToCny, dayChangeReturnPct } from './portfolioCalc'
+import { useFxRates } from './useFxRates'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, instrumentKey, tryParseInstrumentInput, resolveWatchlistInstrument, watchlistItemKey, UNRESOLVED_INSTRUMENT_COPY, formatDisambiguationCandidateLabel, formatInstrumentSearchHitSubtitle, normalizeWatchlistItem } from './instrument'
@@ -63,7 +67,7 @@ const LIST_TABLE_MIN_WIDTH = `calc(${IDENTITY_WIDTH} + 8px + ${METRICS_MIN_WIDTH
 
 const METRIC_COLUMNS = [
   { key: 'price', label: '最新价', minWidth: '68px' },
-  { key: 'follow', label: '关注收益', minWidth: '64px' },
+  { key: 'change', label: '涨跌幅', minWidth: '64px' },
   { key: 'cost', label: '成本价', minWidth: '64px' },
   { key: 'holding', label: '持仓收益', minWidth: '68px' },
 ] as const
@@ -101,6 +105,7 @@ function lookupWatchlistQuote<T>(
 
 const useStyles = makeStyles({
   root: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
@@ -630,9 +635,16 @@ export default function WatchlistTab({
     return groups.find(g => g.id === selectedGroupId)?.title ?? null
   }, [groups, selectedGroupId])
 
+  const fxRates = useFxRates(active)
+
   const groupsDoc = useMemo(
     () => ({ groups, membership }),
     [groups, membership],
+  )
+
+  const groupSummary = useMemo(
+    () => computeWatchlistGroupSummary(items, membership, selectedGroupId, quotes, holdingsByCode, fxRates),
+    [items, membership, selectedGroupId, quotes, holdingsByCode, fxRates],
   )
 
   const refreshQuotes = useCallback(async (opts?: { silent?: boolean }) => {
@@ -1005,6 +1017,7 @@ export default function WatchlistTab({
     () => items.filter(item => {
       const ref = resolveWatchlistInstrument(item)
       if (!ref) return false
+      if (!hasApplicationCapability(ref, 'portfolio_pnl')) return false
       return (lookupHoldingSnapshot(holdingsByCode, ref)?.shares ?? 0) > 0
     }).length,
     [items, holdingsByCode],
@@ -1029,35 +1042,20 @@ export default function WatchlistTab({
         )}
       </div>
 
-      <div className={s.chipRow}>
-        <div className={mergeClasses(s.chipsWrap, 'opptrix-scroll-x')}>
-          <button
-            type="button"
-            className={mergeClasses(s.chip, !selectedGroupId && s.chipActive)}
-            onClick={() => setSelectedGroupId(null)}
-          >
-            全部
-          </button>
-          {groups.map(group => (
-            <button
-              key={group.id}
-              type="button"
-              className={mergeClasses(s.chip, selectedGroupId === group.id && s.chipActive)}
-              onClick={() => setSelectedGroupId(group.id)}
-            >
-              {group.title}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className={s.chipEditBtn}
-          aria-label="管理分组"
-          onClick={() => setDialogOpen(true)}
-        >
-          <SettingsRegular fontSize={14} />
-        </button>
-      </div>
+      <WatchlistGroupFilterBar
+        groups={groups}
+        membership={membership}
+        items={items}
+        selectedGroupId={selectedGroupId}
+        onSelectGroup={setSelectedGroupId}
+        onManage={() => setDialogOpen(true)}
+      />
+
+      <WatchlistGroupSummaryStrip
+        mode="watchlist"
+        metrics={groupSummary}
+        groupTitle={selectedGroupTitle}
+      />
 
       {keyword.trim().length >= 2 && (
         <div className={mergeClasses(s.results, 'opptrix-scroll', !searching && searchHits.length === 0 && !universePrep.status && s.resultsCentered)}>
@@ -1177,13 +1175,31 @@ export default function WatchlistTab({
               const quotePending = price == null && tentativePending && !failedCopy
               const holding = ref ? lookupHoldingSnapshot(holdingsByCode, ref) : null
               const isHolding = (holding?.shares ?? 0) > 0
-              const followPct = followReturnPct(livePrice, item.addedPrice)
-              const holdingPct = isHolding
-                ? holdingReturnPctFromQuote(holding, livePrice)
+              const market = ref?.market
+              const supportsHoldingPnl = ref != null && hasApplicationCapability(ref, 'portfolio_pnl')
+              const isFxMarket = market === 'HK' || market === 'US'
+              const dayPct = dayChangeReturnPct(quote?.changePct, livePrice, quote?.preClose)
+              const dayTone = pctTone(dayPct)
+              const holdingPct = isHolding && supportsHoldingPnl
+                ? holdingReturnPctInCny(holding, livePrice, market, fxRates)
                 : null
-              const followTone = pctTone(followPct)
               const holdingTone = pctTone(holdingPct)
-              const costBasis = holding != null && isHolding && holding.costBasis > 0 ? holding.costBasis : null
+              const costBasisLocal = holding != null && isHolding && supportsHoldingPnl && holding.costBasis > 0
+                ? holding.costBasis
+                : null
+              const costBasisDisplay = costBasisLocal != null
+                ? (isFxMarket && fxRates
+                  ? formatPrice(convertMarketAmountToCny(costBasisLocal, market, fxRates))
+                  : formatPriceForMarket(market, costBasisLocal))
+                : null
+              const costBasisTitle = isFxMarket && costBasisLocal != null
+                ? (fxRates
+                  ? `成本 ${formatPriceForMarket(market, costBasisLocal)}，按最新汇率约合人民币`
+                  : `成本 ${formatPriceForMarket(market, costBasisLocal)}`)
+                : undefined
+              const holdingTitle = isFxMarket && isHolding && supportsHoldingPnl && fxRates
+                ? '港美持仓收益已按人民币口径计算'
+                : undefined
               const radarRow = ref?.market === 'CN' ? radar[instrumentKey(ref)] : undefined
               const radarLine = unresolved
                 ? (hasCandidates
@@ -1230,7 +1246,7 @@ export default function WatchlistTab({
                   <div className={s.rowIdentity}>
                     <div className={s.rowNameLine}>
                       <HoverMarqueeText text={displayName} />
-                      {isHolding && (
+                      {isHolding && supportsHoldingPnl && (
                         <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
                       )}
                       {unresolved && hasCandidates && (
@@ -1290,22 +1306,32 @@ export default function WatchlistTab({
                       onClick={stopRowActionPointer}
                     >
                       {failedCopy && livePrice == null ? (
-                        <span
-                          className={mergeClasses(s.metricCell, s.metricMuted)}
-                          style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
-                          title={failedCopy.hint}
-                        >
-                          {failedCopy.label}
-                        </span>
+                        <>
+                          <span
+                            className={mergeClasses(s.metricCell, s.metricMuted)}
+                            style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                            title={failedCopy.hint}
+                          >
+                            {failedCopy.label}
+                          </span>
+                          <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[1].minWidth }}>—</span>
+                          <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[2].minWidth }}>—</span>
+                          <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[3].minWidth }}>—</span>
+                        </>
                       ) : quotePending && livePrice == null ? (
-                        <span
-                          className={mergeClasses(s.metricCell, s.metricPending)}
-                          style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
-                          title="正在获取最新行情"
-                        >
-                          <Spinner size="extra-tiny" />
-                          正在获取行情…
-                        </span>
+                        <>
+                          <span
+                            className={mergeClasses(s.metricCell, s.metricPending)}
+                            style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
+                            title="正在获取最新行情"
+                          >
+                            <Spinner size="extra-tiny" />
+                            正在获取行情…
+                          </span>
+                          <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[1].minWidth }}>—</span>
+                          <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[2].minWidth }}>—</span>
+                          <span className={mergeClasses(s.metricCell, s.metricMuted)} style={{ minWidth: METRIC_COLUMNS[3].minWidth }}>—</span>
+                        </>
                       ) : (
                         <>
                           <span
@@ -1317,25 +1343,26 @@ export default function WatchlistTab({
                             style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
                             title={failedCopy?.hint}
                           >
-                            {formatPriceForMarket(ref?.market, price)}
+                            {formatPriceForMarket(market, price)}
                           </span>
                           <span
                             className={mergeClasses(
                               s.metricCell,
-                              followPct == null && s.metricMuted,
-                              followTone === 'up' && s.pctUp,
-                              followTone === 'down' && s.pctDown,
-                              followTone === 'flat' && s.pctFlat,
+                              dayPct == null && s.metricMuted,
+                              dayTone === 'up' && s.pctUp,
+                              dayTone === 'down' && s.pctDown,
+                              dayTone === 'flat' && s.pctFlat,
                             )}
                             style={{ minWidth: METRIC_COLUMNS[1].minWidth }}
                           >
-                            {formatPct(followPct, 1)}
+                            {formatPct(dayPct, 1)}
                           </span>
                           <span
-                            className={mergeClasses(s.metricCell, costBasis == null && s.metricMuted)}
+                            className={mergeClasses(s.metricCell, costBasisDisplay == null && s.metricMuted)}
                             style={{ minWidth: METRIC_COLUMNS[2].minWidth }}
+                            title={costBasisTitle}
                           >
-                            {costBasis != null ? formatPriceForMarket(ref?.market, costBasis) : '—'}
+                            {costBasisDisplay ?? '—'}
                           </span>
                           <span
                             className={mergeClasses(
@@ -1346,8 +1373,9 @@ export default function WatchlistTab({
                               holdingTone === 'flat' && s.pctFlat,
                             )}
                             style={{ minWidth: METRIC_COLUMNS[3].minWidth }}
+                            title={holdingTitle}
                           >
-                            {isHolding ? formatPct(holdingPct, 1) : '—'}
+                            {isHolding && supportsHoldingPnl ? formatPct(holdingPct, 1) : '—'}
                           </span>
                         </>
                       )}
@@ -1408,7 +1436,7 @@ export default function WatchlistTab({
         </button>
       </div>
 
-      <WatchlistGroupsDialog
+      <WatchlistGroupsDrawer
         open={dialogOpen}
         items={items}
         doc={groupsDoc}

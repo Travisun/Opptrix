@@ -24,28 +24,68 @@ export function parseInstrumentRef(input: unknown): InstrumentRef | null {
   if (!input || typeof input !== 'object') return null
   const row = input as Record<string, unknown>
   const symbolRaw = String(row.symbol ?? row.code ?? '').trim()
+  const marketRaw = String(row.market ?? '').trim().toUpperCase()
+  const hasExplicitAsset = row.assetClass != null || row.asset_class != null
+  const assetRaw = String(row.assetClass ?? row.asset_class ?? 'EQUITY').trim().toUpperCase()
+  if (hasExplicitAsset && !isAssetClass(assetRaw)) return null
+  const exchangeRaw = row.exchange != null ? String(row.exchange).trim() : ''
+  const exchange = exchangeRaw || undefined
+  const quote = row.quote != null ? String(row.quote) : undefined
+
+  // 结构化对象（market + 裸码）优先：禁止只用 symbol 推断而丢掉 INDEX/FUND/REIT
+  // symbol 含命名空间 / Opptrix ID（冒号）时仍走字符串解析
+  if (symbolRaw && isMarket(marketRaw) && !symbolRaw.includes(':')) {
+    const assetClass = isAssetClass(assetRaw) ? assetRaw : 'EQUITY'
+    if (/\.(SH|SZ|BJ|HK|US|OF|TI)$/i.test(symbolRaw)) {
+      const fromCanonical = parseCanonicalInstrumentInput(symbolRaw)
+      if (fromCanonical) {
+        return normalizeInstrumentRef({
+          ...fromCanonical,
+          market: marketRaw,
+          assetClass: hasExplicitAsset ? assetClass : fromCanonical.assetClass,
+          ...(exchange ? { exchange } : {}),
+          ...(quote != null ? { quote } : {}),
+        })
+      }
+    }
+    return normalizeInstrumentRef({
+      market: marketRaw,
+      assetClass,
+      symbol: symbolRaw,
+      exchange,
+      quote,
+    })
+  }
+
   if (symbolRaw) {
     const fromCanonical = parseCanonicalInstrumentInput(symbolRaw)
-    if (fromCanonical) return fromCanonical
+    if (fromCanonical) {
+      if (hasExplicitAsset || exchange || isMarket(marketRaw)) {
+        return normalizeInstrumentRef({
+          ...fromCanonical,
+          ...(isMarket(marketRaw) ? { market: marketRaw } : {}),
+          ...(hasExplicitAsset ? { assetClass: assetRaw as AssetClass } : {}),
+          ...(exchange ? { exchange } : {}),
+          ...(quote != null ? { quote } : {}),
+        })
+      }
+      return fromCanonical
+    }
     const fromNs = parseInstrumentNamespace(symbolRaw)
     if (fromNs) return fromNs
   }
-  const marketRaw = String(row.market ?? '').trim().toUpperCase()
-  const symbol = symbolRaw
-  if (!symbol || !isMarket(marketRaw)) return null
-  const assetRaw = String(row.assetClass ?? row.asset_class ?? 'EQUITY').trim().toUpperCase()
-  const hasExplicitAsset = row.assetClass != null || row.asset_class != null
-  if (hasExplicitAsset && !isAssetClass(assetRaw)) return null
+
+  if (!symbolRaw || !isMarket(marketRaw)) return null
   const assetClass = isAssetClass(assetRaw) ? assetRaw : 'EQUITY'
-  const exchange = row.exchange != null ? String(row.exchange) : undefined
-  const quote = row.quote != null ? String(row.quote) : undefined
-  return normalizeInstrumentRef({ market: marketRaw, assetClass, symbol, exchange, quote })
+  return normalizeInstrumentRef({ market: marketRaw, assetClass, symbol: symbolRaw, exchange, quote })
 }
 
 /** Build InstrumentRef from flat API fields (POST body) */
 export function instrumentRefFromParams(params: Record<string, unknown>): InstrumentRef | null {
-  const nested = parseInstrumentRef(params.instrument)
-  if (nested) return nested
+  // 已传 instrument：只解析该字段；失败不得回退裸 code（避免 REIT/INDEX → EQUITY）
+  if (params.instrument != null) {
+    return parseInstrumentRef(params.instrument)
+  }
   return parseInstrumentRef(params)
 }
 

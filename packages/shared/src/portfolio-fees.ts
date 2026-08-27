@@ -1,5 +1,10 @@
 import type { InstrumentRef, Market } from './market-data.js'
-import { canonicalCnSymbol, normalizeInstrumentRef } from './instrument-symbol.js'
+import {
+  buildInstrumentNamespace,
+  buildOpptrixInstrumentId,
+  canonicalCnSymbol,
+  normalizeInstrumentRef,
+} from './instrument-symbol.js'
 
 export type PortfolioLedgerKind = 'exchange' | 'otc_fund'
 export type TradeSide = 'buy' | 'sell'
@@ -73,25 +78,37 @@ function isCnFundHoldingsRef(ref: InstrumentRef): boolean {
   return ref.assetClass === 'FUND' || exUp === 'PF' || exUp === 'OF'
 }
 
-/** 持仓账本与 API 返回 holdings[].code 对齐的存储键 */
+/** 持仓账本与 API 返回 holdings[].code 对齐 — Opptrix ID */
 export function portfolioHoldingsStorageKey(ref: InstrumentRef): string {
+  return buildOpptrixInstrumentId(normalizeInstrumentRef(ref))
+}
+
+/**
+ * 读路径别名：Opptrix + 命名空间 + 旧裸码 / CN:PF（不覆盖同码个股槽位由调用方决定）
+ */
+export function portfolioHoldingsStorageKeyAliases(ref: InstrumentRef): string[] {
   const n = normalizeInstrumentRef(ref)
-  switch (n.market) {
-    case 'CN': {
-      const bare = canonicalCnSymbol(n.symbol)
-      if (isCnFundHoldingsRef(n)) return `CN:PF.${bare}`
-      return bare
+  const aliases = new Set<string>()
+  aliases.add(portfolioHoldingsStorageKey(n))
+  aliases.add(buildInstrumentNamespace(n))
+  aliases.add(n.symbol)
+  if (n.market === 'CN') {
+    const bare = canonicalCnSymbol(n.symbol)
+    aliases.add(bare)
+    if (isCnFundHoldingsRef(n)) {
+      aliases.add(`CN:PF.${bare}`)
+      aliases.add(`CN:OF.${bare}`)
+      aliases.add(`${bare}.OF`)
     }
-    case 'US':
-      return n.symbol.trim().toUpperCase()
-    case 'HK': {
-      const raw = n.symbol.trim().replace(/^HK:/i, '')
-      const digits = raw.replace(/\D/g, '')
-      return digits.padStart(5, '0')
-    }
-    default:
-      return n.symbol.trim()
   }
+  if (n.market === 'HK') {
+    aliases.add(`HK:${n.symbol}`)
+    aliases.add(n.symbol.replace(/^0+/, '') || n.symbol)
+  }
+  if (n.market === 'US') {
+    aliases.add(`US:${n.symbol}`)
+  }
+  return [...aliases]
 }
 
 /** A 股场内上市基金代码段（ETF / LOF 等） */

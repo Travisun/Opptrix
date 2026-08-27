@@ -8,6 +8,7 @@ import type { StockContext } from '../context/AppContext'
 import { isCnEtfCode, isCnListedFundSymbol, normalizeCode } from './format'
 import {
   buildInstrumentNamespace as sharedBuildInstrumentNamespace,
+  buildOpptrixInstrumentId,
   isAmbiguousNumericCode as sharedIsAmbiguousNumericCode,
   isUnambiguousCnDigits as sharedIsUnambiguousCnDigits,
   normalizeInstrumentRef,
@@ -24,6 +25,7 @@ import {
 } from '@opptrix/shared/instrument-ref'
 
 export {
+  buildOpptrixInstrumentId,
   parseInstrumentNamespace,
   parseCanonicalInstrumentInput,
   normalizeInstrumentRef,
@@ -172,47 +174,51 @@ export function isOpptrixInstrumentCode(code: string): boolean {
   return parseOpptrixInstrumentId(code.trim()) != null
 }
 
-/** 入库前：搜索 Opptrix ID 原样保留；旧关注项仍走 normalizeWatchlistItem */
+/**
+ * 入库前：已解析身份强制对外 Opptrix ID；未消歧短码保留原样（pending）。
+ */
 export function prepareWatchlistItemForStore(item: WatchlistItem): WatchlistItem {
   const raw = item.code.trim()
-  if (isOpptrixInstrumentCode(raw)) {
-    const parsed = parseOpptrixInstrumentId(raw)
-    const instrument = item.instrument
-      ? normalizeInstrumentRefLocal(item.instrument)
-      : parsed
-        ? normalizeInstrumentRefLocal(parsed as InstrumentRef)
-        : undefined
+  const fromOpptrix = isOpptrixInstrumentCode(raw) ? parseOpptrixInstrumentId(raw) : null
+  const instrument = item.instrument?.market && item.instrument.symbol
+    && String(item.instrument.exchange ?? '').toUpperCase() !== 'PENDING'
+    ? normalizeInstrumentRefLocal(item.instrument)
+    : fromOpptrix
+      ? normalizeInstrumentRefLocal(fromOpptrix as InstrumentRef)
+      : null
+
+  if (instrument) {
+    const code = buildOpptrixInstrumentId(instrument)
     return {
       ...item,
-      code: raw,
-      name: item.name?.trim() || (instrument ? displayCodeFromInstrument(instrument) : raw),
+      code,
+      name: item.name?.trim() || displayCodeFromInstrument(instrument),
       industry: item.industry?.trim() || undefined,
       note: item.note?.trim() || undefined,
       addedPrice: item.addedPrice ?? null,
       instrument,
     }
   }
+
+  // 无显式身份时走权威解析（六位 A 股等）；仍歧义则 pending
   return normalizeWatchlistItem(item)
 }
 
 export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
-  if (isOpptrixInstrumentCode(item.code)) {
-    return prepareWatchlistItemForStore(item)
-  }
   const resolved = tryResolveWatchlistInstrument(item)
   if (resolved) {
-    const code = displayCodeFromInstrument(resolved)
+    const code = buildOpptrixInstrumentId(resolved)
     return {
       ...item,
       code,
-      name: item.name?.trim() || code,
+      name: item.name?.trim() || displayCodeFromInstrument(resolved),
       industry: item.industry?.trim() || undefined,
       note: item.note?.trim() || undefined,
       addedPrice: item.addedPrice ?? null,
       instrument: resolved,
     }
   }
-  // 歧义短码等：不发明假 CN，保留原 code
+  // 歧义短码等：不发明假 CN，保留原 code（pending）
   const code = item.code.trim()
   return {
     ...item,
@@ -240,6 +246,7 @@ export function toStockContext(
     name: item.name,
     instrument: item.instrument,
   })
+  // 已解析：code 为 Opptrix；pending 短码可无 instrument
   return {
     code: normalized.code,
     name: normalized.name,

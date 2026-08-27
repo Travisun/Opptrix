@@ -4286,6 +4286,7 @@ export class ResearchHub {
 
   private portfolioFeeInstrument(code: string, market: string | undefined, t0: number) {
     if (!code.trim()) return fail('code 必填', t0)
+    // 裸码 / Opptrix 均可；getInstrumentFees 内部升格 + 双读旧键
     const data = this.de.portfolio.getInstrumentFees(code, market as import('@opptrix/shared').Market | undefined)
     return ok(data, '标的费率', t0)
   }
@@ -4294,16 +4295,22 @@ export class ResearchHub {
     const code = String(params.code ?? '').trim()
     if (!code) return fail('code 必填', t0)
     const market = params.market != null ? String(params.market) : undefined
+    const assetClassRaw = params.assetClass ?? params.asset_class
+    const assetClass = assetClassRaw != null
+      ? String(assetClassRaw) as import('@opptrix/shared').AssetClass
+      : undefined
     const overrides = params.overrides ?? params.instrument_fees
     if (!overrides || typeof overrides !== 'object') return fail('overrides 必填', t0)
     const result = this.de.portfolio.setInstrumentFees(
       code,
       overrides as import('@opptrix/shared').InstrumentFeeOverrides,
       market as import('@opptrix/shared').Market | undefined,
+      assetClass,
     )
     const snapshot = this.de.portfolio.getInstrumentFees(
       code,
       market as import('@opptrix/shared').Market | undefined,
+      assetClass,
     )
     return ok(
       {

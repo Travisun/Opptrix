@@ -313,10 +313,23 @@ export interface IndustryStockItem {
 }
 
 export interface PortfolioTradeItem {
-  id: number; code: string; name: string
+  id: number
+  code: string
+  name: string
   market?: string
-  tradeSide: 'buy' | 'sell'; shares: number; price: number
-  amount: number; totalFee: number; tradeDate: string
+  assetClass?: string
+  instrument?: {
+    market: string
+    assetClass: string
+    symbol: string
+    exchange?: string
+  }
+  tradeSide: 'buy' | 'sell'
+  shares: number
+  price: number
+  amount: number
+  totalFee: number
+  tradeDate: string
 }
 
 export interface PortfolioLedgerData {

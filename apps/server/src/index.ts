@@ -1931,6 +1931,17 @@ app.get('/api/portfolio/summary', async () => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.get('/api/market/fx-rates', async (_req, reply) => {
+  try {
+    const { getFxRatesToCny } = await import('./fx-rates-service.js')
+    const data = await getFxRatesToCny()
+    return { success: true, data }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '汇率暂时无法获取'
+    return reply.code(503).send({ success: false, message })
+  }
+})
+
 app.get('/api/portfolio/fees/global', async () => {
   const r = await hub.dispatch('portfolio_fee_global', {})
   return { success: r.success, data: r.data, message: r.message }
@@ -2008,17 +2019,19 @@ app.post<{ Body: {
   price: number
   side?: string
   date?: string
+  name?: string
   market?: string
   assetClass?: string
   instrument?: { market: string; assetClass: string; symbol: string; exchange?: string }
 } }>(
   '/api/portfolio/trade',
   async (req, reply) => {
-    const { code, shares, price, side = 'buy', date, market, assetClass, instrument } = req.body ?? {}
+    const { code, shares, price, side = 'buy', date, market, assetClass, instrument, name } = req.body ?? {}
     if (!code || !shares || !price) return reply.code(400).send({ error: 'code, shares, price required' })
     const pm = hub.de.portfolio
     const m = market?.trim() || undefined
     const ac = assetClass?.trim() || undefined
+    // 裸码 / Opptrix / 命名空间均接受；recordTrade 内部升格为 Opptrix 再落库
     const inst = instrument && typeof instrument === 'object'
       ? instrument as import('@opptrix/shared').InstrumentRef
       : undefined
@@ -2029,7 +2042,7 @@ app.post<{ Body: {
       price,
       {
         date,
-        name: '',
+        name: typeof name === 'string' ? name.trim() : '',
         market: m as import('@opptrix/shared').Market | undefined,
         assetClass: ac as import('@opptrix/shared').AssetClass | undefined,
         instrument: inst,

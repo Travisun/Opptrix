@@ -17,6 +17,7 @@ export {
   opptrixFundNav,
   opptrixFundQuoteBatch,
   opptrixFundMetrics,
+  opptrixFxRmbLatest,
   stockIndexListStocks,
   stockIndexListEtfs,
   type StockIndexItem,
@@ -25,6 +26,8 @@ export {
   type OpptrixNavRow,
   type OpptrixFundLatestNavItem,
   type OpptrixFundMetrics,
+  type OpptrixRmbRate,
+  type OpptrixRmbLatestData,
 } from './api/client.js'
 export { StockIndexHttpClient } from './api/http-client.js'
 export {

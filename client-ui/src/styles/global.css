@@ -1249,29 +1249,29 @@ select:focus-visible {
 }
 
 /* 管理关注分组 — 彻底去除右侧个股 Checkbox 所有状态下的 outline / ring / box-shadow */
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox::before,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox::after,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *::before,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *::after {
+.opptrix-watchlist-groups-checkbox,
+.opptrix-watchlist-groups-checkbox *,
+.opptrix-watchlist-groups-checkbox::before,
+.opptrix-watchlist-groups-checkbox::after,
+.opptrix-watchlist-groups-checkbox *::before,
+.opptrix-watchlist-groups-checkbox *::after {
   outline: none !important;
   outline-offset: 0 !important;
   box-shadow: none !important;
   ring: none !important;
 }
 
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus-within,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus-visible,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:focus,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:focus-within,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:focus-visible,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:active,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox[aria-checked="true"],
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox input:checked,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus-within .fui-Checkbox__indicator,
-.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox input:focus-visible + .fui-Checkbox__indicator {
+.opptrix-watchlist-groups-checkbox:focus,
+.opptrix-watchlist-groups-checkbox:focus-within,
+.opptrix-watchlist-groups-checkbox:focus-visible,
+.opptrix-watchlist-groups-checkbox *:focus,
+.opptrix-watchlist-groups-checkbox *:focus-within,
+.opptrix-watchlist-groups-checkbox *:focus-visible,
+.opptrix-watchlist-groups-checkbox *:active,
+.opptrix-watchlist-groups-checkbox[aria-checked="true"],
+.opptrix-watchlist-groups-checkbox input:checked,
+.opptrix-watchlist-groups-checkbox:focus-within .fui-Checkbox__indicator,
+.opptrix-watchlist-groups-checkbox input:focus-visible + .fui-Checkbox__indicator {
   outline: none !important;
   outline-offset: 0 !important;
   box-shadow: none !important;

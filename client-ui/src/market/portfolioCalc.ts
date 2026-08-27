@@ -21,6 +21,7 @@ import {
 import type { PortfolioTradeItem } from '../types/schemas'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import {
+  buildOpptrixInstrumentId,
   instrumentKey,
   tryParseInstrumentInput,
   normalizeInstrumentRefLocal,
@@ -42,12 +43,18 @@ export {
   displayPortfolioHoldingReturnPct,
 }
 
+export {
+  convertMarketAmountToCny,
+  holdingReturnPctInCny,
+  marketQuoteCurrency,
+} from '@opptrix/shared/fx-rates'
+
 export function holdingMatchesRef(
   holding: HoldingSnapshot,
   ref: InstrumentRef,
 ): boolean {
   const parsed = tryParseInstrumentInput(holding.code.trim())
-  const holdingAssetClass = (holding as { assetClass?: InstrumentRef['assetClass'] }).assetClass
+  const holdingAssetClass = holding.assetClass as InstrumentRef['assetClass'] | undefined
   const hRef = parsed
     ? normalizeInstrumentRefLocal(
       holdingAssetClass ? { ...parsed, assetClass: holdingAssetClass } : parsed,
@@ -93,23 +100,28 @@ export function estimateTradeFees(
   return estimatePortfolioTradeFees(ref, side, shares, price, globalFees, overrides)
 }
 
-/** 从 holdings map 按 InstrumentRef 解析持仓快照（严格匹配账本标的） */
+/** 从 holdings map 按 InstrumentRef 解析持仓快照（兼容裸码 / 命名空间 / Opptrix ID） */
 export function lookupHoldingSnapshot(
   map: Record<string, HoldingSnapshot>,
   ref: InstrumentRef,
 ): HoldingSnapshot | undefined {
-  const keys = [portfolioHoldingsStorageKey(ref), instrumentKey(ref)]
+  const n = normalizeInstrumentRefLocal(ref)
+  const keys = [
+    portfolioHoldingsStorageKey(n),
+    instrumentKey(n),
+    buildOpptrixInstrumentId(n),
+  ]
   // 历史场外基金可能仅以裸六位写入 map；lookup 侧 alias，不污染主键
   if (
-    ref.market === 'CN'
-    && (ref.assetClass === 'FUND' || ref.exchange === 'PF' || ref.exchange === 'OF')
+    n.market === 'CN'
+    && (n.assetClass === 'FUND' || n.exchange === 'PF' || n.exchange === 'OF')
   ) {
-    const bare = ref.symbol.replace(/\D/g, '').slice(-6).padStart(6, '0')
+    const bare = n.symbol.replace(/\D/g, '').slice(-6).padStart(6, '0')
     if (bare && !keys.includes(bare)) keys.push(bare)
   }
   for (const k of keys) {
     const row = k ? map[k] : undefined
-    if (row && holdingMatchesRef(row, ref)) return row
+    if (row && holdingMatchesRef(row, n)) return row
   }
   return undefined
 }

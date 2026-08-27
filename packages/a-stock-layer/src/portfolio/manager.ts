@@ -17,6 +17,12 @@ import {
   portfolioLedgerKey,
 } from './instrument.js'
 import { PortfolioStore } from './store.js'
+import {
+  applyWatchlistToHolding,
+  findWatchlistItemForRef,
+  findWatchlistItemForTrade,
+  watchlistItemDisplayName,
+} from './watchlist-lookup.js'
 
 export type PortfolioTradeOpts = {
   date?: string
@@ -27,18 +33,17 @@ export type PortfolioTradeOpts = {
   instrument?: InstrumentRef
 }
 
-function calcPnlForStock(trades: TradeRecord[], currentPrice: number): HoldingPosition {
+function calcPnlForStock(trades: TradeRecord[], currentPrice: number, ref: InstrumentRef): HoldingPosition {
   const first = trades[0]
   const calc = calcHoldingPnlFromTrades(trades, currentPrice)
   const roundedPrice = Math.round(currentPrice * 100) / 100
-  const assetClass = first
-    ? inferTradeAssetClass(first.code, first.market, first.assetClass)
-    : undefined
+  const code = portfolioDisplayCode(ref.symbol, ref.market, ref.assetClass)
   return {
-    code: first?.code ?? '',
+    code,
     name: first?.name ?? '',
-    market: first?.market,
-    assetClass,
+    market: ref.market,
+    assetClass: ref.assetClass,
+    instrument: ref,
     shares: calc.shares,
     costBasis: calc.costBasis,
     totalCost: calc.totalCost,
@@ -71,18 +76,6 @@ export class PortfolioManager {
     return resolvePortfolioProfile(ref).markCapability
   }
 
-  private async resolveName(ref: InstrumentRef, name = '') {
-    if (name || !this.engine) return name
-    try {
-      const r = await this.engine.queryInstrumentData(ref, this.markCapability(ref))
-      const rows = 'data' in r && Array.isArray(r.data) ? r.data : []
-      const row = rows[0] as { name?: unknown } | undefined
-      return row?.name != null ? String(row.name) : name
-    } catch {
-      return name
-    }
-  }
-
   /**
    * 始终经 queryInstrumentData(正确 ref)。
    * FUND → fund_quote（禁止对 FUND 用 A 股 realtime 裸码）。
@@ -102,7 +95,7 @@ export class PortfolioManager {
 
   private tradeFees(ref: InstrumentRef, amount: number, side: TradeSide) {
     const feeCode = portfolioDisplayCode(ref.symbol, ref.market, ref.assetClass)
-    const overrides = this.store.getInstrumentFees(feeCode, ref.market)
+    const overrides = this.store.getInstrumentFees(feeCode, ref.market, ref.assetClass)
     const ledgerKind = overrides.ledgerKind
       ?? resolvePortfolioProfile(ref).ledgerKind
       ?? resolvePortfolioLedgerKind(ref)
@@ -129,6 +122,7 @@ export class PortfolioManager {
     const overrides = this.store.getInstrumentFees(
       portfolioDisplayCode(code, market, assetClass),
       market,
+      assetClass ?? ref.assetClass,
     )
     return {
       ledgerKind: overrides.ledgerKind
@@ -143,8 +137,9 @@ export class PortfolioManager {
     code: string,
     overrides: import('@opptrix/shared').InstrumentFeeOverrides,
     market?: Market,
+    assetClass?: AssetClass,
   ) {
-    return this.store.setInstrumentFees(code, market, overrides)
+    return this.store.setInstrumentFees(code, market, overrides, assetClass)
   }
 
   async buy(
@@ -171,7 +166,7 @@ export class PortfolioManager {
     return this.recordTrade('sell', code, shares, price, { date, name, market, assetClass })
   }
 
-  /** 统一买卖入口 — 支持 assetClass / instrument，FUND/ETF 持久化类型 */
+  /** 统一买卖入口 — code = Opptrix ID；名称优先来自关注列表 */
   async recordTrade(
     side: TradeSide,
     code: string,
@@ -180,15 +175,20 @@ export class PortfolioManager {
     opts: PortfolioTradeOpts = {},
   ) {
     const ref = this.resolveTradeRef(code, opts.market, opts.assetClass, opts.instrument)
-    const displayCode = portfolioDisplayCode(code || ref.symbol, ref.market, ref.assetClass)
+    const wlItem = findWatchlistItemForRef(ref)
+    const displayCode = wlItem?.code?.trim()
+      || portfolioDisplayCode(code || ref.symbol, ref.market, ref.assetClass)
     const tradeDate = opts.date || new Date().toISOString().slice(0, 10)
     const amount = Math.round(shares * price * 100) / 100
     const fees = this.tradeFees(ref, amount, side)
-    const stockName = await this.resolveName(ref, opts.name ?? '')
+    const stockName = opts.name?.trim()
+      || watchlistItemDisplayName(wlItem)
+      || ''
     const id = this.store.addTrade({
       code: displayCode,
       market: ref.market,
       assetClass: ref.assetClass,
+      instrument: ref,
       name: stockName,
       tradeSide: side,
       shares,
@@ -205,6 +205,7 @@ export class PortfolioManager {
       code: displayCode,
       market: ref.market,
       assetClass: ref.assetClass,
+      instrument: ref,
       name: stockName,
       tradeSide: side,
       shares,
@@ -235,15 +236,18 @@ export class PortfolioManager {
       const head = ts[0]!
       const ac = inferTradeAssetClass(head.code, head.market, head.assetClass)
       const ref = portfolioInstrumentRef(head.code, head.market, ac)
+      const profile = resolvePortfolioProfile(ref)
+      // INDEX / 无 portfolio_pnl：不进持仓列表与汇总
+      if (!profile.supportsPnl) continue
       if (refreshPrices && this.engine) {
-        const profile = resolvePortfolioProfile(ref)
-        if (profile.supportsPnl) {
-          const live = await this.fetchRealtimePrice(ref)
-          if (live != null) price = live
-        }
+        const live = await this.fetchRealtimePrice(ref)
+        if (live != null) price = live
       }
-      const pos = calcPnlForStock(ts, price)
-      if (pos.shares > 0) results.push(pos)
+      const pos = calcPnlForStock(ts, price, ref)
+      if (pos.shares > 0) {
+        applyWatchlistToHolding(pos, findWatchlistItemForTrade(head))
+        results.push(pos)
+      }
     }
     return results
   }

@@ -171,6 +171,17 @@ export function resolveInstrumentQuoteChangePct(
     : null
   const raw = num(row.changePct ?? row.change_pct)
   if (raw != null) {
+    // 上游偶发返回小数比率（如 -0.0007）而非百分数
+    if (raw !== 0 && Math.abs(raw) < 0.01) {
+      const asPct = Math.round(raw * 10000) / 100
+      if (
+        derived == null
+        || Math.abs(derived) < 0.05
+        || Math.abs(asPct - derived) + 0.05 <= Math.abs(raw - derived)
+      ) {
+        return asPct
+      }
+    }
     if (Math.abs(raw) <= 500) return raw
     if (derived != null) return derived
     return raw

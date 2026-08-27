@@ -117,7 +117,25 @@ GET /api/v1/instruments?q=茅台&market=CN&class_token=STOCK
 
 ---
 
-## 6. 兼容
+## 6. 人民币中间价（汇率）
+
+### GET `/api/v1/fx/rmb/latest`
+
+最近一个发布日的**外汇管理局中间价**。不传 `pair` / `pairs` 时返回全量约 25 种外币；传 `pair=USD/CNY` 或 `pairs=USD/CNY,HKD/CNY` 可只取指定货币对。
+
+| 项 | 说明 |
+|----|------|
+| 口径 | **100 单位外币 = `rate` 元人民币**（`unit: per_100_foreign`） |
+| 来源 | `source: safe` |
+| 认证 | 同标的搜索，`X-API-Key` |
+
+响应 `data` 示例字段：`trade_date`、`source`、`rates[]`（每项含 `base` / `currency`、`rate`、`pair`）。
+
+工作台内港/美持仓收益换算：服务端调用本接口全量拉取 → 内存缓存 24h → 经 `GET /api/market/fx-rates` 提供给客户端；换算时 `1 单位外币 = rate / 100` 元人民币。
+
+---
+
+## 7. 兼容
 
 - 旧命名空间 `CN:SH.600519`、`CN:PF.110022` 仍可通过 `parseInstrumentNamespace` 解析。
 - 旧小写 token `CN:of:009049` 仍兼容；新数据以 `CN:OTC:000037.OF` 为准。
