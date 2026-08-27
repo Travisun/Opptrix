@@ -27,11 +27,6 @@ function cnExtendedOhlc(ref: InstrumentRef, cnEquityChart: boolean): boolean {
   return ref.assetClass === 'EQUITY' || ref.assetClass === 'INDEX'
 }
 
-/** 指数图：仅日/周/月/季/年 K，不提供分时 */
-export function buildIndexChartPeriodOptions(_ref: InstrumentRef): ChartPeriodOption[] {
-  return BROKER_KLINE_OPTIONS
-}
-
 export function buildChartPeriodOptions(
   ref: InstrumentRef,
   opts: { cnEquityChart: boolean; crossMarketChart: boolean },

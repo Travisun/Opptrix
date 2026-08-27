@@ -9,7 +9,7 @@ import { isCnListedFundSymbol } from './format'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
 import { buildChartSeries, isLineChartView, periodLabel } from './chartSeries'
-import { buildChartPeriodOptions, buildIndexChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOptions'
+import { buildChartPeriodOptions, CN_STOCK_CHART_PERIODS } from './chartPeriodOptions'
 import { DETAIL_PANEL_CHART_MAX_HEIGHT_PX, initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
 import { isLineChartPaneLabel } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
@@ -291,6 +291,14 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: '200px',
   },
+  emptyEmbed: {
+    flex: 1,
+    minHeight: 0,
+    height: 'auto',
+    border: 'none',
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+  },
   hint: {
     fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
@@ -506,10 +514,8 @@ export default function TradingViewChart({
     ? hasApplicationCapability(instrumentRef, 'chart_daily')
     : cnEquityChart || crossMarketChart
   const periodOptions = useMemo(
-    () => (isIndexChart
-      ? buildIndexChartPeriodOptions(instrumentRef)
-      : buildChartPeriodOptions(instrumentRef, { cnEquityChart, crossMarketChart })),
-    [instrumentRef, cnEquityChart, crossMarketChart, isIndexChart],
+    () => buildChartPeriodOptions(instrumentRef, { cnEquityChart, crossMarketChart }),
+    [instrumentRef, cnEquityChart, crossMarketChart],
   )
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
@@ -543,12 +549,19 @@ export default function TradingViewChart({
     dataRef.current = data
   }, [data])
 
+  useEffect(() => {
+    if (isIndexChart && period !== 'daily') {
+      setPeriod('daily')
+    }
+  }, [isIndexChart, period])
+
   const loadChart = useCallback(async (
     nextPeriod: ChartPeriod,
     count: number,
     signal?: AbortSignal,
     opts?: { append?: boolean; before?: string; tail?: number; live?: boolean },
   ) => {
+    const effectivePeriod: ChartPeriod = isIndexChart ? 'daily' : nextPeriod
     const seq = ++loadSeqRef.current
     const hasChart = hasDataRef.current
     const isLive = Boolean(opts?.live)
@@ -577,12 +590,12 @@ export default function TradingViewChart({
 
       const useStockApi = !isIndexChart
         && cnEquityChart
-        && CN_STOCK_CHART_PERIODS.has(nextPeriod)
+        && CN_STOCK_CHART_PERIODS.has(effectivePeriod)
 
       const resp = useStockApi
         ? await research.stockChart(
           instrumentRef,
-          nextPeriod,
+          effectivePeriod,
           count,
           signal,
           opts?.before,
@@ -590,7 +603,7 @@ export default function TradingViewChart({
         )
         : await research.instrumentChart(
           instrumentRef,
-          nextPeriod,
+          effectivePeriod,
           count,
           signal,
           opts?.before,
@@ -619,7 +632,7 @@ export default function TradingViewChart({
       const rawChart = isUnifiedChart(resp.data)
         ? unifiedChartToStockChart(resp.data, instrumentRef.symbol)
         : resp.data
-      setData({ ...rawChart, period: nextPeriod })
+      setData({ ...rawChart, period: effectivePeriod })
     } catch (e) {
       if (seq !== loadSeqRef.current || signal?.aborted) return
       if (e instanceof Error && e.name !== 'AbortError') {
@@ -632,7 +645,7 @@ export default function TradingViewChart({
         setRefreshing(false)
       }
     }
-  }, [instrumentRef, cnEquityChart, canChart])
+  }, [instrumentRef, cnEquityChart, canChart, isIndexChart])
 
   const handleNeedHistory = useCallback(() => {
     const now = Date.now()
@@ -676,12 +689,12 @@ export default function TradingViewChart({
     setRefreshing(false)
     setError('')
 
-    const loadPeriod: ChartPeriod = instrumentChanged ? 'daily' : period
+    const loadPeriod: ChartPeriod = isIndexChart ? 'daily' : (instrumentChanged ? 'daily' : period)
     fetchCountRef.current = initialFetchCount(loadPeriod)
     const controller = new AbortController()
     void loadChart(loadPeriod, fetchCountRef.current, controller.signal)
     return () => { controller.abort() }
-  }, [instrumentIdentity, period, loadChart])
+  }, [instrumentIdentity, period, loadChart, isIndexChart])
 
   useEffect(() => {
     const tradingDay = data?.isTradingDay
@@ -754,7 +767,7 @@ export default function TradingViewChart({
     return () => { cancelAnimationFrame(id) }
   }, [active, data, expanded])
 
-  const paneMainLabel = isLineChartPaneLabel(period) ? '分' : 'K'
+  const paneMainLabel = isIndexChart ? '' : (isLineChartPaneLabel(period) ? '分' : 'K')
   const lineChartView = Boolean(data && data.period === period && isLineChartView(period, data.bars))
   const showMacd = !isIndexChart && Boolean(
     data && !lineChartView
@@ -764,7 +777,7 @@ export default function TradingViewChart({
   useEffect(() => () => { workspaceRef.current.destroy() }, [])
 
   const legendLine = lineChartView
-  const legendOhlc = !lineChartView && data
+  const legendOhlc = !lineChartView && data && !isIndexChart
   const cyqLatest = data?.cyqLatest ?? null
   const cyqProfile = data?.cyqProfile ?? null
   const showCyq = !isIndexChart && Boolean(
@@ -814,9 +827,7 @@ export default function TradingViewChart({
           <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma5 }} />MA5</span>
           <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma10 }} />MA10</span>
           <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma20 }} />MA20</span>
-          {!isIndexChart ? (
-            <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma60 }} />MA60</span>
-          ) : null}
+          <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma60 }} />MA60</span>
           {showMacd && (
             <>
               <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.macd }} />DIF</span>
@@ -833,14 +844,6 @@ export default function TradingViewChart({
       )}
     </div>
   )
-
-  const indexEmbedLegend = useEmbedLayout && isIndexChart && legendOhlc ? (
-    <div className={s.chartLegendOverlay}>
-      <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma5 }} />MA5</span>
-      <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma10 }} />MA10</span>
-      <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma20 }} />MA20</span>
-    </div>
-  ) : null
 
   const insightTopBar = useInsightOverlay && (insightTitle || onInsightClose) ? (
     <div className={s.insightTopBar}>
@@ -892,11 +895,11 @@ export default function TradingViewChart({
 
   return (
     <div className={mergeClasses(s.root, expanded && s.rootExpanded, useEmbedLayout && s.rootEmbed)}>
-      {!useEmbedLayout ? (
+      {!useEmbedLayout && !isIndexChart ? (
         <div className={s.toolbar}>{periodToolbar}</div>
       ) : null}
 
-      {!useEmbedLayout ? (
+      {!useEmbedLayout && !isIndexChart ? (
         <div className={s.zoomRow}>
           <Text className={s.hint}>
             默认显示最新 {periodLabel(period)} · 滚轮缩放 · 左拖加载历史
@@ -944,12 +947,20 @@ export default function TradingViewChart({
       )}
 
       {loading && !data && (
-        <div className={mergeClasses(s.empty, (expanded || useInsightOverlay) && s.emptyExpanded)}>
+        <div className={mergeClasses(
+          s.empty,
+          (expanded || useInsightOverlay) && s.emptyExpanded,
+          useEmbedLayout && s.emptyEmbed,
+        )}>
           <Spinner size="tiny" label="加载图表…" />
         </div>
       )}
       {!loading && error && !data && (
-        <div className={mergeClasses(s.empty, (expanded || useInsightOverlay) && s.emptyExpanded)}>{error}</div>
+        <div className={mergeClasses(
+          s.empty,
+          (expanded || useInsightOverlay) && s.emptyExpanded,
+          useEmbedLayout && s.emptyEmbed,
+        )}>{error}</div>
       )}
 
       <div className={mergeClasses(
@@ -957,6 +968,7 @@ export default function TradingViewChart({
         expanded && s.chartAreaExpanded,
         useEmbedLayout && s.chartAreaEmbed,
         !canChart && s.paneHidden,
+        loading && !data && useEmbedLayout && s.paneHidden,
       )}>
         <div className={mergeClasses(
           s.chartFrame,
@@ -969,7 +981,7 @@ export default function TradingViewChart({
             </div>
           )}
 
-          {useEmbedLayout && !useInsightOverlay ? (
+          {useEmbedLayout && !useInsightOverlay && !isIndexChart ? (
             <div className={s.chartToolbarOverlay}>{periodToolbar}</div>
           ) : null}
 
@@ -1013,9 +1025,8 @@ export default function TradingViewChart({
           </div>
 
           {chartLegend}
-          {indexEmbedLegend}
 
-          {useInsightOverlay ? (
+          {useInsightOverlay && !isIndexChart ? (
             <div className={s.chartToolbarOverlayBottom}>{periodToolbar}</div>
           ) : null}
         </div>
