@@ -45,6 +45,14 @@
     "./instrument-param": {
       "types": "./dist/instrument-param.d.ts",
       "import": "./dist/instrument-param.js"
+    },
+    "./chat-title-display": {
+      "types": "./dist/chat-title-display.d.ts",
+      "import": "./dist/chat-title-display.js"
+    },
+    "./builtin-skill-titles": {
+      "types": "./dist/builtin-skill-titles.d.ts",
+      "import": "./dist/builtin-skill-titles.js"
     }
   },
   "scripts": {

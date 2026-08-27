@@ -30,6 +30,7 @@ export {
   parseCanonicalInstrumentInput,
   normalizeInstrumentRef,
   resolveCnInstrumentIdentity,
+  parseOpptrixInstrumentId,
 }
 
 export const isUnambiguousCnDigits = sharedIsUnambiguousCnDigits

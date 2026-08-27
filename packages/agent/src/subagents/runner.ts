@@ -6,6 +6,7 @@ import type { ChatProgressEvent, ChatProgressOptions } from '../chat-progress.js
 import { getSessionResumeBus } from '../jobs/resume-bus.js'
 import type { CreateSessionOptions, SessionRecord } from '../sessions.js'
 import { resolveAuthSessionId } from './auth-resolve.js'
+import { formatChatTitle } from '../format-chat-title.js'
 import { validateSubagentResult } from './contract.js'
 import { getSubagentRunRegistry, type SubagentRunRegistry } from './registry.js'
 import type {
@@ -301,7 +302,7 @@ async function restartSubagentRun(
     host,
   )
   const mode = params.mode ?? existing.mode
-  const label = params.label?.trim() || existing.label
+  const label = await formatChatTitle(params.label?.trim() || existing.label, 40)
 
   registry.update(restartRunId, {
     status: 'queued',
@@ -433,9 +434,10 @@ export async function runSubagent(
   const roleName = params.role.name?.trim() || '子任务'
   const instructions = params.role.instructions?.trim() || ''
   const labelTrim = params.label?.trim()
+  const formattedLabel = await formatChatTitle(labelTrim || roleName, 40)
 
   const duplicate = registry.findActiveDuplicate(parentId, {
-    label: labelTrim,
+    label: formattedLabel,
     roleName,
   })
   if (duplicate) {
@@ -449,7 +451,7 @@ export async function runSubagent(
 
   const resolvedModel = pickSubagentModel(params.role.model, parent.model, host)
   const child = host.createSession({
-    title: `子任务 · ${roleName}`.slice(0, 48),
+    title: await formatChatTitle(`子任务 · ${roleName}`, 48),
     kind: 'subagent',
     parentSessionId: parentId,
     rootSessionId,
@@ -480,7 +482,7 @@ export async function runSubagent(
     context: params.context,
     resultSchema: schema,
     mode: params.mode ?? 'foreground',
-    label: params.label,
+    label: formattedLabel,
   })
 
   const mode = params.mode ?? 'foreground'

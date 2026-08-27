@@ -154,6 +154,7 @@ import {
   pickUnattendedConfirmIds,
 } from './unattended.js'
 import { SessionStore, sessionToMeta, type SessionRecord, type SessionContextRef, type CreateSessionOptions, type ReasoningEffort } from './sessions.js'
+import { formatChatTitle } from './format-chat-title.js'
 import { getExpertCatalogService } from './experts/catalog-service.js'
 import {
   resolveInitialRolePersona,
@@ -1330,8 +1331,9 @@ export class AgentEngine {
     this.chatAbortBySession.delete(id)
   }
 
-  renameSession(id: string, title: string) {
-    return this.sessions.rename(id, title)
+  async renameSession(id: string, title: string) {
+    const formatted = await formatChatTitle(title, 48)
+    return this.sessions.rename(id, formatted)
   }
 
   getDisplayMessages(sessionId: string) {
@@ -1598,7 +1600,7 @@ export class AgentEngine {
       && (record.title === '新对话' || record.messages.filter(m => m.role === 'user').length === 1)
     ) {
       const titleSeed = text || resolvedAttachments[0]?.name || '新对话'
-      record.title = titleSeed.slice(0, 28) + (titleSeed.length > 28 ? '…' : '')
+      record.title = await formatChatTitle(titleSeed, 28)
     }
     this.sessions.save(record)
     this.invalidateContextUsage(sessionId)
