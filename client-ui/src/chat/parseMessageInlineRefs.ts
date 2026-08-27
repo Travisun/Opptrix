@@ -2,8 +2,15 @@
  * 将用户消息 sendText 解析为可渲染段：纯文本 / 技能 chip / 标的 chip。
  * 与 Composer `createChipElement` 的 sendText 约定对齐：
  * - `@skill:valid-name`
- * - `名称(NAMESPACE)`（NAMESPACE 为 Stock-index 统一命名空间）
+ * - `名称(CODE)` — CODE 为 OpptrixQuant 统一 ID（如 CN:STOCK:600519.SH）或 legacy 命名空间（CN:SH.600519）
  */
+import type { InstrumentRef } from '../types/instrument'
+import {
+  marketDisplayName,
+  normalizeInstrumentRef,
+  parseInstrumentNamespace,
+  parseOpptrixInstrumentId,
+} from '../market/instrument'
 
 export type MessageInlineRefSegment =
   | { kind: 'text'; value: string }
@@ -20,23 +27,26 @@ export function isValidSkillName(name: string): boolean {
   return SKILL_NAME_RE.test(name)
 }
 
-/** 与 `buildInstrumentNamespace` / parseInstrumentNamespaceLocal 对齐的 NAMESPACE。 */
-const INSTRUMENT_NAMESPACE_RE =
-  /^(?:CN:(?:SH|SZ|BJ)[.:]\d{6}|US:(?:(?:NYSE|NASDAQ|AMEX)\.)?[A-Z0-9.-]+|HK:\d{5}|CRYPTO:(?:(?:BINANCE|OKX)\.)?[A-Z0-9]+\/[A-Z0-9]+|JP:[A-Z0-9.-]+|KR:\d{1,6})$/i
-
-export function isInstrumentNamespace(code: string): boolean {
-  return INSTRUMENT_NAMESPACE_RE.test(code.trim())
+/** 解析括号内标的 code → InstrumentRef（Opptrix ID 优先，兼容 legacy 命名空间） */
+export function parseInstrumentRefFromInlineCode(code: string): InstrumentRef | null {
+  const trimmed = code.trim()
+  if (!trimmed) return null
+  const opptrix = parseOpptrixInstrumentId(trimmed)
+  if (opptrix) {
+    return normalizeInstrumentRef(opptrix as InstrumentRef)
+  }
+  return parseInstrumentNamespace(trimmed)
 }
 
-function marketLabelFromNamespace(code: string): string | null {
-  const upper = code.trim().toUpperCase()
-  if (upper.startsWith('CN:')) return null
-  if (upper.startsWith('US:')) return '美股'
-  if (upper.startsWith('HK:')) return '港股'
-  if (upper.startsWith('JP:')) return '日股'
-  if (upper.startsWith('KR:')) return '韩股'
-  if (upper.startsWith('CRYPTO:')) return 'Crypto'
-  return null
+/** 括号内是否为可路由的标的 code（Opptrix ID 或 Stock-index 命名空间） */
+export function isInstrumentNamespace(code: string): boolean {
+  return parseInstrumentRefFromInlineCode(code) != null
+}
+
+function marketLabelFromCode(code: string): string | null {
+  const ref = parseInstrumentRefFromInlineCode(code)
+  if (!ref || ref.market === 'CN') return null
+  return marketDisplayName(ref.market)
 }
 
 const SKILL_AT = '@skill:'
@@ -60,13 +70,12 @@ function tryMatchSkill(input: string, from: number): { end: number; name: string
 }
 
 function isInstrumentNameChar(ch: string): boolean {
-  // 空白 / 括号打断名称；其余（含中文、字母数字、点号等）可构成名称
   return ch !== '(' && ch !== ')' && !/\s/.test(ch)
 }
 
 /**
- * 从 `from` 起找下一处 `名称(NAMESPACE)`。
- * 先定位合法 NAMESPACE 的括号对，再向前取连续非空白非括号作为名称。
+ * 从 `from` 起找下一处 `名称(CODE)`。
+ * CODE 须为 Opptrix ID 或 legacy 命名空间；普通括号内容跳过。
  */
 function tryMatchInstrument(
   input: string,
@@ -83,18 +92,14 @@ function tryMatchInstrument(
       search = open + 1
       continue
     }
-    // 向前取名称：紧贴 `(` 的连续非空白非括号字符
     let nameStart = open
     while (nameStart > from && isInstrumentNameChar(input[nameStart - 1]!)) {
       nameStart -= 1
     }
-    // 名称须从 from 可达：中间只能是「将被记为 text」的前缀
-    // 若 nameStart > from，前缀是 text；名称本身不能为空
     if (nameStart === open) {
       search = close + 1
       continue
     }
-    // 若 from 落在名称中间，不能从 from 切开名称 → 跳过，让调用方逐字前进
     if (nameStart < from) {
       search = open + 1
       continue
@@ -104,8 +109,8 @@ function tryMatchInstrument(
       start: nameStart,
       end: close + 1,
       name,
-      code,
-      market: marketLabelFromNamespace(code),
+      code: code.trim(),
+      market: marketLabelFromCode(code),
     }
   }
   return null

@@ -1264,7 +1264,7 @@ app.patch<{
   async (req, reply) => {
     const { title, model, llmParams } = req.body ?? {}
     if (title !== undefined) {
-      const updated = agent.renameSession(req.params.id, title)
+      const updated = await agent.renameSession(req.params.id, title)
       if (!updated) return reply.code(404).send({ error: 'session not found' })
       return { session: agent.sessionMeta(updated) }
     }

@@ -6,16 +6,30 @@ import { buildToolPackCatalogPrompt } from './tool-packs.js'
 /** 投研答复档位：L1 事实快答 / L2 结构化解读 / L3 深度备忘录 */
 export type ResearchTier = 'L1' | 'L2' | 'L3'
 
-/** Stock-index 统一命名空间 — Agent/搜索/关注列表的全局标的 ID */
+/** OpptrixQuant 统一 instrument_id — Agent/搜索/关注/组合的全局标的 ID */
 export function buildInstrumentNamespacePlaybook(): string {
   return [
-    '【标的命名空间 — Stock-index 全局唯一 ID，查询时必须遵循】',
-    '- 格式：CN:交易所.代码（如 CN:SZ.000009、CN:SH.600519）、US:AAPL、HK:00700、CRYPTO:BINANCE.BTC/USDT',
-    '- 命名空间仅含 market + exchange + symbol，不含 INDEX/ETF 等业务分类；同码异名靠 exchange 区分（例：CN:SZ.000977=浪潮信息，CN:SH.000977=内地低碳）',
-    '- 不熟悉代码时：优先 tools 中已启用的 namespaced MCP 搜码/问数；不足或需 Stock-index 消歧时再 search_instruments → 使用返回的 instrument 对象（market/symbol/exchange）或 code/ref_label 命名空间调用 get_instrument_*',
-    '- 推荐传参：instrument:{market,symbol,exchange}（symbol 为裸代码）；或平铺 code:"CN:SZ.000009"',
-    '- A 股禁止仅用裸 6 位码（如 000977）调用快照/行情，须先拿到带 exchange 的命中',
-    '- 勿把命名空间字符串塞进 instrument.symbol 字段；symbol 始终是裸代码，exchange 单独字段',
+    '【标的统一 ID — OpptrixQuant 格式，调 MCP / 本地工具前必须先解析】',
+    '- 格式：{MARKET}:{CLASS}:{SYMBOL}，三段冒号分隔；前两段为前缀（市场 + 类型），第三段才是真正代码',
+    '  · MARKET：CN / US / HK 等市场',
+    '  · CLASS：标的类型（决定业务语义与工具路径，不是代码的一部分）',
+    '  · SYMBOL：代码本体，含交易所/品类后缀（如 688981.SH、000037.OF、881121.TI、AAPL.US）',
+    '- CLASS 类型对照：',
+    '  · STOCK — A/港/美普通个股：CN:STOCK:688981.SH、HK:STOCK:00700.HK、US:STOCK:AAPL.US',
+    '  · IND — 指数（含板块/行业/题材）：CN:IND:000300.SH、CN:IND:399001.SZ、CN:IND:881121.TI',
+    '  · OTC — 场外基金：CN:OTC:000037.OF',
+    '  · ETF — 场内 ETF：CN:ETF:510050.SH、US:ETF:SPY.US',
+    '  · LOF — 场内 LOF：CN:LOF:160105.SZ',
+    '  · REIT — 公募 REITs：CN:REIT:508000.SH、CN:REIT:180101.SZ',
+    '- 解析步骤（用户/@引用/搜索命中/组合 code 中出现统一 ID 时，先于 MCP 或其他操作执行）：',
+    '  1) 按冒号拆成三段；不足三段可能是旧命名空间或裸码，须 search_instruments 消歧',
+    '  2) MARKET + CLASS 确定市场与标的类型（STOCK≠IND≠ETF≠OTC，勿混用分析路径）',
+    '  3) 第三段 SYMBOL 才是 Provider/MCP 侧代码（保留 .SH/.SZ/.BJ/.TI/.OF/.HK/.US 后缀）',
+    '  4) 勿把 CN:STOCK: 等前缀拼进 symbol 字段；工具传参优先 instrument:{market,assetClass,symbol,exchange}，或平铺 code 传完整 Opptrix ID',
+    '- 后缀：.SH/.SZ/.BJ 沪深北交所；.TI 同花顺板块/行业/题材；.OF 场外基金；.HK/.US 港美；同裸码不同后缀互不冲突（如 000001.SH 指数 vs 000001.SZ 个股）',
+    '- 兼容旧 Stock-index 命名空间（CN:SZ.000009、CN:SH.600519、US:AAPL、HK:00700、CRYPTO:BINANCE.BTC/USDT）：引擎可解析，但搜索/关注/组合以 Opptrix ID 为准',
+    '- 不熟悉代码时：优先 namespaced MCP 搜码/问数 → search_instruments → 使用返回 instrument 或 code（Opptrix ID）调用 get_instrument_*',
+    '- A 股禁止仅用裸 6 位码（如 000977）调用快照/行情，须先拿到完整 ID 或带 exchange 的命中',
   ].join('\n')
 }
 
@@ -67,7 +81,7 @@ export function buildProviderCustomMethodPlaybook(): string {
     '1) list_enabled_providers：确认 baostock / zzshare / tonghuashun / tickflow 等是否可用',
     '2) list_provider_custom_methods：必须带 provider_id 或 keyword；禁止无过滤全量拉取',
     '3) invoke_provider_custom_method：provider_id + method + args（JSON 数组，顺序与 params 一致）',
-    '4) args 中的 code/symbol 可传命名空间（CN:SZ.000009）、InstrumentRef、600519.SH、sh600519 等；引擎自动转为 Provider 裸代码格式',
+    '4) args 中的 code/symbol 可传 Opptrix ID（CN:STOCK:600519.SH）、旧命名空间（CN:SZ.000009）、InstrumentRef、600519.SH、sh600519 等；引擎自动转为 Provider 裸代码格式',
     '5) 禁止用自定义方法替代已有标准能力（如 ETF 净值用 get_etf_nav；财务用 get_instrument_financials；概况用 get_instrument_profile）',
     '6) 同一任务对同一 method 最多调用 1 次；失败时换 provider 或说明数据不可用，勿编造',
   ].join('\n')
@@ -77,7 +91,7 @@ export function buildProviderCustomMethodPlaybook(): string {
 export function buildInstrumentAnalysisPlaybook(): string {
   return [
     '【标的分析路径 — 先识别 market + assetClass，再选工具；有 MCP 先远程】',
-    '0) 不确定时：优先 namespaced MCP 搜码/问数 → 不足再用 search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
+    '0) 不确定时：优先 namespaced MCP 搜码/问数 → 不足再用 search_instruments → 用返回 instrument 或 Opptrix ID（如 CN:STOCK:600519.SH）→ get_instrument_capabilities',
     '1) CN 股票（EQUITY）：定位后 → 外部 MCP 按优先级轮询（精确工具优先于问数，含行情/财务/筹码），不足再用 get_instrument_snapshot / get_instrument_financials / get_instrument_profile（事实表）→ K线/指标优先 MCP，不足再用 get_instrument_chart → 再本地 evaluate_instrument（评分卡）→ get_instrument_strategy_signal → get_instrument_institution_rating；本地 get_instrument_cyq 仅 MCP 不足时',
     '2) CN ETF：定位后 → 先 MCP 问数/概况，不足再用 get_instrument_snapshot → 再本地 evaluate_instrument（技术分析，勿用问财代替）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings',
     '3) 美股/港股：定位后 → 先 MCP 问数/行情，不足再用 get_instrument_snapshot / get_instrument_financials（若可用）/ get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
@@ -576,7 +590,7 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   const sections: string[] = [
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
-    '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
+    '- 跨市场标的统一用 OpptrixQuant ID（如 CN:STOCK:600519.SH）；调工具前先按 MARKET:CLASS:SYMBOL 解析，第三段才是真正代码；search 返回的 instrument 对象同等有效',
     '- 本会话 tools 列表已在首次 chat 全量加载并冻结；优先按本轮尾注「工具选型卡」选工具',
   ]
 

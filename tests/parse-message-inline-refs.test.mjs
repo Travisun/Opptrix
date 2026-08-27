@@ -25,7 +25,14 @@ describe('isValidSkillName', () => {
 })
 
 describe('isInstrumentNamespace', () => {
-  it('accepts Stock-index namespaces', () => {
+  it('accepts OpptrixQuant unified IDs', () => {
+    assert.equal(isInstrumentNamespace('CN:STOCK:600519.SH'), true)
+    assert.equal(isInstrumentNamespace('US:STOCK:AAPL.US'), true)
+    assert.equal(isInstrumentNamespace('HK:STOCK:00700.HK'), true)
+    assert.equal(isInstrumentNamespace('CN:ETF:510050.SH'), true)
+  })
+
+  it('accepts legacy Stock-index namespaces', () => {
     assert.equal(isInstrumentNamespace('CN:SH.600519'), true)
     assert.equal(isInstrumentNamespace('CN:SZ.000858'), true)
     assert.equal(isInstrumentNamespace('US:NASDAQ.AAPL'), true)
@@ -55,6 +62,33 @@ describe('parseMessageInlineRefs', () => {
       },
       { kind: 'text', value: ' 并用 ' },
       { kind: 'skill', name: 'equity-deep-dive' },
+    ])
+  })
+
+  it('parses OpptrixQuant ID in instrument chip', () => {
+    const text = '请分析 贵州茅台(CN:STOCK:600519.SH) 走势'
+    const segs = parseMessageInlineRefs(text)
+    assert.deepEqual(segs, [
+      { kind: 'text', value: '请分析 ' },
+      {
+        kind: 'instrument',
+        name: '贵州茅台',
+        code: 'CN:STOCK:600519.SH',
+        market: null,
+      },
+      { kind: 'text', value: ' 走势' },
+    ])
+  })
+
+  it('parses US Opptrix ID with market badge', () => {
+    const segs = parseMessageInlineRefs('苹果(US:STOCK:AAPL.US)')
+    assert.deepEqual(segs, [
+      {
+        kind: 'instrument',
+        name: '苹果',
+        code: 'US:STOCK:AAPL.US',
+        market: '美股',
+      },
     ])
   })
 
