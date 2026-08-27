@@ -1,7 +1,7 @@
 import {   MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
-  loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode, inferCnAssetClass,
+  loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
   wireRegistryMethodArgs,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
   cnMarketNow, isCnMarketOpen, isCnTradingWeekday, isCnBeforeMarketOpen, isCnAfterMarketClose,
@@ -56,6 +56,7 @@ import {
   resolveInstrumentQuotePrice,
   resolveInstrumentQuotePreClose,
   parseCanonicalInstrumentInput,
+  inferCnAssetClassFromSymbol,
   type InstrumentRef,
   type InstrumentHubCapability,
 } from '@opptrix/shared'
@@ -2194,7 +2195,7 @@ export class ResearchHub {
       if (ref.exchange === 'TI' || normalized.startsWith('88')) return 'SH'
       return ref.exchange === 'SZ' || normalized.startsWith('399') ? 'SZ' : 'SH'
     }
-    if (inferCnAssetClass(normalized) === 'INDEX') {
+    if (inferCnAssetClassFromSymbol(normalized, ref?.exchange) === 'INDEX') {
       return normalized.startsWith('399') ? 'SZ' : 'SH'
     }
     return this.marketData.store.stockMarket(normalized, ref?.exchange) ?? resolveStockMarketCode(normalized)
@@ -2490,7 +2491,7 @@ export class ResearchHub {
       exchange,
     })
     let monthly = instrumentQueryData<import('@opptrix/shared').StockKline[]>(monthlyR) ?? []
-    if (!monthly.length && inferCnAssetClass(normalizeCode(code)) === 'INDEX') {
+    if (!monthly.length && inferCnAssetClassFromSymbol(normalizeCode(code), exchange) === 'INDEX') {
       monthlyR = await this.queryCnKline(code, {
         period: 'monthly',
         count: Math.max(monthlyCount, 120),
@@ -2528,6 +2529,86 @@ export class ResearchHub {
     }
   }
 
+  private async fetchIndexChartKlines(
+    ref: InstrumentRef,
+    period: string,
+    safeCount: number,
+    before: string,
+    tail: number,
+  ): Promise<{ klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null> {
+    const klinePeriod = period === 'year1' || period === 'year3' || period === 'year5'
+      ? 'daily'
+      : (period === 'daily' ? 'daily' : period)
+    const requestCount = klinePeriod !== 'daily'
+      ? Math.max(safeCount, 80)
+      : safeCount
+
+    if (before) {
+      const step = 200
+      const endDay = this.dayBefore(before.slice(0, 10))
+      let olderR = await this.de.queryInstrumentData(ref, 'kline', {
+        period: klinePeriod,
+        count: step,
+        endDate: endDay,
+      })
+      let older = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(olderR) ?? [])
+        .filter(b => b.date < before)
+      if (!older.length) {
+        olderR = await this.de.queryInstrumentData(ref, 'kline', {
+          period: klinePeriod,
+          count: step,
+          endDate: before.slice(0, 10),
+        })
+        older = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(olderR) ?? [])
+          .filter(b => b.date < before)
+      }
+      const recentCount = Math.max(tail, safeCount, 240)
+      const recentR = await this.de.queryInstrumentData(ref, 'kline', {
+        period: klinePeriod,
+        count: Math.max(recentCount, klinePeriod !== 'daily' ? 80 : 0),
+      })
+      const recentData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(recentR)
+      if (recentR.success && recentData?.length) {
+        const merged = this.mergeKlineByTime(older, recentData, before)
+        return {
+          klines: merged.slice(-800),
+          hasMore: older.length >= step,
+        }
+      }
+      if (period === 'quarterly' || period === 'yearly') {
+        const exchange: StockMarket = parseStockMarket(ref.exchange)
+          ?? (ref.symbol.startsWith('399') ? 'SZ' : 'SH')
+        return await this.fetchCnQuarterlyYearlyResampleFallback(ref.symbol, period, safeCount, exchange)
+      }
+      return null
+    }
+
+    let klineR = await this.de.queryInstrumentData(ref, 'kline', {
+      period: klinePeriod,
+      count: requestCount,
+    })
+    let klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
+    if ((!klineR.success || !klineData?.length) && klinePeriod !== 'daily') {
+      klineR = await this.de.queryInstrumentData(ref, 'kline', {
+        period: klinePeriod,
+        count: Math.max(requestCount, 80),
+      })
+      klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
+    }
+    if (klineR.success && klineData?.length) {
+      return {
+        klines: klineData,
+        hasMore: klineData.length >= safeCount && safeCount < 800,
+      }
+    }
+    if (period === 'quarterly' || period === 'yearly') {
+      const exchange: StockMarket = parseStockMarket(ref.exchange)
+        ?? (ref.symbol.startsWith('399') ? 'SZ' : 'SH')
+      return await this.fetchCnQuarterlyYearlyResampleFallback(ref.symbol, period, safeCount, exchange)
+    }
+    return null
+  }
+
   private async fetchChartKlines(
     code: string,
     period: string,
@@ -2535,6 +2616,7 @@ export class ResearchHub {
     before: string,
     tail: number,
     stockMarket: StockMarket,
+    cnRef?: InstrumentRef,
   ): Promise<{ klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null> {
     if (this.isMinutePeriod(period)) {
       return this.fetchMinuteChartKlines(code, period, safeCount, before, tail, stockMarket)
@@ -2545,7 +2627,8 @@ export class ResearchHub {
       ? 'daily'
       : (period === 'daily' ? 'daily' : period)
 
-    const isIndex = inferCnAssetClass(normalizeCode(code)) === 'INDEX'
+    const isIndex = cnRef?.assetClass === 'INDEX'
+      || inferCnAssetClassFromSymbol(normalizeCode(code), exchange) === 'INDEX'
     const requestCount = isIndex && klinePeriod !== 'daily'
       ? Math.max(safeCount, 80)
       : safeCount
@@ -2582,7 +2665,7 @@ export class ResearchHub {
           hasMore: older.length >= step,
         }
       }
-      if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') {
+      if (isIndex) {
         if (period === 'quarterly' || period === 'yearly') {
           return await this.fetchCnQuarterlyYearlyResampleFallback(code, period, safeCount, exchange)
         }
@@ -2621,36 +2704,37 @@ export class ResearchHub {
   }
 
   private async stockChart(
-    code: string,
+    refInput: string | InstrumentRef,
     period: string,
     count: number,
     before: string,
     tail: number,
-    explicitMarket: string | undefined,
     t0: number,
   ) {
-    const normalized = code.padStart(6, '0')
-    const cnRef = resolveCnInstrumentRef(
-      explicitMarket
-        ? {
-          market: 'CN',
-          assetClass: inferCnAssetClass(normalized),
-          symbol: normalized,
-          exchange: explicitMarket,
-        }
-        : normalized,
+    const cnRef = normalizeInstrumentRef(
+      typeof refInput === 'string'
+        ? resolveCnInstrumentRef(refInput)
+        : refInput,
     )
+    if (cnRef.market !== 'CN') return fail('仅支持 A 股图表', t0)
+
+    const normalized = normalizeCode(cnRef.symbol).padStart(6, '0')
+    const isIndex = cnRef.assetClass === 'INDEX'
     const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : this.crossMarketMaxBars(period)
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
-    const stockMarket = this.resolveStockMarket(normalized, explicitMarket, cnRef)
-    const quoteR = await this.stockRealtime(cnRef, explicitMarket)
+    const stockMarket = this.resolveStockMarket(normalized, cnRef.exchange, cnRef)
+    const quoteR = await this.stockRealtime(cnRef)
     let quote = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0] ?? null
     if (quote) quote = normalizePreOpenRealtimeQuote(quote)
     const preClose = quote?.preClose ?? null
     const name = this.resolveStockName(normalized, cnRef.exchange ?? quote?.name, quote?.name)
 
+    if (isIndex && (period === 'intraday' || period === '5day')) {
+      return fail('指数暂不支持分时走势', t0)
+    }
+
     if (period === 'intraday') {
-      const trendR = await this.de.fetchIntradaySessions(code, 5, stockMarket)
+      const trendR = await this.de.fetchIntradaySessions(normalized, 5, stockMarket)
       const trendData = trendR.success
         ? trendR.data as IntradayTrendFetchResult
         : null
@@ -2706,7 +2790,7 @@ export class ResearchHub {
     }
 
     if (period === '5day') {
-      const trendR = await this.de.fetchIntradaySessions(code, 5, stockMarket)
+      const trendR = await this.de.fetchIntradaySessions(normalized, 5, stockMarket)
       const trendData = trendR.success
         ? trendR.data as IntradayTrendFetchResult
         : null
@@ -2751,7 +2835,9 @@ export class ResearchHub {
       }, `${name} 五日 ${bars.length} 点`, t0)
     }
 
-    const fetched = await this.fetchChartKlines(normalized, period, safeCount, before, tail, stockMarket)
+    const fetched = isIndex
+      ? await this.fetchIndexChartKlines(cnRef, period, safeCount, before, tail)
+      : await this.fetchChartKlines(normalized, period, safeCount, before, tail, stockMarket, cnRef)
     if (!fetched?.klines.length) {
       if (isBseCode(normalized)) {
         return ok({
@@ -2780,7 +2866,7 @@ export class ResearchHub {
       turnoverRate: bar.turnoverRate,
     })))
 
-    const indicators = this.sortChartBars(computeIndicators(code, fetched.klines).map(row => ({
+    const indicators = this.sortChartBars(computeIndicators(normalized, fetched.klines).map(row => ({
       time: row.date,
       ma5: row.ma5,
       ma10: row.ma10,
@@ -2795,7 +2881,7 @@ export class ResearchHub {
 
     let cyqLatest: ReturnType<ResearchHub['mapCyqRow']> | null = null
     let cyqProfile: { date: string; currentPrice: number; levels: { price: number; weight: number }[] } | null = null
-    if (period === 'daily' || period === 'weekly' || period === 'monthly') {
+    if (!isIndex && (period === 'daily' || period === 'weekly' || period === 'monthly')) {
       const profileRaw = computeLatestChipProfile(normalized, fetched.klines)
       if (profileRaw) {
         cyqLatest = this.mapCyqRow(profileRaw)
@@ -3855,7 +3941,7 @@ export class ResearchHub {
       opts.exchange
         ? {
           market: 'CN',
-          assetClass: inferCnAssetClass(normalized),
+          assetClass: inferCnAssetClassFromSymbol(normalized, opts.exchange),
           symbol: normalized,
           exchange: opts.exchange,
         }
@@ -4059,8 +4145,8 @@ export class ResearchHub {
       usQuotes: refs => this.crossMarketBatchQuotes('US', refs, t0),
       regionalQuotes: (market, refs) => this.crossMarketBatchQuotes(market, refs, t0),
       cryptoQuotes: refs => this.crossMarketBatchQuotes('CRYPTO', refs, t0),
-      stockChart: (code, period, count, before, tail, market) =>
-        this.stockChart(code, period, count, before, tail, market, t0),
+      stockChart: (ref, period, count, before, tail) =>
+        this.stockChart(ref, period, count, before, tail, t0),
       usKline: (symbol, period, count, before, tail) =>
         this.usKline(symbol, { count, period, before, tail }, t0),
       regionalKline: (market, symbol, period, count, before, tail) =>

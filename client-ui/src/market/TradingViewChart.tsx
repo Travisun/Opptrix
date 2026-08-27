@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
-import { instrumentKey, tryParseInstrumentInput } from './instrument'
+import { instrumentKey, normalizeInstrumentRefLocal, resolveCnInstrumentIdentity, tryParseInstrumentInput } from './instrument'
 import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
 import { isCnListedFundSymbol } from './format'
@@ -463,34 +463,48 @@ export default function TradingViewChart({
       instrument?.quote,
     ],
   )
-  const instrumentRef = useMemo(
-    () => instrument ?? tryParseInstrumentInput(code) ?? {
+  const instrumentRef = useMemo(() => {
+    if (instrument) return normalizeInstrumentRefLocal(instrument)
+    if (chartVariant === 'index') {
+      const parsed = tryParseInstrumentInput(code)
+      if (parsed?.assetClass === 'INDEX') return normalizeInstrumentRefLocal(parsed)
+      const bare = code.trim().match(/^(\d{6})$/)?.[1]
+      if (bare) {
+        return normalizeInstrumentRefLocal(resolveCnInstrumentIdentity({
+          market: 'CN',
+          assetClass: 'INDEX',
+          symbol: bare,
+          exchange: bare.startsWith('399') ? 'SZ' : 'SH',
+        }))
+      }
+      if (parsed) return normalizeInstrumentRefLocal(parsed)
+    }
+    return tryParseInstrumentInput(code) ?? {
       market: 'CN' as const,
       assetClass: 'EQUITY' as const,
       symbol: '000000',
       exchange: 'SZ',
-    },
-    // identity 不变时保留同一对象引用
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by instrumentIdentity
-    [instrumentIdentity],
-  )
+    }
+  }, [instrumentIdentity, chartVariant])
+  const isIndexChart = chartVariant === 'index' || instrumentRef.assetClass === 'INDEX'
   const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
     && hasApplicationCapability(instrumentRef, 'chart_daily')
   const listedCnFundChart = instrumentRef.market === 'CN'
     && instrumentRef.assetClass === 'FUND'
     && isCnListedFundSymbol(instrumentRef.symbol)
-  const cnEquityChart = instrumentRef.market === 'CN'
+  const cnEquityChart = !isIndexChart
+    && instrumentRef.market === 'CN'
     && (instrumentRef.assetClass === 'EQUITY'
-      || instrumentRef.assetClass === 'INDEX'
       || instrumentRef.assetClass === 'ETF'
       || listedCnFundChart)
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
-  const isIndexChart = chartVariant === 'index' || instrumentRef.assetClass === 'INDEX'
   const showVolume = !isIndexChart
   const useEmbedLayout = embedMode && expanded
   const useInsightOverlay = insightEmbed && useEmbedLayout
-  const canChart = cnEquityChart || crossMarketChart
+  const canChart = isIndexChart
+    ? hasApplicationCapability(instrumentRef, 'chart_daily')
+    : cnEquityChart || crossMarketChart
   const periodOptions = useMemo(
     () => (isIndexChart
       ? buildIndexChartPeriodOptions(instrumentRef)
@@ -561,7 +575,9 @@ export default function TradingViewChart({
         return
       }
 
-      const useStockApi = cnEquityChart && CN_STOCK_CHART_PERIODS.has(nextPeriod)
+      const useStockApi = !isIndexChart
+        && cnEquityChart
+        && CN_STOCK_CHART_PERIODS.has(nextPeriod)
 
       const resp = useStockApi
         ? await research.stockChart(

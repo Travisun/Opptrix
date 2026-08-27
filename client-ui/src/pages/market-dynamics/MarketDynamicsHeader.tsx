@@ -14,12 +14,6 @@ import {
   DESKTOP_Z_PANEL_TITLE,
 } from '../../desktop/constants'
 import { desktopTitleBarActionsRight } from '../../desktop/layout'
-import type { MarketDynamicsTab } from './marketDynamicsStorage'
-
-const MARKET_TABS: PanelTitleTabItem<MarketDynamicsTab>[] = [
-  { value: 'cn', label: 'A股' },
-  { value: 'us', label: '美股' },
-]
 
 const useStyles = makeStyles({
   root: {
@@ -42,8 +36,13 @@ const useStyles = makeStyles({
     height: '40px',
     padding: '0 12px',
   },
-  tabsWrap: {
+  title: {
     paddingLeft: '3px',
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 650,
+    color: opptrixCssVars.textPrimary,
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   },
   spacer: {
     flex: 1,
@@ -78,8 +77,6 @@ const useStyles = makeStyles({
 })
 
 type Props = {
-  marketTab: MarketDynamicsTab
-  onMarketTabChange: (tab: MarketDynamicsTab) => void
   statusLabel: string
   refreshing: boolean
   onRefresh: () => void
@@ -89,8 +86,6 @@ type Props = {
 }
 
 export default function MarketDynamicsHeader({
-  marketTab,
-  onMarketTabChange,
   statusLabel,
   refreshing,
   onRefresh,
@@ -138,13 +133,7 @@ export default function MarketDynamicsHeader({
         paddingRight: electronChrome ? `${paddingRight}px` : undefined,
       }}
     >
-      <PanelTitleTabs
-        className={s.tabsWrap}
-        tabs={MARKET_TABS}
-        value={marketTab}
-        onChange={onMarketTabChange}
-        ariaLabel="市场切换"
-      />
+      <Text className={s.title}>A股</Text>
       <div
         className={mergeClasses(s.spacer, electronChrome && dragRegionClassName)}
         aria-hidden

@@ -108,9 +108,21 @@ export default function CnMarketDynamicsView({
   const selectedSectorCode = selectedSector ? sectorIndexCode(selectedSector) : null
 
   useEffect(() => {
-    if (!chartCode || !cnIndices.length) return
-    const hit = cnIndices.find(item => chartCodeFromIndex(item, cnIndices) === chartCode)
-    if (hit) setActiveIndex(hit)
+    if (!cnIndices.length) return
+    if (chartCode) {
+      const hit = cnIndices.find(item => chartCodeFromIndex(item, cnIndices) === chartCode)
+      if (hit) {
+        setActiveIndex(hit)
+        return
+      }
+    }
+    const first = cnIndices.find(item => chartCodeFromIndex(item, cnIndices) != null)
+    if (!first) return
+    const defaultCode = chartCodeFromIndex(first, cnIndices)
+    if (!defaultCode) return
+    setActiveIndex(first)
+    setChartCode(defaultCode)
+    writeCnIndexChartCode(defaultCode)
   }, [chartCode, cnIndices])
 
   const handleIndexSelect = (item: MarketIndexQuote, code: string) => {

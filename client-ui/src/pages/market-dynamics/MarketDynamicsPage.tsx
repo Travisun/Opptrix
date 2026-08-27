@@ -1,16 +1,9 @@
-import { useEffect, useState } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { opptrixCssVars } from '../../theme/tokens'
 import { formatCnDateTime } from '../../utils/cnTime'
 import MarketDynamicsHeader from './MarketDynamicsHeader'
 import CnMarketDynamicsView from './CnMarketDynamicsView'
-import UsMarketDynamicsView from './UsMarketDynamicsView'
 import { useMarketDynamics, useMarketInsights } from './useMarketDynamics'
-import {
-  readMarketDynamicsTab,
-  writeMarketDynamicsTab,
-  type MarketDynamicsTab,
-} from './marketDynamicsStorage'
 
 const useStyles = makeStyles({
   root: {
@@ -52,13 +45,8 @@ type Props = {
 
 function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 0 }: Props) {
   const s = useStyles()
-  const [marketTab, setMarketTab] = useState<MarketDynamicsTab>(() => readMarketDynamicsTab())
-  const { data, loading, refreshing, error, refreshedAt, refresh } = useMarketDynamics(marketTab)
-  const insights = useMarketInsights(marketTab)
-
-  useEffect(() => {
-    writeMarketDynamicsTab(marketTab)
-  }, [marketTab])
+  const { data, loading, refreshing, error, refreshedAt, refresh } = useMarketDynamics('cn')
+  const insights = useMarketInsights('cn')
 
   const updatedLabel = refreshedAt ? formatCnDateTime(refreshedAt) : null
   const statusLabel = refreshing
@@ -77,8 +65,6 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
   return (
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron, 'opptrix-market-dynamics')}>
       <MarketDynamicsHeader
-        marketTab={marketTab}
-        onMarketTabChange={setMarketTab}
         statusLabel={statusLabel}
         refreshing={refreshing}
         onRefresh={handleRefresh}
@@ -88,21 +74,12 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
 
       {error && <div className={s.errorBanner}>{error}</div>}
       <div className={s.content}>
-        {marketTab === 'cn' ? (
-          <CnMarketDynamicsView
-            data={data}
-            loading={loading && !hasData}
-            articles={insights.articles}
-            insightsLoading={insights.loading}
-          />
-        ) : (
-          <UsMarketDynamicsView
-            data={data}
-            loading={loading && !hasData}
-            articles={insights.articles}
-            insightsLoading={insights.loading}
-          />
-        )}
+        <CnMarketDynamicsView
+          data={data}
+          loading={loading && !hasData}
+          articles={insights.articles}
+          insightsLoading={insights.loading}
+        />
       </div>
     </div>
   )

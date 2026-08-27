@@ -1,22 +1,35 @@
 import type { InstrumentRef } from '../../types/instrument'
-import { inferCnExchangeFromCode, isCnEtfCode, normalizeCode } from '../../market/format'
+import {
+  buildOpptrixInstrumentId,
+  normalizeInstrumentRefLocal,
+  tryParseInstrumentInput,
+} from '../../market/instrument'
+import { resolveCnInstrumentRef } from '@opptrix/shared/instrument-ref'
+import { normalizeCode } from '../../market/format'
 
 export type CnInsightStockPick = {
   code: string
   name: string
 }
 
+/** 明细列表点选图表 — 与右侧行情面板一致的 Opptrix 标的 ID */
 export function cnInsightInstrumentFromCode(code: string): InstrumentRef {
-  const symbol = normalizeCode(code)
-  const exchange = inferCnExchangeFromCode(symbol)
-  return {
-    market: 'CN',
-    assetClass: isCnEtfCode(symbol) ? 'ETF' : 'EQUITY',
-    symbol,
-    exchange,
+  const trimmed = code.trim()
+  if (!trimmed) {
+    return { market: 'CN', assetClass: 'EQUITY', symbol: '000000', exchange: 'SZ' }
   }
+  const parsed = tryParseInstrumentInput(trimmed)
+  if (parsed) return normalizeInstrumentRefLocal(parsed)
+  return normalizeInstrumentRefLocal(resolveCnInstrumentRef(trimmed))
+}
+
+export function cnInsightChartInputCode(ref: InstrumentRef): string {
+  return buildOpptrixInstrumentId(ref)
 }
 
 export function insightStockCodeKey(code: string): string {
-  return normalizeCode(code)
+  const trimmed = code.trim()
+  const parsed = tryParseInstrumentInput(trimmed)
+  if (parsed) return buildOpptrixInstrumentId(normalizeInstrumentRefLocal(parsed))
+  return normalizeCode(trimmed)
 }

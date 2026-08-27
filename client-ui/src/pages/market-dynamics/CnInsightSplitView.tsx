@@ -4,7 +4,7 @@ import TradingViewChart from '../../market/TradingViewChart'
 import { opptrixCssVars } from '../../theme/tokens'
 import { CnInsightStockSelectProvider } from './cnInsightStockContext'
 import type { CnInsightStockPick } from './cnInsightStockUtils'
-import { cnInsightInstrumentFromCode } from './cnInsightStockUtils'
+import { cnInsightChartInputCode, cnInsightInstrumentFromCode } from './cnInsightStockUtils'
 
 const useStyles = makeStyles({
   root: {
@@ -82,11 +82,15 @@ function ChartPane({
     () => cnInsightInstrumentFromCode(stock.code),
     [stock.code],
   )
+  const chartInputCode = useMemo(
+    () => cnInsightChartInputCode(instrument),
+    [instrument],
+  )
 
   return (
     <div className={s.chartFill}>
       <TradingViewChart
-        code={stock.code}
+        code={chartInputCode}
         instrument={instrument}
         expanded
         embedMode

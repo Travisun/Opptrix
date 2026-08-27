@@ -52,12 +52,11 @@ export type InstrumentRouteHandlers = {
   /** CRYPTO 批量实时；缺省则回退 cryptoRealtime 有界并发 */
   cryptoQuotes?: (refs: InstrumentRef[]) => Promise<ResearchResult>
   stockChart: (
-    code: string,
+    ref: InstrumentRef,
     period: string,
     count: number,
     before: string,
     tail: number,
-    market?: string,
   ) => Promise<ResearchResult>
   usKline: (
     symbol: string,
@@ -476,7 +475,7 @@ export async function routeInstrumentChart(
     return wrapChart(
       ref,
       period,
-      await handlers.stockChart(ref.symbol, period, count, before, tail, ref.exchange),
+      await handlers.stockChart(ref, period, count, before, tail),
     )
   }
   if (ref.market === 'US') {

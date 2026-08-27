@@ -1,5 +1,8 @@
 import type { MarketDynamicsSection, MarketIndexQuote } from '../../types/schemas'
+import type { InstrumentRef } from '../../types/instrument'
+import { resolveCnInstrumentIdentity } from '@opptrix/shared/instrument-symbol'
 import { pctTone } from '../../market/format'
+import { normalizeInstrumentRefLocal, tryParseInstrumentInput } from '../../market/instrument'
 
 export function computeMarketMood(sections: MarketDynamicsSection[]) {
   const all = sections.flatMap(sec => sec.items)
@@ -51,6 +54,77 @@ export function chartCodeFromIndex(
   if (item.chart_symbol) return item.chart_symbol
   if (!isCnChartableIndex(item, cnIndices)) return null
   return indexChartCodeFromQuote(item)
+}
+
+/** 指数图表用 InstrumentRef — 与右侧行情面板统一（INDEX + exchange 消歧） */
+export function indexInstrumentFromQuote(
+  item: MarketIndexQuote | null | undefined,
+): InstrumentRef | undefined {
+  if (!item) return undefined
+
+  const mkt = (item.market ?? '').toUpperCase()
+  const chartSym = item.chart_symbol?.trim()
+
+  if (chartSym && (mkt === 'HK' || mkt === 'US')) {
+    return { market: mkt as 'HK' | 'US', assetClass: 'ETF', symbol: chartSym }
+  }
+
+  const symbol = indexChartCodeFromQuote(item)
+  if (!symbol) return undefined
+
+  if (/^\d{6}$/.test(symbol)) {
+    const exchange = mkt === 'SH' || mkt === 'SZ'
+      ? mkt
+      : symbol.startsWith('399')
+        ? 'SZ'
+        : 'SH'
+    return normalizeInstrumentRefLocal(resolveCnInstrumentIdentity({
+      market: 'CN',
+      assetClass: 'INDEX',
+      symbol,
+      exchange,
+    }))
+  }
+
+  if (chartSym) {
+    return { market: 'US', assetClass: 'ETF', symbol: chartSym }
+  }
+
+  return undefined
+}
+
+/** 指数图表面板：优先行情行，回退 chartCode（禁止裸 6 位码当个股） */
+export function resolveMarketIndexChartInstrument(
+  item: MarketIndexQuote | null | undefined,
+  chartCode: string | null | undefined,
+): InstrumentRef | undefined {
+  const fromQuote = indexInstrumentFromQuote(item)
+  if (fromQuote) return fromQuote
+
+  const code = (chartCode ?? '').trim()
+  if (!code) return undefined
+
+  const parsed = tryParseInstrumentInput(code)
+  if (parsed?.assetClass === 'INDEX') return normalizeInstrumentRefLocal(parsed)
+
+  const bare = code.match(/^(\d{6})$/)?.[1]
+  if (bare) {
+    return normalizeInstrumentRefLocal(resolveCnInstrumentIdentity({
+      market: 'CN',
+      assetClass: 'INDEX',
+      symbol: bare,
+      exchange: bare.startsWith('399') ? 'SZ' : 'SH',
+    }))
+  }
+
+  return indexInstrumentFromQuote({
+    code,
+    chart_symbol: code,
+    name: '',
+    price: null,
+    change_pct: null,
+    market: code.startsWith('399') ? 'SZ' : 'SH',
+  })
 }
 
 export function indexKey(item: MarketIndexQuote): string {

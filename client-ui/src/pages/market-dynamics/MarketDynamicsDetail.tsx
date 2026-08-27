@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular, NewsRegular, OpenRegular } from '@fluentui/react-icons'
 import PanelTitleTabs from '../../components/PanelTitleTabs'
@@ -20,6 +20,8 @@ import type {
 import { openExternalUrl } from '../../platform/openUrl'
 import { formatRelativeTime } from '../news/newsUtils'
 import { indexChartCodeFromQuote } from './cnIndexChartStorage'
+import { resolveMarketIndexChartInstrument } from './marketBoardUtils'
+import { buildOpptrixInstrumentId } from '../../market/instrument'
 import { MarketDynamicsSectionTabs } from './MarketDynamicsHeader'
 import MarketBoardFocus from './MarketBoardFocus'
 import MarketDragonTigerList from './MarketDragonTigerList'
@@ -381,7 +383,12 @@ export default function MarketDynamicsDetail({
   const [detailTab, setDetailTab] = useState<DetailTab>('board')
   const [boardList, setBoardList] = useState<BoardListId>('movers')
   const showChart = Boolean(chartCode)
-  const activeName = cnIndices.find(item => indexChartCodeFromQuote(item) === chartCode)?.name ?? chartCode
+  const activeIndex = cnIndices.find(item => indexChartCodeFromQuote(item) === chartCode) ?? null
+  const activeName = activeIndex?.name ?? chartCode
+  const chartInstrument = useMemo(
+    () => resolveMarketIndexChartInstrument(activeIndex, chartCode),
+    [activeIndex, chartCode],
+  )
 
   const moversLoading = marketLoading && !gainers.length && !losers.length
   const limitUpLoading = marketLoading && !limitUp.length
@@ -515,10 +522,16 @@ export default function MarketDynamicsDetail({
       )}
 
       <div className={s.body}>
-        {showChart && chartCode ? (
+        {showChart && chartCode && chartInstrument ? (
           <div className={s.pane}>
             <div className={s.chartWrap}>
-              <TradingViewChart code={chartCode} chartVariant="index" expanded active />
+              <TradingViewChart
+                code={buildOpptrixInstrumentId(chartInstrument)}
+                instrument={chartInstrument}
+                chartVariant="index"
+                expanded
+                active
+              />
             </div>
           </div>
         ) : null}

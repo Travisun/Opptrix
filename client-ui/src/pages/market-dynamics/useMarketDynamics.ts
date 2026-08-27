@@ -21,9 +21,6 @@ export function useMarketInsights(market: MarketDynamicsTab = 'cn') {
       if (feedResp?.articles) {
         const filtered = feedResp.articles.filter(article => {
           const text = `${article.title} ${article.source_title ?? ''}`.toLowerCase()
-          if (market === 'us') {
-            return /美股|nasdaq|nyse|华尔街|标普|道琼斯|纳斯达克|fed|美联储|\bus\b/i.test(text)
-          }
           return /a股|沪深|上证|深证|创业板|科创板|北交所|cn\b|china/i.test(text)
             || !/美股|nasdaq|nyse|港股|恒生|crypto|btc/i.test(text)
         })

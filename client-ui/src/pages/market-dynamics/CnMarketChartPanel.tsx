@@ -13,6 +13,8 @@ import {
   resolveIndexChangeAmt,
   resolveIndexDisplayCode,
 } from './cnIndexFormat'
+import { resolveMarketIndexChartInstrument } from './marketBoardUtils'
+import { buildOpptrixInstrumentId } from '../../market/instrument'
 import CnChangePill from './CnChangePill'
 import { CN_DASH } from './cnDashboardTokens'
 import { CnChartPanelSkeleton } from './cnDashboardSkeletons'
@@ -186,17 +188,6 @@ const useStyles = makeStyles({
   },
 })
 
-function cnChartInstrument(item: MarketIndexQuote | null | undefined): InstrumentRef | undefined {
-  if (!item?.chart_symbol) return undefined
-  if (item.market === 'HK') {
-    return { market: 'HK', assetClass: 'ETF', symbol: item.chart_symbol }
-  }
-  if (item.market === 'US') {
-    return { market: 'US', assetClass: 'ETF', symbol: item.chart_symbol }
-  }
-  return undefined
-}
-
 function chartDisplayCode(
   chartCode: string | null,
   indexCode?: string | null,
@@ -245,13 +236,11 @@ export default function CnMarketChartPanel({
   const s = useStyles()
 
   const instrument = useMemo(
-    () => cnChartInstrument(activeIndex),
-    [activeIndex],
+    () => resolveMarketIndexChartInstrument(activeIndex, chartCode),
+    [activeIndex, chartCode],
   )
 
-  const chartInputCode = instrument
-    ? `${instrument.market}:${instrument.symbol}`
-    : chartCode ?? ''
+  const chartInputCode = instrument ? buildOpptrixInstrumentId(instrument) : ''
 
   const displayCode = activeIndex
     ? resolveIndexDisplayCode(activeIndex)
@@ -337,18 +326,18 @@ export default function CnMarketChartPanel({
           </div>
         </aside>
         <div className={s.chartCol}>
-          <TradingViewChart
-            code={chartInputCode}
-            instrument={instrument}
-            chartVariant="index"
-            expanded
-            embedMode
-            active
-          />
+          {instrument ? (
+            <TradingViewChart
+              code={chartInputCode}
+              instrument={instrument}
+              chartVariant="index"
+              expanded
+              embedMode
+              active
+            />
+          ) : null}
         </div>
       </div>
     </section>
   )
 }
-
-export { cnChartInstrument }
