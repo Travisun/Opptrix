@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { portfolioClearInstrument, portfolioDeleteTrade, portfolioTrade, research } from '../api/client'
 import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
-import { normalizeCode, portfolioHoldingsKey } from './format'
+import { portfolioHoldingsKey } from './format'
 import {
   buildOpptrixInstrumentId,
   instrumentKey,
@@ -12,6 +12,10 @@ import {
   portfolioHoldingsStorageKey,
   portfolioHoldingsStorageKeyAliases,
 } from '@opptrix/shared/portfolio-fees'
+import {
+  portfolioTradeCacheKey,
+  resolvePortfolioTradeLookupCode,
+} from './portfolioTradeLookup'
 import type { InstrumentRef, Market } from '../types/instrument'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
@@ -29,7 +33,6 @@ function holdingRowRef(row: HoldingSnapshot) {
       assetClass ? { ...parsed, assetClass } : parsed,
     )
   }
-  // CN:PF.xxx / xxx.OF 等场外基金命名（与 shared parse 对齐的兜底）
   const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
   if (fundNs) {
     return normalizeInstrumentRefLocal({
@@ -49,7 +52,6 @@ function holdingRowRef(row: HoldingSnapshot) {
     })
   }
   const market = (row.market ?? 'CN') as Market
-  // 优先持仓行 assetClass；未知时仍默认 EQUITY，但六位裸码保留 market
   return normalizeInstrumentRefLocal({
     market,
     assetClass: assetClass ?? 'EQUITY',
@@ -63,17 +65,14 @@ function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnaps
   map[primary] = row
   const nsKey = instrumentKey(ref)
   if (nsKey && nsKey !== primary) map[nsKey] = row
-  // Opptrix 对外 ID：关注列表用 CN:STOCK:… 查持仓时须命中
   const opptrixKey = buildOpptrixInstrumentId(ref)
   if (opptrixKey && opptrixKey !== primary && opptrixKey !== nsKey) {
     map[opptrixKey] = row
   }
-  // 账本原样 code（旧裸码或新 Opptrix）双写，兼容 packages 迁移前后
   const raw = row.code.trim()
   if (raw && raw !== primary && raw !== nsKey && raw !== opptrixKey) {
     map[raw] = row
   }
-  // 历史场外基金裸六位 alias：仅当槽位空闲，避免盖掉同码个股
   if (ref.market === 'CN' && (ref.assetClass === 'FUND' || ref.exchange === 'PF')) {
     const bare = ref.symbol.replace(/\D/g, '').slice(-6).padStart(6, '0')
     if (bare && !map[bare]) map[bare] = row
@@ -87,48 +86,6 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const tradesCache = useRef<Record<string, PortfolioTradeItem[]>>({})
-
-  /** 与 store portfolioCodesMatch / 账本对齐的稳定缓存键 */
-  const tradeCacheKey = (code: string, market?: string) => {
-    const trimmed = code.trim()
-    const parsed = tryParseInstrumentInput(trimmed)
-    if (parsed) {
-      const ref = normalizeInstrumentRefLocal(parsed)
-      const storageKey = portfolioHoldingsStorageKey(ref)
-      if (ref.market === 'CN') {
-        return storageKey.startsWith('CN:') ? storageKey : `CN:${storageKey}`
-      }
-      return instrumentKey(ref)
-    }
-    const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
-    if (fundNs) return `CN:PF.${fundNs[1]}`
-    const fundSuffix = /^(\d{6})\.(?:OF|PF)$/i.exec(trimmed)
-    if (fundSuffix) return `CN:PF.${fundSuffix[1]}`
-    if (market && market !== 'CN') return `${market}:${trimmed}`
-    if (/^\d{6}$/.test(trimmed)) return `CN:${normalizeCode(trimmed)}`
-    return `${market ?? 'CN'}:${trimmed}`
-  }
-
-  const resolveTradeLookupCode = (code: string, market?: string) => {
-    const trimmed = code.trim()
-    const parsed = tryParseInstrumentInput(trimmed)
-    if (parsed) {
-      const ref = normalizeInstrumentRefLocal(parsed)
-      if (ref.assetClass === 'FUND' || ref.exchange === 'PF' || ref.exchange === 'OF') {
-        const key = portfolioHoldingsStorageKey(ref)
-        return key.startsWith('CN:PF.') ? key : `CN:PF.${key}`
-      }
-      if (ref.market === 'CN') return portfolioHoldingsStorageKey(ref)
-      return ref.symbol
-    }
-    const fundNs = /^CN:(?:PF|OF)[.:](\d{6})$/i.exec(trimmed)
-    if (fundNs) return `CN:PF.${fundNs[1]}`
-    const fundSuffix = /^(\d{6})\.(?:OF|PF)$/i.exec(trimmed)
-    if (fundSuffix) return `CN:PF.${fundSuffix[1]}`
-    if (market && market !== 'CN') return trimmed
-    if (/^CN:/i.test(trimmed)) return trimmed
-    return normalizeCode(trimmed)
-  }
 
   const refreshHoldings = useCallback(async () => {
     setLoading(true)
@@ -159,16 +116,19 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     return () => window.clearInterval(timer)
   }, [refreshHoldings, enabled])
 
-  const loadTrades = useCallback(async (code: string, market?: string) => {
-    const cacheKey = tradeCacheKey(code, market)
-    const lookupCode = resolveTradeLookupCode(code, market)
+  const loadTrades = useCallback(async (
+    code: string,
+    market?: string,
+    assetClass?: InstrumentRef['assetClass'],
+  ) => {
+    const cacheKey = portfolioTradeCacheKey(code, market, assetClass)
+    const lookupCode = resolvePortfolioTradeLookupCode(code, market, assetClass)
     try {
       const resp = await research.portfolioTrades(lookupCode, market)
       if (resp.success && resp.data?.trades) {
         tradesCache.current[cacheKey] = resp.data.trades
         return resp.data.trades
       }
-      // 失败勿用空数组覆盖已有成功缓存
     } catch { /* ignore */ }
     return tradesCache.current[cacheKey] ?? []
   }, [])
@@ -197,6 +157,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
           : undefined
       })()
     const code = instrument ? buildOpptrixInstrumentId(instrument) : payload.code.trim()
+    const ac = (payload.assetClass ?? instrument?.assetClass) as InstrumentRef['assetClass'] | undefined
     await portfolioTrade({
       code,
       name: payload.name,
@@ -209,13 +170,18 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
       instrument,
     })
     await refreshHoldings()
-    return loadTrades(code, payload.market ?? instrument?.market)
+    return loadTrades(code, payload.market ?? instrument?.market, ac)
   }, [loadTrades, refreshHoldings])
 
-  const deleteTrade = useCallback(async (id: number, code: string, market?: string) => {
+  const deleteTrade = useCallback(async (
+    id: number,
+    code: string,
+    market?: string,
+    assetClass?: InstrumentRef['assetClass'],
+  ) => {
     await portfolioDeleteTrade(id)
     await refreshHoldings()
-    return loadTrades(code, market)
+    return loadTrades(code, market, assetClass)
   }, [loadTrades, refreshHoldings])
 
   const clearPortfolioForCode = useCallback(async (
@@ -228,7 +194,11 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     } catch {
       /* best-effort cleanup when removing watchlist row */
     }
-    delete tradesCache.current[tradeCacheKey(code, market)]
+    delete tradesCache.current[portfolioTradeCacheKey(
+      code,
+      market,
+      assetClass as InstrumentRef['assetClass'] | undefined,
+    )]
     setHoldingsByCode(prev => {
       const next = { ...prev }
       const parsed = tryParseInstrumentInput(code)

@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles } from '@fluentui/react-components'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { portfolioFeeGlobal, portfolioFeeGlobalSave } from '../../api/client'
-import { DEFAULT_PORTFOLIO_GLOBAL_FEES, type PortfolioGlobalFees } from '@opptrix/shared/portfolio-fees'
+import { DEFAULT_PORTFOLIO_GLOBAL_FEES, normalizePortfolioGlobalFees, type PortfolioGlobalFees } from '@opptrix/shared/portfolio-fees'
 import PortfolioGlobalFeeEditor from '../../market/PortfolioGlobalFeeEditor'
 import { opptrixCssVars } from '../../theme/tokens'
 import {
-  SettingsCard,
   SettingsGroup,
   SettingsRow,
 } from './SettingsPrimitives'
@@ -39,8 +38,9 @@ export default function PortfolioFeeSettingsSection() {
     try {
       const resp = await portfolioFeeGlobal()
       if (resp.success && resp.data?.globalFees) {
-        setGlobalFees(resp.data.globalFees)
-        baselineRef.current = JSON.stringify(resp.data.globalFees)
+        const normalized = normalizePortfolioGlobalFees(resp.data.globalFees)
+        setGlobalFees(normalized)
+        baselineRef.current = JSON.stringify(normalized)
       }
     } catch {
       toast.showToast('暂时无法加载组合费率', 'error')
@@ -63,8 +63,8 @@ export default function PortfolioFeeSettingsSection() {
         toast.showToast('保存失败，请稍后重试', 'error')
         return
       }
-      setGlobalFees(resp.data.globalFees)
-      baselineRef.current = JSON.stringify(resp.data.globalFees)
+      setGlobalFees(normalizePortfolioGlobalFees(resp.data.globalFees))
+      baselineRef.current = JSON.stringify(normalizePortfolioGlobalFees(resp.data.globalFees))
       const n = resp.data.recalculatedTrades ?? 0
       toast.showToast(
         n > 0 ? `已保存，并按新费率重算了 ${n} 笔历史交易` : '组合默认费率已保存',
@@ -86,9 +86,7 @@ export default function PortfolioFeeSettingsSection() {
       <Text className={s.intro} block>
         作为所有标的的默认计费规则。在「管理持仓」里可为单只标的单独覆盖；保存后会按新规则自动重算已有买卖记录的费用与持仓盈亏。
       </Text>
-      <SettingsCard>
-        <PortfolioGlobalFeeEditor value={globalFees} onChange={setGlobalFees} />
-      </SettingsCard>
+      <PortfolioGlobalFeeEditor value={globalFees} onChange={setGlobalFees} />
       <SettingsGroup>
         <SettingsRow
           title="保存并重算"

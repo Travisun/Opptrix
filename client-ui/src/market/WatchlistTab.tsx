@@ -24,10 +24,10 @@ import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import HoverMarqueeText from '../chat/HoverMarqueeText'
-import { formatPct, formatPrice, formatPriceForMarket, pctTone, resolveDisplayStockName, hasCjkText, normalizeCode } from './format'
+import { formatPct, formatPriceWithCurrency, pctTone, resolveDisplayStockName, hasCjkText, normalizeCode } from './format'
 import { unifiedQuoteToMarketQuote } from './instrument-adapters'
 import type { QuoteFailedReason } from './instrument-adapters'
-import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctInCny, convertMarketAmountToCny, dayChangeReturnPct } from './portfolioCalc'
+import { lookupHoldingSnapshot, followReturnPct, holdingReturnPctInCny, dayChangeReturnPct } from './portfolioCalc'
 import { useFxRates } from './useFxRates'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
@@ -1188,14 +1188,10 @@ export default function WatchlistTab({
                 ? holding.costBasis
                 : null
               const costBasisDisplay = costBasisLocal != null
-                ? (isFxMarket && fxRates
-                  ? formatPrice(convertMarketAmountToCny(costBasisLocal, market, fxRates))
-                  : formatPriceForMarket(market, costBasisLocal))
+                ? formatPriceWithCurrency(market, costBasisLocal)
                 : null
-              const costBasisTitle = isFxMarket && costBasisLocal != null
-                ? (fxRates
-                  ? `成本 ${formatPriceForMarket(market, costBasisLocal)}，按最新汇率约合人民币`
-                  : `成本 ${formatPriceForMarket(market, costBasisLocal)}`)
+              const costBasisTitle = costBasisLocal != null
+                ? `成本 ${formatPriceWithCurrency(market, costBasisLocal)}`
                 : undefined
               const holdingTitle = isFxMarket && isHolding && supportsHoldingPnl && fxRates
                 ? '港美持仓收益已按人民币口径计算'
@@ -1343,7 +1339,7 @@ export default function WatchlistTab({
                             style={{ minWidth: METRIC_COLUMNS[0].minWidth }}
                             title={failedCopy?.hint}
                           >
-                            {formatPriceForMarket(market, price)}
+                            {formatPriceWithCurrency(market, price)}
                           </span>
                           <span
                             className={mergeClasses(

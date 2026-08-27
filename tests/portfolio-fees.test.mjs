@@ -5,6 +5,7 @@ import {
   DEFAULT_PORTFOLIO_GLOBAL_FEES,
   estimatePortfolioTradeFees,
   legacyFlatFeesToGlobal,
+  normalizePortfolioGlobalFees,
   resolvePortfolioLedgerKind,
 } from '@opptrix/shared'
 
@@ -105,4 +106,63 @@ test('recompute trade fees updates stored zero fees', () => {
   })
   assert.equal(fees.commission, 5)
   assert.equal(fees.totalFee, 5.01)
+})
+
+test('normalizePortfolioGlobalFees migrates legacy exchange to cn', () => {
+  const normalized = normalizePortfolioGlobalFees({
+    exchange: {
+      commission: { mode: 'fixed', fixed: 2 },
+      stampDuty: { mode: 'rate', rate: 0.001 },
+      transferFee: { mode: 'none' },
+    },
+    otcFund: {
+      subscriptionFee: { mode: 'none' },
+      redemptionFee: { mode: 'none' },
+    },
+  })
+  assert.equal(normalized.cn.commission.mode, 'fixed')
+  assert.equal(normalized.cn.commission.fixed, 2)
+  assert.equal(normalized.us.commission.mode, 'min_rate')
+  assert.equal(normalized.hk.commission.mode, 'min_rate')
+})
+
+test('US sell fees include regulatory and activity charges', () => {
+  const fees = calcPortfolioTradeFees({
+    ledgerKind: 'exchange',
+    side: 'sell',
+    amount: 10000,
+    globalFees: DEFAULT_PORTFOLIO_GLOBAL_FEES,
+    market: 'US',
+  })
+  assert.ok(fees.stampDuty > 0)
+  assert.ok(fees.transferFee > 0)
+  assert.equal(
+    calcPortfolioTradeFees({
+      ledgerKind: 'exchange',
+      side: 'buy',
+      amount: 10000,
+      globalFees: DEFAULT_PORTFOLIO_GLOBAL_FEES,
+      market: 'US',
+    }).stampDuty,
+    0,
+  )
+})
+
+test('HK stamp duty applies on both sides', () => {
+  const buy = calcPortfolioTradeFees({
+    ledgerKind: 'exchange',
+    side: 'buy',
+    amount: 10000,
+    globalFees: DEFAULT_PORTFOLIO_GLOBAL_FEES,
+    market: 'HK',
+  })
+  const sell = calcPortfolioTradeFees({
+    ledgerKind: 'exchange',
+    side: 'sell',
+    amount: 10000,
+    globalFees: DEFAULT_PORTFOLIO_GLOBAL_FEES,
+    market: 'HK',
+  })
+  assert.equal(buy.stampDuty, 10)
+  assert.equal(sell.stampDuty, 10)
 })

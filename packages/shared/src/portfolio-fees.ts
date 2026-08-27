@@ -16,16 +16,19 @@ export interface FeeRule {
   mode: FeeCalcMode
   /** 费率小数，如 0.00025 表示 0.025% */
   rate?: number
-  /** 最低费用（元），用于 min_rate */
+  /** 最低费用，用于 min_rate */
   min?: number
-  /** 固定每笔费用（元），用于 fixed */
+  /** 固定每笔费用，用于 fixed */
   fixed?: number
 }
 
+/** 场内交易费率模板 — 对齐主流券商字段 */
 export interface ExchangeFeeTemplate {
   commission: FeeRule
   stampDuty: FeeRule
   transferFee: FeeRule
+  /** 平台费 / 交易系统使用费（美股常见） */
+  platformFee?: FeeRule
 }
 
 export interface OtcFundFeeTemplate {
@@ -34,8 +37,12 @@ export interface OtcFundFeeTemplate {
 }
 
 export interface PortfolioGlobalFees {
-  exchange: ExchangeFeeTemplate
+  cn: ExchangeFeeTemplate
+  us: ExchangeFeeTemplate
+  hk: ExchangeFeeTemplate
   otcFund: OtcFundFeeTemplate
+  /** 旧版单模板；加载时迁移到 cn */
+  exchange?: ExchangeFeeTemplate
 }
 
 export interface InstrumentFeeOverrides {
@@ -43,6 +50,7 @@ export interface InstrumentFeeOverrides {
   commission?: FeeRule
   stampDuty?: FeeRule
   transferFee?: FeeRule
+  platformFee?: FeeRule
   subscriptionFee?: FeeRule
   redemptionFee?: FeeRule
 }
@@ -61,16 +69,86 @@ export const DEFAULT_STAMP_DUTY: FeeRule = { mode: 'rate', rate: 0.0005 }
 export const DEFAULT_TRANSFER_FEE: FeeRule = { mode: 'rate', rate: 0.00001 }
 export const DEFAULT_FEE_NONE: FeeRule = { mode: 'none' }
 
+const DEFAULT_CN_EXCHANGE: ExchangeFeeTemplate = {
+  commission: DEFAULT_EXCHANGE_COMMISSION,
+  stampDuty: DEFAULT_STAMP_DUTY,
+  transferFee: DEFAULT_TRANSFER_FEE,
+  platformFee: DEFAULT_FEE_NONE,
+}
+
+/** 美股常见：佣金 + 卖出规费（SEC/TAF 等合并到 stamp/transfer 槽位） */
+const DEFAULT_US_EXCHANGE: ExchangeFeeTemplate = {
+  commission: { mode: 'min_rate', rate: 0.0003, min: 0.99 },
+  stampDuty: { mode: 'rate', rate: 0.0000278 },
+  transferFee: { mode: 'rate', rate: 0.000166 },
+  platformFee: { mode: 'none' },
+}
+
+/** 港股常见：佣金 + 印花税 + 交易征费/财汇局征费等 */
+const DEFAULT_HK_EXCHANGE: ExchangeFeeTemplate = {
+  commission: { mode: 'min_rate', rate: 0.0003, min: 3 },
+  stampDuty: { mode: 'rate', rate: 0.001 },
+  transferFee: { mode: 'rate', rate: 0.0000565 },
+  platformFee: { mode: 'none' },
+}
+
 export const DEFAULT_PORTFOLIO_GLOBAL_FEES: PortfolioGlobalFees = {
-  exchange: {
-    commission: DEFAULT_EXCHANGE_COMMISSION,
-    stampDuty: DEFAULT_STAMP_DUTY,
-    transferFee: DEFAULT_TRANSFER_FEE,
-  },
+  cn: structuredClone(DEFAULT_CN_EXCHANGE),
+  us: structuredClone(DEFAULT_US_EXCHANGE),
+  hk: structuredClone(DEFAULT_HK_EXCHANGE),
   otcFund: {
     subscriptionFee: DEFAULT_FEE_NONE,
     redemptionFee: DEFAULT_FEE_NONE,
   },
+}
+
+export function marketFeeCurrencyUnit(market?: Market | string): string {
+  if (market === 'US') return '美元'
+  if (market === 'HK') return '港币'
+  return '元'
+}
+
+export function marketFeeCurrencySymbol(market?: Market | string): string {
+  if (market === 'US') return '$'
+  if (market === 'HK') return 'HK$'
+  return '¥'
+}
+
+function cloneExchangeTemplate(t: ExchangeFeeTemplate): ExchangeFeeTemplate {
+  return structuredClone(t)
+}
+
+/** 读盘 / API 入参归一 — 兼容旧版仅 exchange 字段 */
+export function normalizePortfolioGlobalFees(raw: unknown): PortfolioGlobalFees {
+  const base = structuredClone(DEFAULT_PORTFOLIO_GLOBAL_FEES)
+  if (!raw || typeof raw !== 'object') return base
+  const obj = raw as Partial<PortfolioGlobalFees>
+  if (obj.exchange && typeof obj.exchange === 'object') {
+    base.cn = { ...base.cn, ...cloneExchangeTemplate(obj.exchange) }
+  }
+  if (obj.cn && typeof obj.cn === 'object') {
+    base.cn = { ...base.cn, ...cloneExchangeTemplate(obj.cn) }
+  }
+  if (obj.us && typeof obj.us === 'object') {
+    base.us = { ...base.us, ...cloneExchangeTemplate(obj.us) }
+  }
+  if (obj.hk && typeof obj.hk === 'object') {
+    base.hk = { ...base.hk, ...cloneExchangeTemplate(obj.hk) }
+  }
+  if (obj.otcFund && typeof obj.otcFund === 'object') {
+    base.otcFund = { ...base.otcFund, ...structuredClone(obj.otcFund) }
+  }
+  return base
+}
+
+export function resolveMarketExchangeFees(
+  globalFees: PortfolioGlobalFees,
+  market?: Market,
+): ExchangeFeeTemplate {
+  const normalized = normalizePortfolioGlobalFees(globalFees)
+  if (market === 'US') return normalized.us
+  if (market === 'HK') return normalized.hk
+  return normalized.cn
 }
 
 function isCnFundHoldingsRef(ref: InstrumentRef): boolean {
@@ -171,13 +249,17 @@ export const DEFAULT_LEGACY_FLAT_FEE_CONFIG: LegacyFlatFeeConfig = {
 }
 
 export function legacyFlatFeesToGlobal(cfg: LegacyFlatFeeConfig): PortfolioGlobalFees {
+  const cn: ExchangeFeeTemplate = {
+    commission: { mode: 'min_rate', rate: cfg.commissionRate, min: cfg.commissionMin },
+    stampDuty: { mode: 'rate', rate: cfg.stampDutyRate },
+    transferFee: { mode: 'rate', rate: cfg.transferFeeRate },
+    platformFee: DEFAULT_FEE_NONE,
+  }
   return {
-    exchange: {
-      commission: { mode: 'min_rate', rate: cfg.commissionRate, min: cfg.commissionMin },
-      stampDuty: { mode: 'rate', rate: cfg.stampDutyRate },
-      transferFee: { mode: 'rate', rate: cfg.transferFeeRate },
-    },
-    otcFund: { ...DEFAULT_PORTFOLIO_GLOBAL_FEES.otcFund },
+    cn: structuredClone(cn),
+    us: structuredClone(DEFAULT_US_EXCHANGE),
+    hk: structuredClone(DEFAULT_HK_EXCHANGE),
+    otcFund: structuredClone(DEFAULT_PORTFOLIO_GLOBAL_FEES.otcFund),
   }
 }
 
@@ -207,7 +289,6 @@ export function calcPortfolioTradeFees(input: {
   amount: number
   globalFees: PortfolioGlobalFees
   overrides?: InstrumentFeeOverrides
-  /** 非 CN 市场默认不计印花税/过户费（全局 CN 模板不误用于美股等） */
   market?: Market
 }): TradeFeeBreakdown {
   const { ledgerKind, side, amount, globalFees, overrides, market } = input
@@ -216,22 +297,30 @@ export function calcPortfolioTradeFees(input: {
   let transferFee = 0
 
   if (ledgerKind === 'exchange') {
-    const cnExchange = !market || market === 'CN'
-    const comm = resolveFeeRule(overrides?.commission, globalFees.exchange.commission)
-    const stamp = resolveFeeRule(
-      overrides?.stampDuty,
-      cnExchange ? globalFees.exchange.stampDuty : DEFAULT_FEE_NONE,
-    )
-    const transfer = resolveFeeRule(
-      overrides?.transferFee,
-      cnExchange ? globalFees.exchange.transferFee : DEFAULT_FEE_NONE,
-    )
-    commission = round2(calcOne(comm, amount))
-    transferFee = cnExchange ? round2(calcOne(transfer, amount)) : 0
-    stampDuty = cnExchange && side === 'sell' ? round2(calcOne(stamp, amount)) : 0
+    const tpl = resolveMarketExchangeFees(globalFees, market)
+    const comm = resolveFeeRule(overrides?.commission, tpl.commission)
+    const platform = resolveFeeRule(overrides?.platformFee, tpl.platformFee ?? DEFAULT_FEE_NONE)
+    const stamp = resolveFeeRule(overrides?.stampDuty, tpl.stampDuty)
+    const transfer = resolveFeeRule(overrides?.transferFee, tpl.transferFee)
+
+    commission = round2(calcOne(comm, amount) + calcOne(platform, amount))
+
+    if (!market || market === 'CN') {
+      transferFee = round2(calcOne(transfer, amount))
+      stampDuty = side === 'sell' ? round2(calcOne(stamp, amount)) : 0
+    } else if (market === 'HK') {
+      transferFee = round2(calcOne(transfer, amount))
+      stampDuty = round2(calcOne(stamp, amount))
+    } else if (market === 'US') {
+      if (side === 'sell') {
+        stampDuty = round2(calcOne(stamp, amount))
+        transferFee = round2(calcOne(transfer, amount))
+      }
+    }
   } else {
-    const sub = resolveFeeRule(overrides?.subscriptionFee, globalFees.otcFund.subscriptionFee)
-    const red = resolveFeeRule(overrides?.redemptionFee, globalFees.otcFund.redemptionFee)
+    const normalized = normalizePortfolioGlobalFees(globalFees)
+    const sub = resolveFeeRule(overrides?.subscriptionFee, normalized.otcFund.subscriptionFee)
+    const red = resolveFeeRule(overrides?.redemptionFee, normalized.otcFund.redemptionFee)
     commission = side === 'buy'
       ? round2(calcOne(sub, amount))
       : round2(calcOne(red, amount))

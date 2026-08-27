@@ -5,7 +5,7 @@ import SidebarListEmpty from './SidebarListEmpty'
 import type { PortfolioSummaryData } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { formatMoney, formatPct, pctTone, portfolioHoldingsKey } from './format'
+import { formatCnyMoney, formatMoneyWithCurrency, formatPct, pctTone, portfolioHoldingsKey } from './format'
 import { instrumentKey, marketDisplayName, tryParseInstrumentInput } from './instrument'
 import { displayPortfolioHoldingReturnPct } from './portfolioCalc'
 import {
@@ -396,7 +396,7 @@ export default function PortfolioTab({
             totalUnrealizedPnl: displaySummary.totalUnrealizedPnl,
             holdingsCount: displaySummary.holdingsCount,
           } : null}
-          formatMoney={formatMoney}
+          formatMoney={formatCnyMoney}
         />
       ) : null}
 
@@ -462,7 +462,7 @@ export default function PortfolioTab({
                     {formatPct(rowReturnPct)}
                   </span>
                   <span className={s.quoteSecondary}>
-                    {formatMoney(h.marketValue)}
+                    {formatMoneyWithCurrency(h.market, h.marketValue)}
                   </span>
                 </div>
               </div>

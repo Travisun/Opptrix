@@ -46,7 +46,7 @@ test('portfolioHoldingsStorageKey — CN ETF Opptrix', () => {
   )
 })
 
-test('US exchange trades skip CN stamp duty and transfer fee', () => {
+test('US exchange sell uses US fee template not CN stamp duty', () => {
   const global = legacyFlatFeesToGlobal({
     commissionRate: 0.00025,
     commissionMin: 5,
@@ -60,9 +60,10 @@ test('US exchange trades skip CN stamp duty and transfer fee', () => {
     globalFees: global,
     market: 'US',
   })
-  assert.equal(sell.stampDuty, 0)
-  assert.equal(sell.transferFee, 0)
-  assert.equal(sell.commission, 5)
+  assert.equal(sell.commission, 3)
+  assert.ok(sell.stampDuty > 0)
+  assert.ok(sell.transferFee > 0)
+  assert.notEqual(sell.stampDuty, 5)
 })
 
 test('CN exchange sell still applies stamp duty', () => {

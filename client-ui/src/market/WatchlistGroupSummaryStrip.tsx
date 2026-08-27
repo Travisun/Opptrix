@@ -78,7 +78,7 @@ export default function WatchlistGroupSummaryStrip({
     return (
       <div className={mergeClasses(s.root, className)}>
         <div className={s.metric}>
-          <Text className={s.label}>{groupTitle ? `${groupTitle} · 市值` : '总市值'}</Text>
+          <Text className={s.label}>{groupTitle ? `${groupTitle} · 市值` : '总市值（折合）'}</Text>
           <Text className={s.value}>{formatMoney(portfolioSummary.totalMarketValue)}</Text>
         </div>
         <div className={s.metric}>
@@ -88,7 +88,7 @@ export default function WatchlistGroupSummaryStrip({
           </Text>
         </div>
         <div className={s.metric}>
-          <Text className={s.label}>浮动盈亏</Text>
+          <Text className={s.label}>浮动盈亏（折合）</Text>
           <Text className={s.value} style={{ color: pnlColor(portfolioSummary.totalUnrealizedPnl) }}>
             {formatMoney(portfolioSummary.totalUnrealizedPnl)}
           </Text>

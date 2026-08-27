@@ -20,6 +20,39 @@ export function formatMoney(value: number | null | undefined, digits = 2): strin
   })
 }
 
+/** 市场本币符号：A 股 ¥、美股 $、港股 HK$ */
+export function marketCurrencySymbol(market?: string): string {
+  if (market === 'US') return '$'
+  if (market === 'HK') return 'HK$'
+  return '¥'
+}
+
+/** 带本币符号的价格（关注列表最新价 / 成本价等） */
+export function formatPriceWithCurrency(
+  market: string | undefined,
+  value: number | null | undefined,
+  digits?: number,
+): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return `${marketCurrencySymbol(market)}${formatPriceForMarket(market, value, digits)}`
+}
+
+/** 带本币符号的金额（组合单只市值等） */
+export function formatMoneyWithCurrency(
+  market: string | undefined,
+  value: number | null | undefined,
+  digits = 2,
+): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return `${marketCurrencySymbol(market)}${formatMoney(value, digits)}`
+}
+
+/** 人民币口径汇总（跨市场分组 strip 等） */
+export function formatCnyMoney(value: number | null | undefined, digits = 2): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return `¥${formatMoney(value, digits)}`
+}
+
 /** 按市场格式化价格 — CN 保留小数；US/JP/KR/HK 同；Crypto 低价多小数位 */
 export function formatPriceForMarket(
   market: string | undefined,

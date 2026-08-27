@@ -43,6 +43,10 @@ export {
   resolveFeeRule,
   legacyFlatFeesToGlobal,
   legacyFlatPartialToOverrides,
+  normalizePortfolioGlobalFees,
+  resolveMarketExchangeFees,
+  marketFeeCurrencySymbol,
+  marketFeeCurrencyUnit,
 } from '@opptrix/shared'
 
 export function migrateLegacyFeeState(input: {

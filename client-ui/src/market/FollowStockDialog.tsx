@@ -20,7 +20,7 @@ import {
   type PortfolioGlobalFees,
   type PortfolioLedgerKind,
 } from '@opptrix/shared/portfolio-fees'
-import { formatCompactNumberForMarket, formatPct, formatPriceForMarket, pctTone, resolveCloseOnDate, resolveFundNavOnDate } from './format'
+import { formatCompactNumberForMarket, formatPct, formatPriceWithCurrency, marketCurrencySymbol, pctTone, resolveCloseOnDate, resolveFundNavOnDate } from './format'
 import { displayCodeFromInstrument, instrumentKey, resolveWatchlistInstrument } from './instrument'
 import PortfolioFeeEditor from './PortfolioFeeEditor'
 import {
@@ -35,11 +35,12 @@ import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import TradeDateField, { todayTradeDate } from './TradeDateField'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive } from '../theme/mixins'
+import { MARKET_PANEL_DRAWER_CLOSE_MS, MARKET_PANEL_DRAWER_MAX_WIDTH } from './marketPanelDrawer'
 
 type DialogTab = 'records' | 'trade'
 
-const DRAWER_CLOSE_MS = 220
-const DRAWER_MAX_WIDTH = 440
+const DRAWER_CLOSE_MS = MARKET_PANEL_DRAWER_CLOSE_MS
+const DRAWER_MAX_WIDTH = MARKET_PANEL_DRAWER_MAX_WIDTH
 const NOTE_SAVE_DEBOUNCE_MS = 400
 
 const useStyles = makeStyles({
@@ -394,7 +395,7 @@ interface Props {
   portfolioEnabled?: boolean
   onClose: () => void
   onSaveNote: (code: string, note: string) => void
-  loadTrades: (code: string, market?: string) => Promise<PortfolioTradeItem[]>
+  loadTrades: (code: string, market?: string, assetClass?: import('../types/instrument').InstrumentRef['assetClass']) => Promise<PortfolioTradeItem[]>
   submitTrade: (payload: {
     code: string
     market?: string
@@ -406,7 +407,7 @@ interface Props {
     side: 'buy' | 'sell'
     date?: string
   }) => Promise<PortfolioTradeItem[]>
-  deleteTrade: (id: number, code: string, market?: string) => Promise<PortfolioTradeItem[]>
+  deleteTrade: (id: number, code: string, market?: string, assetClass?: import('../types/instrument').InstrumentRef['assetClass']) => Promise<PortfolioTradeItem[]>
   onFeesRecalculated?: () => void
 }
 
@@ -524,7 +525,7 @@ export default function FollowStockDialog({
     }
     let cancelled = false
     setLoadingTrades(true)
-    void loadTrades(tradeCode, stockMarket).then(rows => {
+    void loadTrades(tradeCode, stockMarket, stockRef?.assetClass).then(rows => {
       if (!cancelled) {
         setTrades(rows)
         setDialogTab(rows.length > 0 ? 'records' : 'trade')
@@ -665,7 +666,7 @@ export default function FollowStockDialog({
       if (!resp.success) return
       if ((resp.data?.recalculatedTrades ?? 0) > 0) {
         onFeesRecalculated?.()
-        void loadTrades(tradeCode, stockRef.market).then(setTrades)
+        void loadTrades(tradeCode, stockRef.market, stockRef.assetClass).then(setTrades)
       }
     }).catch(() => { /* ignore */ })
   }, [stock, stockRef, tradeCode, onFeesRecalculated])
@@ -701,7 +702,7 @@ export default function FollowStockDialog({
   const handleDeleteTrade = useCallback(async (id: number) => {
     if (!stock) return
     try {
-      const rows = await deleteTrade(id, tradeCode, stockRef?.market)
+      const rows = await deleteTrade(id, tradeCode, stockRef?.market, stockRef?.assetClass)
       setTrades(rows)
     } catch { /* ignore */ }
   }, [stock, tradeCode, stockRef, deleteTrade])
@@ -761,7 +762,7 @@ export default function FollowStockDialog({
             <div className={s.metrics}>
               <div className={s.metric}>
                 <span className={s.metricLabel}>现价</span>
-                <span className={s.metricValue}>{formatPriceForMarket(stockRef?.market, currentPrice)}</span>
+                <span className={s.metricValue}>{formatPriceWithCurrency(stockRef?.market, currentPrice)}</span>
               </div>
               <div className={s.metric}>
                 <span className={s.metricLabel}>关注收益</span>
@@ -892,7 +893,7 @@ export default function FollowStockDialog({
                     <Text className={s.feeHint}>
                       预估成交额 {formatCompactNumberForMarket(stockRef?.market, estimateTradeAmount(Number(tradeForm.shares), Number(tradeForm.price)))}
                       {' · '}
-                      费用约 {previewFees.totalFee.toFixed(2)}
+                      费用约 {marketCurrencySymbol(stockRef?.market)}{previewFees.totalFee.toFixed(2)}
                       {ledgerKind === 'exchange'
                         ? `（佣金+过户${tradeForm.side === 'sell' ? '+印花税' : ''}）`
                         : `（${tradeForm.side === 'buy' ? '申购' : '赎回'}费）`}
@@ -918,6 +919,7 @@ export default function FollowStockDialog({
                   {feePanelOpen && stockRef && (
                     <PortfolioFeeEditor
                       ledgerKind={ledgerKind}
+                      market={stockRef.market}
                       globalFees={globalFees}
                       overrides={feeOverrides}
                       onChange={handleFeeOverridesChange}
@@ -955,9 +957,9 @@ export default function FollowStockDialog({
                             {t.tradeSide === 'buy' ? '买' : '卖'}
                           </Badge>
                           <div className={s.tradeMain}>
-                            <span>{t.tradeDate} · {t.shares} {positionUnit} @ {t.price.toFixed(2)}</span>
+                            <span>{t.tradeDate} · {t.shares} {positionUnit} @ {formatPriceWithCurrency(stockRef?.market, t.price)}</span>
                             <span className={s.sub}>
-                              成交额 {formatCompactNumberForMarket(stockRef?.market, t.amount)} · 费用 {t.totalFee.toFixed(2)}
+                              成交额 {formatCompactNumberForMarket(stockRef?.market, t.amount)} · 费用 {marketCurrencySymbol(stockRef?.market)}{t.totalFee.toFixed(2)}
                             </span>
                           </div>
                           <button

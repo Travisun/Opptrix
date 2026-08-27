@@ -5,8 +5,9 @@ import type { WatchlistGroupsDocument, WatchlistItem } from '../types/market'
 import WatchlistGroupsPanel from './WatchlistGroupsPanel'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, nativeIconInteractive } from '../theme/mixins'
+import { MARKET_PANEL_DRAWER_CLOSE_MS, MARKET_PANEL_DRAWER_MAX_WIDTH } from './marketPanelDrawer'
 
-const DRAWER_CLOSE_MS = 220
+const DRAWER_CLOSE_MS = MARKET_PANEL_DRAWER_CLOSE_MS
 
 const useStyles = makeStyles({
   scrim: {
@@ -43,6 +44,7 @@ const useStyles = makeStyles({
   drawer: {
     width: '100%',
     minWidth: 0,
+    maxWidth: `min(100%, ${MARKET_PANEL_DRAWER_MAX_WIDTH}px)`,
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',

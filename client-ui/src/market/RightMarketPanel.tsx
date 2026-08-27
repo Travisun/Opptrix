@@ -582,8 +582,8 @@ function RightMarketPanel({
             await refreshHoldings()
             return rows
           }}
-          deleteTrade={async (id, code, market) => {
-            const rows = await deleteTrade(id, code, market)
+          deleteTrade={async (id, code, market, assetClass) => {
+            const rows = await deleteTrade(id, code, market, assetClass)
             await refreshHoldings()
             return rows
           }}

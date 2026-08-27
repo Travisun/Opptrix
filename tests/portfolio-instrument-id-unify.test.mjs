@@ -15,6 +15,13 @@ test('portfolio migrate instrument_id_unify_portfolio_v1 — bare → Opptrix; i
   try { getUserDataStore().close() } catch { /* */ }
 
   const storeApi = getUserDataStore()
+  storeApi.setDocument('watchlist', 'default', {
+    items: [
+      { code: '600519', name: '贵州茅台' },
+      { code: '009049', name: '测试基金', instrument: { market: 'CN', assetClass: 'FUND', symbol: '009049', exchange: 'OF' } },
+      { code: 'AAPL', name: 'Apple', instrument: { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' } },
+    ],
+  })
   storeApi.setDocument('portfolio', 'default', {
     globalFees: {
       exchange: {

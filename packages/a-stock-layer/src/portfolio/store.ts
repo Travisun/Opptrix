@@ -1,5 +1,6 @@
 import type { AssetClass, Market } from '@opptrix/shared'
 import type { InstrumentFeeOverrides, PortfolioGlobalFees } from '@opptrix/shared'
+import { normalizePortfolioGlobalFees } from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { TradeRecord } from './trade-models.js'
 import {
@@ -74,7 +75,7 @@ function normalizeLoadedState(raw: LegacyDbState): DbState {
   const base = defaultState()
   if (raw.globalFees) {
     return {
-      globalFees: raw.globalFees,
+      globalFees: normalizePortfolioGlobalFees(raw.globalFees),
       instrumentFees: raw.instrumentFees ?? {},
       trades: raw.trades ?? [],
       nextId: raw.nextId ?? 1,
@@ -249,7 +250,7 @@ export class PortfolioStore {
   }
 
   setGlobalFees(globalFees: PortfolioGlobalFees): { globalFees: PortfolioGlobalFees; recalculatedTrades: number } {
-    this.state.globalFees = structuredClone(globalFees)
+    this.state.globalFees = normalizePortfolioGlobalFees(globalFees)
     const recalculatedTrades = this.recomputeAllTradeFees()
     this.save()
     return { globalFees: this.getGlobalFees(), recalculatedTrades }
