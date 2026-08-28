@@ -3,7 +3,7 @@
  * Used by Electron main (production) and dev launch scripts.
  */
 const net = require('node:net')
-const { execSync } = require('node:child_process')
+const { execSync, spawnSync } = require('node:child_process')
 
 const API_HOST = '127.0.0.1'
 const DEFAULT_API_PORT = 8711
@@ -115,7 +115,9 @@ function getProcessCommand(pid) {
 
 function isOpptrixServerCommand(command) {
   if (!command) return false
-  return /apps[\\/]+server[\\/]+dist[\\/]+index\.js|@opptrix[\\/]+server|stock-research|opptrix/i.test(command)
+  return /apps[\\/]+server[\\/]+dist[\\/]+index\.js|runtime-stage[\\/].*index\.js|@opptrix[\\/]+server|stock-research|opptrix\.exe.*index\.js|ELECTRON_RUN_AS_NODE/i.test(
+    command,
+  )
 }
 
 function isOpptrixViteCommand(command) {
@@ -132,6 +134,37 @@ async function waitForPortFree(port, timeoutMs = 5000) {
   return !(await isPortListening(port))
 }
 
+/**
+ * Windows: taskkill /T kills child tree (sidecar under Opptrix.exe).
+ * @param {number} pid
+ * @param {boolean} [force]
+ */
+function killPidTree(pid, force = false) {
+  if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) return false
+  if (process.platform === 'win32') {
+    try {
+      const args = force
+        ? ['/F', '/T', '/PID', String(pid)]
+        : ['/PID', String(pid), '/T']
+      const result = spawnSync('taskkill', args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        timeout: 4000,
+      })
+      return result.status === 0 || /not found|no running instance|找不到/i.test(String(result.stderr ?? ''))
+    } catch {
+      return false
+    }
+  }
+  try {
+    process.kill(pid, force ? 'SIGKILL' : 'SIGTERM')
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function tryCleanupStaleListeners(port, { forWeb = false, aggressive = false } = {}) {
   const pids = getListenPids(port)
   let killed = false
@@ -141,33 +174,47 @@ async function tryCleanupStaleListeners(port, { forWeb = false, aggressive = fal
     const command = getProcessCommand(pid)
     const matches = forWeb ? isOpptrixViteCommand(command) : isOpptrixServerCommand(command)
     if (!matches && !aggressive) continue
-    try {
-      process.kill(pid, 'SIGTERM')
-      killed = true
-    } catch {
-      /* ignore */
-    }
+    if (killPidTree(pid, false)) killed = true
   }
 
   if (killed) {
-    const freed = await waitForPortFree(port, 4000)
+    const freed = await waitForPortFree(port, 5000)
     if (!freed) {
       for (const pid of getListenPids(port)) {
         if (pid === process.pid) continue
         const command = getProcessCommand(pid)
         const matches = forWeb ? isOpptrixViteCommand(command) : isOpptrixServerCommand(command)
         if (!matches && !aggressive) continue
-        try {
-          process.kill(pid, 'SIGKILL')
-          killed = true
-        } catch {
-          /* ignore */
-        }
+        if (killPidTree(pid, true)) killed = true
       }
-      await sleep(300)
+      await waitForPortFree(port, 3000)
     }
   }
   return killed
+}
+
+/**
+ * Aggressive multi-pass cleanup until port is free or health is Opptrix-ok.
+ * @param {number} port
+ * @param {{ maxPasses?: number, waitMs?: number }} [opts]
+ */
+async function forceReleaseApiPort(port, opts = {}) {
+  const maxPasses = opts.maxPasses ?? 3
+  const waitMs = opts.waitMs ?? 5000
+  let cleaned = false
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const health = await probeOpptrixHealth(port)
+    if (health) return { released: false, reused: true, health, cleaned }
+    if (!(await isPortListening(port))) {
+      return { released: true, reused: false, cleaned }
+    }
+    cleaned = (await tryCleanupStaleListeners(port, { aggressive: true })) || cleaned
+    if (await waitForPortFree(port, waitMs)) {
+      return { released: true, reused: false, cleaned }
+    }
+    await sleep(200)
+  }
+  return { released: !(await isPortListening(port)), reused: false, cleaned }
 }
 
 /** Force-clean Opptrix API listeners on a port (SIGTERM → SIGKILL). */
@@ -206,10 +253,14 @@ async function resolveApiPort(opts = {}) {
     return { port: base, mode: 'use' }
   }
 
-  // 端口占用但 health 不通 — 多为 K 线导入等卡死的事件循环，视为僵尸 sidecar
+  // 端口占用但 health 不通 — 多为僵尸 sidecar；强制多轮清理（Win taskkill /T）
   const staleSidecar = !health
   if (allowCleanup) {
-    await tryCleanupStaleListeners(base, { aggressive: staleSidecar })
+    if (staleSidecar) {
+      await forceReleaseApiPort(base, { maxPasses: 3 })
+    } else {
+      await tryCleanupStaleListeners(base, { aggressive: false })
+    }
     if (!(await isPortListening(base))) {
       return { port: base, mode: 'use', cleaned: true }
     }
@@ -335,6 +386,7 @@ module.exports = {
   applyPortEnv,
   cleanupStaleApiListeners,
   describePortPlan,
+  forceReleaseApiPort,
   isPortListening,
   logPortPlan,
   probeOpptrixHealth,

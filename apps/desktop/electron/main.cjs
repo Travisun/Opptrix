@@ -10,6 +10,7 @@ const {
   waitForHealth: waitForSidecarHealth,
   stopChild,
   serverEntryPath,
+  sidecarHealthTimeoutMs,
 } = require('./os-schedule/sidecar-launch.cjs')
 const {
   SIDECAR_GRACEFUL_MS,
@@ -25,7 +26,7 @@ const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu, listApplicationMenuTopItems, popupApplicationMenuAt } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
 const { clearMacAppQuarantine } = require('./clear-mac-quarantine.cjs')
-const { initUpdater, registerUpdaterIpc, resumePendingUpdateOnStartup, isUpdateReady, installPendingUpdate } = require('./updater.cjs')
+const { initUpdater, registerUpdaterIpc, tryQuickPendingUpdateOnStartup, tryDeferredPendingUpdateOnStartup, isUpdateReady, installPendingUpdate } = require('./updater.cjs')
 const {
   deliverProtocolUrl,
   findProtocolUrl,
@@ -70,8 +71,16 @@ const {
   resolveApiPort,
   resolveWebPort,
   logPortPlan,
+  forceReleaseApiPort,
 } = require('./resolve-ports.cjs')
+const { createBootloader } = require('./bootloader.cjs')
+const { registerDesktopBootloader } = require('./bootloader-register.cjs')
 const windowState = require('./window-state.cjs')
+
+/** Unified boot / shutdown hook runner (see bootloader-register.cjs). */
+const boot = createBootloader()
+let bootHooksRegistered = false
+let shutdownChainRunning = false
 
 const isDev = !app.isPackaged
 const launchArgs = parseLaunchArgs()
@@ -287,6 +296,58 @@ function stopSidecarSupervision() {
   }
 }
 
+function registerBootHooksIfNeeded() {
+  if (bootHooksRegistered) return
+  bootHooksRegistered = true
+  registerDesktopBootloader(boot, {
+    initResolvedPorts,
+    tryQuickPendingUpdate: async () => {
+      const quitting = await tryQuickPendingUpdateOnStartup({ version: VERSION })
+      return quitting
+    },
+    tryDeferredPendingUpdate: () => tryDeferredPendingUpdateOnStartup({ version: VERSION }),
+    startSidecarHealthWatchdog,
+    startScheduleReconcilePoll,
+    initUpdater: () => initUpdater({ version: VERSION }),
+    maybeBootstrapOfflineModelDownloads: () => {
+      void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('translation-download-progress', progress)
+          }
+        }
+      })
+    },
+    requestNotificationPermission: () => {
+      if (app.isPackaged) void requestNotificationPermission()
+    },
+    stopScheduleReconcilePoll,
+    stopSidecarAndWait,
+    disposeTranslation,
+    destroyTray,
+    intentionalSidecarStopRef: {
+      get current() { return intentionalSidecarStop },
+      set current(v) { intentionalSidecarStop = v },
+    },
+    stopSidecarSupervision,
+  })
+}
+
+async function runShutdownChain(reason) {
+  if (shutdownChainRunning) return
+  shutdownChainRunning = true
+  app.isQuitting = true
+  intentionalSidecarStop = true
+  try {
+    registerBootHooksIfNeeded()
+    await boot.runShutdown({ reason })
+    sidecarQuitPrepared = true
+    serverProcess = null
+  } finally {
+    shutdownChainRunning = false
+  }
+}
+
 function spawnSidecar() {
   const root = repoRoot()
   const entry = serverEntryPath(root)
@@ -322,7 +383,7 @@ function spawnSidecar() {
   return serverProcess
 }
 
-async function waitForHealth(timeoutMs = 30_000) {
+async function waitForHealth(timeoutMs = sidecarHealthTimeoutMs(isDev)) {
   await waitForSidecarHealth(API_HOST, API_PORT, timeoutMs)
 }
 
@@ -705,9 +766,6 @@ function prepareForUpdateInstall() {
   app.isUpdating = true
   app.isQuitting = true
   prepareForUpdateInstallPromise = (async () => {
-    // 1) 停主进程内调度轮询，避免安装窗口期再 reconcile / 拉起 tick
-    stopScheduleReconcilePoll()
-    // 2) 卸掉 OS 级 tick（launchd / schtasks / systemd），防止第二实例顶上
     try {
       const paused = await pauseOsScheduleForUpdateInstall()
       if (!paused.ok) {
@@ -716,11 +774,7 @@ function prepareForUpdateInstall() {
     } catch (err) {
       console.warn('[updater] pause OS schedule tick failed:', err)
     }
-    // 3) 托盘会让进程在关窗后仍存活；安装前必须拆掉
-    destroyTray()
-    // 4) sidecar 可能正跑计划任务；宽限原生模块关闭后再强杀，再交给 ShipIt
-    await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
-    sidecarQuitPrepared = true
+    await runShutdownChain('update-install')
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue
       try {
@@ -731,7 +785,7 @@ function prepareForUpdateInstall() {
         /* ignore */
       }
     }
-    // 5) 强杀同 bundle / 安装目录残留（Helper、孤儿实例、sidecar 孙进程等），排除 self
+    // 强杀同 bundle / 安装目录残留（Helper、孤儿实例、sidecar 孙进程等），排除 self
     try {
       await killResidualAppProcessesForUpdate()
     } catch (err) {
@@ -751,13 +805,7 @@ async function quitApp() {
     return
   }
   if (app.isUpdating) return
-  app.isQuitting = true
-  intentionalSidecarStop = true
-  stopSidecarSupervision()
-  stopScheduleReconcilePoll()
-  destroyTray()
-  await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
-  sidecarQuitPrepared = true
+  await runShutdownChain('quit-app')
   allowQuit = true
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
@@ -769,7 +817,6 @@ async function quitApp() {
     }
   }
   app.quit()
-  // Windows / Linux：托盘或 AppImage 更新后偶发不退；短超时强制 exit（更新路径另有 scheduleInstallExitGuards）
   if (process.platform === 'win32' || process.platform === 'linux') {
     setTimeout(() => {
       if (app.isUpdating) return
@@ -1046,16 +1093,15 @@ async function loadAppInMainWindow(win, { enforceMinSplash = true, sidecarAlread
   }
 }
 
-async function ensureSidecarReady() {
+async function ensureSidecarReadyOnce(timeoutMs) {
   if (isDev) {
-    await waitForHealth()
+    await waitForHealth(timeoutMs)
     return
   }
   if (apiPortMode === 'reuse') {
-    await waitForHealth()
+    await waitForHealth(timeoutMs)
     return
   }
-  // Spawn 前先 probe：托盘二次唤起 / second-instance 等场景下健康窗可 reuse，避免双开
   if (!serverProcess) {
     const healthy = await probeSidecarHealth(2500)
     if (healthy) {
@@ -1064,7 +1110,29 @@ async function ensureSidecarReady() {
     }
     spawnSidecar()
   }
-  await waitForHealth()
+  await waitForHealth(timeoutMs)
+}
+
+async function ensureSidecarReady() {
+  const timeoutMs = sidecarHealthTimeoutMs(isDev)
+  try {
+    await ensureSidecarReadyOnce(timeoutMs)
+  } catch (firstErr) {
+    if (isDev || apiPortMode === 'reuse') throw firstErr
+    console.warn(
+      '[sidecar] ensure failed; releasing port and retrying once:',
+      firstErr instanceof Error ? firstErr.message : firstErr,
+    )
+    await forceReleaseApiPort(Number(API_PORT), { maxPasses: 3 })
+    if (serverProcess) {
+      intentionalSidecarStop = true
+      await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
+      intentionalSidecarStop = false
+    }
+    apiPortMode = 'use'
+    spawnSidecar()
+    await waitForHealth(timeoutMs)
+  }
 }
 
 async function bootstrapApp({ withSplash = true } = {}) {
@@ -1142,7 +1210,6 @@ async function bootstrapBackgroundApp() {
   await reconcileOsSchedule().catch((err) => {
     console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
   })
-  startScheduleReconcilePoll()
 }
 
 /**
@@ -1150,13 +1217,7 @@ async function bootstrapBackgroundApp() {
  * 新注册的 OS tick 不再指向此路径（见 headless-tick.cjs）。
  */
 async function exitAfterEphemeralScheduleTick() {
-  app.isQuitting = true
-  intentionalSidecarStop = true
-  stopSidecarSupervision()
-  stopScheduleReconcilePoll()
-  destroyTray()
-  await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
-  sidecarQuitPrepared = true
+  await runShutdownChain('schedule-tick-exit')
   allowQuit = true
   app.quit()
   if (process.platform === 'win32' || process.platform === 'linux') {
@@ -1210,7 +1271,6 @@ async function bootstrapForegroundApp({ withSplash = true } = {}) {
   await reconcileOsSchedule().catch((err) => {
     console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
   })
-  startScheduleReconcilePoll()
   return true
 }
 
@@ -1644,16 +1704,18 @@ if (!gotTheLock) {
     setupDesktopChrome()
     registerWindowIpc()
 
-    const portsOk = await initResolvedPorts()
-    if (!portsOk) {
+    registerBootHooksIfNeeded()
+    /** @type {{ quittingForUpdate?: boolean }} */
+    const bootCtx = {}
+    try {
+      await boot.runBootCritical(bootCtx)
+    } catch (err) {
+      console.error('[boot] critical chain failed:', err instanceof Error ? err.message : err)
       app.quit()
       return
     }
-
-    if (app.isPackaged) {
-      const quittingForUpdate = await resumePendingUpdateOnStartup({ version: VERSION })
-      // true：已 destroy 窗口并进入 quitAndInstall；退出/恢复看门狗在 updater.triggerInstall
-      if (quittingForUpdate) return
+    if (bootCtx.quittingForUpdate) {
+      return
     }
 
     await continueDesktopBootstrap({
@@ -1715,20 +1777,7 @@ if (!gotTheLock) {
     if (launchUrl) deliverProtocolUrl(launchUrl)
     else flushPendingProtocolUrl()
 
-    if (app.isPackaged) {
-      void requestNotificationPermission()
-    }
-
-    // 本地翻译模型按需加载（首次 translate / 显式 preload），启动不占显存
-    void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('translation-download-progress', progress)
-        }
-      }
-    })
-    initUpdater({ version: VERSION })
-    startSidecarHealthWatchdog()
+    boot.runBootDeferred({ background, withSplash })
     return true
   }
 
@@ -1747,61 +1796,33 @@ if (!gotTheLock) {
     // 更新安装中由 quitAndInstall 接管退出；勿抢先 app.quit()
     if (app.isUpdating) return
     if (app.isPackaged && hasTray()) return
-    // quitApp / before-quit 已在停 sidecar：勿双重 SIGKILL
     if (app.isQuitting) {
       if (allowQuit || sidecarQuitPrepared || !serverProcess) {
         app.quit()
       }
       return
     }
-    app.isQuitting = true
-    intentionalSidecarStop = true
-    stopSidecarSupervision()
-    void (async () => {
-      await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
-      sidecarQuitPrepared = true
+    void runShutdownChain('window-all-closed').then(() => {
       allowQuit = true
       app.quit()
-    })()
+    })
   })
 
   app.on('before-quit', (event) => {
     app.isQuitting = true
-    intentionalSidecarStop = true
-    stopSidecarSupervision()
-    stopScheduleReconcilePoll()
-
     if (allowQuit || sidecarQuitPrepared) {
-      destroyTray()
       void disposeTranslation()
       return
     }
-
-    // quitApp 等路径已等过 sidecar（process 已 null）→ 直接放行
-    if (!serverProcess || serverProcess.killed || serverProcess.exitCode != null) {
-      serverProcess = null
-      sidecarQuitPrepared = true
-      destroyTray()
-      void disposeTranslation()
+    if (shutdownChainRunning) {
+      event.preventDefault()
       return
     }
-
-    // Cmd+Q：先宽限停 sidecar，再允许真正退出（避免硬杀原生模块导致 SIGABRT）
     event.preventDefault()
-    void (async () => {
-      try {
-        await stopSidecarAndWait(SIDECAR_GRACEFUL_MS)
-      } catch (err) {
-        console.warn(
-          '[sidecar] graceful stop on quit failed:',
-          err instanceof Error ? err.message : err,
-        )
-      }
-      sidecarQuitPrepared = true
+    void runShutdownChain('before-quit').then(() => {
       allowQuit = true
-      destroyTray()
       void disposeTranslation()
       app.quit()
-    })()
+    })
   })
 }
