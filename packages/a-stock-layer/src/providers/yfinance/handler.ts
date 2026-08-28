@@ -12,6 +12,7 @@ import {
   resolveYfinanceGlobalIndex,
 } from './symbols.js'
 import { listYfinanceSectorBoards } from './sectors.js'
+import { normalizeCode } from '../../utils/helpers.js'
 import {
   mapChartQuotesToIndexKlines,
   mapChartQuotesToKlines,
@@ -41,7 +42,7 @@ function periodStartDate(period: ChartInterval, count: number): Date {
 
 function marketFromTicker(ticker: string): Market {
   const upper = ticker.toUpperCase()
-  if (upper === '^HSI' || upper.endsWith('.HK')) return 'HK'
+  if (upper === '^HSI' || upper === '^HSCE' || upper === 'HSTECH.HK' || upper.endsWith('.HK')) return 'HK'
   if (upper === '^N225' || upper.endsWith('.T')) return 'JP'
   if (upper === '^KS11' || upper.endsWith('.KS')) return 'KR'
   if (upper.endsWith('.SS') || upper.endsWith('.SZ')) return 'CN'
@@ -58,6 +59,30 @@ function asYahooQuote(quote: unknown): Parameters<typeof mapQuoteToGlobalIndex>[
 
 function asQuoteSummary(summary: unknown): Parameters<typeof mapQuoteSummaryToProfile>[1] {
   return summary as Parameters<typeof mapQuoteSummaryToProfile>[1]
+}
+
+function resolveBatchQuoteMarket(
+  code: string,
+  markets?: Record<string, Market | undefined>,
+): Market {
+  const raw = code.trim()
+  const candidates = [
+    raw,
+    raw.toUpperCase(),
+    normalizeCode(raw),
+    raw.padStart(5, '0'),
+    normalizeCode(raw).padStart(5, '0'),
+  ]
+  for (const key of candidates) {
+    const hit = markets?.[key]
+    if (hit) return hit
+  }
+  if (raw.endsWith('.HK') || raw.toUpperCase() === 'HSTECH.HK' || /^\d{4,5}$/.test(normalizeCode(raw))) {
+    return 'HK'
+  }
+  if (raw.endsWith('.T')) return 'JP'
+  if (raw.endsWith('.KS')) return 'KR'
+  return 'US'
 }
 
 export class YfinanceMarketHandler extends MarketHandlerShell {
@@ -126,7 +151,7 @@ export class YfinanceMarketHandler extends MarketHandlerShell {
   ): Promise<import('@opptrix/shared').StockRealtime[] | null> {
     if (!codes.length) return null
     const pairs = codes.map(code => {
-      const mkt = markets?.[code] ?? markets?.[code.trim().toUpperCase()] ?? 'US'
+      const mkt = resolveBatchQuoteMarket(code, markets)
       const ticker = resolveYahooEquityTicker(mkt, code)
       return ticker ? { code, mkt, ticker } : null
     }).filter((row): row is { code: string; mkt: Market; ticker: string } => row != null)

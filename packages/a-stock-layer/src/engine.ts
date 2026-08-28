@@ -1220,13 +1220,20 @@ export class MarketDataEngine {
     const normalized = market === 'US'
       ? symbols.map(s => normalizeUsSymbol(s))
       : symbols
+    const marketsMap = Object.fromEntries(
+      normalized.flatMap(code => {
+        const key = code.trim()
+        const padded = market === 'HK' ? key.padStart(5, '0') : key
+        return [[key, market], [padded, market], [key.toUpperCase(), market]]
+      }),
+    )
     return this.qScoped(
       market,
       'EQUITY',
       Capability.STOCK_REALTIME,
       'batchRealtime',
       false,
-      normalized,
+      [normalized, marketsMap],
     )
   }
 

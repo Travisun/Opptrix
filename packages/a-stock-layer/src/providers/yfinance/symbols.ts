@@ -16,6 +16,8 @@ export const YFINANCE_GLOBAL_INDICES: YfinanceGlobalIndex[] = [
   { outCode: 'IXIC', yahoo: '^IXIC', name: '纳斯达克', market: 'US' },
   { outCode: 'DJI', yahoo: '^DJI', name: '道琼斯', market: 'US' },
   { outCode: 'HSI', yahoo: '^HSI', name: '恒生指数', market: 'HK' },
+  { outCode: 'HSCE', yahoo: '^HSCE', name: '恒生国企', market: 'HK' },
+  { outCode: 'HSTECH', yahoo: 'HSTECH.HK', name: '恒生科技', market: 'HK' },
   { outCode: 'N225', yahoo: '^N225', name: '日经225', market: 'JP' },
   { outCode: 'KOSPI', yahoo: '^KS11', name: '韩国综合', market: 'KR' },
   { outCode: 'FTSE', yahoo: '^FTSE', name: '富时100', market: 'UK' },
@@ -39,6 +41,13 @@ const ALIAS_TO_OUT: Record<string, string> = {
   '^dji': 'DJI',
   hsi: 'HSI',
   '^hsi': 'HSI',
+  hsce: 'HSCE',
+  '^hsce': 'HSCE',
+  hscei: 'HSCE',
+  '^hscei': 'HSCE',
+  hstech: 'HSTECH',
+  '^hstech': 'HSTECH',
+  'hstech.hk': 'HSTECH',
   n225: 'N225',
   nikkei: 'N225',
   '^n225': 'N225',
@@ -95,6 +104,8 @@ export function resolveYahooIndexTicker(
   }
   if (mkt === 'HK') {
     if (raw.toUpperCase() === 'HSI') return '^HSI'
+    if (raw.toUpperCase() === 'HSCE' || raw.toUpperCase() === 'HSCEI') return '^HSCE'
+    if (raw.toUpperCase() === 'HSTECH') return 'HSTECH.HK'
     const hk = normalizeCode(raw)
     if (/^\d{4,5}$/.test(hk)) return `${hk}.HK`
     return raw.includes('.') ? raw : `${raw}.HK`

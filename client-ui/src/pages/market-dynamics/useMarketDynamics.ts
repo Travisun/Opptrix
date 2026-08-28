@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { news, research } from '../../api/client'
 import type { FeedArticle, MarketDynamicsData } from '../../types/schemas'
-import type { MarketDynamicsTab } from './marketDynamicsStorage'
 
 const NEWS_REFRESH_MS = 60_000
 const MARKET_REFRESH_MS = 30_000
 
-export function useMarketInsights(market: MarketDynamicsTab = 'cn') {
+function filterCnArticles(articles: FeedArticle[]): FeedArticle[] {
+  return articles.filter(article => {
+    const text = `${article.title} ${article.source_title ?? ''}`.toLowerCase()
+    return /a股|沪深|上证|深证|创业板|科创板|北交所|cn\b|china/i.test(text)
+      || !/美股|nasdaq|nyse|港股|恒生|crypto|btc/i.test(text)
+  })
+}
+
+export function useMarketInsights() {
   const [articles, setArticles] = useState<FeedArticle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -19,12 +26,7 @@ export function useMarketInsights(market: MarketDynamicsTab = 'cn') {
       const feedResp = await news.getFeed({ limit: 24 }).catch(() => null)
       if (!mountedRef.current) return
       if (feedResp?.articles) {
-        const filtered = feedResp.articles.filter(article => {
-          const text = `${article.title} ${article.source_title ?? ''}`.toLowerCase()
-          return /a股|沪深|上证|深证|创业板|科创板|北交所|cn\b|china/i.test(text)
-            || !/美股|nasdaq|nyse|港股|恒生|crypto|btc/i.test(text)
-        })
-        setArticles(filtered.slice(0, 12))
+        setArticles(filterCnArticles(feedResp.articles).slice(0, 12))
       }
     } catch (e) {
       if (!mountedRef.current) return
@@ -32,7 +34,7 @@ export function useMarketInsights(market: MarketDynamicsTab = 'cn') {
     } finally {
       if (mountedRef.current) setLoading(false)
     }
-  }, [market])
+  }, [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -47,7 +49,7 @@ export function useMarketInsights(market: MarketDynamicsTab = 'cn') {
   return { articles, loading, error, refresh: () => load({ silent: true }) }
 }
 
-export function useMarketDynamics(market: MarketDynamicsTab = 'cn') {
+export function useMarketDynamics() {
   const [data, setData] = useState<MarketDynamicsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -60,10 +62,13 @@ export function useMarketDynamics(market: MarketDynamicsTab = 'cn') {
     else setRefreshing(true)
     setError('')
     try {
-      const resp = await research.marketDynamics({ market })
+      const resp = await research.marketDynamics({ market: 'cn' })
       if (!mountedRef.current) return
       if (resp.success && resp.data) {
-        setData(resp.data)
+        setData({
+          ...resp.data,
+          market: resp.data.market ?? 'cn',
+        })
       } else {
         setError(resp.message || '暂时无法获取市场数据')
       }
@@ -76,7 +81,7 @@ export function useMarketDynamics(market: MarketDynamicsTab = 'cn') {
         setRefreshing(false)
       }
     }
-  }, [market])
+  }, [])
 
   useEffect(() => {
     mountedRef.current = true

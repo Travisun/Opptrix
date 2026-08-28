@@ -13,8 +13,9 @@ import type { ChartResultArray } from 'yahoo-finance2/modules/chart'
 import type { Quote, QuoteOptions } from 'yahoo-finance2/modules/quote'
 import { sleep } from '../../utils/http-shared.js'
 import {
-  YFINANCE_QUERY_HOST,
+  yfinanceFetchHeaders,
   yfinanceMaxRetries,
+  yfinanceQueryHost,
   yfinanceQueueIntervalMs,
   yfinanceQuoteCombineDebounceMs,
   yfinanceQuoteCombineMaxSymbols,
@@ -35,9 +36,22 @@ function isRetriableYahooError(err: unknown): boolean {
 }
 
 function createYahooFinanceClient(): YahooFinanceClient {
+  const browserHeaders = yfinanceFetchHeaders()
+  const browserFetch: typeof fetch = (input, init) => {
+    const headers = new Headers(init?.headers)
+    for (const [key, value] of Object.entries(browserHeaders)) {
+      headers.set(key, value)
+    }
+    return fetch(input, { ...init, headers })
+  }
+
   return new YahooFinance({
     suppressNotices: ['yahooSurvey'],
-    YF_QUERY_HOST: YFINANCE_QUERY_HOST,
+    YF_QUERY_HOST: yfinanceQueryHost(),
+    fetch: browserFetch,
+    fetchOptions: {
+      headers: browserHeaders,
+    },
     queue: {
       concurrency: 1,
       interval: yfinanceQueueIntervalMs(),

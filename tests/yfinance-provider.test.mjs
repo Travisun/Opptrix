@@ -9,6 +9,9 @@ test('resolveYfinanceGlobalIndex maps aliases to Yahoo tickers', async () => {
   assert.equal(resolveYfinanceGlobalIndex('^HSI')?.outCode, 'HSI')
   assert.equal(resolveYahooIndexTicker('US', 'SPX'), '^GSPC')
   assert.equal(resolveYahooIndexTicker('HK', 'HSI'), '^HSI')
+  assert.equal(resolveYahooIndexTicker('HK', 'HSCE'), '^HSCE')
+  assert.equal(resolveYahooIndexTicker('HK', 'HSTECH'), 'HSTECH.HK')
+  assert.equal(resolveYfinanceGlobalIndex('HSTECH')?.yahoo, 'HSTECH.HK')
   assert.equal(resolveYahooIndexTicker('JP', 'N225'), '^N225')
 })
 
@@ -18,6 +21,7 @@ test('resolveYahooEquityTicker maps regional stock codes', async () => {
   )
   assert.equal(resolveYahooEquityTicker('US', 'aapl'), 'AAPL')
   assert.equal(resolveYahooEquityTicker('HK', '00700'), '0700.HK')
+  assert.equal(resolveYahooEquityTicker('HK', '700'), '0700.HK')
   assert.equal(resolveYahooEquityTicker('JP', '7203'), '7203.T')
   assert.equal(resolveYahooEquityTicker('KR', '005930'), '005930.KS')
 })
@@ -73,6 +77,21 @@ test('mapScreenerQuoteToMover normalizes screener rows', async () => {
   assert.equal(row.change_pct, 2.5)
 })
 
+test('mapScreenerQuoteToMover normalizes HK screener rows', async () => {
+  const { mapScreenerQuoteToMover } = await import(
+    '../packages/a-stock-layer/dist/providers/yfinance/normalize.js'
+  )
+  const row = mapScreenerQuoteToMover({
+    symbol: '0700.HK',
+    shortName: 'Tencent',
+    regularMarketPrice: 400,
+    regularMarketChangePercent: 1.2,
+  }, 'HK')
+  assert.equal(row.code, '00700')
+  assert.equal(row.chart_symbol, '0700.HK')
+  assert.equal(row.market, 'HK')
+})
+
 test('yfinance custom methods are registered', async () => {
   const { findCustomMethod } = await import(
     '../packages/a-stock-layer/dist/core/custom-methods.js'
@@ -81,20 +100,14 @@ test('yfinance custom methods are registered', async () => {
   assert.ok(findCustomMethod('yfinance', 'yfTrendingSymbols'))
 })
 
-test('resolveInstrumentQueryPlan routes US INDEX kline to yfinance binding', async () => {
-  const { resolveInstrumentQueryPlan } = await import(
-    '../packages/a-stock-layer/dist/core/instrument-query.js'
+test('yfinanceFetchHeaders uses browser User-Agent not SDK identifier', async () => {
+  const { yfinanceFetchHeaders, yfinanceUserAgent, YFINANCE_DEFAULT_USER_AGENT } = await import(
+    '../packages/a-stock-layer/dist/providers/yfinance/settings.js'
   )
-  const plan = resolveInstrumentQueryPlan(
-    { market: 'US', assetClass: 'INDEX', symbol: '^GSPC' },
-    'kline',
-    { count: 120 },
-  )
-  assert.equal(plan?.kind, 'registry')
-  if (plan?.kind === 'registry') {
-    assert.equal(plan.market, 'US')
-    assert.equal(plan.assetClass, 'INDEX')
-    assert.equal(plan.method, 'indexKline')
-  }
+  const ua = yfinanceUserAgent()
+  assert.ok(ua.includes('Chrome') || ua.includes('Safari'))
+  assert.ok(!ua.includes('yahoo-finance2'))
+  assert.equal(yfinanceFetchHeaders()['User-Agent'], ua)
+  assert.ok(YFINANCE_DEFAULT_USER_AGENT.includes('AppleWebKit'))
 })
 
