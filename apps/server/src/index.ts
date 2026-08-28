@@ -7,6 +7,8 @@ import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@oppt
 import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
+import { registerAuthRoutes } from './auth-routes.js'
+import { registerOwnerAuthHook, shouldExposeFullHealth } from './auth-hook.js'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
@@ -260,6 +262,8 @@ setEnrichmentPersistHook(doc => {
 })
 
 const app = Fastify({ logger: true, bodyLimit: ATTACHMENT_UPLOAD_BODY_LIMIT })
+registerOwnerAuthHook(app)
+registerAuthRoutes(app)
 
 const scheduleService = getScheduleService()
 const workspaceService = getWorkspaceService()
@@ -318,20 +322,26 @@ app.get<{ Params: { code: string } }>('/api/stock/:code/prep', async (req) => {
   return { prep: getStockPrep(req.params.code) }
 })
 
-app.get('/api/health', async () => ({
-  status: 'ok',
-  version: APP_VERSION,
-  runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
-  desktop: process.env.OPPTRIX_DESKTOP === '1',
-  llm_configured: agent.llmConfigured,
-  model: cfg.default_model ?? null,
-  available_models: agent.listAvailableModels().length,
-  scorecard: cfg.default_scorecard,
-  tools: agent.tools.list().length,
-  mcp_tools: agent.tools.mcpTools().length,
-  mining_tools: agent.tools.miningTools().length,
-  factors: REGISTRY.count(),
-}))
+app.get('/api/health', async (req) => {
+  const publicBody = {
+    status: 'ok' as const,
+    version: APP_VERSION,
+  }
+  if (!shouldExposeFullHealth(req)) return publicBody
+  return {
+    ...publicBody,
+    runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
+    desktop: process.env.OPPTRIX_DESKTOP === '1',
+    llm_configured: agent.llmConfigured,
+    model: cfg.default_model ?? null,
+    available_models: agent.listAvailableModels().length,
+    scorecard: cfg.default_scorecard,
+    tools: agent.tools.list().length,
+    mcp_tools: agent.tools.mcpTools().length,
+    mining_tools: agent.tools.miningTools().length,
+    factors: REGISTRY.count(),
+  }
+})
 
 app.get('/api/legal/user-agreement', async (_req, reply) => {
   try {

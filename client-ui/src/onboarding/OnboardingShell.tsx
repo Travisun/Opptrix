@@ -3,6 +3,8 @@ import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import { desktopFrameTitlebarHeight } from '../desktop/layout'
+import MacTrafficLights from '../desktop/MacTrafficLights'
+import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { electronPlatform, isElectron } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
 import {
@@ -438,11 +440,14 @@ export function OnboardingShell({
   children,
 }: OnboardingShellProps) {
   const s = useOnboardingShellStyles()
+  const macFullscreen = useElectronFullscreen()
   const electronChrome = isElectron()
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
   // Only when there is no primary WindowFrameTitleBar (darwin / Web keep current behavior).
   const showOnboardingElectronTitleBar =
     electronChrome && desktopFrameTitlebarHeight() === 0
+  const showTrafficLights =
+    showOnboardingElectronTitleBar && electronPlatform() === 'darwin' && !macFullscreen
   const isDisplay = layoutMode === 'display'
   const railClass = chromeRailClass(s, { isDisplay, contentWide })
 
@@ -458,6 +463,7 @@ export function OnboardingShell({
         className={mergeClasses(s.titleBarDragOverlay, 'opptrix-onboarding-title-drag')}
         aria-hidden
       />
+      {showTrafficLights ? <MacTrafficLights /> : null}
       <Text className={s.titleBarBrand} block>
         Opptrix
       </Text>

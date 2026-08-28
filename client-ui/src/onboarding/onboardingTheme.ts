@@ -5,22 +5,27 @@ export type OnboardingPhase =
   | 'data'
   | 'fuyao'
   | 'community'
+  | 'account'
   | 'legal'
 
 export interface OnboardingNavStep {
   phase: OnboardingPhase
 }
 
-export function buildOnboardingSteps(): OnboardingNavStep[] {
-  return [
+export function buildOnboardingSteps(opts?: { includeAccount?: boolean }): OnboardingNavStep[] {
+  const steps: OnboardingNavStep[] = [
     { phase: 'intro' },
     { phase: 'llm' },
     { phase: 'mcp' },
     { phase: 'data' },
     { phase: 'fuyao' },
     { phase: 'community' },
-    { phase: 'legal' },
   ]
+  if (opts?.includeAccount !== false) {
+    steps.push({ phase: 'account' })
+  }
+  steps.push({ phase: 'legal' })
+  return steps
 }
 
 export function stepLabel(step: OnboardingNavStep): string {
@@ -30,6 +35,7 @@ export function stepLabel(step: OnboardingNavStep): string {
   if (step.phase === 'data') return '行情'
   if (step.phase === 'fuyao') return '历史行情'
   if (step.phase === 'community') return '交流群'
+  if (step.phase === 'account') return '账户'
   return '协议'
 }
 

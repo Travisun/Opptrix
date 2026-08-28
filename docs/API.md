@@ -44,6 +44,55 @@
 }
 ```
 
+## 本地账户与登录（Auth）
+
+本机单用户账户（无云端账号）。**未创建账户**时，仅本机 / 受信地址可调用 `/api/*`；**已创建后**所有访问都须登录。桌面客户端会话默认 **30 天**，Web 会话 **12 小时**。
+
+### 环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `OPPTRIX_AUTH_SAFE_MODE=1` | 启动时**删除**本地账户与全部会话（恢复用）。日志会警告一次。 |
+| `OPPTRIX_TRUSTED_PROXIES` | 反向代理 CIDR/IP 列表（逗号分隔）。**为空则不信任**转发客户端头。受信时按优先级取：`CF-Connecting-IP` → `True-Client-IP` → `X-Real-IP` → `X-Forwarded-For` 最左侧一跳 → 直连 peer。非受信 peer **绝不**采信上述头（防伪造成本地地址逃锁定）。 |
+| `OPPTRIX_TRUSTED_LOCAL_CIDRS` | 额外视为「本机」的 CIDR（默认仅 loopback：`127.0.0.0/8`、`::1`）。 |
+| `OPPTRIX_AUTH_COOKIE_SECURE=1` | 强制会话 Cookie 带 `Secure`。若未设：仅当对端为受信代理且 `X-Forwarded-Proto=https`，或连接本身为 HTTPS。 |
+| `OPPTRIX_DESKTOP=1` | 进程视为桌面端，签发长会话。请求头 `X-Opptrix-Client: desktop` 同等效果。 |
+| `OPPTRIX_AUTH_KEY_PATH` | 可选。TOTP 密钥加密用的 `auth.key` 路径（默认 `~/.opptrix/auth.key`，权限 0600）。 |
+
+Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `Authorization: Bearer <token>`。
+
+未创建账户且客户端不是本机/受信地址 → `403` `{ code: "local_only" }`。已创建但未登录 → `401` `{ code: "auth_required" }`。已启用 TOTP 时，修改系统代理、模型密钥、沙箱写入、改密/关闭 TOTP/踢掉全部会话需先 `POST /api/auth/step-up`，否则 `403` `{ code: "step_up_required" }`。
+
+限流与锁定（按解析后的访问者 IP；**本机/受信本地 IP 不软限流、不累计失败、不硬锁定**）：
+
+- **软限流**（仅非本机）：登录 / 创建账户 / TOTP 相关接口，同一 IP 每 15 分钟最多 **30** 次 → `429` `{ code: "rate_limited" }`。
+- **失败锁定**（仅非本机）：密码或 TOTP 连续失败满 **5** 次起锁定 **30** 分钟；之后每再错 1 次，锁定时长再累加 **35** 分钟（第 6 次 → 65 分钟，依此类推）。登录成功清零。锁定中 → `429` `{ code: "login_locked", retry_after_sec }`。
+
+凭据规则（创建账户与改密；`@opptrix/shared/auth-credentials`）：
+
+- **用户名**：≥5 且 ≤64；仅英文、数字与常用符号；须「英文+数字」组合，或合法邮箱。
+- **密码**：≥8 且 ≤128；须同时包含大写、小写、数字与特殊符号。
+
+### 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/auth/status` | `{ claimed, auth_required, local_access, totp_enabled?, username?, session?, safe_mode? }` |
+| POST | `/api/auth/setup` | `{ username, password }` — 仅未创建时；成功后自动登录 |
+| POST | `/api/auth/login` | `{ username, password }` — TOTP 关闭则设 Cookie；开启则 `{ totp_required: true, ticket }`（ticket 5 分钟） |
+| POST | `/api/auth/login/totp` | `{ ticket, code }` |
+| POST | `/api/auth/logout` | 注销当前会话 |
+| GET | `/api/auth/sessions` | 设备/会话列表（需登录） |
+| DELETE | `/api/auth/sessions/:id` | 踢掉指定会话 |
+| POST | `/api/auth/sessions/revoke-all` | 踢掉除当前外全部会话（敏感） |
+| POST | `/api/auth/totp/begin` | `{ otpauth_url, secret }` 供 Authenticator 扫码 |
+| POST | `/api/auth/totp/confirm` | `{ code }` → 启用并返回一次性恢复码 |
+| POST | `/api/auth/totp/disable` | `{ password, code }` |
+| POST | `/api/auth/password` | `{ current_password, new_password, totp_code? }` |
+| POST | `/api/auth/step-up` | `{ code }` — 敏感操作提权，约 8 分钟 |
+
+`GET /api/health` 与 `GET /api/legal/*` 无需登录。已创建账户或非本机访问时，health 只返回 `status` 与 `version`。
+
 ## Hub Features
 
 | feature | params | 说明 |

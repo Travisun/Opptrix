@@ -1,5 +1,6 @@
 export type SettingsSection =
   | 'general'
+  | 'account_security'
   | 'models'
   | 'data_providers'
   | 'mcp_servers'
@@ -17,6 +18,7 @@ export type SettingsSection =
 
 const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'general',
+  'account_security',
   'portfolio_fees',
   'models',
   'data_providers',

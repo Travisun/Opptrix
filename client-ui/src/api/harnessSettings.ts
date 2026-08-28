@@ -12,7 +12,18 @@ async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = RE
     controller.abort()
   }, timeoutMs)
   try {
-    return await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal })
+    const { headers, credentials, ...rest } = init ?? {}
+    const merged = new Headers(headers)
+    if (typeof window !== 'undefined' && window.electronAPI?.isElectron === true
+      && !merged.has('X-Opptrix-Client')) {
+      merged.set('X-Opptrix-Client', 'desktop')
+    }
+    return await fetch(`${API_BASE}${path}`, {
+      ...rest,
+      credentials: credentials ?? 'include',
+      headers: merged,
+      signal: controller.signal,
+    })
   } catch (e) {
     if (timedOut && e instanceof Error && e.name === 'AbortError') {
       throw new Error('请求超时')

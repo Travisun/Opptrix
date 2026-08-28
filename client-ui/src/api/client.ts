@@ -24,6 +24,19 @@ import {
   saveMarketPackageBlob,
 } from '../platform/saveMarketPackage'
 import { decodeTextBufferBytes } from '../utils/decodeTextBuffer'
+import { emitAuthRequired, waitForStepUp } from '../auth/authEvents'
+import { isElectron } from '../platform/detect'
+
+export class ApiHttpError extends Error {
+  readonly status: number
+  readonly code?: string
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ApiHttpError'
+    this.status = status
+    this.code = code
+  }
+}
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -44,8 +57,17 @@ async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = RE
   const onExternalAbort = () => controller.abort()
   external?.addEventListener('abort', onExternalAbort)
   try {
-    const { signal: _ignored, ...rest } = init ?? {}
-    return await fetch(path, { ...rest, signal: controller.signal })
+    const { signal: _ignored, headers, credentials, ...rest } = init ?? {}
+    const merged = new Headers(headers)
+    if (isElectron() && !merged.has('X-Opptrix-Client')) {
+      merged.set('X-Opptrix-Client', 'desktop')
+    }
+    return await fetch(path, {
+      ...rest,
+      credentials: credentials ?? 'include',
+      headers: merged,
+      signal: controller.signal,
+    })
   } catch (e) {
     if (timedOut && e instanceof Error && e.name === 'AbortError') {
       throw new Error('请求超时')
@@ -57,11 +79,29 @@ async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = RE
   }
 }
 
-async function jsonFetch<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<T> {
+export async function jsonFetch<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<T> {
+  return jsonFetchOnce(path, init, timeoutMs, true)
+}
+
+async function jsonFetchOnce<T>(
+  path: string,
+  init: RequestInit | undefined,
+  timeoutMs: number,
+  allowStepUpRetry: boolean,
+): Promise<T> {
   const resp = await fetchWithTimeout(`${API_BASE}${path}`, init, timeoutMs)
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({})) as { error?: string; message?: string }
-    throw new Error(err.message || err.error || `API error: ${resp.status}`)
+    const err = await resp.json().catch(() => ({})) as { error?: string; message?: string; code?: string }
+    if (err.code === 'auth_required') emitAuthRequired()
+    if (err.code === 'step_up_required' && allowStepUpRetry && path !== '/auth/step-up') {
+      const verified = await waitForStepUp()
+      if (verified) return jsonFetchOnce(path, init, timeoutMs, false)
+    }
+    throw new ApiHttpError(
+      err.message || err.error || `API error: ${resp.status}`,
+      resp.status,
+      err.code,
+    )
   }
   return resp.json() as Promise<T>
 }
@@ -2493,7 +2533,11 @@ export async function subscribeSessionLiveProgress(
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/sessions/${sessionId}/live-progress`, {
     method: 'GET',
-    headers: { Accept: 'text/event-stream' },
+    headers: {
+      Accept: 'text/event-stream',
+      ...(isElectron() ? { 'X-Opptrix-Client': 'desktop' } : {}),
+    },
+    credentials: 'include',
     signal,
   })
   if (!resp.ok) {

@@ -57,6 +57,10 @@
     "./proxy-config": {
       "types": "./dist/proxy-config.d.ts",
       "import": "./dist/proxy-config.js"
+    },
+    "./auth-credentials": {
+      "types": "./dist/auth-credentials.d.ts",
+      "import": "./dist/auth-credentials.js"
     }
   },
   "scripts": {
