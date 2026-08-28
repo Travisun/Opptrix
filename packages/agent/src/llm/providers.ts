@@ -15,8 +15,8 @@ export interface ProviderProfile {
   baseUrl: string
   apiKey: string
   models: string[]
-  /** Resolved effective outbound proxy (provider overrides system). */
-  proxyUrl?: string
+  /** Resolved outbound proxy; `false` forces direct (ignore process default). */
+  proxyUrl?: string | false
 }
 
 export interface AvailableModel {
@@ -131,7 +131,7 @@ export class ProviderRegistry {
       apiKey: p.apiKey,
       model,
       baseUrl: normalizeBaseUrl(p.baseUrl),
-      ...(p.proxyUrl ? { proxyUrl: p.proxyUrl } : {}),
+      ...(p.proxyUrl !== undefined ? { proxyUrl: p.proxyUrl } : {}),
     }
   }
 

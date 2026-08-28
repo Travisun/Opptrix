@@ -59,10 +59,16 @@ export {
   formatOutboundFetchError,
   isOutboundTimeoutError,
   resetOutboundProxyAgentCacheForTests,
+  setDefaultOutboundProxyUrl,
+  getDefaultOutboundProxyUrl,
+  applySystemProxyAsDefault,
+  resetDefaultOutboundProxyUrlForTests,
+  resolveEffectiveOutboundProxyUrl,
   type OutboundFetchInit,
 } from './outbound-fetch.js'
 export {
   resolveEffectiveProxyUrl,
+  resolveOutboundProxyInit,
   validateProxyUrlInput,
   normalizeProxyUrlInput,
   normalizeProviderProxyMode,

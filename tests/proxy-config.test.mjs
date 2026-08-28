@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   resolveEffectiveProxyUrl,
+  resolveOutboundProxyInit,
   isValidProxyUrl,
   validateProxyUrlInput,
   normalizeProviderProxyMode,
@@ -53,5 +54,30 @@ describe('proxy-config', () => {
 
   it('validateProxyUrlInput rejects invalid schemes', () => {
     assert.throws(() => validateProxyUrlInput('ftp://x'), /代理地址/)
+  })
+
+  it('resolveOutboundProxyInit maps none to false (force direct)', () => {
+    const system = { enabled: true, url: 'http://127.0.0.1:7890' }
+    assert.equal(resolveOutboundProxyInit({ mode: 'none' }, system), false)
+  })
+
+  it('resolveOutboundProxyInit maps invalid custom to false', () => {
+    assert.equal(resolveOutboundProxyInit({ mode: 'custom', url: 'not-a-url' }, null), false)
+    assert.equal(resolveOutboundProxyInit({ mode: 'custom' }, null), false)
+  })
+
+  it('resolveOutboundProxyInit inherit returns system url when enabled', () => {
+    const system = { enabled: true, url: 'http://127.0.0.1:7890' }
+    assert.equal(
+      resolveOutboundProxyInit({ mode: 'inherit' }, system),
+      'http://127.0.0.1:7890',
+    )
+  })
+
+  it('resolveOutboundProxyInit inherit is undefined when system disabled', () => {
+    assert.equal(
+      resolveOutboundProxyInit({ mode: 'inherit' }, { enabled: false }),
+      undefined,
+    )
   })
 })

@@ -1,4 +1,4 @@
-/** Per-provider proxy mode; `inherit` falls back to system proxy when enabled. */
+/** Per-provider proxy mode; `inherit` falls back to the global outbound proxy when enabled. */
 export type ProviderProxyMode = 'inherit' | 'none' | 'custom'
 
 export interface SystemProxySettings {
@@ -49,7 +49,8 @@ export function normalizeProviderProxyMode(mode: unknown): ProviderProxyMode {
 }
 
 /**
- * Resolve outbound proxy for an LLM provider.
+ * Resolve outbound proxy URL for an LLM provider (string or unset).
+ * `none` returns undefined — use {@link resolveOutboundProxyInit} when force-direct (`false`) is required.
  * Priority: provider custom > provider none (direct) > system > direct.
  */
 export function resolveEffectiveProxyUrl(
@@ -67,6 +68,25 @@ export function resolveEffectiveProxyUrl(
     if (url && isValidProxyUrl(url)) return url
   }
   return undefined
+}
+
+/**
+ * Map provider + system proxy settings to an outboundFetch `proxyUrl` init value.
+ * - `none` → `false` (force direct, ignore process default)
+ * - `custom` → validated URL, or `false` if missing/invalid
+ * - `inherit` → system URL when enabled, otherwise `undefined` (process default)
+ */
+export function resolveOutboundProxyInit(
+  provider: ProviderProxySettings | undefined | null,
+  system: SystemProxySettings | undefined | null,
+): string | false | undefined {
+  const mode = normalizeProviderProxyMode(provider?.mode)
+  if (mode === 'none') return false
+  if (mode === 'custom') {
+    const url = normalizeProxyUrlInput(provider?.url)
+    return url && isValidProxyUrl(url) ? url : false
+  }
+  return resolveEffectiveProxyUrl(provider, system)
 }
 
 /** Mask credentials in proxy URL for logs / previews. */
