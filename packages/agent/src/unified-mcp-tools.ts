@@ -436,7 +436,7 @@ export function buildUnifiedInstrumentTools(
         kind: {
           type: 'string',
           description:
-            'limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list',
+            'limit_up_ladder | skyrocket | hot_stock | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list',
         },
         code: { type: 'string', description: '个股代码（hot_rank_trend / anomaly_stock）' },
         codes: { type: 'string', description: 'anomaly_stock 多码时可逗号分隔' },

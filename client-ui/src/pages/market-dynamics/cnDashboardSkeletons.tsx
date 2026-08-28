@@ -150,7 +150,7 @@ const useSectorGridStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
     gridAutoRows: 'min-content',
     alignContent: 'start',
     gap: '8px',

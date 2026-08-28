@@ -8,6 +8,7 @@ import CnHeroIndexStrip from './CnHeroIndexStrip'
 import CnMarketChartPanel from './CnMarketChartPanel'
 import CnMarketInsightPanel, { type CnInsightTab } from './CnMarketInsightPanel'
 import CnSectorDiscoverGrid from './CnSectorDiscoverGrid'
+import CnHotBoardPanel from './CnHotBoardPanel'
 import { readCnIndexChartCode, writeCnIndexChartCode } from './cnIndexChartStorage'
 import { resolveIndexDisplayName } from './cnIndexFormat'
 import { chartCodeFromIndex } from './marketBoardUtils'
@@ -65,6 +66,23 @@ const useStyles = makeStyles({
   },
   sideCol: {
     minHeight: 0,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: CN_DASH.pageGap,
+    overflow: 'hidden',
+  },
+  sectorCol: {
+    flex: '1 1 45%',
+    minHeight: '200px',
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  hotBoardCol: {
+    flex: '1 1 55%',
+    minHeight: '280px',
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
@@ -224,13 +242,23 @@ export default function CnMarketDynamicsView({
         </div>
 
         <div className={s.sideCol}>
-          <CnSectorDiscoverGrid
-            sectors={sectorIndices}
-            selectedCode={selectedSectorCode}
-            loading={loading}
-            emptyHint={data?.cn_sector_hint}
-            onSelect={handleSectorSelect}
-          />
+          <div className={s.sectorCol}>
+            <CnSectorDiscoverGrid
+              sectors={sectorIndices}
+              selectedCode={selectedSectorCode}
+              loading={loading}
+              emptyHint={data?.cn_sector_hint}
+              onSelect={handleSectorSelect}
+            />
+          </div>
+          <div className={s.hotBoardCol}>
+            <CnHotBoardPanel
+              skyrocket={data?.cn_skyrocket}
+              hotStocks={data?.cn_hot_stocks}
+              loading={loading}
+              emotionSource={data?.cn_emotion_source ?? null}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -303,13 +303,34 @@ export const research = {
   marketRegime: (scope: 'cn' | 'us' = 'cn') =>
     apiCall<import('../types/schemas').MarketRegimeData>('market_regime', { profile_scope: scope }),
 
-  marketDynamics: (opts?: { market?: 'cn' | 'us' | 'hk' }) =>
+  marketDynamics: (opts?: { market?: 'cn' | 'us' | 'hk'; refresh?: boolean }) =>
     apiCall<import('../types/schemas').MarketDynamicsData>(
       'market_dynamics',
-      { market: opts?.market ?? 'cn' },
+      { market: opts?.market ?? 'cn', ...(opts?.refresh ? { refresh: true } : {}) },
       undefined,
       35000,
     ),
+
+  cnMarketSpecial: (params: {
+    kind: 'skyrocket' | 'hot_stock' | 'hot_history' | string
+    date?: string
+    code?: string
+    start?: string
+    end?: string
+  }) =>
+    apiCall<{
+      kind: string
+      items: Record<string, unknown>[]
+      count: number
+      source?: string
+    }>('cn_market_special', params, undefined, 25000),
+
+  tradeCalendar: (year?: number) =>
+    apiCall<{
+      year: number
+      items: Array<{ date: string; isTradeDay?: boolean }>
+      count: number
+    }>('trade_calendar', { year: year ?? new Date().getFullYear() }, undefined, 20000),
 
   indexConstituents: (indexCode: string, opts?: { withQuotes?: boolean; quoteLimit?: number }) =>
     apiCall<import('../types/schemas').IndexConstituentsData>(

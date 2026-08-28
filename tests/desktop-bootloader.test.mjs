@@ -150,6 +150,15 @@ describe('main.cjs bootloader wiring', () => {
     assert.match(mainCjs, /runShutdownChain\('window-all-closed'\)/)
     assert.match(mainCjs, /runShutdownChain\('update-install'\)/)
   })
+
+  it('updater.cjs exports quick/deferred startup helpers', () => {
+    const updaterCjs = fs.readFileSync(
+      path.join(here, '../apps/desktop/electron/updater.cjs'),
+      'utf8',
+    )
+    assert.match(updaterCjs, /tryQuickPendingUpdateOnStartup,/)
+    assert.match(updaterCjs, /tryDeferredPendingUpdateOnStartup,/)
+  })
 })
 
 describe('bootloader-register hooks', () => {

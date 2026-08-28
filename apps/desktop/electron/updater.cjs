@@ -693,6 +693,8 @@ module.exports = {
   initUpdater,
   registerUpdaterIpc,
   resumePendingUpdateOnStartup,
+  tryQuickPendingUpdateOnStartup,
+  tryDeferredPendingUpdateOnStartup,
   isUpdateReady,
   installPendingUpdate,
 }
