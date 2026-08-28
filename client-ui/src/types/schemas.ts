@@ -433,6 +433,9 @@ export interface MarketHotItem {
   rank?: number | null
   heat?: number | null
   rank_change?: number | null
+  price?: number | null
+  change_pct?: number | null
+  change_amt?: number | null
 }
 
 export interface MarketLimitLadderBoard {

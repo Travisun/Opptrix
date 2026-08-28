@@ -167,6 +167,25 @@ export const TONGHUASHUN_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     },
   ),
 
+  thsHotStockList: thsDoc(
+    'thsHotStockList',
+    'A 股热股榜单 Top30',
+    '/api/a-share/special-data/hot-stock-list',
+    [
+      {
+        name: 'period',
+        type: 'string',
+        description: '统计周期：day（日榜，默认）',
+        default: 'day',
+      },
+    ],
+    'Record<string, unknown>[] 热股行，含 source=tonghuashun',
+    {
+      example: '{"provider":"tonghuashun","method":"thsHotStockList","args":["day"]}',
+      usage: INVOKE('thsHotStockList', '["day"]'),
+    },
+  ),
+
   thsHotStockListHistory: thsDoc(
     'thsHotStockListHistory',
     '历史热股排行（按自然日）',

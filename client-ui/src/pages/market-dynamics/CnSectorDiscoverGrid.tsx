@@ -38,7 +38,7 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflowY: 'auto',
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
     gridAutoRows: 'min-content',
     alignContent: 'start',
     gap: '8px',

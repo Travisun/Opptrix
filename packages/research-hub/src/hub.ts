@@ -127,7 +127,6 @@ import {
   normalizeShareholderPayload,
 } from './stock-detail-normalize.js'
 import {
-  mapCnAnomalyItems,
   mapCnHotStockItems,
   mapCnLimitBreakItems,
   mapCnLimitUpItems,
@@ -137,12 +136,15 @@ import {
 import {
   dedupeThsCatalogEntries,
   indexSnapshotRows,
+  majorCnIndexThscode,
+  mapMajorCnIndexQuote,
   mapThsIndexSnapshotToQuote,
   mergeConstituentQuoteRow,
   parseConstituentStockCode,
   parseThsIndexCatalogRow,
   rankSectorIndexQuotes,
   sortConstituentRowsByChangePct,
+  type ThsIndexCatalogEntry,
   type ThsSectorTag,
 } from './market-sector-map.js'
 import {
@@ -259,6 +261,25 @@ export class ResearchHub {
   private readonly stockNameCache = new Map<string, string>()
   /** 进程内最近一次成功报价 — live 失败时回退，避免关注列表部分无价 */
   private readonly lastInstrumentQuotes = new Map<string, Record<string, unknown>>()
+  /** 同花顺板块 catalog — 慢变数据，降 market_dynamics 轮询压力 */
+  private readonly thsSectorCatalogCache = new Map<
+    ThsSectorTag,
+    { fetchedAt: number; entries: ThsIndexCatalogEntry[] }
+  >()
+  /** 历史热榜档期涨跌 — 过去交易日永久、当日短 TTL */
+  private readonly cnHotHistoryQuoteCache = new Map<
+    string,
+    {
+      fetchedAt: number
+      quotes: Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>
+    }
+  >()
+  /** A 股 market_dynamics 短 TTL — 去重 30s 轮询内的重复 bulk */
+  private marketDynamicsCnCache: { at: number; payload: ResearchResult } | null = null
+
+  private static readonly THS_SECTOR_CATALOG_TTL_MS = 15 * 60 * 1000
+  private static readonly MARKET_DYNAMICS_CN_TTL_MS = 22_000
+  private static readonly HOT_HISTORY_TODAY_TTL_MS = 5 * 60 * 1000
 
   initMarketDataAutoSync(): void {
     this.notifyMarketDataUiReady()
@@ -915,6 +936,88 @@ export class ResearchHub {
     return /^\d{6}$/.test(digits) ? digits : ''
   }
 
+  private shiftCalendarYmd(ymd: string, deltaDays: number): string {
+    const d = new Date(`${ymd}T12:00:00.000Z`)
+    d.setUTCDate(d.getUTCDate() + deltaDays)
+    return d.toISOString().slice(0, 10)
+  }
+
+  /** 历史热榜：按 tradeDate 拉日线 close / changePct，不用实时 batch。 */
+  private hotHistoryQuoteCacheTtlMs(tradeDateYmd: string): number {
+    const today = cnTodayString()
+    return tradeDateYmd < today
+      ? Number.MAX_SAFE_INTEGER
+      : ResearchHub.HOT_HISTORY_TODAY_TTL_MS
+  }
+
+  private async fetchCnHistoricalDayQuoteMap(
+    codes: string[],
+    tradeDateYmd: string,
+  ): Promise<Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>> {
+    const map = new Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>()
+    const unique = [...new Set(codes.map(code => this.bareCnStockCode(code)).filter(Boolean))]
+    if (!unique.length || !/^\d{4}-\d{2}-\d{2}$/.test(tradeDateYmd)) return map
+
+    const ttlMs = this.hotHistoryQuoteCacheTtlMs(tradeDateYmd)
+    const cached = this.cnHotHistoryQuoteCache.get(tradeDateYmd)
+    if (cached && Date.now() - cached.fetchedAt < ttlMs) {
+      for (const code of unique) {
+        const quote = cached.quotes.get(code)
+        if (quote) map.set(code, quote)
+      }
+    }
+
+    const missing = unique.filter(code => !map.has(code))
+    if (!missing.length) return map
+
+    const startYmd = this.shiftCalendarYmd(tradeDateYmd, -20)
+    const CONCURRENCY = 6
+    const fetched = new Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>()
+    for (let i = 0; i < missing.length; i += CONCURRENCY) {
+      const chunk = missing.slice(i, i + CONCURRENCY)
+      await Promise.all(chunk.map(async (code) => {
+        try {
+          const ref = resolveCnInstrumentRef({
+            market: 'CN',
+            assetClass: 'EQUITY',
+            symbol: code,
+          })
+          const r = await this.de.queryInstrumentData(ref, 'kline', {
+            startDate: startYmd,
+            endDate: tradeDateYmd,
+            count: 25,
+          })
+          const bars = instrumentQueryData<StockKline[]>(r) ?? []
+          const bar = bars.find(b => b.date === tradeDateYmd)
+            ?? bars.filter(b => b.date <= tradeDateYmd).at(-1)
+          if (!bar) return
+          const price = typeof bar.close === 'number' && Number.isFinite(bar.close) ? bar.close : null
+          const change_pct = typeof bar.changePct === 'number' && Number.isFinite(bar.changePct)
+            ? bar.changePct
+            : null
+          fetched.set(code, {
+            price,
+            change_pct,
+            change_amt: this.quoteChangeAmt(undefined, price, change_pct),
+          })
+        } catch {
+          /* skip single symbol */
+        }
+      }))
+    }
+
+    const store = cached?.quotes ?? new Map()
+    for (const [code, quote] of fetched) {
+      store.set(code, quote)
+      map.set(code, quote)
+    }
+    this.cnHotHistoryQuoteCache.set(tradeDateYmd, {
+      fetchedAt: Date.now(),
+      quotes: store,
+    })
+    return map
+  }
+
   private async fetchCnStockQuoteMap(
     codes: string[],
   ): Promise<Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>> {
@@ -965,7 +1068,30 @@ export class ResearchHub {
   private async fetchCnIndexMarketItems(
     indices: Array<{ code: string; name?: string }>,
   ) {
-    const items = await Promise.all(indices.map(async entry => {
+    if (!indices.length) return []
+
+    const thscodes = indices.map(entry => majorCnIndexThscode(entry.code)).filter(Boolean)
+    const { rows } = await this.fetchThsIndexPriceSnapshots(thscodes)
+    const snapByThscode = new Map(
+      rows.map(row => [String(row.thscode ?? '').trim().toUpperCase(), row]),
+    )
+
+    return Promise.all(indices.map(async entry => {
+      const thscode = majorCnIndexThscode(entry.code).toUpperCase()
+      const snap = snapByThscode.get(thscode)
+      const resolvedName = this.resolveIndexQuoteName(
+        entry.name,
+        snap ? String(snap.index_name ?? snap.name ?? '') : undefined,
+        entry.code,
+      )
+      const fromSnap = mapMajorCnIndexQuote({ code: entry.code, name: resolvedName }, snap)
+      if (fromSnap.price != null) {
+        return {
+          ...fromSnap,
+          name: this.resolveIndexQuoteName(entry.name, fromSnap.name, entry.code),
+        }
+      }
+
       const ref = resolveCnInstrumentRef({
         market: 'CN',
         assetClass: 'INDEX',
@@ -1000,7 +1126,6 @@ export class ResearchHub {
         market,
       }
     }))
-    return items.filter((item): item is NonNullable<typeof item> => item != null)
   }
 
   private async fetchGlobalIndexProxyItems(
@@ -1067,9 +1192,37 @@ export class ResearchHub {
     }
   }
 
+  private async fetchThsSectorCatalog(
+    tag: ThsSectorTag,
+    cap: number,
+  ): Promise<{ entries: ThsIndexCatalogEntry[]; error?: string }> {
+    const cached = this.thsSectorCatalogCache.get(tag)
+    if (cached && Date.now() - cached.fetchedAt < ResearchHub.THS_SECTOR_CATALOG_TTL_MS) {
+      return { entries: cached.entries.slice(0, cap) }
+    }
+    try {
+      const r = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexList', [tag])
+      if (!r.success) {
+        return { entries: [], error: r.error ?? '板块目录获取失败' }
+      }
+      if (!Array.isArray(r.data)) return { entries: [] }
+      const entries = r.data
+        .slice(0, cap)
+        .map(row => parseThsIndexCatalogRow(row as Record<string, unknown>, tag))
+        .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+      this.thsSectorCatalogCache.set(tag, { fetchedAt: Date.now(), entries })
+      return { entries }
+    } catch (e) {
+      return {
+        entries: [],
+        error: e instanceof Error ? e.message : String(e),
+      }
+    }
+  }
+
   /**
    * 同花顺板块指数 — SDK 路由：
-   * 1) index.catalogThsIndexList(tag) → thsIndexList
+   * 1) index.catalogThsIndexList(tag) → thsIndexList（15min 进程缓存）
    * 2) index.pricesSnapshot(thscodes) → thsIndexPricesSnapshot（非 aShare.prices）
    */
   private async fetchCnThsSectorIndexItems(): Promise<{
@@ -1085,21 +1238,9 @@ export class ResearchHub {
 
     const catalogEntries = (
       await Promise.all(TAGS.map(async tag => {
-        try {
-          const r = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexList', [tag])
-          if (!r.success) {
-            if (r.error) catalogErrors.push(r.error)
-            return []
-          }
-          if (!Array.isArray(r.data)) return []
-          return r.data
-            .slice(0, CATALOG_CAP)
-            .map(row => parseThsIndexCatalogRow(row as Record<string, unknown>, tag))
-            .filter((entry): entry is NonNullable<typeof entry> => entry != null)
-        } catch (e) {
-          catalogErrors.push(e instanceof Error ? e.message : String(e))
-          return []
-        }
+        const { entries, error } = await this.fetchThsSectorCatalog(tag, CATALOG_CAP)
+        if (error) catalogErrors.push(error)
+        return entries
       }))
     ).flat()
 
@@ -1163,7 +1304,18 @@ export class ResearchHub {
     const market = String(params.market ?? 'cn').trim().toLowerCase()
     if (market === 'us') return this.marketDynamicsUs(t0)
     if (market === 'hk') return this.marketDynamicsHk(t0)
-    return this.marketDynamicsCn(t0)
+    const force = params.force === true || params.refresh === true
+    if (!force) {
+      const cached = this.marketDynamicsCnCache
+      if (cached && Date.now() - cached.at < ResearchHub.MARKET_DYNAMICS_CN_TTL_MS) {
+        return cached.payload
+      }
+    }
+    const result = await this.marketDynamicsCn(t0)
+    if (result.success) {
+      this.marketDynamicsCnCache = { at: Date.now(), payload: result }
+    }
+    return result
   }
 
   private async fetchHkSectorBoardViaTickflow() {
@@ -1558,13 +1710,26 @@ export class ResearchHub {
       chartSymbol: '^HSI',
     }
 
-    const fetchEmotionLimitUp = async () => {
+    const fetchCnLimitUpdownPack = async () => {
       try {
         const r = await this.de.limitUpdown()
-        if (!r.success || !Array.isArray(r.data)) return []
-        return mapCnLimitUpItems(r.data)
+        if (!r.success || !Array.isArray(r.data)) {
+          return { gainers: [] as Array<{ code: string; name: string; price: number | null; change_pct: number | null; change_amt: number | null }>, losers: [] as Array<{ code: string; name: string; price: number | null; change_pct: number | null; change_amt: number | null }>, limitUp: [] as ReturnType<typeof mapCnLimitUpItems> }
+        }
+        const mapMover = (row: { code: string; name: string; changePct?: number | null; type: string }) => ({
+          code: row.code,
+          name: row.name,
+          price: null as number | null,
+          change_pct: row.changePct ?? null,
+          change_amt: null as number | null,
+        })
+        return {
+          gainers: r.data.filter(row => row.type === 'limit_up').slice(0, 30).map(mapMover),
+          losers: r.data.filter(row => row.type === 'limit_down').slice(0, 30).map(mapMover),
+          limitUp: mapCnLimitUpItems(r.data),
+        }
       } catch {
-        return []
+        return { gainers: [], losers: [], limitUp: [] }
       }
     }
 
@@ -1608,41 +1773,30 @@ export class ResearchHub {
       }
     }
 
-    const fetchAnomaly = async () => {
-      try {
-        const r = await this.de.invokeCustomMethod('tonghuashun', 'thsAnomalyAnalysisList', [])
-        if (!r.success) return []
-        return mapCnAnomalyItems(r.data)
-      } catch {
-        return []
-      }
-    }
-
     const [
       cnMajorCn,
       cnMajorHk,
       cnSectorPack,
-      cnMovers,
+      cnLimitUpdownPack,
       dragonR,
-      cnLimitUp,
       cnSkyrocket,
       cnLimitLadder,
       cnLimitBreak,
       cnHotStocks,
-      cnAnomaly,
     ] = await Promise.all([
       this.fetchCnIndexMarketItems(CN_MAJOR_CN),
       this.fetchGlobalIndexProxyItems([HK_HSI_PROXY]),
       this.fetchCnThsSectorIndexItems(),
-      this.fetchCnLimitMovers(),
+      fetchCnLimitUpdownPack(),
       this.de.dragonTiger(),
-      fetchEmotionLimitUp(),
       fetchEmotionSkyrocket(),
       fetchEmotionLadder(),
       fetchLimitBreak(),
       fetchHotStocks(),
-      fetchAnomaly(),
     ])
+
+    const cnMovers = { gainers: cnLimitUpdownPack.gainers, losers: cnLimitUpdownPack.losers }
+    const cnLimitUp = cnLimitUpdownPack.limitUp
 
     const cnMajor = [...cnMajorCn, ...cnMajorHk]
     const cnSectors = cnSectorPack.items
@@ -1672,6 +1826,8 @@ export class ResearchHub {
       ...cnLimitUp,
       ...cnLimitBreak,
       ...cnDragonTiger,
+      ...cnSkyrocket,
+      ...cnHotStocks,
       ...(cnLimitLadder?.boards.flatMap(board => board.items) ?? []),
     ].map(item => item.code)
     const cnStockQuoteMap = await this.fetchCnStockQuoteMap(quoteCodes)
@@ -1681,6 +1837,8 @@ export class ResearchHub {
     const cnLimitUpQuoted = cnLimitUp.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
     const cnLimitBreakQuoted = cnLimitBreak.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
     const cnDragonTigerQuoted = cnDragonTiger.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnSkyrocketQuoted = cnSkyrocket.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
+    const cnHotStocksQuoted = cnHotStocks.map(item => this.applyCnStockQuote(item, cnStockQuoteMap))
     const cnLimitLadderQuoted = cnLimitLadder
       ? {
           ...cnLimitLadder,
@@ -1727,10 +1885,9 @@ export class ResearchHub {
     }
 
     const hasEmotionData = cnLimitUpQuoted.length > 0
-      || cnSkyrocket.length > 0
+      || cnSkyrocketQuoted.length > 0
       || cnLimitBreakQuoted.length > 0
-      || cnHotStocks.length > 0
-      || cnAnomaly.length > 0
+      || cnHotStocksQuoted.length > 0
       || (cnLimitLadderQuoted?.boards.length ?? 0) > 0
 
     return ok({
@@ -1743,9 +1900,8 @@ export class ResearchHub {
       cn_dragon_tiger_date: cnDragonTigerQuoted[0]?.date ?? null,
       cn_limit_up: cnLimitUpQuoted.length ? cnLimitUpQuoted : undefined,
       cn_limit_break: cnLimitBreakQuoted.length ? cnLimitBreakQuoted : undefined,
-      cn_skyrocket: cnSkyrocket.length ? cnSkyrocket : undefined,
-      cn_hot_stocks: cnHotStocks.length ? cnHotStocks : undefined,
-      cn_anomaly: cnAnomaly.length ? cnAnomaly : undefined,
+      cn_skyrocket: cnSkyrocketQuoted.length ? cnSkyrocketQuoted : undefined,
+      cn_hot_stocks: cnHotStocksQuoted.length ? cnHotStocksQuoted : undefined,
       cn_limit_ladder: cnLimitLadderQuoted,
       cn_emotion_source: hasEmotionData ? 'tonghuashun' as const : null,
       cn_sector_status: cnSectorPack.status,
@@ -4165,6 +4321,10 @@ export class ResearchHub {
         method: 'thsSkyrocketList',
         args: p => [String(p.period ?? 'day')],
       },
+      hot_stock: {
+        method: 'thsHotStockList',
+        args: () => ['day'],
+      },
       hot_history: {
         method: 'thsHotStockListHistory',
         args: p => {
@@ -4204,7 +4364,7 @@ export class ResearchHub {
     const spec = kindMap[kind]
     if (!spec) {
       return fail(
-        'kind 必填且须为：limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list（成分股用 get_index_constituents；财务指标用 get_instrument_financial_indicators）',
+        'kind 必填且须为：limit_up_ladder | skyrocket | hot_stock | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list（成分股用 get_index_constituents；财务指标用 get_instrument_financial_indicators）',
         t0,
       )
     }
@@ -4222,13 +4382,30 @@ export class ResearchHub {
     }
     const raw = r.data
     const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    const LIVE_HOT_QUOTE_KINDS = new Set(['skyrocket', 'hot_stock'])
+    let items: unknown[] = rows
+    const tradeDate = String(params.date ?? '').trim().slice(0, 10)
+    if (kind === 'hot_history') {
+      const mapped = mapCnSkyrocketItems(rows)
+      const quoteMap = /^\d{4}-\d{2}-\d{2}$/.test(tradeDate)
+        ? await this.fetchCnHistoricalDayQuoteMap(mapped.map(item => item.code), tradeDate)
+        : new Map()
+      items = mapped.map(item => this.applyCnStockQuote(item, quoteMap))
+    } else if (LIVE_HOT_QUOTE_KINDS.has(kind)) {
+      const mapped = mapCnSkyrocketItems(rows)
+      const quoteMap = await this.fetchCnStockQuoteMap(mapped.map(item => item.code))
+      items = mapped.map(item => this.applyCnStockQuote(item, quoteMap))
+    }
     return ok(
       {
         kind,
-        items: rows,
-        count: rows.length,
+        items,
+        count: items.length,
         source: 'tonghuashun',
         provider_method: spec.method,
+        ...(kind === 'hot_history' && /^\d{4}-\d{2}-\d{2}$/.test(tradeDate)
+          ? { as_of_date: tradeDate, quote_basis: 'historical_close' as const }
+          : {}),
         hint: '须启用同花顺（富耀）Provider；申万/板块目录用 get_sector_list；指数成分用 get_index_constituents；财务指标用 get_instrument_financial_indicators',
       },
       `${kind} ${rows.length} 条`,

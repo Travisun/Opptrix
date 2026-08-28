@@ -76,6 +76,50 @@ export function indexSnapshotRows(raw: unknown): Record<string, unknown>[] {
   return []
 }
 
+/** A 股宽基指数 thscode（000300 → 000300.SH，399006 → 399006.SZ） */
+export function majorCnIndexThscode(code: string): string {
+  const raw = String(code ?? '').trim()
+  if (!raw) return ''
+  if (raw.includes('.')) return raw.toUpperCase()
+  const digits = raw.replace(/\D/g, '').padStart(6, '0').slice(-6)
+  if (digits.startsWith('399') || digits.startsWith('88')) {
+    return `${digits}.${digits.startsWith('399') ? 'SZ' : 'TI'}`
+  }
+  return `${digits}.SH`
+}
+
+export function mapMajorCnIndexQuote(
+  entry: { code: string; name: string },
+  snap: Record<string, unknown> | undefined,
+): {
+  code: string
+  name: string
+  price: number | null
+  change_pct: number | null
+  change_amt: number | null
+  market: string
+} {
+  const market = entry.code.startsWith('399') ? 'SZ' : 'SH'
+  if (!snap) {
+    return {
+      code: entry.code,
+      name: entry.name,
+      price: null,
+      change_pct: null,
+      change_amt: null,
+      market,
+    }
+  }
+  return {
+    code: entry.code,
+    name: entry.name,
+    price: safeFloat(snap.last_price),
+    change_pct: safeFloat(snap.price_change_ratio_pct),
+    change_amt: safeFloat(snap.price_change),
+    market,
+  }
+}
+
 /** 从指数成份行解析 A 股标的代码（6 位），供 batchRealtime 对齐 */
 export function parseConstituentStockCode(row: Record<string, unknown>): string {
   const thscode = String(row.thscode ?? row.stock_code ?? '').trim()

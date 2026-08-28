@@ -56,13 +56,16 @@ export function useMarketDynamics() {
   const [error, setError] = useState('')
   const mountedRef = useRef(true)
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
+  const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     const silent = opts?.silent ?? false
     if (!silent) setLoading(true)
     else setRefreshing(true)
     setError('')
     try {
-      const resp = await research.marketDynamics({ market: 'cn' })
+      const resp = await research.marketDynamics({
+        market: 'cn',
+        ...(opts?.force ? { refresh: true } : {}),
+      })
       if (!mountedRef.current) return
       if (resp.success && resp.data) {
         setData({
@@ -99,6 +102,6 @@ export function useMarketDynamics() {
     refreshing,
     error,
     refreshedAt: data?.refreshed_at ?? null,
-    refresh: () => load({ silent: true }),
+    refresh: () => load({ silent: true, force: true }),
   }
 }
