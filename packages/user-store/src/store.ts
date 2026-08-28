@@ -28,6 +28,11 @@ import {
   initAgentVaultSchema,
 } from './agent-vault.js'
 import {
+  AppAuthRepository,
+  initAppAuthSchema,
+  APP_AUTH_SCHEMA_MIGRATION_KEY,
+} from './app-auth.js'
+import {
   ScheduleRepository,
   initScheduleSchema,
   SCHEDULE_SCHEMA_MIGRATION_KEY,
@@ -80,6 +85,7 @@ export class UserDataStore {
   readonly freeProviderThrottle: FreeProviderThrottleRepository
   readonly mcpServers: McpServersRepository
   readonly agentVault: AgentVaultRepository
+  readonly appAuth: AppAuthRepository
   readonly schedule: ScheduleRepository
 
   private constructor(dbPath: string) {
@@ -93,12 +99,15 @@ export class UserDataStore {
     initSpeedRankingSchema(this.db)
     initFreeProviderThrottleSchema(this.db)
     initAgentVaultSchema(this.db)
+    initAppAuthSchema(this.db)
     this.providerSettings = new ProviderSettingsRepository(this.db)
     this.speedRanking = new SpeedRankingRepository(this.db)
     this.freeProviderThrottle = new FreeProviderThrottleRepository(this.db)
     this.mcpServers = new McpServersRepository(this)
     this.agentVault = new AgentVaultRepository(this.db)
+    this.appAuth = new AppAuthRepository(this.db)
     this.initSchema()
+    this.ensureAppAuthSchemaMigration()
     initScheduleSchema(this.db)
     this.schedule = new ScheduleRepository(
       this.db,
@@ -174,6 +183,13 @@ export class UserDataStore {
         ON documents(namespace, updated_at DESC);
     `)
     initFtsSchema(this.db)
+  }
+
+  /** 幂等：表已由 CREATE IF NOT EXISTS 创建，meta 标记保证迁移可观测 */
+  private ensureAppAuthSchemaMigration() {
+    if (this.hasMigration(APP_AUTH_SCHEMA_MIGRATION_KEY)) return
+    initAppAuthSchema(this.db)
+    this.markMigration(APP_AUTH_SCHEMA_MIGRATION_KEY)
   }
 
   /** 幂等：表已由 CREATE IF NOT EXISTS 创建，meta 标记保证迁移可观测 */

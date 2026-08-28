@@ -14,6 +14,7 @@ import {
   ServerRegular,
   PlugConnectedRegular,
   ShieldRegular,
+  LockClosedRegular,
   CalendarClockRegular,
   BookOpenRegular,
   CalculatorRegular,
@@ -43,6 +44,7 @@ export type SettingsSidebarMode = 'panel' | 'overlay'
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
   // 基础与持仓
   { id: 'general', label: '常规', icon: SettingsRegular },
+  { id: 'account_security', label: '账户与安全', icon: LockClosedRegular },
   { id: 'portfolio_fees', label: '组合费率', icon: CalculatorRegular },
   // 核心能力
   { id: 'models', label: '大模型', icon: BotRegular },
@@ -458,6 +460,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
   switch (section) {
     case 'general':
       return '评分偏好与连接设置'
+    case 'account_security':
+      return '登录、两步验证与已登录设备'
     case 'models':
       return '添加和管理大模型服务'
     case 'data_providers':

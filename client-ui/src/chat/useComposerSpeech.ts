@@ -39,9 +39,13 @@ async function transcribeViaApi(
   try {
     const resp = await fetch(`${speechApiBase()}/speech/transcribe`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/octet-stream',
         'X-Speech-Mime': mime,
+        ...(typeof window !== 'undefined' && window.electronAPI?.isElectron === true
+          ? { 'X-Opptrix-Client': 'desktop' }
+          : {}),
       },
       body: data,
       signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),

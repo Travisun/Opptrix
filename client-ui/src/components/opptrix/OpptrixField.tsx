@@ -36,11 +36,16 @@ minHeight: '44px',
     lineHeight: 1.5,
     marginTop: '-2px',
   },
+  error: {
+    color: opptrixCssVars.error,
+  },
 })
 
 interface OpptrixFieldProps {
   label?: string
   hint?: string
+  /** Validation message — replaces hint when set. */
+  error?: string
   children: ReactNode
   className?: string
   /** 多行文本域：放宽 shell 高度与内边距 */
@@ -48,13 +53,29 @@ interface OpptrixFieldProps {
 }
 
 /** Stacked label + filled control surface */
-export default function OpptrixField({ label, hint, children, className, multiline = false }: OpptrixFieldProps) {
+export default function OpptrixField({
+  label,
+  hint,
+  error,
+  children,
+  className,
+  multiline = false,
+}: OpptrixFieldProps) {
   const s = useStyles()
+  const footer = error || hint
   return (
     <div className={mergeClasses('opptrix-field', s.rootStack, className)}>
       {label ? <Text className={s.label} block>{label}</Text> : null}
       <div className={mergeClasses(s.control, multiline && s.controlMultiline, 'opptrix-input-shell')}>{children}</div>
-      {hint ? <Text className={s.hint} block>{hint}</Text> : null}
+      {footer ? (
+        <Text
+          className={mergeClasses(s.hint, error ? s.error : undefined)}
+          block
+          role={error ? 'alert' : undefined}
+        >
+          {footer}
+        </Text>
+      ) : null}
     </div>
   )
 }

@@ -17,6 +17,10 @@ import {
   type OnboardingFuyaoNavState,
 } from './OnboardingFuyaoPanel'
 import { OnboardingIntroCarousel } from './OnboardingIntroCarousel'
+import {
+  OnboardingAccountPanel,
+  type OnboardingAccountNavState,
+} from './OnboardingAccountPanel'
 import { OnboardingCommunityPanel } from './OnboardingCommunityPanel'
 import { OnboardingLegalPanel } from './OnboardingLegalPanel'
 import { OnboardingLlmReadyPanel } from './OnboardingLlmReadyPanel'
@@ -38,6 +42,7 @@ import {
 } from './manifest'
 import { loadOnboardingState, saveOnboardingComplete } from './onboardingState'
 import { useAppVersion } from './useAppVersion'
+import { useAuthStatus } from '../auth/AuthGate'
 
 function OnboardingLlmBody({
   onConfigured,
@@ -86,7 +91,11 @@ export default function OnboardingWizard({
 }: OnboardingWizardProps) {
   const s = useOnboardingShellStyles()
   const release = useMemo(() => resolveOnboardingRelease(appVersion), [appVersion])
-  const steps = useMemo(() => buildOnboardingSteps(), [])
+  const { status: authStatus, reload: reloadAuth } = useAuthStatus()
+  const steps = useMemo(
+    () => buildOnboardingSteps({ includeAccount: !authStatus?.claimed }),
+    [authStatus?.claimed],
+  )
 
   const [stepIndex, setStepIndex] = useState(0)
   const [llmSkipped, setLlmSkipped] = useState(false)
@@ -98,11 +107,12 @@ export default function OnboardingWizard({
   const [fuyaoProvider, setFuyaoProvider] = useState<PublicProviderRuntime | null>(null)
   const [fuyaoNav, setFuyaoNav] = useState<OnboardingFuyaoNavState | null>(null)
   const [fuyaoReconfiguring, setFuyaoReconfiguring] = useState(false)
+  const [accountNav, setAccountNav] = useState<OnboardingAccountNavState | null>(null)
   const [agreed, setAgreed] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [finishError, setFinishError] = useState('')
 
-  const current = steps[stepIndex]!
+  const current = steps[Math.min(stepIndex, Math.max(0, steps.length - 1))] ?? { phase: 'intro' as const }
   const returning = isReturningUser(priorState)
   const isLast = stepIndex >= steps.length - 1
 
@@ -147,6 +157,12 @@ export default function OnboardingWizard({
     if (llmReady) setLlmSkipped(false)
   }, [llmReady])
 
+  useEffect(() => {
+    if (stepIndex >= steps.length) {
+      setStepIndex(Math.max(0, steps.length - 1))
+    }
+  }, [stepIndex, steps.length])
+
   const goNext = () => {
     if (!isLast) setStepIndex(i => i + 1)
   }
@@ -167,6 +183,16 @@ export default function OnboardingWizard({
     }
     goBack()
   }
+
+  const skipAccount = () => {
+    setAccountNav(null)
+    goNext()
+  }
+
+  const handleAccountCreated = useCallback(() => {
+    void reloadAuth()
+    setStepIndex(i => i + 1)
+  }, [reloadAuth])
 
   const skipLlm = () => {
     setLlmSkipped(true)
@@ -365,6 +391,30 @@ export default function OnboardingWizard({
     footerPrimary = (
       <OpptrixButton variant="primary" onClick={goNext}>
         继续
+      </OpptrixButton>
+    )
+  } else if (current.phase === 'account') {
+    bodyFlush = true
+    contentWide = true
+    contentAlignStart = true
+    body = (
+      <OnboardingAccountPanel
+        onCreated={handleAccountCreated}
+        onNavChange={setAccountNav}
+      />
+    )
+    footerSecondary = (
+      <OpptrixButton variant="ghost" onClick={skipAccount}>
+        仅本机使用，暂不创建
+      </OpptrixButton>
+    )
+    footerPrimary = (
+      <OpptrixButton
+        variant="primary"
+        disabled={!accountNav?.canAdvance}
+        onClick={() => { void accountNav?.advance() }}
+      >
+        {accountNav?.advancing ? '正在创建…' : '创建账户'}
       </OpptrixButton>
     )
   } else {

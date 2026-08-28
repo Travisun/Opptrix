@@ -26,6 +26,7 @@ import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettin
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
 import PortfolioFeeSettingsSection from './settings/PortfolioFeeSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
+import AccountSecuritySettingsSection from './settings/AccountSecuritySettingsSection'
 import { SystemProxySettingsSection } from './settings/SystemProxySettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -771,6 +772,9 @@ function SettingsPageView({
 
       case 'portfolio_fees':
         return <PortfolioFeeSettingsSection />
+
+      case 'account_security':
+        return <AccountSecuritySettingsSection />
 
       case 'translation':
         return <TranslationSettingsSection />

@@ -24,6 +24,7 @@ function haystack(entry: SettingsSearchEntry): string {
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // 分类（与侧栏导航顺序一致）
   { section: 'general', title: '常规', desc: '管理默认评分卡与后端连接状态' },
+  { section: 'account_security', title: '账户与安全', desc: '登录、两步验证与已登录设备', keywords: ['账户', '安全', '登录', '密码', '两步验证', '身份验证器', '恢复码', '会话', '设备'] },
   { section: 'models', title: '大模型', desc: '配置大模型提供商与可用模型', keywords: ['模型', 'LLM', 'AI'] },
   { section: 'data_providers', title: '数据源', desc: '管理行情与资讯数据提供商、拖拽回退顺序', keywords: ['priority', '回退', '拖拽', '排序'] },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
@@ -61,6 +62,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', group: '偏好', title: '评分卡', desc: '因子评估默认使用的评分模板', keywords: ['scorecard', 'G=B+M', '因子'] },
   { section: 'general', group: '连接', title: '后端连接', desc: '检查 API 服务与 LLM 提供商配置', keywords: ['测试', 'health', '连接'] },
   { section: 'general', group: '网络', title: '网络代理', desc: '未单独覆盖的外部请求默认走此代理', keywords: ['代理', 'proxy', 'socks', '网络', '全局代理', '网络代理'] },
+
+  // 账户与安全
+  { section: 'account_security', group: '账户', title: '创建账户', desc: '设置用户名与密码，保护工作台', keywords: ['创建账户', '注册', '用户名', '密码'] },
+  { section: 'account_security', group: '账户', title: '更改密码', keywords: ['改密码', '密码'] },
+  { section: 'account_security', group: '两步验证', title: '两步验证', desc: '登录时使用身份验证器确认身份', keywords: ['两步验证', '身份验证器', '验证码'] },
+  { section: 'account_security', group: '两步验证', title: '恢复码', desc: '身份验证器不可用时使用', keywords: ['恢复码'] },
+  { section: 'account_security', group: '会话与设备', title: '会话与设备', desc: '查看并退出已登录的设备', keywords: ['会话', '设备', '退出'] },
+  { section: 'account_security', group: '会话与设备', title: '退出此设备', keywords: ['退出', '登出', 'logout'] },
 
   // 大模型
   { section: 'models', title: '提供商', desc: '配置服务地址与密钥', keywords: ['大模型', 'LLM', 'OpenAI', '密钥', '提供商', '代理'] },
@@ -162,6 +171,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
 const SECTION_LABEL: Record<SettingsSection, string> = {
   general: '常规',
+  account_security: '账户与安全',
   models: '大模型',
   data_providers: '数据源',
   news_feed: '新闻订阅',

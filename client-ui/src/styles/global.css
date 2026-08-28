@@ -632,6 +632,22 @@ html.opptrix-electron .opptrix-overlay-sidebar {
   border-color: var(--opptrix-focus-border);
 }
 
+/* Login gate fields — default visible edge (same idea as settings search). */
+.opptrix-auth-login-shell.opptrix-input-shell {
+  border-color: var(--opptrix-separator-strong);
+  background-color: var(--opptrix-canvas);
+}
+
+.opptrix-auth-login-shell.opptrix-input-shell:hover:not(:focus-within) {
+  border-color: var(--opptrix-border-strong);
+  background-color: var(--opptrix-input-bg-hover);
+}
+
+.opptrix-auth-login-shell.opptrix-input-shell:focus-within {
+  border-color: var(--opptrix-focus-border, var(--opptrix-border-strong));
+  background-color: var(--opptrix-input-bg-focus);
+}
+
 html.opptrix-electron .opptrix-settings-search-shell {
   background: var(--opptrix-glass);
 }
