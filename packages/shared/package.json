@@ -53,10 +53,18 @@
     "./builtin-skill-titles": {
       "types": "./dist/builtin-skill-titles.d.ts",
       "import": "./dist/builtin-skill-titles.js"
+    },
+    "./proxy-config": {
+      "types": "./dist/proxy-config.d.ts",
+      "import": "./dist/proxy-config.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^7.0.6",
+    "socks-proxy-agent": "^8.0.5"
   }
 }

@@ -1,4 +1,5 @@
 import { createProvider, chatMessageContentToText } from '@opptrix/agent'
+import { resolveEffectiveProxyUrl } from '@opptrix/shared'
 import type { NewsTranslationSettings } from '@opptrix/news-feed'
 import { loadConfig } from './config.js'
 import {
@@ -56,6 +57,10 @@ function resolveRemoteLlm(translation: NewsTranslationSettings) {
     temperature: 0.3,
     maxTokens: 2048,
     timeout: 120_000,
+    proxyUrl: resolveEffectiveProxyUrl(
+      { mode: provider.proxy_mode, url: provider.proxy_url },
+      cfg.system_proxy,
+    ),
   })
 }
 

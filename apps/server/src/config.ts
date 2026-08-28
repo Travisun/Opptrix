@@ -3,6 +3,13 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { getModelsDevCatalog, resolveModelsDevProviderMeta } from '@opptrix/agent'
+import {
+  normalizeProviderProxyMode,
+  resolveEffectiveProxyUrl,
+  validateProxyUrlInput,
+  type ProviderProxyMode,
+  type SystemProxySettings,
+} from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -16,7 +23,12 @@ export interface StoredProvider {
   base_url: string
   api_key: string
   models: string[]
+  /** inherit = system proxy; none = direct; custom = proxy_url */
+  proxy_mode?: ProviderProxyMode
+  proxy_url?: string
 }
+
+export type { ProviderProxyMode, SystemProxySettings }
 
 export interface LegacyLlmConfig {
   provider: string
@@ -30,6 +42,7 @@ export interface AppConfig {
   default_model?: string
   default_scorecard: string
   default_top_n: number
+  system_proxy?: SystemProxySettings
   /** @deprecated migrated to providers */
   llm?: LegacyLlmConfig
 }
@@ -178,6 +191,7 @@ export function loadConfig(): AppConfig {
     default_model: defaultModel,
     default_scorecard: file.default_scorecard ?? DEFAULTS.default_scorecard,
     default_top_n: file.default_top_n ?? DEFAULTS.default_top_n,
+    system_proxy: normalizeSystemProxy(file.system_proxy),
   }
 }
 
@@ -187,12 +201,14 @@ export function saveConfig(partial: Partial<AppConfig>): AppConfig {
     ...current,
     ...partial,
     providers: partial.providers ?? current.providers,
+    system_proxy: partial.system_proxy ?? current.system_proxy,
   }
   const toWrite = {
     providers: next.providers,
     default_model: next.default_model,
     default_scorecard: next.default_scorecard,
     default_top_n: next.default_top_n,
+    system_proxy: next.system_proxy,
   }
   getUserDataStore().setDocument(NAMESPACE, DOC_ID, toWrite)
   return next
@@ -215,21 +231,64 @@ export function publicConfig(cfg: AppConfig) {
       base_url: p.base_url,
       models: p.models,
       api_key_configured: !!p.api_key,
+      proxy_mode: normalizeProviderProxyMode(p.proxy_mode),
+      proxy_url: p.proxy_url?.trim() || undefined,
     })),
     available_models,
     default_model: cfg.default_model,
     default_scorecard: cfg.default_scorecard,
     default_top_n: cfg.default_top_n,
+    system_proxy: normalizeSystemProxy(cfg.system_proxy),
     llm_configured: cfg.providers.some(p => p.api_key && p.base_url && p.models.length > 0),
   }
 }
 
+function normalizeSystemProxy(raw: unknown): SystemProxySettings {
+  if (!raw || typeof raw !== 'object') return { enabled: false }
+  const rec = raw as Record<string, unknown>
+  const enabled = rec.enabled === true
+  const url = typeof rec.url === 'string' ? rec.url.trim() : undefined
+  return { enabled, ...(url ? { url } : {}) }
+}
+
+export function parseSystemProxyInput(raw: unknown): SystemProxySettings {
+  const base = normalizeSystemProxy(raw)
+  if (base.enabled && base.url) {
+    return { enabled: true, url: validateProxyUrlInput(base.url) ?? undefined }
+  }
+  if (base.enabled && !base.url?.trim()) {
+    throw new Error('启用系统代理时请填写代理地址')
+  }
+  return { enabled: false }
+}
+
+export function parseProviderProxyFields(body: {
+  proxy_mode?: unknown
+  proxy_url?: unknown
+}): Pick<StoredProvider, 'proxy_mode' | 'proxy_url'> {
+  const mode = normalizeProviderProxyMode(body.proxy_mode)
+  if (mode === 'custom') {
+    const url = validateProxyUrlInput(typeof body.proxy_url === 'string' ? body.proxy_url : '')
+    if (!url) throw new Error('自定义代理模式下请填写代理地址')
+    return { proxy_mode: 'custom', proxy_url: url }
+  }
+  if (mode === 'none') {
+    return { proxy_mode: 'none' }
+  }
+  return { proxy_mode: 'inherit' }
+}
+
 export function toAgentProviders(cfg: AppConfig) {
+  const system = cfg.system_proxy
   return cfg.providers.map(p => ({
     id: p.id,
     name: p.name,
     baseUrl: p.base_url,
     apiKey: p.api_key,
     models: p.models,
+    proxyUrl: resolveEffectiveProxyUrl(
+      { mode: normalizeProviderProxyMode(p.proxy_mode), url: p.proxy_url },
+      system,
+    ),
   }))
 }

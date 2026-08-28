@@ -1489,6 +1489,13 @@ export interface PublicProvider {
   base_url: string
   models: string[]
   api_key_configured: boolean
+  proxy_mode?: 'inherit' | 'none' | 'custom'
+  proxy_url?: string
+}
+
+export interface SystemProxySettings {
+  enabled: boolean
+  url?: string
 }
 
 export interface ProviderPreset {
@@ -1504,6 +1511,7 @@ export interface AppConfig {
   default_model?: string
   default_scorecard: string
   default_top_n: number
+  system_proxy?: SystemProxySettings
   llm_configured: boolean
 }
 
@@ -1517,6 +1525,7 @@ export async function patchConfig(payload: {
   default_scorecard?: string
   default_top_n?: number
   default_model?: string
+  system_proxy?: SystemProxySettings
 }) {
   return jsonFetch<{ status: string; config: AppConfig }>('/config', {
     method: 'PATCH',
@@ -1559,13 +1568,22 @@ export async function getProviderPresets() {
 /** 拉取模型列表：上游常需 10–30s，须长于默认 REQUEST_TIMEOUT */
 const DISCOVER_MODELS_TIMEOUT_MS = 45_000
 
-export async function discoverModels(base_url: string, api_key: string) {
+export async function discoverModels(
+  base_url: string,
+  api_key: string,
+  proxy?: { proxy_mode?: 'inherit' | 'none' | 'custom'; proxy_url?: string },
+) {
   return jsonFetch<{ models: string[] }>(
     '/providers/discover-models',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base_url, api_key }),
+      body: JSON.stringify({
+        base_url,
+        api_key,
+        ...(proxy?.proxy_mode ? { proxy_mode: proxy.proxy_mode } : {}),
+        ...(proxy?.proxy_url ? { proxy_url: proxy.proxy_url } : {}),
+      }),
     },
     DISCOVER_MODELS_TIMEOUT_MS,
   )
@@ -1576,6 +1594,8 @@ export async function createProvider(payload: {
   base_url: string
   api_key: string
   models: string[]
+  proxy_mode?: 'inherit' | 'none' | 'custom'
+  proxy_url?: string
 }) {
   return jsonFetch<{ status: string; provider: PublicProvider }>('/providers', {
     method: 'POST',
@@ -1589,6 +1609,8 @@ export async function updateProvider(id: string, payload: Partial<{
   base_url: string
   api_key: string
   models: string[]
+  proxy_mode: 'inherit' | 'none' | 'custom'
+  proxy_url: string
 }>) {
   return jsonFetch<{ status: string; provider: PublicProvider }>(`/providers/${id}`, {
     method: 'PATCH',

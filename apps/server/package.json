@@ -35,6 +35,7 @@
     "@opptrix/research-hub": "*",
     "@opptrix/search-hub": "*",
     "@opptrix/schedule": "*",
+    "@opptrix/shared": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
     "fastify": "^5.11.3",

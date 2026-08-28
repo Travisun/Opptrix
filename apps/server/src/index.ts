@@ -9,9 +9,11 @@ import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStor
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
+import { resolveEffectiveProxyUrl } from '@opptrix/shared'
 import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
-  resolveProviderPresets, type StoredProvider,
+  resolveProviderPresets, parseSystemProxyInput, parseProviderProxyFields,
+  type StoredProvider,
 } from './config.js'
 import { closeMarketDuckRuntime, getMarketDataService } from '@opptrix/market-data-store'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
@@ -959,14 +961,31 @@ app.get('/api/market-data/sync-state', async () => {
   }
 })
 
-app.patch<{ Body: { default_scorecard?: string; default_top_n?: number; default_model?: string } }>(
+app.patch<{ Body: {
+  default_scorecard?: string
+  default_top_n?: number
+  default_model?: string
+  system_proxy?: { enabled?: boolean; url?: string }
+} }>(
   '/api/config',
-  async (req) => {
+  async (req, reply) => {
     const b = req.body ?? {}
+    let system_proxy = cfg.system_proxy
+    if (b.system_proxy !== undefined) {
+      try {
+        system_proxy = parseSystemProxyInput(b.system_proxy)
+      } catch (e) {
+        return reply.code(400).send({
+          status: 'error',
+          error: e instanceof Error ? e.message : '系统代理配置无效',
+        })
+      }
+    }
     cfg = saveConfig({
       default_scorecard: b.default_scorecard,
       default_top_n: b.default_top_n,
       default_model: b.default_model,
+      system_proxy,
     })
     syncAgentProviders()
     return { status: 'saved', config: publicConfig(cfg) }
@@ -975,15 +994,31 @@ app.patch<{ Body: { default_scorecard?: string; default_top_n?: number; default_
 
 app.get('/api/providers/presets', async () => ({ presets: await resolveProviderPresets() }))
 
-app.post<{ Body: { base_url: string; api_key: string } }>(
+app.post<{ Body: {
+  base_url: string
+  api_key: string
+  proxy_mode?: string
+  proxy_url?: string
+} }>(
   '/api/providers/discover-models',
   async (req, reply) => {
-    const { base_url, api_key } = req.body ?? {}
+    const { base_url, api_key, proxy_mode, proxy_url } = req.body ?? {}
     if (!base_url?.trim() || !api_key?.trim()) {
       return reply.code(400).send({ error: 'base_url and api_key required' })
     }
+    let proxyUrl: string | undefined
     try {
-      const models = await fetchOpenAiModelList(base_url.trim(), api_key.trim())
+      const proxyFields = parseProviderProxyFields({ proxy_mode, proxy_url })
+      proxyUrl = resolveEffectiveProxyUrl(
+        { mode: proxyFields.proxy_mode, url: proxyFields.proxy_url },
+        cfg.system_proxy,
+      )
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '代理配置无效'
+      return reply.code(400).send({ error: msg })
+    }
+    try {
+      const models = await fetchOpenAiModelList(base_url.trim(), api_key.trim(), { proxyUrl })
       return { models }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'fetch models failed'
@@ -992,20 +1027,35 @@ app.post<{ Body: { base_url: string; api_key: string } }>(
   },
 )
 
-app.post<{ Body: { name: string; base_url: string; api_key: string; models: string[] } }>(
+app.post<{ Body: {
+  name: string
+  base_url: string
+  api_key: string
+  models: string[]
+  proxy_mode?: string
+  proxy_url?: string
+} }>(
   '/api/providers',
   async (req, reply) => {
-    const { name, base_url, api_key, models } = req.body ?? {}
+    const { name, base_url, api_key, models, proxy_mode, proxy_url } = req.body ?? {}
     if (!name?.trim() || !base_url?.trim() || !api_key?.trim()) {
       return reply.code(400).send({ error: 'name, base_url and api_key required' })
     }
     if (!models?.length) return reply.code(400).send({ error: '至少启用一个模型' })
+    let proxyFields: Pick<StoredProvider, 'proxy_mode' | 'proxy_url'> = { proxy_mode: 'inherit' }
+    try {
+      proxyFields = parseProviderProxyFields({ proxy_mode, proxy_url })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '代理配置无效'
+      return reply.code(400).send({ error: msg })
+    }
     const provider: StoredProvider = {
       id: randomUUID(),
       name: name.trim(),
       base_url: base_url.trim(),
       api_key: api_key.trim(),
       models: [...new Set(models.map(m => m.trim()).filter(Boolean))],
+      ...proxyFields,
     }
     cfg = saveConfig({ providers: [...cfg.providers, provider] })
     if (!cfg.default_model) {
@@ -1023,6 +1073,21 @@ app.patch<{ Params: { id: string }; Body: Partial<StoredProvider> }>(
     if (idx < 0) return reply.code(404).send({ error: 'provider not found' })
     const b = req.body ?? {}
     const current = cfg.providers[idx]
+    let proxyFields: Pick<StoredProvider, 'proxy_mode' | 'proxy_url'> = {
+      proxy_mode: current.proxy_mode ?? 'inherit',
+      proxy_url: current.proxy_url,
+    }
+    if (b.proxy_mode !== undefined || b.proxy_url !== undefined) {
+      try {
+        proxyFields = parseProviderProxyFields({
+          proxy_mode: b.proxy_mode ?? current.proxy_mode,
+          proxy_url: b.proxy_url ?? current.proxy_url,
+        })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '代理配置无效'
+        return reply.code(400).send({ error: msg })
+      }
+    }
     const next: StoredProvider = {
       ...current,
       name: b.name?.trim() || current.name,
@@ -1031,6 +1096,7 @@ app.patch<{ Params: { id: string }; Body: Partial<StoredProvider> }>(
       models: b.models?.length
         ? [...new Set(b.models.map(m => m.trim()).filter(Boolean))]
         : current.models,
+      ...proxyFields,
     }
     if (!next.models.length) return reply.code(400).send({ error: '至少启用一个模型' })
     const providers = [...cfg.providers]
