@@ -185,7 +185,7 @@ export function SystemProxySettingsSection({
     if (expanded) {
       return '填写代理地址后，点输入框右侧按钮保存'
     }
-    return '为未单独配置的模型提供商提供默认出站代理'
+    return '未单独覆盖的外部请求（含行情与模型）默认走此代理'
   })()
 
   const persist = useCallback(async (next: SystemProxySettings) => {
@@ -195,7 +195,7 @@ export function SystemProxySettingsSection({
       const stored = resp.config.system_proxy ?? { enabled: false }
       onSaved(stored)
       setDraftUrl(stored.url ?? '')
-      toast.showSuccess(stored.enabled ? '系统代理已保存' : '系统代理已停用')
+      toast.showSuccess(stored.enabled ? '网络代理已保存' : '网络代理已停用')
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '保存失败')
     } finally {
@@ -224,14 +224,14 @@ export function SystemProxySettingsSection({
   return (
     <SettingsGroup>
       <SettingsRow
-        title="大模型网络代理"
+        title="网络代理"
         desc={rowDesc}
         last={!expanded}
         control={(
           <Switch
             checked={expanded}
             onChange={handleSwitchChange}
-            aria-label="展开或收起大模型网络代理设置"
+            aria-label="展开或收起网络代理设置"
           />
         )}
       />
@@ -285,7 +285,7 @@ export function SystemProxySettingsSection({
             ) : (
               <div className={s.panelFooter}>
                 <Text className={s.fieldHint} block>
-                  保存后对所有「跟随系统」的模型提供商生效；可在「大模型」中单独覆盖。
+                  保存后全局生效；可在「大模型」中为单个提供商覆盖或强制直连。
                 </Text>
                 {enabled ? (
                   <OpptrixButton

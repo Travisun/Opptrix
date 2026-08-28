@@ -15,11 +15,75 @@ import {
 import { isValidProxyUrl, normalizeProxyUrlInput } from './proxy-config.js'
 
 export type OutboundFetchInit = RequestInit & {
-  /** http(s):// or socks5:// / socks4:// — routes this request through a proxy */
-  proxyUrl?: string
+  /**
+   * Outbound proxy for this request:
+   * - `string` — use that proxy
+   * - `false` — force direct (ignore process default)
+   * - `undefined` — use process default when set
+   */
+  proxyUrl?: string | false
 }
 
 const proxyAgentCache = new Map<string, Agent>()
+
+let defaultOutboundProxyUrl: string | undefined
+
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  return host === 'localhost'
+    || host === '127.0.0.1'
+    || host === '::1'
+    || host.endsWith('.localhost')
+}
+
+/** Set process-wide default outbound proxy. Invalid/empty clears. */
+export function setDefaultOutboundProxyUrl(url: string | undefined | null): void {
+  const raw = normalizeProxyUrlInput(url)
+  defaultOutboundProxyUrl = raw && isValidProxyUrl(raw) ? raw : undefined
+}
+
+export function getDefaultOutboundProxyUrl(): string | undefined {
+  return defaultOutboundProxyUrl
+}
+
+/** Apply Settings → 网络代理 (`system_proxy`) as the process default. */
+export function applySystemProxyAsDefault(
+  system: { enabled: boolean; url?: string } | null | undefined,
+): void {
+  if (system?.enabled) {
+    setDefaultOutboundProxyUrl(system.url)
+    return
+  }
+  setDefaultOutboundProxyUrl(undefined)
+}
+
+/** @internal tests only */
+export function resetDefaultOutboundProxyUrlForTests(): void {
+  defaultOutboundProxyUrl = undefined
+}
+
+/**
+ * Resolve the proxy URL actually used for a request.
+ * Loopback hosts skip the process default; an explicit `string` still applies.
+ */
+export function resolveEffectiveOutboundProxyUrl(
+  init: Pick<OutboundFetchInit, 'proxyUrl'> = {},
+  hostname = '',
+): string | undefined {
+  if (init.proxyUrl === false) return undefined
+
+  const explicit = typeof init.proxyUrl === 'string'
+    ? normalizeProxyUrlInput(init.proxyUrl)
+    : null
+  if (explicit) {
+    return isValidProxyUrl(explicit) ? explicit : undefined
+  }
+
+  const fallback = defaultOutboundProxyUrl
+  if (!fallback) return undefined
+  if (hostname && isLoopbackHostname(hostname)) return undefined
+  return fallback
+}
 
 function proxyAgentFor(url: string): Agent {
   let agent = proxyAgentCache.get(url)
@@ -155,23 +219,16 @@ function outboundFetchOnce(
   })
 }
 
-function resolveProxyFromInit(init: OutboundFetchInit): string | undefined {
-  const raw = normalizeProxyUrlInput(init.proxyUrl)
-  if (!raw) return undefined
-  if (!isValidProxyUrl(raw)) return undefined
-  return raw
-}
-
 /**
  * Outbound HTTP(S) fetch: IPv4 first per host; retry IPv6 only after v4 connect/DNS failure.
  * 一旦响应头到达并开始流式 body，不再换栈重放。
- * With `proxyUrl`, traffic routes through HTTP/HTTPS/SOCKS proxy (no dual-stack retry).
+ * With a resolved proxy URL, traffic routes through HTTP/HTTPS/SOCKS (no dual-stack retry).
  */
 export async function outboundFetch(url: string, init: OutboundFetchInit = {}): Promise<Response> {
   await ensureOutboundNetworkReady()
   const { proxyUrl: proxyOpt, ...fetchInit } = init
-  const proxyUrl = resolveProxyFromInit({ ...fetchInit, proxyUrl: proxyOpt })
   const hostname = new URL(url).hostname
+  const proxyUrl = resolveEffectiveOutboundProxyUrl({ proxyUrl: proxyOpt }, hostname)
   const families: OutboundConnectFamily[] = proxyUrl ? [4] : getConnectFamiliesForHost(hostname)
 
   let lastError: unknown

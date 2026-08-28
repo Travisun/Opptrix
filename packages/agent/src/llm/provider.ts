@@ -58,8 +58,8 @@ export interface LlmConfig {
   temperature?: number
   maxTokens?: number
   timeout?: number
-  /** http(s):// or socks5:// — per-provider or system-resolved */
-  proxyUrl?: string
+  /** http(s):// or socks5:// — per-provider override; `false` forces direct */
+  proxyUrl?: string | false
 }
 
 export interface ToolCall {
@@ -628,7 +628,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       },
       body: JSON.stringify(buildBody(stream)),
       signal: requestSignal,
-      ...(this.cfg.proxyUrl ? { proxyUrl: this.cfg.proxyUrl } : {}),
+      ...(this.cfg.proxyUrl !== undefined ? { proxyUrl: this.cfg.proxyUrl } : {}),
     })
 
     /** 上游拒收 tool_choice 时：先改 auto，再省略该字段后重试 */
@@ -776,7 +776,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
   async listModels() {
     return fetchOpenAiModelList(this.cfg.baseUrl, this.cfg.apiKey, {
-      proxyUrl: this.cfg.proxyUrl,
+      ...(this.cfg.proxyUrl !== undefined ? { proxyUrl: this.cfg.proxyUrl } : {}),
     }).catch(() => [])
   }
 }
@@ -803,13 +803,13 @@ export function joinOpenAiCompatibleUrl(baseUrl: string, relativePath: string): 
 export async function fetchOpenAiModelList(
   baseUrl: string,
   apiKey: string,
-  opts?: { proxyUrl?: string },
+  opts?: { proxyUrl?: string | false },
 ): Promise<string[]> {
   const url = joinOpenAiCompatibleUrl(baseUrl, 'models')
   const resp = await outboundFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(30_000),
-    ...(opts?.proxyUrl ? { proxyUrl: opts.proxyUrl } : {}),
+    ...(opts?.proxyUrl !== undefined ? { proxyUrl: opts.proxyUrl } : {}),
   })
   if (!resp.ok) {
     const text = (await resp.text()).slice(0, 200)

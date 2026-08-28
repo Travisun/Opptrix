@@ -9,7 +9,6 @@ import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStor
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
-import { resolveEffectiveProxyUrl } from '@opptrix/shared'
 import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   resolveProviderPresets, parseSystemProxyInput, parseProviderProxyFields,
@@ -34,7 +33,15 @@ import {
 } from './stock-analysis-store.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
-import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveOpptrixAppVersion, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
+import {
+  applySystemProxyAsDefault,
+  isDiscoverStrategyProfile,
+  listDiscoverProfileMeta,
+  resolveOpptrixAppVersion,
+  resolveOutboundProxyInit,
+  resolveProjectRoot,
+  type DiscoverStrategyProfile,
+} from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerCommunityRoutes } from './community-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
@@ -88,6 +95,7 @@ const APP_VERSION = resolveOpptrixAppVersion()
 
 const hub = new ResearchHub()
 let cfg = loadConfig()
+applySystemProxyAsDefault(cfg.system_proxy)
 
 function syncAgentProviders() {
   agent.setProviders(toAgentProviders(cfg), cfg.default_model)
@@ -977,7 +985,7 @@ app.patch<{ Body: {
       } catch (e) {
         return reply.code(400).send({
           status: 'error',
-          error: e instanceof Error ? e.message : '系统代理配置无效',
+          error: e instanceof Error ? e.message : '网络代理配置无效',
         })
       }
     }
@@ -987,6 +995,7 @@ app.patch<{ Body: {
       default_model: b.default_model,
       system_proxy,
     })
+    applySystemProxyAsDefault(cfg.system_proxy)
     syncAgentProviders()
     return { status: 'saved', config: publicConfig(cfg) }
   },
@@ -1006,10 +1015,10 @@ app.post<{ Body: {
     if (!base_url?.trim() || !api_key?.trim()) {
       return reply.code(400).send({ error: 'base_url and api_key required' })
     }
-    let proxyUrl: string | undefined
+    let proxyUrl: string | false | undefined
     try {
       const proxyFields = parseProviderProxyFields({ proxy_mode, proxy_url })
-      proxyUrl = resolveEffectiveProxyUrl(
+      proxyUrl = resolveOutboundProxyInit(
         { mode: proxyFields.proxy_mode, url: proxyFields.proxy_url },
         cfg.system_proxy,
       )

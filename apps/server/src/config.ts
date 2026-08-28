@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { getModelsDevCatalog, resolveModelsDevProviderMeta } from '@opptrix/agent'
 import {
   normalizeProviderProxyMode,
-  resolveEffectiveProxyUrl,
+  resolveOutboundProxyInit,
   validateProxyUrlInput,
   type ProviderProxyMode,
   type SystemProxySettings,
@@ -23,7 +23,7 @@ export interface StoredProvider {
   base_url: string
   api_key: string
   models: string[]
-  /** inherit = system proxy; none = direct; custom = proxy_url */
+  /** inherit = global outbound proxy; none = direct; custom = proxy_url */
   proxy_mode?: ProviderProxyMode
   proxy_url?: string
 }
@@ -257,7 +257,7 @@ export function parseSystemProxyInput(raw: unknown): SystemProxySettings {
     return { enabled: true, url: validateProxyUrlInput(base.url) ?? undefined }
   }
   if (base.enabled && !base.url?.trim()) {
-    throw new Error('启用系统代理时请填写代理地址')
+    throw new Error('启用网络代理时请填写代理地址')
   }
   return { enabled: false }
 }
@@ -286,7 +286,7 @@ export function toAgentProviders(cfg: AppConfig) {
     baseUrl: p.base_url,
     apiKey: p.api_key,
     models: p.models,
-    proxyUrl: resolveEffectiveProxyUrl(
+    proxyUrl: resolveOutboundProxyInit(
       { mode: normalizeProviderProxyMode(p.proxy_mode), url: p.proxy_url },
       system,
     ),

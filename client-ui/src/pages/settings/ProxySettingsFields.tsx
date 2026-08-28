@@ -6,17 +6,17 @@ import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSe
 export type ProviderProxyMode = 'inherit' | 'none' | 'custom'
 
 const PROXY_MODE_OPTIONS: Array<{ value: ProviderProxyMode; label: string }> = [
-  { value: 'inherit', label: '跟随系统' },
+  { value: 'inherit', label: '跟随全局代理' },
   { value: 'none', label: '直连（不走代理）' },
   { value: 'custom', label: '自定义代理' },
 ]
 
 function providerModeHint(mode: ProviderProxyMode): string | undefined {
   if (mode === 'inherit') {
-    return '与「常规 → 网络」中的系统代理一致；系统未启用时自动直连。'
+    return '与「常规 → 网络代理」一致；未启用时自动直连。'
   }
   if (mode === 'none') {
-    return '始终直连此服务的 API 地址，不使用系统或自定义代理。'
+    return '始终直连，不使用全局或自定义代理。'
   }
   return undefined
 }
