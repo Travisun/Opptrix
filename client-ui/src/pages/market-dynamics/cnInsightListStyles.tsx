@@ -34,12 +34,12 @@ export const useCnInsightListStyles = makeStyles({
   row: {
     ...ghostInteractive,
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-    gap: '6px 10px',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, auto)',
+    gap: '4px 8px',
     alignItems: 'center',
-    padding: '9px 8px',
+    padding: '8px 8px',
     borderRadius: '8px',
-    minHeight: '44px',
+    minHeight: '40px',
     boxSizing: 'border-box',
     width: '100%',
     border: 'none',
@@ -64,12 +64,10 @@ export const useCnInsightListStyles = makeStyles({
     ':active': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowWithBadge: {
-    gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
+    gridTemplateColumns: 'minmax(0, 1fr) auto repeat(3, auto)',
   },
-  rowStacked: {
+  rowWithTrailing: {
     gridTemplateColumns: 'minmax(0, 1fr) auto',
-    gridTemplateRows: 'auto auto',
-    rowGap: '2px',
   },
   rowBody: {
     minWidth: 0,
@@ -108,47 +106,48 @@ export const useCnInsightListStyles = makeStyles({
     whiteSpace: 'nowrap',
     lineHeight: 1.25,
     alignSelf: 'center',
+    justifySelf: 'end',
   },
-  priceCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: '1px',
-    minWidth: '52px',
+  metricCell: {
+    justifySelf: 'end',
     alignSelf: 'center',
+    fontVariantNumeric: 'tabular-nums',
+    textAlign: 'right',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.25,
   },
-  rowPrice: {
+  metricPrice: {
+    minWidth: '4.25rem',
     fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 650,
-    fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textPrimary,
-    textAlign: 'right',
-    whiteSpace: 'nowrap',
   },
-  rowChangeAmt: {
-    fontSize: '10px',
+  metricAmt: {
+    minWidth: '3.25rem',
+    fontSize: '11px',
     fontWeight: 600,
-    fontVariantNumeric: 'tabular-nums',
-    textAlign: 'right',
-    whiteSpace: 'nowrap',
-    lineHeight: 1.2,
+  },
+  metricPct: {
+    minWidth: '3.5rem',
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 650,
+  },
+  rowTrailing: {
+    justifySelf: 'end',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '10px',
+    minWidth: 0,
+    flexShrink: 0,
   },
   rowPct: {
     fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
-    minWidth: '52px',
+    minWidth: '3.5rem',
     whiteSpace: 'nowrap',
-    alignSelf: 'center',
-  },
-  rowTrailing: {
-    gridColumn: '2 / -1',
-    justifySelf: 'end',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
   },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
@@ -225,12 +224,14 @@ export function CnInsightStockRow({
 
   const rowClass = mergeClasses(
     s.row,
-    hasTrailing && s.rowStacked,
+    hasTrailing && s.rowWithTrailing,
     showBadge && s.rowWithBadge,
     interactive && s.rowInteractive,
     isActive && s.rowActive,
     className,
   )
+
+  const metricTone = insightPctClass(s, toneValue)
 
   const inner = (
     <>
@@ -240,26 +241,21 @@ export function CnInsightStockRow({
       </div>
       {showBadge ? <span className={s.rowBadge}>{badge}</span> : null}
       {showPriceCol ? (
-        <div className={s.priceCol}>
-          {price != null ? (
-            <span className={s.rowPrice}>{formatPrice(price, 2)}</span>
-          ) : (
-            <span className={s.rowPrice}>—</span>
-          )}
-          {changeAmt != null ? (
-            <span className={mergeClasses(s.rowChangeAmt, insightPctClass(s, toneValue))}>
-              {formatChangeAmt(changeAmt)}
-            </span>
-          ) : null}
-        </div>
+        <>
+          <span className={mergeClasses(s.metricCell, s.metricPrice)}>
+            {price != null ? formatPrice(price, 2) : '—'}
+          </span>
+          <span className={mergeClasses(s.metricCell, s.metricAmt, metricTone)}>
+            {changeAmt != null ? formatChangeAmt(changeAmt) : '—'}
+          </span>
+          <span className={mergeClasses(s.metricCell, s.metricPct, metricTone)}>
+            {formatPct(changePct ?? null, 2)}
+          </span>
+        </>
       ) : null}
       {hasTrailing ? (
         <div className={s.rowTrailing}>{trailing}</div>
-      ) : (
-        <span className={mergeClasses(s.rowPct, insightPctClass(s, toneValue))}>
-          {formatPct(changePct ?? null, 2)}
-        </span>
-      )}
+      ) : null}
     </>
   )
 

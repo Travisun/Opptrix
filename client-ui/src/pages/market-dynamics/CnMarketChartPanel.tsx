@@ -36,20 +36,35 @@ const useStyles = makeStyles({
   split: {
     flex: 1,
     minHeight: 0,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    position: 'relative',
+    isolation: 'isolate',
   },
   leftCol: {
-    flexShrink: 0,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 2,
     width: LEFT_COL_WIDTH,
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
     padding: '14px 14px 12px',
-    borderRight: `1px solid ${opptrixCssVars.separatorHairline}`,
+    boxSizing: 'border-box',
     minHeight: 0,
     overflow: 'hidden',
+    pointerEvents: 'auto',
+    backgroundColor: opptrixCssVars.surfaceGlass,
+    borderRight: `1px solid ${opptrixCssVars.glassSurfaceBorder}`,
+    borderRadius: `${CN_DASH.cardRadius} 0 0 ${CN_DASH.cardRadius}`,
+    boxShadow: '4px 0 20px rgba(0, 0, 0, 0.04)',
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+    '@media (prefers-reduced-transparency: reduce)': {
+      backgroundColor: opptrixCssVars.surface,
+      backdropFilter: 'none',
+      WebkitBackdropFilter: 'none',
+    },
   },
   breadcrumb: {
     display: 'inline-flex',
@@ -151,40 +166,32 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
   },
   chartCol: {
-    flex: 1,
+    position: 'absolute',
+    inset: 0,
+    zIndex: 0,
     minWidth: 0,
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    borderRadius: CN_DASH.cardRadius,
     backgroundColor: opptrixCssVars.canvasAlt,
   },
-  emptySplit: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  emptyLeft: {
-    flexShrink: 0,
-    width: LEFT_COL_WIDTH,
-    padding: '14px',
-    borderRight: `1px solid ${opptrixCssVars.separatorHairline}`,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
   emptyRight: {
-    flex: 1,
+    position: 'absolute',
+    inset: 0,
+    zIndex: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '24px',
+    padding: `24px 24px 24px calc(${LEFT_COL_WIDTH} + 16px)`,
+    boxSizing: 'border-box',
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
     lineHeight: 1.55,
+    borderRadius: CN_DASH.cardRadius,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
 })
 
@@ -277,16 +284,16 @@ export default function CnMarketChartPanel({
   if (!chartCode) {
     return (
       <section className={mergeClasses(s.panel, 'opptrix-cn-chart-panel')}>
-        <div className={s.emptySplit}>
-          <div className={s.emptyLeft}>
+        <div className={s.split}>
+          <Text className={s.emptyRight} block>
+            点击顶部宽基指数卡片，查看点位与走势
+          </Text>
+          <aside className={s.leftCol}>
             {leftMeta}
             <Text className={s.heroNote} block>
               在顶部选择宽基指数，查看点位与走势
             </Text>
-          </div>
-          <Text className={s.emptyRight} block>
-            点击顶部宽基指数卡片，查看点位与走势
-          </Text>
+          </aside>
         </div>
       </section>
     )
@@ -295,6 +302,18 @@ export default function CnMarketChartPanel({
   return (
     <section className={mergeClasses(s.panel, 'opptrix-cn-chart-panel')}>
       <div className={s.split}>
+        <div className={s.chartCol}>
+          {instrument ? (
+            <TradingViewChart
+              code={chartInputCode}
+              instrument={instrument}
+              chartVariant="index"
+              expanded
+              embedMode
+              active
+            />
+          ) : null}
+        </div>
         <aside className={s.leftCol}>
           {leftMeta}
           <div className={s.metricsGrid}>
@@ -325,18 +344,6 @@ export default function CnMarketChartPanel({
             </div>
           </div>
         </aside>
-        <div className={s.chartCol}>
-          {instrument ? (
-            <TradingViewChart
-              code={chartInputCode}
-              instrument={instrument}
-              chartVariant="index"
-              expanded
-              embedMode
-              active
-            />
-          ) : null}
-        </div>
       </div>
     </section>
   )

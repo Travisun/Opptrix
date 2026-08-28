@@ -67,6 +67,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    borderRadius: `0 0 ${CN_DASH.cardRadius} ${CN_DASH.cardRadius}`,
   },
 })
 

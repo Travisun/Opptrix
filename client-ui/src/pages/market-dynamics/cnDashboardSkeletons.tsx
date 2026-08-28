@@ -227,32 +227,45 @@ const useChartStyles = makeStyles({
   panel: {
     flex: 1,
     minHeight: 0,
-    display: 'flex',
-    flexDirection: 'row',
+    position: 'relative',
+    isolation: 'isolate',
     backgroundColor: opptrixCssVars.surface,
     borderRadius: CN_DASH.cardRadius,
-    border: 'none',
+    border: CN_DASH.cardBorder,
     overflow: 'hidden',
   },
   left: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 2,
     width: '172px',
-    flexShrink: 0,
     padding: '14px',
-    borderRight: `1px solid ${opptrixCssVars.separatorHairline}`,
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
+    backgroundColor: opptrixCssVars.surfaceGlass,
+    borderRight: `1px solid ${opptrixCssVars.glassSurfaceBorder}`,
+    borderRadius: `${CN_DASH.cardRadius} 0 0 ${CN_DASH.cardRadius}`,
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
   },
   crumb: { ...skBar('80%', '9px') },
   title: { ...skBar('90%', '16px') },
   metric: { ...skBar('100%', '36px', opptrixTokens.radiusMd) },
   chart: {
-    flex: 1,
-    minWidth: 0,
+    position: 'absolute',
+    inset: 0,
+    zIndex: 0,
     padding: '12px',
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
+    borderRadius: CN_DASH.cardRadius,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   chartBar: { flex: 1, minHeight: '120px', borderRadius: opptrixTokens.radiusMd },
 })
@@ -261,15 +274,15 @@ export function CnChartPanelSkeleton() {
   const s = useChartStyles()
   return (
     <section className={s.panel} aria-busy="true" aria-label="加载走势图">
+      <div className={s.chart} aria-hidden>
+        <Skeleton><SkeletonItem className={s.chartBar} /></Skeleton>
+      </div>
       <div className={s.left} aria-hidden>
         <Skeleton><SkeletonItem className={s.crumb} /></Skeleton>
         <Skeleton><SkeletonItem className={s.title} /></Skeleton>
         {Array.from({ length: 4 }, (_, i) => (
           <Skeleton key={i}><SkeletonItem className={s.metric} /></Skeleton>
         ))}
-      </div>
-      <div className={s.chart} aria-hidden>
-        <Skeleton><SkeletonItem className={s.chartBar} /></Skeleton>
       </div>
     </section>
   )

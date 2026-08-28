@@ -128,9 +128,11 @@ const useStyles = makeStyles({
   chartFrame: {
     position: 'relative',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
+  },
+  chartFrameBoxed: {
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   chartFrameExpanded: {
     display: 'flex',
@@ -143,8 +145,7 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     maxHeight: 'none',
-    borderRadius: 0,
-    border: 'none',
+    borderRadius: 'inherit',
     backgroundColor: 'transparent',
   },
   chartToolbarOverlay: {
@@ -972,6 +973,7 @@ export default function TradingViewChart({
       )}>
         <div className={mergeClasses(
           s.chartFrame,
+          !useEmbedLayout && s.chartFrameBoxed,
           expanded && s.chartFrameExpanded,
           useEmbedLayout && s.chartFrameEmbed,
         )}>
