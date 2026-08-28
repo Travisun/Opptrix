@@ -80,14 +80,14 @@ describe('provider-priority-order', () => {
     const tickflow = row({
       providerId: 'tickflow',
       title: 'TickFlow',
-      sortOrder: 20,
+      sortOrder: 30,
       requiresApiKey: false,
       manifestDefaultPriority: 110,
     })
     const tushare = row({
       providerId: 'tushare',
       title: 'Tushare',
-      sortOrder: 30,
+      sortOrder: 40,
       manifestDefaultPriority: 105,
     })
     // 新加源无 sortOrder，不得甩到最后

@@ -36,12 +36,19 @@ const useStyles = makeStyles({
     height: '40px',
     padding: '0 12px',
   },
+  titleTabs: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    minHeight: '28px',
+    position: 'relative',
+    zIndex: 1,
+  },
   title: {
-    paddingLeft: '3px',
-    fontSize: 'var(--opptrix-font-sm)',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
-    flexShrink: 0,
+    lineHeight: 1.2,
     whiteSpace: 'nowrap',
   },
   spacer: {
@@ -133,7 +140,9 @@ export default function MarketDynamicsHeader({
         paddingRight: electronChrome ? `${paddingRight}px` : undefined,
       }}
     >
-      <Text className={s.title}>A股</Text>
+      <div className={mergeClasses(s.titleTabs, 'opptrix-panel-title-no-drag')}>
+        <Text className={s.title}>市场动态</Text>
+      </div>
       <div
         className={mergeClasses(s.spacer, electronChrome && dragRegionClassName)}
         aria-hidden

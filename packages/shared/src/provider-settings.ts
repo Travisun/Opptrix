@@ -291,5 +291,5 @@ export const REMOVED_SCRAPING_PROVIDER_IDS = [
 ] as const
 
 /** 暂时下线的内置源（源码保留，便于以后加回；启动时 purge 用户配置） */
-export const REMOVED_TEMP_PROVIDER_IDS = ['baostock', 'zzshare'] as const
+export const REMOVED_TEMP_PROVIDER_IDS = ['baostock', 'zzshare', 'yfinance'] as const
 

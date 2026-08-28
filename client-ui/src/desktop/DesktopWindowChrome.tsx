@@ -44,6 +44,7 @@ import {
   desktopTitleLeft,
   desktopTitleMaxWidth,
   desktopToolbarLeft,
+  desktopChromeToolbarReserve,
   type DesktopViewMode,
 } from './layout'
 import ChromeToolButton from './ChromeToolButton'
@@ -357,6 +358,8 @@ export default function DesktopWindowChrome({
     rightPanelWidth,
   )
 
+  const standaloneDragLeft = dragLeftInset
+
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {
       if (!sidebarOpen) onRevealSidebar?.()
@@ -411,7 +414,7 @@ export default function DesktopWindowChrome({
           <div
             className={s.drag}
             style={{
-              left: `${dragLeftInset}px`,
+              left: `${standaloneDragLeft}px`,
               right: 0,
               ...dragRightClip,
               ...(dragRightClip.right != null

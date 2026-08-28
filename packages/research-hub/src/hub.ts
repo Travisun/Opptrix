@@ -60,6 +60,7 @@ import {
   type InstrumentRef,
   type InstrumentHubCapability,
 } from '@opptrix/shared'
+import { canonicalHkSymbol } from '@opptrix/shared/instrument-symbol'
 import {
   quickAssess,
   verifyStrategy,
@@ -1009,11 +1010,17 @@ export class ResearchHub {
       displayName: string
       location: string
       chartSymbol?: string
+      etfFallback?: import('@opptrix/shared').InstrumentRef
     }>,
   ) {
     const items = await Promise.all(proxies.map(async proxy => {
       const r = await this.de.queryInstrumentData(proxy.ref, 'realtime')
-      const row = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
+      const indexRow = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(r)?.[0]
+      let fallbackRow: import('@opptrix/shared').StockRealtime | undefined
+      if ((!indexRow || indexRow.price == null) && proxy.etfFallback) {
+        const fbR = await this.de.queryInstrumentData(proxy.etfFallback, 'realtime')
+        fallbackRow = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(fbR)?.[0]
+      }
       const base = {
         code: proxy.outCode,
         name: proxy.displayName,
@@ -1023,9 +1030,14 @@ export class ResearchHub {
         location: proxy.location,
         chart_symbol: proxy.chartSymbol ?? proxy.ref.symbol,
       }
+      const row = indexRow ?? fallbackRow
       if (!row) return base
-      const price = typeof row.price === 'number' ? row.price : null
-      const changePct = typeof row.changePct === 'number' ? row.changePct : null
+      const price = typeof indexRow?.price === 'number' ? indexRow.price : null
+      const changePct = typeof indexRow?.changePct === 'number'
+        ? indexRow.changePct
+        : typeof fallbackRow?.changePct === 'number'
+          ? fallbackRow.changePct
+          : null
       return {
         ...base,
         price,
@@ -1150,7 +1162,209 @@ export class ResearchHub {
   private async marketDynamics(t0: number, params: Record<string, unknown> = {}) {
     const market = String(params.market ?? 'cn').trim().toLowerCase()
     if (market === 'us') return this.marketDynamicsUs(t0)
+    if (market === 'hk') return this.marketDynamicsHk(t0)
     return this.marketDynamicsCn(t0)
+  }
+
+  private async fetchHkSectorBoardViaTickflow() {
+    const boards = [
+      { code: '2828', name: '恒生中国企业', chartSymbol: '2828.HK' },
+      { code: '3067', name: '恒生科技', chartSymbol: '3067.HK' },
+      { code: '2800', name: '盈富基金', chartSymbol: '2800.HK' },
+      { code: '3033', name: '南方恒生科技', chartSymbol: '3033.HK' },
+    ]
+    const batch = await this.de.batchRealtimeByMarket('HK', boards.map(b => b.code))
+    if (!batch.success || !batch.data?.length) return []
+    return boards.flatMap(board => {
+      const row = (batch.data as Record<string, unknown>[]).find(item => {
+        const code = String(item.code ?? '').trim().padStart(5, '0')
+        return code === board.code.padStart(5, '0')
+      })
+      if (!row) return []
+      return [{
+        code: board.code,
+        name: board.name,
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        change_amt: null as number | null,
+        market: 'HK' as const,
+        location: '香港',
+        chart_symbol: board.chartSymbol,
+        sector_tag: 'sector',
+      }]
+    })
+  }
+
+  private async fetchHkMoversViaTickflow(limit = 12) {
+    const watch = [
+      '00700', '09988', '01810', '03690', '00941', '01299', '02318', '01398',
+      '00883', '01024', '09999', '09618', '02382', '02628', '00005', '00011',
+      '00388', '02269', '02020', '06618', '01211', '02313', '01928', '00939',
+    ]
+    const chunkSize = 4
+    const merged: Record<string, unknown>[] = []
+    for (let i = 0; i < watch.length; i += chunkSize) {
+      const part = watch.slice(i, i + chunkSize)
+      const batch = await this.de.batchRealtimeByMarket('HK', part)
+      if (batch.success && batch.data?.length) {
+        merged.push(...(batch.data as Record<string, unknown>[]))
+      }
+    }
+    if (!merged.length) return { gainers: [], losers: [] }
+    const rows = merged
+      .map(row => {
+        const code = String(row.code ?? '').trim().padStart(5, '0')
+        const name = String(row.name ?? code).trim()
+        const changePct = typeof row.changePct === 'number' ? row.changePct : null
+        if (!code || changePct == null) return null
+        return {
+          code,
+          name,
+          price: typeof row.price === 'number' ? row.price : null,
+          change_pct: changePct,
+          change_amt: typeof row.change === 'number' ? row.change : null,
+        }
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .sort((a, b) => (b.change_pct ?? 0) - (a.change_pct ?? 0))
+    return {
+      gainers: rows.filter(r => (r.change_pct ?? 0) > 0).slice(0, limit),
+      losers: rows.filter(r => (r.change_pct ?? 0) < 0).slice(-limit).reverse(),
+    }
+  }
+
+  private async marketDynamicsHk(t0: number) {
+    const hkYahooEquityTicker = (code: string) => {
+      const hk = canonicalHkSymbol(code.replace(/\.HK$/i, ''))
+      const yahoo = hk.length > 4 ? hk.slice(-4) : hk
+      return `${yahoo}.HK`
+    }
+    const hkMoverChartSymbol = (code: string, chartFromRow?: unknown) => {
+      const chart = String(chartFromRow ?? '').trim()
+      if (chart && (chart.includes('.') || chart.startsWith('^'))) return chart
+      return hkYahooEquityTicker(code)
+    }
+
+    const HK_CORE_INDICES = [
+      {
+        ref: { market: 'HK', assetClass: 'INDEX', symbol: '^HSI' } as import('@opptrix/shared').InstrumentRef,
+        etfFallback: { market: 'HK', assetClass: 'EQUITY', symbol: '2800' } as import('@opptrix/shared').InstrumentRef,
+        outCode: 'HSI', displayName: '恒生指数', chartSymbol: '^HSI', location: '香港',
+      },
+      {
+        ref: { market: 'HK', assetClass: 'INDEX', symbol: '^HSCE' } as import('@opptrix/shared').InstrumentRef,
+        etfFallback: { market: 'HK', assetClass: 'EQUITY', symbol: '2828' } as import('@opptrix/shared').InstrumentRef,
+        outCode: 'HSCE', displayName: '恒生国企', chartSymbol: '^HSCE', location: '香港',
+      },
+      {
+        ref: { market: 'HK', assetClass: 'INDEX', symbol: '^HSTECH' } as import('@opptrix/shared').InstrumentRef,
+        etfFallback: { market: 'HK', assetClass: 'EQUITY', symbol: '3067' } as import('@opptrix/shared').InstrumentRef,
+        outCode: 'HSTECH', displayName: '恒生科技', chartSymbol: 'HSTECH.HK', location: '香港',
+      },
+    ]
+
+    const [
+      hkItems,
+      hkSectors,
+      moversFallback,
+    ] = await Promise.all([
+      this.fetchGlobalIndexProxyItems(
+        HK_CORE_INDICES.map(row => ({
+          ref: row.ref,
+          etfFallback: row.etfFallback,
+          outCode: row.outCode,
+          displayName: row.displayName,
+          location: row.location,
+          chartSymbol: row.chartSymbol,
+        })),
+      ).then(items => items.map((item, idx) => ({
+        ...item,
+        chart_symbol: HK_CORE_INDICES[idx]?.chartSymbol ?? item.code,
+      }))),
+      this.fetchHkSectorBoardViaTickflow(),
+      this.fetchHkMoversViaTickflow(12),
+    ])
+
+    const hkGainers = moversFallback.gainers
+    const hkLosers = moversFallback.losers
+    const hkTrending: Array<{
+      code: string
+      name: string
+      price: number | null
+      change_pct: number | null
+      change_amt: number | null
+      rank?: number
+    }> = []
+
+    const sections = hkItems.length ? [{
+      id: 'hk_major',
+      title: '港股主要指数',
+      hint: '恒生系列宽基指数实时报价',
+      items: hkItems,
+    }] : []
+
+    if (hkSectors.length) {
+      sections.push({
+        id: 'hk_sectors',
+        title: '港股板块',
+        hint: '代表性 ETF 板块涨跌',
+        items: hkSectors,
+      })
+    }
+
+    if (hkGainers.length) {
+      sections.push({
+        id: 'hk_gainers',
+        title: '港股涨幅榜',
+        hint: '当日涨幅领先个股',
+        items: hkGainers.map(row => ({
+          ...row,
+          market: 'HK',
+          location: '香港',
+          chart_symbol: hkMoverChartSymbol(row.code, row.code),
+        })),
+      })
+    }
+
+    if (hkLosers.length) {
+      sections.push({
+        id: 'hk_losers',
+        title: '港股跌幅榜',
+        hint: '当日跌幅靠前个股',
+        items: hkLosers.map(row => ({
+          ...row,
+          market: 'HK',
+          location: '香港',
+          chart_symbol: hkMoverChartSymbol(row.code, row.code),
+        })),
+      })
+    }
+
+    if (hkTrending.length) {
+      sections.push({
+        id: 'hk_trending',
+        title: '港股热门',
+        hint: '当前讨论与关注度较高的标的',
+        items: hkTrending.map(row => ({
+          ...row,
+          market: 'HK',
+          location: '香港',
+          chart_symbol: hkMoverChartSymbol(row.code, row.code),
+        })),
+      })
+    }
+
+    return ok({
+      market: 'hk' as const,
+      refreshed_at: new Date().toISOString(),
+      sections,
+      hk_indices: hkItems,
+      hk_gainers: hkGainers,
+      hk_losers: hkLosers,
+      hk_trending: hkTrending,
+      hk_sector_status: hkSectors.length ? 'ok' as const : 'empty' as const,
+      hk_sector_hint: hkSectors.length ? undefined : '板块数据待更新，请稍后刷新',
+    }, '港股市场动态', t0)
   }
 
   private async marketDynamicsUs(t0: number) {
@@ -1169,16 +1383,9 @@ export class ResearchHub {
       FCHI: { location: '法国', chartSymbol: '^FCHI' },
     }
 
-    const usSectorRef = { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' } as import('@opptrix/shared').InstrumentRef
-
     const [
       usItems,
       asiaItems,
-      usSectorR,
-      gainersR,
-      losersR,
-      trendingUsR,
-      trendingJpR,
       globalR,
     ] = await Promise.all([
       this.fetchGlobalIndexProxyItems(
@@ -1204,11 +1411,6 @@ export class ResearchHub {
         ...item,
         chart_symbol: ASIA_CORE_INDICES[idx]?.chartSymbol ?? item.code,
       }))),
-      this.de.queryInstrumentData(usSectorRef, 'sector_list', { plateType: 'boards:US' }),
-      this.de.invokeCustomMethod('yfinance', 'yfScreener', ['day_gainers', 12, 'US']),
-      this.de.invokeCustomMethod('yfinance', 'yfScreener', ['day_losers', 12, 'US']),
-      this.de.invokeCustomMethod('yfinance', 'yfTrendingSymbols', ['US', 10]),
-      this.de.invokeCustomMethod('yfinance', 'yfTrendingSymbols', ['JP', 8]),
       this.de.globalIndex(''),
     ])
 
@@ -1228,43 +1430,29 @@ export class ResearchHub {
         }
       })
 
-    const usSectors = (instrumentQueryData<Array<Record<string, unknown>>>(usSectorR) ?? [])
-      .map(row => ({
-        code: String(row.code ?? '').trim(),
-        name: String(row.name ?? row.code ?? '').trim(),
-        price: typeof row.price === 'number' ? row.price : null,
-        change_pct: typeof row.change_pct === 'number' ? row.change_pct : null,
-        change_amt: null as number | null,
-        market: 'US' as const,
-        location: '美国',
-        chart_symbol: String(row.chart_symbol ?? row.code ?? '').trim() || String(row.code ?? '').trim(),
-        sector_tag: String(row.sector_tag ?? 'sector'),
-      }))
-      .filter(item => item.code && item.name)
+    const usSectors: Array<{
+      code: string
+      name: string
+      price: number | null
+      change_pct: number | null
+      change_amt: number | null
+      market: 'US'
+      location: string
+      chart_symbol: string
+      sector_tag: string
+    }> = []
 
-    const mapUsMovers = (r: { success: boolean; data?: unknown }) => {
-      if (!r.success || !Array.isArray(r.data)) return []
-      return r.data
-        .map(row => {
-          const rec = row as Record<string, unknown>
-          const code = String(rec.code ?? '').trim()
-          const name = String(rec.name ?? code).trim()
-          if (!code || !name) return null
-          return {
-            code,
-            name,
-            price: typeof rec.price === 'number' ? rec.price : null,
-            change_pct: typeof rec.change_pct === 'number' ? rec.change_pct : null,
-            change_amt: typeof rec.change_amt === 'number' ? rec.change_amt : null,
-          }
-        })
-        .filter((row): row is NonNullable<typeof row> => row != null)
-    }
-
-    const usGainers = mapUsMovers(gainersR)
-    const usLosers = mapUsMovers(losersR)
-    const usTrending = mapUsMovers(trendingUsR)
-    const usTrendingJp = mapUsMovers(trendingJpR)
+    const emptyUsMovers: Array<{
+      code: string
+      name: string
+      price: number | null
+      change_pct: number | null
+      change_amt: number | null
+    }> = []
+    const usGainers = emptyUsMovers
+    const usLosers = emptyUsMovers
+    const usTrending = emptyUsMovers
+    const usTrendingJp = emptyUsMovers
 
     const allIndices = [...usItems, ...asiaItems, ...euItems]
 

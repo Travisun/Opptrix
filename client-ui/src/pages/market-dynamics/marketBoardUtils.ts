@@ -66,7 +66,18 @@ export function indexInstrumentFromQuote(
   const chartSym = item.chart_symbol?.trim()
 
   if (chartSym && (mkt === 'HK' || mkt === 'US')) {
-    return { market: mkt as 'HK' | 'US', assetClass: 'INDEX', symbol: chartSym }
+    const isHkIndex = mkt === 'HK' && (
+      chartSym.startsWith('^')
+        || chartSym.toUpperCase() === 'HSTECH.HK'
+        || ['HSI', 'HSCE', 'HSTECH'].includes((item.code ?? '').trim().toUpperCase())
+    )
+    return {
+      market: mkt as 'HK' | 'US',
+      assetClass: mkt === 'HK'
+        ? (isHkIndex ? 'INDEX' : 'EQUITY')
+        : 'INDEX',
+      symbol: chartSym,
+    }
   }
 
   const symbol = indexChartCodeFromQuote(item)

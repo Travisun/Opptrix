@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import TradingViewChart from '../../market/TradingViewChart'
 import { opptrixCssVars } from '../../theme/tokens'
+import type { InstrumentRef } from '../../types/instrument'
 import { CnInsightStockSelectProvider } from './cnInsightStockContext'
 import type { CnInsightStockPick } from './cnInsightStockUtils'
 import { cnInsightChartInputCode, cnInsightInstrumentFromCode } from './cnInsightStockUtils'
@@ -68,23 +69,29 @@ type Props = {
   selected: CnInsightStockPick | null
   onSelect: (pick: CnInsightStockPick | null) => void
   children: React.ReactNode
+  instrumentFromCode?: (code: string) => InstrumentRef
+  chartInputCode?: (ref: InstrumentRef) => string
 }
 
 function ChartPane({
   stock,
   onClose,
+  instrumentFromCode,
+  chartInputCodeFn,
 }: {
   stock: CnInsightStockPick
   onClose: () => void
+  instrumentFromCode: (code: string) => InstrumentRef
+  chartInputCodeFn: (ref: InstrumentRef) => string
 }) {
   const s = useStyles()
   const instrument = useMemo(
-    () => cnInsightInstrumentFromCode(stock.code),
-    [stock.code],
+    () => instrumentFromCode(stock.code),
+    [instrumentFromCode, stock.code],
   )
   const chartInputCode = useMemo(
-    () => cnInsightChartInputCode(instrument),
-    [instrument],
+    () => chartInputCodeFn(instrument),
+    [chartInputCodeFn, instrument],
   )
 
   return (
@@ -109,6 +116,8 @@ export default function CnInsightSplitView({
   selected,
   onSelect,
   children,
+  instrumentFromCode = cnInsightInstrumentFromCode,
+  chartInputCode: chartInputCodeFn = cnInsightChartInputCode,
 }: Props) {
   const s = useStyles()
   const split = selected != null
@@ -121,7 +130,12 @@ export default function CnInsightSplitView({
         </div>
         <div className={mergeClasses(s.chartPane, split && s.chartPaneOpen)}>
           {selected ? (
-            <ChartPane stock={selected} onClose={() => onSelect(null)} />
+            <ChartPane
+              stock={selected}
+              onClose={() => onSelect(null)}
+              instrumentFromCode={instrumentFromCode}
+              chartInputCodeFn={chartInputCodeFn}
+            />
           ) : null}
         </div>
       </div>

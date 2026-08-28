@@ -1,6 +1,7 @@
 import type { StockKline, StockRealtime } from '@opptrix/shared'
 import type { GlobalIndex, IndexKline, StockProfile } from '../../core/schema.js'
 import type { YfinanceGlobalIndex } from './symbols.js'
+import { displayCodeFromYahooTicker } from './symbols.js'
 
 function n(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -192,7 +193,7 @@ export function mapQuoteSummaryToProfile(
 }
 
 export function mapSectorQuoteRow(
-  board: { code: string; name: string; market: string; tag?: string },
+  board: { code: string; name: string; market: string; tag?: string; yahoo?: string },
   quote: YahooQuote,
 ): Record<string, unknown> {
   return {
@@ -202,7 +203,7 @@ export function mapSectorQuoteRow(
     sector_tag: board.tag ?? 'sector',
     price: n(quote.regularMarketPrice),
     change_pct: pct(quote.regularMarketChangePercent),
-    chart_symbol: board.code,
+    chart_symbol: board.yahoo ?? board.code,
   }
 }
 
@@ -220,8 +221,12 @@ export function mapScreenerQuoteToMover(
   quote: ScreenerQuoteLike,
   market: string,
 ): Record<string, unknown> {
-  const code = String(quote.symbol ?? '').trim()
-  if (!code) return {}
+  const ticker = String(quote.symbol ?? '').trim()
+  if (!ticker) return {}
+  const mkt = market.toUpperCase()
+  const code = mkt === 'HK' || mkt === 'JP' || mkt === 'KR'
+    ? displayCodeFromYahooTicker(ticker, mkt as import('@opptrix/shared').Market)
+    : ticker
   const name = String(quote.shortName ?? quote.displayName ?? quote.longName ?? code)
   const price = n(quote.regularMarketPrice)
   const changePct = pct(quote.regularMarketChangePercent)
@@ -237,7 +242,7 @@ export function mapScreenerQuoteToMover(
     change_pct: changePct,
     change_amt: changeAmt,
     market,
-    chart_symbol: code,
+    chart_symbol: ticker,
   }
 }
 

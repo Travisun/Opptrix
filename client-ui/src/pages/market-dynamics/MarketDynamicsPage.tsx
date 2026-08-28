@@ -45,17 +45,20 @@ type Props = {
 
 function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 0 }: Props) {
   const s = useStyles()
-  const { data, loading, refreshing, error, refreshedAt, refresh } = useMarketDynamics('cn')
-  const insights = useMarketInsights('cn')
+  const { data, loading, refreshing, error, refresh } = useMarketDynamics()
+  const insights = useMarketInsights()
 
-  const updatedLabel = refreshedAt ? formatCnDateTime(refreshedAt) : null
+  const panelData = data?.market === 'cn' ? data : null
+  const panelLoading = loading || (data != null && data.market !== 'cn')
+
+  const updatedLabel = panelData?.refreshed_at ? formatCnDateTime(panelData.refreshed_at) : null
   const statusLabel = refreshing
     ? '刷新中…'
     : updatedLabel
       ? `更新 ${updatedLabel}`
       : '尚未刷新'
 
-  const hasData = Boolean(data?.sections.length || data?.us_indices?.length)
+  const hasData = Boolean(panelData?.sections.length)
 
   const handleRefresh = () => {
     void refresh()
@@ -75,8 +78,8 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
       {error && <div className={s.errorBanner}>{error}</div>}
       <div className={s.content}>
         <CnMarketDynamicsView
-          data={data}
-          loading={loading && !hasData}
+          data={panelData}
+          loading={panelLoading && !hasData}
           articles={insights.articles}
           insightsLoading={insights.loading}
         />

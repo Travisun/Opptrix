@@ -303,7 +303,7 @@ export const research = {
   marketRegime: (scope: 'cn' | 'us' = 'cn') =>
     apiCall<import('../types/schemas').MarketRegimeData>('market_regime', { profile_scope: scope }),
 
-  marketDynamics: (opts?: { market?: 'cn' | 'us' }) =>
+  marketDynamics: (opts?: { market?: 'cn' | 'us' | 'hk' }) =>
     apiCall<import('../types/schemas').MarketDynamicsData>(
       'market_dynamics',
       { market: opts?.market ?? 'cn' },

@@ -400,6 +400,7 @@ export interface MarketStockMover {
   price: number | null
   change_pct: number | null
   change_amt?: number | null
+  rank?: number | null
 }
 
 export interface MarketDragonTigerItem {
@@ -461,7 +462,7 @@ export interface MarketAnomalyItem {
 }
 
 export interface MarketDynamicsData {
-  market?: 'cn' | 'us'
+  market?: 'cn' | 'us' | 'hk'
   refreshed_at: string
   sections: MarketDynamicsSection[]
   cn_gainers?: MarketStockMover[]
@@ -482,6 +483,12 @@ export interface MarketDynamicsData {
   us_losers?: MarketStockMover[]
   us_trending?: MarketStockMover[]
   us_trending_jp?: MarketStockMover[]
+  hk_indices?: MarketIndexQuote[]
+  hk_gainers?: MarketStockMover[]
+  hk_losers?: MarketStockMover[]
+  hk_trending?: MarketStockMover[]
+  hk_sector_status?: 'ok' | 'empty' | 'error'
+  hk_sector_hint?: string
 }
 
 export interface StockSearchItem {
