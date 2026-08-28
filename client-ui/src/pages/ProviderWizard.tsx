@@ -11,6 +11,7 @@ import {
   type ProviderPreset, type PublicProvider,
 } from '../api/client'
 import { useSettingsToast } from './settings/SettingsToast'
+import { ProxySettingsFields, type ProviderProxyMode } from './settings/ProxySettingsFields'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { focusRing, ghostInteractive } from '../theme/mixins'
 
@@ -402,6 +403,8 @@ export default function ProviderWizard({
   const [discovering, setDiscovering] = useState(false)
   const [saving, setSaving] = useState(false)
   const [discoverHint, setDiscoverHint] = useState('')
+  const [proxyMode, setProxyMode] = useState<ProviderProxyMode>('inherit')
+  const [proxyUrl, setProxyUrl] = useState('')
 
   useEffect(() => {
     getProviderPresets()
@@ -422,6 +425,8 @@ export default function ProviderWizard({
     setCustomFormOpen(false)
     setSelectedPresetId(null)
     setDiscoverHint('')
+    setProxyMode(provider.proxy_mode ?? 'inherit')
+    setProxyUrl(provider.proxy_url ?? '')
   }, [provider])
 
   /** 扁平列表：返利置顶 → 其余中国 → 海外 → 自定义 */
@@ -465,6 +470,11 @@ export default function ProviderWizard({
     setStep(2)
   }
 
+  const proxyPayload = useMemo(() => ({
+    proxy_mode: proxyMode,
+    ...(proxyMode === 'custom' && proxyUrl.trim() ? { proxy_url: proxyUrl.trim() } : {}),
+  }), [proxyMode, proxyUrl])
+
   const runDiscover = async (): Promise<boolean> => {
     const url = baseUrl.trim()
     const key = apiKey.trim()
@@ -481,7 +491,7 @@ export default function ProviderWizard({
     setDiscovered([])
     setSelected(new Set())
     try {
-      const { models } = await discoverModels(url, key)
+      const { models } = await discoverModels(url, key, proxyPayload)
       setDiscovered(models)
       if (models.length) {
         if (isEdit && provider) {
@@ -562,6 +572,10 @@ export default function ProviderWizard({
       toast.showError('请至少勾选一个模型')
       return
     }
+    if (proxyMode === 'custom' && !proxyUrl.trim()) {
+      toast.showError('自定义代理模式下请填写代理地址')
+      return
+    }
     setSaving(true)
     try {
       if (isEdit && provider) {
@@ -570,6 +584,8 @@ export default function ProviderWizard({
           base_url: baseUrl.trim(),
           ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
           models: [...selected],
+          proxy_mode: proxyMode,
+          ...(proxyMode === 'custom' ? { proxy_url: proxyUrl.trim() } : {}),
         })
       } else {
         await createProvider({
@@ -577,6 +593,8 @@ export default function ProviderWizard({
           base_url: baseUrl.trim(),
           api_key: apiKey.trim(),
           models: [...selected],
+          proxy_mode: proxyMode,
+          ...(proxyMode === 'custom' ? { proxy_url: proxyUrl.trim() } : {}),
         })
       }
       onDone()
@@ -785,6 +803,13 @@ export default function ProviderWizard({
                     autoComplete="off"
                   />
                 </OpptrixField>
+                <ProxySettingsFields
+                  scope="provider"
+                  mode={proxyMode}
+                  url={proxyUrl}
+                  onModeChange={setProxyMode}
+                  onUrlChange={setProxyUrl}
+                />
               </div>
             </>
           )}

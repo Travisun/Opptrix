@@ -60,9 +60,10 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', group: '外观', title: '提示音', desc: '对话完成或需要你确认时播放轻提示', keywords: ['提示音', '音效', '声音', 'sound', '通知音'] },
   { section: 'general', group: '偏好', title: '评分卡', desc: '因子评估默认使用的评分模板', keywords: ['scorecard', 'G=B+M', '因子'] },
   { section: 'general', group: '连接', title: '后端连接', desc: '检查 API 服务与 LLM 提供商配置', keywords: ['测试', 'health', '连接'] },
+  { section: 'general', group: '网络', title: '大模型系统代理', desc: '打开开关配置代理地址，在输入框旁保存', keywords: ['代理', 'proxy', 'socks', '网络'] },
 
   // 大模型
-  { section: 'models', title: '提供商', desc: '配置服务地址与密钥', keywords: ['大模型', 'LLM', 'OpenAI', '密钥', '提供商'] },
+  { section: 'models', title: '提供商', desc: '配置服务地址与密钥', keywords: ['大模型', 'LLM', 'OpenAI', '密钥', '提供商', '代理'] },
   { section: 'models', title: '添加提供商', keywords: ['新增', '添加', '大模型'] },
   { section: 'models', title: '编辑提供商', keywords: ['修改', '大模型'] },
   // 自进化

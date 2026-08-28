@@ -1,6 +1,9 @@
 import http from 'node:http'
 import https from 'node:https'
+import type { Agent } from 'node:http'
 import { Readable } from 'node:stream'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import { SocksProxyAgent } from 'socks-proxy-agent'
 import {
   ensureOutboundNetworkReady,
   getConnectFamiliesForHost,
@@ -9,6 +12,31 @@ import {
   noteHostConnectSuccess,
   type OutboundConnectFamily,
 } from './outbound-network.js'
+import { isValidProxyUrl, normalizeProxyUrlInput } from './proxy-config.js'
+
+export type OutboundFetchInit = RequestInit & {
+  /** http(s):// or socks5:// / socks4:// — routes this request through a proxy */
+  proxyUrl?: string
+}
+
+const proxyAgentCache = new Map<string, Agent>()
+
+function proxyAgentFor(url: string): Agent {
+  let agent = proxyAgentCache.get(url)
+  if (!agent) {
+    const scheme = new URL(url).protocol.replace(':', '').toLowerCase()
+    agent = (scheme === 'socks5' || scheme === 'socks4')
+      ? new SocksProxyAgent(url)
+      : new HttpsProxyAgent(url)
+    proxyAgentCache.set(url, agent)
+  }
+  return agent
+}
+
+/** @internal tests only */
+export function resetOutboundProxyAgentCacheForTests(): void {
+  proxyAgentCache.clear()
+}
 
 function normalizeHeaders(headers?: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -60,6 +88,7 @@ function outboundFetchOnce(
   url: string,
   init: RequestInit,
   family: OutboundConnectFamily,
+  proxyUrl?: string,
 ): Promise<Response> {
   const parsed = new URL(url)
   const isHttps = parsed.protocol === 'https:'
@@ -67,6 +96,16 @@ function outboundFetchOnce(
   const method = init.method ?? 'GET'
   const headers = normalizeHeaders(init.headers)
   const payload = bodyBytes(init.body)
+  const agent = proxyUrl ? proxyAgentFor(proxyUrl) : undefined
+
+  const requestOptions: https.RequestOptions = {
+    hostname: parsed.hostname,
+    port: parsed.port || (isHttps ? 443 : 80),
+    path: `${parsed.pathname}${parsed.search}`,
+    method,
+    headers,
+    ...(agent ? { agent } : { family }),
+  }
 
   return new Promise((resolve, reject) => {
     const signal = init.signal
@@ -88,16 +127,8 @@ function outboundFetchOnce(
     }
 
     const req = lib.request(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || (isHttps ? 443 : 80),
-        path: `${parsed.pathname}${parsed.search}`,
-        method,
-        headers,
-        family,
-      },
+      requestOptions,
       (res) => {
-        // 响应头到达即 resolve，body 用可读流 — 禁止整包缓冲后再给调用方
         const webBody = Readable.toWeb(res) as ReadableStream<Uint8Array>
         settleResolve(new Response(webBody, {
           status: res.statusCode ?? 500,
@@ -108,14 +139,12 @@ function outboundFetchOnce(
     )
 
     req.on('error', (error) => {
-      // 已 resolve（流式读 body）后 destroy/abort 只影响 body，勿再 reject Promise
       settleReject(error)
     })
 
     const onAbort = () => {
       const reason = abortRejectReason(signal)
       req.destroy(reason)
-      // 尚未拿到响应头：以 abort reason 结束（含 TimeoutError，由 formatOutboundFetchError 转中文）
       settleReject(reason)
     }
     signal?.addEventListener('abort', onAbort, { once: true })
@@ -126,24 +155,34 @@ function outboundFetchOnce(
   })
 }
 
+function resolveProxyFromInit(init: OutboundFetchInit): string | undefined {
+  const raw = normalizeProxyUrlInput(init.proxyUrl)
+  if (!raw) return undefined
+  if (!isValidProxyUrl(raw)) return undefined
+  return raw
+}
+
 /**
  * Outbound HTTP(S) fetch: IPv4 first per host; retry IPv6 only after v4 connect/DNS failure.
  * 一旦响应头到达并开始流式 body，不再换栈重放。
+ * With `proxyUrl`, traffic routes through HTTP/HTTPS/SOCKS proxy (no dual-stack retry).
  */
-export async function outboundFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export async function outboundFetch(url: string, init: OutboundFetchInit = {}): Promise<Response> {
   await ensureOutboundNetworkReady()
+  const { proxyUrl: proxyOpt, ...fetchInit } = init
+  const proxyUrl = resolveProxyFromInit({ ...fetchInit, proxyUrl: proxyOpt })
   const hostname = new URL(url).hostname
-  const families = getConnectFamiliesForHost(hostname)
+  const families: OutboundConnectFamily[] = proxyUrl ? [4] : getConnectFamiliesForHost(hostname)
 
   let lastError: unknown
   for (const family of families) {
     try {
-      const response = await outboundFetchOnce(url, init, family)
-      noteHostConnectSuccess(hostname, family)
+      const response = await outboundFetchOnce(url, fetchInit, family, proxyUrl)
+      if (!proxyUrl) noteHostConnectSuccess(hostname, family)
       return response
     } catch (error) {
-      if (init.signal?.aborted) throw error
-      if (!isOutboundConnectError(error)) throw error
+      if (fetchInit.signal?.aborted) throw error
+      if (proxyUrl || !isOutboundConnectError(error)) throw error
       noteHostConnectFailure(hostname, family)
       lastError = error
     }

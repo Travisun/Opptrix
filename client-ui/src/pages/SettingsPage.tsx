@@ -26,6 +26,7 @@ import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettin
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
 import PortfolioFeeSettingsSection from './settings/PortfolioFeeSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
+import { SystemProxySettingsSection } from './settings/SystemProxySettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsEmptyState,
@@ -34,7 +35,7 @@ import {
 } from './settings/SettingsPrimitives'
 import {
   getConfig, patchConfig, deleteProvider, getHealth, news,
-  type AppConfig, type PublicProvider,
+  type AppConfig, type PublicProvider, type SystemProxySettings,
 } from '../api/client'
 import {
   applyFontScale, readFontScalePreference, writeFontScalePreference,
@@ -515,6 +516,11 @@ function SettingsPageView({
       })
   }, [scorecard, loading, onSaved, toast], SCORECARD_SAVE_MS, true)
 
+  const handleSystemProxySaved = useCallback((next: SystemProxySettings) => {
+    setConfig(prev => (prev ? { ...prev, system_proxy: next } : prev))
+    onSaved?.()
+  }, [onSaved])
+
   const openProviderWizard = useCallback((provider: PublicProvider | null = null) => {
     setEditingProvider(provider)
     setWizardOpen(true)
@@ -655,6 +661,14 @@ function SettingsPageView({
               <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
                 {saveHintText}
               </Text>
+            </div>
+
+            <div className={s.sectionBlock}>
+              <SettingsSectionLabel spaced>网络</SettingsSectionLabel>
+              <SystemProxySettingsSection
+                saved={config?.system_proxy}
+                onSaved={handleSystemProxySaved}
+              />
             </div>
 
             <div className={s.sectionBlock}>

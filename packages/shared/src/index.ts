@@ -54,7 +54,24 @@ export {
   type OutboundFamilyMode,
   type OutboundNetworkStatus,
 } from './outbound-network.js'
-export { outboundFetch, formatOutboundFetchError, isOutboundTimeoutError } from './outbound-fetch.js'
+export {
+  outboundFetch,
+  formatOutboundFetchError,
+  isOutboundTimeoutError,
+  resetOutboundProxyAgentCacheForTests,
+  type OutboundFetchInit,
+} from './outbound-fetch.js'
+export {
+  resolveEffectiveProxyUrl,
+  validateProxyUrlInput,
+  normalizeProxyUrlInput,
+  normalizeProviderProxyMode,
+  isValidProxyUrl,
+  maskProxyUrlForDisplay,
+  type ProviderProxyMode,
+  type SystemProxySettings,
+  type ProviderProxySettings,
+} from './proxy-config.js'
 export { ok, fail, elapsedSince } from './result.js'
 export {
   resolveUserDataRoot,
