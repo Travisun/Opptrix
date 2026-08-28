@@ -205,3 +205,64 @@ export function mapSectorQuoteRow(
     chart_symbol: board.code,
   }
 }
+
+type ScreenerQuoteLike = {
+  symbol?: string
+  shortName?: string
+  longName?: string
+  displayName?: string
+  regularMarketPrice?: number
+  regularMarketChange?: number
+  regularMarketChangePercent?: number
+}
+
+export function mapScreenerQuoteToMover(
+  quote: ScreenerQuoteLike,
+  market: string,
+): Record<string, unknown> {
+  const code = String(quote.symbol ?? '').trim()
+  if (!code) return {}
+  const name = String(quote.shortName ?? quote.displayName ?? quote.longName ?? code)
+  const price = n(quote.regularMarketPrice)
+  const changePct = pct(quote.regularMarketChangePercent)
+  let changeAmt = n(quote.regularMarketChange)
+  if (changeAmt == null && price != null && changePct != null) {
+    const prev = price / (1 + changePct / 100)
+    if (Number.isFinite(prev)) changeAmt = price - prev
+  }
+  return {
+    code,
+    name,
+    price,
+    change_pct: changePct,
+    change_amt: changeAmt,
+    market,
+    chart_symbol: code,
+  }
+}
+
+export function mapScreenerQuotes(
+  quotes: ScreenerQuoteLike[],
+  market: string,
+): Record<string, unknown>[] {
+  return quotes
+    .map(q => mapScreenerQuoteToMover(q, market))
+    .filter(row => Boolean(row.code))
+}
+
+export function mapTrendingQuotesToMovers(
+  symbols: string[],
+  quotes: YahooQuote[],
+  market: string,
+): Record<string, unknown>[] {
+  const list = quotes
+  const out: Record<string, unknown>[] = []
+  for (let i = 0; i < symbols.length; i++) {
+    const sym = symbols[i]
+    const quote = list[i]
+    if (!sym || !quote) continue
+    const row = mapScreenerQuoteToMover({ ...quote, symbol: sym }, market)
+    if (row.code) out.push({ ...row, rank: i + 1 })
+  }
+  return out
+}

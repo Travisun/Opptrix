@@ -120,7 +120,7 @@ bindingsFor: () => []
 |------|----------|-----------------|------|
 | 1 | **tonghuashun** | 120 | 需扶摇 Key；个股 / ETF / 公募基金主路径；HTTP 经 `@opptrix/fuyao` SDK（`FuyaoClient` 适配层） |
 | 2 | **stockindex**（Opptrix量化） | 115 | 标的搜索权威源；需数据密钥；基址固定 `https://quant.opptrix.net` |
-| 2b | **yfinance** | 118 | **默认开启**；全球指数 + 美/港/日/韩 `STOCK_*` / `INDEX_*` / `SECTOR_LIST`；`yahoo-finance2` 内置 Queue（1 并发 + 1s 间隔）+ 客户端 429/5xx 退避；无需密钥 |
+| 2b | **yfinance** | 118 | **默认开启**；全球指数 + 美/港/日/韩 `STOCK_*` / `INDEX_*` / `SECTOR_LIST`；自定义 `yfScreener` / `yfTrendingSymbols`；`yahoo-finance2` Queue + 429/5xx 退避；无需密钥 |
 | 3 | **tickflow** | 110 | **默认开启**公开免费档；配置 Key 可升级实时；US / HK / CN ETF；名录灌库 |
 | 4 | **tushare** | 105 | 需 Token；批量 / 基本面 |
 | — | **binance** / **okx** | ≤100 | CRYPTO；勿抢前四 |

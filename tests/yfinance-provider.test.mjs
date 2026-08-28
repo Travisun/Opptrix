@@ -57,6 +57,30 @@ test('yahooFinanceClientQueueConfig defaults align with hostnameLimiter', async 
   assert.deepEqual(yahooFinanceClientQueueConfig(), { concurrency: 1, interval: 1000 })
 })
 
+test('mapScreenerQuoteToMover normalizes screener rows', async () => {
+  const { mapScreenerQuoteToMover } = await import(
+    '../packages/a-stock-layer/dist/providers/yfinance/normalize.js'
+  )
+  const row = mapScreenerQuoteToMover({
+    symbol: 'NVDA',
+    shortName: 'NVIDIA',
+    regularMarketPrice: 120,
+    regularMarketChangePercent: 2.5,
+  }, 'US')
+  assert.equal(row.code, 'NVDA')
+  assert.equal(row.name, 'NVIDIA')
+  assert.equal(row.price, 120)
+  assert.equal(row.change_pct, 2.5)
+})
+
+test('yfinance custom methods are registered', async () => {
+  const { findCustomMethod } = await import(
+    '../packages/a-stock-layer/dist/core/custom-methods.js'
+  )
+  assert.ok(findCustomMethod('yfinance', 'yfScreener'))
+  assert.ok(findCustomMethod('yfinance', 'yfTrendingSymbols'))
+})
+
 test('resolveInstrumentQueryPlan routes US INDEX kline to yfinance binding', async () => {
   const { resolveInstrumentQueryPlan } = await import(
     '../packages/a-stock-layer/dist/core/instrument-query.js'

@@ -3,7 +3,7 @@ import type { GlobalIndex, IndexKline, StockProfile } from '../../core/schema.js
 import type { StockKline } from '@opptrix/shared'
 import { Capability } from '../../core/capabilities.js'
 import { MarketHandlerShell } from '../common/driver-factory.js'
-import { yahooChart, yahooQuote, yahooQuoteSummary } from './client.js'
+import { yahooChart, yahooQuote, yahooQuoteSummary, yahooScreener, yahooTrendingSymbols } from './client.js'
 import {
   displayCodeFromYahooTicker,
   listYfinanceGlobalIndexTargets,
@@ -19,6 +19,8 @@ import {
   mapQuoteToGlobalIndex,
   mapQuoteToIndexRealtime,
   mapSectorQuoteRow,
+  mapScreenerQuotes,
+  mapTrendingQuotesToMovers,
 } from './normalize.js'
 
 type ChartInterval = '1d' | '1wk' | '1mo'
@@ -234,6 +236,53 @@ export class YfinanceMarketHandler extends MarketHandlerShell {
         interval,
       })
       return result.quotes ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** Yahoo screener — day_gainers / day_losers / most_actives */
+  async yfScreener(
+    scrId = 'day_gainers',
+    count = 10,
+    region = 'US',
+  ): Promise<Record<string, unknown>[] | null> {
+    const id = String(scrId ?? 'day_gainers').trim()
+    if (id !== 'day_gainers' && id !== 'day_losers' && id !== 'most_actives') return null
+    const mkt = String(region ?? 'US').trim().toUpperCase() || 'US'
+    try {
+      const result = await yahooScreener(id, {
+        count: Math.max(1, Math.min(Number(count) || 10, 25)),
+        region: mkt,
+      })
+      const rows = mapScreenerQuotes(
+        (result.quotes ?? []) as Parameters<typeof mapScreenerQuotes>[0],
+        mkt,
+      )
+      return rows.length ? rows : null
+    } catch {
+      return null
+    }
+  }
+
+  /** Yahoo 区域热门标的（symbol + 批量 quote） */
+  async yfTrendingSymbols(
+    region = 'US',
+    count = 10,
+  ): Promise<Record<string, unknown>[] | null> {
+    const mkt = String(region ?? 'US').trim().toUpperCase() || 'US'
+    try {
+      const trending = await yahooTrendingSymbols(mkt, {
+        count: Math.max(1, Math.min(Number(count) || 10, 25)),
+      })
+      const symbols = (trending.quotes ?? [])
+        .map(row => String(row.symbol ?? '').trim())
+        .filter(Boolean)
+      if (!symbols.length) return null
+      const quotes = await yahooQuote(symbols)
+      const list = Array.isArray(quotes) ? quotes : [quotes]
+      const rows = mapTrendingQuotesToMovers(symbols, list as Parameters<typeof mapTrendingQuotesToMovers>[1], mkt)
+      return rows.length ? rows : null
     } catch {
       return null
     }

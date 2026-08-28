@@ -161,16 +161,59 @@ const useStyles = makeStyles({
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
   pctFlat: { color: opptrixCssVars.textSecondary },
+  sectionBlock: {
+    paddingBottom: '4px',
+  },
 })
+
+function resolveUsChartMarket(market?: string): InstrumentRef['market'] {
+  if (market === 'CN' || market === 'US' || market === 'HK' || market === 'JP' || market === 'KR') return market
+  return 'US'
+}
 
 function usChartInstrument(item: MarketIndexQuote): InstrumentRef {
   const sym = item.chart_symbol ?? item.code
-  const isIndex = sym.startsWith('^') || ['SPX', 'IXIC', 'DJI', 'N225', 'KOSPI', 'HSI'].includes(item.code)
+  const isIndex = sym.startsWith('^') || ['SPX', 'IXIC', 'DJI', 'N225', 'KOSPI', 'HSI', 'FTSE', 'GDAXI', 'FCHI'].includes(item.code)
   return {
-    market: (item.market ?? 'US') as 'US' | 'HK' | 'JP' | 'KR',
+    market: resolveUsChartMarket(item.market),
     assetClass: isIndex ? 'INDEX' : 'EQUITY',
     symbol: sym,
   }
+}
+
+function UsQuoteRows({
+  items,
+  onSelect,
+  pctClass,
+  priceMarket = 'US',
+  styles: s,
+}: {
+  items: MarketIndexQuote[]
+  onSelect: (item: MarketIndexQuote) => void
+  pctClass: (value: number | null | undefined) => string
+  priceMarket?: InstrumentRef['market']
+  styles: ReturnType<typeof useStyles>
+}) {
+  if (!items.length) return null
+  return (
+    <div className={s.indexList}>
+      {items.map(item => (
+        <button
+          key={`${item.code}-${item.name}`}
+          type="button"
+          className={s.indexRow}
+          onClick={() => onSelect(item)}
+        >
+          <div>
+            <div className={s.indexName}>{item.name}</div>
+            <div className={s.indexMeta}>{item.code}{item.location ? ` · ${item.location}` : ''}</div>
+          </div>
+          <span>{formatPriceForMarket(priceMarket, item.price)}</span>
+          <span className={pctClass(item.change_pct)}>{formatPct(item.change_pct, 2)}</span>
+        </button>
+      ))}
+    </div>
+  )
 }
 
 type Props = {
@@ -189,19 +232,43 @@ export default function UsMarketDynamicsView({
   const s = useStyles()
   const [detailTab, setDetailTab] = useState<'indices' | 'news'>('indices')
   const [chartInstrument, setChartInstrument] = useState<InstrumentRef | null>(null)
+  const [chartTitle, setChartTitle] = useState('')
 
+  const sections = useMemo(() => data?.sections ?? [], [data?.sections])
   const indices = useMemo(
-    () => data?.us_indices ?? data?.sections.find(sec => sec.id === 'us_major')?.items ?? [],
-    [data],
+    () => data?.us_indices ?? sections.find(sec => sec.id === 'us_major')?.items ?? [],
+    [data, sections],
+  )
+  const sectors = useMemo(
+    () => sections.find(sec => sec.id === 'us_sectors')?.items ?? [],
+    [sections],
+  )
+  const gainers = useMemo(
+    () => data?.us_gainers ?? sections.find(sec => sec.id === 'us_gainers')?.items ?? [],
+    [data, sections],
+  )
+  const losers = useMemo(
+    () => data?.us_losers ?? sections.find(sec => sec.id === 'us_losers')?.items ?? [],
+    [data, sections],
+  )
+  const trending = useMemo(
+    () => data?.us_trending ?? sections.find(sec => sec.id === 'us_trending')?.items ?? [],
+    [data, sections],
+  )
+  const trendingJp = useMemo(
+    () => data?.us_trending_jp ?? sections.find(sec => sec.id === 'us_trending_jp')?.items ?? [],
+    [data, sections],
   )
 
   const handleIndexSelect = (item: MarketIndexQuote) => {
     const inst = usChartInstrument(item)
-    if (chartInstrument?.symbol === inst.symbol) {
+    if (chartInstrument?.symbol === inst.symbol && chartInstrument.market === inst.market) {
       setChartInstrument(null)
+      setChartTitle('')
       return
     }
     setChartInstrument(inst)
+    setChartTitle(item.name)
   }
 
   const pctClass = (value: number | null | undefined) => {
@@ -224,9 +291,9 @@ export default function UsMarketDynamicsView({
         <>
           <div className={s.chartBar}>
             <Text className={s.chartTitle} block>
-              {indices.find(row => (row.chart_symbol ?? row.code) === chartInstrument.symbol)?.name ?? chartInstrument.symbol}
+              {chartTitle || chartInstrument.symbol}
             </Text>
-            <button type="button" className={s.closeBtn} onClick={() => setChartInstrument(null)}>
+            <button type="button" className={s.closeBtn} onClick={() => { setChartInstrument(null); setChartTitle('') }}>
               <DismissRegular fontSize={14} />
               收起图表
             </button>
@@ -255,23 +322,64 @@ export default function UsMarketDynamicsView({
               <CnInsightListSkeleton rowCount={6} fill />
             ) : (
               <>
-                <div className={s.indexList}>
-                  {indices.map(item => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      className={s.indexRow}
-                      onClick={() => handleIndexSelect(item)}
-                    >
-                      <div>
-                        <div className={s.indexName}>{item.name}</div>
-                        <div className={s.indexMeta}>{item.code}</div>
-                      </div>
-                      <span>{formatPriceForMarket('US', item.price)}</span>
-                      <span className={pctClass(item.change_pct)}>{formatPct(item.change_pct, 2)}</span>
-                    </button>
-                  ))}
+                <div className={s.sectionBlock}>
+                  <div className={s.watchHead}>
+                    <span className={s.watchTitle}>全球主要指数</span>
+                  </div>
+                  <UsQuoteRows items={indices} onSelect={handleIndexSelect} pctClass={pctClass} styles={s} />
                 </div>
+
+                {sectors.length ? (
+                  <div className={s.sectionBlock}>
+                    <div className={s.watchHead}>
+                      <span className={s.watchTitle}>美股板块</span>
+                    </div>
+                    <UsQuoteRows items={sectors} onSelect={handleIndexSelect} pctClass={pctClass} styles={s} />
+                  </div>
+                ) : null}
+
+                {gainers.length ? (
+                  <div className={s.sectionBlock}>
+                    <div className={s.watchHead}>
+                      <span className={s.watchTitle}>涨幅榜</span>
+                    </div>
+                    <UsQuoteRows items={gainers} onSelect={handleIndexSelect} pctClass={pctClass} styles={s} />
+                  </div>
+                ) : null}
+
+                {losers.length ? (
+                  <div className={s.sectionBlock}>
+                    <div className={s.watchHead}>
+                      <span className={s.watchTitle}>跌幅榜</span>
+                    </div>
+                    <UsQuoteRows items={losers} onSelect={handleIndexSelect} pctClass={pctClass} styles={s} />
+                  </div>
+                ) : null}
+
+                {trending.length ? (
+                  <div className={s.sectionBlock}>
+                    <div className={s.watchHead}>
+                      <span className={s.watchTitle}>美股热门</span>
+                    </div>
+                    <UsQuoteRows items={trending} onSelect={handleIndexSelect} pctClass={pctClass} styles={s} />
+                  </div>
+                ) : null}
+
+                {trendingJp.length ? (
+                  <div className={s.sectionBlock}>
+                    <div className={s.watchHead}>
+                      <span className={s.watchTitle}>日本热门</span>
+                    </div>
+                    <UsQuoteRows
+                      items={trendingJp}
+                      onSelect={handleIndexSelect}
+                      pctClass={pctClass}
+                      priceMarket="JP"
+                      styles={s}
+                    />
+                  </div>
+                ) : null}
+
                 <div className={s.watchHead}>
                   <span className={s.watchTitle}>科技龙头自选</span>
                   <MarketUsTechWatchManageButton />

@@ -112,3 +112,31 @@ export async function yahooChart(
     return result as ChartResultArray
   })
 }
+
+type PredefinedScreenerId =
+  | 'day_gainers'
+  | 'day_losers'
+  | 'most_actives'
+  | 'growth_technology_stocks'
+
+export async function yahooScreener(
+  scrId: PredefinedScreenerId,
+  options: { count?: number; region?: string } = {},
+): Promise<{ quotes?: Array<Record<string, unknown>> }> {
+  const count = Math.max(1, Math.min(options.count ?? 10, 25))
+  const region = options.region ?? 'US'
+  return withYahooFinanceRequest(async client => {
+    const result = await client.screener({ scrIds: scrId, count, region })
+    return result as unknown as { quotes?: Array<Record<string, unknown>> }
+  })
+}
+
+export async function yahooTrendingSymbols(
+  region: string,
+  options: { count?: number } = {},
+): Promise<{ quotes?: Array<{ symbol?: string }> }> {
+  const count = Math.max(1, Math.min(options.count ?? 10, 25))
+  return withYahooFinanceRequest(client =>
+    client.trendingSymbols(region, { count, region }),
+  ) as Promise<{ quotes?: Array<{ symbol?: string }> }>
+}
