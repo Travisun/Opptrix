@@ -561,21 +561,39 @@ export function resolveInstrumentQueryPlan(
     }
   }
 
+  // ── 美股指数 ──
+  if (ref.market === 'US' && ref.assetClass === 'INDEX') {
+    const normalized = normalizeInstrumentRef(ref)
+    const sym = normalized.symbol
+    switch (dataCap) {
+      case 'realtime':
+        return registryPlan('US', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, 'US'], normalized)
+      case 'kline':
+        return registryPlan('US', 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, [
+          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, 'US',
+        ], normalized)
+      case 'snapshot':
+        return registryPlan('US', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, 'US'], normalized)
+      default:
+        return null
+    }
+  }
+
   // ── 美股市场 ──
   if (ref.market === 'US' && ref.assetClass === 'EQUITY') {
     const normalized = normalizeInstrumentRef(ref)
     const sym = usSymbol(ref)
     switch (dataCap) {
       case 'realtime':
-        return registryPlan('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym], normalized)
+        return registryPlan('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym, 'US'], normalized)
       case 'kline':
         return registryPlan('US', 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
-          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
+          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, 'US',
         ], normalized)
       case 'snapshot':
         return { kind: 'composite_snapshot', market: 'US', symbol: sym }
       case 'profile':
-        return registryPlan('US', 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym], normalized)
+        return registryPlan('US', 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym, 'US'], normalized)
       case 'financials':
         return registryPlan('US', 'EQUITY', Capability.FINANCIAL_SUMMARY, 'financials', true, [
           sym, opts.reportDate ?? '', opts.reportType ?? 'annual',
@@ -637,20 +655,61 @@ export function resolveInstrumentQueryPlan(
   // ── 区域市场（HK；JP/KR 暂不接入） ──
   if (isRegionalEquityMarket(ref.market)) {
     const market = ref.market as RegionalEquityMarket
-    if (market === 'JP' || market === 'KR') return null
     const normalized = normalizeInstrumentRef(ref)
     const sym = regionalSymbol(ref)
+
+    if (ref.assetClass === 'INDEX') {
+      switch (dataCap) {
+        case 'realtime':
+          return registryPlan(market, 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, market], normalized)
+        case 'kline':
+          return registryPlan(market, 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, [
+            sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, market,
+          ], normalized)
+        case 'snapshot':
+          return registryPlan(market, 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [sym, market], normalized)
+        default:
+          return null
+      }
+    }
+
+    if (market === 'JP' || market === 'KR') {
+      switch (dataCap) {
+        case 'realtime':
+          return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym, market], normalized)
+        case 'kline':
+          return registryPlan(market, 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
+            sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, market,
+          ], normalized)
+        case 'snapshot':
+          return { kind: 'composite_snapshot', market, symbol: sym }
+        case 'profile':
+          return registryPlan(market, 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym, market], normalized)
+        case 'sector_list':
+          return registryPlan(
+            market,
+            'EQUITY',
+            Capability.SECTOR_LIST,
+            'sectorList',
+            true,
+            [opts.plateType ?? `boards:${market}`],
+          )
+        default:
+          return null
+      }
+    }
+
     switch (dataCap) {
       case 'realtime':
-        return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym], normalized)
+        return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym, market], normalized)
       case 'kline':
         return registryPlan(market, 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
-          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
+          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count, market,
         ], normalized)
       case 'snapshot':
         return { kind: 'composite_snapshot', market, symbol: sym }
       case 'profile':
-        return registryPlan(market, 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym], normalized)
+        return registryPlan(market, 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym, market], normalized)
       case 'stock_list': {
         const page = opts.page ?? 1
         const pageSize = opts.pageSize ?? 100

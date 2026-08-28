@@ -1,19 +1,25 @@
 import {
+  AreaSeries,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
   LineStyle,
   createChart,
   type IChartApi,
+  type ISeriesApi,
   type LogicalRange,
 } from 'lightweight-charts'
 import type { ChartPeriod } from '../types/market'
 import type { ColorScheme } from '../theme/tokens'
 import type { ChartSeriesBundle } from './chartSeries'
+import type { LinePoint } from './chartSeriesAlign'
+import type { IndexMountainColors } from './chartTheme'
+import { IndexLatestPulseOverlay, type IndexPulsePoint } from './indexChartPulseOverlay'
 import {
   candlestickColors,
   getChartLayout,
   getChartTheme,
+  getIndexMountainColors,
   indicatorColors,
   stockPriceFormat,
 } from './chartTheme'
@@ -36,6 +42,27 @@ const LINE_OPTS = {
  * syncRightPriceScaleWidths() locks all panes to the same measured width.
  */
 const PRICE_SCALE_MIN_WIDTH = 52
+
+function applyIndexLatestPriceLine(
+  area: ISeriesApi<'Area'>,
+  priceLine: LinePoint[],
+  colors: IndexMountainColors,
+): IndexPulsePoint | null {
+  const points = priceLine.filter((p): p is LinePoint & { value: number } => p.value != null)
+  const last = points[points.length - 1]
+  if (!last) return null
+
+  area.createPriceLine({
+    price: last.value,
+    color: colors.anchorLineColor,
+    lineWidth: 1,
+    lineStyle: LineStyle.Dashed,
+    axisLabelVisible: true,
+    title: '最新',
+  })
+
+  return { time: last.time, value: last.value }
+}
 
 function alignedRightPriceScale(
   extra?: { scaleMargins?: { top: number; bottom: number } },
@@ -87,6 +114,7 @@ export class ChartWorkspace {
   private doResize: (() => void) | null = null
   private mountOptions: ChartMountOptions | null = null
   private totalBars = 0
+  private indexPulseOverlay = new IndexLatestPulseOverlay()
   private onFontFamilyChange: (() => void) | null = null
 
   mount(refs: ChartPaneRefs, bundle: ChartSeriesBundle, options: ChartMountOptions): void {
@@ -94,6 +122,7 @@ export class ChartWorkspace {
     this.alive = true
     this.mountOptions = options
     this.totalBars = this.countBars(bundle)
+    this.paneRefs = refs
     const minuteChart = isMinuteOhlcPeriod(options.period)
     const intradayChart = isIntradayPeriod(options.period)
     const scheme = options.colorScheme ?? 'light'
@@ -195,7 +224,7 @@ export class ChartWorkspace {
   }
 
   private countBars(bundle: ChartSeriesBundle): number {
-    if (bundle.mode === 'intraday') return bundle.priceLine.length
+    if (bundle.mode === 'intraday' || bundle.mode === 'index') return bundle.priceLine.length
     return bundle.candles.length
   }
 
@@ -240,6 +269,32 @@ export class ChartWorkspace {
           title: '昨收',
         })
       }
+    } else if (bundle.mode === 'index') {
+      const scheme = this.mountOptions?.colorScheme ?? 'light'
+      const colors = getIndexMountainColors(scheme, bundle.indexTrend ?? 'flat')
+      const area = this.mainChart.addSeries(AreaSeries, {
+        lineColor: colors.lineColor,
+        topColor: colors.topColor,
+        bottomColor: colors.bottomColor,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        priceFormat: stockPriceFormat,
+      })
+      this.setSeriesData('指数走势', () => {
+        area.setData(bundle.priceLine)
+        const pulsePoint = applyIndexLatestPriceLine(area, bundle.priceLine, colors)
+        if (pulsePoint && this.mainChart && this.paneRefs) {
+          this.indexPulseOverlay.mount(
+            this.paneRefs.main,
+            this.mainChart,
+            area,
+            pulsePoint,
+            colors,
+          )
+        }
+      })
     } else {
       const candles = this.mainChart.addSeries(CandlestickSeries, {
         ...candlestickColors,
@@ -282,7 +337,9 @@ export class ChartWorkspace {
     }
 
     const vol = this.volumeChart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' } })
-    this.setSeriesData('成交量', () => vol.setData(bundle.volume))
+    if (bundle.volume.length > 0) {
+      this.setSeriesData('成交量', () => vol.setData(bundle.volume))
+    }
 
     if (this.macdChart && bundle.macd.length) {
       const hist = this.macdChart.addSeries(HistogramSeries, {
@@ -433,6 +490,7 @@ export class ChartWorkspace {
       }
       this.syncRightPriceScaleWidths()
       this.pushRangeToPanes()
+      this.indexPulseOverlay.reposition()
     }
     this.doResize = resize
 
@@ -470,6 +528,8 @@ export class ChartWorkspace {
     this.doResize = null
     this.mountOptions = null
     this.totalBars = 0
+
+    this.indexPulseOverlay.unmount()
 
     for (const chart of [this.mainChart, this.volumeChart, this.macdChart]) {
       if (!chart) continue

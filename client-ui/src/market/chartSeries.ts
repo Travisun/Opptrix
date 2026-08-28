@@ -17,7 +17,7 @@ import {
 
 export type { LinePoint, MacdPoint, VolumePoint }
 
-export type ChartMode = 'ohlc' | 'intraday'
+export type ChartMode = 'ohlc' | 'intraday' | 'index'
 
 export interface CandlePoint {
   time: Time
@@ -44,6 +44,8 @@ export interface ChartSeriesBundle {
     cost70Low: number
     cost70High: number
   } | null
+  /** 指数山峰图：区间涨跌方向，用于渐变配色 */
+  indexTrend?: 'up' | 'down' | 'flat'
 }
 
 function volumeColor(change: number | null | undefined, scheme: ColorScheme): string {
@@ -113,7 +115,7 @@ export function isLineChartView(period: string, bars: StockChartData['bars']): b
 }
 
 export interface BuildChartSeriesOptions {
-  /** 指数图：对齐券商指数页，仅展示 MA5/10/20 三均线 */
+  /** 指数图：山峰走势，无 K 线周期切换与均线 */
   indexChart?: boolean
 }
 
@@ -222,11 +224,35 @@ export function buildChartSeries(
     cost70High: latest.cost70High,
   } : null
 
+  if (options.indexChart) {
+    const priceLine = dedupeByTime(
+      candles.map(c => ({ time: c.time, value: c.close })),
+    )
+    const first = priceLine.find(p => p.value != null)?.value
+    const last = [...priceLine].reverse().find(p => p.value != null)?.value
+    let indexTrend: 'up' | 'down' | 'flat' = 'flat'
+    if (first != null && last != null) {
+      if (last > first) indexTrend = 'up'
+      else if (last < first) indexTrend = 'down'
+    }
+
+    return {
+      mode: 'index',
+      showMacd: false,
+      candles: [],
+      priceLine,
+      avgLine: [],
+      maLines: [],
+      volume: [],
+      macd: [],
+      cyqOverlay: null,
+      indexTrend,
+    }
+  }
+
   const maKeys = minuteOhlc
     ? (['ma5', 'ma10'] as const)
-    : options.indexChart
-      ? (['ma5', 'ma10', 'ma20'] as const)
-      : (['ma5', 'ma10', 'ma20', 'ma60'] as const)
+    : (['ma5', 'ma10', 'ma20', 'ma60'] as const)
   const maLines = maKeys
     .map(key => ({
       key,

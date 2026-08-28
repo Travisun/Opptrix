@@ -1155,35 +1155,200 @@ export class ResearchHub {
 
   private async marketDynamicsUs(t0: number) {
     const US_CORE_INDICES = [
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'SPY' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', chartSymbol: 'SPY' },
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'QQQ' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', chartSymbol: 'QQQ' },
-      { ref: { market: 'US', assetClass: 'ETF', symbol: 'DIA' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', chartSymbol: 'DIA' },
+      { ref: { market: 'US', assetClass: 'INDEX', symbol: '^GSPC' } as import('@opptrix/shared').InstrumentRef, outCode: 'SPX', displayName: '标普500', chartSymbol: '^GSPC' },
+      { ref: { market: 'US', assetClass: 'INDEX', symbol: '^IXIC' } as import('@opptrix/shared').InstrumentRef, outCode: 'IXIC', displayName: '纳斯达克', chartSymbol: '^IXIC' },
+      { ref: { market: 'US', assetClass: 'INDEX', symbol: '^DJI' } as import('@opptrix/shared').InstrumentRef, outCode: 'DJI', displayName: '道琼斯', chartSymbol: '^DJI' },
     ]
+    const ASIA_CORE_INDICES = [
+      { ref: { market: 'JP', assetClass: 'INDEX', symbol: '^N225' } as import('@opptrix/shared').InstrumentRef, outCode: 'N225', displayName: '日经225', chartSymbol: '^N225', location: '日本' },
+      { ref: { market: 'KR', assetClass: 'INDEX', symbol: '^KS11' } as import('@opptrix/shared').InstrumentRef, outCode: 'KOSPI', displayName: '韩国综合', chartSymbol: '^KS11', location: '韩国' },
+    ]
+    const EU_INDEX_META: Record<string, { location: string; chartSymbol: string }> = {
+      FTSE: { location: '英国', chartSymbol: '^FTSE' },
+      GDAXI: { location: '德国', chartSymbol: '^GDAXI' },
+      FCHI: { location: '法国', chartSymbol: '^FCHI' },
+    }
 
-    const usItems = await this.fetchGlobalIndexProxyItems(
-      US_CORE_INDICES.map(row => ({
-        ref: row.ref,
-        outCode: row.outCode,
-        displayName: row.displayName,
+    const usSectorRef = { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' } as import('@opptrix/shared').InstrumentRef
+
+    const [
+      usItems,
+      asiaItems,
+      usSectorR,
+      gainersR,
+      losersR,
+      trendingUsR,
+      trendingJpR,
+      globalR,
+    ] = await Promise.all([
+      this.fetchGlobalIndexProxyItems(
+        US_CORE_INDICES.map(row => ({
+          ref: row.ref,
+          outCode: row.outCode,
+          displayName: row.displayName,
+          location: '美国',
+        })),
+      ).then(items => items.map((item, idx) => ({
+        ...item,
+        chart_symbol: US_CORE_INDICES[idx]?.chartSymbol ?? item.code,
+      }))),
+      this.fetchGlobalIndexProxyItems(
+        ASIA_CORE_INDICES.map(row => ({
+          ref: row.ref,
+          outCode: row.outCode,
+          displayName: row.displayName,
+          location: row.location,
+          chartSymbol: row.chartSymbol,
+        })),
+      ).then(items => items.map((item, idx) => ({
+        ...item,
+        chart_symbol: ASIA_CORE_INDICES[idx]?.chartSymbol ?? item.code,
+      }))),
+      this.de.queryInstrumentData(usSectorRef, 'sector_list', { plateType: 'boards:US' }),
+      this.de.invokeCustomMethod('yfinance', 'yfScreener', ['day_gainers', 12, 'US']),
+      this.de.invokeCustomMethod('yfinance', 'yfScreener', ['day_losers', 12, 'US']),
+      this.de.invokeCustomMethod('yfinance', 'yfTrendingSymbols', ['US', 10]),
+      this.de.invokeCustomMethod('yfinance', 'yfTrendingSymbols', ['JP', 8]),
+      this.de.globalIndex(''),
+    ])
+
+    const euItems = (globalR.success && Array.isArray(globalR.data) ? globalR.data : [])
+      .filter(row => row.code === 'FTSE' || row.code === 'GDAXI' || row.code === 'FCHI')
+      .map(row => {
+        const meta = EU_INDEX_META[row.code] ?? { location: row.market ?? '', chartSymbol: row.code }
+        return {
+          code: row.code,
+          name: row.name,
+          price: row.price ?? null,
+          change_pct: row.changePct ?? null,
+          change_amt: null as number | null,
+          market: row.market ?? 'UK',
+          location: meta.location,
+          chart_symbol: meta.chartSymbol,
+        }
+      })
+
+    const usSectors = (instrumentQueryData<Array<Record<string, unknown>>>(usSectorR) ?? [])
+      .map(row => ({
+        code: String(row.code ?? '').trim(),
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.change_pct === 'number' ? row.change_pct : null,
+        change_amt: null as number | null,
+        market: 'US' as const,
         location: '美国',
-      })),
-    ).then(items => items.map((item, idx) => ({
-      ...item,
-      chart_symbol: US_CORE_INDICES[idx]?.chartSymbol ?? item.code,
-    })))
+        chart_symbol: String(row.chart_symbol ?? row.code ?? '').trim() || String(row.code ?? '').trim(),
+        sector_tag: String(row.sector_tag ?? 'sector'),
+      }))
+      .filter(item => item.code && item.name)
 
-    const sections = usItems.length ? [{
+    const mapUsMovers = (r: { success: boolean; data?: unknown }) => {
+      if (!r.success || !Array.isArray(r.data)) return []
+      return r.data
+        .map(row => {
+          const rec = row as Record<string, unknown>
+          const code = String(rec.code ?? '').trim()
+          const name = String(rec.name ?? code).trim()
+          if (!code || !name) return null
+          return {
+            code,
+            name,
+            price: typeof rec.price === 'number' ? rec.price : null,
+            change_pct: typeof rec.change_pct === 'number' ? rec.change_pct : null,
+            change_amt: typeof rec.change_amt === 'number' ? rec.change_amt : null,
+          }
+        })
+        .filter((row): row is NonNullable<typeof row> => row != null)
+    }
+
+    const usGainers = mapUsMovers(gainersR)
+    const usLosers = mapUsMovers(losersR)
+    const usTrending = mapUsMovers(trendingUsR)
+    const usTrendingJp = mapUsMovers(trendingJpR)
+
+    const allIndices = [...usItems, ...asiaItems, ...euItems]
+
+    const sections = allIndices.length ? [{
       id: 'us_major',
-      title: '美股主要指数',
-      hint: 'ETF 代理实时报价',
-      items: usItems,
+      title: '全球主要指数',
+      hint: '美股、亚太与欧非宽基指数实时报价',
+      items: allIndices,
     }] : []
+
+    if (usSectors.length) {
+      sections.push({
+        id: 'us_sectors',
+        title: '美股板块',
+        hint: '行业 ETF 代表板块涨跌',
+        items: usSectors,
+      })
+    }
+
+    if (usGainers.length) {
+      sections.push({
+        id: 'us_gainers',
+        title: '美股涨幅榜',
+        hint: '当日涨幅领先个股',
+        items: usGainers.map(row => ({
+          ...row,
+          market: 'US',
+          location: '美国',
+          chart_symbol: row.code,
+        })),
+      })
+    }
+
+    if (usLosers.length) {
+      sections.push({
+        id: 'us_losers',
+        title: '美股跌幅榜',
+        hint: '当日跌幅靠前个股',
+        items: usLosers.map(row => ({
+          ...row,
+          market: 'US',
+          location: '美国',
+          chart_symbol: row.code,
+        })),
+      })
+    }
+
+    if (usTrending.length) {
+      sections.push({
+        id: 'us_trending',
+        title: '美股热门',
+        hint: '当前讨论与关注度较高的标的',
+        items: usTrending.map(row => ({
+          ...row,
+          market: 'US',
+          location: '美国',
+          chart_symbol: row.code,
+        })),
+      })
+    }
+
+    if (usTrendingJp.length) {
+      sections.push({
+        id: 'us_trending_jp',
+        title: '日本热门',
+        hint: '日本市场当前热门标的',
+        items: usTrendingJp.map(row => ({
+          ...row,
+          market: 'JP',
+          location: '日本',
+          chart_symbol: row.code,
+        })),
+      })
+    }
 
     return ok({
       market: 'us' as const,
       refreshed_at: new Date().toISOString(),
       sections,
-      us_indices: usItems,
+      us_indices: allIndices,
+      us_gainers: usGainers,
+      us_losers: usLosers,
+      us_trending: usTrending,
+      us_trending_jp: usTrendingJp,
     }, '美股市场动态', t0)
   }
 
@@ -1198,11 +1363,11 @@ export class ResearchHub {
       { code: '000688', name: '科创50' },
     ]
     const HK_HSI_PROXY = {
-      ref: { market: 'HK', assetClass: 'ETF', symbol: '2800' } as import('@opptrix/shared').InstrumentRef,
+      ref: { market: 'HK', assetClass: 'INDEX', symbol: '^HSI' } as import('@opptrix/shared').InstrumentRef,
       outCode: 'HSI',
       displayName: '恒生指数',
       location: '香港',
-      chartSymbol: '2800',
+      chartSymbol: '^HSI',
     }
 
     const fetchEmotionLimitUp = async () => {

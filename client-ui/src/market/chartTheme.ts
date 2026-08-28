@@ -6,6 +6,25 @@ import { resolveSansFontFamily } from '../theme/fontFamily'
 export const MARKET_UP = '#FF3B30'
 export const MARKET_DOWN = '#34C759'
 
+export type IndexMountainColors = {
+  lineColor: string
+  topColor: string
+  bottomColor: string
+  /** 最新价水平锚线 */
+  anchorLineColor: string
+  /** 最新点外圈光晕 */
+  glowColor: string
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return hex
+  const r = Number.parseInt(h.slice(0, 2), 16)
+  const g = Number.parseInt(h.slice(2, 4), 16)
+  const b = Number.parseInt(h.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 export function getChartLayout(scheme: ColorScheme) {
   const t = getOpptrixTokens(scheme)
   return {
@@ -70,6 +89,38 @@ export const indicatorColors = {
   signal: '#FF9500',
   rsi: '#32ADE6',
   avg: '#FF9500',
+}
+
+export function getIndexMountainColors(
+  scheme: ColorScheme,
+  trend: 'up' | 'down' | 'flat' = 'flat',
+): IndexMountainColors {
+  if (trend === 'up') {
+    return {
+      lineColor: MARKET_UP,
+      topColor: scheme === 'dark' ? 'rgba(255, 59, 48, 0.42)' : 'rgba(255, 59, 48, 0.32)',
+      bottomColor: 'rgba(255, 59, 48, 0.02)',
+      anchorLineColor: scheme === 'dark' ? 'rgba(255, 59, 48, 0.62)' : 'rgba(255, 59, 48, 0.48)',
+      glowColor: hexToRgba(MARKET_UP, scheme === 'dark' ? 0.38 : 0.28),
+    }
+  }
+  if (trend === 'down') {
+    return {
+      lineColor: MARKET_DOWN,
+      topColor: scheme === 'dark' ? 'rgba(52, 199, 89, 0.42)' : 'rgba(52, 199, 89, 0.32)',
+      bottomColor: 'rgba(52, 199, 89, 0.02)',
+      anchorLineColor: scheme === 'dark' ? 'rgba(52, 199, 89, 0.62)' : 'rgba(52, 199, 89, 0.48)',
+      glowColor: hexToRgba(MARKET_DOWN, scheme === 'dark' ? 0.38 : 0.28),
+    }
+  }
+  const lineColor = '#5856D6'
+  return {
+    lineColor,
+    topColor: scheme === 'dark' ? 'rgba(88, 86, 214, 0.38)' : 'rgba(88, 86, 214, 0.28)',
+    bottomColor: 'rgba(88, 86, 214, 0.02)',
+    anchorLineColor: scheme === 'dark' ? 'rgba(88, 86, 214, 0.58)' : 'rgba(88, 86, 214, 0.44)',
+    glowColor: hexToRgba(lineColor, scheme === 'dark' ? 0.36 : 0.26),
+  }
 }
 
 export function getChartTheme(scheme: ColorScheme) {

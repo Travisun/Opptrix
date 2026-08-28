@@ -66,7 +66,7 @@ export function indexInstrumentFromQuote(
   const chartSym = item.chart_symbol?.trim()
 
   if (chartSym && (mkt === 'HK' || mkt === 'US')) {
-    return { market: mkt as 'HK' | 'US', assetClass: 'ETF', symbol: chartSym }
+    return { market: mkt as 'HK' | 'US', assetClass: 'INDEX', symbol: chartSym }
   }
 
   const symbol = indexChartCodeFromQuote(item)
@@ -87,7 +87,7 @@ export function indexInstrumentFromQuote(
   }
 
   if (chartSym) {
-    return { market: 'US', assetClass: 'ETF', symbol: chartSym }
+    return { market: 'US', assetClass: 'INDEX', symbol: chartSym }
   }
 
   return undefined

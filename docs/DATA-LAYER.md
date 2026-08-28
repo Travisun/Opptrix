@@ -1042,6 +1042,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 |----------|---------------|----------|------|
 | tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0；**有 Key 时 CN ETF**（列表/概况/净值/持仓/行情）优先走 Fuyao `/api/fund/*`；**CN 个股 realtime** 并行 enrich `valuations/snapshot`（pe/pb）；**etfProfile** 并行 enrich `fund/holders/detail` |
 | stockindex（Opptrix量化） | 115 | ✅ | 标的搜索权威源；需数据密钥 |
+| yfinance | 118 | ✅ | **默认开启**；全球指数 + 美/港/日/韩个股/板块；`yahoo-finance2` 内置 Queue（1 并发 + 1s 间隔）+ 429/5xx 退避；无需密钥 |
 | tickflow | 110（目录）/ CN binding 封顶 100 / US·HK ≥200 | ✅ | **默认开启**公开免费档（免 Key 日K/标的）；配置 Key 升级实时；多市场 |
 | tushare | 105 | ✅ | 需 Token；bulk/基本面 |
 | binance / okx | 100 / 90 | ✅ | CRYPTO；勿抢前四 |
@@ -1075,7 +1076,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 ### 8.0 内置注册现状（2026-08）
 
-**已注册**（`register.ts`）：tonghuashun、stockindex（Opptrix量化）、tickflow、tushare、binance、okx。
+**已注册**（`register.ts`）：tonghuashun、stockindex（Opptrix量化）、yfinance、tickflow、tushare、binance、okx。
 
 **已移除内置注册**（实现与注册均已删除）：tencent、sinafinance、eastmoney、akshare、webfeed。
 

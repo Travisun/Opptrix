@@ -478,6 +478,10 @@ export interface MarketDynamicsData {
   cn_sector_status?: 'ok' | 'empty' | 'error'
   cn_sector_hint?: string
   us_indices?: MarketIndexQuote[]
+  us_gainers?: MarketStockMover[]
+  us_losers?: MarketStockMover[]
+  us_trending?: MarketStockMover[]
+  us_trending_jp?: MarketStockMover[]
 }
 
 export interface StockSearchItem {

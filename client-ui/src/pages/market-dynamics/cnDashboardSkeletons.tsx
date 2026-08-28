@@ -231,7 +231,7 @@ const useChartStyles = makeStyles({
     flexDirection: 'row',
     backgroundColor: opptrixCssVars.surface,
     borderRadius: CN_DASH.cardRadius,
-    border: CN_DASH.cardBorder,
+    border: 'none',
     overflow: 'hidden',
   },
   left: {

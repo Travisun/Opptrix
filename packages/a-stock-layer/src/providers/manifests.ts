@@ -5,6 +5,7 @@ import { BINANCE_MANIFEST } from './binance/manifest.js'
 import { OKX_MANIFEST } from './okx/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
 import { STOCKINDEX_MANIFEST } from './stockindex/manifest.js'
+import { YFINANCE_MANIFEST } from './yfinance/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
@@ -16,6 +17,7 @@ export { BAOSTOCK_SETTINGS } from './baostock/settings.js'
 export { ZZSHARE_SETTINGS } from './zzshare/settings.js'
 export { TONGHUASHUN_SETTINGS } from './tonghuashun/settings.js'
 export { STOCKINDEX_SETTINGS } from './stockindex/settings.js'
+export { YFINANCE_SETTINGS } from './yfinance/settings.js'
 
 /** Static built-in manifests — baostock / zzshare 暂时下线，不进目录 */
 export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
@@ -25,6 +27,7 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   OKX_MANIFEST,
   TONGHUASHUN_MANIFEST,
   STOCKINDEX_MANIFEST,
+  YFINANCE_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */
