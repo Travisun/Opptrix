@@ -105,5 +105,7 @@ describe('desktop splash ∥ sidecar + reuse probe', () => {
     assert.ok(probeAt >= 0, 'probeSidecarHealth required before spawn')
     assert.ok(spawnAt > probeAt, 'probe must precede spawn')
     assert.match(body, /apiPortMode\s*=\s*['"]reuse['"]/)
+    assert.match(body, /forceReleaseApiPort/)
+    assert.match(body, /retrying once/)
   })
 })

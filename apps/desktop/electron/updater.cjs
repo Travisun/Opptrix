@@ -79,6 +79,10 @@ let installExitWatchdogScheduled = false
 const INSTALL_FORCE_EXIT_MS = 3_000
 const INSTALL_STALL_RECOVER_MS = 12_000
 
+/** Startup: do not block UI/bootstrap longer than this for hydrate + install. */
+const STARTUP_UPDATE_QUICK_MS = 6_000
+const STARTUP_UPDATE_DEFERRED_MS = 25_000
+
 function broadcast(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
@@ -460,10 +464,11 @@ function waitForHydratedUpdate(currentVersion, timeoutMs = 20_000) {
 }
 
 /**
- * 启动第一时间：若本地已有比当前版本新的待安装包，则跳过 UI/bootstrap，直接退出并安装。
- * 防循环：同一 pending 包在窗口期内失败次数有上限，超出后仅提示手动安装。
+ * 启动第一时间：若本地已有比当前版本新的待安装包，则尝试退出并安装。
+ * @param {{ version: string, hydrateTimeoutMs?: number }} opts
+ * @returns {Promise<boolean>} true = 已进入安装退出路径
  */
-async function resumePendingUpdateOnStartup({ version }) {
+async function resumePendingUpdateOnStartup({ version, hydrateTimeoutMs = 20_000 }) {
   if (!app.isPackaged || !autoUpdater || shouldSkipStartupResume()) {
     return false
   }
@@ -487,8 +492,9 @@ async function resumePendingUpdateOnStartup({ version }) {
   attachNativeBeforeQuitHook()
   bindAutoUpdaterEvents(version)
 
-  const hydratedVersion = await waitForHydratedUpdate(version)
+  const hydratedVersion = await waitForHydratedUpdate(version, hydrateTimeoutMs)
   if (!hydratedVersion || !isVersionNewer(hydratedVersion, version)) {
+    console.warn('[updater] startup resume: update not hydrated yet; deferring')
     return false
   }
 
@@ -496,6 +502,26 @@ async function resumePendingUpdateOnStartup({ version }) {
     targetVersion: hydratedVersion,
     cacheKey: pending.cacheKey,
     source: 'startup',
+  })
+}
+
+/** 短超时快速尝试（不阻塞 UI）；失败则 deferred 钩子再试。 */
+async function tryQuickPendingUpdateOnStartup({ version }) {
+  return resumePendingUpdateOnStartup({
+    version,
+    hydrateTimeoutMs: STARTUP_UPDATE_QUICK_MS,
+  })
+}
+
+/** UI 就绪后后台再试一次 pending 安装。 */
+async function tryDeferredPendingUpdateOnStartup({ version }) {
+  if (!app.isPackaged || !autoUpdater) return
+  const pending = readPendingDownloadFromDisk()
+  if (!pending?.version || !isVersionNewer(pending.version, version)) return
+  if (status.state === 'installing') return
+  await resumePendingUpdateOnStartup({
+    version,
+    hydrateTimeoutMs: STARTUP_UPDATE_DEFERRED_MS,
   })
 }
 

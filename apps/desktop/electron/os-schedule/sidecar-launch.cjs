@@ -176,7 +176,15 @@ function sleep(ms) {
  * @param {string | number} port
  * @param {number} [timeoutMs]
  */
-async function waitForHealth(host, port, timeoutMs = 30_000) {
+/** Packaged cold start (Windows AV / native modules) may exceed 30s. */
+const SIDECAR_HEALTH_TIMEOUT_DEV_MS = 30_000
+const SIDECAR_HEALTH_TIMEOUT_PACKAGED_MS = 60_000
+
+function sidecarHealthTimeoutMs(isDev) {
+  return isDev ? SIDECAR_HEALTH_TIMEOUT_DEV_MS : SIDECAR_HEALTH_TIMEOUT_PACKAGED_MS
+}
+
+async function waitForHealth(host, port, timeoutMs = SIDECAR_HEALTH_TIMEOUT_PACKAGED_MS) {
   const url = `http://${host}:${port}/api/health`
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
@@ -269,4 +277,7 @@ module.exports = {
   stopChildAndWait,
   SIDECAR_GRACEFUL_MS,
   SIDECAR_HARD_EXTRA_MS,
+  SIDECAR_HEALTH_TIMEOUT_DEV_MS,
+  SIDECAR_HEALTH_TIMEOUT_PACKAGED_MS,
+  sidecarHealthTimeoutMs,
 }
