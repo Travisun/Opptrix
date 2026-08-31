@@ -5,6 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   APP_TAG_PREFIX,
+  DEFAULT_IMAGE_REPOSITORY,
   MIN_APP_TAG,
   MIN_APP_VERSION,
   assertAppTagAllowed,
@@ -16,6 +17,8 @@ import {
   parseSemver,
   readAppTagMeta,
   resolveAppRef,
+  resolveImageRef,
+  resolveImageRepository,
   resolveReleaseIdentity,
 } from '../packages/selfhost/src/app-refs.mjs'
 
@@ -128,14 +131,39 @@ test('readAppTagMeta defaults', () => {
   const meta = readAppTagMeta({})
   assert.equal(meta.minAppTag, MIN_APP_TAG)
   assert.equal(meta.preferredAppTag, MIN_APP_TAG)
+  assert.equal(meta.imageRepository, DEFAULT_IMAGE_REPOSITORY)
 
   const custom = readAppTagMeta({
     opptrixSelfhost: {
       minAppTag: 'opptrix-selfhost-v1.3.6',
       preferredAppTag: 'opptrix-selfhost-v1.4.0',
+      imageRepository: 'ghcr.io/example/opptrix',
     },
   })
   assert.equal(custom.preferredAppTag, 'opptrix-selfhost-v1.4.0')
+  assert.equal(custom.imageRepository, 'ghcr.io/example/opptrix')
+})
+
+test('resolveImageRef maps app tag to GHCR image', () => {
+  assert.equal(
+    resolveImageRef('opptrix-selfhost-v1.3.6'),
+    'ghcr.io/travisun/opptrix:opptrix-selfhost-v1.3.6',
+  )
+  assert.equal(resolveImageRef('main'), null)
+  assert.equal(resolveImageRef('selfhost-v0.1.6'), null)
+  assert.equal(
+    resolveImageRef('opptrix-selfhost-v1.4.0', {
+      imageRepository: 'ghcr.io/other/opptrix',
+    }),
+    'ghcr.io/other/opptrix:opptrix-selfhost-v1.4.0',
+  )
+  assert.equal(
+    resolveImageRef('opptrix-selfhost-v1.3.6', {
+      env: { OPPTRIX_IMAGE_REPO: 'ghcr.io/mirror/opptrix/' },
+    }),
+    'ghcr.io/mirror/opptrix:opptrix-selfhost-v1.3.6',
+  )
+  assert.equal(resolveImageRepository({}), DEFAULT_IMAGE_REPOSITORY)
 })
 
 test('min filter keeps only >= 1.3.6 tags', () => {

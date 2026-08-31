@@ -1,6 +1,6 @@
 # Opptrix 自托管（Docker Compose）
 
-推荐用 **Docker Compose** 部署单用户实例：一份镜像、持久化数据卷、可选宿主机目录挂载。桌面安装包仍是本机可选形态，不依赖本文。
+推荐用 **Docker Compose** 部署单用户实例：一份镜像、持久化数据卷、可选宿主机目录挂载。本文是面向最终用户与运维的**唯一推荐安装路径**。
 
 ## 快速开始（Linux 服务器 · 推荐）
 
@@ -12,11 +12,21 @@
 npm i -g @opptrix/selfhost
 # 国内 registry 可选: npm i -g @opptrix/selfhost --registry https://registry.npmmirror.com
 opptrix init          # 默认自动检测国内/海外镜像与 clone 源
-opptrix up
-# 强制指定: opptrix up --mirror cn   或  --mirror foreign
+opptrix up            # 优先拉取 GHCR 预构建镜像并启动
+# 强制本地编译: opptrix up --build
+# 强制指定源: opptrix up --mirror cn   或  --mirror foreign
 ```
 
-`up` 若在非仓库目录执行，会按镜像偏好自动 clone 完整源码到 `~/.opptrix/instances/default`（可用 `OPPTRIX_DEPLOY_DIR` 覆盖）。**默认检出应用快照 tag** `opptrix-selfhost-v*`（包内 `preferredAppTag`，当前最低 `opptrix-selfhost-v1.3.6`），**不会**自动回退到 `main`，也**不会**用 CLI 发版标签 `selfhost-v*` 当应用源码。
+`up` 默认**优先拉取**预构建镜像（路径随区域变化）：
+
+| 区域 | 拉镜像 |
+|------|--------|
+| **国内 (`cn`)** | 对 `ghcr.nju.edu.cn` 与 `ghcr.1ms.run` **TCP 测速**，选更快者；失败再试另一站，最后可选官方 `ghcr.io` |
+| **海外 (`foreign`)** | 官方 `ghcr.io/travisun/opptrix:<应用 tag>` |
+
+只需写入 Compose 清单到部署目录（默认 `~/.opptrix/instances/default`，可用 `OPPTRIX_DEPLOY_DIR` 覆盖），**不必**先 clone 整仓。拉取失败（镜像未发布、网络不通等）或显式 `--build` / `OPPTRIX_FORCE_BUILD=1` / `ref=main` 时，再自动 clone 完整源码并本地构建。**默认应用快照**为 `opptrix-selfhost-v*`（包内 `preferredAppTag`，当前最低 `opptrix-selfhost-v1.3.6`），**不会**自动回退到 `main`，也**不会**用 CLI 发版标签 `selfhost-v*` 当应用源码。
+
+强制指定国内镜像站：`OPPTRIX_GHCR_MIRROR=ghcr.nju.edu.cn`（或 `ghcr.1ms.run`）。`opptrix doctor` 会打印测速结果。
 
 | `--mirror` / 区域 | 默认 clone 源 | 回退 |
 |-------------------|---------------|------|
@@ -25,27 +35,36 @@ opptrix up
 
 可用 `OPPTRIX_GIT_URL_CN` / `OPPTRIX_GIT_URL` / `OPPTRIX_GIT_URL_OVERRIDE` 覆盖。包内带有与发版同步的 Compose / Dockerfile 清单。
 
-### 版本轨道（三轨）
+### 版本轨道
 
 | 轨道 | 用途 |
 |------|------|
-| `desktop-v*` | 桌面安装包 |
-| `opptrix-selfhost-vX.Y.Z` | **自托管应用**可安装快照（clone / 升级 / 回退；与桌面同一套 X.Y.Z） |
+| `opptrix-selfhost-vX.Y.Z` | **自托管应用**可安装快照（GHCR 镜像 tag / clone / 升级 / 回退） |
 | `selfhost-v*` | **仅** `@opptrix/selfhost` CLI 的 npm 发版触发，**不是**应用源码 |
+
+预构建镜像（打 `opptrix-selfhost-v*` 后由 CI 推送）：
+
+| 项 | 值 |
+|----|-----|
+| 仓库 | CI 推送至 `ghcr.io/travisun/opptrix`；国内 pull 经 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速代理主机名 |
+| 覆盖 | `OPPTRIX_IMAGE`（完整引用）、`OPPTRIX_IMAGE_REPO`、`OPPTRIX_GHCR_MIRROR`（仅改 registry 主机） |
+| Tag | 与 git 一致的 `opptrix-selfhost-vX.Y.Z`、纯 semver `X.Y.Z`、浮动 `selfhost` |
+| 大模型 | **不在镜像内**；运行时写入卷 `opptrix-models`，升级不重下 |
 
 查看与切换应用版本：
 
 ```bash
 opptrix tags                          # 列出 ≥ 最低版本的可用快照
 opptrix use opptrix-selfhost-v1.3.6   # 写入 .opptrix.json 的 appRef
-opptrix up                            # 按偏好检出并启动
+opptrix up                            # 优先 pull 预构建并启动
+opptrix up --build                    # 强制本地编译
 opptrix up --ref opptrix-selfhost-v1.3.6
-# 开发分支（需显式，风险自担）:
+# 开发分支（需显式，风险自担，走本地编译）:
 opptrix use main && opptrix up
 # 或: OPPTRIX_GIT_REF=main opptrix up
 ```
 
-容器内可通过 `OPPTRIX_APP_VERSION` / `OPPTRIX_RELEASE_CHANNEL=selfhost` / `OPPTRIX_RELEASE_TAG` 识别当前快照（CLI 构建时注入）。
+容器内可通过 `OPPTRIX_APP_VERSION` / `OPPTRIX_RELEASE_CHANNEL=selfhost` / `OPPTRIX_RELEASE_TAG` 识别当前快照（CLI 注入）。
 
 ### 方式 B：一键 bootstrap（自动装 Docker + 托管 Node + CLI）
 
@@ -83,9 +102,10 @@ opptrix up
 | `opptrix doctor` | 检查 Docker / 仓库文件 |
 | `opptrix tags` | 列出可用应用快照（`opptrix-selfhost-v*`） |
 | `opptrix use <tag\|main>` | 写入应用版本偏好（`--apply` 可立即启动） |
-| `opptrix up` | 构建并后台启动 |
+| `opptrix up` | 优先 pull 预构建并后台启动 |
+| `opptrix up --build` | 强制本地编译后启动 |
 | `opptrix up --ref <tag\|main>` | 本次使用指定版本 |
-| `opptrix update` | 按配置版本同步源码后重建启动 |
+| `opptrix update` | 优先 pull 新 tag 镜像；保留 compose.env / 卷 |
 | `opptrix stop` / `start` / `restart` | 停 / 启 / 重启 |
 | `opptrix down` | 停止并移除容器（默认**保留**数据卷） |
 | `opptrix logs -f` | 跟踪日志 |
@@ -109,12 +129,16 @@ git push origin selfhost-vX.Y.Z && git push gitee selfhost-vX.Y.Z
 
 打 tag `selfhost-v*` 会触发 `.github/workflows/publish-selfhost.yml`；流水线会在 `npm publish` 后向 `registry.npmjs.org` 回查，不可见则失败。也可在 Actions 里手动 `workflow_dispatch`。
 
-应用快照 `opptrix-selfhost-v*` 由维护者另行打 tag（与桌面 `desktop-v*` 对齐的 X.Y.Z），**不会**由 `release:selfhost` 自动创建。
+应用快照 `opptrix-selfhost-v*` 由维护者另行打 tag，**不会**由 `release:selfhost`（CLI）自动创建。打该 tag 会触发 `.github/workflows/publish-selfhost-image.yml`，将多架构镜像推送到 `ghcr.io/<owner>/opptrix`（标签含完整 tag、semver、`selfhost`）。**首个 tag 推送完成前**，用户 `opptrix up` 的 pull 会失败并自动回退本地编译。
 
 ### 不用 CLI 时的 Compose 原语
 
 ```bash
 cp compose.env.example compose.env
+# 预构建（示例）:
+OPPTRIX_IMAGE=ghcr.io/travisun/opptrix:opptrix-selfhost-v1.3.6 docker compose pull
+OPPTRIX_IMAGE=ghcr.io/travisun/opptrix:opptrix-selfhost-v1.3.6 docker compose up -d
+# 或本地编译:
 OPPTRIX_BUILD_MIRROR=cn ./scripts/docker-compose-with-mirrors.sh up -d --build
 curl -fsS http://127.0.0.1:8711/api/health
 ```
@@ -180,33 +204,48 @@ docker compose start
 
 模型卷同理。
 
-## 升级（不丢数据）
+## 升级（不丢数据与配置）
+
+用 CLI（推荐）：
 
 ```bash
-git pull   # 或换到新的 release 源码 / 镜像标签
-docker compose up -d --build
+opptrix tags
+opptrix use opptrix-selfhost-vX.Y.Z --apply
+# 或: opptrix update
 ```
 
-确认仍挂载同一 `opptrix-data` / `opptrix-models`。不要删除这两个 named volume。
+**默认保留：**
 
-若已预置模型、想跳过启动时探测下载：
+| 内容 | 位置 | 说明 |
+|------|------|------|
+| 账户 / 会话 / 设置 | 卷 `opptrix-data` → `/data` | `down` 不带 `--volumes` 即保留 |
+| 核心模型 | 卷 `opptrix-models` → `/models` | 已有文件**不会**再下载 |
+| 运行时配置 | 部署目录 `compose.env`、`.opptrix.json` | 升级不覆盖 |
+| 额外目录映射 | `docker-compose.override.yml` | 升级不覆盖；Compose 自动合并 |
+
+启动时 entrypoint 会检测模型卷：齐全则跳过下载。仅当编排指定时才重下：
 
 ```bash
-# 在 compose 的 environment 中
-OPPTRIX_SKIP_MODEL_FETCH: "1"
+# compose.env
+OPPTRIX_FORCE_MODEL_FETCH=1
 ```
+
+冒烟、完全不拉模型：`OPPTRIX_SKIP_MODEL_FETCH=1` 或 `opptrix up --skip-models`。
+
+不要删除 named volume；`opptrix down --volumes` 会清空数据与模型。
 
 ## 额外目录挂载
 
 约定：宿主机目录挂到 **`/data/mounts/<name>`**，`<name>` 为短标识（如 `research`、`docs`）。
 
-在 `docker-compose.yml` 中取消注释并改路径，例如：
+请写在 **`docker-compose.override.yml`**（与 `docker-compose.yml` 同目录），升级覆盖主 compose 时不会丢掉你的映射：
 
 ```yaml
-volumes:
-  - opptrix-data:/data
-  - opptrix-models:/models
-  - ./host-research:/data/mounts/research:ro
+# docker-compose.override.yml
+services:
+  opptrix:
+    volumes:
+      - ./host-research:/data/mounts/research:ro
 ```
 
 只读（`:ro`）适合资料库；需要工作区内写入时去掉 `:ro`。应用侧按挂载名访问这些路径（与数据根下的 `mounts` 约定一致）。
@@ -273,10 +312,6 @@ docker compose restart
 docker compose down          # 保留 volumes
 docker compose down -v       # ⚠ 删除数据与模型卷
 ```
-
-## 桌面端（可选）
-
-本机也可以继续使用 [GitHub Releases](https://github.com/Travisun/Opptrix/releases) 桌面安装包。Docker 自托管与桌面版数据目录独立；不要假设两边自动同步。
 
 ## 故障排查
 

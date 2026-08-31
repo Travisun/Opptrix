@@ -1,6 +1,7 @@
 /**
  * Ensure a full Opptrix source tree exists for Docker build context.
- * npm package ships CLI + compose templates; image build still needs apps/packages/client-ui.
+ * npm package ships CLI + compose templates; local image build still needs apps/packages/client-ui.
+ * Prebuilt GHCR path only needs a thin deploy (compose/Dockerfile overlay) — see ensureThinDeploy.
  *
  * App snapshots use `opptrix-selfhost-v*` tags (not CLI `selfhost-v*` / not silent main).
  * Clone remotes (see resolveGitCloneUrls):
@@ -9,6 +10,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import {
   assertAppTagAllowed,
@@ -27,6 +29,15 @@ import {
   resolvePackageRoot,
 } from './paths.mjs'
 
+/** Operator state that must survive thin→full clone fallback. */
+const PRESERVE_ON_CLONE = [
+  'compose.env',
+  '.env',
+  '.opptrix.json',
+  '.opptrix-host.json',
+  'docker-compose.override.yml',
+]
+
 function log(msg) {
   console.log(`[opptrix] ${msg}`)
 }
@@ -43,6 +54,47 @@ export function isDevMonorepoRoot(root) {
   const pkgRoot = resolvePackageRoot()
   const mono = path.resolve(pkgRoot, '../..')
   return path.resolve(root) === mono
+}
+
+/**
+ * @param {string} root
+ * @returns {{ dir: string, files: string[] } | null}
+ */
+function stashOperatorState(root) {
+  /** @type {string[]} */
+  const files = []
+  for (const rel of PRESERVE_ON_CLONE) {
+    const p = path.join(root, rel)
+    if (fs.existsSync(p)) files.push(rel)
+  }
+  if (!files.length) return null
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-state-'))
+  for (const rel of files) {
+    fs.copyFileSync(path.join(root, rel), path.join(dir, rel))
+  }
+  return { dir, files }
+}
+
+/**
+ * @param {string} root
+ * @param {{ dir: string, files: string[] } | null} stash
+ */
+function restoreOperatorState(root, stash) {
+  if (!stash) return
+  try {
+    for (const rel of stash.files) {
+      const from = path.join(stash.dir, rel)
+      if (fs.existsSync(from)) {
+        fs.copyFileSync(from, path.join(root, rel))
+      }
+    }
+  } finally {
+    try {
+      fs.rmSync(stash.dir, { recursive: true, force: true })
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /**
@@ -122,6 +174,7 @@ export function syncCheckout(root, ref) {
  * @returns {boolean}
  */
 function tryCloneRef(root, url, ref) {
+  const stash = stashOperatorState(root)
   fs.rmSync(root, { recursive: true, force: true })
   fs.mkdirSync(path.dirname(root), { recursive: true })
   log(`git clone --branch ${ref} ← ${url}`)
@@ -131,11 +184,14 @@ function tryCloneRef(root, url, ref) {
     { encoding: 'utf8', shell: false },
   )
   if (attempt.status === 0) {
+    restoreOperatorState(root, stash)
     log(`已检出 ${ref}`)
     return true
   }
   warn(`检出 ${ref} 失败: ${(attempt.stderr || '').trim().slice(0, 200)}`)
-  fs.rmSync(root, { recursive: true, force: true })
+  // Restore operator state into a recreated empty root so compose.env is not lost
+  fs.mkdirSync(root, { recursive: true })
+  restoreOperatorState(root, stash)
   return false
 }
 
@@ -161,9 +217,11 @@ function cloneInto(root, urls, ref) {
 
 /**
  * Overlay published compose/Dockerfile onto a clone (not when deploy root is this monorepo).
+ * Never touches user state: `compose.env`, `.env`, `.opptrix.json`, `docker-compose.override.yml`
+ * (operator mounts/config). Named Docker volumes are outside this tree and also preserved.
  * @param {string} root
  */
-function overlayBundleCompose(root) {
+export function overlayBundleCompose(root) {
   const bundle = resolveBundleRoot()
   if (!fs.existsSync(path.join(bundle, 'docker-compose.yml'))) return
   if (isDevMonorepoRoot(root)) return
@@ -178,6 +236,22 @@ function overlayBundleCompose(root) {
     fs.mkdirSync(path.dirname(epDest), { recursive: true })
     fs.copyFileSync(epSrc, epDest)
   }
+}
+
+/**
+ * Thin deploy: compose/Dockerfile only (no git clone). Used for prebuilt image pull path.
+ * @param {string} [root]
+ * @returns {string}
+ */
+export function ensureThinDeploy(root = resolveDeployRoot()) {
+  fs.mkdirSync(root, { recursive: true })
+  overlayBundleCompose(root)
+  if (!fs.existsSync(path.join(root, 'docker-compose.yml'))) {
+    throw new Error(
+      `缺少 docker-compose.yml。请确认 @opptrix/selfhost 包已执行 build（含 bundle），或设置 OPPTRIX_DEPLOY_DIR。`,
+    )
+  }
+  return root
 }
 
 /**

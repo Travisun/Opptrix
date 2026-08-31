@@ -24,9 +24,10 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.name, '@opptrix/selfhost')
   assert.equal(pkg.bin.opptrix, 'bin/opptrix.js')
   assert.equal(pkg.publishConfig?.access, 'public')
-  assert.equal(pkg.version, '0.1.5')
+  assert.equal(pkg.version, '0.1.6')
   assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
   assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.3.6')
+  assert.equal(pkg.opptrixSelfhost?.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
 test('root package.json bin points at packages/selfhost', async () => {
@@ -61,7 +62,7 @@ test('resolvePackageRoot / monorepo detection', () => {
   assert.equal(findFullSourceTree(path.join(ROOT, 'packages/selfhost/src')), ROOT)
 })
 
-test('opptrix help mentions @opptrix/selfhost', () => {
+test('opptrix help mentions prebuilt pull and --build', () => {
   const r = spawnSync(process.execPath, [CLI, 'help'], {
     cwd: ROOT,
     encoding: 'utf8',
@@ -71,11 +72,32 @@ test('opptrix help mentions @opptrix/selfhost', () => {
   assert.match(r.stdout, /install-cli/)
   assert.match(r.stdout, /\btags\b/)
   assert.match(r.stdout, /opptrix-selfhost-v1\.3\.6/)
+  assert.match(r.stdout, /预构建/)
+  assert.match(r.stdout, /--build/)
+  assert.match(r.stdout, /ghcr\.io\/travisun\/opptrix/)
 })
 
-test('readPackageMeta exposes app tag prefs', async () => {
+test('publish-selfhost-image workflow exists', async () => {
+  const wf = await fs.promises.readFile(
+    path.join(ROOT, '.github/workflows/publish-selfhost-image.yml'),
+    'utf8',
+  )
+  assert.match(wf, /opptrix-selfhost-v/)
+  assert.match(wf, /ghcr\.io/)
+  assert.match(wf, /packages:\s*write/)
+  assert.match(wf, /linux\/amd64/)
+})
+
+test('readPackageMeta exposes imageRepository', async () => {
   const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
   const meta = readPackageMeta()
   assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
   assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.3.6')
+  assert.equal(meta.imageRepository, 'ghcr.io/travisun/opptrix')
+})
+
+test('docker-compose supports OPPTRIX_IMAGE override', async () => {
+  const yml = await fs.promises.readFile(path.join(ROOT, 'docker-compose.yml'), 'utf8')
+  assert.match(yml, /\$\{OPPTRIX_IMAGE:-opptrix:local\}/)
+  assert.match(yml, /build:/)
 })

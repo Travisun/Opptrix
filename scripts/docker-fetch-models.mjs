@@ -223,19 +223,29 @@ function exists(filePath) {
   }
 }
 
+/** When set, ignore on-volume markers and re-download missing-or-all suites (per-file still skips intact files unless removed). */
+function forceModelFetch() {
+  const raw = process.env.OPPTRIX_FORCE_MODEL_FETCH?.trim()
+  return raw === '1' || raw?.toLowerCase() === 'true' || raw?.toLowerCase() === 'yes'
+}
+
 function e5Ready() {
+  if (forceModelFetch()) return false
   return E5_REQUIRED.every((f) => exists(path.join(E5_DIR, f)))
 }
 
 function rapidocrReady() {
+  if (forceModelFetch()) return false
   return RAPIDOCR_FILES.every((f) => exists(path.join(RAPIDOCR_DIR, f.local)))
 }
 
 function sensevoiceReady() {
+  if (forceModelFetch()) return false
   return SENSEVOICE_FILES.every((f) => exists(path.join(SENSEVOICE_DIR, f.filename)))
 }
 
 function hyMtReady() {
+  if (forceModelFetch()) return false
   return HY_MT_BOOTSTRAP.every((f) => exists(path.join(LLM_DIR, f.filename)))
 }
 
@@ -248,7 +258,7 @@ async function ensureE5() {
   await fs.promises.mkdir(E5_DIR, { recursive: true })
   for (const file of E5_FILES) {
     const dest = path.join(E5_DIR, file)
-    if (exists(dest)) {
+    if (exists(dest) && !forceModelFetch()) {
       console.log(`${LOG}: skip existing ${file}`)
       continue
     }
@@ -278,7 +288,7 @@ async function ensureRapidOcr() {
   await fs.promises.mkdir(RAPIDOCR_DIR, { recursive: true })
   for (const entry of RAPIDOCR_FILES) {
     const dest = path.join(RAPIDOCR_DIR, entry.local)
-    if (exists(dest)) {
+    if (exists(dest) && !forceModelFetch()) {
       console.log(`${LOG}: skip existing ${entry.local}`)
       continue
     }
@@ -301,7 +311,7 @@ async function ensureSenseVoice() {
   await fs.promises.mkdir(SENSEVOICE_DIR, { recursive: true })
   for (const spec of SENSEVOICE_FILES) {
     const dest = path.join(SENSEVOICE_DIR, spec.filename)
-    if (exists(dest)) {
+    if (exists(dest) && !forceModelFetch()) {
       console.log(`${LOG}: skip existing ${spec.filename}`)
       continue
     }
@@ -326,7 +336,7 @@ async function ensureHyMt() {
   await fs.promises.mkdir(LLM_DIR, { recursive: true })
   for (const spec of HY_MT_BOOTSTRAP) {
     const dest = path.join(LLM_DIR, spec.filename)
-    if (exists(dest)) {
+    if (exists(dest) && !forceModelFetch()) {
       console.log(`${LOG}: skip existing ${spec.filename}`)
       continue
     }

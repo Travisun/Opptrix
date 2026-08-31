@@ -12,6 +12,18 @@ export const CN_MIRROR_DEFAULTS = Object.freeze({
   aptMirror: 'mirrors.aliyun.com',
 })
 
+/** Official GHCR registry host (foreign / default pull). */
+export const OFFICIAL_GHCR_HOST = 'ghcr.io'
+
+/**
+ * China GHCR pull mirrors (host only, no scheme).
+ * Docs often show https://ghcr.nju.edu.cn/ — Docker image refs use the hostname.
+ */
+export const CN_GHCR_MIRROR_HOSTS = Object.freeze([
+  'ghcr.nju.edu.cn',
+  'ghcr.1ms.run',
+])
+
 /** Default git remotes for source clone (Docker build context). */
 export const GIT_CLONE_DEFAULTS = Object.freeze({
   /** 国内默认：Gitee */
@@ -201,4 +213,187 @@ export function resolveBuildMirrorEnv(profile, env = process.env) {
     OPPTRIX_NPM_REGISTRY: env.OPPTRIX_NPM_REGISTRY?.trim() || '',
     OPPTRIX_APT_MIRROR: env.OPPTRIX_APT_MIRROR?.trim() || '',
   }
+}
+
+/**
+ * TCP connect latency to host:443 (ms). Infinity when unreachable.
+ * @param {string} host
+ * @param {number} [timeoutMs]
+ * @returns {{ host: string, ok: boolean, ms: number }}
+ */
+export function probeHostLatency(host, timeoutMs = 2500) {
+  const h = String(host ?? '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '')
+  if (!h) return { host: '', ok: false, ms: Number.POSITIVE_INFINITY }
+  const msCap = Math.max(200, Math.min(timeoutMs, 10000))
+  const started = Date.now()
+  const script = `
+const net=require('net');
+const host=${JSON.stringify(h)};
+const t0=Date.now();
+const s=net.connect(443,host,()=>{const ms=Date.now()-t0;try{s.destroy()}catch{};process.stdout.write(String(ms));process.exit(0)});
+s.on('error',()=>process.exit(1));
+setTimeout(()=>{try{s.destroy()}catch{};process.exit(1)},${msCap});
+`
+  const r = spawnSync(process.execPath, ['-e', script], {
+    encoding: 'utf8',
+    timeout: msCap + 1000,
+    windowsHide: true,
+  })
+  if (r.status !== 0) {
+    return { host: h, ok: false, ms: Number.POSITIVE_INFINITY }
+  }
+  const parsed = Number.parseInt(String(r.stdout || '').trim(), 10)
+  const ms = Number.isFinite(parsed) ? parsed : Date.now() - started
+  return { host: h, ok: true, ms }
+}
+
+/**
+ * @param {string} host
+ */
+export function normalizeRegistryHost(host) {
+  return String(host ?? '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/+$/, '')
+    .split('/')[0] || ''
+}
+
+/**
+ * Replace registry host in `ghcr.io/owner/name` (or already-mirrored) → `newHost/owner/name`.
+ * @param {string} repository no tag
+ * @param {string} host
+ */
+export function applyRegistryHost(repository, host) {
+  const repo = String(repository ?? '').trim().replace(/\/$/, '')
+  const h = normalizeRegistryHost(host)
+  if (!repo || !h) return repo
+  const parts = repo.split('/')
+  if (parts.length >= 2 && parts[0].includes('.')) {
+    parts[0] = h
+    return parts.join('/')
+  }
+  return `${h}/${repo}`
+}
+
+/**
+ * Rank hosts by TCP latency (fastest first). Unreachable hosts sort last.
+ * @param {string[]} hosts
+ * @param {{
+ *   probeFn?: (host: string) => { host: string, ok: boolean, ms: number },
+ *   timeoutMs?: number,
+ * }} [opts]
+ * @returns {{
+ *   ranked: string[],
+ *   winner: string | null,
+ *   results: Array<{ host: string, ok: boolean, ms: number }>,
+ * }}
+ */
+export function rankHostsByLatency(hosts, opts = {}) {
+  const list = [...new Set(
+    (hosts || []).map(normalizeRegistryHost).filter(Boolean),
+  )]
+  const probe = typeof opts.probeFn === 'function'
+    ? opts.probeFn
+    : (host) => probeHostLatency(host, opts.timeoutMs)
+  const results = list.map((host) => probe(host))
+  const okSorted = [...results].filter((r) => r.ok).sort((a, b) => a.ms - b.ms)
+  const failHosts = results.filter((r) => !r.ok).map((r) => r.host)
+  const ranked = [...okSorted.map((r) => r.host), ...failHosts]
+  return {
+    ranked,
+    winner: okSorted[0]?.host || null,
+    results,
+  }
+}
+
+/**
+ * Resolve ordered GHCR pull repository bases (no tag) for a mirror profile.
+ * - foreign → official ghcr.io/…
+ * - cn → speed-test among NJU / 1ms.run (then optional official fallback)
+ * Env:
+ *   OPPTRIX_GHCR_MIRROR — force registry host (e.g. ghcr.nju.edu.cn)
+ *   OPPTRIX_IMAGE_REPO — full repo override before host rewrite (still rewritten unless OPPTRIX_IMAGE set at CLI)
+ *
+ * @param {{
+ *   profile: BuildMirrorProfile | string,
+ *   imageRepository?: string | null,
+ *   env?: NodeJS.ProcessEnv,
+ *   probeFn?: (host: string) => { host: string, ok: boolean, ms: number },
+ *   includeOfficialFallback?: boolean,
+ * }} opts
+ * @returns {{
+ *   profile: BuildMirrorProfile,
+ *   repositories: string[],
+ *   winnerHost: string,
+ *   probeResults: Array<{ host: string, ok: boolean, ms: number }>,
+ *   reason: string,
+ * }}
+ */
+export function resolveGhcrPullRepositories(opts) {
+  const env = opts.env || process.env
+  const profile = resolveMirrorProfile(opts.profile, env, { probeNetwork: false }).profile
+  const baseRepo = String(
+    opts.imageRepository
+      || env.OPPTRIX_IMAGE_REPO
+      || 'ghcr.io/travisun/opptrix',
+  )
+    .trim()
+    .replace(/\/$/, '') || 'ghcr.io/travisun/opptrix'
+
+  const forced = normalizeRegistryHost(env.OPPTRIX_GHCR_MIRROR || '')
+  if (forced) {
+    const repo = applyRegistryHost(baseRepo, forced)
+    return {
+      profile,
+      repositories: [repo],
+      winnerHost: forced,
+      probeResults: [],
+      reason: 'OPPTRIX_GHCR_MIRROR',
+    }
+  }
+
+  if (profile === 'foreign') {
+    const repo = applyRegistryHost(baseRepo, OFFICIAL_GHCR_HOST)
+    return {
+      profile: 'foreign',
+      repositories: [repo],
+      winnerHost: OFFICIAL_GHCR_HOST,
+      probeResults: [],
+      reason: 'official-ghcr',
+    }
+  }
+
+  const ranked = rankHostsByLatency([...CN_GHCR_MIRROR_HOSTS], {
+    probeFn: opts.probeFn,
+  })
+  const includeOfficial = opts.includeOfficialFallback !== false
+  /** @type {string[]} */
+  const hosts = ranked.ranked.length
+    ? [...ranked.ranked]
+    : [...CN_GHCR_MIRROR_HOSTS]
+  if (includeOfficial && !hosts.includes(OFFICIAL_GHCR_HOST)) {
+    hosts.push(OFFICIAL_GHCR_HOST)
+  }
+  const repositories = [...new Set(hosts.map((h) => applyRegistryHost(baseRepo, h)))]
+  const winnerHost = ranked.winner || hosts[0] || CN_GHCR_MIRROR_HOSTS[0]
+  return {
+    profile: 'cn',
+    repositories,
+    winnerHost,
+    probeResults: ranked.results,
+    reason: ranked.winner
+      ? `cn-speed-test:${ranked.winner}`
+      : 'cn-mirrors-try-ordered',
+  }
+}
+
+/**
+ * Format probe table for doctor / logs.
+ * @param {Array<{ host: string, ok: boolean, ms: number }>} results
+ */
+export function formatGhcrProbeResults(results) {
+  if (!results?.length) return '(skipped)'
+  return results
+    .map((r) => (r.ok ? `${r.host} ${r.ms}ms` : `${r.host} unreachable`))
+    .join(' · ')
 }

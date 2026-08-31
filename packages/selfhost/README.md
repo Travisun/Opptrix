@@ -22,13 +22,14 @@
 安装并执行成功后，你会得到：
 
 1. 本机命令 **`opptrix`**（检查环境、初始化、启停实例）  
-2. 一份可构建的 **Docker Compose** 部署（数据落在 Docker 卷里，升级不丢）  
-3. **自动判断**用国内源还是海外源（也可手动指定）  
+2. 一份 Docker Compose 部署（默认 **拉取 GHCR 预构建镜像**；也可本地编译）  
+3. **自动判断**用国内源还是海外源（本地编译 / clone 时）  
 4. 浏览器打开 **http://127.0.0.1:8711** 使用完整 Opptrix Web 界面  
 
 典型问题本工具直接回答：
 
 - 「怎么在自己的 Linux 服务器上部署 Opptrix？」  
+- 「怎么用预构建镜像快速启动？怎么强制本地编译？」  
 - 「国内网络怎么拉镜像 / 克隆代码更快？」  
 - 「怎么启动、停止、看日志、升级自托管实例？」  
 - 「Mac / Windows 已经装了 Docker，怎么本地跑 Opptrix？」
@@ -39,12 +40,12 @@
 
 | 角色 | 场景 |
 |------|------|
-| 个人投资者 / 研究员 | 数据与会话留在自己机器或 VPS，不依赖桌面安装包 |
+| 个人投资者 / 研究员 | 数据与会话留在自己的机器或 VPS |
 | 运维 / 极客 | 用 Docker 跑单用户实例，脚本化启停与升级 |
 | 国内用户 | 自动走 Gitee + 国内构建镜像，少踩 Docker Hub / GitHub 超时 |
 | 海外用户 | 自动走 GitHub + 官方 registry |
 
-**不适合：** 希望「双击安装包」的纯桌面用户（请用 [GitHub Releases 桌面版](https://github.com/Travisun/Opptrix/releases)）；也不提供 Windows/macOS 自动安装 Docker。
+**不适合：** 未安装 Docker、且不打算自行安装 Docker 的环境；本包也不提供 Windows/macOS 自动安装 Docker。
 
 ---
 
@@ -54,7 +55,7 @@
 |------|----------|----------|
 | Node.js | **≥ 24** | `node -v` |
 | Docker | Engine + **Compose V2** | `docker compose version` |
-| 磁盘与网络 | 首次构建较大；可选下载本地模型 | 预留数 GB 以上更稳妥 |
+| 磁盘与网络 | 首次 pull 预构建较快；本地 `--build` 或拉模型时更大 | 预留数 GB 以上更稳妥 |
 
 - **Linux 服务器**：推荐；可用一键脚本先装 Docker / Node，再装本 CLI。  
 - **macOS / Windows**：请先自行安装 Docker Desktop（或等价环境）与 Node，再 `npm i -g @opptrix/selfhost`。
@@ -112,7 +113,7 @@ opptrix doctor
 
 ```bash
 opptrix init          # 生成 compose.env，自动选国内/海外源并写入配置
-opptrix up            # 必要时自动 clone 源码 → 构建镜像 → 后台启动
+opptrix up            # 优先拉取预构建镜像 → 后台启动（失败再本地编译）
 opptrix health        # 确认服务健康
 ```
 
@@ -121,16 +122,22 @@ opptrix health        # 确认服务健康
 | 步骤 | 你在做什么 | 成功后的效果 |
 |------|------------|--------------|
 | `init` | 准备配置 | 出现 `compose.env`、`.opptrix.json`（含检测到的 mirror） |
-| `up` | 构建并启动 | 容器运行；端口 8711 可访问；数据写入 Docker 卷 |
+| `up` | 拉镜像并启动 | 容器运行；端口 8711 可访问；数据写入 Docker 卷 |
 | `health` | 探活 | 打印健康检查成功信息 |
 
-首次构建可能较久。若只想先验证「能起来」、暂不下载本地模型：
+默认**不**在本机全量编译。若需强制本地构建，或 GHCR 拉不到时：
+
+```bash
+opptrix up --build
+```
+
+若只想先验证「能起来」、暂不下载本地模型：
 
 ```bash
 opptrix up --skip-models
 ```
 
-**效果：** 跳过首启大体积模型拉取，更快看到界面；之后可再完整 `up` 补模型。
+**效果：** 跳过首启大体积模型拉取，更快看到界面；之后可再完整 `up` 补模型。模型始终在卷里，不进预构建镜像。
 
 ---
 
@@ -156,16 +163,16 @@ opptrix down          # 删容器但默认保留数据卷
 
 ## 场景三：升级 Opptrix 实例与 CLI
 
-版本分轨：`opptrix-selfhost-v*` 是应用快照；`selfhost-v*` 只发布 CLI 包；`desktop-v*` 是桌面端。
+版本分轨：`opptrix-selfhost-v*` 是应用快照（并对应 GHCR 镜像）；`selfhost-v*` 只发布 CLI 包。
 
 ```bash
 opptrix tags                       # 查看可升级 / 可回退的应用快照
-opptrix use opptrix-selfhost-v1.3.6 && opptrix up   # 切到指定应用版本并重建
+opptrix use opptrix-selfhost-v1.3.6 && opptrix up   # 切到指定版本并优先 pull
 npm update -g @opptrix/selfhost    # 仅升级管理命令本身（selfhost-v*）
-opptrix update                     # 按当前 appRef 同步源码并重建启动
+opptrix update                     # 优先拉新预构建镜像；保留配置与卷
 ```
 
-**效果：** 应用与 CLI 分轨升级/回退；默认不会静默跟 `main`。
+**效果：** 应用与 CLI 分轨升级/回退；**沿用**原 `compose.env`、挂载 override、数据卷与模型卷。已有核心模型跳过下载；强制重下见 `OPPTRIX_FORCE_MODEL_FETCH=1`。默认不会静默跟 `main`。维护者打 `opptrix-selfhost-v*` 后 CI 推送镜像到 `ghcr.io/travisun/opptrix`；国内 `opptrix up` 会对 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速后拉取。
 
 ---
 
@@ -199,7 +206,7 @@ opptrix up --mirror auto      # 显式再检测一次
 
 1. 使用环境变量 `OPPTRIX_DEPLOY_DIR`（若设置）  
 2. 或当前目录向上找到已有 Opptrix 仓库  
-3. 否则用 `~/.opptrix/instances/default`（没有则自动 clone）
+3. 否则用 `~/.opptrix/instances/default`（写入 Compose 清单；`--build` 时再 clone）
 
 ```bash
 export OPPTRIX_DEPLOY_DIR=/data/opptrix
@@ -207,7 +214,7 @@ opptrix init
 opptrix up
 ```
 
-**效果：** 源码与 Compose 工作目录固定在你指定的路径，便于多机备份或挂载盘。
+**效果：** Compose 工作目录固定在你指定的路径；预构建路径无需整仓源码。
 
 ---
 
@@ -240,11 +247,11 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `opptrix init` | 初始化配置 | 生成 `compose.env`，保存 mirror 等偏好 |
 | `opptrix tags` | 列出应用快照 | `opptrix-selfhost-v*`（≥ 最低版本）及升降级提示 |
 | `opptrix use <tag\|main>` | 写入版本偏好 | `.opptrix.json` 的 `appRef`；`--apply` 可立即启动 |
-| `opptrix up` | 构建并后台启动 | 实例运行，默认可访问 8711 |
+| `opptrix up` | 优先 pull 预构建并后台启动 | 实例运行，默认可访问 8711 |
 | `opptrix start` / `stop` / `restart` | 启停重启 | 不强制重建镜像 |
 | `opptrix down` | 移除容器 | 默认保留数据；加 `--volumes` 清空 |
-| `opptrix build` | 只构建镜像 | 不启动容器 |
-| `opptrix update` | 按 appRef 同步并重建 | 实例对齐所选快照 |
+| `opptrix build` | 只本地构建镜像 | 不启动容器 |
+| `opptrix update` | 优先 pull 新版本镜像 | 保留配置与卷 |
 | `opptrix logs` | 查看日志 | `-f` 持续跟踪 |
 | `opptrix status` | 容器状态 | 等同 compose ps |
 | `opptrix health` | HTTP 健康检查 | 确认 API 已就绪 |
@@ -257,9 +264,10 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 |------|------|
 | `--mirror cn\|foreign\|auto` | 指定或自动区域源（默认等价 auto） |
 | `--ref <tag\|main>` | 本次使用的应用版本 |
-| `--apply` | `use` 后直接构建启动 |
+| `--apply` | `use` 后直接启动 |
 | `--skip-models` | 跳过首启核心模型下载，更快冒烟 |
-| `--no-build` | `up` 时不重建镜像 |
+| `--build` | 强制本地编译（跳过优先 pull） |
+| `--no-build` | 本地路径下 `up` 不加 `--build` |
 | `--volumes` | `down` 时删除数据卷（危险） |
 | `-f` / `--follow` | 日志跟踪 |
 | `--tail <n>` | 日志尾部行数（默认 200） |
@@ -268,7 +276,11 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 
 | 变量 | 作用 |
 |------|------|
-| `OPPTRIX_DEPLOY_DIR` | 部署 / 源码目录 |
+| `OPPTRIX_DEPLOY_DIR` | 部署 / Compose 目录 |
+| `OPPTRIX_IMAGE` | 完整镜像引用（手动设置则跳过测速与候选列表） |
+| `OPPTRIX_IMAGE_REPO` | 镜像仓库路径（默认 `ghcr.io/travisun/opptrix`） |
+| `OPPTRIX_GHCR_MIRROR` | 强制 registry 主机：`ghcr.nju.edu.cn` 或 `ghcr.1ms.run` |
+| `OPPTRIX_FORCE_BUILD=1` | 同 `--build` |
 | `OPPTRIX_BUILD_MIRROR` | `cn` / `foreign` / `auto` |
 | `OPPTRIX_FORCE_CN=1` | 强制按国内检测 |
 | `OPPTRIX_GIT_URL_CN` / `OPPTRIX_GIT_URL` | 覆盖 Gitee / GitHub 地址 |
@@ -295,7 +307,7 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 
 ### Opptrix 怎么本地 Docker 部署？
 
-安装 Node ≥ 24 与 Docker Compose V2 后：`npm i -g @opptrix/selfhost && opptrix init && opptrix up`，浏览器打开 http://127.0.0.1:8711 。
+安装 Node ≥ 24 与 Docker Compose V2 后：`npm i -g @opptrix/selfhost && opptrix init && opptrix up`，浏览器打开 http://127.0.0.1:8711 。默认拉取预构建镜像；本地编译用 `opptrix up --build`。
 
 ### 国内如何更快安装 Opptrix？
 
@@ -328,9 +340,9 @@ opptrix down                 # 可选
 npm uninstall -g @opptrix/selfhost
 ```
 
-### 桌面版和自托管是一回事吗？
+### 自托管和本机 `npm run serve` 有什么区别？
 
-不是。桌面版是安装包；本 CLI 管理的是 **Docker 单用户自托管实例**。两边数据目录默认独立。
+自托管走 Docker：数据与模型在卷里，适合服务器长期跑。`npm run serve` 是开发/临时预览，不推荐当生产部署。
 
 ---
 

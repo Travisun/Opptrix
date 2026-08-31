@@ -25,6 +25,7 @@ export function resolveBundleRoot(pkgRoot = resolvePackageRoot()) {
  *   version: string,
  *   minAppTag: string,
  *   preferredAppTag: string,
+ *   imageRepository: string,
  *   raw: Record<string, unknown>,
  * }}
  */
@@ -39,11 +40,15 @@ export function readPackageMeta(pkgRoot = resolvePackageRoot()) {
   const preferredAppTag = typeof block.preferredAppTag === 'string' && block.preferredAppTag.trim()
     ? block.preferredAppTag.trim()
     : minAppTag
+  const imageRepository = typeof block.imageRepository === 'string' && block.imageRepository.trim()
+    ? block.imageRepository.trim().replace(/\/$/, '')
+    : 'ghcr.io/travisun/opptrix'
   return {
     name: String(pkg.name || '@opptrix/selfhost'),
     version: String(pkg.version || '0.0.0'),
     minAppTag,
     preferredAppTag,
+    imageRepository,
     raw: pkg,
   }
 }

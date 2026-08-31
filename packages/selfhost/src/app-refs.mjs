@@ -6,12 +6,15 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { applyRegistryHost } from './mirrors.mjs'
 
 /** Lowest installable self-host app snapshot (code constant; remote may lag). */
 export const MIN_APP_TAG = 'opptrix-selfhost-v1.3.6'
 export const MIN_APP_VERSION = '1.3.6'
 export const APP_TAG_PREFIX = 'opptrix-selfhost-v'
 export const RELEASE_CHANNEL_SELFHOST = 'selfhost'
+/** Default GHCR repository (owner lowercased). Override via OPPTRIX_IMAGE_REPO or package meta. */
+export const DEFAULT_IMAGE_REPOSITORY = 'ghcr.io/travisun/opptrix'
 
 /**
  * @param {string} version
@@ -88,7 +91,14 @@ export function assertAppTagAllowed(ref, minTag = MIN_APP_TAG) {
 
 /**
  * Read opptrixSelfhost block from package.json (with defaults).
- * @param {{ version?: string, opptrixSelfhost?: { minAppTag?: string, preferredAppTag?: string } } | null | undefined} pkg
+ * @param {{
+ *   version?: string,
+ *   opptrixSelfhost?: {
+ *     minAppTag?: string,
+ *     preferredAppTag?: string,
+ *     imageRepository?: string,
+ *   },
+ * } | null | undefined} pkg
  */
 export function readAppTagMeta(pkg) {
   const block = pkg && typeof pkg === 'object' ? pkg.opptrixSelfhost : null
@@ -99,11 +109,54 @@ export function readAppTagMeta(pkg) {
     block && typeof block.preferredAppTag === 'string' && block.preferredAppTag.trim()
   ) || ''
   if (!preferredAppTag) preferredAppTag = minAppTag
+  const imageRepository = (
+    block && typeof block.imageRepository === 'string' && block.imageRepository.trim()
+  ) || DEFAULT_IMAGE_REPOSITORY
   return {
     minAppTag,
     preferredAppTag,
+    imageRepository: imageRepository.replace(/\/$/, ''),
     minVersion: parseAppTag(minAppTag)?.version || MIN_APP_VERSION,
   }
+}
+
+/**
+ * Resolve container image repository (no tag).
+ * Order: OPPTRIX_IMAGE_REPO → opts.imageRepository → package default.
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   imageRepository?: string | null,
+ * }} [opts]
+ * @returns {string}
+ */
+export function resolveImageRepository(opts = {}) {
+  const env = opts.env || process.env
+  const fromEnv = env.OPPTRIX_IMAGE_REPO?.trim()
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
+  const fromOpts = opts.imageRepository != null ? String(opts.imageRepository).trim() : ''
+  if (fromOpts) return fromOpts.replace(/\/$/, '')
+  return DEFAULT_IMAGE_REPOSITORY
+}
+
+/**
+ * Map app snapshot tag → container image reference (repository:tag).
+ * Image tag prefers the full git tag (`opptrix-selfhost-vX.Y.Z`) for 1:1 alignment with CI.
+ * Optional `registryHost` rewrites ghcr.io → domestic mirror (e.g. ghcr.nju.edu.cn).
+ * @param {string} appTag
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   imageRepository?: string | null,
+ *   registryHost?: string | null,
+ * }} [opts]
+ * @returns {string | null} null when appTag is not a valid opptrix-selfhost-v* tag
+ */
+export function resolveImageRef(appTag, opts = {}) {
+  const parsed = parseAppTag(appTag)
+  if (!parsed) return null
+  let repo = resolveImageRepository(opts)
+  const host = opts.registryHost != null ? String(opts.registryHost).trim() : ''
+  if (host) repo = applyRegistryHost(repo, host)
+  return `${repo}:${parsed.tag}`
 }
 
 /**

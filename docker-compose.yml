@@ -1,8 +1,13 @@
 # Opptrix — recommended single-user self-host (Docker Compose)
 #
-# Quick start:
+# Prebuilt image (recommended via `opptrix up`):
+#   CLI sets OPPTRIX_IMAGE=ghcr.io/travisun/opptrix:opptrix-selfhost-vX.Y.Z then pull + up.
+#   Override registry/tag anytime: OPPTRIX_IMAGE=... docker compose up -d
+#   (国内镜像站日后可改 OPPTRIX_IMAGE / OPPTRIX_IMAGE_REPO。)
+#
+# Local build (no prebuilt / --build / pull 失败回退):
 #   cp compose.env.example compose.env   # optional runtime overrides
-#   docker compose up -d --build
+#   docker compose up -d --build         # builds → tags opptrix:local when OPPTRIX_IMAGE unset
 #   open http://127.0.0.1:8711
 #
 # China build (Docker Hub / npm / apt mirrors):
@@ -12,10 +17,14 @@
 #
 # Data lives in named volume `opptrix-data` (/data).
 # Core models live in `opptrix-models` (/models); first boot fetches if empty.
+# Upgrades reuse the same volumes — existing models are not re-downloaded unless
+# OPPTRIX_FORCE_MODEL_FETCH=1. Operator mounts: docker-compose.override.yml (never overwritten).
 # Extra host folders: mount under /data/mounts/<name> (see docs/SELF-HOSTING.md).
 #
 # Smoke without downloading ~1GB+ models:
 #   OPPTRIX_SKIP_MODEL_FETCH=1 docker compose up -d --build
+# Force re-download of core models:
+#   OPPTRIX_FORCE_MODEL_FETCH=1 docker compose up -d
 
 services:
   opptrix:
@@ -29,7 +38,8 @@ services:
         NPM_REGISTRY: "${OPPTRIX_NPM_REGISTRY:-}"
         # Host only, e.g. mirrors.aliyun.com
         APT_MIRROR: "${OPPTRIX_APT_MIRROR:-}"
-    image: opptrix:local
+    # Default opptrix:local for local --build. Prebuilt path: CLI sets OPPTRIX_IMAGE.
+    image: ${OPPTRIX_IMAGE:-opptrix:local}
     container_name: opptrix
     # Optional local overrides (do not commit secrets). Compose v2.24+ `required: false`.
     env_file:
@@ -53,6 +63,8 @@ services:
       OPPTRIX_WITH_MODELS: "${OPPTRIX_WITH_MODELS:-1}"
       # Host/env-file override: set to 1 to skip first-boot model download
       OPPTRIX_SKIP_MODEL_FETCH: "${OPPTRIX_SKIP_MODEL_FETCH:-0}"
+      # Set to 1 to re-fetch core models even when volume markers exist
+      OPPTRIX_FORCE_MODEL_FETCH: "${OPPTRIX_FORCE_MODEL_FETCH:-0}"
       OPPTRIX_MODEL_SOURCE_ORDER: "${OPPTRIX_MODEL_SOURCE_ORDER:-modelscope,hf-mirror,huggingface}"
       # Self-host release identity (injected by `opptrix` CLI from checkout tag)
       OPPTRIX_APP_VERSION: "${OPPTRIX_APP_VERSION:-}"

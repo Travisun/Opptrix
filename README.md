@@ -9,7 +9,7 @@
     <td align="center"><a href="https://github.com/Travisun/Opptrix"><img src="https://img.shields.io/badge/GitHub-%E4%BB%93%E5%BA%93-181717?logo=github&logoColor=white" alt="GitHub" /></a></td>
     <td align="center"><a href="https://gitee.com/Travisun/Opptrix"><img src="https://img.shields.io/badge/Gitee-%E4%BB%93%E5%BA%93-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a></td>
     <td align="center"><a href="https://www.npmjs.com/package/@opptrix/selfhost"><img src="https://img.shields.io/npm/v/@opptrix/selfhost?label=selfhost%20CLI&color=cb3837" alt="npm @opptrix/selfhost" /></a></td>
-    <td align="center"><a href="https://github.com/Travisun/Opptrix/releases"><img src="https://img.shields.io/badge/%E6%A1%8C%E9%9D%A2%E7%89%88-Releases-2ea44f" alt="Desktop Releases" /></a></td>
+    <td align="center"><a href="docs/SELF-HOSTING.md"><img src="https://img.shields.io/badge/%E8%87%AA%E6%89%98%E7%AE%A1-Docker-2496ED?logo=docker&logoColor=white" alt="Self-host Docker" /></a></td>
     <td align="center"><a href="https://linux.do"><img src="https://img.shields.io/badge/Born%20in-LINUX.DO-009185" alt="Born in LINUX.DO" /></a></td>
     <td align="center"><a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen" alt="Node.js" /></a></td>
     <td align="center"><a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7%2B-blue" alt="TypeScript" /></a></td>
@@ -25,17 +25,15 @@
   <img src="screenshot.webp" alt="Opptrix 主界面：对话投研、工作流技能与右侧个股行情面板" width="920" />
 </p>
 
-<p align="center"><sub>主界面：多会话聊天、Agent 工具与工作流技能、右侧关注/个股面板；自托管 Web 与桌面端共用同一套 UI</sub></p>
+<p align="center"><sub>主界面：多会话聊天、Agent 工具与工作流技能、右侧关注/个股面板；自托管 Web 交付</sub></p>
 
 <p align="center">
-  <strong>推荐部署：</strong>
+  <strong>部署：</strong>
   <a href="#部署与使用">Docker 自托管（<code>opptrix</code> CLI）</a>
   ·
   <a href="https://www.npmjs.com/package/@opptrix/selfhost">npm <code>@opptrix/selfhost</code></a>
   ·
   <a href="docs/SELF-HOSTING.md">完整自托管说明</a>
-  ·
-  <a href="https://github.com/Travisun/Opptrix/releases">桌面安装包</a>
 </p>
 
 ## 💬 技术交流与作者动态
@@ -131,7 +129,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 
 **Opptrix** 是一款开源的 **全球多市场投研工作台**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场。用自然语言提问，由大模型按意图挂载 **150+ 投研工具**，并可激活 **170+ 内置工作流技能**（量化因子 / 择时 / 价值投资流程等），把结构化数据整理成中文报告或可预览投研页。
 
-**主推交付形态是自托管 Web**（Docker Compose + 全局命令 `opptrix`）：数据与会话留在你自己的机器或服务器。另可选 **Electron 桌面安装包**；两者共用同一套 React 界面与 Fastify API。设置中可选开启 **自进化**，让同一模型在投研主路径上更稳、更完整。
+**主推交付形态是自托管 Web**（Docker Compose + 全局命令 `opptrix`）：数据与会话留在你自己的机器或服务器，浏览器打开即可使用。共用一套 React 界面与 Fastify API；设置中可选开启 **自进化**，让同一模型在投研主路径上更稳、更完整。
 
 ---
 
@@ -145,7 +143,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 |------|------|
 | **是什么** | 可 **自托管** 的全球多市场投研整理工作台：跨市场标的搜索、聊天问答、工作流技能、新闻订阅、行情动态、关注列表、发现策略、计划任务与多市场本地数据包（A 股深度最强） |
 | **不是什么** | 持牌投顾、券商交易软件、理财销售或荐股/喊单系统；也不提供自动下单与实盘交易 |
-| **怎么用** | **优先** Docker 自托管（`npm i -g @opptrix/selfhost` → `opptrix up`）；也可装桌面包或本机开发运行 |
+| **怎么用** | Docker 自托管：`npm i -g @opptrix/selfhost` → `opptrix up`；或本机开发运行 |
 | **支持市场** | **CN** A 股/ETF/指数 · **US** 美股 · **HK** 港股 · **JP** 日股 · **KR** 韩股 · **CRYPTO** 现货等（能力因市场而异，见 [MULTI-MARKET-ARCHITECTURE.md](docs/MULTI-MARKET-ARCHITECTURE.md)） |
 | **适合谁** | 希望数据留在自己环境、自行查询与整理多市场信息的投资者与研究者；对话能力需自备 LLM API Key |
 | **适合学习** | TypeScript monorepo、LLM Function Calling、Agent Skills、多市场数据标准层、Fluent UI 产品设计 |
@@ -188,7 +186,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 | **网页交付** | 投研结果可生成可预览网页，便于分享与复盘 |
 | **子 Agent** | 复杂任务可派生子任务并行或接力，父会话汇总 |
 | **发现策略** | 多市场内置策略（ETF / 美股 / 加密 / 日 / 韩 / 港等），支持自建策略与回测验证 |
-| **计划任务** | 定时 / 周期 / Cron 调度，支持智能体提示词与受控脚本（应用内 + 桌面 OS tick） |
+| **计划任务** | 定时 / 周期 / Cron 调度，支持智能体提示词与受控脚本 |
 | **Agent 工作区** | 文件读写、Shell、HTTP、网页浏览、Python、密钥保险箱；会话隔离沙盒 |
 | **专家体系** | 内置与本地自建专家；技能专长注入对话，配合投研纪律（与工作流技能互补） |
 | **右侧投研面板** | 跨市场关注列表、发现策略、行业透视、组合账本、决策卡 |
@@ -196,7 +194,6 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 | **行情动态** | 全球与 A 股大盘/板块/龙虎榜/涨跌停/市场情绪等动态视图 |
 | **本地数据** | 多市场基础数据包同步（`.opmd`）、A 股全市场能力、多市场本地列表筛选 |
 | **自托管 Web** | Docker Compose 单用户实例；`opptrix` CLI 负责安装、启停、按应用快照升级/回退 |
-| **桌面端** | Electron 打包、系统托盘、计划任务 OS tick、自动更新、`opptrix://` 深链（可选形态） |
 | **设置** | 模型与 API、分市场数据源、市场数据同步、新闻、翻译/多模态、自进化、MCP 服务器管理 |
 
 ---
@@ -238,7 +235,7 @@ opptrix up
 
 #### 版本、升级与回退
 
-自托管应用版本与桌面产品号对齐，使用独立 git 标签 **`opptrix-selfhost-vX.Y.Z`**（最低可用起点为 **`opptrix-selfhost-v1.3.6`**）。CLI 发版标签 `selfhost-v*`、桌面标签 `desktop-v*` 是另外两条轨道，不要混用。
+自托管应用使用独立 git 标签 **`opptrix-selfhost-vX.Y.Z`**（最低可用起点为 **`opptrix-selfhost-v1.3.6`**）。CLI 发版标签 `selfhost-v*` 只对应 npm 包 `@opptrix/selfhost`，**不是**应用源码版本。
 
 ```bash
 opptrix tags                              # 查看可用快照、发布日期与升降级状态
@@ -249,6 +246,8 @@ opptrix update                            # 按当前偏好同步源码后重建
 opptrix up --ref main
 ```
 
+升级默认**保留** `compose.env`、`.opptrix.json`、`docker-compose.override.yml`（额外目录映射）以及 Docker 卷中的数据与模型；卷内已有核心模型时**不会重下**（强制重下：`OPPTRIX_FORCE_MODEL_FETCH=1`）。
+
 | 常用命令 | 作用 |
 |----------|------|
 | `opptrix logs -f` | 跟踪日志 |
@@ -256,22 +255,9 @@ opptrix up --ref main
 | `opptrix stop` / `start` / `restart` | 停 / 启 / 重启 |
 | `opptrix down` | 停并移除容器（默认**保留**数据卷） |
 
-浏览器打开 **http://127.0.0.1:8711** 后，与桌面相同：在 **设置 → 模型与 API** 配置 LLM；按需配置数据源、新闻与自进化。
+浏览器打开 **http://127.0.0.1:8711** 后：在 **设置 → 模型与 API** 配置 LLM；按需配置数据源、新闻与自进化。
 
-### 2. 桌面安装包（可选）
-
-适合希望双击使用、不自己管 Docker 的本机用户。从 [GitHub Releases](https://github.com/Travisun/Opptrix/releases) 下载（标签 **`desktop-v*`**）：
-
-| 平台 | 产物名示例 |
-|------|------------|
-| Apple Silicon Mac | `Opptrix-{version}-MacOS-arm64-M-CPU.dmg` |
-| Intel Mac | `Opptrix-{version}-MacOS-x64-Intel-CPU.dmg` |
-| Windows | `Opptrix-{version}-Windows.exe` |
-| Linux | `Opptrix-{version}-Linux.AppImage` |
-
-首次启动请配置模型与 API；桌面端会后台检查更新，需你确认后才会安装。说明见 [docs/DESKTOP-RELEASE.md](docs/DESKTOP-RELEASE.md)。macOS 若提示「已损坏」，可 `xattr -cr /Applications/Opptrix.app` 或右键 → 打开一次。
-
-### 3. 本机开发 / 无 Docker 预览
+### 2. 本机开发 / 无 Docker 预览
 
 ```bash
 git clone https://github.com/Travisun/Opptrix.git   # 国内可用 Gitee 同名仓库
@@ -293,7 +279,7 @@ npm run serve    # → http://127.0.0.1:5173
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  client-ui (React + Fluent UI + Vite)                             │
-│  聊天 · 技能 · 新闻 · 行情动态 · 右侧面板 · 设置 · Electron chrome │
+│  聊天 · 技能 · 新闻 · 行情动态 · 右侧面板 · 设置 · Web SPA        │
 └────────────────────────────┬─────────────────────────────────────┘
                              │ /api/*  (dev: Vite proxy → :8711)
 ┌────────────────────────────▼─────────────────────────────────────┐
@@ -323,7 +309,7 @@ npm run serve    # → http://127.0.0.1:5173
 Opptrix/
 ├── apps/
 │   ├── server/                 # Fastify API（:8711）
-│   └── desktop/                # Electron 壳 + sidecar + 打包
+│   └── desktop/                # 仓库内 Electron（维护用，非用户安装路径）
 ├── client-ui/                  # React SPA（:5173）
 └── packages/
     ├── shared/                 # InstrumentRef、市场注册表、类型
@@ -341,7 +327,7 @@ Opptrix/
     ├── news-feed/              # RSS 新闻
     ├── article-enrichment/     # 文章抓取与增强
     ├── canvas-kit/ · doc-library/
-    ├── local-inference/        # 本地翻译/推理（桌面）
+    ├── local-inference/        # 本地翻译/推理
     ├── schedule/               # 计划任务（应用内 + OS tick）
     ├── agent-workspace/        # 文件 / Shell / Python / 密钥保险箱
     ├── agent-browser/          # 网页浏览后端
@@ -361,7 +347,6 @@ Opptrix/
 | [docs/PROVIDER-STANDARD-API.md](docs/PROVIDER-STANDARD-API.md) | `queryInstrumentData` 标准 API |
 | [docs/AGENT-SKILLS.md](docs/AGENT-SKILLS.md) | 工作流技能规范与目录 |
 | [docs/SELF-HARNESS-PRODUCT.md](docs/SELF-HARNESS-PRODUCT.md) | 自进化产品设计（开发者） |
-| [docs/DESKTOP.md](docs/DESKTOP.md) | 桌面开发与 sidecar |
 | [docs/README.md](docs/README.md) | **文档总索引** |
 
 ---
@@ -388,7 +373,7 @@ Opptrix/
 
 - **Node.js** ≥ 24（Active LTS）  
 - **npm**（workspaces，仅在仓库根目录 `npm install`）  
-- 可选：macOS / Windows / Linux（桌面打包见 [DESKTOP.md](docs/DESKTOP.md)）
+- 可选：**Docker**（自托管见 [SELF-HOSTING.md](docs/SELF-HOSTING.md)）
 
 ### 安装与编译
 
@@ -408,9 +393,6 @@ npm run build            # 编译 packages + client-ui
 # Web：API + Vite 热更新
 npm run dev
 # → 浏览器 http://127.0.0.1:5173（API 在 :8711，由 Vite 代理 /api）
-
-# 桌面：Electron + API + Vite HMR
-npm run dev:desktop
 ```
 
 ### 生产预览
@@ -479,8 +461,6 @@ npm run test:ci          # 仅跑测试（CI 在 build 之后）
 | [docs/MULTI-MARKET-ARCHITECTURE.md](docs/MULTI-MARKET-ARCHITECTURE.md) | 开发者 | 多市场矩阵与扩展 |
 | [docs/PROVIDER-STANDARD-API.md](docs/PROVIDER-STANDARD-API.md) | 开发者 | 标准数据 API |
 | [docs/API.md](docs/API.md) | 集成方 | REST 与 Hub features |
-| [docs/DESKTOP.md](docs/DESKTOP.md) | 桌面 | Electron 开发与 sidecar |
-| [docs/DESKTOP-RELEASE.md](docs/DESKTOP-RELEASE.md) | 发布 | 版本号、三端产物、CI |
 | [docs/UI-DESIGN-SYSTEM.md](docs/UI-DESIGN-SYSTEM.md) | 前端 | 设计 token 与组件 |
 | [packages/README.md](packages/README.md) | 开发者 | 各 workspace 包职责 |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | 贡献者 | PR 与 review 约定 |
@@ -502,7 +482,7 @@ npm run test:ci          # 仅跑测试（CI 在 build 之后）
 
 ## 技术栈
 
-Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Electron · SQLite (better-sqlite3) · OpenAI 兼容 LLM API · Agent Skills
+Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Docker · SQLite (better-sqlite3) · OpenAI 兼容 LLM API · Agent Skills
 
 ---
 
@@ -534,7 +514,6 @@ Opptrix 的 Agent 工作流、投研协作与量化/价值投资技能设计，�
 - 产品主页：[opptrix.org](https://www.opptrix.org)  
 - 自托管 CLI：[npm `@opptrix/selfhost`](https://www.npmjs.com/package/@opptrix/selfhost) · [部署说明](docs/SELF-HOSTING.md)  
 - 源码：[GitHub Travisun/Opptrix](https://github.com/Travisun/Opptrix) · [Gitee](https://gitee.com/Travisun/Opptrix)  
-- 桌面 Releases：[安装包下载](https://github.com/Travisun/Opptrix/releases)（`desktop-v*`）  
 - 量化社区：[opptrix.net](https://opptrix.net/)（邀请码 `A8SA8`）  
 - Issues：[报告问题或提议功能](https://github.com/Travisun/Opptrix/issues)
 

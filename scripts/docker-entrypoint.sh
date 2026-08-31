@@ -29,25 +29,41 @@ export OPPTRIX_SENSEVOICE_BUNDLED_DIR="${OPPTRIX_SENSEVOICE_BUNDLED_DIR:-$MODELS
 
 WITH_MODELS="${OPPTRIX_WITH_MODELS:-1}"
 SKIP_FETCH="${OPPTRIX_SKIP_MODEL_FETCH:-0}"
+FORCE_FETCH="${OPPTRIX_FORCE_MODEL_FETCH:-0}"
 
-if [ "$WITH_MODELS" = "1" ] && [ "$SKIP_FETCH" != "1" ]; then
-  echo "[opptrix] ensuring core models under $MODELS_DIR …"
+# Marker files — same readiness as docker-fetch-models.mjs / post-fetch env gating below.
+e5_onnx="$OPPTRIX_E5_BUNDLED_DIR/onnx/model_quantized.onnx"
+rapid_det="$OPPTRIX_RAPIDOCR_MODEL_DIR/ch_PP-OCRv4_det_mobile.onnx"
+sv_q8="$OPPTRIX_SENSEVOICE_BUNDLED_DIR/sensevoice-small-q8.gguf"
+hy_mt="$OPPTRIX_LLM_DIR/HY-MT1.5-1.8B-Q4_K_M.gguf"
+
+models_present=0
+if [ -f "$e5_onnx" ] && [ -f "$rapid_det" ] && [ -f "$sv_q8" ] && [ -f "$hy_mt" ]; then
+  models_present=1
+fi
+
+if [ "$WITH_MODELS" != "1" ] || [ "$SKIP_FETCH" = "1" ]; then
+  echo "[opptrix] skipping model fetch (OPPTRIX_WITH_MODELS=$WITH_MODELS OPPTRIX_SKIP_MODEL_FETCH=$SKIP_FETCH)"
+elif [ "$models_present" = "1" ] && [ "$FORCE_FETCH" != "1" ]; then
+  echo "[opptrix] core models already on volume $MODELS_DIR — skip download (set OPPTRIX_FORCE_MODEL_FETCH=1 to re-fetch)"
+else
+  if [ "$FORCE_FETCH" = "1" ]; then
+    echo "[opptrix] OPPTRIX_FORCE_MODEL_FETCH=1 — re-checking / fetching models under $MODELS_DIR …"
+  else
+    echo "[opptrix] ensuring core models under $MODELS_DIR …"
+  fi
   if ! node /app/scripts/docker-fetch-models.mjs; then
     echo "[opptrix] WARN: model fetch failed (network?). Server will still start; models can be filled later."
   fi
-else
-  echo "[opptrix] skipping model fetch (OPPTRIX_WITH_MODELS=$WITH_MODELS OPPTRIX_SKIP_MODEL_FETCH=$SKIP_FETCH)"
 fi
 
 # Only export bundled dirs when marker files exist (avoid empty env paths blocking user fallbacks)
-e5_onnx="$OPPTRIX_E5_BUNDLED_DIR/onnx/model_quantized.onnx"
 if [ -f "$e5_onnx" ]; then
   export OPPTRIX_E5_BUNDLED_DIR
 else
   unset OPPTRIX_E5_BUNDLED_DIR || true
 fi
 
-rapid_det="$OPPTRIX_RAPIDOCR_MODEL_DIR/ch_PP-OCRv4_det_mobile.onnx"
 if [ -f "$rapid_det" ]; then
   export OPPTRIX_RAPIDOCR_MODEL_DIR
   export OPPTRIX_RAPIDOCR_BUNDLED_DIR
@@ -56,7 +72,6 @@ else
   unset OPPTRIX_RAPIDOCR_BUNDLED_DIR || true
 fi
 
-sv_q8="$OPPTRIX_SENSEVOICE_BUNDLED_DIR/sensevoice-small-q8.gguf"
 if [ -f "$sv_q8" ]; then
   export OPPTRIX_SENSEVOICE_BUNDLED_DIR
 else

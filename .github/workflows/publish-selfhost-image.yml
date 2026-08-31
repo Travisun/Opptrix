@@ -1,0 +1,151 @@
+# Publish Opptrix self-host Docker image to GHCR
+# Triggers: push tag opptrix-selfhost-v*  or  workflow_dispatch
+#
+# Image: ghcr.io/<owner-lowercase>/opptrix
+# Tags (same digest):
+#   - opptrix-selfhost-vX.Y.Z  (matches git tag)
+#   - X.Y.Z                    (semver shorthand)
+#   - selfhost                 (floating latest successful self-host line)
+#
+# Does NOT bake LLMs into the image (entrypoint volume detection unchanged).
+name: Publish selfhost image
+
+on:
+  push:
+    tags:
+      - 'opptrix-selfhost-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'App tag or version (e.g. opptrix-selfhost-v1.3.6 or 1.3.6)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-selfhost-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Empty = official Docker Hub / npm / Debian (CI foreign default)
+  OPPTRIX_NODE_VERSION: '24'
+
+jobs:
+  build-and-push:
+    name: Build & push GHCR image
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Resolve version tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          RAW="${RAW#refs/tags/}"
+          if [[ "$RAW" == opptrix-selfhost-v* ]]; then
+            FULL_TAG="$RAW"
+            VERSION="${RAW#opptrix-selfhost-v}"
+          elif [[ "$RAW" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+            VERSION="$RAW"
+            FULL_TAG="opptrix-selfhost-v${VERSION}"
+          else
+            echo "::error::Invalid tag '${RAW}'. Expect opptrix-selfhost-vX.Y.Z or X.Y.Z"
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+            echo "::error::Invalid semver in '${FULL_TAG}'"
+            exit 1
+          fi
+          OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER_LC}/opptrix"
+          echo "full_tag=${FULL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Resolved FULL_TAG=${FULL_TAG} VERSION=${VERSION} IMAGE=${IMAGE}"
+
+      - name: Checkout app snapshot
+        uses: actions/checkout@v5
+        with:
+          # Tag push: checkout that commit. Dispatch: checkout the resolved tag ref.
+          ref: ${{ steps.meta.outputs.full_tag }}
+          fetch-depth: 1
+
+      - name: Verify monorepo build context (no baked models)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f Dockerfile
+          test -f docker-compose.yml
+          test -d apps
+          test -d packages
+          test -d client-ui
+          # Guard: Dockerfile must not COPY large model trees into the image
+          if grep -E 'COPY.*(llms|sensevoice|/models)' Dockerfile; then
+            echo "::error::Dockerfile appears to COPY model paths — self-host image must stay model-free"
+            exit 1
+          fi
+          if ! grep -q 'OPPTRIX_MODELS_DIR\|/models' scripts/docker-entrypoint.sh; then
+            echo "::warning::entrypoint may not reference models volume — confirm volume detection still works"
+          fi
+          echo "Build context OK (monorepo + model-free Dockerfile)"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.meta.outputs.image }}
+          tags: |
+            type=raw,value=${{ steps.meta.outputs.full_tag }}
+            type=raw,value=${{ steps.meta.outputs.version }}
+            type=raw,value=selfhost
+          labels: |
+            org.opencontainers.image.title=Opptrix self-host
+            org.opencontainers.image.description=Opptrix single-user self-hosted image (models via volume)
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          # Official registries (empty prefixes) — Node 24
+          build-args: |
+            NODE_VERSION=24
+            NODE_IMAGE_PREFIX=
+            NPM_REGISTRY=
+            APT_MIRROR=
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Summarize
+        shell: bash
+        run: |
+          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: \`${{ steps.meta.outputs.image }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tags: \`${{ steps.meta.outputs.full_tag }}\`, \`${{ steps.meta.outputs.version }}\`, \`selfhost\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Models: not included (volume /models at runtime)" >> "$GITHUB_STEP_SUMMARY"

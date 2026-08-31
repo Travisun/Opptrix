@@ -14,10 +14,9 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 
 ### 最终用户（安装使用）
 
-1. [README.md](../README.md) — **自托管部署**、桌面可选、功能概览、**风险提示**
+1. [README.md](../README.md) — **自托管部署**、功能概览、**风险提示**
 2. [SELF-HOSTING.md](./SELF-HOSTING.md) — **Docker Compose + `opptrix` CLI**（推荐、备份升级、挂载、TLS、应用快照 tag）
-3. [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) — 桌面版更新、各平台文件名、常见问题
-4. [DESKTOP.md](./DESKTOP.md) — 桌面端行为（托盘、深链、菜单）
+3. [PWA.md](./PWA.md) — 浏览器安装为应用（可选）
 
 ### 开发者（本地运行与改代码）
 
@@ -25,6 +24,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 2. [DEVELOPMENT.md](./DEVELOPMENT.md) — 日常命令、调试、测试、FAQ
 3. [ARCHITECTURE.md](./ARCHITECTURE.md) — 分层与请求流
 4. [example/README.md](../example/README.md) — 示例配置
+5. [DESKTOP.md](./DESKTOP.md) / [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) — 仓库内 Electron 相关（维护者，非用户安装路径）
 
 ### 数据层 / Provider 开发者
 
