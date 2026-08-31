@@ -1,10 +1,16 @@
 /**
- * Shared model download helpers for desktop stage-*.mjs scripts.
+ * Shared model download helpers for desktop stage-*.mjs / docker-fetch-models.
  *
- * Source order:
- * - Explicit OPPTRIX_MODEL_SOURCE_ORDER (comma-separated labels)
- * - CI / OPPTRIX_CI_FOREIGN_MIRRORS=1 → huggingface,modelscope (foreign first)
- * - Local default → modelscope,huggingface
+ * Source kinds (prefer domestic by default):
+ * - modelscope — 魔搭官方仓
+ * - hf-mirror — hf-mirror.com 等国内 HF 镜像
+ * - huggingface — huggingface.co
+ * - direct — 自建/OSS 直链（始终最优先）
+ *
+ * Order:
+ * - Explicit OPPTRIX_MODEL_SOURCE_ORDER (comma-separated kinds)
+ * - CI / OPPTRIX_CI_FOREIGN_MIRRORS=1 → huggingface,hf-mirror,modelscope
+ * - Local default → modelscope,hf-mirror,huggingface
  *
  * Optional: HF_TOKEN / HUGGING_FACE_HUB_TOKEN for Hugging Face Authorization.
  */
@@ -33,17 +39,47 @@ export function preferForeignMirrors() {
 }
 
 /**
+ * Expand legacy `huggingface` token so domestic runs still try hf-mirror before
+ * huggingface.co when the env only listed `huggingface`.
+ * @param {string[]} order
+ * @param {{ foreign?: boolean }} [opts]
+ * @returns {string[]}
+ */
+export function expandSourceOrder(order, opts = {}) {
+  const foreign = opts.foreign === true
+  /** @type {string[]} */
+  const out = []
+  for (const raw of order) {
+    const kind = String(raw ?? '').trim().toLowerCase()
+    if (!kind) continue
+    if (kind === 'huggingface' && !order.map((s) => s.toLowerCase()).includes('hf-mirror')) {
+      if (foreign) {
+        out.push('huggingface', 'hf-mirror')
+      } else {
+        out.push('hf-mirror', 'huggingface')
+      }
+      continue
+    }
+    if (!out.includes(kind)) out.push(kind)
+  }
+  return out
+}
+
+/**
  * @returns {string[]}
  */
 export function resolveSourceOrder() {
   const raw = String(process.env.OPPTRIX_MODEL_SOURCE_ORDER ?? '').trim()
   if (raw) {
-    return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    return expandSourceOrder(
+      raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+      { foreign: preferForeignMirrors() },
+    )
   }
   if (preferForeignMirrors()) {
-    return ['huggingface', 'modelscope']
+    return ['huggingface', 'hf-mirror', 'modelscope']
   }
-  return ['modelscope', 'huggingface']
+  return ['modelscope', 'hf-mirror', 'huggingface']
 }
 
 /**
@@ -152,6 +188,22 @@ export async function downloadWithRetries(url, destPath, opts = {}) {
  */
 
 /**
+ * Normalize kind from source entry (supports legacy label hf-mirror under huggingface).
+ * @param {DownloadSource} c
+ * @returns {string}
+ */
+export function sourceKind(c) {
+  const explicit = String(c.kind ?? '').trim().toLowerCase()
+  if (explicit) return explicit
+  const label = String(c.label ?? '').toLowerCase()
+  if (label.includes('hf-mirror') || label === 'mirror') return 'hf-mirror'
+  if (label.startsWith('modelscope')) return 'modelscope'
+  if (label.startsWith('huggingface') || label === 'hf') return 'huggingface'
+  if (label.startsWith('direct')) return 'direct'
+  return label.split('-')[0] || 'unknown'
+}
+
+/**
  * Build ordered sources from labeled candidates using resolveSourceOrder().
  * Unknown order labels are ignored; candidates whose `kind` is not in the order
  * are appended last (stable fallback).
@@ -163,7 +215,7 @@ export function orderSources(candidates) {
   const order = resolveSourceOrder()
   const byKind = new Map()
   for (const c of candidates) {
-    const kind = String(c.kind ?? c.label.split('-')[0] ?? '').toLowerCase()
+    const kind = sourceKind(c)
     if (!byKind.has(kind)) byKind.set(kind, [])
     byKind.get(kind).push(c)
   }
@@ -218,6 +270,12 @@ export async function downloadFromSources(sources, dest, opts = {}) {
 
 export function modelscopeBases() {
   return [...new Set([MODELSCOPE_BASE, 'https://www.modelscope.cn', 'https://modelscope.cn'])]
+}
+
+/** ModelScope resolve URL helper (master revision). */
+export function buildModelScopeResolveUrl(repo, filename, revision = 'master') {
+  const base = MODELSCOPE_BASE
+  return `${base}/models/${String(repo).replace(/^\/+|\/+$/g, '')}/resolve/${revision}/${filename}`
 }
 
 export { MODELSCOPE_BASE, HF_MIRROR, DOWNLOAD_MAX_ATTEMPTS }

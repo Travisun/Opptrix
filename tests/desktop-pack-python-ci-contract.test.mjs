@@ -316,6 +316,8 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     const src = read('apps/desktop/scripts/lib/model-download.mjs')
     assert.ok(src.includes('resolveSourceOrder'))
     assert.ok(src.includes("'huggingface'"))
+    assert.ok(src.includes("'hf-mirror'"))
+    assert.ok(src.includes("'modelscope'"))
     assert.ok(src.includes('HF_TOKEN'))
     assert.ok(src.includes('HUGGING_FACE_HUB_TOKEN'))
     assert.ok(src.includes('downloadWithRetries'))

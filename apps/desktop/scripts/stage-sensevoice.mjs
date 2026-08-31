@@ -47,14 +47,14 @@ function sourcesFor(repo, filename) {
   }
   sources.push(
     {
-      kind: 'huggingface',
-      label: 'huggingface',
-      url: `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`,
+      kind: 'hf-mirror',
+      label: 'hf-mirror',
+      url: `${HF_MIRROR}/${repo}/resolve/main/${filename}?download=true`,
     },
     {
       kind: 'huggingface',
-      label: 'hf-mirror',
-      url: `${HF_MIRROR}/${repo}/resolve/main/${filename}?download=true`,
+      label: 'huggingface',
+      url: `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`,
     },
   )
   return sources

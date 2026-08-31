@@ -18,7 +18,9 @@ docker compose up -d --build
 curl -fsS http://127.0.0.1:8711/api/health
 ```
 
-首次启动会在空的 **models** 卷中拉取核心本地模型（E5 语义向量、RapidOCR、SenseVoice q8 + VAD、HY-MT 离线翻译 GGUF）。下载体积约 1GB+，依赖外网（ModelScope / Hugging Face）。失败时服务仍会启动，相关能力可稍后补齐。
+首次启动会在空的 **models** 卷中拉取核心本地模型（E5 语义向量、RapidOCR、SenseVoice q8 + VAD、HY-MT 离线翻译 GGUF）。下载体积约 1GB+。**默认国内优先**：ModelScope → hf-mirror → Hugging Face（可用 `OPPTRIX_MODEL_SOURCE_ORDER` 覆盖）。HY-MT GGUF 官方仓为 `Tencent-Hunyuan/HY-MT1.5-1.8B-GGUF`（与 HF 的 `tencent/…` 组织名不同）。失败时服务仍会启动，相关能力可稍后补齐。
+
+不必自建「数据集」镜像：权重应挂 **Model** 仓。四套核心模型在 ModelScope 均有官方/上游仓；自建 Opptrix 合集仓仅在需要钉死版本或内网二次分发时有价值。
 
 离线新闻翻译跑在 **服务端 HTTP**（`POST /api/news/translate` + `/api/news/translation/*`），不依赖 Electron；Docker `with-models` 会把 `HY-MT1.5-1.8B-Q4_K_M.gguf` 放到 `/models/llms`（`OPPTRIX_LLM_DIR`），与 `resolveTranslationModelPath` 搜索顺序一致。设置页从目录下载的 GGUF 同样写入 `OPPTRIX_LLM_DIR`（Compose 默认 `/models/llms`，落在 models 卷），而不是容器内易失的 `~/.opptrix/llms`。翻译请求可走 SSE（`Accept: text/event-stream` 或 `?stream=1`，事件 `progress` / `result` / `error`）；未声明流式时仍返回完整 JSON。文章级译文缓存在 `$OPPTRIX_DATA_DIR/news-translation-cache.json`（Compose 下即 `/data/…`），命中时响应含 `fromCache: true`。
 

@@ -66,14 +66,14 @@ function e5Sources(filename) {
   }
   sources.push(
     {
-      kind: 'huggingface',
-      label: 'huggingface',
-      url: `https://huggingface.co/${E5_HF_REPO}/resolve/main/${filename}?download=true`,
+      kind: 'hf-mirror',
+      label: 'hf-mirror',
+      url: `${HF_MIRROR}/${E5_HF_REPO}/resolve/main/${filename}?download=true`,
     },
     {
       kind: 'huggingface',
-      label: 'hf-mirror',
-      url: `${HF_MIRROR}/${E5_HF_REPO}/resolve/main/${filename}?download=true`,
+      label: 'huggingface',
+      url: `https://huggingface.co/${E5_HF_REPO}/resolve/main/${filename}?download=true`,
     },
   )
   return sources
@@ -161,21 +161,27 @@ function sensevoiceSources(repo, filename) {
   }
   sources.push(
     {
-      kind: 'huggingface',
-      label: 'huggingface',
-      url: `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`,
+      kind: 'hf-mirror',
+      label: 'hf-mirror',
+      url: `${HF_MIRROR}/${repo}/resolve/main/${filename}?download=true`,
     },
     {
       kind: 'huggingface',
-      label: 'hf-mirror',
-      url: `${HF_MIRROR}/${repo}/resolve/main/${filename}?download=true`,
+      label: 'huggingface',
+      url: `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`,
     },
   )
   return sources
 }
 
 // ── HY-MT translation GGUF (align TRANSLATION_BOOTSTRAP_MODEL_IDS / hy-mt-q4) ─
-const HY_MT_REPO = 'tencent/HY-MT1.5-1.8B-GGUF'
+/** HF 组织名与 ModelScope 不同：tencent vs Tencent-Hunyuan */
+const HY_MT_HF_REPO = String(
+  process.env.OPPTRIX_HY_MT_HF_REPO ?? 'tencent/HY-MT1.5-1.8B-GGUF',
+).replace(/^\/+|\/+$/g, '')
+const HY_MT_MODELSCOPE_REPO = String(
+  process.env.OPPTRIX_HY_MT_MODELSCOPE_REPO ?? 'Tencent-Hunyuan/HY-MT1.5-1.8B-GGUF',
+).replace(/^\/+|\/+$/g, '')
 const HY_MT_BOOTSTRAP = [
   {
     id: 'hy-mt-q4',
@@ -185,18 +191,28 @@ const HY_MT_BOOTSTRAP = [
 
 function hyMtSources(filename) {
   /** @type {import('../apps/desktop/scripts/lib/model-download.mjs').DownloadSource[]} */
-  return [
+  const sources = []
+  for (const base of modelscopeBases()) {
+    const host = base.includes('www.') ? 'www' : 'apex'
+    sources.push({
+      kind: 'modelscope',
+      label: `modelscope-${host}`,
+      url: `${base}/models/${HY_MT_MODELSCOPE_REPO}/resolve/master/${filename}`,
+    })
+  }
+  sources.push(
     {
-      kind: 'huggingface',
+      kind: 'hf-mirror',
       label: 'hf-mirror',
-      url: `${HF_MIRROR}/${HY_MT_REPO}/resolve/main/${filename}?download=true`,
+      url: `${HF_MIRROR}/${HY_MT_HF_REPO}/resolve/main/${filename}?download=true`,
     },
     {
       kind: 'huggingface',
       label: 'huggingface',
-      url: `https://huggingface.co/${HY_MT_REPO}/resolve/main/${filename}?download=true`,
+      url: `https://huggingface.co/${HY_MT_HF_REPO}/resolve/main/${filename}?download=true`,
     },
-  ]
+  )
+  return sources
 }
 
 function exists(filePath) {

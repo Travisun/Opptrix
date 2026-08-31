@@ -2,36 +2,54 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-/** 国内默认走 hf-mirror；设 OPPTRIX_HF_MIRROR= 可改回官方 Hugging Face */
+/** 国内默认走 ModelScope，再回退 hf-mirror / Hugging Face */
 const HF_MIRROR = String(process.env.OPPTRIX_HF_MIRROR ?? 'https://hf-mirror.com').replace(/\/$/, '')
 const HF_OFFICIAL = 'https://huggingface.co'
+const MODELSCOPE_BASE = String(
+  process.env.OPPTRIX_MODELSCOPE_BASE ?? 'https://modelscope.cn',
+).replace(/\/$/, '')
+const HY_MT_HF_REPO = String(
+  process.env.OPPTRIX_HY_MT_HF_REPO ?? 'tencent/HY-MT1.5-1.8B-GGUF',
+).replace(/^\/+|\/+$/g, '')
+const HY_MT_MODELSCOPE_REPO = String(
+  process.env.OPPTRIX_HY_MT_MODELSCOPE_REPO ?? 'Tencent-Hunyuan/HY-MT1.5-1.8B-GGUF',
+).replace(/^\/+|\/+$/g, '')
 
 function buildHfResolveUrl(base, repo, filename) {
   return `${base}/${repo}/resolve/main/${filename}?download=true`
 }
 
-function buildHfDownloadUrls(repo, filename) {
+function buildModelScopeResolveUrl(repo, filename) {
+  return `${MODELSCOPE_BASE}/models/${repo}/resolve/master/${filename}`
+}
+
+function buildHyMtDownloadUrls(filename) {
   return [
+    {
+      source: 'modelscope',
+      label: 'ModelScope',
+      url: buildModelScopeResolveUrl(HY_MT_MODELSCOPE_REPO, filename),
+    },
     {
       source: 'hf-mirror',
       label: 'HF 镜像',
-      url: buildHfResolveUrl(HF_MIRROR, repo, filename),
+      url: buildHfResolveUrl(HF_MIRROR, HY_MT_HF_REPO, filename),
     },
     {
       source: 'huggingface',
       label: 'Hugging Face',
-      url: buildHfResolveUrl(HF_OFFICIAL, repo, filename),
+      url: buildHfResolveUrl(HF_OFFICIAL, HY_MT_HF_REPO, filename),
     },
   ]
 }
 
-/** @type {Array<{ id: string; name: string; filename: string; urls: ReturnType<typeof buildHfDownloadUrls>; sizeBytes: number; family: string; purpose: 'translation' | 'vision'; recommended?: boolean }>} */
+/** @type {Array<{ id: string; name: string; filename: string; urls: ReturnType<typeof buildHyMtDownloadUrls>; sizeBytes: number; family: string; purpose: 'translation' | 'vision'; recommended?: boolean }>} */
 const TRANSLATION_MODEL_CATALOG = [
   {
     id: 'hy-mt-q4',
     name: 'HY-MT1.5-1.8B Q4_K_M',
     filename: 'HY-MT1.5-1.8B-Q4_K_M.gguf',
-    urls: buildHfDownloadUrls('tencent/HY-MT1.5-1.8B-GGUF', 'HY-MT1.5-1.8B-Q4_K_M.gguf'),
+    urls: buildHyMtDownloadUrls('HY-MT1.5-1.8B-Q4_K_M.gguf'),
     sizeBytes: 1_133_080_512,
     family: 'hy-mt',
     purpose: 'translation',
@@ -41,7 +59,7 @@ const TRANSLATION_MODEL_CATALOG = [
     id: 'hy-mt-q8',
     name: 'HY-MT1.5-1.8B Q8_0',
     filename: 'HY-MT1.5-1.8B-Q8_0.gguf',
-    urls: buildHfDownloadUrls('tencent/HY-MT1.5-1.8B-GGUF', 'HY-MT1.5-1.8B-Q8_0.gguf'),
+    urls: buildHyMtDownloadUrls('HY-MT1.5-1.8B-Q8_0.gguf'),
     sizeBytes: 1_908_528_288,
     family: 'hy-mt',
     purpose: 'translation',
@@ -149,7 +167,7 @@ function formatBytes(bytes) {
 }
 
 function getDefaultDownloadSourceLabel() {
-  return HF_MIRROR.includes('hf-mirror') ? 'HF 镜像（hf-mirror）' : HF_MIRROR
+  return 'ModelScope（国内）'
 }
 
 function getCatalogPurposeLabel(purpose) {
@@ -168,5 +186,5 @@ module.exports = {
   formatBytes,
   getDefaultDownloadSourceLabel,
   getCatalogPurposeLabel,
-  buildHfDownloadUrls,
+  buildHyMtDownloadUrls,
 }

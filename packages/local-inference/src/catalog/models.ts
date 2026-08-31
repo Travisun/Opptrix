@@ -2,22 +2,43 @@ import type { CatalogModel } from '../types.js'
 
 const HF_MIRROR = String(process.env.OPPTRIX_HF_MIRROR ?? 'https://hf-mirror.com').replace(/\/$/, '')
 const HF_OFFICIAL = 'https://huggingface.co'
+const MODELSCOPE_BASE = String(
+  process.env.OPPTRIX_MODELSCOPE_BASE ?? 'https://modelscope.cn',
+).replace(/\/$/, '')
+
+/** HF: tencent/… ；ModelScope: Tencent-Hunyuan/… */
+const HY_MT_HF_REPO = String(
+  process.env.OPPTRIX_HY_MT_HF_REPO ?? 'tencent/HY-MT1.5-1.8B-GGUF',
+).replace(/^\/+|\/+$/g, '')
+const HY_MT_MODELSCOPE_REPO = String(
+  process.env.OPPTRIX_HY_MT_MODELSCOPE_REPO ?? 'Tencent-Hunyuan/HY-MT1.5-1.8B-GGUF',
+).replace(/^\/+|\/+$/g, '')
 
 function buildHfResolveUrl(base: string, repo: string, filename: string): string {
   return `${base}/${repo}/resolve/main/${filename}?download=true`
 }
 
-function buildHfDownloadUrls(repo: string, filename: string): CatalogModel['urls'] {
+function buildModelScopeResolveUrl(repo: string, filename: string): string {
+  return `${MODELSCOPE_BASE}/models/${repo}/resolve/master/${filename}`
+}
+
+/** 国内优先：ModelScope → HF 镜像 → Hugging Face */
+function buildHyMtDownloadUrls(filename: string): CatalogModel['urls'] {
   return [
+    {
+      source: 'modelscope',
+      label: 'ModelScope',
+      url: buildModelScopeResolveUrl(HY_MT_MODELSCOPE_REPO, filename),
+    },
     {
       source: 'hf-mirror',
       label: 'HF 镜像',
-      url: buildHfResolveUrl(HF_MIRROR, repo, filename),
+      url: buildHfResolveUrl(HF_MIRROR, HY_MT_HF_REPO, filename),
     },
     {
       source: 'huggingface',
       label: 'Hugging Face',
-      url: buildHfResolveUrl(HF_OFFICIAL, repo, filename),
+      url: buildHfResolveUrl(HF_OFFICIAL, HY_MT_HF_REPO, filename),
     },
   ]
 }
@@ -27,7 +48,7 @@ export const MODEL_CATALOG: CatalogModel[] = [
     id: 'hy-mt-q4',
     name: 'HY-MT1.5-1.8B Q4_K_M',
     filename: 'HY-MT1.5-1.8B-Q4_K_M.gguf',
-    urls: buildHfDownloadUrls('tencent/HY-MT1.5-1.8B-GGUF', 'HY-MT1.5-1.8B-Q4_K_M.gguf'),
+    urls: buildHyMtDownloadUrls('HY-MT1.5-1.8B-Q4_K_M.gguf'),
     sizeBytes: 1_133_080_512,
     family: 'hy-mt',
     purpose: 'translation',
@@ -37,7 +58,7 @@ export const MODEL_CATALOG: CatalogModel[] = [
     id: 'hy-mt-q8',
     name: 'HY-MT1.5-1.8B Q8_0',
     filename: 'HY-MT1.5-1.8B-Q8_0.gguf',
-    urls: buildHfDownloadUrls('tencent/HY-MT1.5-1.8B-GGUF', 'HY-MT1.5-1.8B-Q8_0.gguf'),
+    urls: buildHyMtDownloadUrls('HY-MT1.5-1.8B-Q8_0.gguf'),
     sizeBytes: 1_908_528_288,
     family: 'hy-mt',
     purpose: 'translation',
@@ -55,7 +76,7 @@ export function getCatalogModel(modelId: string): CatalogModel | undefined {
 }
 
 export function getDefaultDownloadSourceLabel(): string {
-  return HF_MIRROR.includes('hf-mirror') ? 'HF 镜像（hf-mirror）' : HF_MIRROR
+  return 'ModelScope（国内）'
 }
 
 export function getCatalogPurposeLabel(purpose: CatalogModel['purpose']): string {
