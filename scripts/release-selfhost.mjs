@@ -2,6 +2,11 @@
 /**
  * Bump @opptrix/selfhost, build bundle, create tag selfhost-v{version}.
  *
+ * Tag lanes (do not confuse):
+ *   selfhost-v*           — THIS script: CLI npm publish only
+ *   opptrix-selfhost-v*   — App installable snapshots (clone/upgrade); NOT created here
+ *   desktop-v*            — Desktop releases
+ *
  * Usage:
  *   node scripts/release-selfhost.mjs           # patch bump
  *   node scripts/release-selfhost.mjs minor

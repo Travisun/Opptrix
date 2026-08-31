@@ -6,10 +6,25 @@
 
 ### `GET /api/health`
 
+公开（未登录 / 非本机受限场景）通常仅：
+
 ```json
 {
   "status": "ok",
-  "version": "0.6.0",
+  "version": "1.3.6"
+}
+```
+
+`version` 来自 `OPPTRIX_APP_VERSION`（自托管 Compose 注入）或 `apps/desktop/package.json`。
+
+受信完整响应另含运行态字段；自托管构建还会带可选安装识别字段：
+
+```json
+{
+  "status": "ok",
+  "version": "1.3.6",
+  "channel": "selfhost",
+  "releaseTag": "opptrix-selfhost-v1.3.6",
   "runtime": "node",
   "llm_configured": true,
   "model": "deepseek-chat",
@@ -18,6 +33,8 @@
   "factors": 40
 }
 ```
+
+- `channel` / `releaseTag`：仅当环境变量 `OPPTRIX_RELEASE_CHANNEL` / `OPPTRIX_RELEASE_TAG` 有值时出现（Docker 自托管由 Compose 注入；桌面包通常无此二字段）。
 
 ### `POST /api/research`
 

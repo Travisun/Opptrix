@@ -5,14 +5,25 @@
  *   npm i -g @opptrix/selfhost
  *   opptrix init --mirror cn && opptrix up --mirror cn
  *
+ * App snapshots: opptrix-selfhost-v*  ·  CLI npm tags: selfhost-v*  ·  Desktop: desktop-v*
  * Linux servers may use scripts/bootstrap/linux.sh (Docker + managed Node + this package).
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
+import {
+  assertAppTagAllowed,
+  listAppTags,
+  parseAppTag,
+} from '../src/app-refs.mjs'
 import { detectDocker, gitPull, npmLinkCli, npmUnlinkCli, probeHealth, runCompose } from '../src/compose.mjs'
-import { ensureBuildContext } from '../src/ensure-source.mjs'
-import { resolveBuildMirrorEnv, resolveMirrorProfile } from '../src/mirrors.mjs'
+import {
+  buildReleaseEnv,
+  ensureBuildContext,
+  isDevMonorepoRoot,
+  resolveEnsureAppRef,
+} from '../src/ensure-source.mjs'
+import { resolveBuildMirrorEnv, resolveGitCloneUrls, resolveMirrorProfile } from '../src/mirrors.mjs'
 import { flagString, flagTrue, parseArgv } from '../src/parse.mjs'
 import {
   ensureComposeEnv,
@@ -38,16 +49,25 @@ function printHelp() {
 Linux 服务器也可: ./scripts/bootstrap/linux.sh（Docker + 托管 Node + 本 CLI）
 macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
 
+版本轨道（请勿混淆）:
+  desktop-v*              桌面安装包（本 CLI 不使用）
+  opptrix-selfhost-v*     自托管应用可安装快照（clone / 升级 / 回退）
+  selfhost-v*             仅 CLI npm 发版标签，不是应用源码
+
+默认安装 ${meta.preferredAppTag}（最低 ${meta.minAppTag}）；不会自动回退 main。
+
 命令:
   init              生成 compose.env，保存默认镜像偏好
   doctor            检查 Docker / Compose / 构建上下文
+  tags              列出可用应用快照（opptrix-selfhost-v* ≥ 最低版本）
+  use <tag|main>    写入本机偏好版本；加 --apply 立即检出并启动
   up                构建并启动（必要时自动 clone 完整源码）
   start             启动已有容器（不重建）
   stop              停止容器
   restart           重启容器
   down              停止并移除容器（默认保留数据卷）
   build             仅构建镜像
-  update            更新源码（git）后重建并启动；建议同时 npm update -g @opptrix/selfhost
+  update            按配置的应用版本同步源码后重建并启动
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
   health            探测 http://127.0.0.1:8711/api/health
@@ -60,6 +80,8 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   --mirror cn|foreign|auto
                         构建与 clone 区域（默认 auto：按时区/语言与 Docker Hub 连通性检测；
                         也可读 .opptrix.json / OPPTRIX_BUILD_MIRROR）
+  --ref <tag|main>      本次使用的应用版本（写入前可用 use 固定偏好）
+  --apply               use 后直接 ensure + 构建启动
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
   --no-build            up 时不加 --build
   --volumes             down 时删除数据卷（危险）
@@ -68,15 +90,18 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
 
 环境变量:
   OPPTRIX_DEPLOY_DIR    Compose / 源码树目录（默认：当前 monorepo 或 ~/.opptrix/instances/default）
-  OPPTRIX_GIT_REF       clone 用的 tag/分支（默认 selfhost-v{version}，回退 main）
+  OPPTRIX_GIT_REF       显式应用 ref（tag 或 main；未设置时用 .opptrix.json / 包内默认 tag）
+  OPPTRIX_APP_REF       同 OPPTRIX_GIT_REF（备选名）
   OPPTRIX_BUILD_MIRROR  cn|foreign|auto（与 --mirror 相同）
   OPPTRIX_FORCE_CN=1    强制国内源（检测时）
 
 示例:
   opptrix init
+  opptrix tags
+  opptrix use ${meta.preferredAppTag}
   opptrix up
+  opptrix up --ref ${meta.preferredAppTag}
   opptrix up --skip-models
-  opptrix up --mirror foreign
   opptrix logs -f
 `)
 }
@@ -116,10 +141,18 @@ function resolveMirror(parsed) {
 function prepareRoot(parsed, opts = {}) {
   let root = resolveDeployRoot()
   const mirror = resolveMirror(parsed)
+  const refFlag = flagString(parsed.flags, 'ref')
   if (opts.needFullSource !== false) {
-    root = ensureBuildContext(root, { mirror })
+    root = ensureBuildContext(root, { mirror, ref: refFlag })
   }
-  return { root, mirror }
+  const resolved = resolveEnsureAppRef({ root, ref: refFlag })
+  // Monorepo 开发树未强制 checkout tag：release 身份按当前工作区（main@sha），除非用户显式 --ref tag
+  let releaseRef = resolved.ref
+  if (isDevMonorepoRoot(root) && !(resolved.explicit && parseAppTag(resolved.ref))) {
+    releaseRef = 'main'
+  }
+  const releaseEnv = buildReleaseEnv(root, releaseRef)
+  return { root, mirror, resolved, releaseEnv }
 }
 
 async function cmdInit(parsed) {
@@ -134,10 +167,15 @@ async function cmdInit(parsed) {
   }
   const force = flagTrue(parsed.flags, 'force')
   const result = ensureComposeEnv(root, { force })
-  writeHostConfig(root, { mirror, skipModels: flagTrue(parsed.flags, 'skip-models') })
+  const meta = readPackageMeta()
+  const patch = { mirror, skipModels: flagTrue(parsed.flags, 'skip-models') }
+  const existing = readHostConfig(root)
+  if (!existing.appRef) patch.appRef = meta.preferredAppTag
+  writeHostConfig(root, patch)
   const resolved = resolveBuildMirrorEnv(mirror)
   console.log(`[opptrix] compose.env ${result.created ? '已创建' : '已存在'} → ${result.path}`)
   console.log(`[opptrix] 默认 mirror=${resolved.profile}（写入 .opptrix.json；可用 --mirror 覆盖）`)
+  console.log(`[opptrix] 默认应用版本 ${(existing.appRef || meta.preferredAppTag)}（opptrix tags / use 可切换）`)
   console.log(`[opptrix] deploy root → ${root}`)
   if (resolved.profile === 'cn') {
     console.log('[opptrix] 国内构建：DaoCloud Node 前缀 + npmmirror + 阿里云 Debian；clone 优先 Gitee')
@@ -148,13 +186,14 @@ async function cmdInit(parsed) {
   return 0
 }
 
-async function cmdDoctor() {
+async function cmdDoctor(parsed) {
   const d = detectDocker()
   console.log(`[opptrix] ${d.message}`)
   if (d.docker) console.log(`[opptrix] docker server ${d.docker}`)
   if (d.compose) console.log(`[opptrix] ${d.compose}`)
   const meta = readPackageMeta()
   console.log(`[opptrix] package ${meta.name}@${meta.version} → ${resolvePackageRoot()}`)
+  console.log(`[opptrix] preferredAppTag=${meta.preferredAppTag} minAppTag=${meta.minAppTag}`)
 
   const root = resolveDeployRoot()
   console.log(`[opptrix] deploy root → ${root}`)
@@ -177,7 +216,13 @@ async function cmdDoctor() {
     if (!ok) missing++
   }
   const cfg = readHostConfig(root)
-  console.log(`[opptrix] config mirror=${cfg.mirror ?? '(unset)'}`)
+  console.log(`[opptrix] config mirror=${cfg.mirror ?? '(unset)'} appRef=${cfg.appRef ?? '(unset)'}`)
+  try {
+    const resolved = resolveEnsureAppRef({ root, ref: flagString(parsed.flags, 'ref') })
+    console.log(`[opptrix] resolved ref=${resolved.ref} (${resolved.source})`)
+  } catch (err) {
+    console.log(`[opptrix] resolved ref: ${err instanceof Error ? err.message : err}`)
+  }
   const detected = resolveMirrorProfile('auto')
   console.log(`[opptrix] auto-detect now → ${detected.profile} (${detected.reason})`)
   console.log(`[opptrix] node ${process.version} platform=${process.platform}/${process.arch}`)
@@ -189,8 +234,99 @@ async function cmdDoctor() {
   return 0
 }
 
+async function cmdTags(parsed) {
+  const meta = readPackageMeta()
+  const root = resolveDeployRoot()
+  const cfg = readHostConfig(root)
+  let currentRef = ''
+  try {
+    currentRef = resolveEnsureAppRef({
+      root,
+      ref: flagString(parsed.flags, 'ref'),
+    }).ref
+  } catch {
+    currentRef = cfg.appRef || meta.preferredAppTag
+  }
+
+  const mirror = resolveMirror(parsed)
+  const urls = resolveGitCloneUrls(mirror)
+  console.log(`[opptrix] 应用快照轨道：opptrix-selfhost-v*（≥ ${meta.minAppTag}）`)
+  console.log(`[opptrix] CLI 包内 preferred=${meta.preferredAppTag}  min=${meta.minAppTag}`)
+  console.log(`[opptrix] 当前实例配置 ref=${cfg.appRef || '(未设置)'} → 解析为 ${currentRef}`)
+  console.log(`[opptrix] CLI npm 发版标签 selfhost-v* 仅用于包发布，不用于 clone`)
+  console.log(`[opptrix] 查询镜像: ${urls.join(' → ')}`)
+
+  let listed
+  try {
+    listed = listAppTags({
+      urls,
+      currentRef,
+      minVersion: parseAppTag(meta.minAppTag)?.version,
+      withDates: !flagTrue(parsed.flags, 'no-dates'),
+    })
+  } catch (err) {
+    console.error(`[opptrix] ${err instanceof Error ? err.message : err}`)
+    return 1
+  }
+
+  console.log(`[opptrix] 来源 ${listed.url}`)
+  if (!listed.rows.length) {
+    console.log('[opptrix] 暂无可用的应用快照。')
+    console.log(`[opptrix] 远端可能尚未推送 ${meta.minAppTag}；请稍后再试，或显式 --ref main（风险自担）。`)
+    return 0
+  }
+
+  console.log('')
+  console.log('标签\t版本\t发布日期\t状态')
+  for (const row of listed.rows) {
+    const date = row.date || '—'
+    const status = row.relationLabel || '—'
+    console.log(`${row.tag}\t${row.version}\t${date}\t${status}`)
+  }
+  console.log('')
+  for (const row of listed.rows) {
+    if (row.relation === 'current') continue
+    const verb = row.relation === 'rollback' ? '回退' : '升级'
+    console.log(`[opptrix] ${verb}到 ${row.tag}: opptrix use ${row.tag} && opptrix up`)
+  }
+  return 0
+}
+
+async function cmdUse(parsed) {
+  const target = (parsed.args[0] || '').trim()
+  if (!target) {
+    console.error('[opptrix] 用法: opptrix use <opptrix-selfhost-vX.Y.Z|main> [--apply]')
+    return 2
+  }
+  const meta = readPackageMeta()
+  if (parseAppTag(target)) {
+    assertAppTagAllowed(target, meta.minAppTag)
+  } else if (target !== 'main' && !target.startsWith('opptrix-selfhost-v')) {
+    console.error(
+      `[opptrix] 不支持的版本引用: ${target}。请使用 opptrix-selfhost-v* 或显式 main。`,
+    )
+    return 2
+  } else if (target.startsWith('opptrix-selfhost-v') && !parseAppTag(target)) {
+    console.error(`[opptrix] 标签格式无效: ${target}`)
+    return 2
+  }
+
+  const root = resolveDeployRoot()
+  fs.mkdirSync(root, { recursive: true })
+  writeHostConfig(root, { appRef: target })
+  console.log(`[opptrix] 已写入应用版本偏好 appRef=${target} → ${path.join(root, '.opptrix.json')}`)
+  if (target === 'main') {
+    console.log('[opptrix] 注意: main 为开发分支，稳定性与升级路径自负。')
+  }
+  if (!flagTrue(parsed.flags, 'apply')) {
+    console.log('[opptrix] 下一步: opptrix up   （或 opptrix use … --apply 一步完成）')
+    return 0
+  }
+  return cmdUp(parsed)
+}
+
 async function cmdUp(parsed) {
-  const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
+  const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
   const skipModels = flagTrue(parsed.flags, 'skip-models')
     || readHostConfig(root).skipModels === true
   const noBuild = flagTrue(parsed.flags, 'no-build')
@@ -198,27 +334,27 @@ async function cmdUp(parsed) {
   writeHostConfig(root, { mirror, skipModels })
   const args = ['up', '-d']
   if (!noBuild) args.push('--build')
-  return runCompose(args, { root, mirror, skipModels })
+  return runCompose(args, { root, mirror, skipModels, releaseEnv })
 }
 
 async function cmdUpdate(parsed) {
-  const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
+  const { root, mirror, resolved, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
   const skipModels = flagTrue(parsed.flags, 'skip-models')
-  const pullCode = await gitPull(root)
+  const pullCode = await gitPull(root, resolved.ref)
   if (pullCode !== 0) {
-    console.error('[opptrix] git pull 失败；仍可手动改代码后执行 up')
+    console.error('[opptrix] 源码同步未完全成功；仍可手动改代码后执行 up')
   }
-  console.log('[opptrix] 提示: CLI 包更新请执行 npm update -g @opptrix/selfhost')
-  return runCompose(['up', '-d', '--build'], { root, mirror, skipModels })
+  console.log('[opptrix] 提示: CLI 包更新请执行 npm update -g @opptrix/selfhost（selfhost-v*）')
+  return runCompose(['up', '-d', '--build'], { root, mirror, skipModels, releaseEnv })
 }
 
 async function cmdLogs(parsed) {
-  const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
+  const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
   const follow = flagTrue(parsed.flags, 'follow', 'f')
   const tail = flagString(parsed.flags, 'tail') || '200'
   const args = ['logs', '--tail', tail]
   if (follow) args.push('-f')
-  return runCompose(args, { root, mirror })
+  return runCompose(args, { root, mirror, releaseEnv })
 }
 
 async function main() {
@@ -237,32 +373,37 @@ async function main() {
         return await cmdInit(parsed)
       case 'doctor':
         return await cmdDoctor(parsed)
+      case 'tags':
+        return await cmdTags(parsed)
+      case 'use':
+        return await cmdUse(parsed)
       case 'up':
         return await cmdUp(parsed)
       case 'start': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
-        return runCompose(['start'], { root, mirror })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
+        return runCompose(['start'], { root, mirror, releaseEnv })
       }
       case 'stop': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
-        return runCompose(['stop'], { root, mirror })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
+        return runCompose(['stop'], { root, mirror, releaseEnv })
       }
       case 'restart': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
-        return runCompose(['restart'], { root, mirror })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
+        return runCompose(['restart'], { root, mirror, releaseEnv })
       }
       case 'down': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
         const args = ['down']
         if (flagTrue(parsed.flags, 'volumes')) args.push('-v')
-        return runCompose(args, { root, mirror })
+        return runCompose(args, { root, mirror, releaseEnv })
       }
       case 'build': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
         return runCompose(['build'], {
           root,
           mirror,
           skipModels: flagTrue(parsed.flags, 'skip-models'),
+          releaseEnv,
         })
       }
       case 'update':
@@ -271,8 +412,8 @@ async function main() {
         return await cmdLogs(parsed)
       case 'status':
       case 'ps': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
-        return runCompose(['ps'], { root, mirror })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
+        return runCompose(['ps'], { root, mirror, releaseEnv })
       }
       case 'health': {
         const h = await probeHealth()
@@ -284,8 +425,8 @@ async function main() {
         return 1
       }
       case 'compose': {
-        const { root, mirror } = prepareRoot(parsed, { needFullSource: true })
-        return runCompose(parsed.args.length ? parsed.args : [], { root, mirror })
+        const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
+        return runCompose(parsed.args.length ? parsed.args : [], { root, mirror, releaseEnv })
       }
       case 'install-cli': {
         console.log('[opptrix] npm link @opptrix/selfhost …')

@@ -112,6 +112,10 @@ test('opptrix help exits 0 and lists commands', () => {
   assert.match(r.stdout, /install-cli/)
   assert.match(r.stdout, /update/)
   assert.match(r.stdout, /--mirror/)
+  assert.match(r.stdout, /\btags\b/)
+  assert.match(r.stdout, /\buse\b/)
+  assert.match(r.stdout, /opptrix-selfhost-v/)
+  assert.match(r.stdout, /--ref/)
 })
 
 test('opptrix doctor reports platform without requiring healthy docker', () => {

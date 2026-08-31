@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
+// spawnSync used by gitPull for tag fetch
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveBuildMirrorEnv } from './mirrors.mjs'
@@ -46,6 +47,7 @@ export function detectDocker() {
  *   env?: NodeJS.ProcessEnv,
  *   skipModels?: boolean,
  *   inheritStdio?: boolean,
+ *   releaseEnv?: Record<string, string>,
  * }} [opts]
  * @returns {Promise<number>}
  */
@@ -61,6 +63,9 @@ export function runCompose(args, opts = {}) {
     OPPTRIX_NPM_REGISTRY: mirrorEnv.OPPTRIX_NPM_REGISTRY,
     OPPTRIX_APT_MIRROR: mirrorEnv.OPPTRIX_APT_MIRROR,
   }
+  if (opts.releaseEnv) {
+    Object.assign(env, opts.releaseEnv)
+  }
   if (opts.skipModels === true) {
     env.OPPTRIX_SKIP_MODEL_FETCH = '1'
   }
@@ -70,6 +75,13 @@ export function runCompose(args, opts = {}) {
     console.log(`[opptrix]   NODE_IMAGE_PREFIX=${mirrorEnv.OPPTRIX_DOCKER_IMAGE_PREFIX}`)
     console.log(`[opptrix]   NPM_REGISTRY=${mirrorEnv.OPPTRIX_NPM_REGISTRY}`)
     console.log(`[opptrix]   APT_MIRROR=${mirrorEnv.OPPTRIX_APT_MIRROR}`)
+  }
+  if (env.OPPTRIX_RELEASE_TAG) {
+    console.log(
+      `[opptrix] release channel=${env.OPPTRIX_RELEASE_CHANNEL || 'selfhost'}`
+        + ` tag=${env.OPPTRIX_RELEASE_TAG}`
+        + ` version=${env.OPPTRIX_APP_VERSION || ''}`,
+    )
   }
   console.log(`[opptrix] docker compose ${args.join(' ')}`)
 
@@ -106,18 +118,39 @@ export async function probeHealth(root = resolveRepoRoot()) {
 }
 
 /**
- * Best-effort git pull in repo root (update).
+ * Checkout / pull a specific ref (update path). Prefer ensure-source.syncCheckout.
  * @param {string} root
+ * @param {string} [ref]
  * @returns {Promise<number>}
  */
-export function gitPull(root = resolveRepoRoot()) {
+export function gitPull(root = resolveRepoRoot(), ref) {
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(path.join(root, '.git'))) {
-      console.log('[opptrix] 当前目录不是 git 仓库，跳过 pull（请自行更新源码后 build）')
+      console.log('[opptrix] 当前目录不是 git 仓库，跳过源码同步（请自行更新后 build）')
       resolve(0)
       return
     }
-    const child = spawn('git', ['pull', '--ff-only'], {
+    const target = ref || 'main'
+    if (target === 'main' || !String(target).startsWith('opptrix-selfhost-v')) {
+      const child = spawn('git', ['pull', '--ff-only', 'origin', target], {
+        cwd: root,
+        stdio: 'inherit',
+        shell: false,
+        windowsHide: true,
+      })
+      child.on('error', reject)
+      child.on('close', (code) => resolve(code ?? 1))
+      return
+    }
+    const fetch = spawnSync('git', ['fetch', 'origin', `refs/tags/${target}:refs/tags/${target}`, '--force'], {
+      cwd: root,
+      encoding: 'utf8',
+      shell: false,
+    })
+    if (fetch.status !== 0) {
+      console.warn(`[opptrix] WARN: 获取 ${target} 失败: ${(fetch.stderr || '').trim().slice(0, 200)}`)
+    }
+    const child = spawn('git', ['checkout', '--force', target], {
       cwd: root,
       stdio: 'inherit',
       shell: false,

@@ -24,6 +24,9 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.name, '@opptrix/selfhost')
   assert.equal(pkg.bin.opptrix, 'bin/opptrix.js')
   assert.equal(pkg.publishConfig?.access, 'public')
+  assert.equal(pkg.version, '0.1.5')
+  assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
+  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.3.6')
 })
 
 test('root package.json bin points at packages/selfhost', async () => {
@@ -66,4 +69,13 @@ test('opptrix help mentions @opptrix/selfhost', () => {
   assert.equal(r.status, 0)
   assert.match(r.stdout, /@opptrix\/selfhost/)
   assert.match(r.stdout, /install-cli/)
+  assert.match(r.stdout, /\btags\b/)
+  assert.match(r.stdout, /opptrix-selfhost-v1\.3\.6/)
+})
+
+test('readPackageMeta exposes app tag prefs', async () => {
+  const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
+  const meta = readPackageMeta()
+  assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
+  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.3.6')
 })

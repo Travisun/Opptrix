@@ -156,12 +156,16 @@ opptrix down          # 删容器但默认保留数据卷
 
 ## 场景三：升级 Opptrix 实例与 CLI
 
+版本分轨：`opptrix-selfhost-v*` 是应用快照；`selfhost-v*` 只发布 CLI 包；`desktop-v*` 是桌面端。
+
 ```bash
-npm update -g @opptrix/selfhost    # 升级管理命令本身
-opptrix update                     # 拉取源码（若为 git 目录）并重建启动
+opptrix tags                       # 查看可升级 / 可回退的应用快照
+opptrix use opptrix-selfhost-v1.3.6 && opptrix up   # 切到指定应用版本并重建
+npm update -g @opptrix/selfhost    # 仅升级管理命令本身（selfhost-v*）
+opptrix update                     # 按当前 appRef 同步源码并重建启动
 ```
 
-**效果：** CLI 与 Compose 清单随包版本更新；实例镜像按新代码重建。升级前可用 `opptrix logs` 确认无关键写入需求。
+**效果：** 应用与 CLI 分轨升级/回退；默认不会静默跟 `main`。
 
 ---
 
@@ -234,11 +238,13 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 |------|------|--------------|
 | `opptrix doctor` | 环境与文件检查 | 列出 Docker / 源码树 / 自动检测结果 |
 | `opptrix init` | 初始化配置 | 生成 `compose.env`，保存 mirror 等偏好 |
+| `opptrix tags` | 列出应用快照 | `opptrix-selfhost-v*`（≥ 最低版本）及升降级提示 |
+| `opptrix use <tag\|main>` | 写入版本偏好 | `.opptrix.json` 的 `appRef`；`--apply` 可立即启动 |
 | `opptrix up` | 构建并后台启动 | 实例运行，默认可访问 8711 |
 | `opptrix start` / `stop` / `restart` | 启停重启 | 不强制重建镜像 |
 | `opptrix down` | 移除容器 | 默认保留数据；加 `--volumes` 清空 |
 | `opptrix build` | 只构建镜像 | 不启动容器 |
-| `opptrix update` | 更新源码并重建启动 | 实例升到新代码 |
+| `opptrix update` | 按 appRef 同步并重建 | 实例对齐所选快照 |
 | `opptrix logs` | 查看日志 | `-f` 持续跟踪 |
 | `opptrix status` | 容器状态 | 等同 compose ps |
 | `opptrix health` | HTTP 健康检查 | 确认 API 已就绪 |
@@ -250,6 +256,8 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | 选项 | 效果 |
 |------|------|
 | `--mirror cn\|foreign\|auto` | 指定或自动区域源（默认等价 auto） |
+| `--ref <tag\|main>` | 本次使用的应用版本 |
+| `--apply` | `use` 后直接构建启动 |
 | `--skip-models` | 跳过首启核心模型下载，更快冒烟 |
 | `--no-build` | `up` 时不重建镜像 |
 | `--volumes` | `down` 时删除数据卷（危险） |
@@ -265,7 +273,7 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `OPPTRIX_FORCE_CN=1` | 强制按国内检测 |
 | `OPPTRIX_GIT_URL_CN` / `OPPTRIX_GIT_URL` | 覆盖 Gitee / GitHub 地址 |
 | `OPPTRIX_GIT_URL_OVERRIDE` | 强制单一 clone 地址 |
-| `OPPTRIX_GIT_REF` | clone 的分支或 tag |
+| `OPPTRIX_GIT_REF` / `OPPTRIX_APP_REF` | 显式应用 ref（未设则用 `.opptrix.json` / 包内默认 tag） |
 | `OPPTRIX_DOCKER_IMAGE_PREFIX` | 构建用 Node 镜像前缀（须以 `/` 结尾） |
 | `OPPTRIX_NPM_REGISTRY` / `OPPTRIX_APT_MIRROR` | 构建期 npm / apt 源 |
 
@@ -336,7 +344,7 @@ npm run build -w @opptrix/selfhost
 npm link -w @opptrix/selfhost
 ```
 
-发版：`npm run release:selfhost`，推送 `main` 与 tag `selfhost-v*`（需 npm 组织 `@opptrix` 与 GitHub `NPM_TOKEN`）。
+发版 CLI：`npm run release:selfhost`，推送 `main` 与 tag `selfhost-v*`（仅 CLI npm；应用快照 `opptrix-selfhost-v*` 另行打 tag）。
 
 ---
 

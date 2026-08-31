@@ -54,6 +54,10 @@ services:
       # Host/env-file override: set to 1 to skip first-boot model download
       OPPTRIX_SKIP_MODEL_FETCH: "${OPPTRIX_SKIP_MODEL_FETCH:-0}"
       OPPTRIX_MODEL_SOURCE_ORDER: "${OPPTRIX_MODEL_SOURCE_ORDER:-modelscope,hf-mirror,huggingface}"
+      # Self-host release identity (injected by `opptrix` CLI from checkout tag)
+      OPPTRIX_APP_VERSION: "${OPPTRIX_APP_VERSION:-}"
+      OPPTRIX_RELEASE_CHANNEL: "${OPPTRIX_RELEASE_CHANNEL:-}"
+      OPPTRIX_RELEASE_TAG: "${OPPTRIX_RELEASE_TAG:-}"
       # Behind TLS reverse proxy — list proxy CIDRs so client IP / local gate work:
       # OPPTRIX_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       # OPPTRIX_AUTH_COOKIE_SECURE: "1"

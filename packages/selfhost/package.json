@@ -1,7 +1,7 @@
 {
   "name": "@opptrix/selfhost",
-  "version": "0.1.4",
-  "description": "Opptrix 自托管 CLI（opptrix）：Docker Compose 本地/服务器部署，自动国内海外镜像，启停升级与健康检查",
+  "version": "0.1.5",
+  "description": "Opptrix 自托管 CLI（opptrix）：Docker Compose 部署，应用快照 opptrix-selfhost-v*，版本列表/升级回退，国内海外镜像",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Opptrix Team",
@@ -19,6 +19,7 @@
     "opptrix-cli",
     "self-host",
     "selfhost",
+    "opptrix-selfhost",
     "docker",
     "docker-compose",
     "local-deploy",
@@ -43,6 +44,10 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run build",
     "version": "npm run build"
+  },
+  "opptrixSelfhost": {
+    "minAppTag": "opptrix-selfhost-v1.3.6",
+    "preferredAppTag": "opptrix-selfhost-v1.3.6"
   },
   "engines": {
     "node": ">=24"

@@ -14,8 +14,8 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 
 ### 最终用户（安装使用）
 
-1. [README.md](../README.md) — 安装包下载、首次配置、功能概览、**风险提示**
-2. [SELF-HOSTING.md](./SELF-HOSTING.md) — **Docker Compose 自托管**（推荐部署、备份升级、挂载、TLS）
+1. [README.md](../README.md) — **自托管部署**、桌面可选、功能概览、**风险提示**
+2. [SELF-HOSTING.md](./SELF-HOSTING.md) — **Docker Compose + `opptrix` CLI**（推荐、备份升级、挂载、TLS、应用快照 tag）
 3. [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) — 桌面版更新、各平台文件名、常见问题
 4. [DESKTOP.md](./DESKTOP.md) — 桌面端行为（托盘、深链、菜单）
 
@@ -66,7 +66,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 | [PROVIDER-STANDARD-API.md](./PROVIDER-STANDARD-API.md) | 标准数据 API 规范 |
 | [FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md) | 免费源串行保护（主机闸门 / 批内全开） |
 | [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md) | 数据层落地进度 |
-| [SELF-HOSTING.md](./SELF-HOSTING.md) | Docker Compose 自托管；`@opptrix/selfhost` CLI |
+| [SELF-HOSTING.md](./SELF-HOSTING.md) | Docker 自托管；`@opptrix/selfhost`（`opptrix`）与 `opptrix-selfhost-v*` 快照 |
 | [DESKTOP.md](./DESKTOP.md) | Electron 桌面开发 |
 | [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) | 桌面发布与自动更新 |
 | [UI-DESIGN-SYSTEM.md](./UI-DESIGN-SYSTEM.md) | UI 设计系统 |

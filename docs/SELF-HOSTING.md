@@ -16,7 +16,7 @@ opptrix up
 # 强制指定: opptrix up --mirror cn   或  --mirror foreign
 ```
 
-`up` 若在非仓库目录执行，会按镜像偏好自动 clone 完整源码到 `~/.opptrix/instances/default`（可用 `OPPTRIX_DEPLOY_DIR` 覆盖）：
+`up` 若在非仓库目录执行，会按镜像偏好自动 clone 完整源码到 `~/.opptrix/instances/default`（可用 `OPPTRIX_DEPLOY_DIR` 覆盖）。**默认检出应用快照 tag** `opptrix-selfhost-v*`（包内 `preferredAppTag`，当前最低 `opptrix-selfhost-v1.3.6`），**不会**自动回退到 `main`，也**不会**用 CLI 发版标签 `selfhost-v*` 当应用源码。
 
 | `--mirror` / 区域 | 默认 clone 源 | 回退 |
 |-------------------|---------------|------|
@@ -24,6 +24,28 @@ opptrix up
 | `foreign`（国外） | [GitHub Travisun/Opptrix](https://github.com/Travisun/Opptrix) | Gitee |
 
 可用 `OPPTRIX_GIT_URL_CN` / `OPPTRIX_GIT_URL` / `OPPTRIX_GIT_URL_OVERRIDE` 覆盖。包内带有与发版同步的 Compose / Dockerfile 清单。
+
+### 版本轨道（三轨）
+
+| 轨道 | 用途 |
+|------|------|
+| `desktop-v*` | 桌面安装包 |
+| `opptrix-selfhost-vX.Y.Z` | **自托管应用**可安装快照（clone / 升级 / 回退；与桌面同一套 X.Y.Z） |
+| `selfhost-v*` | **仅** `@opptrix/selfhost` CLI 的 npm 发版触发，**不是**应用源码 |
+
+查看与切换应用版本：
+
+```bash
+opptrix tags                          # 列出 ≥ 最低版本的可用快照
+opptrix use opptrix-selfhost-v1.3.6   # 写入 .opptrix.json 的 appRef
+opptrix up                            # 按偏好检出并启动
+opptrix up --ref opptrix-selfhost-v1.3.6
+# 开发分支（需显式，风险自担）:
+opptrix use main && opptrix up
+# 或: OPPTRIX_GIT_REF=main opptrix up
+```
+
+容器内可通过 `OPPTRIX_APP_VERSION` / `OPPTRIX_RELEASE_CHANNEL=selfhost` / `OPPTRIX_RELEASE_TAG` 识别当前快照（CLI 构建时注入）。
 
 ### 方式 B：一键 bootstrap（自动装 Docker + 托管 Node + CLI）
 
@@ -59,8 +81,11 @@ opptrix up
 | 命令 | 作用 |
 |------|------|
 | `opptrix doctor` | 检查 Docker / 仓库文件 |
+| `opptrix tags` | 列出可用应用快照（`opptrix-selfhost-v*`） |
+| `opptrix use <tag\|main>` | 写入应用版本偏好（`--apply` 可立即启动） |
 | `opptrix up` | 构建并后台启动 |
-| `opptrix update` | `git pull`（若可用）后重建启动 |
+| `opptrix up --ref <tag\|main>` | 本次使用指定版本 |
+| `opptrix update` | 按配置版本同步源码后重建启动 |
 | `opptrix stop` / `start` / `restart` | 停 / 启 / 重启 |
 | `opptrix down` | 停止并移除容器（默认**保留**数据卷） |
 | `opptrix logs -f` | 跟踪日志 |
@@ -70,19 +95,21 @@ opptrix up
 
 仓内未装全局时：`npm run opptrix -- up --mirror cn`。仅验证服务、暂不拉模型：`opptrix up --mirror cn --skip-models`。
 
-发布 npm 包前请确认：
+发布 **CLI** npm 包前请确认：
 
 1. 在 npm 创建组织 [`@opptrix`](https://www.npmjs.com/org/create)，并把发版账号加为成员  
 2. GitHub Secret `NPM_TOKEN` 对该组织有 **publish** 权限  
 
 ```bash
-npm run release:selfhost          # 默认 patch 升版本
+npm run release:selfhost          # 默认 patch 升版本（打 selfhost-v*，仅 CLI）
 # 提交后：
 git push origin main && git push gitee main
 git push origin selfhost-vX.Y.Z && git push gitee selfhost-vX.Y.Z
 ```
 
 打 tag `selfhost-v*` 会触发 `.github/workflows/publish-selfhost.yml`；流水线会在 `npm publish` 后向 `registry.npmjs.org` 回查，不可见则失败。也可在 Actions 里手动 `workflow_dispatch`。
+
+应用快照 `opptrix-selfhost-v*` 由维护者另行打 tag（与桌面 `desktop-v*` 对齐的 X.Y.Z），**不会**由 `release:selfhost` 自动创建。
 
 ### 不用 CLI 时的 Compose 原语
 

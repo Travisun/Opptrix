@@ -20,11 +20,32 @@ export function resolveBundleRoot(pkgRoot = resolvePackageRoot()) {
 }
 
 /**
- * @returns {{ name: string, version: string }}
+ * @returns {{
+ *   name: string,
+ *   version: string,
+ *   minAppTag: string,
+ *   preferredAppTag: string,
+ *   raw: Record<string, unknown>,
+ * }}
  */
 export function readPackageMeta(pkgRoot = resolvePackageRoot()) {
   const pkg = require(path.join(pkgRoot, 'package.json'))
-  return { name: String(pkg.name || '@opptrix/selfhost'), version: String(pkg.version || '0.0.0') }
+  const block = pkg.opptrixSelfhost && typeof pkg.opptrixSelfhost === 'object'
+    ? pkg.opptrixSelfhost
+    : {}
+  const minAppTag = typeof block.minAppTag === 'string' && block.minAppTag.trim()
+    ? block.minAppTag.trim()
+    : 'opptrix-selfhost-v1.3.6'
+  const preferredAppTag = typeof block.preferredAppTag === 'string' && block.preferredAppTag.trim()
+    ? block.preferredAppTag.trim()
+    : minAppTag
+  return {
+    name: String(pkg.name || '@opptrix/selfhost'),
+    version: String(pkg.version || '0.0.0'),
+    minAppTag,
+    preferredAppTag,
+    raw: pkg,
+  }
 }
 
 /**
@@ -130,7 +151,7 @@ export function legacyHostConfigPath(root = resolveDeployRoot()) {
 
 /**
  * @param {string} root
- * @returns {{ mirror?: string, skipModels?: boolean }}
+ * @returns {{ mirror?: string, skipModels?: boolean, appRef?: string }}
  */
 export function readHostConfig(root = resolveDeployRoot()) {
   for (const p of [hostConfigPath(root), legacyHostConfigPath(root)]) {
@@ -138,7 +159,7 @@ export function readHostConfig(root = resolveDeployRoot()) {
       const raw = fs.readFileSync(p, 'utf8')
       const data = JSON.parse(raw)
       if (!data || typeof data !== 'object') continue
-      return /** @type {{ mirror?: string, skipModels?: boolean }} */ (data)
+      return /** @type {{ mirror?: string, skipModels?: boolean, appRef?: string }} */ (data)
     } catch {
       // try next
     }

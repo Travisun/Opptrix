@@ -113,6 +113,7 @@ ENV NODE_ENV=production \
   OPPTRIX_RAPIDOCR_BUNDLED_DIR=/models/llms/rapidocr-ppocrv4-mobile \
   OPPTRIX_SENSEVOICE_BUNDLED_DIR=/models/sensevoice \
   OPPTRIX_WITH_MODELS=1
+# Runtime release identity may be overridden by Compose env (OPPTRIX_APP_VERSION / CHANNEL / TAG)
 
 EXPOSE 8711
 

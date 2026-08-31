@@ -328,8 +328,12 @@ app.get('/api/health', async (req) => {
     version: APP_VERSION,
   }
   if (!shouldExposeFullHealth(req)) return publicBody
+  const channel = process.env.OPPTRIX_RELEASE_CHANNEL?.trim() || undefined
+  const releaseTag = process.env.OPPTRIX_RELEASE_TAG?.trim() || undefined
   return {
     ...publicBody,
+    ...(channel ? { channel } : {}),
+    ...(releaseTag ? { releaseTag } : {}),
     runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
     desktop: process.env.OPPTRIX_DESKTOP === '1',
     llm_configured: agent.llmConfigured,
