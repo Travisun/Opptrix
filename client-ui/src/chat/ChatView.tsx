@@ -33,6 +33,8 @@ import { listRowKey } from '../utils/listRowKey'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   PanelRightExpandRegular,
+  PanelLeftExpandRegular,
+  PanelLeftContractRegular,
   ArrowMaximizeRegular,
   ArrowMinimizeRegular,
 } from './chatIcons'
@@ -340,6 +342,11 @@ const useStyles = makeStyles({
     maxWidth: '100%',
     display: 'flex',
     alignItems: 'center',
+    gap: '4px',
+  },
+  headerSidebarToggle: {
+    flexShrink: 0,
+    marginLeft: '-4px',
   },
   title: {
     fontSize: 'var(--opptrix-font-lg)',
@@ -529,6 +536,10 @@ interface ChatViewProps {
   /** 本对话文件预览（状态由 ChatApp 持有；Electron 在 chrome titleBarTrailing；Web 在 headerActions） */
   sessionFilesPreviewOpen?: boolean
   onToggleSessionFilesPreview?: () => void
+  /** 移动端：打开关注 / 持仓全屏面板 */
+  onOpenMobileMarketPanel?: () => void
+  /** 移动端：打开文件预览全屏面板 */
+  onOpenMobileFilesPanel?: () => void
 }
 
 function ChatView({
@@ -538,6 +549,7 @@ function ChatView({
   sessionLlmParams,
   contextUsage = null,
   isMobile = false,
+  sidebarVisible = false,
   llmLabel = '',
   backendOk = false,
   onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onCancelBackgroundJob, collaborationTasks = [], onCancelCollaborationTask, onDismissCollaborationTask,
@@ -552,6 +564,7 @@ function ChatView({
   onForkMessage, onEditResend, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange, onLlmParamsChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
+  onToggleSidebar,
   rightPanelOpen = false,
   onToggleRightPanel,
   onOpenFilePreview,
@@ -562,6 +575,8 @@ function ChatView({
   onClearPendingUserPrompt,
   sessionFilesPreviewOpen = false,
   onToggleSessionFilesPreview,
+  onOpenMobileMarketPanel,
+  onOpenMobileFilesPanel,
 }: ChatViewProps) {
   const s = useStyles()
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
@@ -994,6 +1009,11 @@ function ChatView({
           onOpenDrawer={onOpenSidebar}
           onNewChat={onNewChat}
           onOpenSettings={onOpenSettings}
+          onOpenMarketPanel={onOpenMobileMarketPanel}
+          marketPanelOpen={rightPanelOpen}
+          onOpenFilesPanel={onOpenMobileFilesPanel}
+          filesPanelOpen={sessionFilesPreviewOpen}
+          filesPanelDisabled={!sessionId}
         />
       )}
 
@@ -1002,6 +1022,19 @@ function ChatView({
           <div className={s.headerMain}>
             <div className={s.headerInner}>
               <div className={s.headerTitleSlot}>
+                {onToggleSidebar ? (
+                  <ChromeToolButton
+                    className={s.headerSidebarToggle}
+                    label={sidebarVisible ? '收起侧栏' : '打开侧栏'}
+                    iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                    active={sidebarVisible}
+                    onClick={onToggleSidebar}
+                  >
+                    {sidebarVisible
+                      ? <PanelLeftContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                      : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                  </ChromeToolButton>
+                ) : null}
                 {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
               </div>
               {(sessionFilesToggle || headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (

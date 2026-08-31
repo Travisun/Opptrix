@@ -203,6 +203,27 @@ const useStyles = makeStyles({
   contentWorkspaceMobile: {
     flexDirection: 'column',
   },
+  /** Mobile ≤767：关注/文件全屏浮层（高于会话抽屉 z=200） */
+  mobileRightSheet: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 220,
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: opptrixCssVars.canvas,
+    paddingTop: 'env(safe-area-inset-top)',
+    paddingRight: 'env(safe-area-inset-right)',
+    paddingBottom: 'env(safe-area-inset-bottom)',
+    paddingLeft: 'env(safe-area-inset-left)',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+    '& > *': {
+      flex: 1,
+      minHeight: 0,
+      minWidth: 0,
+      width: '100%',
+    },
+  },
   contentWorkspaceElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
   },
@@ -314,6 +335,14 @@ export default function ChatApp() {
   const [preview, setPreview] = useState<{ sessionId: string; attachment: ChatAttachmentMeta } | null>(null)
   /** 本会话停留期间用户主动关闭预览后，不再自动打开 */
   const previewAutoOpenDismissedRef = useRef(false)
+  /** 移动端右栏全屏 sheet：行情 / 文件预览（与桌面 split 独立） */
+  const [mobileRightSheet, setMobileRightSheet] = useState<null | 'market' | 'preview'>(null)
+
+  useEffect(() => {
+    if (!isMobile || view !== 'chat') {
+      setMobileRightSheet(null)
+    }
+  }, [isMobile, view])
 
   useEffect(() => {
     if (mode === 'market' && !rightPanelVisible) {
@@ -321,29 +350,25 @@ export default function ChatApp() {
     }
   }, [mode, rightPanelVisible])
 
-  const handleOpenFilePreview = useCallback((sessionId: string, attachment: ChatAttachmentMeta) => {
-    setPreview({ sessionId, attachment })
-    openPreview()
-  }, [openPreview])
+  const closeMobileRightSheet = useCallback(() => {
+    setMobileRightSheet(null)
+    setPreview(null)
+  }, [])
 
   const handleClosePreview = useCallback(() => {
     previewAutoOpenDismissedRef.current = true
+    if (isMobile) {
+      closeMobileRightSheet()
+      return
+    }
     openMarket()
-  }, [openMarket])
+  }, [openMarket, isMobile, closeMobileRightSheet])
 
   const handlePeerSlideTransitionEnd = useCallback(() => {
     if (modeRef.current === 'market') {
       setPreview(null)
     }
   }, [])
-
-  const handleToggleSessionFilesPreview = useCallback(() => {
-    if (mode === 'preview') {
-      handleClosePreview()
-      return
-    }
-    openPreview()
-  }, [mode, handleClosePreview, openPreview])
 
   const {
     width: sidebarWidth,
@@ -430,6 +455,54 @@ export default function ChatApp() {
   const [archivedGroups, setArchivedGroups] = useState<ArchiveFolderGroup[]>([])
   const [sidebarListTab, setSidebarListTab] = useState<SidebarListTab>('chat')
   const [activeId, setActiveId] = useState<string | null>(null)
+
+  const handleOpenFilePreview = useCallback((sessionId: string, attachment: ChatAttachmentMeta) => {
+    setPreview({ sessionId, attachment })
+    if (isMobile) {
+      closeDrawer()
+      setMobileRightSheet('preview')
+      return
+    }
+    openPreview()
+  }, [openPreview, isMobile, closeDrawer])
+
+  const handleToggleSessionFilesPreview = useCallback(() => {
+    if (isMobile) {
+      if (!activeId) return
+      closeDrawer()
+      setMobileRightSheet((prev) => {
+        if (prev === 'preview') {
+          setPreview(null)
+          return null
+        }
+        return 'preview'
+      })
+      return
+    }
+    if (mode === 'preview') {
+      handleClosePreview()
+      return
+    }
+    openPreview()
+  }, [isMobile, activeId, closeDrawer, mode, handleClosePreview, openPreview])
+
+  const handleOpenMobileMarketPanel = useCallback(() => {
+    closeDrawer()
+    setMobileRightSheet((prev) => (prev === 'market' ? null : 'market'))
+  }, [closeDrawer])
+
+  const handleOpenMobileFilesPanel = useCallback(() => {
+    if (!activeId) return
+    closeDrawer()
+    setMobileRightSheet((prev) => {
+      if (prev === 'preview') {
+        setPreview(null)
+        return null
+      }
+      return 'preview'
+    })
+  }, [activeId, closeDrawer])
+
   const handleSelectPreviewAttachment = useCallback((att: ChatAttachmentMeta) => {
     if (!activeId) return
     setPreview({ sessionId: activeId, attachment: att })
@@ -2761,6 +2834,8 @@ export default function ChatApp() {
               <NewsCenterPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
+                isMobile={isMobile}
+                onOpenSidebar={openDrawer}
                 onOpenSettings={openNewsSettings}
                 onDiscussArticle={handleDiscussArticle}
               />
@@ -2797,6 +2872,8 @@ export default function ChatApp() {
               <MarketDynamicsPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
+                isMobile={isMobile}
+                onOpenSidebar={openDrawer}
               />
             </div>
           </div>
@@ -2831,6 +2908,8 @@ export default function ChatApp() {
               <CommunityFeedPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
+                isMobile={isMobile}
+                onOpenSidebar={openDrawer}
               />
             </div>
           </div>
@@ -2865,6 +2944,8 @@ export default function ChatApp() {
               <ExpertMarketPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
+                isMobile={isMobile}
+                onOpenSidebar={openDrawer}
                 onSelectExpert={handleSelectExpert}
                 onExpertSaved={() => setExpertRefreshKey(k => k + 1)}
               />
@@ -2942,6 +3023,7 @@ export default function ChatApp() {
                   sessionLlmParams={sessionLlmParams}
                   contextUsage={contextUsage}
                   isMobile={isMobile}
+                  sidebarVisible={sidebarVisible}
                   llmLabel={llmLabel}
                   backendOk={backendOk}
                   onSubmit={handleSubmit}
@@ -2973,16 +3055,19 @@ export default function ChatApp() {
                   onOpenSidebar={openDrawer}
                   onNewChat={handleNew}
                   onOpenSettings={openSystemSettings}
-                  rightPanelOpen={rightPanelVisible}
+                  onToggleSidebar={!isMobile ? handleToggleSidebar : undefined}
+                  rightPanelOpen={isMobile ? mobileRightSheet === 'market' : rightPanelVisible}
                   chatColumnVisible={chatVisible}
                   onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
                   onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
-                  onOpenFilePreview={!isMobile ? handleOpenFilePreview : undefined}
+                  onOpenFilePreview={handleOpenFilePreview}
                   onStreamError={handleStreamError}
                   resolveStreamSnapshot={resolveStreamSnapshot}
                   onClearPendingUserPrompt={clearPendingUserPrompt}
-                  sessionFilesPreviewOpen={!isMobile && mode === 'preview'}
-                  onToggleSessionFilesPreview={!isMobile ? handleToggleSessionFilesPreview : undefined}
+                  sessionFilesPreviewOpen={isMobile ? mobileRightSheet === 'preview' : mode === 'preview'}
+                  onToggleSessionFilesPreview={handleToggleSessionFilesPreview}
+                  onOpenMobileMarketPanel={isMobile ? handleOpenMobileMarketPanel : undefined}
+                  onOpenMobileFilesPanel={isMobile ? handleOpenMobileFilesPanel : undefined}
                 />
               </div>
             </div>
@@ -3018,6 +3103,30 @@ export default function ChatApp() {
               onClosePreview={handleClosePreview}
               onSlideTransitionEnd={handlePeerSlideTransitionEnd}
             />
+          )}
+
+          {isMobile && view === 'chat' && mobileRightSheet != null && (
+            <div
+              className={s.mobileRightSheet}
+              role="dialog"
+              aria-modal="true"
+              aria-label={mobileRightSheet === 'preview' ? '文件预览' : '关注与持仓'}
+            >
+              <RightPanel
+                visible
+                fullWidth
+                transitionEnabled={false}
+                focusStockCode={focusStockCode}
+                onFocusStockConsumed={handleFocusStockConsumed}
+                onToggleRightPanel={closeMobileRightSheet}
+                onDiscussInChat={handleStockDiscuss}
+                previewMode={mobileRightSheet === 'preview'}
+                preview={preview}
+                previewSessionId={activeId}
+                onSelectAttachment={handleSelectPreviewAttachment}
+                onClosePreview={closeMobileRightSheet}
+              />
+            </div>
           )}
         </div>
 

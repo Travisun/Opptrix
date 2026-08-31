@@ -41,9 +41,16 @@ const useStyles = makeStyles({
 type Props = {
   electronChrome?: boolean
   chromeToolbarReserve?: number
+  isMobile?: boolean
+  onOpenSidebar?: () => void
 }
 
-function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 0 }: Props) {
+function MarketDynamicsContent({
+  electronChrome = false,
+  chromeToolbarReserve = 0,
+  isMobile = false,
+  onOpenSidebar,
+}: Props) {
   const s = useStyles()
   const { data, loading, refreshing, error, refresh } = useMarketDynamics()
   const insights = useMarketInsights()
@@ -73,6 +80,8 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
         onRefresh={handleRefresh}
         electronChrome={electronChrome}
         chromeToolbarReserve={chromeToolbarReserve}
+        isMobile={isMobile}
+        onOpenSidebar={onOpenSidebar}
       />
 
       {error && <div className={s.errorBanner}>{error}</div>}

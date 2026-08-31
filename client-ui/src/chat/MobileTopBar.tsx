@@ -1,8 +1,8 @@
 import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
 import {
-  NavigationRegular, SettingsRegular,
+  NavigationRegular, SettingsRegular, FolderListRegular,
 } from '@fluentui/react-icons'
-import { ChatAddRegular } from './chatIcons'
+import { ChatAddRegular, PanelRightExpandRegular } from './chatIcons'
 import type { AvailableModel, SessionLlmParams } from '../types/chat'
 import ModelSelector from './ModelSelector'
 import type { SessionLlmParamsPatch } from './ModelSelector'
@@ -69,6 +69,9 @@ minWidth: '44px',
     height: '44px',
     color: opptrixCssVars.textSecondary,
   },
+  actionBtnActive: {
+    color: opptrixCssVars.textPrimary,
+  },
   statusDot: {
     width: '6px',
     height: '6px',
@@ -91,6 +94,14 @@ interface MobileTopBarProps {
   onOpenDrawer: () => void
   onNewChat: () => void
   onOpenSettings: () => void
+  /** 打开关注 / 组合·持仓全屏面板 */
+  onOpenMarketPanel?: () => void
+  marketPanelOpen?: boolean
+  /** 打开本对话文件预览全屏面板 */
+  onOpenFilesPanel?: () => void
+  filesPanelOpen?: boolean
+  /** 无会话时禁用文件入口 */
+  filesPanelDisabled?: boolean
 }
 
 export default function MobileTopBar({
@@ -101,6 +112,11 @@ export default function MobileTopBar({
   onModelChange,
   onLlmParamsChange,
   onOpenDrawer, onNewChat, onOpenSettings,
+  onOpenMarketPanel,
+  marketPanelOpen = false,
+  onOpenFilesPanel,
+  filesPanelOpen = false,
+  filesPanelDisabled = false,
 }: MobileTopBarProps) {
   const s = useStyles()
 
@@ -143,6 +159,27 @@ export default function MobileTopBar({
           onClick={onNewChat}
           aria-label="新对话"
         />
+        {onOpenMarketPanel ? (
+          <OpptrixButton
+            className={mergeClasses(s.actionBtn, marketPanelOpen && s.actionBtnActive)}
+            variant="ghost"
+            icon={<PanelRightExpandRegular fontSize={22} />}
+            onClick={onOpenMarketPanel}
+            aria-label="打开关注与持仓"
+            aria-pressed={marketPanelOpen}
+          />
+        ) : null}
+        {onOpenFilesPanel ? (
+          <OpptrixButton
+            className={mergeClasses(s.actionBtn, filesPanelOpen && s.actionBtnActive)}
+            variant="ghost"
+            icon={<FolderListRegular fontSize={22} />}
+            onClick={onOpenFilesPanel}
+            disabled={filesPanelDisabled}
+            aria-label="打开文件预览"
+            aria-pressed={filesPanelOpen}
+          />
+        ) : null}
         <OpptrixButton
           className={s.actionBtn}
           variant="ghost"
