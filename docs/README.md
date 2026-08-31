@@ -66,7 +66,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 | [PROVIDER-STANDARD-API.md](./PROVIDER-STANDARD-API.md) | 标准数据 API 规范 |
 | [FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md) | 免费源串行保护（主机闸门 / 批内全开） |
 | [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md) | 数据层落地进度 |
-| [SELF-HOSTING.md](./SELF-HOSTING.md) | Docker Compose 自托管（推荐部署） |
+| [SELF-HOSTING.md](./SELF-HOSTING.md) | Docker Compose 自托管；`@opptrix/selfhost` CLI |
 | [DESKTOP.md](./DESKTOP.md) | Electron 桌面开发 |
 | [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) | 桌面发布与自动更新 |
 | [UI-DESIGN-SYSTEM.md](./UI-DESIGN-SYSTEM.md) | UI 设计系统 |

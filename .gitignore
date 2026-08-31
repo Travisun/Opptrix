@@ -33,6 +33,10 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+compose.env
+.opptrix.json
+.opptrix-host.json
+packages/selfhost/bundle/
 *.key
 certs/
 !apps/desktop/electron/certs/
@@ -88,6 +92,7 @@ outputs/
 !.cursor/hooks/
 .cursor/hooks/*
 !.cursor/hooks/ensure-codegraph.sh
+!.cursor/hooks/selfhost-release-hint.sh
 !.cursor/hooks/index.mdc
 !.cursor/rules/
 .cursor/rules/*

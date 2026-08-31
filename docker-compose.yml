@@ -1,22 +1,43 @@
 # Opptrix — recommended single-user self-host (Docker Compose)
 #
 # Quick start:
+#   cp compose.env.example compose.env   # optional runtime overrides
 #   docker compose up -d --build
 #   open http://127.0.0.1:8711
+#
+# China build (Docker Hub / npm / apt mirrors):
+#   OPPTRIX_BUILD_MIRROR=cn ./scripts/docker-compose-with-mirrors.sh up -d --build
+# Foreign / CI default (official registries):
+#   OPPTRIX_BUILD_MIRROR=foreign ./scripts/docker-compose-with-mirrors.sh build
 #
 # Data lives in named volume `opptrix-data` (/data).
 # Core models live in `opptrix-models` (/models); first boot fetches if empty.
 # Extra host folders: mount under /data/mounts/<name> (see docs/SELF-HOSTING.md).
+#
+# Smoke without downloading ~1GB+ models:
+#   OPPTRIX_SKIP_MODEL_FETCH=1 docker compose up -d --build
 
 services:
   opptrix:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "${OPPTRIX_NODE_VERSION:-24}"
+        # Must end with / when set, e.g. docker.m.daocloud.io/library/
+        NODE_IMAGE_PREFIX: "${OPPTRIX_DOCKER_IMAGE_PREFIX:-}"
+        NPM_REGISTRY: "${OPPTRIX_NPM_REGISTRY:-}"
+        # Host only, e.g. mirrors.aliyun.com
+        APT_MIRROR: "${OPPTRIX_APT_MIRROR:-}"
     image: opptrix:local
     container_name: opptrix
+    # Optional local overrides (do not commit secrets). Compose v2.24+ `required: false`.
+    env_file:
+      - path: compose.env
+        required: false
     ports:
-      - "8711:8711"
+      # Bind loopback by default; expose via reverse proxy for remote access.
+      - "127.0.0.1:8711:8711"
     environment:
       STOCK_RESEARCH_HOST: "0.0.0.0"
       STOCK_RESEARCH_PORT: "8711"
@@ -29,9 +50,10 @@ services:
       OPPTRIX_RAPIDOCR_BUNDLED_DIR: "/models/llms/rapidocr-ppocrv4-mobile"
       OPPTRIX_SENSEVOICE_BUNDLED_DIR: "/models/sensevoice"
       UI_DIST_PATH: "/app/client-ui/dist"
-      OPPTRIX_WITH_MODELS: "1"
-      # Optional: skip first-boot download when you pre-seed the models volume
-      # OPPTRIX_SKIP_MODEL_FETCH: "1"
+      OPPTRIX_WITH_MODELS: "${OPPTRIX_WITH_MODELS:-1}"
+      # Host/env-file override: set to 1 to skip first-boot model download
+      OPPTRIX_SKIP_MODEL_FETCH: "${OPPTRIX_SKIP_MODEL_FETCH:-0}"
+      OPPTRIX_MODEL_SOURCE_ORDER: "${OPPTRIX_MODEL_SOURCE_ORDER:-modelscope,hf-mirror,huggingface}"
       # Behind TLS reverse proxy — list proxy CIDRs so client IP / local gate work:
       # OPPTRIX_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       # OPPTRIX_AUTH_COOKIE_SECURE: "1"
@@ -46,9 +68,9 @@ services:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8711/api/health"]
       interval: 30s
       timeout: 8s
-      retries: 5
-      # First boot may download E5 / RapidOCR / SenseVoice before listen
-      start_period: 300s
+      retries: 8
+      # First boot may download E5 / RapidOCR / SenseVoice / HY-MT before listen
+      start_period: 900s
 
 volumes:
   opptrix-data:

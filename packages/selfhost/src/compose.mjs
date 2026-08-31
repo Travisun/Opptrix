@@ -1,0 +1,163 @@
+import { spawn, spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
+import { resolveBuildMirrorEnv } from './mirrors.mjs'
+import { resolvePackageRoot, resolveRepoRoot } from './paths.mjs'
+
+/**
+ * @returns {{ ok: boolean, docker?: string, compose?: string, message: string }}
+ */
+export function detectDocker() {
+  const docker = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], {
+    encoding: 'utf8',
+    shell: false,
+  })
+  if (docker.status !== 0) {
+    return {
+      ok: false,
+      message:
+        '未检测到可用的 Docker。Linux 服务器可运行 scripts/bootstrap/linux.sh；macOS/Windows 请自行安装 Docker 后重试。',
+    }
+  }
+  const compose = spawnSync('docker', ['compose', 'version'], {
+    encoding: 'utf8',
+    shell: false,
+  })
+  if (compose.status !== 0) {
+    return {
+      ok: false,
+      docker: docker.stdout.trim(),
+      message: '已找到 Docker，但 `docker compose` 不可用。请升级到 Compose V2。',
+    }
+  }
+  return {
+    ok: true,
+    docker: docker.stdout.trim(),
+    compose: (compose.stdout || compose.stderr || '').trim().split('\n')[0],
+    message: 'Docker 与 Compose 可用',
+  }
+}
+
+/**
+ * @param {string[]} args
+ * @param {{
+ *   root?: string,
+ *   mirror?: import('./mirrors.mjs').BuildMirrorProfile,
+ *   env?: NodeJS.ProcessEnv,
+ *   skipModels?: boolean,
+ *   inheritStdio?: boolean,
+ * }} [opts]
+ * @returns {Promise<number>}
+ */
+export function runCompose(args, opts = {}) {
+  const root = opts.root || resolveRepoRoot()
+  const mirror = opts.mirror || 'foreign'
+  const mirrorEnv = resolveBuildMirrorEnv(mirror, opts.env || process.env)
+  /** @type {NodeJS.ProcessEnv} */
+  const env = {
+    ...process.env,
+    ...(opts.env || {}),
+    OPPTRIX_DOCKER_IMAGE_PREFIX: mirrorEnv.OPPTRIX_DOCKER_IMAGE_PREFIX,
+    OPPTRIX_NPM_REGISTRY: mirrorEnv.OPPTRIX_NPM_REGISTRY,
+    OPPTRIX_APT_MIRROR: mirrorEnv.OPPTRIX_APT_MIRROR,
+  }
+  if (opts.skipModels === true) {
+    env.OPPTRIX_SKIP_MODEL_FETCH = '1'
+  }
+
+  console.log(`[opptrix] mirror=${mirrorEnv.profile}`)
+  if (mirrorEnv.profile === 'cn') {
+    console.log(`[opptrix]   NODE_IMAGE_PREFIX=${mirrorEnv.OPPTRIX_DOCKER_IMAGE_PREFIX}`)
+    console.log(`[opptrix]   NPM_REGISTRY=${mirrorEnv.OPPTRIX_NPM_REGISTRY}`)
+    console.log(`[opptrix]   APT_MIRROR=${mirrorEnv.OPPTRIX_APT_MIRROR}`)
+  }
+  console.log(`[opptrix] docker compose ${args.join(' ')}`)
+
+  const inherit = opts.inheritStdio !== false
+  return new Promise((resolve, reject) => {
+    const child = spawn('docker', ['compose', ...args], {
+      cwd: root,
+      env,
+      stdio: inherit ? 'inherit' : 'pipe',
+      shell: false,
+      windowsHide: true,
+    })
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+}
+
+/**
+ * @param {string} root
+ * @returns {Promise<{ ok: boolean, status?: number, body?: string, error?: string }>}
+ */
+export async function probeHealth(root = resolveRepoRoot()) {
+  const url = 'http://127.0.0.1:8711/api/health'
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const body = await resp.text()
+    return { ok: resp.ok, status: resp.status, body }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
+/**
+ * Best-effort git pull in repo root (update).
+ * @param {string} root
+ * @returns {Promise<number>}
+ */
+export function gitPull(root = resolveRepoRoot()) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(path.join(root, '.git'))) {
+      console.log('[opptrix] 当前目录不是 git 仓库，跳过 pull（请自行更新源码后 build）')
+      resolve(0)
+      return
+    }
+    const child = spawn('git', ['pull', '--ff-only'], {
+      cwd: root,
+      stdio: 'inherit',
+      shell: false,
+      windowsHide: true,
+    })
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+}
+
+/**
+ * Link @opptrix/selfhost so `opptrix` is on PATH (monorepo: link this package).
+ * @param {string} [_root]
+ */
+export function npmLinkCli(_root = resolveRepoRoot()) {
+  const pkgRoot = resolvePackageRoot()
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['link', '--no-fund', '--no-audit'], {
+      cwd: pkgRoot,
+      stdio: 'inherit',
+      shell: false,
+      windowsHide: true,
+    })
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+}
+
+/**
+ * @param {string} [_root]
+ */
+export function npmUnlinkCli(_root = resolveRepoRoot()) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['unlink', '-g', '@opptrix/selfhost'], {
+      cwd: resolvePackageRoot(),
+      stdio: 'inherit',
+      shell: false,
+      windowsHide: true,
+    })
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+}

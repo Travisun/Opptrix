@@ -2,23 +2,102 @@
 
 推荐用 **Docker Compose** 部署单用户实例：一份镜像、持久化数据卷、可选宿主机目录挂载。桌面安装包仍是本机可选形态，不依赖本文。
 
-## 快速开始
+## 快速开始（Linux 服务器 · 推荐）
+
+### 方式 A：npm 全局 CLI（需已有 Node ≥ 24 + Docker）
 
 ```bash
-git clone https://github.com/Travisun/Opptrix.git
-cd Opptrix
-docker compose up -d --build
+npm i -g @opptrix/selfhost
+# 国内 registry 可选: npm i -g @opptrix/selfhost --registry https://registry.npmmirror.com
+opptrix init --mirror cn
+opptrix up --mirror cn
 ```
 
-浏览器打开 [http://127.0.0.1:8711](http://127.0.0.1:8711)。
+`up` 若在非仓库目录执行，会按镜像偏好自动 clone 完整源码到 `~/.opptrix/instances/default`（可用 `OPPTRIX_DEPLOY_DIR` 覆盖）：
 
-健康检查：
+| `--mirror` / 区域 | 默认 clone 源 | 回退 |
+|-------------------|---------------|------|
+| `cn`（国内） | [Gitee Travisun/Opptrix](https://gitee.com/Travisun/Opptrix) | GitHub |
+| `foreign`（国外） | [GitHub Travisun/Opptrix](https://github.com/Travisun/Opptrix) | Gitee |
+
+可用 `OPPTRIX_GIT_URL_CN` / `OPPTRIX_GIT_URL` / `OPPTRIX_GIT_URL_OVERRIDE` 覆盖。包内带有与发版同步的 Compose / Dockerfile 清单。
+
+### 方式 B：一键 bootstrap（自动装 Docker + 托管 Node + CLI）
 
 ```bash
+export OPPTRIX_BUILD_MIRROR=cn   # 可选；默认 auto
+curl -fsSL https://raw.githubusercontent.com/Travisun/Opptrix/main/scripts/bootstrap/linux.sh | bash
+# 国内若 GitHub raw 慢：先 git clone https://gitee.com/Travisun/Opptrix.git
+# 再: cd Opptrix && ./scripts/bootstrap/linux.sh
+
+export PATH="$HOME/.local/bin:$PATH"
+opptrix doctor
+opptrix up --mirror cn
+```
+
+可选环境变量见脚本头注释（`OPPTRIX_REPO_DIR`、`OPPTRIX_NODE_VERSION`、`OPPTRIX_BOOTSTRAP_UP=1` 等）。
+
+浏览器打开 [http://127.0.0.1:8711](http://127.0.0.1:8711)（Compose 默认只绑定本机回环）。
+
+### macOS / Windows（自备 Docker + Node）
+
+不提供自动安装 Docker。请自行安装 **Docker** 与 **Node.js ≥ 24**，再：
+
+```bash
+npm i -g @opptrix/selfhost
+opptrix init --mirror cn    # 或 foreign
+opptrix up --mirror cn
+```
+
+或在仓库内：`npm run build -w @opptrix/selfhost && npm link -w @opptrix/selfhost`。
+
+### 常用运维（`opptrix` CLI）
+
+| 命令 | 作用 |
+|------|------|
+| `opptrix doctor` | 检查 Docker / 仓库文件 |
+| `opptrix up` | 构建并后台启动 |
+| `opptrix update` | `git pull`（若可用）后重建启动 |
+| `opptrix stop` / `start` / `restart` | 停 / 启 / 重启 |
+| `opptrix down` | 停止并移除容器（默认**保留**数据卷） |
+| `opptrix logs -f` | 跟踪日志 |
+| `opptrix status` | 容器状态 |
+| `opptrix health` | 探测 `http://127.0.0.1:8711/api/health` |
+| `opptrix uninstall-cli` | 取消全局命令 |
+
+仓内未装全局时：`npm run opptrix -- up --mirror cn`。仅验证服务、暂不拉模型：`opptrix up --mirror cn --skip-models`。
+
+发布 npm 包：
+
+```bash
+npm run release:selfhost          # 默认 patch 升版本
+# 提交后：
+git push origin main && git push gitee main
+git push origin selfhost-vX.Y.Z && git push gitee selfhost-vX.Y.Z
+```
+
+打 tag `selfhost-v*` 会触发 `.github/workflows/publish-selfhost.yml`（需 Secret `NPM_TOKEN`）。也可在 Actions 里手动 `workflow_dispatch`。
+
+### 不用 CLI 时的 Compose 原语
+
+```bash
+cp compose.env.example compose.env
+OPPTRIX_BUILD_MIRROR=cn ./scripts/docker-compose-with-mirrors.sh up -d --build
 curl -fsS http://127.0.0.1:8711/api/health
 ```
 
-首次启动会在空的 **models** 卷中拉取核心本地模型（E5 语义向量、RapidOCR、SenseVoice q8 + VAD、HY-MT 离线翻译 GGUF）。下载体积约 1GB+。**默认国内优先**：ModelScope → hf-mirror → Hugging Face（可用 `OPPTRIX_MODEL_SOURCE_ORDER` 覆盖）。HY-MT GGUF 官方仓为 `Tencent-Hunyuan/HY-MT1.5-1.8B-GGUF`（与 HF 的 `tencent/…` 组织名不同）。失败时服务仍会启动，相关能力可稍后补齐。
+### 构建镜像源（国内外切换）
+
+| 变量 | 作用 | 国内示例 |
+|------|------|----------|
+| `OPPTRIX_BUILD_MIRROR` / `--mirror` | `cn` / `foreign` | `cn` |
+| `OPPTRIX_DOCKER_IMAGE_PREFIX` | Node 基础镜像前缀（须以 `/` 结尾） | `docker.m.daocloud.io/library/` |
+| `OPPTRIX_NPM_REGISTRY` | `npm ci` 注册表 | `https://registry.npmmirror.com` |
+| `OPPTRIX_APT_MIRROR` | Debian apt 主机名（无 `https://`） | `mirrors.aliyun.com` |
+
+`opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还需进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。备用 Node 前缀示例：`docker.1ms.run/library/`。
+
+首次启动（未 `--skip-models`）会在空的 **models** 卷中拉取核心本地模型（约 1GB+）。**运行时模型下载**默认国内优先：ModelScope → hf-mirror → Hugging Face。健康检查 `start_period` 约 15 分钟。
 
 不必自建「数据集」镜像：权重应挂 **Model** 仓。四套核心模型在 ModelScope 均有官方/上游仓；自建 Opptrix 合集仓仅在需要钉死版本或内网二次分发时有价值。
 

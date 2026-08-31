@@ -29,6 +29,10 @@
   ],
   "scripts": {
     "dev": "node scripts/dev-with-ports.mjs",
+    "opptrix": "node packages/selfhost/bin/opptrix.mjs",
+    "build:selfhost": "npm run build -w @opptrix/selfhost",
+    "publish:selfhost": "npm run build -w @opptrix/selfhost && npm publish -w @opptrix/selfhost",
+    "release:selfhost": "node scripts/release-selfhost.mjs",
     "dev:desktop": "npm run build:packages && npm run dev -w @opptrix/desktop",
     "dev:api": "npm run dev -w @opptrix/server",
     "dev:web": "npm run dev -w opptrix-client",
@@ -52,6 +56,9 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "bin": {
+    "opptrix": "packages/selfhost/bin/opptrix.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

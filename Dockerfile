@@ -4,15 +4,34 @@
 #
 # Native modules (better-sqlite3, duckdb, sharp, onnxruntime-node, @lancedb/lancedb,
 # node-llama-cpp) are compiled/installed against linux glibc Node 24 in the build stage.
+#
+# Build mirrors (CN / foreign) — pass via --build-arg or Compose:
+#   NODE_IMAGE_PREFIX  e.g. docker.m.daocloud.io/library/  (must end with /)
+#   NPM_REGISTRY       e.g. https://registry.npmmirror.com
+#   APT_MIRROR         e.g. mirrors.aliyun.com  (host only, no scheme)
+# Empty = Docker Hub + registry.npmjs.org + deb.debian.org (foreign default).
 
 ARG NODE_VERSION=24
+ARG NODE_IMAGE_PREFIX=
 
 # ── Stage: build ─────────────────────────────────────────────────────────────
-FROM node:${NODE_VERSION}-bookworm AS build
+FROM ${NODE_IMAGE_PREFIX}node:${NODE_VERSION}-bookworm AS build
+
+ARG APT_MIRROR=
+ARG NPM_REGISTRY=
+ARG NODE_VERSION
 
 WORKDIR /app
 
-RUN apt-get update \
+# Optional Debian mirror (bookworm uses deb822 *.sources and/or *.list)
+RUN if [ -n "${APT_MIRROR}" ]; then \
+      find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -print0 \
+        | xargs -0 -r sed -i \
+          -e "s|deb.debian.org|${APT_MIRROR}|g" \
+          -e "s|security.debian.org|${APT_MIRROR}|g"; \
+      echo "[opptrix-build] APT_MIRROR=${APT_MIRROR}"; \
+    fi \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
     python3 \
     make \
@@ -36,7 +55,11 @@ COPY README.md LICENSE ./
 
 # Full workspace install (devDeps needed for TypeScript / Vite build)
 ENV NODE_ENV=development
-RUN npm ci
+RUN if [ -n "${NPM_REGISTRY}" ]; then \
+      echo "[opptrix-build] NPM_REGISTRY=${NPM_REGISTRY}"; \
+      npm config set registry "${NPM_REGISTRY}"; \
+    fi \
+  && npm ci
 
 # packages + client-ui (SERVE_UI=1 serves client-ui/dist)
 RUN npm run build
@@ -45,11 +68,22 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ── Stage: runtime ───────────────────────────────────────────────────────────
-FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+# Re-declare ARGs after FROM (build-args do not carry across stages).
+ARG NODE_VERSION=24
+ARG NODE_IMAGE_PREFIX=
+FROM ${NODE_IMAGE_PREFIX}node:${NODE_VERSION}-bookworm-slim AS runtime
+
+ARG APT_MIRROR=
 
 WORKDIR /app
 
-RUN apt-get update \
+RUN if [ -n "${APT_MIRROR}" ]; then \
+      find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -print0 \
+        | xargs -0 -r sed -i \
+          -e "s|deb.debian.org|${APT_MIRROR}|g" \
+          -e "s|security.debian.org|${APT_MIRROR}|g"; \
+    fi \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \

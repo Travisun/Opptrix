@@ -6,6 +6,12 @@
         "command": ".cursor/hooks/ensure-codegraph.sh",
         "timeout": 60
       }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/selfhost-release-hint.sh",
+        "timeout": 15
+      }
     ]
   }
 }

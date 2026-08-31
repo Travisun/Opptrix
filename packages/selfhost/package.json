@@ -1,0 +1,44 @@
+{
+  "name": "@opptrix/selfhost",
+  "version": "0.1.0",
+  "description": "Opptrix self-host CLI (opptrix) + Docker Compose deploy assets",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Opptrix Team",
+  "homepage": "https://www.opptrix.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Travisun/Opptrix.git",
+    "directory": "packages/selfhost"
+  },
+  "bugs": {
+    "url": "https://github.com/Travisun/Opptrix/issues"
+  },
+  "keywords": [
+    "opptrix",
+    "self-host",
+    "docker-compose",
+    "cli"
+  ],
+  "bin": {
+    "opptrix": "./bin/opptrix.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "bundle",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ./scripts/build-bundle.mjs",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build",
+    "version": "npm run build"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
