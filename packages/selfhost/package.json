@@ -1,7 +1,7 @@
 {
   "name": "@opptrix/selfhost",
-  "version": "0.1.2",
-  "description": "Opptrix self-host CLI (opptrix): Docker Compose deploy, CN/foreign mirrors, start/stop/update",
+  "version": "0.1.3",
+  "description": "Opptrix self-host CLI (opptrix): auto region mirrors, Docker Compose deploy, start/stop/update",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Opptrix Team",

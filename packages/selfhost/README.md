@@ -45,18 +45,20 @@ opptrix doctor
 
 ## 快速开始
 
-### 国内
+### 国内 / 默认（自动检测）
+
+无需传 `--mirror`：CLI 会按时区/语言与 Docker Hub 连通性自动选择 `cn` 或 `foreign`（与 Linux bootstrap 一致）。仍可用 `--mirror cn|foreign` 强制覆盖。
 
 ```bash
-opptrix init --mirror cn
-opptrix up --mirror cn
+opptrix init
+opptrix up
 # 仅验证服务、暂不拉本地模型：
-# opptrix up --mirror cn --skip-models
+# opptrix up --skip-models
 ```
 
 浏览器打开 [http://127.0.0.1:8711](http://127.0.0.1:8711)（默认只绑定本机回环）。
 
-### 海外 / 官方源
+### 强制海外 / 官方源
 
 ```bash
 opptrix init --mirror foreign
@@ -96,7 +98,7 @@ curl -fsSL https://raw.githubusercontent.com/Travisun/Opptrix/main/scripts/boots
 
 | 选项 | 说明 |
 |------|------|
-| `--mirror cn\|foreign` | 构建与 **git clone** 的区域偏好（见下） |
+| `--mirror cn\|foreign\|auto` | 构建与 **git clone** 区域（**默认 auto**） |
 | `--skip-models` | 跳过首启核心模型下载（`OPPTRIX_SKIP_MODEL_FETCH=1`） |
 | `--no-build` | `up` 时不重建镜像 |
 | `--volumes` | `down` 时删除命名卷（会清数据，慎用） |
@@ -107,7 +109,16 @@ curl -fsSL https://raw.githubusercontent.com/Travisun/Opptrix/main/scripts/boots
 
 ## 国内 / 海外如何生效
 
-`--mirror`（或 `opptrix init` 写入的配置、`OPPTRIX_BUILD_MIRROR`）同时影响：
+**默认 `auto`**（未传 `--mirror`、未设 `OPPTRIX_BUILD_MIRROR`、且配置未写死时）：
+
+1. `OPPTRIX_FORCE_CN=1` → 国内  
+2. 时区/语言含 `Asia/Shanghai`、`zh_CN` 等 → 国内  
+3. 探测 `auth.docker.io:443` 不可达 → 国内  
+4. 否则 → 海外  
+
+`--mirror` / `init` 写入的 `.opptrix.json` / 环境变量可覆盖。`auto` 会再次走上述检测。
+
+显式偏好同时影响：
 
 1. **Docker 构建**：Node 基础镜像前缀、npm registry、Debian apt 镜像  
 2. **源码 clone**（仅当本地还没有完整 Opptrix 树时）

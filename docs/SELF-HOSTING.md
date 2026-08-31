@@ -11,8 +11,9 @@
 ```bash
 npm i -g @opptrix/selfhost
 # 国内 registry 可选: npm i -g @opptrix/selfhost --registry https://registry.npmmirror.com
-opptrix init --mirror cn
-opptrix up --mirror cn
+opptrix init          # 默认自动检测国内/海外镜像与 clone 源
+opptrix up
+# 强制指定: opptrix up --mirror cn   或  --mirror foreign
 ```
 
 `up` 若在非仓库目录执行，会按镜像偏好自动 clone 完整源码到 `~/.opptrix/instances/default`（可用 `OPPTRIX_DEPLOY_DIR` 覆盖）：
@@ -47,8 +48,8 @@ opptrix up --mirror cn
 
 ```bash
 npm i -g @opptrix/selfhost
-opptrix init --mirror cn    # 或 foreign
-opptrix up --mirror cn
+opptrix init
+opptrix up
 ```
 
 或在仓库内：`npm run build -w @opptrix/selfhost && npm link -w @opptrix/selfhost`。

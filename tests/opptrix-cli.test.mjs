@@ -11,6 +11,8 @@ import {
   normalizeMirrorProfile,
   resolveBuildMirrorEnv,
   resolveGitCloneUrls,
+  resolveMirrorProfile,
+  detectMirrorProfile,
   ensureTrailingSlash,
   CN_MIRROR_DEFAULTS,
   GIT_CLONE_DEFAULTS,
@@ -36,7 +38,8 @@ test('parseArgv extracts command, flags, and -- passthrough', () => {
 test('normalizeMirrorProfile and resolveBuildMirrorEnv cn/foreign', () => {
   assert.equal(normalizeMirrorProfile('cn'), 'cn')
   assert.equal(normalizeMirrorProfile('China'), 'cn')
-  assert.equal(normalizeMirrorProfile(''), 'foreign')
+  assert.equal(normalizeMirrorProfile('foreign'), 'foreign')
+  assert.throws(() => normalizeMirrorProfile(''))
   assert.throws(() => normalizeMirrorProfile('nope'))
 
   assert.equal(ensureTrailingSlash('docker.m.daocloud.io/library'), 'docker.m.daocloud.io/library/')
@@ -55,6 +58,33 @@ test('normalizeMirrorProfile and resolveBuildMirrorEnv cn/foreign', () => {
     OPPTRIX_DOCKER_IMAGE_PREFIX: 'docker.1ms.run/library',
   })
   assert.equal(override.OPPTRIX_DOCKER_IMAGE_PREFIX, 'docker.1ms.run/library/')
+})
+
+test('resolveMirrorProfile auto detects via locale / force flags', () => {
+  const forcedCn = resolveMirrorProfile('auto', { OPPTRIX_FORCE_CN: '1' }, { probeNetwork: false })
+  assert.equal(forcedCn.profile, 'cn')
+  assert.equal(forcedCn.auto, true)
+
+  const forcedForeign = resolveMirrorProfile('', { OPPTRIX_FORCE_FOREIGN: '1' }, { probeNetwork: false })
+  assert.equal(forcedForeign.profile, 'foreign')
+
+  const byLocale = detectMirrorProfile(
+    { TZ: 'Asia/Shanghai', LANG: 'zh_CN.UTF-8' },
+    { probeNetwork: false },
+  )
+  assert.equal(byLocale.profile, 'cn')
+  assert.equal(byLocale.reason, 'locale/TZ')
+
+  const byProbe = detectMirrorProfile(
+    { LANG: 'en_US.UTF-8', TZ: 'UTC' },
+    { probeNetwork: true, useSystemTimeZone: false, probeFn: () => false },
+  )
+  assert.equal(byProbe.profile, 'cn')
+  assert.equal(byProbe.reason, 'docker-hub-unreachable')
+
+  const explicit = resolveMirrorProfile('foreign', {})
+  assert.equal(explicit.profile, 'foreign')
+  assert.equal(explicit.auto, false)
 })
 
 test('resolveGitCloneUrls: cn→Gitee first, foreign→GitHub first', () => {

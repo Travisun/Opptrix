@@ -488,8 +488,9 @@ EOF
 
 下一步：
   opptrix doctor
-  opptrix up --mirror $mirror
-  # 快速验证（跳过模型）: opptrix up --mirror $mirror --skip-models
+  opptrix up
+  # 快速验证（跳过模型）: opptrix up --skip-models
+  # 若需强制镜像: opptrix up --mirror cn|foreign
 
 浏览器: http://127.0.0.1:8711
 EOF

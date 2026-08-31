@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { detectDocker, gitPull, npmLinkCli, npmUnlinkCli, probeHealth, runCompose } from '../src/compose.mjs'
 import { ensureBuildContext } from '../src/ensure-source.mjs'
-import { normalizeMirrorProfile, resolveBuildMirrorEnv } from '../src/mirrors.mjs'
+import { resolveBuildMirrorEnv, resolveMirrorProfile } from '../src/mirrors.mjs'
 import { flagString, flagTrue, parseArgv } from '../src/parse.mjs'
 import {
   ensureComposeEnv,
@@ -57,7 +57,9 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   help              显示帮助
 
 选项:
-  --mirror cn|foreign   构建用镜像源（默认读 .opptrix.json 或 foreign）
+  --mirror cn|foreign|auto
+                        构建与 clone 区域（默认 auto：按时区/语言与 Docker Hub 连通性检测；
+                        也可读 .opptrix.json / OPPTRIX_BUILD_MIRROR）
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
   --no-build            up 时不加 --build
   --volumes             down 时删除数据卷（危险）
@@ -67,28 +69,44 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
 环境变量:
   OPPTRIX_DEPLOY_DIR    Compose / 源码树目录（默认：当前 monorepo 或 ~/.opptrix/instances/default）
   OPPTRIX_GIT_REF       clone 用的 tag/分支（默认 selfhost-v{version}，回退 main）
-  --mirror cn           clone 默认 Gitee（失败再试 GitHub）
-  --mirror foreign      clone 默认 GitHub（失败再试 Gitee）
+  OPPTRIX_BUILD_MIRROR  cn|foreign|auto（与 --mirror 相同）
+  OPPTRIX_FORCE_CN=1    强制国内源（检测时）
 
 示例:
-  opptrix init --mirror cn
-  opptrix up --mirror cn --skip-models
+  opptrix init
+  opptrix up
+  opptrix up --skip-models
+  opptrix up --mirror foreign
   opptrix logs -f
 `)
 }
 
 /**
  * @param {import('../src/parse.mjs').ParsedArgv} parsed
+ * @returns {import('../src/mirrors.mjs').BuildMirrorProfile}
  */
 function resolveMirror(parsed) {
   const fromFlag = flagString(parsed.flags, 'mirror')
-  if (fromFlag) return normalizeMirrorProfile(fromFlag)
-  const cfg = readHostConfig(resolveDeployRoot())
-  if (cfg.mirror) return normalizeMirrorProfile(String(cfg.mirror))
-  if (process.env.OPPTRIX_BUILD_MIRROR) {
-    return normalizeMirrorProfile(process.env.OPPTRIX_BUILD_MIRROR)
+  if (fromFlag) {
+    const r = resolveMirrorProfile(fromFlag)
+    if (r.auto) console.log(`[opptrix] mirror=${r.profile}（自动检测: ${r.reason}）`)
+    return r.profile
   }
-  return 'foreign'
+  const cfg = readHostConfig(resolveDeployRoot())
+  if (cfg.mirror != null && String(cfg.mirror).trim() !== '') {
+    const r = resolveMirrorProfile(String(cfg.mirror))
+    if (r.auto) console.log(`[opptrix] mirror=${r.profile}（配置 auto → ${r.reason}）`)
+    return r.profile
+  }
+  if (process.env.OPPTRIX_BUILD_MIRROR) {
+    const r = resolveMirrorProfile(process.env.OPPTRIX_BUILD_MIRROR)
+    if (r.auto) console.log(`[opptrix] mirror=${r.profile}（环境 auto → ${r.reason}）`)
+    else console.log(`[opptrix] mirror=${r.profile}（OPPTRIX_BUILD_MIRROR）`)
+    return r.profile
+  }
+  const r = resolveMirrorProfile('auto')
+  console.log(`[opptrix] mirror=${r.profile}（自动检测: ${r.reason}）`)
+  return r.profile
 }
 
 /**
@@ -119,10 +137,12 @@ async function cmdInit(parsed) {
   writeHostConfig(root, { mirror, skipModels: flagTrue(parsed.flags, 'skip-models') })
   const resolved = resolveBuildMirrorEnv(mirror)
   console.log(`[opptrix] compose.env ${result.created ? '已创建' : '已存在'} → ${result.path}`)
-  console.log(`[opptrix] 默认 mirror=${resolved.profile}（写入 .opptrix.json）`)
+  console.log(`[opptrix] 默认 mirror=${resolved.profile}（写入 .opptrix.json；可用 --mirror 覆盖）`)
   console.log(`[opptrix] deploy root → ${root}`)
   if (resolved.profile === 'cn') {
-    console.log('[opptrix] 国内构建将使用 DaoCloud Node 前缀 + npmmirror + 阿里云 Debian')
+    console.log('[opptrix] 国内构建：DaoCloud Node 前缀 + npmmirror + 阿里云 Debian；clone 优先 Gitee')
+  } else {
+    console.log('[opptrix] 海外构建：官方 Docker/npm/apt；clone 优先 GitHub')
   }
   console.log('[opptrix] 下一步: opptrix up')
   return 0
@@ -158,6 +178,8 @@ async function cmdDoctor() {
   }
   const cfg = readHostConfig(root)
   console.log(`[opptrix] config mirror=${cfg.mirror ?? '(unset)'}`)
+  const detected = resolveMirrorProfile('auto')
+  console.log(`[opptrix] auto-detect now → ${detected.profile} (${detected.reason})`)
   console.log(`[opptrix] node ${process.version} platform=${process.platform}/${process.arch}`)
   if (process.platform !== 'linux') {
     console.log('[opptrix] 提示: 一键 bootstrap 仅 Linux；本机请自备 Docker + Node')
