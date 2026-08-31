@@ -6,7 +6,7 @@
 # node-llama-cpp) are compiled/installed against linux glibc Node 24 in the build stage.
 #
 # Build mirrors (CN / foreign) — pass via --build-arg or Compose:
-#   NODE_IMAGE_PREFIX  e.g. docker.m.daocloud.io/library/  (must end with /)
+#   NODE_IMAGE_PREFIX  e.g. docker.1ms.run/library/  (must end with /)
 #   NPM_REGISTRY       e.g. https://registry.npmmirror.com
 #   APT_MIRROR         e.g. mirrors.aliyun.com  (host only, no scheme)
 # Empty = Docker Hub + registry.npmjs.org + deb.debian.org (foreign default).

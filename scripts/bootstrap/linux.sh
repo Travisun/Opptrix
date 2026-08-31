@@ -154,7 +154,6 @@ configure_docker_registry_mirrors_cn() {
   sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
 {
   "registry-mirrors": [
-    "https://docker.m.daocloud.io",
     "https://docker.1ms.run"
   ]
 }

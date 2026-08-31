@@ -42,7 +42,7 @@ test('normalizeMirrorProfile and resolveBuildMirrorEnv cn/foreign', () => {
   assert.throws(() => normalizeMirrorProfile(''))
   assert.throws(() => normalizeMirrorProfile('nope'))
 
-  assert.equal(ensureTrailingSlash('docker.m.daocloud.io/library'), 'docker.m.daocloud.io/library/')
+  assert.equal(ensureTrailingSlash('docker.1ms.run/library'), 'docker.1ms.run/library/')
 
   const cn = resolveBuildMirrorEnv('cn', {})
   assert.equal(cn.profile, 'cn')

@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process'
 /** @typedef {'cn' | 'foreign'} BuildMirrorProfile */
 
 export const CN_MIRROR_DEFAULTS = Object.freeze({
-  dockerImagePrefix: 'docker.m.daocloud.io/library/',
+  /** Docker Hub library/ proxy for Node base images (DaoCloud 401 — use 1ms.run). */
+  dockerImagePrefix: 'docker.1ms.run/library/',
   npmRegistry: 'https://registry.npmmirror.com',
   aptMirror: 'mirrors.aliyun.com',
 })

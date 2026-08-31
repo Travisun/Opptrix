@@ -148,11 +148,11 @@ curl -fsS http://127.0.0.1:8711/api/health
 | 变量 | 作用 | 国内示例 |
 |------|------|----------|
 | `OPPTRIX_BUILD_MIRROR` / `--mirror` | `cn` / `foreign` | `cn` |
-| `OPPTRIX_DOCKER_IMAGE_PREFIX` | Node 基础镜像前缀（须以 `/` 结尾） | `docker.m.daocloud.io/library/` |
+| `OPPTRIX_DOCKER_IMAGE_PREFIX` | Node 基础镜像前缀（须以 `/` 结尾） | `docker.1ms.run/library/` |
 | `OPPTRIX_NPM_REGISTRY` | `npm ci` 注册表 | `https://registry.npmmirror.com` |
 | `OPPTRIX_APT_MIRROR` | Debian apt 主机名（无 `https://`） | `mirrors.aliyun.com` |
 
-`opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还需进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。备用 Node 前缀示例：`docker.1ms.run/library/`。
+`opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还需进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。
 
 首次启动（未 `--skip-models`）会在空的 **models** 卷中拉取核心本地模型（约 1GB+）。**运行时模型下载**默认国内优先：ModelScope → hf-mirror → Hugging Face。健康检查 `start_period` 约 15 分钟。
 

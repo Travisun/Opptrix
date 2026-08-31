@@ -33,7 +33,7 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_VERSION: "${OPPTRIX_NODE_VERSION:-24}"
-        # Must end with / when set, e.g. docker.m.daocloud.io/library/
+        # Must end with / when set, e.g. docker.1ms.run/library/
         NODE_IMAGE_PREFIX: "${OPPTRIX_DOCKER_IMAGE_PREFIX:-}"
         NPM_REGISTRY: "${OPPTRIX_NPM_REGISTRY:-}"
         # Host only, e.g. mirrors.aliyun.com
