@@ -20,7 +20,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 
 ### 开发者（本地运行与改代码）
 
-1. [README.md](../README.md) — 快速开始
+1. [PROJECT-OVERVIEW.md](./PROJECT-OVERVIEW.md) — **架构预览、目录树、开发快速开始**
 2. [DEVELOPMENT.md](./DEVELOPMENT.md) — 日常命令、调试、测试、FAQ
 3. [ARCHITECTURE.md](./ARCHITECTURE.md) — 分层与请求流
 4. [example/README.md](../example/README.md) — 示例配置
@@ -57,6 +57,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 
 | 文档 | 说明 |
 |------|------|
+| [PROJECT-OVERVIEW.md](./PROJECT-OVERVIEW.md) | **架构预览、目录树、开发快速开始、参考项目**（自 README 拆出） |
 | [ARCHITECTURE-COMPREHENSIVE.md](./ARCHITECTURE-COMPREHENSIVE.md) | **全面架构指南**（数据库层、数据层、Provider、模块化、UI、发布、测试、审计） |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统分层、包依赖、Hub、持久化 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发环境、脚本、测试、排错 |
