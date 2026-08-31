@@ -58,7 +58,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'mcp_servers', label: 'MCP 服务', icon: PlugConnectedRegular },
   { id: 'agent_skills', label: '工作流技能', icon: BookOpenRegular },
   { id: 'self_evolve', label: '自进化', icon: ArrowSyncRegular },
-  { id: 'sandbox', label: '沙盒', icon: ShieldRegular },
+  { id: 'sandbox', label: '工作区隔离', icon: ShieldRegular },
   { id: 'schedule', label: '计划任务', icon: CalendarClockRegular },
   { id: 'python', label: 'Python', icon: CodeRegular },
   // 关于
@@ -481,7 +481,7 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'self_evolve':
       return '管理使用中自动优化分析习惯'
     case 'sandbox':
-      return '管理命令隔离环境的网络访问规则'
+      return '查看工作区隔离状态与网络访问规则'
     case 'schedule':
       return '管理定时智能体任务与受控脚本'
     case 'python':

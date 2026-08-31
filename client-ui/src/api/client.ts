@@ -3336,7 +3336,7 @@ export async function unsubscribeMcpResource(id: string, uri: string) {
 export interface SandboxSettings {
   allowed_domains: string[]
   allow_lan_access: boolean
-  /** Windows：`elevated` 完整隔离 / `unelevated` 基础隔离（产品默认）；非 Windows 可持久化，运行时忽略 */
+  /** 兼容字段：Windows 遗留 elevated/unelevated；产品默认工作区隔离，UI 不再切换 */
   windows_isolation_mode: 'elevated' | 'unelevated'
 }
 
@@ -3354,6 +3354,11 @@ export interface SandboxPlatformStatus {
   userns_restricted?: boolean
   windows_isolation_mode?: 'elevated' | 'unelevated'
   network_isolation_level?: 'full' | 'basic' | 'none'
+  /**
+   * 产品隔离形态：`workspace` 默认工作区隔离（无 OS 级提升）；
+   * `srt` 为遗留完整系统隔离（需环境变量显式开启）。
+   */
+  isolation_mode?: 'workspace' | 'srt'
 }
 
 export const sandboxSettings = {

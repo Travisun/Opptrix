@@ -20,11 +20,33 @@ export function buildGlobalDenyPaths(): string[] {
     'market-data',
     'browser-screenshots',
     'runtimes',
+    'news-translation-cache.json',
+    'auth.key',
+    'vault.key',
   ]
   return [
     resolveAgentPrivilegesRoot(),
     ...sensitiveUnderUserData.map(name => path.join(userData, name)),
   ]
+}
+
+/**
+ * 相对路径或 basename 是否命中敏感文件/目录名。
+ * 即使落在 grant 内，path-gate 也应拒绝。
+ */
+export function isSensitiveRelPath(relOrBasename: string): boolean {
+  const raw = String(relOrBasename ?? '').trim().replace(/\\/g, '/')
+  if (!raw) return false
+  const segments = raw.split('/').filter(Boolean)
+  for (const seg of segments) {
+    const lower = seg.toLowerCase()
+    if (lower === '.env') return true
+    if (lower.startsWith('.env.')) return true
+    if (lower.endsWith('.pem') || lower.endsWith('.key')) return true
+    if (lower === 'id_rsa' || lower === 'credentials.json') return true
+    if (lower === '.aws' || lower === '.ssh') return true
+  }
+  return false
 }
 
 function normalizeForCompare(p: string): string {

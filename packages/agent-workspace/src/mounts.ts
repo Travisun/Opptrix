@@ -1,11 +1,11 @@
 /**
  * 服务器已挂载目录（$OPPTRIX_DATA_DIR/mounts 的直接子目录）与授权路径白名单。
- * Web / 自托管强制白名单；桌面端（OPPTRIX_DESKTOP）可放宽为仅 Deny 校验。
+ * 始终强制白名单（mounts / session / shared）；不再因桌面运行时放宽。
  */
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
-import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
+import { resolveUserDataRoot } from '@opptrix/shared'
 import { isPathDenied } from './deny.js'
 import { DenyPathError, PathEscapeError, WorkspaceError } from './errors.js'
 import { resolveSafePath } from './path-gate.js'
@@ -161,9 +161,8 @@ export function isGrantPathAllowlisted(absPath: string, sessionId?: string): boo
 export interface AssertGrantPathOptions {
   sessionId?: string
   /**
-   * true：强制白名单（测试 / 明确自托管）。
-   * false：仅 Deny。
-   * 缺省：桌面运行时放宽，否则强制白名单。
+   * true（缺省）：强制白名单。
+   * false：仅 Deny（仅测试逃生；产品路径不得关闭）。
    */
   enforceAllowlist?: boolean
 }
@@ -184,10 +183,7 @@ export function assertGrantPathAllowed(
     throw new DenyPathError('无法授权该目录（受保护路径）')
   }
 
-  const enforce =
-    opts?.enforceAllowlist !== undefined
-      ? opts.enforceAllowlist
-      : !isDesktopRuntime()
+  const enforce = opts?.enforceAllowlist !== false
 
   if (!enforce) return resolved
 

@@ -250,13 +250,14 @@ Opptrix/
       - 写/删/覆盖：`rw` 授权；覆盖与删除需用户确认（可本对话 sticky）；默认工作区总配额约 20GB
       - `http_fetch` / `download_file`：仅 `http`/`https`；DNS 解析后禁止 localhost / 私网 / 链路本地 / 云元数据地址（SSRF）；**会话/全局已允许局域网时**可访问私网 host（具体域名仍可能需出站确认）；响应进上下文默认截断约 1.5MB；请求体 ≤32MB
       - `request_folder_access` 仅提示用户去界面授权，不直接弹系统选目录；授权 API 见 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)
-      - **命令隔离（`opptrix_run`）**：实现 `packages/agent-workspace/src/shell/`（`SessionShellRuntime` + `ShellRunner` + `@anthropic-ai/sandbox-runtime`）。主参数为 **`command` 字符串**（真 shell）。围栏内**任意命令**，安全边界为 grant + SRT FS/网络（非二进制白名单）。Posix 下 shell 经 `resolvePosixShellPath()`（`SHELL` → darwin zsh → bash → `/bin/sh`），**不**硬编码裸 `/bin/bash`（避免 ENOENT）。`python`/`pip`/`node`/`npm`/`npx` 经能力增强改写到 active / Electron-as-node（**真 shell 亦同步到 `command_string`**，含 `--target` / `--cert`）。子进程 **`HOME`=grant 根**，**cwd=`cwdRel`**（`~` ≠ cwd；结果可含 `home_is_grant_root`）。cwd 须为已存在目录，否则结构化错误（可先 `mkdir`）。同 `configHash` **复用 SRT**；仅 `initialize`/`reset` 全局串行；`clearSession` dispose 句柄。结果含 `isolation: full|basic`；`escalate=unsandboxed` 每次人批。会话默认 `allowedDomains` 含包安装源；其它 host 仍审批。聊天 tools **仅**暴露 `opptrix_run`（勿调用已移除工具）。测网站延迟优先 `http_fetch`。**预计较长（下载/安装/重计算）必须 `background: true`**（Job 续跑，依赖终态自动续跑；禁止 poll/sleep）。意图：`workspace_shell` / `workspace_shell_install` / `workspace_shell_network` → 首选 `opptrix_run`；找文件/搜内容优先 `workspace_glob`/`workspace_grep`（shell ls/find/rg 仅后备）；**硬禁**用 shell 读/改文本文件内容；**硬禁**把绝对路径/`abs_path`/宿主绝对路径填进 path/cwd/脚本；**硬禁**用 `~/` 当相对 cwd
+      - **命令隔离（`opptrix_run`）**：**默认工作区隔离**（grant + Deny；外网默认放行；**不**默认启用 OS 级 SRT）。实现 `packages/agent-workspace/src/shell/`（`ShellRunner`；遗留完整隔离时另用 `SessionShellRuntime` + `@anthropic-ai/sandbox-runtime`）。主参数为 **`command` 字符串**（真 shell）。围栏内**任意命令**，安全边界为已授权文件夹与敏感路径 Deny（非二进制白名单）。Posix 下 shell 经 `resolvePosixShellPath()`（`SHELL` → darwin zsh → bash → `/bin/sh`），**不**硬编码裸 `/bin/bash`（避免 ENOENT）。`python`/`pip`/`node`/`npm`/`npx` 经能力增强改写到 active / Electron-as-node（**真 shell 亦同步到 `command_string`**，含 `--target` / `--cert`）。子进程 **`HOME`=grant 根**，**cwd=`cwdRel`**（`~` ≠ cwd；结果可含 `home_is_grant_root`）。cwd 须为已存在目录，否则结构化错误（可先 `mkdir`）。结果含 `isolation: workspace|full|basic`（默认 `workspace`）；`escalate=unsandboxed` **每次**人批（仅 once，禁止 session sticky）。工作区模式外网默认放行（无需逐次授权）；遗留 SRT 模式会话默认含包安装源，其它 host 仍审批。聊天 tools **仅**暴露 `opptrix_run`（勿调用已移除工具）。测网站延迟优先 `http_fetch`。**预计较长（下载/安装/重计算）必须 `background: true`**（Job 续跑，依赖终态自动续跑；禁止 poll/sleep）。意图：`workspace_shell` / `workspace_shell_install` / `workspace_shell_network` → 首选 `opptrix_run`；找文件/搜内容优先 `workspace_glob`/`workspace_grep`（shell ls/find/rg 仅后备）；**硬禁**用 shell 读/改文本文件内容；**硬禁**把绝对路径/`abs_path`/宿主绝对路径填进 path/cwd/脚本；**硬禁**用 `~/` 当相对 cwd
+      - **隔离模式切换**：默认 `workspace`。遗留 OS 级完整隔离：部署侧设 `OPPTRIX_SHELL_ISOLATION=srt`（桌面/自托管均可；需平台依赖就绪）。产品设置页**不**再引导「完成系统授权 / 完整隔离」作为日常路径
       - **命令运行确认**：围栏内**无**「首次运行命令」总确认。出站新域名 / `unsandboxed` 才确认；`unsandboxed` 仅 once。`shell_platform_status` 无需确认
       - **包安装与网络**：包源默认已并入会话 allowlist；直接 `opptrix_run({ command: "pip install …" })`。其它域名经 `sandboxAskCallback` / egress 确认或 `suggested_escalate`。pip 默认 `--target .opptrix-packages`；npm 禁止 `-g` 等。CA **仅**物化到工作区 `.opptrix/cacert.pem` 后注入子进程（materialize 失败不回退包内路径，避免沙盒 `CERTIFICATE_VERIFY_FAILED`）；`python`/`pip` 一律托管/包内优先于本机（有 Opptrix 托管或安装包内置则 `active_source=opptrix`）
       - **出站授权（SessionNetworkEgressStore + sandboxAskCallback）**：默认已含包源集合；永久白名单 = `OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页。未授权目标会确认。出站被拒返回 `needs_network_egress` / `suggested_escalate=network`。grant 经 SSRF（`assertEgressHostGrantable`）
-      - **设置页白名单（用户可见）**：**设置 → 沙盒环境** — 「访问白名单」、「允许局域网访问」、Windows「完整隔离 / 基础隔离」
+      - **设置页白名单（用户可见）**：**设置 → 工作区隔离** — 「访问白名单」、「允许局域网访问」；状态卡说明工作区隔离能力（无日常 elevation CTA）
       - **DNS 策略**：系统解析可用；沙盒内自打 UDP/53 的 dig 等受围栏限制；授权对象是连接目标
-      - **平台依赖（`shell_platform_status`）**：返回 `platform` / `ready` / `windows_isolation_mode` / `network_isolation_level` 等。**Windows 基础隔离**：RestrictedToken，结果 `isolation=basic`，网络限制更弱，不支持 `secret_refs`。**完整隔离**：SRT；凭据失效最多自动刷新再执行一次
+      - **平台依赖（`shell_platform_status`）**：返回 `platform` / `ready` / `isolation_mode?` / `network_isolation_level` 等。**默认工作区隔离**：`ready` 在无 OS 提升时亦可为 true；`needs_elevation` 日常为 false。遗留 `OPPTRIX_SHELL_ISOLATION=srt` 时才可能要求系统授权 / 完整隔离组件
 
 #### 工作区编程、本地数据目录与扶摇 Dump
 
@@ -345,7 +346,7 @@ Opptrix/
 
 | 层级 | 存储 | 作用 |
 |------|------|------|
-| 全局 | 用户 SQLite `preference/sandbox_settings.allow_lan_access`（设置 → 沙盒环境；REST `GET/PUT /api/settings/sandbox`） | 所有对话允许私网/localhost 连接判定 |
+| 全局 | 用户 SQLite `preference/sandbox_settings.allow_lan_access`（设置 → 工作区隔离；REST `GET/PUT /api/settings/sandbox`） | 所有对话允许私网/localhost 连接判定 |
 | 本对话 | `SessionLanAccessStore`（**内存**） | 仅当前 session；**可覆盖**全局 `false`；**不写回** preference |
 
 - **有效 LAN** = 全局 `allow_lan_access` **OR** 本会话已授权（`isEffectiveLanAllowed(sessionId)`）。

@@ -33,6 +33,7 @@ export {
   buildPipInstallArgv,
   commandNeedsNetwork,
   commandMayNeedEgressConfirmation,
+  extractExplicitHostsFromArgv,
   injectPipCertArgv,
   isNetworkDiagnosticCommand,
   isShellBinaryAllowlisted,
@@ -121,6 +122,10 @@ export {
   summarizeShellArgv,
 } from './sticky-shell-run.js'
 export { getShellPlatformStatus } from './platform.js'
+export {
+  resolveShellIsolationMode,
+  type OpptrixShellIsolationMode,
+} from './isolation-mode.js'
 export {
   ensureLinuxSandboxReady,
   linuxSandboxProfileStillNeeded,

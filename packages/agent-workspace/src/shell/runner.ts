@@ -103,6 +103,7 @@ import {
   startShellCommandJob,
 } from './shell-command-job.js'
 import { getUserDataStore } from '@opptrix/user-store'
+import { resolveShellIsolationMode } from './isolation-mode.js'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_STREAM_BYTES = 200_000
@@ -219,6 +220,9 @@ function assertCwdDirectoryExists(cwdAbs: string, cwdRel: string): void {
 
 const SHELL_PATH_NOTE =
   'HOME=grant 根；cwd=cwdRel（相对 root）；~ ≠ cwd；脚本勿用 ~/ 当相对 cwd。'
+
+const WORKSPACE_PATH_NOTE =
+  '命令在已授权工作区内运行（容器 + 工作区边界）；HOME=grant 根；仅限已授权工作区路径。'
 
 async function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
@@ -513,28 +517,28 @@ async function requireDiagnosticMergedConfirmation(
   return applyEgressChoice(sessionId, normalizedTarget, answer.selected_ids, egress)
 }
 
-function applyEgressChoice(
-  sessionId: string,
-  targetHost: string | undefined,
-  selectedIds: readonly string[],
-  egress?: SessionNetworkEgressStore,
-): EgressRunGrants {
-  const choice = parseNetworkEgressChoice(selectedIds)
-  if (choice === 'cancel') throw new WorkspaceError('用户已取消外网访问')
-  if (!targetHost) {
-    throw new WorkspaceError('未指定访问目标，无法仅允许该目标')
+  function applyEgressChoice(
+    sessionId: string,
+    targetHost: string | undefined,
+    selectedIds: readonly string[],
+    egress?: SessionNetworkEgressStore,
+  ): EgressRunGrants {
+    const choice = parseNetworkEgressChoice(selectedIds)
+    if (choice === 'cancel') throw new WorkspaceError('用户已取消外网访问')
+    if (!targetHost) {
+      throw new WorkspaceError('未指定访问目标，无法仅允许该目标')
+    }
+    if (choice === 'allow_host_session') {
+      egress?.grantHost(sessionId, targetHost)
+      return { onceHosts: [], runWithDeniedNetwork: false }
+    }
+    if (choice === 'allow_host_once') {
+      return { onceHosts: [targetHost], runWithDeniedNetwork: false }
+    }
+    throw new WorkspaceError('用户已取消外网访问')
   }
-  if (choice === 'allow_host_session') {
-    egress?.grantHost(sessionId, targetHost)
-    return { onceHosts: [], runWithDeniedNetwork: false }
-  }
-  if (choice === 'allow_host_once') {
-    return { onceHosts: [targetHost], runWithDeniedNetwork: false }
-  }
-  throw new WorkspaceError('用户已取消外网访问')
-}
 
-function detectPlatformLabel(): Platform {
+  function detectPlatformLabel(): Platform {
   if (!SandboxManager.isSupportedPlatform()) return 'unknown'
   const p = process.platform
   if (p === 'darwin') return 'macos'
@@ -850,6 +854,8 @@ async function executeUnsandboxedOnce(ctx: {
   timeoutMs: number
   signal?: AbortSignal
   onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void
+  /** 默认 basic（出围栏）；workspace 模式传 'workspace' */
+  isolation?: ShellIsolation
 }): Promise<{ exitCode: number | null; stdout: string; stderr: string; isolation: ShellIsolation }> {
   const childEnv = await sanitizeChildEnv(
     { ...process.env },
@@ -868,7 +874,7 @@ async function executeUnsandboxedOnce(ctx: {
     ctx.signal,
     ctx.onOutput,
   )
-  return { ...result, isolation: 'basic' }
+  return { ...result, isolation: ctx.isolation ?? 'basic' }
 }
 
 export interface ShellRunnerDeps {
@@ -984,9 +990,18 @@ export class ShellRunner {
       await requireUnsandboxedConfirmation(normalizedArgv, confirm)
     }
 
+    // workspace 默认：外网直通，不做出站授权；仅遗留 SRT 路径保留域名确认
+    const isolationMode = resolveShellIsolationMode()
+    const useWorkspaceIsolation = isolationMode === 'workspace' && escalate !== 'unsandboxed'
+
     let egressGrants: EgressRunGrants = { onceHosts: [], runWithDeniedNetwork: false }
 
-    if (escalate !== 'unsandboxed' && diagnostic && diagnosticTargetHost) {
+    if (
+      !useWorkspaceIsolation
+      && escalate !== 'unsandboxed'
+      && diagnostic
+      && diagnosticTargetHost
+    ) {
       egressGrants = await requireDiagnosticMergedConfirmation(
         params.sessionId,
         normalizedArgv,
@@ -995,7 +1010,7 @@ export class ShellRunner {
         confirm,
       )
     }
-    // 围栏内：无「首次运行命令」总确认；包源网络默认已含（决策 2/3）
+    // 围栏内：无「首次运行命令」总确认；workspace 外网默认放行；SRT 包源默认已含
 
     const timeoutMs = wantBackground
       ? clampShellBgTimeoutMs(params.timeoutMs)
@@ -1015,12 +1030,12 @@ export class ShellRunner {
 
     await resolvePreferredPipIndexUrl(getPythonSettings().pip_index_urls)
 
-    if (escalate !== 'unsandboxed') {
+    // workspace 默认路径：跳过 SRT / assertShellReady；仅 srt 逃生舱走完整隔离
+    if (escalate !== 'unsandboxed' && !useWorkspaceIsolation) {
       await this.assertShellReady(true)
     }
 
-    const grants = await this.deps.listGrants(params.sessionId)
-    // 决策 2：会话默认即含安装源；其它 host 仍审批
+    // 决策 2：SRT 会话默认即含安装源；其它 host 仍审批。workspace 不建 SRT config
     const allowNetworkInstall = !egressGrants.runWithDeniedNetwork
     const diagnosticTargetHosts = diagnosticTargetHost && !egressGrants.runWithDeniedNetwork
       ? [diagnosticTargetHost]
@@ -1035,15 +1050,17 @@ export class ShellRunner {
       ? undefined
       : [...egressGrants.onceHosts, ...secretInjectHosts, ...preflightEgress]
 
-    const config = await buildSandboxConfigFromGrants({
-      grants,
-      allowNetworkInstall,
-      diagnosticTargetHosts,
-      sessionEgress,
-      onceEgressHosts,
-      sessionId: params.sessionId,
-      pipIndexUrls: getPythonSettings().pip_index_urls,
-    })
+    const config = useWorkspaceIsolation
+      ? undefined
+      : await buildSandboxConfigFromGrants({
+        grants: await this.deps.listGrants(params.sessionId),
+        allowNetworkInstall,
+        diagnosticTargetHosts,
+        sessionEgress,
+        onceEgressHosts,
+        sessionId: params.sessionId,
+        pipIndexUrls: getPythonSettings().pip_index_urls,
+      })
 
     const materializedCert = materializeBundledCaCert(grant.abs_path)
     // 有物化证书时始终注入 argv --cert（真 shell 亦然；env 由 sanitizeChildEnv 指向 grant 内路径）
@@ -1060,6 +1077,13 @@ export class ShellRunner {
     )
 
     const commandSummary = summarizeShellArgv(execArgv)
+    const resultSandbox = escalate !== 'unsandboxed' && !useWorkspaceIsolation
+    const bgIsolation: ShellIsolation = escalate === 'unsandboxed'
+      ? 'basic'
+      : useWorkspaceIsolation
+        ? 'workspace'
+        : 'full'
+    const pathNote = useWorkspaceIsolation ? WORKSPACE_PATH_NOTE : SHELL_PATH_NOTE
 
     if (wantBackground) {
       const jobTitleRaw = typeof params.title === 'string'
@@ -1085,7 +1109,9 @@ export class ShellRunner {
             reportOutput(stream, redactSecretsInText(chunk, plainSecretsForRedact))
           }
           try {
-            const sandboxAskCallback = egressGrants.runWithDeniedNetwork || escalate === 'unsandboxed'
+            const sandboxAskCallback = useWorkspaceIsolation
+              || egressGrants.runWithDeniedNetwork
+              || escalate === 'unsandboxed'
               ? undefined
               : createSandboxAskCallback({
                 sessionId: params.sessionId,
@@ -1111,7 +1137,22 @@ export class ShellRunner {
                 signal: linked.signal,
                 onOutput,
               })
+            } else if (useWorkspaceIsolation) {
+              result = await executeUnsandboxedOnce({
+                commandString: execCommandString,
+                normalizedArgv: execArgv,
+                useShellWrap,
+                cwdAbs,
+                grantRootAbs: grant.abs_path,
+                timeoutMs,
+                signal: linked.signal,
+                onOutput,
+                isolation: 'workspace',
+              })
             } else {
+              if (!config) {
+                throw new WorkspaceError('内部错误：沙箱配置未就绪')
+              }
               result = await executeSandboxOnce({
                 sessionId: params.sessionId,
                 commandString: execCommandString,
@@ -1156,12 +1197,14 @@ export class ShellRunner {
         async_hint: shellCommandJobAsyncHint(),
         poll_hint:
           `命令后台执行中（约 ${suggested ?? eta ?? 60}s）。系统通常已自动挂起，结束后通知续跑。勿 poll/sleep 查进度。`,
-        isolation: escalate === 'unsandboxed' ? 'basic' : 'full',
-        sandbox: escalate !== 'unsandboxed',
+        isolation: bgIsolation,
+        sandbox: resultSandbox,
       }
     }
 
-    const sandboxAskCallback = egressGrants.runWithDeniedNetwork || escalate === 'unsandboxed'
+    const sandboxAskCallback = useWorkspaceIsolation
+      || egressGrants.runWithDeniedNetwork
+      || escalate === 'unsandboxed'
       ? undefined
       : createSandboxAskCallback({
         sessionId: params.sessionId,
@@ -1188,7 +1231,21 @@ export class ShellRunner {
         timeoutMs,
         signal: params.signal,
       })
+    } else if (useWorkspaceIsolation) {
+      result = await executeUnsandboxedOnce({
+        commandString: execCommandString,
+        normalizedArgv: execArgv,
+        useShellWrap,
+        cwdAbs,
+        grantRootAbs: grant.abs_path,
+        timeoutMs,
+        signal: params.signal,
+        isolation: 'workspace',
+      })
     } else {
+      if (!config) {
+        throw new WorkspaceError('内部错误：沙箱配置未就绪')
+      }
       // spawn 不进全局大锁；仅 acquireFullSrt 内 initialize/reset 串行
       result = await executeSandboxOnce({
         sessionId: params.sessionId,
@@ -1229,10 +1286,10 @@ export class ShellRunner {
       command: execArgv,
       command_string: execCommandString,
       home_is_grant_root: true,
-      path_note: SHELL_PATH_NOTE,
+      path_note: pathNote,
       isolation: result.isolation,
       escalated: escalate === 'unsandboxed' || undefined,
-      sandbox: escalate !== 'unsandboxed',
+      sandbox: resultSandbox,
       platform: detectPlatformLabel(),
       duration_ms: Date.now() - started,
       python_runtime: pythonRuntimeInfo,

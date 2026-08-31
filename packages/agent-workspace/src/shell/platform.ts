@@ -16,6 +16,7 @@ import {
   isUnelevatedSpawnSupported,
   UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
 } from './windows-unelevated/index.js'
+import { resolveShellIsolationMode } from './isolation-mode.js'
 
 function nodePlatformToSandboxPlatform(): Platform | 'unsupported' {
   if (!SandboxManager.isSupportedPlatform()) return 'unsupported'
@@ -105,6 +106,22 @@ function windowsHint(canAutoInstall: boolean, unelevatedReady: boolean): string 
 
 export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
   const platform = nodePlatformToSandboxPlatform()
+
+  // Docker-first：默认 workspace 隔离，不依赖 bwrap / SRT
+  if (resolveShellIsolationMode() === 'workspace') {
+    return {
+      platform: platform === 'unsupported' ? 'unknown' : platform,
+      supported: true,
+      sandbox_available: false,
+      ready: true,
+      message: '命令在已授权工作区内运行（容器 + 工作区边界），无需系统级沙盒组件',
+      needs_elevation: false,
+      can_auto_install: false,
+      network_isolation_level: 'basic',
+      isolation_mode: 'workspace',
+    }
+  }
+
   if (platform === 'unsupported') {
     return {
       platform: 'unknown',
@@ -215,5 +232,6 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
     userns_restricted: usernsRestricted || undefined,
     windows_isolation_mode: windowsIsolationMode,
     network_isolation_level: networkIsolationLevel,
+    isolation_mode: 'srt',
   }
 }

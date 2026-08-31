@@ -56,7 +56,7 @@ export {
   NetworkEgressConfirmationRequiredError,
   ShellRunConfirmationRequiredError,
 } from './errors.js'
-export { buildGlobalDenyPaths, isPathDenied, isWorkspaceRootPath } from './deny.js'
+export { buildGlobalDenyPaths, isPathDenied, isSensitiveRelPath, isWorkspaceRootPath } from './deny.js'
 export {
   resolveSafePath,
   ensureDirectory,
@@ -286,6 +286,7 @@ export {
   syncCommandStringFromManagedArgv,
   commandNeedsNetwork,
   commandMayNeedEgressConfirmation,
+  extractExplicitHostsFromArgv,
   isNetworkDiagnosticCommand,
   parseDiagnosticTargetHost,
   parseCommandToArgv,
@@ -312,6 +313,7 @@ export {
   isEgressHostPreAuthorized,
   resetConfiguredAllowedDomainsForTests,
   getShellPlatformStatus,
+  resolveShellIsolationMode,
   PACKAGE_INSTALL_ALLOWED_DOMAINS,
   SRT_SUPPORTS_ALLOW_ALL_IN_ALLOWED_DOMAINS,
   resolveBundledCaCertPath,
@@ -351,6 +353,7 @@ export {
   type ShellSecretRef,
   type ShellIsolation,
   type ShellEscalate,
+  type OpptrixShellIsolationMode,
   type NetworkInstallPreflightResult,
   type NetworkEgressPreflightResult,
   startShellCommandJob,

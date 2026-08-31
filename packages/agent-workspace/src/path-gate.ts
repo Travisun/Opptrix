@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import fsSync from 'node:fs'
 import path from 'node:path'
 import { DenyPathError, PathEscapeError } from './errors.js'
-import { isPathDenied } from './deny.js'
+import { isPathDenied, isSensitiveRelPath } from './deny.js'
 
 function isUnderRoot(target: string, root: string): boolean {
   const rel = path.relative(root, target)
@@ -93,6 +93,10 @@ export async function resolveSafePath(
   }
   if (isPathDenied(resolved, denyPaths)) {
     throw new DenyPathError()
+  }
+  const relFromRoot = path.relative(rootReal, resolved)
+  if (isSensitiveRelPath(clean) || isSensitiveRelPath(relFromRoot)) {
+    throw new DenyPathError('该路径包含敏感文件或目录，无法访问（即使已授权工作区）')
   }
   return resolved
 }

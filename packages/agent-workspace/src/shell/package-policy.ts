@@ -161,6 +161,28 @@ export function commandMayNeedEgressConfirmation(argv: string[]): boolean {
   return INTERPRETER_BINARIES.has(bin) || isPythonLikeBinary(bin)
 }
 
+/**
+ * 从 argv 抽取显式 URL/主机（含 scheme 的参数）。
+ * 供工作区隔离软出站审批：能解析则先确认，无法解析则不假装硬拦。
+ */
+export function extractExplicitHostsFromArgv(argv: readonly string[]): string[] {
+  const hosts = new Set<string>()
+  for (const raw of argv) {
+    const t = String(raw ?? '').trim()
+    if (!t) continue
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(t) && !/^\/\/[^/]/.test(t)) continue
+    try {
+      const href = t.startsWith('//') ? `https:${t}` : t
+      const hostname = new URL(href).hostname
+      const normalized = hostname.trim().toLowerCase().replace(/\.$/, '')
+      if (normalized) hosts.add(normalized)
+    } catch {
+      /* ignore unparseable */
+    }
+  }
+  return [...hosts]
+}
+
 function isPipInstallArgv(argv: string[], bin: string): boolean {
   if (isPipLikeBinary(bin)) return true
   if (!isPythonLikeBinary(bin)) return false

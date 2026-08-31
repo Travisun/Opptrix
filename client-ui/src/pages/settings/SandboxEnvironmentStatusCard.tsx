@@ -48,11 +48,6 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
-  footerActions: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
 })
 
 type ShellInstallResult = {
@@ -61,7 +56,40 @@ type ShellInstallResult = {
   message?: string
 }
 
+const WORKSPACE_ISOLATION_DESC =
+  '命令仅限已授权文件夹；敏感路径受保护；默认可访问外网'
+
+/** 产品默认：工作区隔离（无需系统授权）。兼容 sibling 可能新增的 isolation_mode 字段。 */
+function isWorkspaceIsolationActive(status: SandboxPlatformStatus): boolean {
+  if (status.isolation_mode === 'workspace') return true
+  if (status.isolation_mode === 'srt') return false
+  // 自托管 / Web：无桌面授权路径，一律按工作区隔离呈现
+  if (!isElectron()) return true
+  // 就绪且无需系统授权 → 工作区隔离
+  if (
+    status.ready
+    && !status.needs_elevation
+    && !status.needs_windows_install
+    && !status.needs_linux_install
+  ) {
+    return true
+  }
+  // 基础网络约束 + 无 elevation 诉求
+  if (
+    status.network_isolation_level === 'basic'
+    && !status.needs_elevation
+    && !status.needs_windows_install
+    && !status.needs_linux_install
+  ) {
+    return true
+  }
+  return false
+}
+
+/** 仅桌面 + 显式需要系统授权时才露出「完成设置」（遗留完整隔离路径）。 */
 function needsSetupAction(status: SandboxPlatformStatus): boolean {
+  if (!isElectron()) return false
+  if (isWorkspaceIsolationActive(status)) return false
   return Boolean(
     status.can_auto_install
     && (status.needs_elevation || status.needs_windows_install || status.needs_linux_install),
@@ -69,15 +97,27 @@ function needsSetupAction(status: SandboxPlatformStatus): boolean {
 }
 
 function networkLevelLabel(level: SandboxPlatformStatus['network_isolation_level']): string {
-  if (level === 'full') return '完整隔离'
-  if (level === 'basic') return '基础隔离'
+  if (level === 'full') return '完整网络约束'
+  if (level === 'basic') return '确认与白名单'
   return '未启用'
 }
 
-export default function SandboxEnvironmentStatusCard(props?: {
-  isolationMode?: 'elevated' | 'unelevated'
-  onSwitchToBasic?: () => void
-}) {
+function displayMessage(status: SandboxPlatformStatus, workspaceActive: boolean): string {
+  if (workspaceActive) {
+    // 勿把「完整隔离未就绪」类后端文案吓到用户
+    if (
+      /完整隔离|系统授权|待完成|尚未就绪|AppArmor|userns|bwrap|SRT/i.test(status.message)
+      || !status.message.trim()
+    ) {
+      return status.ready
+        ? '工作区隔离已启用'
+        : '工作区隔离可用：命令受文件夹授权约束，默认可访问外网'
+    }
+  }
+  return status.message
+}
+
+export default function SandboxEnvironmentStatusCard() {
   const s = useStyles()
   const toast = useSettingsToast()
   const [loading, setLoading] = useState(true)
@@ -103,7 +143,7 @@ export default function SandboxEnvironmentStatusCard(props?: {
 
   const handleInstall = useCallback(async () => {
     if (!isElectron()) {
-      toast.showError('请在桌面版中完成系统授权')
+      toast.showError('当前环境无需系统授权，工作区隔离已可用')
       return
     }
     const platform = electronPlatform()
@@ -120,7 +160,7 @@ export default function SandboxEnvironmentStatusCard(props?: {
     try {
       const result = await installFn() as ShellInstallResult
       if (result.ok) {
-        toast.showSuccess(result.message ?? '命令隔离环境已就绪')
+        toast.showSuccess(result.message ?? '环境已就绪')
       } else if (result.cancelled) {
         toast.showError(result.message ?? '未完成系统授权')
       } else {
@@ -161,52 +201,63 @@ export default function SandboxEnvironmentStatusCard(props?: {
     )
   }
 
+  const workspaceActive = isWorkspaceIsolationActive(status)
   const showSetup = needsSetupAction(status)
-  const mode = props?.isolationMode
-    ?? status.windows_isolation_mode
-    ?? 'elevated'
-  const showSwitchToBasic = Boolean(
-    props?.onSwitchToBasic
-    && mode === 'elevated'
-    && !status.ready
-    && (status.platform === 'windows' || electronPlatform() === 'win32'),
-  )
+  const overallReady = status.ready || workspaceActive
 
   const isolationMeta = (() => {
-    if (!status.supported) {
+    if (!status.supported && !workspaceActive) {
       return {
-        desc: '当前系统暂不支持命令隔离',
+        desc: '当前系统暂不支持命令保护',
         badge: null as ReactNode,
       }
     }
-    if (status.ready) {
+    if (workspaceActive || status.ready) {
       return {
-        desc: mode === 'unelevated'
-          ? '助手运行命令时将启用基础隔离保护'
-          : '助手运行命令时将自动启用隔离保护',
+        desc: WORKSPACE_ISOLATION_DESC,
         badge: (
           <span className={mergeClasses(s.statusBadge, s.statusReady)}>
             <ShieldRegular fontSize={14} />
-            已启用
+            工作区隔离
           </span>
         ),
       }
     }
     return {
-      desc: '完成设置后，助手运行命令时将启用保护',
+      desc: '助手运行命令时将启用工作区隔离保护',
       badge: (
         <span className={mergeClasses(s.statusBadge, s.statusWarn)}>
-          待完成
+          待确认
         </span>
       ),
     }
+  })()
+
+  const networkMeta = (() => {
+    if (workspaceActive) {
+      return '默认可访问外网；文件夹授权与敏感路径仍受保护'
+    }
+    if (status.network_isolation_level === 'basic') {
+      return '出站由确认与白名单约束'
+    }
+    if (status.network_isolation_level === 'full') {
+      return '出站受更强系统约束'
+    }
+    return '出站由确认与白名单约束'
+  })()
+
+  const setupHintSafe = (() => {
+    if (!status.setup_hint) return undefined
+    if (workspaceActive) return undefined
+    if (/完整隔离|bwrap|SRT|AppArmor|userns/i.test(status.setup_hint)) return undefined
+    return status.setup_hint
   })()
 
   return (
     <div className={s.sectionBlock}>
       <SettingsListPanel>
         <SettingsAddBar
-          meta={status.message}
+          meta={displayMessage(status, workspaceActive)}
           actions={(
             <>
               <OpptrixButton
@@ -218,7 +269,7 @@ export default function SandboxEnvironmentStatusCard(props?: {
               >
                 {refreshing ? '刷新中…' : '刷新状态'}
               </OpptrixButton>
-              {showSetup && mode === 'elevated' && (
+              {showSetup && (
                 <OpptrixButton
                   variant="primary"
                   size="small"
@@ -234,12 +285,16 @@ export default function SandboxEnvironmentStatusCard(props?: {
 
         <SettingsListRow
           title="总体就绪"
-          meta={status.ready ? '命令隔离环境已准备完成' : '部分能力尚未就绪'}
+          meta={
+            overallReady
+              ? '工作区隔离已就绪，可安全运行受控命令'
+              : '请刷新状态；若仍不可用，请确认已授权工作区文件夹'
+          }
           trailing={(
-            <span className={mergeClasses(s.statusBadge, status.ready && s.statusReady)}>
-              {status.ready
+            <span className={mergeClasses(s.statusBadge, overallReady && s.statusReady)}>
+              {overallReady
                 ? <><CheckmarkCircleRegular fontSize={14} /> 已就绪</>
-                : '待完成'}
+                : '待确认'}
             </span>
           )}
         />
@@ -251,44 +306,26 @@ export default function SandboxEnvironmentStatusCard(props?: {
         />
 
         <SettingsListRow
-          title="网络隔离能力"
-          meta={
-            status.network_isolation_level === 'basic'
-              ? '基础隔离：出站由确认与白名单约束'
-              : status.network_isolation_level === 'full'
-                ? '完整隔离：出站受更强保护'
-                : '当前未启用网络隔离保护'
-          }
+          title="网络访问"
+          meta={networkMeta}
           trailing={(
             <span className={s.statusBadge}>
-              {networkLevelLabel(status.network_isolation_level)}
+              {workspaceActive
+                ? '确认与白名单'
+                : networkLevelLabel(status.network_isolation_level)}
             </span>
           )}
         />
 
-        {(status.setup_hint || showSetup || showSwitchToBasic) && (
+        {(setupHintSafe || showSetup) && (
           <div className={s.footerHint}>
-            {status.setup_hint && (
-              <Text className={s.footerHintText} block>{status.setup_hint}</Text>
+            {setupHintSafe && (
+              <Text className={s.footerHintText} block>{setupHintSafe}</Text>
             )}
-            {showSetup && !status.setup_hint && mode === 'elevated' && (
+            {showSetup && !setupHintSafe && (
               <Text className={s.footerHintText} block>
-                待完成一次系统授权，完成后即可启用完整隔离。
+                当前环境需要一次系统授权后才能启用更强保护；日常使用工作区隔离即可。
               </Text>
-            )}
-            {showSwitchToBasic && (
-              <div className={s.footerActions}>
-                <Text className={s.footerHintText} block>
-                  完整隔离尚未就绪时，可先改用基础隔离继续使用。
-                </Text>
-                <OpptrixButton
-                  variant="secondary"
-                  size="small"
-                  onClick={() => props?.onSwitchToBasic?.()}
-                >
-                  改用基础隔离
-                </OpptrixButton>
-              </div>
             )}
           </div>
         )}

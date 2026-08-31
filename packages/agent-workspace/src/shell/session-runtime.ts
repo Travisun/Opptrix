@@ -8,7 +8,7 @@ import {
   type SandboxRuntimeConfig,
 } from '@anthropic-ai/sandbox-runtime'
 
-export type ShellIsolation = 'full' | 'basic'
+export type ShellIsolation = 'full' | 'basic' | 'workspace'
 
 type SandboxAskCallback = (params: {
   host: string

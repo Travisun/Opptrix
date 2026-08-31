@@ -5,8 +5,8 @@ export type ShellNetworkIntent = 'none' | 'install'
 /** 升权：默认围栏内；unsandboxed 每次人批、禁止 session sticky */
 export type ShellEscalate = 'none' | 'unsandboxed'
 
-/** 完整隔离（SRT）| 基础隔离（如 Windows unelevated） */
-export type ShellIsolation = 'full' | 'basic'
+/** 完整隔离（SRT）| 基础隔离（如 Windows unelevated）| 工作区隔离（grant+Deny，无 SRT） */
+export type ShellIsolation = 'full' | 'basic' | 'workspace'
 
 /** opptrix_run 引用保险箱条目 — 仅传名字；host 注入 sentinel，明文不进子进程 env */
 export interface ShellSecretRef {
@@ -86,12 +86,13 @@ export interface ShellRunResult {
   home_is_grant_root?: true
   /** 路径语义短提示（无绝对路径） */
   path_note?: string
-  /** 完整 | 基础隔离；unsandboxed 时仍标 basic 并带 escalated */
+  /** 完整 | 基础 | 工作区隔离；unsandboxed 时仍标 basic 并带 escalated */
   isolation: ShellIsolation
   /** 是否以出围栏方式执行（每次确认） */
   escalated?: boolean
   blocked_by?: string
   suggested_escalate?: 'network' | 'unsandboxed' | string
+  /** SRT 完整隔离为 true；workspace / unsandboxed 为 false */
   sandbox: boolean
   platform: Platform
   duration_ms: number
@@ -128,6 +129,8 @@ export interface ShellPlatformStatus {
   windows_isolation_mode?: 'elevated' | 'unelevated'
   /** 用户向：网络隔离能力级别 */
   network_isolation_level?: ShellNetworkIsolationLevel
+  /** 产品隔离形态：默认 workspace；OPPTRIX_SHELL_ISOLATION=srt 时为 srt */
+  isolation_mode?: 'workspace' | 'srt'
 }
 
 export interface ShellInstallParams {

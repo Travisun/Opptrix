@@ -42,7 +42,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     desc: '管理使用中自动优化分析习惯',
     keywords: ['自进化', '进化', '合入', '更新记录', '关闭自进化', '分析习惯'],
   },
-  { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
+  { section: 'sandbox', title: '工作区隔离', desc: '查看命令保护与网络访问规则', keywords: ['沙盒', '沙盒环境', '命令隔离', '工作区隔离'] },
   { section: 'schedule', title: '计划任务', desc: '管理定时任务', keywords: ['定时', '自动执行'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
   { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
@@ -129,7 +129,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'news_feed', group: '更新', title: '自动刷新间隔', desc: '打开新闻中心时后台拉取', keywords: ['刷新', '间隔'] },
   { section: 'news_feed', group: '更新', title: '上次更新', keywords: ['拉取时间'] },
 
-  // 沙盒环境
+  // 工作区隔离 / 沙盒
+  { section: 'sandbox', title: '环境状态', desc: '工作区隔离是否就绪', keywords: ['工作区隔离', '就绪', '命令保护'] },
   { section: 'sandbox', title: '永久允许的目标', desc: '出站访问白名单', keywords: ['白名单', '域名', '网络'] },
   { section: 'sandbox', title: '允许局域网访问', desc: '授权本地网络内的目标', keywords: ['局域网', '本地', '私网'] },
 
@@ -184,7 +185,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   mcp_servers: 'MCP 服务',
   agent_skills: '工作流技能',
   self_evolve: '自进化',
-  sandbox: '沙盒',
+  sandbox: '工作区隔离',
   schedule: '计划任务',
   python: 'Python',
   portfolio_fees: '组合费率',

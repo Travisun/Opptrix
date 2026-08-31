@@ -18,7 +18,6 @@ import {
 import { useSettingsToast } from './SettingsToast'
 import SettingsMonospaceEditor from './SettingsMonospaceEditor'
 import SandboxEnvironmentStatusCard from './SandboxEnvironmentStatusCard'
-import { isElectron, electronPlatform } from '../../platform/detect'
 
 export interface SandboxSettings {
   allowed_domains: string[]
@@ -85,11 +84,6 @@ const useStyles = makeStyles({
     lineHeight: 1.5,
     padding: '8px 2px 0',
   },
-  isolationBtnRow: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
 })
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
@@ -121,7 +115,6 @@ export default function SandboxSettingsSection() {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const skipSave = useRef(true)
   const baseline = useRef<SandboxSettings | null>(null)
-  const showWindowsIsolation = !isElectron() || electronPlatform() === 'win32'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -248,49 +241,9 @@ export default function SandboxSettingsSection() {
       {tab === 'status' && (
         <>
           <Text className={s.tabHint} block>
-            查看命令隔离环境是否就绪，完成系统授权后即可启用保护。
+            默认启用工作区隔离：命令仅限已授权文件夹，敏感路径受保护；默认可访问外网。
           </Text>
-          {showWindowsIsolation && (
-            <SettingsGroup>
-              <SettingsRow
-                title="隔离强度"
-                desc={
-                  settings.windows_isolation_mode === 'unelevated'
-                    ? '基础隔离：降低权限，出站由确认与白名单约束'
-                    : '完整隔离：更强保护，首次使用可能需要系统授权'
-                }
-                control={(
-                  <div className={s.isolationBtnRow}>
-                    <OpptrixButton
-                      variant={settings.windows_isolation_mode === 'elevated' ? 'primary' : 'secondary'}
-                      size="small"
-                      onClick={() => {
-                        setSettings(prev => ({ ...prev, windows_isolation_mode: 'elevated' }))
-                      }}
-                    >
-                      完整隔离
-                    </OpptrixButton>
-                    <OpptrixButton
-                      variant={settings.windows_isolation_mode === 'unelevated' ? 'primary' : 'secondary'}
-                      size="small"
-                      onClick={() => {
-                        setSettings(prev => ({ ...prev, windows_isolation_mode: 'unelevated' }))
-                      }}
-                    >
-                      基础隔离
-                    </OpptrixButton>
-                  </div>
-                )}
-                last
-              />
-            </SettingsGroup>
-          )}
-          <SandboxEnvironmentStatusCard
-            isolationMode={settings.windows_isolation_mode}
-            onSwitchToBasic={() => {
-              setSettings(prev => ({ ...prev, windows_isolation_mode: 'unelevated' }))
-            }}
-          />
+          <SandboxEnvironmentStatusCard />
           <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
             {saveHintText}
           </Text>
