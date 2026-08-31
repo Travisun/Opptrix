@@ -18,6 +18,13 @@ export type ChatLocalNotificationResult =
   | 'denied'
   | 'failed'
 
+/** Web 通知点击 → 打开会话（与桌面协议路由同形，由 useDesktopShell 消费） */
+export const OPPTRIX_OPEN_CHAT_EVENT = 'opptrix:open-chat'
+
+export type OpptrixOpenChatDetail = {
+  sessionId?: string
+}
+
 const BODY_MAX = 120
 
 function isElectronRuntime(): boolean {
@@ -121,24 +128,89 @@ export async function resolveWindowFocused(): Promise<boolean> {
   return false
 }
 
+/** 浏览器是否提供 Notification API（不含 Push） */
+export function isWebNotificationSupported(): boolean {
+  return typeof Notification !== 'undefined'
+}
+
 /**
- * Electron 下按注意力状态决定是否展示本地通知；Web / 失败静默 no-op。
- * 返回结果便于权限被拒时做一次温和引导。
+ * 聚焦窗口并派发打开会话事件（Web 通知点击 / 测试复用）。
+ */
+export function dispatchOpenChatFromNotification(sessionId?: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.focus()
+  } catch {
+    /* ignore */
+  }
+  const trimmed = typeof sessionId === 'string' ? sessionId.trim() : ''
+  const detail: OpptrixOpenChatDetail = trimmed ? { sessionId: trimmed } : {}
+  window.dispatchEvent(new CustomEvent(OPPTRIX_OPEN_CHAT_EVENT, { detail }))
+}
+
+async function ensureWebNotificationPermission(): Promise<NotificationPermission> {
+  if (!isWebNotificationSupported()) return 'denied'
+  if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+    return Notification.permission
+  }
+  try {
+    return await Notification.requestPermission()
+  } catch {
+    return 'denied'
+  }
+}
+
+async function showWebChatNotification(
+  payload: LocalNotificationPayload,
+): Promise<ChatLocalNotificationResult> {
+  if (!isWebNotificationSupported()) return 'skipped'
+
+  const permission = await ensureWebNotificationPermission()
+  if (permission === 'denied') return 'denied'
+  if (permission !== 'granted') return 'failed'
+
+  try {
+    const notification = new Notification(payload.title, {
+      body: payload.body,
+      tag: payload.tag,
+      silent: payload.silent === true,
+    })
+    notification.onclick = () => {
+      dispatchOpenChatFromNotification(payload.sessionId)
+      try {
+        notification.close()
+      } catch {
+        /* ignore */
+      }
+    }
+    return 'shown'
+  } catch {
+    return 'failed'
+  }
+}
+
+/**
+ * 按注意力状态决定是否展示本地通知（Electron IPC 或浏览器 Notification）。
+ * 无 Push；返回结果便于权限被拒时做一次温和引导。
  */
 export async function maybeShowChatLocalNotification(
   targetSessionId: string,
   attention: ChatNotificationAttention,
   payload: LocalNotificationPayload,
 ): Promise<ChatLocalNotificationResult> {
-  if (!isElectronRuntime()) return 'skipped'
   if (!shouldNotify(targetSessionId, attention)) return 'skipped'
-  try {
-    const shown = await window.electronAPI?.showLocalNotification?.(payload)
-    if (shown) return 'shown'
-    const permission = await window.electronAPI?.notificationGetPermission?.()
-    if (permission === 'denied') return 'denied'
-    return 'failed'
-  } catch {
-    return 'failed'
+
+  if (isElectronRuntime()) {
+    try {
+      const shown = await window.electronAPI?.showLocalNotification?.(payload)
+      if (shown) return 'shown'
+      const permission = await window.electronAPI?.notificationGetPermission?.()
+      if (permission === 'denied') return 'denied'
+      return 'failed'
+    } catch {
+      return 'failed'
+    }
   }
+
+  return showWebChatNotification(payload)
 }

@@ -1,4 +1,5 @@
 import type { SettingsSection } from './settingsTypes'
+import { isElectron } from '../../platform/detect'
 
 export interface SettingsSearchEntry {
   section: SettingsSection
@@ -6,6 +7,8 @@ export interface SettingsSearchEntry {
   title: string
   desc?: string
   keywords?: string[]
+  /** 仅桌面壳展示（如登录托盘启动） */
+  desktopOnly?: boolean
 }
 
 function fold(text: string): string {
@@ -40,7 +43,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: ['自进化', '进化', '合入', '更新记录', '关闭自进化', '分析习惯'],
   },
   { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
-  { section: 'schedule', title: '计划任务', desc: '管理定时任务与开机启动', keywords: ['定时', '自动执行', '开机启动'] },
+  { section: 'schedule', title: '计划任务', desc: '管理定时任务', keywords: ['定时', '自动执行'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
   { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
@@ -133,7 +136,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // 计划任务
   { section: 'schedule', title: '启用计划任务', desc: '关闭后，任务不会自动执行', keywords: ['总开关', '执行'] },
   { section: 'schedule', title: '允许任务运行受控脚本', desc: '默认只跑智能体任务；开启后才可执行脚本类任务', keywords: ['脚本'] },
-  { section: 'schedule', title: '登录时在托盘启动', desc: '开机后在托盘运行，便于按时执行任务', keywords: ['开机启动', '登录启动', '托盘'] },
+  { section: 'schedule', title: '登录时在托盘启动', desc: '开机后在托盘运行，便于按时执行任务', keywords: ['开机启动', '登录启动', '托盘'], desktopOnly: true },
 
   // Python 环境
   { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },
@@ -152,7 +155,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // 翻译
   { section: 'translation', group: '翻译服务', title: '服务类型', desc: '离线优先或远程大模型', keywords: ['离线', '远程', 'offline', 'remote'] },
-  { section: 'translation', group: '离线翻译', title: '离线翻译模型', desc: '本地下载 HY-MT 等模型', keywords: ['HY-MT', 'GGUF', '下载', '腾讯'] },
+  { section: 'translation', group: '离线翻译', title: '离线翻译模型', desc: '本地下载 HY-MT 等模型', keywords: ['HY-MT', 'GGUF', '下载', '腾讯', '离线翻译'] },
   { section: 'translation', group: '远程翻译', title: '提供商', desc: '远程翻译 API 提供商' },
   { section: 'translation', group: '远程翻译', title: '模型名称', desc: '远程翻译使用的模型' },
 
@@ -203,6 +206,7 @@ export function searchSettingsEntries(
   const hits: SettingsSearchEntry[] = []
 
   for (const entry of [...SETTINGS_SEARCH_INDEX, ...dynamic]) {
+    if (entry.desktopOnly && !isElectron()) continue
     const hay = haystack(entry)
     if (!tokens.every(token => hay.includes(token))) continue
     const key = `${entry.section}\0${entry.group ?? ''}\0${entry.title}`

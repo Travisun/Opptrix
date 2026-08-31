@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@opptrix/shared": "*",
     "ffmpeg-static": "^5.2.0",
     "nodejs-whisper": "^0.3.0"
   },

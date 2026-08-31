@@ -62,6 +62,23 @@ export {
   ensureDirectory,
   RELATIVE_PATH_CONTRACT_HINT,
 } from './path-gate.js'
+export {
+  MOUNTS_SUBDIR,
+  MAX_BROWSE_DIR_ENTRIES,
+  MAX_BROWSE_REL_DEPTH,
+  resolveMountsRoot,
+  emptyMountsReason,
+  listMountRoots,
+  collectGrantAllowlistRootsSync,
+  isGrantPathAllowlisted,
+  assertGrantPathAllowed,
+  resolveBrowseRootAbs,
+  browseWorkspaceDirs,
+  type WorkspaceMountRoot,
+  type WorkspaceBrowseEntry,
+  type WorkspaceBrowseResult,
+  type AssertGrantPathOptions,
+} from './mounts.js'
 export { assertAllowedUrl, assertAllowedHost } from './ssrf.js'
 export {
   GrantStore,

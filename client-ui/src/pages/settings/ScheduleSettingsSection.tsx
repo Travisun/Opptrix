@@ -19,6 +19,7 @@ import {
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { listRowKey } from '../../utils/listRowKey'
+import { isElectron } from '../../platform/detect'
 
 const useStyles = makeStyles({
   root: {
@@ -172,24 +173,26 @@ export default function ScheduleSettingsSection() {
         </SettingsGroup>
       </div>
 
-      <div className={s.sectionBlock}>
-        <SettingsSectionLabel>开机启动</SettingsSectionLabel>
-        <SettingsGroup>
-          <SettingsRow
-            title="登录时在托盘启动"
-            desc="默认开启；登录后在托盘运行，便于按时执行任务"
-            control={(
-              <Switch
-                checked={settings.autostart}
-                disabled={!settings.master_enabled}
-                onChange={(_, data) => { void patchSettings({ autostart: Boolean(data.checked) }) }}
-                aria-label="登录时在托盘启动"
-              />
-            )}
-            last
-          />
-        </SettingsGroup>
-      </div>
+      {isElectron() && (
+        <div className={s.sectionBlock}>
+          <SettingsSectionLabel>开机启动</SettingsSectionLabel>
+          <SettingsGroup>
+            <SettingsRow
+              title="登录时在托盘启动"
+              desc="默认开启；登录后在托盘运行，便于按时执行任务"
+              control={(
+                <Switch
+                  checked={settings.autostart}
+                  disabled={!settings.master_enabled}
+                  onChange={(_, data) => { void patchSettings({ autostart: Boolean(data.checked) }) }}
+                  aria-label="登录时在托盘启动"
+                />
+              )}
+              last
+            />
+          </SettingsGroup>
+        </div>
+      )}
 
       <div className={s.sectionBlock}>
         <SettingsSectionLabel>任务列表</SettingsSectionLabel>

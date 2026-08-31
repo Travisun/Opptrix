@@ -30,7 +30,7 @@ function speechApiBase(): string {
 
 /**
  * POST /api/speech/transcribe（octet-stream + X-Speech-Mime）。
- * 仅作 IPC `speechTranscribe` 缺失时的可选兜底；网络不可达返回 null。
+ * 主路径；网络不可达时返回 null，由调用方再试桌面壳兜底。
  */
 async function transcribeViaApi(
   data: ArrayBuffer,
@@ -106,19 +106,24 @@ function computeRms(analyser: AnalyserNode, buffer: Float32Array<ArrayBuffer>): 
 }
 
 /**
- * Composer 语音输入：点按开始 → 说完静音自动结束（也可再点一次）→ 本机转写。
- * 仅 Electron 桌面端可用。对齐安装版：录音前无 status 门禁；转写主路径为 speechTranscribe IPC。
+ * Composer 语音输入：点按开始 → 说完静音自动结束（也可再点一次）→ 转写。
+ * 优先 HTTP `/api/speech/transcribe`；不可达时再试桌面壳兜底。
  */
+function speechRecordingSupported(): boolean {
+  if (typeof window === 'undefined') return false
+  if (typeof MediaRecorder === 'undefined') return false
+  if (!navigator.mediaDevices?.getUserMedia) return false
+  // 浏览器需安全上下文才能用麦克风；桌面壳不受此限
+  if (!isElectron() && !window.isSecureContext) return false
+  return true
+}
+
 export function useComposerSpeech({
   disabled = false,
   onTranscript,
   onError,
 }: UseComposerSpeechOptions) {
-  const available = isElectron()
-    && typeof window !== 'undefined'
-    && Boolean(window.electronAPI?.speechTranscribe)
-    && typeof MediaRecorder !== 'undefined'
-    && Boolean(navigator.mediaDevices?.getUserMedia)
+  const available = speechRecordingSupported()
 
   const [phase, setPhase] = useState<ComposerSpeechPhase>('idle')
   const [statusHint, setStatusHint] = useState<string | null>(null)
@@ -207,14 +212,13 @@ export function useComposerSpeech({
       const mime = blob.type || mimeRef.current
       const buffer = await blob.arrayBuffer()
 
-      // 安装版主路径：IPC speechTranscribe；HTTP 仅 IPC 缺失时兜底
-      let result: TranscribeResult | null | undefined =
-        await window.electronAPI?.speechTranscribe?.({
+      // 优先 HTTP；不可达（null）时再试桌面壳兜底
+      let result: TranscribeResult | null | undefined = await transcribeViaApi(buffer, mime)
+      if (result == null) {
+        result = await window.electronAPI?.speechTranscribe?.({
           data: buffer,
           mime,
         })
-      if (!result) {
-        result = await transcribeViaApi(buffer, mime)
       }
 
       if (!result || !result.ok) {

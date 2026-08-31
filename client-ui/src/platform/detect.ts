@@ -133,6 +133,8 @@ export type TranslationModelsResult = {
   catalog: TranslationModelCatalogItem[]
   installed: TranslationInstalledModel[]
   defaultDownloadSource?: string
+  /** 相对数据根的目录标签（服务端 HTTP）；与 downloadDir 二选一兼容 */
+  downloadDirLabel?: string
   downloadDir?: string
 }
 
@@ -152,6 +154,8 @@ export type TranslationEngineStatus = {
   canTranslate?: boolean
   downloading?: boolean
   download?: TranslationDownloadProgress | null
+  /** 相对数据根的目录标签（服务端 HTTP）；与 downloadDir 二选一兼容 */
+  downloadDirLabel?: string
   downloadDir?: string
 }
 

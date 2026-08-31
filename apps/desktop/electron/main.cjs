@@ -309,14 +309,9 @@ function registerBootHooksIfNeeded() {
     startSidecarHealthWatchdog,
     startScheduleReconcilePoll,
     initUpdater: () => initUpdater({ version: VERSION }),
+    // 设置保存后服务端自行 bootstrap 离线模型；主进程不再下载 / 推送进度（renderer 轮询 HTTP status）
     maybeBootstrapOfflineModelDownloads: () => {
-      void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('translation-download-progress', progress)
-          }
-        }
-      })
+      void maybeBootstrapOfflineModelDownloads(repoRoot())
     },
     requestNotificationPermission: () => {
       if (app.isPackaged) void requestNotificationPermission()
@@ -1606,14 +1601,9 @@ function registerWindowIpc() {
     return resolved
   })
 
-  // 立即 ack `{ started, download }`；GGUF 在后台继续，进度走 translation-download-progress / translation-get-status.download
-  ipcMain.handle('translation-start-download', async (event, modelId) => {
-    const sender = event.sender
-    return startTranslationModelDownload(repoRoot(), String(modelId ?? ''), progress => {
-      if (!sender.isDestroyed()) {
-        sender.send('translation-download-progress', progress)
-      }
-    })
+  // 立即 ack `{ started, download }`；GGUF 在服务端下载，进度由 renderer 轮询 GET /api/news/translation/status
+  ipcMain.handle('translation-start-download', async (_event, modelId) => {
+    return startTranslationModelDownload(repoRoot(), String(modelId ?? ''))
   })
 
   ipcMain.handle('translation-cancel-download', async () => {

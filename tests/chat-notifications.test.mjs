@@ -4,9 +4,13 @@ import assert from 'node:assert/strict'
 import {
   buildChatAskNotification,
   buildChatDoneNotification,
+  dispatchOpenChatFromNotification,
   isAttendingChat,
   isAwayFromForeground,
   isChatTurnCompleteEvent,
+  isWebNotificationSupported,
+  maybeShowChatLocalNotification,
+  OPPTRIX_OPEN_CHAT_EVENT,
   shouldNotify,
   truncateNotificationText,
 } from '../client-ui/src/platform/chatNotifications.ts'
@@ -112,6 +116,145 @@ describe('chat notification builders', () => {
   it('truncateNotificationText collapses whitespace', () => {
     assert.equal(truncateNotificationText('  a   b  '), 'a b')
     assert.equal(truncateNotificationText(''), '')
+  })
+})
+
+describe('web notification helpers', () => {
+  const away = {
+    activeSessionId: 'sess-1',
+    view: 'chat',
+    documentVisible: false,
+    windowFocused: false,
+  }
+
+  it('isWebNotificationSupported is false without Notification in Node', () => {
+    assert.equal(isWebNotificationSupported(), false)
+  })
+
+  it('maybeShowChatLocalNotification skips when attending (web or electron)', async () => {
+    const attending = {
+      activeSessionId: 'sess-1',
+      view: 'chat',
+      documentVisible: true,
+      windowFocused: true,
+    }
+    const result = await maybeShowChatLocalNotification(
+      'sess-1',
+      attending,
+      buildChatDoneNotification('sess-1', 't'),
+    )
+    assert.equal(result, 'skipped')
+  })
+
+  it('maybeShowChatLocalNotification skips web path when Notification unsupported', async () => {
+    const result = await maybeShowChatLocalNotification(
+      'sess-1',
+      away,
+      buildChatDoneNotification('sess-1', 't'),
+    )
+    assert.equal(result, 'skipped')
+  })
+
+  it('maybeShowChatLocalNotification shows via mocked Notification when not attending', async () => {
+    const calls = []
+    /** @type {Array<{ type: string, detail: unknown }>} */
+    const events = []
+    const FakeNotification = class {
+      static permission = 'granted'
+      static requestPermission = async () => 'granted'
+      /**
+       * @param {string} title
+       * @param {NotificationOptions} [opts]
+       */
+      constructor(title, opts) {
+        calls.push({ title, opts })
+        this.onclick = null
+      }
+      close() {}
+    }
+    const g = globalThis
+    const prevNotification = g.Notification
+    const prevWindow = g.window
+    g.Notification = FakeNotification
+    g.window = {
+      focus() {},
+      dispatchEvent(ev) {
+        events.push({ type: ev.type, detail: ev.detail })
+        return true
+      },
+    }
+    try {
+      const result = await maybeShowChatLocalNotification(
+        'sess-9',
+        away,
+        buildChatAskNotification('sess-9', '请确认'),
+      )
+      assert.equal(result, 'shown')
+      assert.equal(calls.length, 1)
+      assert.equal(calls[0].title, '需要你的确认')
+      assert.equal(calls[0].opts?.tag, 'chat:ask:sess-9')
+      assert.equal(typeof calls[0].opts?.silent, 'boolean')
+
+      const n = new FakeNotification('x', {})
+      n.onclick = () => {
+        dispatchOpenChatFromNotification('sess-9')
+      }
+      n.onclick()
+      assert.equal(events.some((e) => e.type === OPPTRIX_OPEN_CHAT_EVENT), true)
+      const open = events.find((e) => e.type === OPPTRIX_OPEN_CHAT_EVENT)
+      assert.deepEqual(open?.detail, { sessionId: 'sess-9' })
+    } finally {
+      if (prevNotification === undefined) delete g.Notification
+      else g.Notification = prevNotification
+      if (prevWindow === undefined) delete g.window
+      else g.window = prevWindow
+    }
+  })
+
+  it('maybeShowChatLocalNotification returns denied when permission denied', async () => {
+    const FakeNotification = class {
+      static permission = 'denied'
+      static requestPermission = async () => 'denied'
+      constructor() {
+        throw new Error('should not construct')
+      }
+    }
+    const g = globalThis
+    const prev = g.Notification
+    g.Notification = FakeNotification
+    try {
+      const result = await maybeShowChatLocalNotification(
+        'sess-1',
+        away,
+        buildChatDoneNotification('sess-1'),
+      )
+      assert.equal(result, 'denied')
+    } finally {
+      if (prev === undefined) delete g.Notification
+      else g.Notification = prev
+    }
+  })
+
+  it('dispatchOpenChatFromNotification emits custom event', () => {
+    const events = []
+    const g = globalThis
+    const prevWindow = g.window
+    g.window = {
+      focus() {},
+      dispatchEvent(ev) {
+        events.push(ev)
+        return true
+      },
+    }
+    try {
+      dispatchOpenChatFromNotification('abc')
+      assert.equal(events.length, 1)
+      assert.equal(events[0].type, OPPTRIX_OPEN_CHAT_EVENT)
+      assert.deepEqual(events[0].detail, { sessionId: 'abc' })
+    } finally {
+      if (prevWindow === undefined) delete g.window
+      else g.window = prevWindow
+    }
   })
 })
 

@@ -165,25 +165,32 @@ test('sticky persists for session and clears on deleteSession', async () => {
 })
 
 test('grant store clears on session delete', async () => {
-  const grants = new GrantStore()
-  const sessionId = 'grant-sess'
-  await grants.ensureDefaultRoot(sessionId)
-  grants.addGrant(sessionId, os.tmpdir(), 'ro', 'tmp')
-  assert.equal(grants.listGrants(sessionId).length, 3)
-  grants.clearSession(sessionId)
-  assert.equal(grants.listGrants(sessionId).length, 0)
+  await withTmpDataDir(async (tmp) => {
+    const mountDir = path.join(tmp, 'mounts', 'extra')
+    await fs.mkdir(mountDir, { recursive: true })
+    const grants = new GrantStore()
+    const sessionId = 'grant-sess'
+    await grants.ensureDefaultRoot(sessionId)
+    grants.addGrant(sessionId, mountDir, 'ro', 'tmp')
+    assert.equal(grants.listGrants(sessionId).length, 3)
+    grants.clearSession(sessionId)
+    assert.equal(grants.listGrants(sessionId).length, 0)
+  })
 })
 
-test('agent cannot read deny paths via workspace service', async () => {
+test('agent cannot grant deny paths via workspace service', async () => {
   await withTmpDataDir(async (tmp) => {
     const svc = new WorkspaceService()
     const sessionId = 'deny-read'
     const dbPath = path.join(tmp, 'opptrix.db')
     await fs.writeFile(dbPath, 'secret-db')
-    svc.addGrant(sessionId, tmp, 'rw', 'userData')
-    await assert.rejects(
-      () => svc.readFile(sessionId, svc.getGrantStore().listGrants(sessionId).find(g => !g.is_default).root_id, 'opptrix.db'),
-      /保护|拒绝|Deny|路径/,
+    assert.throws(
+      () => svc.addGrant(sessionId, dbPath, 'rw', 'db'),
+      /保护|拒绝|Deny|无法授权/,
+    )
+    assert.throws(
+      () => svc.addGrant(sessionId, tmp, 'rw', 'userData'),
+      /已挂载|工作区|公共资产|无法授权|保护/,
     )
   })
 })
@@ -251,34 +258,44 @@ test('deleteSessionStateDirectory removes session-state dir idempotently', async
 })
 
 test('listGrants orders default then shared then extras', async () => {
-  const grants = new GrantStore()
-  const sessionId = 'order-sess'
-  await grants.ensureDefaultRoot(sessionId)
-  grants.addGrant(sessionId, os.tmpdir(), 'ro', 'extra-a')
-  grants.addGrant(sessionId, path.join(os.tmpdir(), 'b'), 'rw', 'extra-b')
-  const listed = grants.listGrants(sessionId)
-  assert.equal(listed.length, 4)
-  assert.equal(listed[0].is_default, true)
-  assert.equal(listed[1].root_id, SHARED_ROOT_ID)
-  assert.equal(listed[1].label, '公共资产')
-  assert.ok(listed[2].root_id.startsWith('grant_'))
-  assert.ok(listed[3].root_id.startsWith('grant_'))
+  await withTmpDataDir(async (tmp) => {
+    const a = path.join(tmp, 'mounts', 'extra-a')
+    const b = path.join(tmp, 'mounts', 'extra-b')
+    await fs.mkdir(a, { recursive: true })
+    await fs.mkdir(b, { recursive: true })
+    const grants = new GrantStore()
+    const sessionId = 'order-sess'
+    await grants.ensureDefaultRoot(sessionId)
+    grants.addGrant(sessionId, a, 'ro', 'extra-a')
+    grants.addGrant(sessionId, b, 'rw', 'extra-b')
+    const listed = grants.listGrants(sessionId)
+    assert.equal(listed.length, 4)
+    assert.equal(listed[0].is_default, true)
+    assert.equal(listed[1].root_id, SHARED_ROOT_ID)
+    assert.equal(listed[1].label, '公共资产')
+    assert.ok(listed[2].root_id.startsWith('grant_'))
+    assert.ok(listed[3].root_id.startsWith('grant_'))
+  })
 })
 
 test('removeGrant rejects default and shared grants', async () => {
-  const grants = new GrantStore()
-  const sessionId = 'remove-builtin'
-  await grants.ensureDefaultRoot(sessionId)
-  const listed = grants.listGrants(sessionId)
-  const defaultGrant = listed.find(g => g.is_default)
-  const sharedGrant = listed.find(g => g.root_id === SHARED_ROOT_ID)
-  assert.ok(defaultGrant)
-  assert.ok(sharedGrant)
-  assert.equal(grants.removeGrant(sessionId, defaultGrant.id), false)
-  assert.equal(grants.removeGrant(sessionId, sharedGrant.id), false)
-  const extra = grants.addGrant(sessionId, os.tmpdir(), 'ro', 'tmp')
-  assert.equal(grants.removeGrant(sessionId, extra.id), true)
-  assert.equal(grants.listGrants(sessionId).length, 2)
+  await withTmpDataDir(async (tmp) => {
+    const mountDir = path.join(tmp, 'mounts', 'removable')
+    await fs.mkdir(mountDir, { recursive: true })
+    const grants = new GrantStore()
+    const sessionId = 'remove-builtin'
+    await grants.ensureDefaultRoot(sessionId)
+    const listed = grants.listGrants(sessionId)
+    const defaultGrant = listed.find(g => g.is_default)
+    const sharedGrant = listed.find(g => g.root_id === SHARED_ROOT_ID)
+    assert.ok(defaultGrant)
+    assert.ok(sharedGrant)
+    assert.equal(grants.removeGrant(sessionId, defaultGrant.id), false)
+    assert.equal(grants.removeGrant(sessionId, sharedGrant.id), false)
+    const extra = grants.addGrant(sessionId, mountDir, 'ro', 'tmp')
+    assert.equal(grants.removeGrant(sessionId, extra.id), true)
+    assert.equal(grants.listGrants(sessionId).length, 2)
+  })
 })
 
 test('shared workspace auto-granted and survives clearSession', async () => {

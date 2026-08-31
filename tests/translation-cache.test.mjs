@@ -4,14 +4,15 @@ import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { createRequire } from 'node:module'
-
-const require = createRequire(import.meta.url)
-const {
+import {
+  buildArticleTranslationCacheKey,
   createTranslationCache,
-} = require('../apps/desktop/electron/translation-cache.cjs')
+  getCachedTranslation,
+  setCachedTranslation,
+  setDefaultTranslationCacheForTests,
+} from '../apps/server/dist/translation-cache.js'
 
-describe('desktop translation-cache (memory Map + debounce persist)', () => {
+describe('server translation-cache (memory Map + debounce persist)', () => {
   /** @type {string} */
   let dir
   /** @type {string} */
@@ -25,6 +26,7 @@ describe('desktop translation-cache (memory Map + debounce persist)', () => {
   })
 
   afterEach(() => {
+    setDefaultTranslationCacheForTests(null)
     cache?.dispose?.()
     rmSync(dir, { recursive: true, force: true })
   })
@@ -48,6 +50,27 @@ describe('desktop translation-cache (memory Map + debounce persist)', () => {
     assert.deepEqual(hit.segments, [{ id: '1', text: '段' }])
     assert.equal(typeof hit.cached_at, 'string')
     assert.ok(String(hit.cached_at).length > 0)
+  })
+
+  it('article cache key + default cache hit (repeat translate same article)', () => {
+    cache = createTranslationCache({
+      filePath,
+      persistDebounceMs: 60_000,
+      disableExitFlush: true,
+    })
+    setDefaultTranslationCacheForTests(cache)
+    const key = buildArticleTranslationCacheKey('article-42', 'HY-MT1.5-1.8B-Q4_K_M.gguf')
+    assert.equal(key, 'article-42::HY-MT1.5-1.8B-Q4_K_M.gguf::zh')
+    setCachedTranslation(key, {
+      title: '标题译文',
+      body: '正文',
+      segments: [{ id: 's1', text: '段译文', kind: 'text' }],
+      engine: 'offline',
+    })
+    const hit = getCachedTranslation(key)
+    assert.ok(hit)
+    assert.equal(hit.title, '标题译文')
+    assert.equal(getCachedTranslation(key)?.title, '标题译文')
   })
 
   it('does not sync-write on every set; flush persists last state', async () => {
@@ -95,8 +118,6 @@ describe('desktop translation-cache (memory Map + debounce persist)', () => {
   })
 
   it('LRU eviction: evicted keys are not readable (memory or after flush)', () => {
-    // Policy: once over maxEntries, oldest (least recently used) is dropped from
-    // the Map and will not appear on the next disk persist. Callers must re-translate.
     cache = createTranslationCache({
       filePath,
       maxEntries: 2,
@@ -105,7 +126,6 @@ describe('desktop translation-cache (memory Map + debounce persist)', () => {
     })
     cache.set('a', { title: 'A', body: 'A' })
     cache.set('b', { title: 'B', body: 'B' })
-    // Touch a → b becomes LRU when c is inserted
     assert.equal(cache.get('a')?.title, 'A')
     cache.set('c', { title: 'C', body: 'C' })
 

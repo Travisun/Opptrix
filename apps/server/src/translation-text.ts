@@ -85,3 +85,51 @@ export function cleanHtmlTranslationOutput(raw: string, sourceHtml: string): str
 export function normalizeWhitespace(text: string): string {
   return String(text ?? '').replace(/\s+/g, ' ').trim()
 }
+
+const MAX_CHUNK_CHARS = 1200
+
+/** 无 segments 时将纯文本正文切段，供离线翻译循环 */
+export function splitIntoChunks(text: string, maxLen = MAX_CHUNK_CHARS): string[] {
+  const normalized = String(text ?? '').replace(/\r\n/g, '\n').trim()
+  if (!normalized) return []
+  if (normalized.length <= maxLen) return [normalized]
+
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+
+  const chunks: string[] = []
+  let buffer = ''
+
+  const flush = () => {
+    if (!buffer.trim()) return
+    chunks.push(buffer.trim())
+    buffer = ''
+  }
+
+  for (const paragraph of paragraphs) {
+    if (paragraph.length > maxLen) {
+      flush()
+      let rest = paragraph
+      while (rest.length > maxLen) {
+        let cut = rest.lastIndexOf(' ', maxLen)
+        if (cut < maxLen * 0.5) cut = maxLen
+        chunks.push(rest.slice(0, cut).trim())
+        rest = rest.slice(cut).trim()
+      }
+      if (rest) buffer = rest
+      continue
+    }
+
+    const next = buffer ? `${buffer}\n\n${paragraph}` : paragraph
+    if (next.length > maxLen) {
+      flush()
+      buffer = paragraph
+    } else {
+      buffer = next
+    }
+  }
+  flush()
+  return chunks
+}

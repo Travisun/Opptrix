@@ -1,0 +1,55 @@
+# Opptrix — recommended single-user self-host (Docker Compose)
+#
+# Quick start:
+#   docker compose up -d --build
+#   open http://127.0.0.1:8711
+#
+# Data lives in named volume `opptrix-data` (/data).
+# Core models live in `opptrix-models` (/models); first boot fetches if empty.
+# Extra host folders: mount under /data/mounts/<name> (see docs/SELF-HOSTING.md).
+
+services:
+  opptrix:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: opptrix:local
+    container_name: opptrix
+    ports:
+      - "8711:8711"
+    environment:
+      STOCK_RESEARCH_HOST: "0.0.0.0"
+      STOCK_RESEARCH_PORT: "8711"
+      SERVE_UI: "1"
+      OPPTRIX_DATA_DIR: "/data"
+      OPPTRIX_MODELS_DIR: "/models"
+      OPPTRIX_LLM_DIR: "/models/llms"
+      OPPTRIX_E5_BUNDLED_DIR: "/models/llms/multilingual-e5-small"
+      OPPTRIX_RAPIDOCR_MODEL_DIR: "/models/llms/rapidocr-ppocrv4-mobile"
+      OPPTRIX_RAPIDOCR_BUNDLED_DIR: "/models/llms/rapidocr-ppocrv4-mobile"
+      OPPTRIX_SENSEVOICE_BUNDLED_DIR: "/models/sensevoice"
+      UI_DIST_PATH: "/app/client-ui/dist"
+      OPPTRIX_WITH_MODELS: "1"
+      # Optional: skip first-boot download when you pre-seed the models volume
+      # OPPTRIX_SKIP_MODEL_FETCH: "1"
+      # Behind TLS reverse proxy — list proxy CIDRs so client IP / local gate work:
+      # OPPTRIX_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      # OPPTRIX_AUTH_COOKIE_SECURE: "1"
+    volumes:
+      - opptrix-data:/data
+      - opptrix-models:/models
+      # Extra research / docs folders visible inside the instance:
+      # - ./host-research:/data/mounts/research:ro
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8711/api/health"]
+      interval: 30s
+      timeout: 8s
+      retries: 5
+      # First boot may download E5 / RapidOCR / SenseVoice before listen
+      start_period: 300s
+
+volumes:
+  opptrix-data:
+  opptrix-models:

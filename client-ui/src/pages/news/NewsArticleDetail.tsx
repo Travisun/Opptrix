@@ -3,7 +3,6 @@ import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-compone
 import { ChatRegular, ImageRegular, TranslateRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
 import { isHttpUrl, openExternalUrl } from '../../platform/openUrl'
-import { isElectron } from '../../platform/detect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
 import {
@@ -340,7 +339,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               查看原文
             </span>
           )}
-          {isElectron() && translation.available && (
+          {translation.available && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
               <button
@@ -395,7 +394,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </button>
             </div>
           )}
-          {isElectron() && enrichment.available && (
+          {enrichment.available && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
               <button
@@ -440,8 +439,8 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
         </div>
       </div>
       {(progressLabel || translation.error || enrichment.progressLabel || enrichment.error
-        || (!translation.available && isElectron())
-        || (!translation.canTranslate && translation.available && !translation.hasTranslation && isElectron())) && (
+        || (!translation.available && translation.likelyForeign)
+        || (!translation.canTranslate && translation.available && !translation.hasTranslation)) && (
         <Text
           block
           className={mergeClasses(
@@ -453,8 +452,8 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
             || enrichment.error
             || enrichment.progressLabel
             || progressLabel
-            || (!translation.available && isElectron()
-              ? '翻译暂不可用：请在设置中开启翻译功能'
+            || (!translation.available
+              ? '翻译暂不可用：请在设置中配置翻译服务'
               : !translation.canTranslate && translation.available && !translation.hasTranslation
                 ? '内容主要为中文，通常无需翻译'
                 : '')}

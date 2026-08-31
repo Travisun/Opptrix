@@ -196,3 +196,7 @@
 | 隔离强度（Windows） | `SandboxSettingsSection` | 「完整隔离 / 基础隔离」；写入 `windows_isolation_mode`（默认基础隔离） |
 | 永久允许的目标 | `SettingsMonospaceEditor` | 每行一条域名或地址；支持 `*.example.com`；500ms 防抖自动保存；底部保存状态提示 |
 | 局域网 | `SettingsGroup` + Switch | 「允许局域网访问」；开启后在 `SettingsStaticBlock` 显示风险提示 |
+
+### 7.4 浏览器通知与 PWA
+
+浏览器端对话完成/确认提醒与可安装 PWA 说明见 [`docs/PWA.md`](./PWA.md)（Notification API，无 Web Push；需 HTTPS 或 localhost）。

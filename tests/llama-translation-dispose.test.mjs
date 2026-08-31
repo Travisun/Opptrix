@@ -138,99 +138,13 @@ describe('LlamaRuntime idle unload', () => {
   })
 })
 
-describe('translation-service dispose + idle + on-demand', () => {
-  let prevIdle
-
-  before(() => {
-    prevIdle = process.env.OPPTRIX_TRANSLATION_IDLE_MS
-  })
-
-  after(async () => {
-    if (prevIdle === undefined) delete process.env.OPPTRIX_TRANSLATION_IDLE_MS
-    else process.env.OPPTRIX_TRANSLATION_IDLE_MS = prevIdle
-    translationService.__setTranslationRuntimeForTests({})
-    await translationService.disposeTranslation()
-  })
-
-  it('resolveTranslationIdleMs reads env (0 disables)', () => {
-    process.env.OPPTRIX_TRANSLATION_IDLE_MS = '0'
-    assert.equal(translationService.resolveTranslationIdleMs(), 0)
-    process.env.OPPTRIX_TRANSLATION_IDLE_MS = '1500'
-    assert.equal(translationService.resolveTranslationIdleMs(), 1500)
-    delete process.env.OPPTRIX_TRANSLATION_IDLE_MS
-    assert.equal(
-      translationService.resolveTranslationIdleMs(),
-      translationService.DEFAULT_TRANSLATION_IDLE_MS,
+describe('translation-service HTTP proxy (no in-process llama)', () => {
+  it('disposeTranslation and bootstrap are no-ops (no GGUF in Electron main)', async () => {
+    await assert.doesNotReject(() => translationService.disposeTranslation())
+    await assert.doesNotReject(() =>
+      translationService.maybeBootstrapOfflineModelDownloads(repoRoot),
     )
-  })
-
-  it('disposeTranslation calls native dispose and keeps segment LRU size API stable', async () => {
-    process.env.OPPTRIX_TRANSLATION_IDLE_MS = '0'
-    /** @type {Array<{ label: string, opts: unknown }>} */
-    const calls = []
-    const session = mockDisposable('session', calls)
-    const context = mockDisposable('context', calls)
-    const model = mockDisposable('model', calls)
-
-    translationService.__setTranslationRuntimeForTests({
-      chatSession: session,
-      context,
-      model,
-      loadedModelPath: '/tmp/hy-mt.gguf',
-    })
-
-    await translationService.disposeTranslation()
-
-    assert.deepEqual(
-      calls.map(c => c.label),
-      ['session', 'context', 'model'],
-    )
-    const state = translationService.__getTranslationRuntimeForTests()
-    assert.equal(state.chatSession, null)
-    assert.equal(state.model, null)
-    assert.equal(state.context, null)
-    assert.equal(state.loadedModelPath, null)
-    assert.equal(typeof state.segmentMemoryCacheSize, 'number')
-  })
-
-  it('idle timer unloads and calls dispose', async () => {
-    process.env.OPPTRIX_TRANSLATION_IDLE_MS = '40'
-    /** @type {Array<{ label: string }>} */
-    const calls = []
-    const session = mockDisposable('session', calls)
-    const context = mockDisposable('context', calls)
-    const model = mockDisposable('model', calls)
-
-    translationService.__setTranslationRuntimeForTests({
-      chatSession: session,
-      context,
-      model,
-      loadedModelPath: '/tmp/hy-mt.gguf',
-    })
-    translationService.__touchLastUsedForTests()
-
-    await new Promise(r => setTimeout(r, 120))
-    assert.deepEqual(
-      calls.map(c => c.label),
-      ['session', 'context', 'model'],
-    )
-    const state = translationService.__getTranslationRuntimeForTests()
-    assert.equal(state.loadedModelPath, null)
-    assert.equal(state.chatSession, null)
-  })
-
-  it('status ready=false when unloaded (avoids false ready UI)', async () => {
-    process.env.OPPTRIX_TRANSLATION_IDLE_MS = '0'
-    translationService.__setTranslationRuntimeForTests({})
-    const status = await translationService.getTranslationStatus(repoRoot, {
-      translation: { service_mode: 'offline', offline_model: '__auto__' },
-    })
-    assert.equal(status.ready, false)
-    assert.equal(status.loading, false)
-    // modelFound 仅表示磁盘有文件；未 load 时不得把 ready 置 true
-    if (status.modelFound) {
-      assert.equal(status.ready, false)
-    }
+    await assert.doesNotReject(() => translationService.preloadTranslationModel(repoRoot))
   })
 
   it('boot path does not auto-preload translation model', () => {
@@ -249,51 +163,24 @@ describe('translation-service dispose + idle + on-demand', () => {
     )
   })
 
-  it('download success path source does not auto-preload', () => {
+  it('Electron translation-service proxies to /api/news and does not load node-llama', () => {
     const serviceSrc = fs.readFileSync(
       path.join(repoRoot, 'apps/desktop/electron/translation-service.cjs'),
       'utf8',
     )
-    const downloadSrc = fs.readFileSync(
-      path.join(repoRoot, 'apps/desktop/electron/translation-download.cjs'),
-      'utf8',
-    )
-    // IPC 入口已改为同步 ack（startTranslationModelDownload → startTranslationModelDownloadAck）
-    const serviceMatch = serviceSrc.match(
-      /function startTranslationModelDownload\([\s\S]*?\n\}/,
-    )
-    assert.ok(serviceMatch, 'startTranslationModelDownload not found')
+    assert.match(serviceSrc, /\/api\/news/)
+    assert.match(serviceSrc, /\/translation\/status/)
+    assert.match(serviceSrc, /\/translate/)
     assert.equal(
-      /preloadTranslationModel/.test(serviceMatch[0]),
+      /node-llama-cpp|ensureChatSession|LlamaChatSession/.test(serviceSrc),
       false,
-      'download IPC entry must not auto-preload',
-    )
-    const ackMatch = downloadSrc.match(
-      /function startTranslationModelDownloadAck\([\s\S]*?\n\}/,
-    )
-    assert.ok(ackMatch, 'startTranslationModelDownloadAck not found')
-    assert.equal(
-      /preloadTranslationModel/.test(ackMatch[0]),
-      false,
-      'download ack path must not auto-preload',
-    )
-    assert.equal(
-      /preloadTranslationModel/.test(downloadSrc),
-      false,
-      'translation-download must not reference preloadTranslationModel',
+      'must not load llama in Electron main',
     )
   })
 
-  it('translateArticleLocal emits loading phase before ensure when cold', async () => {
-    const src = fs.readFileSync(
-      path.join(repoRoot, 'apps/desktop/electron/translation-service.cjs'),
-      'utf8',
-    )
-    assert.match(src, /phase:\s*'loading'/)
-    assert.match(src, /async function translateArticleLocal/)
-    assert.match(
-      src,
-      /translateArticleLocal[\s\S]*ensureChatSession/,
-    )
+  it('ensureTranslationDownloadDir still resolves local open-folder path', async () => {
+    const dir = await translationService.ensureTranslationDownloadDir()
+    assert.ok(typeof dir === 'string' && dir.length > 0)
+    assert.match(dir, /llms/)
   })
 })

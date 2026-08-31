@@ -5,7 +5,7 @@ import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
 import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
-import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState } from '@opptrix/agent-workspace'
+import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState, listMountRoots, emptyMountsReason, browseWorkspaceDirs } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { registerAuthRoutes } from './auth-routes.js'
 import { registerOwnerAuthHook, shouldExposeFullHealth } from './auth-hook.js'
@@ -1577,6 +1577,37 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id/workspace/grants', async 
   if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
   const grants = await agent.listWorkspaceGrants(req.params.id)
   return { grants }
+})
+
+/** 列出 $OPPTRIX_DATA_DIR/mounts 下可授权的已挂载根目录 */
+app.get('/api/workspace/mounts', async () => {
+  const mounts = await listMountRoots()
+  if (mounts.length === 0) {
+    return { mounts, empty_reason: emptyMountsReason() }
+  }
+  return { mounts }
+})
+
+/** 在已挂载根或公共资产下浏览子目录（仅目录） */
+app.get<{
+  Querystring: { root?: string; path?: string }
+}>('/api/workspace/browse', async (req, reply) => {
+  const root = String(req.query.root ?? '').trim()
+  const rel = String(req.query.path ?? '').trim()
+  if (!root) return reply.code(400).send({ error: '请指定浏览根目录' })
+  try {
+    const result = await browseWorkspaceDirs(root, rel)
+    return result
+  } catch (e) {
+    if (e instanceof PathEscapeError || e instanceof DenyPathError) {
+      return reply.code(403).send({ error: e.message })
+    }
+    if (e instanceof WorkspaceError) {
+      return reply.code(400).send({ error: e.message })
+    }
+    const message = e instanceof Error ? e.message : String(e)
+    return reply.code(400).send({ error: message })
+  }
 })
 
 app.post<{

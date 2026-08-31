@@ -5,7 +5,7 @@ import type { DownloadProgress } from '../types.js'
 import { getCatalogModel } from './models.js'
 import { ensureDirAsync, getLlmsDir } from '../paths.js'
 
-const DOWNLOAD_USER_AGENT = 'Opptrix-Desktop/1.0'
+const DOWNLOAD_USER_AGENT = 'Opptrix/1.0'
 
 let activeAbort: AbortController | null = null
 let activeDownload: DownloadProgress | null = null

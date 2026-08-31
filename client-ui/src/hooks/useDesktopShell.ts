@@ -3,6 +3,10 @@ import type { SettingsSection } from '../pages/settings/SettingsSidebar'
 import { setNewsFeedSelectedId } from '../pages/news/newsFeedSession'
 import { isElectron } from '../platform/detect'
 import type { OpptrixProtocolPayload } from '../platform/detect'
+import {
+  OPPTRIX_OPEN_CHAT_EVENT,
+  type OpptrixOpenChatDetail,
+} from '../platform/chatNotifications'
 
 type DesktopProtocolHandlers = {
   openChat: (sessionId?: string) => void | Promise<void>
@@ -62,5 +66,19 @@ export function useDesktopShell(handlers: DesktopProtocolHandlers) {
     })
 
     return () => unsubscribe?.()
+  }, [handlers])
+
+  /** Web Notification 点击 → 打开对应会话 */
+  useEffect(() => {
+    if (isElectron()) return
+
+    const onOpenChat = (event: Event) => {
+      const detail = (event as CustomEvent<OpptrixOpenChatDetail>).detail
+      const sessionId = typeof detail?.sessionId === 'string' ? detail.sessionId.trim() : ''
+      void handlers.openChat(sessionId || undefined)
+    }
+
+    window.addEventListener(OPPTRIX_OPEN_CHAT_EVENT, onOpenChat)
+    return () => window.removeEventListener(OPPTRIX_OPEN_CHAT_EVENT, onOpenChat)
   }, [handlers])
 }

@@ -3,10 +3,9 @@ import test from 'node:test'
 import {
   articleLikelyNeedsChineseTranslation,
   buildTranslatePrompt,
-  cleanTranslationOutput,
-  estimateMaxTokens,
+  cleanBlockTranslationOutput,
   splitIntoChunks,
-} from '../apps/desktop/electron/translation-text.cjs'
+} from '../apps/server/dist/translation-text.js'
 
 test('articleLikelyNeedsChineseTranslation detects foreign text', () => {
   assert.equal(articleLikelyNeedsChineseTranslation('Hello world from Twitter'), true)
@@ -34,16 +33,8 @@ test('splitIntoChunks respects max length', () => {
   }
 })
 
-test('estimateMaxTokens scales with source length', () => {
-  const short = estimateMaxTokens('Hello world')
-  const long = estimateMaxTokens('Word '.repeat(120))
-  assert.ok(short < long)
-  assert.ok(short <= 768)
-  assert.ok(long <= 768)
-})
-
-test('cleanTranslationOutput strips prompt echo', () => {
-  const out = cleanTranslationOutput(
+test('cleanBlockTranslationOutput strips prompt echo', () => {
+  const out = cleanBlockTranslationOutput(
     'Translate the following segment into Chinese, without additional explanation. 免费供应',
     'It is on the house.',
   )

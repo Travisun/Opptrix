@@ -963,7 +963,11 @@ export default function ChatApp() {
   const handleNotificationResult = useCallback((result: 'skipped' | 'shown' | 'denied' | 'failed') => {
     if (result !== 'denied' || notificationDeniedHintedRef.current) return
     notificationDeniedHintedRef.current = true
-    setError('桌面通知未开启。可在系统设置中允许 Opptrix 发送通知，以免错过对话完成提醒。')
+    setError(
+      isElectron()
+        ? '桌面通知未开启。可在系统设置中允许 Opptrix 发送通知，以免错过对话完成提醒。'
+        : '浏览器通知未开启。可在地址栏旁允许通知，离开对话时也能及时收到完成提醒。',
+    )
   }, [])
 
   const maybeNotifyChatDone = useCallback((
@@ -1008,8 +1012,6 @@ export default function ChatApp() {
   }, [])
 
   useEffect(() => {
-    if (!isElectron()) return
-
     const onVisibilityOrFocusChange = () => {
       void markStreamingSessionsAwayIfNeeded()
     }

@@ -25,7 +25,14 @@ import {
 } from '../platform/saveMarketPackage'
 import { decodeTextBufferBytes } from '../utils/decodeTextBuffer'
 import { emitAuthRequired, waitForStepUp } from '../auth/authEvents'
-import { isElectron } from '../platform/detect'
+import {
+  isElectron,
+  type TranslationArticleResult,
+  type TranslationDownloadProgress,
+  type TranslationEngineStatus,
+  type TranslationModelsResult,
+  type TranslationProgress,
+} from '../platform/detect'
 
 export class ApiHttpError extends Error {
   readonly status: number
@@ -1844,6 +1851,36 @@ export async function listWorkspaceGrants(sessionId: string) {
   return jsonFetch<{ grants: WorkspaceGrantDto[] }>(`/sessions/${sessionId}/workspace/grants`)
 }
 
+export interface WorkspaceMountRootDto {
+  name: string
+  abs_path: string
+  label: string
+}
+
+export async function listWorkspaceMounts() {
+  return jsonFetch<{ mounts: WorkspaceMountRootDto[]; empty_reason?: string }>('/workspace/mounts')
+}
+
+export interface WorkspaceBrowseEntryDto {
+  name: string
+  abs_path: string
+}
+
+export async function browseWorkspaceMount(
+  root: string,
+  relativePath = '',
+) {
+  const qs = new URLSearchParams()
+  qs.set('root', root)
+  if (relativePath) qs.set('path', relativePath)
+  return jsonFetch<{
+    root: string
+    path: string
+    entries: WorkspaceBrowseEntryDto[]
+    truncated: boolean
+  }>(`/workspace/browse?${qs.toString()}`)
+}
+
 export async function addWorkspaceGrant(
   sessionId: string,
   payload: { path: string; mode?: 'ro' | 'rw'; label?: string },
@@ -2844,6 +2881,135 @@ export const news = {
       has_more: boolean
       total: number
     }>('/news/refresh', { method: 'POST' }),
+
+  /** 翻译引擎状态（本机服务端模型 / 远程配置 / 下载进度）。 */
+  getTranslationStatus: () =>
+    newsJsonFetch<TranslationEngineStatus>('/news/translation/status'),
+
+  /** 离线翻译模型目录与已安装列表。 */
+  getTranslationModels: () =>
+    newsJsonFetch<TranslationModelsResult>('/news/translation/models'),
+
+  /** 开始下载离线翻译模型（立即 ack；进度见 getTranslationStatus.download）。 */
+  startTranslationDownload: (modelId: string) =>
+    newsJsonFetch<{
+      started: boolean
+      download: TranslationDownloadProgress | null
+      alreadyPresent?: boolean
+    }>('/news/translation/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId }),
+    }),
+
+  cancelTranslationDownload: () =>
+    newsJsonFetch<{ cancelled: boolean }>('/news/translation/download/cancel', {
+      method: 'POST',
+    }),
+
+  /** 文章翻译（本机服务端离线模型或远程大模型）。优先 SSE 进度；失败时回退 JSON。 */
+  translateArticle: async (
+    payload: {
+      articleId: string
+      title?: string
+      bodyText?: string
+      segments?: Array<{ id: string; text: string; kind?: 'text' | 'html' }>
+      targetLang?: string
+    },
+    opts?: {
+      onProgress?: (progress: TranslationProgress) => void
+      signal?: AbortSignal
+    },
+  ): Promise<TranslationArticleResult> => {
+    const onProgress = opts?.onProgress
+    const body = JSON.stringify(payload)
+
+    try {
+      const resp = await fetchWithTimeout(`${API_BASE}/news/translate?stream=1`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body,
+        signal: opts?.signal,
+      }, LOCAL_HEAVY_TIMEOUT)
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({})) as { error?: string; message?: string }
+        throw new ApiHttpError(err.message || err.error || `API error: ${resp.status}`, resp.status)
+      }
+
+      const contentType = resp.headers.get('content-type') ?? ''
+      if (contentType.includes('text/event-stream') && resp.body) {
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let result: TranslationArticleResult | null = null
+        let streamError: string | null = null
+
+        const consumeBlock = (block: string) => {
+          const lines = block.split('\n')
+          let eventName = 'message'
+          const dataLines: string[] = []
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventName = line.slice(6).trim()
+            } else if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5).trimStart())
+            }
+          }
+          if (!dataLines.length) return
+          let parsed: unknown
+          try {
+            parsed = JSON.parse(dataLines.join('\n'))
+          } catch {
+            return
+          }
+          if (eventName === 'progress' && onProgress && parsed && typeof parsed === 'object') {
+            onProgress(parsed as TranslationProgress)
+          } else if (eventName === 'result' && parsed && typeof parsed === 'object') {
+            result = parsed as TranslationArticleResult
+          } else if (eventName === 'error' && parsed && typeof parsed === 'object') {
+            const row = parsed as { error?: unknown }
+            streamError = typeof row.error === 'string' ? row.error : '翻译失败，请稍后再试'
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const chunks = buffer.split('\n\n')
+          buffer = chunks.pop() ?? ''
+          for (const chunk of chunks) {
+            if (chunk.trim()) consumeBlock(chunk)
+          }
+        }
+        if (buffer.trim()) consumeBlock(buffer)
+
+        if (streamError) throw new Error(streamError)
+        if (result) return result
+        throw new Error('翻译流式响应未返回结果')
+      }
+
+      // Server returned JSON despite Accept (proxy / older build)
+      return await resp.json() as TranslationArticleResult
+    } catch (streamErr) {
+      if (streamErr instanceof ApiHttpError) throw streamErr
+      if (streamErr instanceof Error && streamErr.name === 'AbortError') throw streamErr
+      try {
+        return await jsonFetch<TranslationArticleResult>('/news/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          signal: opts?.signal,
+        }, LOCAL_HEAVY_TIMEOUT)
+      } catch {
+        throw streamErr
+      }
+    }
+  },
 }
 
 export async function fetchCommunityFeed(kind: CommunityFeedKind, page = 0): Promise<CommunityFeedResponse> {

@@ -8,6 +8,7 @@ import {
 } from '../api/client'
 import { isElectron } from '../platform/detect'
 import WorkspaceGrantsDialog, { grantFolderName, isBuiltinGrant } from './WorkspaceGrantsDialog'
+import WorkspaceMountPickerDialog from './WorkspaceMountPickerDialog'
 
 export type ChatWorkspaceGrantsHandle = {
   open: () => void
@@ -33,6 +34,9 @@ const ChatWorkspaceGrants = forwardRef<ChatWorkspaceGrantsHandle, ChatWorkspaceG
     const [dialogError, setDialogError] = useState<string | null>(null)
     const [toolbarHint, setToolbarHint] = useState<string | null>(null)
     const toolbarHintTimerRef = useRef<number | null>(null)
+    const [pickerOpen, setPickerOpen] = useState(false)
+    const [pickerMode, setPickerMode] = useState<'ro' | 'rw'>('ro')
+    const replaceTargetRef = useRef<WorkspaceGrantDto | null>(null)
 
     const clearToolbarHintTimer = useCallback(() => {
       if (toolbarHintTimerRef.current !== null) {
@@ -82,7 +86,7 @@ const ChatWorkspaceGrants = forwardRef<ChatWorkspaceGrantsHandle, ChatWorkspaceG
         clearError()
       } catch (e) {
         const message = e instanceof Error ? e.message : '暂时无法加载授权目录'
-      if ((variant === 'toolbar' || variant === 'dialog-only') && !dialogOpen) {
+        if ((variant === 'toolbar' || variant === 'dialog-only') && !dialogOpen) {
           console.warn('[ChatWorkspaceGrants] refresh failed:', message)
         } else {
           reportError(message)
@@ -94,29 +98,55 @@ const ChatWorkspaceGrants = forwardRef<ChatWorkspaceGrantsHandle, ChatWorkspaceG
       void refresh()
     }, [refresh])
 
-    const pickDirectory = useCallback(async (): Promise<string | null> => {
+    const pickNativeDirectory = useCallback(async (): Promise<string | null> => {
       if (!isElectron() || !window.electronAPI?.pickExportDirectory) {
-        reportError('授权本地文件夹需使用桌面版')
         return null
       }
       return window.electronAPI.pickExportDirectory()
-    }, [reportError])
+    }, [])
 
-    const handleAddFolder = useCallback(async (mode: 'ro' | 'rw') => {
+    const openServerPicker = useCallback((mode: 'ro' | 'rw', replace?: WorkspaceGrantDto) => {
+      replaceTargetRef.current = replace ?? null
+      setPickerMode(mode)
+      setPickerOpen(true)
+    }, [])
+
+    const applyGrantPath = useCallback(async (dirPath: string, mode: 'ro' | 'rw', label?: string) => {
       if (!sessionId || disabled) return
       setLoading(true)
       setDialogError(null)
       try {
-        const dirPath = await pickDirectory()
-        if (!dirPath) return
-        await addWorkspaceGrant(sessionId, { path: dirPath, mode })
+        const replace = replaceTargetRef.current
+        if (replace && !isBuiltinGrant(replace)) {
+          await removeWorkspaceGrant(sessionId, replace.id)
+        }
+        await addWorkspaceGrant(sessionId, { path: dirPath, mode, label })
+        replaceTargetRef.current = null
+        setPickerOpen(false)
         await refresh()
       } catch (e) {
         reportError(e instanceof Error ? e.message : '添加失败，请稍后重试')
       } finally {
         setLoading(false)
       }
-    }, [disabled, pickDirectory, refresh, reportError, sessionId])
+    }, [disabled, refresh, reportError, sessionId])
+
+    const handleAddFolder = useCallback(async (mode: 'ro' | 'rw') => {
+      if (!sessionId || disabled) return
+      setDialogError(null)
+      replaceTargetRef.current = null
+      if (isElectron()) {
+        try {
+          const dirPath = await pickNativeDirectory()
+          if (!dirPath) return
+          await applyGrantPath(dirPath, mode)
+        } catch (e) {
+          reportError(e instanceof Error ? e.message : '添加失败，请稍后重试')
+        }
+        return
+      }
+      openServerPicker(mode)
+    }, [applyGrantPath, disabled, openServerPicker, pickNativeDirectory, reportError, sessionId])
 
     const handleRemove = useCallback(async (grant: WorkspaceGrantDto) => {
       if (!sessionId || isBuiltinGrant(grant) || disabled) return
@@ -134,21 +164,20 @@ const ChatWorkspaceGrants = forwardRef<ChatWorkspaceGrantsHandle, ChatWorkspaceG
 
     const handleReplaceGrant = useCallback(async (grant: WorkspaceGrantDto) => {
       if (!sessionId || isBuiltinGrant(grant) || disabled) return
-      setLoading(true)
       setDialogError(null)
-      try {
-        const dirPath = await pickDirectory()
-        if (!dirPath) return
-        const mode = grant.mode
-        await removeWorkspaceGrant(sessionId, grant.id)
-        await addWorkspaceGrant(sessionId, { path: dirPath, mode })
-        await refresh()
-      } catch (e) {
-        reportError(e instanceof Error ? e.message : '更换文件夹失败，请稍后重试')
-      } finally {
-        setLoading(false)
+      if (isElectron()) {
+        try {
+          const dirPath = await pickNativeDirectory()
+          if (!dirPath) return
+          replaceTargetRef.current = grant
+          await applyGrantPath(dirPath, grant.mode)
+        } catch (e) {
+          reportError(e instanceof Error ? e.message : '更换文件夹失败，请稍后重试')
+        }
+        return
       }
-    }, [disabled, pickDirectory, refresh, reportError, sessionId])
+      openServerPicker(grant.mode, grant)
+    }, [applyGrantPath, disabled, openServerPicker, pickNativeDirectory, reportError, sessionId])
 
     const openDialog = useCallback(() => {
       if (!sessionId || disabled) return
@@ -171,18 +200,32 @@ const ChatWorkspaceGrants = forwardRef<ChatWorkspaceGrantsHandle, ChatWorkspaceG
     if (!sessionId && variant !== 'dialog-only') return null
 
     const dialog = (
-      <WorkspaceGrantsDialog
-        open={dialogOpen}
-        onClose={closeDialog}
-        grants={grants}
-        loading={loading}
-        disabled={disabled}
-        error={dialogError}
-        isDesktop={isElectron()}
-        onAddFolder={mode => { void handleAddFolder(mode) }}
-        onReplaceGrant={grant => { void handleReplaceGrant(grant) }}
-        onRemoveGrant={grant => { void handleRemove(grant) }}
-      />
+      <>
+        <WorkspaceGrantsDialog
+          open={dialogOpen}
+          onClose={closeDialog}
+          grants={grants}
+          loading={loading}
+          disabled={disabled}
+          error={dialogError}
+          isDesktop={isElectron()}
+          onAddFolder={mode => { void handleAddFolder(mode) }}
+          onReplaceGrant={grant => { void handleReplaceGrant(grant) }}
+          onRemoveGrant={grant => { void handleRemove(grant) }}
+        />
+        <WorkspaceMountPickerDialog
+          open={pickerOpen}
+          mode={pickerMode}
+          disabled={disabled || loading}
+          onClose={() => {
+            setPickerOpen(false)
+            replaceTargetRef.current = null
+          }}
+          onConfirm={(absPath, label) => {
+            void applyGrantPath(absPath, pickerMode, label)
+          }}
+        />
+      </>
     )
 
     if (variant === 'dialog-only') {

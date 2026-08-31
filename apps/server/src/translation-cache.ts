@@ -1,51 +1,58 @@
-const fs = require('node:fs')
-const os = require('node:os')
-const path = require('node:path')
-
-const DEFAULT_CACHE_FILE = path.join(os.homedir(), '.opptrix', 'news-translation-cache.json')
-/** Cap live + disk entries (LRU). Raised from 200 to bound growth without thrashing. */
-const DEFAULT_MAX_ENTRIES = 2000
-/** Align with market-data-core Cache debounce (1–2s). */
-const DEFAULT_PERSIST_DEBOUNCE_MS = 1500
-
 /**
- * In-memory LRU Map + debounced JSON persist (same idea as engine Cache).
- *
- * Eviction: Map insertion order = LRU. get() touches; set() re-inserts.
- * Evicted keys are gone from memory and omitted on next persist — not readable
- * until re-translated. Restart loads only what last flushed to disk.
- *
- * @param {{
- *   filePath?: string
- *   maxEntries?: number
- *   persistDebounceMs?: number
- *   disableExitFlush?: boolean
- * }} [options]
+ * Article-level news translation cache: in-memory LRU Map + debounced JSON persist.
+ * Mirrors former Electron createTranslationCache; file lives under user data root.
  */
-function createTranslationCache(options = {}) {
+import fs from 'node:fs'
+import path from 'node:path'
+import { resolveUserDataRoot } from '@opptrix/shared'
+
+export const DEFAULT_CACHE_FILE = path.join(resolveUserDataRoot(), 'news-translation-cache.json')
+/** Cap live + disk entries (LRU). */
+export const DEFAULT_MAX_ENTRIES = 2000
+/** Align with market-data-core Cache debounce (1–2s). */
+export const DEFAULT_PERSIST_DEBOUNCE_MS = 1500
+
+export type TranslationCacheEntry = Record<string, unknown>
+
+export type TranslationCacheOptions = {
+  filePath?: string
+  maxEntries?: number
+  persistDebounceMs?: number
+  disableExitFlush?: boolean
+}
+
+export type TranslationCache = {
+  get: (cacheKey: string) => TranslationCacheEntry | null
+  set: (cacheKey: string, value: TranslationCacheEntry) => void
+  clear: () => void
+  flush: () => void
+  dispose: () => void
+  readonly persistWriteCount: number
+  readonly size: number
+  readonly filePath: string
+}
+
+export function createTranslationCache(options: TranslationCacheOptions = {}): TranslationCache {
   const filePath = options.filePath ?? DEFAULT_CACHE_FILE
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
   const persistDebounceMs = options.persistDebounceMs ?? DEFAULT_PERSIST_DEBOUNCE_MS
   const disableExitFlush = options.disableExitFlush === true
 
-  /** @type {Map<string, Record<string, unknown>>} */
-  const store = new Map()
+  const store = new Map<string, TranslationCacheEntry>()
   let dirty = false
-  /** @type {ReturnType<typeof setTimeout> | null} */
-  let persistTimer = null
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
   let persistWriteCount = 0
-  /** @type {(() => void) | null} */
-  let onBeforeExit = null
+  let onBeforeExit: (() => void) | null = null
 
-  function load() {
+  function load(): void {
     try {
       if (!fs.existsSync(filePath)) return
       const raw = fs.readFileSync(filePath, 'utf8')
-      const parsed = JSON.parse(raw)
+      const parsed: unknown = JSON.parse(raw)
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
-      for (const [key, value] of Object.entries(parsed)) {
+      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) continue
-        store.set(key, /** @type {Record<string, unknown>} */ (value))
+        store.set(key, value as TranslationCacheEntry)
       }
       enforceLimits()
     } catch {
@@ -53,16 +60,14 @@ function createTranslationCache(options = {}) {
     }
   }
 
-  function writeDisk() {
+  function writeDisk(): void {
     try {
       const dir = path.dirname(filePath)
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-      /** @type {Record<string, Record<string, unknown>>} */
-      const payload = {}
+      const payload: Record<string, TranslationCacheEntry> = {}
       for (const [k, v] of store) {
         payload[k] = v
       }
-      // Compact JSON (no indent) — smaller + faster than pretty-print.
       fs.writeFileSync(filePath, JSON.stringify(payload), 'utf8')
       persistWriteCount += 1
       dirty = false
@@ -71,7 +76,7 @@ function createTranslationCache(options = {}) {
     }
   }
 
-  function schedulePersist() {
+  function schedulePersist(): void {
     dirty = true
     if (persistDebounceMs <= 0) {
       writeDisk()
@@ -82,11 +87,10 @@ function createTranslationCache(options = {}) {
       persistTimer = null
       if (dirty) writeDisk()
     }, persistDebounceMs)
-    // Do not keep the process alive solely for cache flush; beforeExit still flushes.
     persistTimer.unref?.()
   }
 
-  function flush() {
+  function flush(): void {
     if (persistTimer) {
       clearTimeout(persistTimer)
       persistTimer = null
@@ -94,7 +98,7 @@ function createTranslationCache(options = {}) {
     if (dirty) writeDisk()
   }
 
-  function flushNow() {
+  function flushNow(): void {
     dirty = true
     if (persistTimer) {
       clearTimeout(persistTimer)
@@ -103,7 +107,7 @@ function createTranslationCache(options = {}) {
     writeDisk()
   }
 
-  function enforceLimits() {
+  function enforceLimits(): void {
     while (store.size > maxEntries) {
       const oldest = store.keys().next().value
       if (oldest === undefined) break
@@ -111,29 +115,20 @@ function createTranslationCache(options = {}) {
     }
   }
 
-  /** Move key to most-recently-used (Map insertion order). */
-  function touch(key, entry) {
+  function touch(key: string, entry: TranslationCacheEntry): void {
     store.delete(key)
     store.set(key, entry)
   }
 
-  /**
-   * @param {string} cacheKey
-   * @returns {Record<string, unknown> | null}
-   */
-  function get(cacheKey) {
+  function get(cacheKey: string): TranslationCacheEntry | null {
     const entry = store.get(cacheKey)
     if (!entry) return null
     touch(cacheKey, entry)
     return entry
   }
 
-  /**
-   * @param {string} cacheKey
-   * @param {Record<string, unknown>} value
-   */
-  function set(cacheKey, value) {
-    const entry = {
+  function set(cacheKey: string, value: TranslationCacheEntry): void {
+    const entry: TranslationCacheEntry = {
       ...value,
       cached_at: new Date().toISOString(),
     }
@@ -143,13 +138,12 @@ function createTranslationCache(options = {}) {
     schedulePersist()
   }
 
-  /** Clear all entries and persist immediately (empty object on disk). */
-  function clear() {
+  function clear(): void {
     store.clear()
     flushNow()
   }
 
-  function dispose() {
+  function dispose(): void {
     if (persistTimer) {
       clearTimeout(persistTimer)
       persistTimer = null
@@ -187,46 +181,44 @@ function createTranslationCache(options = {}) {
   }
 }
 
-/** @type {ReturnType<typeof createTranslationCache> | null} */
-let defaultCache = null
+let defaultCache: TranslationCache | null = null
 
-function getDefaultCache() {
+function getDefaultCache(): TranslationCache {
   if (!defaultCache) {
     defaultCache = createTranslationCache()
   }
   return defaultCache
 }
 
-function getCachedTranslation(cacheKey) {
+/** `${articleId}::${modelBasename}::zh` */
+export function buildArticleTranslationCacheKey(articleId: string, modelBasename: string): string {
+  return `${articleId}::${modelBasename}::zh`
+}
+
+export function getCachedTranslation(cacheKey: string): TranslationCacheEntry | null {
   return getDefaultCache().get(cacheKey)
 }
 
-function setCachedTranslation(cacheKey, value) {
+export function setCachedTranslation(cacheKey: string, value: TranslationCacheEntry): void {
   getDefaultCache().set(cacheKey, value)
 }
 
-function clearCachedTranslations() {
+export function clearCachedTranslations(): void {
   getDefaultCache().clear()
 }
 
-function flushTranslationCache() {
+export function flushTranslationCache(): void {
   getDefaultCache().flush()
 }
 
-function disposeTranslationCache() {
+export function disposeTranslationCache(): void {
   if (!defaultCache) return
   defaultCache.dispose()
   defaultCache = null
 }
 
-module.exports = {
-  createTranslationCache,
-  getCachedTranslation,
-  setCachedTranslation,
-  clearCachedTranslations,
-  flushTranslationCache,
-  disposeTranslationCache,
-  DEFAULT_CACHE_FILE,
-  DEFAULT_MAX_ENTRIES,
-  DEFAULT_PERSIST_DEBOUNCE_MS,
+/** Test helper: replace default cache (e.g. temp filePath). */
+export function setDefaultTranslationCacheForTests(cache: TranslationCache | null): void {
+  if (defaultCache) defaultCache.dispose()
+  defaultCache = cache
 }

@@ -1,13 +1,15 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { resolveUserDataRoot } from '@opptrix/shared'
 
 export function getOpptrixHome(): string {
-  return path.resolve(os.homedir(), '.opptrix')
+  return path.resolve(resolveUserDataRoot())
 }
 
 export function getLlmsDir(): string {
-  return path.resolve(getOpptrixHome(), 'llms')
+  const fromEnv = process.env.OPPTRIX_LLM_DIR?.trim()
+  if (fromEnv) return path.resolve(fromEnv)
+  return path.join(getOpptrixHome(), 'llms')
 }
 
 export function getWhisperModelsDir(): string {
@@ -97,12 +99,24 @@ export function getMediaCacheDir(): string {
 }
 
 export function listLlmsSearchDirs(repoRoot?: string): string[] {
-  return [
-    process.env.OPPTRIX_LLM_DIR,
+  const candidates = [
+    process.env.OPPTRIX_LLM_DIR?.trim()
+      ? path.resolve(process.env.OPPTRIX_LLM_DIR.trim())
+      : undefined,
     repoRoot ? path.join(repoRoot, 'apps/server/llms') : undefined,
     repoRoot ? path.join(repoRoot, 'llms') : undefined,
     getLlmsDir(),
   ].filter((d): d is string => Boolean(d))
+
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const dir of candidates) {
+    const key = path.resolve(dir)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(key)
+  }
+  return out
 }
 
 export function ensureDir(dir: string): void {

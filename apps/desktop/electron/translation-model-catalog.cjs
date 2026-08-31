@@ -51,17 +51,34 @@ const TRANSLATION_MODEL_CATALOG = [
 /** 启用离线翻译时后台预拉 HY-MT */
 const BOOTSTRAP_MODEL_IDS = ['hy-mt-q4']
 
+function getDefaultDownloadDir() {
+  const llmDir = typeof process.env.OPPTRIX_LLM_DIR === 'string'
+    ? process.env.OPPTRIX_LLM_DIR.trim()
+    : ''
+  if (llmDir) return path.resolve(llmDir)
+  const dataRoot = typeof process.env.OPPTRIX_DATA_DIR === 'string'
+    && process.env.OPPTRIX_DATA_DIR.trim()
+    ? process.env.OPPTRIX_DATA_DIR.trim()
+    : path.join(os.homedir(), '.opptrix')
+  return path.join(path.resolve(dataRoot), 'llms')
+}
+
 function listSearchDirs(repoRoot) {
-  return [
+  const candidates = [
     process.env.OPPTRIX_LLM_DIR,
     path.join(repoRoot, 'apps/server/llms'),
     path.join(repoRoot, 'llms'),
-    path.join(os.homedir(), '.opptrix', 'llms'),
+    getDefaultDownloadDir(),
   ].filter(Boolean)
-}
-
-function getDefaultDownloadDir() {
-  return path.resolve(os.homedir(), '.opptrix', 'llms')
+  const seen = new Set()
+  const out = []
+  for (const dir of candidates) {
+    const key = path.resolve(dir)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(key)
+  }
+  return out
 }
 
 function listInstalledModels(repoRoot) {

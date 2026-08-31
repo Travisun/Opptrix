@@ -10,8 +10,8 @@ import {
 } from './paths.js'
 import { ensureDirectory } from './path-gate.js'
 import { ensureSharedWorkspaceLayout } from './shared-workspace.js'
-import { isPathDenied } from './deny.js'
-import { DenyPathError, WorkspaceError } from './errors.js'
+import { assertGrantPathAllowed } from './mounts.js'
+import { WorkspaceError } from './errors.js'
 
 export type GrantMode = 'ro' | 'rw'
 
@@ -26,14 +26,6 @@ export interface WorkspaceGrant {
 
 interface SessionGrants {
   byRootId: Map<string, WorkspaceGrant>
-}
-
-function normalizeGrantPath(absPath: string): string {
-  const resolved = path.resolve(absPath)
-  if (isPathDenied(resolved)) {
-    throw new DenyPathError('无法授权该目录（受保护路径）')
-  }
-  return resolved
 }
 
 export class GrantStore {
@@ -91,7 +83,7 @@ export class GrantStore {
     mode: GrantMode,
     label?: string,
   ): WorkspaceGrant {
-    const normalized = normalizeGrantPath(absPath)
+    const normalized = assertGrantPathAllowed(absPath, { sessionId })
     const rootId = `grant_${randomUUID().slice(0, 8)}`
     const grant: WorkspaceGrant = {
       id: randomUUID(),

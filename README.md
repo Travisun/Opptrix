@@ -193,7 +193,18 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 
 ## 使用方式（最终用户）
 
-### 方式一：桌面安装包（推荐）
+### 方式一：Docker 自托管（推荐部署）
+
+单用户实例默认用 Docker Compose 交付（数据与模型在外部卷，升级不丢）：
+
+```bash
+docker compose up -d --build
+# → http://127.0.0.1:8711
+```
+
+说明见 **[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md)**（备份、升级、额外挂载、账户与 TLS）。
+
+### 方式二：桌面安装包
 
 从 [GitHub Releases](https://github.com/Travisun/Opptrix/releases) 下载对应平台安装包（标签 `desktop-v*`）：
 
@@ -216,9 +227,7 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 
 未签名/dev 包在 macOS 上若提示「已损坏」，可在终端执行 `xattr -cr /Applications/Opptrix.app` 或 **右键 → 打开** 一次。
 
-### 方式二：浏览器（自托管 Web）
-
-适合在本机或服务器部署后通过浏览器访问：
+### 方式三：本机 npm 运行（开发 / 无 Docker）
 
 ```bash
 git clone https://github.com/Travisun/Opptrix.git
@@ -229,9 +238,9 @@ npm run build
 npm run serve    # → http://127.0.0.1:5173
 ```
 
-在 **设置** 中同样配置 LLM 与数据源。生产环境请自行做好 HTTPS、访问控制与密钥管理。
+生产环境更推荐 [Docker 自托管](docs/SELF-HOSTING.md)。请自行做好 HTTPS、访问控制与密钥管理。
 
-### 方式三：开发模式
+### 方式四：开发模式
 
 见下方 [快速开始（开发者）](#快速开始开发者) 与 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 

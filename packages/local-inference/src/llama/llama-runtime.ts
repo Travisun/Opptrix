@@ -239,6 +239,14 @@ export class LlamaRuntime {
     })
   }
 
+  getLoadedModelPath(): string | null {
+    return loadedModelPath
+  }
+
+  isLoading(): boolean {
+    return Boolean(loadingPromise)
+  }
+
   /** 真正 dispose model/context/session；仅置 null 会导致托盘长驻泄漏 VRAM/RAM */
   async unload(): Promise<void> {
     clearIdleTimer()

@@ -20,7 +20,7 @@ Cross-platform desktop app built with **Electron** and a **Node.js API sidecar**
 
 **Why Electron?** Mature ecosystem, consistent Chromium rendering (Markdown / Mermaid / LaTeX), and the main process is Node — a natural fit for spawning the existing API sidecar. Production uses `ELECTRON_RUN_AS_NODE` so the bundled app does not require a separate Node.js install.
 
-新闻离线翻译结果缓存在主进程内存 Map 中，防抖落盘至 `~/.opptrix/news-translation-cache.json`（对齐行情引擎 Cache：LRU + 退出 flush）。本地翻译 GGUF **按需加载**（启动/下载完成不进显存；首次翻译或显式 `preloadTranslationModel` 才 load），空闲约 12 分钟后真正 `dispose`（`OPPTRIX_TRANSLATION_IDLE_MS`，`0` 关闭）；句段内存 LRU 保留，换模/退出亦走官方 dispose。 sidecar `LlamaRuntime` 同语义 idle unload。`translation-start-download` IPC **立即 ack** `{ started, download }`，GGUF 后台下载，进度经 `translation-download-progress` / `translation-get-status.download`（并发不双开）。
+新闻翻译：**Electron 仅作 HTTP 薄代理**（IPC → 服务端 `/api/news/*`，翻译可走 SSE 转发进度），**不在主进程加载 llama / GGUF**。离线推理与文章级缓存均在 sidecar：结果 LRU + 防抖落盘至 `$OPPTRIX_DATA_DIR/news-translation-cache.json`（未设则 `~/.opptrix/…`，经 `resolveUserDataRoot()`）；命中时响应 `fromCache: true`。GGUF **按需加载**，空闲约 12 分钟 unload（`OPPTRIX_TRANSLATION_IDLE_MS`）。下载写入 `OPPTRIX_LLM_DIR`（否则 `$DATA/llms`）；IPC `translation-start-download` 立即 ack，进度由 renderer **轮询** `GET /api/news/translation/status`。客户端翻译优先 `Accept: text/event-stream`（`progress` / `result` / `error`）。
 
 <p align="center">
   <img src="../screenshot.jpg" alt="Opptrix 桌面主界面" width="880" />

@@ -1,0 +1,73 @@
+# Dependencies & build caches
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.npm
+.cache
+**/.turbo
+coverage
+.nyc_output
+
+# VCS / IDE / agent local
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+.codegraph
+.mimocode
+.cursor
+.agents
+agent-transcripts
+
+# Desktop packaging artifacts (not needed for server image)
+apps/desktop/release
+apps/desktop/dist
+apps/desktop/out
+apps/desktop/resources/llms
+apps/desktop/resources/sensevoice
+apps/desktop/resources/engines
+apps/desktop/resources/runtime-stage
+apps/desktop/resources/python
+
+# Author / marketing / noise
+author
+screenshot.webp
+*.dmg
+*.AppImage
+*.exe
+*.blockmap
+
+# Tests & fixtures (runtime image does not ship the suite)
+tests
+**/__fixtures__
+**/*.test.ts
+**/*.test.mjs
+**/*.spec.ts
+
+# Local secrets & env
+.env
+.env.*
+!.env.example
+*.key
+certs
+api_keys.txt
+
+# Docs heavy assets optional — keep md for SELF-HOSTING inside image? exclude large media
+docs/**/*.png
+docs/**/*.jpg
+docs/**/*.webp
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+tmp
+temp
+.venv
+venv
+__pycache__
+*.mdc
+AGENTS.md

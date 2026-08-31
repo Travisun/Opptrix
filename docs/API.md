@@ -368,6 +368,12 @@ POST /api/research
 | PUT | `/api/news/subscriptions/:id/group` | `{ group_id }` 移动订阅 |
 | GET | `/api/news/articles/:id` | 单篇文章 |
 | POST | `/api/news/refresh` | 强制刷新全部 enabled 源 |
+| POST | `/api/news/translate` | 文章翻译：离线（本地 HY-MT GGUF）优先或按 `service_mode`；失败且已配置远程时回退。响应含 `engine: "offline"\|"remote"`、可选 `fromCache`。默认 JSON；`Accept: text/event-stream` 或 `?stream=1` 时为 SSE（`event: progress` / `result` / `error`）。**不依赖 Electron** |
+| GET | `/api/news/translation/status` | 离线翻译引擎状态（模型是否就绪、下载进度、`canTranslate` 等） |
+| GET | `/api/news/translation/models` | 目录模型 + 已安装 GGUF 列表 |
+| POST | `/api/news/translation/download` | `{ modelId }` 开始下载（立即返回 `{ started, download }`；进度见 status） |
+| POST | `/api/news/translation/download/cancel` | 取消进行中的模型下载 |
+| GET | `/api/news/translation/download-dir` | `{ downloadDirLabel }`（相对标签，如 `llms`；不暴露本机绝对路径） |
 | GET | `/api/news/multimodal/status` | 多模态运行时状态（ffmpeg、SenseVoice 就绪、`canEnrich*`、`sensevoiceEnsure` 任务快照） |
 | POST | `/api/news/multimodal/sensevoice/ensure` | **立即返回** `{ ok, started, job }`；后台准备语音模型。请轮询 GET 同路径直至 `job.phase` 为 `ready` / `error` |
 | GET | `/api/news/multimodal/sensevoice/ensure` | 查询 ensure 任务：`{ job: { phase, percent, message, ready, … } }` |
@@ -389,6 +395,37 @@ POST /api/research
 - 模型加载：**内置（安装包）→ `~/.opptrix/sensevoice/models` → 按需下载**。
 - **ensure 为异步 job**：`POST …/sensevoice/ensure` 不阻塞下载；客户端用短超时启动后轮询 `GET` 同路径（或 `status.sensevoiceEnsure`）。设置保存时的后台 bootstrap 与显式 ensure **共用同一 job**，不会双开下载。
 - `job.phase`：`idle` → `preparing` → `downloading` → `ready` | `error`；含 `percent` / `message`（产品级文案）。
+
+**新闻离线翻译（服务端）**
+
+- 主路径：`POST /api/news/translate`；设置 `translation.service_mode === "offline"` 且本地有 HY-MT GGUF 时走 `llamaRuntime`，否则（或本地失败）回退已配置的远程 LLM。
+- **文章缓存**：键 `${articleId}::${modelBasename}::zh`，落盘 `~/.opptrix/news-translation-cache.json`；命中时 JSON/`result` 含 `fromCache: true`（跳过推理）。
+- **SSE**：请求头含 `Accept: text/event-stream` 或查询参数 `stream=1` 时，推送 `progress`（与离线/远程 `onProgress` 一致）→ 最终 `result`；失败发 `error`。未请求流式时仍返回完整 JSON（向后兼容）。
+- 模型管理：`/api/news/translation/status|models|download`；Docker `with-models` 会预拉 `HY-MT1.5-1.8B-Q4_K_M.gguf` 到 `/models/llms`。
+- 桌面 Electron IPC 可薄代理到同一 HTTP（翻译可走 SSE 转发进度），但离线翻译**不要求** Electron。
+
+**GET `/api/news/translation/status` 示例**
+
+```json
+{
+  "supported": true,
+  "modelFound": true,
+  "modelPath": "HY-MT1.5-1.8B-Q4_K_M.gguf",
+  "modelName": "HY-MT1.5-1.8B-Q4_K_M.gguf",
+  "modelFamily": "hy-mt",
+  "ready": true,
+  "loading": false,
+  "lastError": null,
+  "serviceMode": "offline",
+  "offlineModel": "__auto__",
+  "remoteConfigured": false,
+  "localAvailable": true,
+  "download": null,
+  "downloading": false,
+  "canTranslate": true,
+  "downloadDirLabel": "llms"
+}
+```
 
 ### 沙盒环境设置
 
@@ -1347,18 +1384,69 @@ Content-Type: application/json
 
 按**会话**管理 Agent 可访问的本地根目录。列表时会确保存在默认工作区（`root_id: "default"`，路径为用户数据目录下 `agent-workspace/sessions/<sessionId>/`，`mode: "rw"`，`is_default: true`；**每会话隔离**）。额外授权由用户在聊天侧选择文件夹后写入；受保护路径（如用户库、`agent-privileges`、`sessions/` 容器目录本身等）不可授权。默认根不可删除。会话删除时服务端会清理该会话的 grants、写/删 sticky 策略、**出站授权**、**会话局域网授权**（`SessionLanAccessStore`），并 dispose 会话级隔离句柄，尽量删除 `sessions/<sessionId>/` 磁盘目录（`WorkspaceService.clearSession`；**不删** `agent-workspace/shared/`）。本 REST 响应可含 `abs_path`（供 UI）；Agent 工具 `list_workspace_grants` 对默认工作区与用户数据根下路径脱敏，**不**把 `~/.opptrix` 根当作可访问目录暴露给模型（见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
 
+自托管 / Web：**额外授权路径**须落在白名单内——本会话工作区、公共资产（`agent-workspace/shared/`）、或 `$OPPTRIX_DATA_DIR/mounts`（或 `resolveUserDataRoot()/mounts`）的**直接子目录**及其子路径。桌面运行时（`OPPTRIX_DESKTOP`）可继续用本机目录选择器，服务端仅做 Deny 校验。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/api/workspace/mounts` | 列出可授权的已挂载根（见下） |
+| GET | `/api/workspace/browse` | 在挂载根或公共资产下浏览子目录 |
 | GET | `/api/sessions/:id/workspace/grants` | `{ grants: WorkspaceGrant[] }` |
-| POST | `/api/sessions/:id/workspace/grants` | 新增授权；body 见下 |
+| POST | `/api/sessions/:id/workspace/grants` | 新增授权；body 见下；服务端强制路径门禁 |
 | DELETE | `/api/sessions/:id/workspace/grants/:grantId` | 按 grant `id` 移除；默认根返回 404 |
 | GET | `/api/sessions/:id/workspace/file` | 流式读取已授权文件（见下） |
+
+### Workspace mounts / browse（服务器目录选择）
+
+供 Web（及需要时的桌面）在**不经过本机文件对话框**的情况下挑选可授权路径。需登录（与其它 `/api` 相同）。
+
+**GET `/api/workspace/mounts`**
+
+列出 `$OPPTRIX_DATA_DIR/mounts`（未设置时为 `resolveUserDataRoot()/mounts`）下的**直接子目录**。目录不存在或为空时返回空列表与友好说明。
+
+```json
+{
+  "mounts": [
+    { "name": "research-notes", "abs_path": "/data/mounts/research-notes", "label": "research-notes" }
+  ]
+}
+```
+
+空列表示例：
+
+```json
+{
+  "mounts": [],
+  "empty_reason": "还没有可选用的已挂载目录。请先在服务器上添加需要共享的文件夹后刷新。本对话工作区与公共资产仍可正常使用。"
+}
+```
+
+**GET `/api/workspace/browse?root=...&path=...`**
+
+| Query | 类型 | 说明 |
+|-------|------|------|
+| `root` | string | **必填**：某一挂载根的 `abs_path`，或公共资产根绝对路径 |
+| `path` | string | 相对 `root` 的子路径；禁止 `..` / 绝对路径；默认可空 |
+
+仅返回**子目录**（不含普通文件）；单层最多约 200 项，超出时 `truncated: true`。符号链接若逃出 `root` 则跳过。
+
+```json
+{
+  "root": "/data/mounts/research-notes",
+  "path": "2024",
+  "entries": [
+    { "name": "q1", "abs_path": "/data/mounts/research-notes/2024/q1" }
+  ],
+  "truncated": false
+}
+```
+
+失败：根不在白名单 / 穿越 → 403；参数缺失 → 400。
 
 **POST body（grants）**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `path` | string | **必填**，要授权的绝对路径 |
+| `path` | string | **必填**，要授权的绝对路径（须通过服务端白名单 / Deny） |
 | `mode` | `"ro"` \| `"rw"` | 默认 `"ro"`；其它值按只读处理 |
 | `label` | string | 可选显示名；缺省时用目录名 |
 
@@ -1407,7 +1495,7 @@ Content-Type: application/json
 | 400 | `path` 缺失；路径受保护或其它校验失败（`{ "error": "…" }`） |
 | 404 | 会话不存在；DELETE 时 grant 不存在或试图删除默认根 |
 
-前端客户端：`listWorkspaceGrants` / `addWorkspaceGrant` / `removeWorkspaceGrant`（`client-ui/src/api/client.ts`）。Agent 侧对应工具：`list_workspace_grants`（问可访问目录时首选）、`request_folder_access`（仅提示用户授权，不代替本 API）；`get_project_info` 已脱敏且不是授权清单。
+前端客户端：`listWorkspaceMounts` / `browseWorkspaceMount` / `listWorkspaceGrants` / `addWorkspaceGrant` / `removeWorkspaceGrant`（`client-ui/src/api/client.ts`）。Agent 侧对应工具：`list_workspace_grants`（问可访问目录时首选）、`request_folder_access`（仅提示用户授权，不代替本 API）；`get_project_info` 已脱敏且不是授权清单。
 
 ## 错误
 

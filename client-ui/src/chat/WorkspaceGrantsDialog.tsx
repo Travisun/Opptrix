@@ -189,6 +189,7 @@ interface WorkspaceGrantsDialogProps {
   loading: boolean
   disabled: boolean
   error: string | null
+  /** 桌面端保留本机选文件夹；Web 走服务器目录选择 */
   isDesktop: boolean
   onAddFolder: (mode: 'ro' | 'rw') => void
   onReplaceGrant: (grant: WorkspaceGrantDto) => void
@@ -232,7 +233,7 @@ export default function WorkspaceGrantsDialog({
   }, [onAddFolder])
 
   const busy = disabled || loading
-  const canAddFolder = isDesktop && !busy
+  const canAddFolder = !busy
 
   return (
     <>
@@ -336,7 +337,7 @@ export default function WorkspaceGrantsDialog({
 
               {!isDesktop && (
                 <Text className={s.desktopHint} block>
-                  添加本地文件夹需使用桌面版。你可以在桌面应用中打开本对话后再添加。
+                  可从服务器上的已挂载目录中选择文件夹进行授权。本对话工作区与公共资产始终可用。
                 </Text>
               )}
 

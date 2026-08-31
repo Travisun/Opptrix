@@ -18,6 +18,15 @@ import './styles/global.css'
 applyFontFamily(readFontFamilyPreference())
 applyFontScale(readFontScalePreference())
 
+/** Web PWA：生产环境注册最小 Service Worker（无 Push）；Electron 不注册 */
+if (!isElectron() && import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* installability best-effort */
+    })
+  })
+}
+
 if (isDesktopApp()) {
   document.documentElement.classList.add('opptrix-desktop')
 }

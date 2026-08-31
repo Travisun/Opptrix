@@ -371,19 +371,45 @@ export default function TranslationSettingsSection() {
   const skipSettingsSave = useRef(true)
   const settingsBaseline = useRef<NewsTranslationSettings | null>(null)
 
-  const refreshEngine = useCallback(async () => {
-    if (!isElectron()) return
-    const [nextStatus, nextModels, dir] = await Promise.all([
-      window.electronAPI?.translationGetStatus?.() ?? Promise.resolve(null),
-      window.electronAPI?.translationGetModels?.() ?? Promise.resolve(null),
-      window.electronAPI?.translationGetDownloadDir?.() ?? Promise.resolve(null),
-    ])
-    if (nextStatus) setStatus(nextStatus)
+  const applyEngineState = useCallback((
+    nextStatus: TranslationEngineStatus | null,
+    nextModels: TranslationModelsResult | null,
+    dir?: string | null,
+  ) => {
+    if (nextStatus) {
+      setStatus(nextStatus)
+      if (nextStatus.download) setDownload(nextStatus.download)
+      else if (!nextStatus.downloading) setDownload(null)
+    }
     if (nextModels) setModels(nextModels)
-    if (nextStatus?.download) setDownload(nextStatus.download)
-    const resolvedDir = dir ?? nextModels?.downloadDir ?? nextStatus?.downloadDir ?? null
+    const resolvedDir = dir
+      ?? nextModels?.downloadDirLabel
+      ?? nextModels?.downloadDir
+      ?? nextStatus?.downloadDirLabel
+      ?? nextStatus?.downloadDir
+      ?? null
     if (resolvedDir) setDownloadDir(resolvedDir)
   }, [])
+
+  const refreshEngine = useCallback(async () => {
+    try {
+      const [nextStatus, nextModels] = await Promise.all([
+        news.getTranslationStatus(),
+        news.getTranslationModels(),
+      ])
+      applyEngineState(nextStatus, nextModels)
+      return
+    } catch {
+      // HTTP 不可达时再试桌面壳兜底
+    }
+    if (!window.electronAPI?.translationGetStatus) return
+    const [nextStatus, nextModels, dir] = await Promise.all([
+      window.electronAPI.translationGetStatus(),
+      window.electronAPI.translationGetModels?.() ?? Promise.resolve(null),
+      window.electronAPI.translationGetDownloadDir?.() ?? Promise.resolve(null),
+    ])
+    applyEngineState(nextStatus, nextModels, dir)
+  }, [applyEngineState])
 
   const handleOpenDownloadDir = useCallback(async () => {
     if (!window.electronAPI?.translationOpenDownloadDir) return
@@ -416,20 +442,26 @@ export default function TranslationSettingsSection() {
 
   useEffect(() => { void load() }, [load])
 
+  // 下载中：轮询 status 端点（HTTP 主路径）；完成后提示
+  const downloadTerminalRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!isElectron()) return
-    const unsubscribe = window.electronAPI?.onTranslationDownloadProgress?.(progress => {
-      setDownload(progress)
-      if (progress.status === 'completed') {
+    if (download?.status !== 'downloading') {
+      if (download?.status === 'completed' && downloadTerminalRef.current !== 'completed') {
+        downloadTerminalRef.current = 'completed'
         toast.showSuccess('离线翻译模型已下载完成')
         void refreshEngine()
+      } else if (download?.status === 'error' && downloadTerminalRef.current !== 'error') {
+        downloadTerminalRef.current = 'error'
+        toast.showError(download.error ?? '模型下载失败')
       }
-      if (progress.status === 'error') {
-        toast.showError(progress.error ?? '模型下载失败')
-      }
-    })
-    return unsubscribe
-  }, [refreshEngine, toast])
+      return
+    }
+    downloadTerminalRef.current = 'downloading'
+    const timer = window.setInterval(() => {
+      void refreshEngine()
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [download, refreshEngine, toast])
 
   useDebouncedEffect(() => {
     if (loading || skipSettingsSave.current) {
@@ -482,33 +514,43 @@ export default function TranslationSettingsSection() {
   ]
 
   const handleDownload = async (modelId: string) => {
-    if (!window.electronAPI?.translationStartDownload) return
     try {
-      const ack = await window.electronAPI.translationStartDownload(modelId)
-      if (ack?.download) setDownload(ack.download)
-      if (ack?.alreadyPresent) {
+      downloadTerminalRef.current = null
+      let ack: {
+        started: boolean
+        download: TranslationDownloadProgress | null
+        alreadyPresent?: boolean
+      } | null = null
+      try {
+        ack = await news.startTranslationDownload(modelId)
+      } catch {
+        ack = await window.electronAPI?.translationStartDownload?.(modelId) ?? null
+      }
+      if (!ack) {
+        toast.showError('无法开始下载，请确认服务已启动')
+        return
+      }
+      if (ack.download) setDownload(ack.download)
+      if (ack.alreadyPresent) {
         await refreshEngine()
         return
       }
-      // invoke 仅 ack；进度靠事件，并用 status.download 轮询兜底（防事件丢失）
-      const pollUntilDone = async () => {
-        for (let i = 0; i < 3600; i += 1) {
-          await new Promise(r => window.setTimeout(r, 1000))
-          const next = await window.electronAPI?.translationGetStatus?.()
-          if (!next) break
-          if (next.download) setDownload(next.download)
-          const terminal = next.download?.status === 'completed'
-            || next.download?.status === 'error'
-            || (!next.downloading && !next.download)
-          if (terminal) {
-            void refreshEngine()
-            return
-          }
-        }
-      }
-      void pollUntilDone()
+      // 进度由 status 轮询 effect 驱动
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '下载失败')
+    }
+  }
+
+  const handleCancelDownload = async () => {
+    try {
+      try {
+        await news.cancelTranslationDownload()
+      } catch {
+        await window.electronAPI?.translationCancelDownload?.()
+      }
+      await refreshEngine()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '取消失败')
     }
   }
 
@@ -522,22 +564,19 @@ export default function TranslationSettingsSection() {
   })()
 
   const engineHint = (() => {
-    if (!isElectron()) {
-      return '离线翻译仅在桌面版可用；远程翻译需先在「模型」中配置提供商。'
-    }
     if (settings.translation.service_mode === 'remote') {
       return status?.remoteConfigured
         ? '将始终使用远程大模型翻译。'
         : '请先在下方选择用于翻译的远程模型。'
     }
     if (status?.ready) {
-      return `当前使用本地模型：${status.modelName ?? '已加载'}`
+      return `当前使用本机服务端模型：${status.modelName ?? '已加载'}`
     }
     if (status?.localAvailable) {
-      return '已找到本地模型文件，首次翻译时将自动加载（约十几秒）。'
+      return '已找到本机服务端模型，首次翻译时将自动加载（约十几秒）。'
     }
     if (status?.remoteConfigured) {
-      return '本地模型尚未就绪，翻译时将自动使用远程大模型。'
+      return '本机服务端模型尚未就绪，翻译时将自动使用远程大模型。'
     }
     return '请下载离线模型，或在下方配置远程翻译作为回退。'
   })()
@@ -553,7 +592,7 @@ export default function TranslationSettingsSection() {
         <SettingsGroup>
           <SettingsRow
             title="服务类型"
-            desc="离线优先时，本地模型可用则用本地；否则回退到远程 API"
+            desc="离线优先时，本机服务端模型可用则用本机；否则回退到远程大模型"
             control={(
               <OpptrixSelect
                 className={s.intervalSelect}
@@ -579,7 +618,7 @@ export default function TranslationSettingsSection() {
         </Text>
       </div>
 
-      {settings.translation.service_mode !== 'remote' && isElectron() && (
+      {settings.translation.service_mode !== 'remote' && (
         <div className={s.sectionBlock}>
           <div className={s.sectionHeaderRow}>
             <div className={s.sectionHeaderLeft}>
@@ -703,7 +742,7 @@ export default function TranslationSettingsSection() {
                         size="small"
                         className={s.progressCancel}
                         icon={<DismissRegular fontSize={12} />}
-                        onClick={() => { void window.electronAPI?.translationCancelDownload?.() }}
+                        onClick={() => { void handleCancelDownload() }}
                       >
                         取消
                       </OpptrixButton>
@@ -726,15 +765,19 @@ export default function TranslationSettingsSection() {
             </Text>
             <div className={s.panelFooterDirRow}>
               {downloadDir ? (
-                <OpptrixButton
-                  variant="ghost"
-                  size="small"
-                  className={s.panelFooterDir}
-                  title="点击打开文件夹"
-                  onClick={() => { void handleOpenDownloadDir() }}
-                >
-                  {downloadDir}
-                </OpptrixButton>
+                isElectron() && window.electronAPI?.translationOpenDownloadDir ? (
+                  <OpptrixButton
+                    variant="ghost"
+                    size="small"
+                    className={s.panelFooterDir}
+                    title="点击打开文件夹"
+                    onClick={() => { void handleOpenDownloadDir() }}
+                  >
+                    {downloadDir}
+                  </OpptrixButton>
+                ) : (
+                  <span className={s.panelFooterDirMuted} title={downloadDir}>{downloadDir}</span>
+                )
               ) : (
                 <span className={s.panelFooterDirMuted}>加载中…</span>
               )}
