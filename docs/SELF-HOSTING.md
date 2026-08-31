@@ -67,7 +67,10 @@ opptrix up --mirror cn
 
 仓内未装全局时：`npm run opptrix -- up --mirror cn`。仅验证服务、暂不拉模型：`opptrix up --mirror cn --skip-models`。
 
-发布 npm 包：
+发布 npm 包前请确认：
+
+1. 在 npm 创建组织 [`@opptrix`](https://www.npmjs.com/org/create)，并把发版账号加为成员  
+2. GitHub Secret `NPM_TOKEN` 对该组织有 **publish** 权限  
 
 ```bash
 npm run release:selfhost          # 默认 patch 升版本
@@ -76,7 +79,7 @@ git push origin main && git push gitee main
 git push origin selfhost-vX.Y.Z && git push gitee selfhost-vX.Y.Z
 ```
 
-打 tag `selfhost-v*` 会触发 `.github/workflows/publish-selfhost.yml`（需 Secret `NPM_TOKEN`）。也可在 Actions 里手动 `workflow_dispatch`。
+打 tag `selfhost-v*` 会触发 `.github/workflows/publish-selfhost.yml`；流水线会在 `npm publish` 后向 `registry.npmjs.org` 回查，不可见则失败。也可在 Actions 里手动 `workflow_dispatch`。
 
 ### 不用 CLI 时的 Compose 原语
 

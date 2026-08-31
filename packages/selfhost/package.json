@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/selfhost",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opptrix self-host CLI (opptrix) + Docker Compose deploy assets",
   "type": "module",
   "license": "Apache-2.0",
@@ -21,7 +21,7 @@
     "cli"
   ],
   "bin": {
-    "opptrix": "./bin/opptrix.mjs"
+    "opptrix": "bin/opptrix.js"
   },
   "files": [
     "bin",

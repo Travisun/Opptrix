@@ -6,4 +6,4 @@
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 MIRROR="${OPPTRIX_BUILD_MIRROR:-foreign}"
-exec node "$ROOT/packages/selfhost/bin/opptrix.mjs" --mirror "$MIRROR" compose -- "$@"
+exec node "$ROOT/packages/selfhost/bin/opptrix.js" --mirror "$MIRROR" compose -- "$@"

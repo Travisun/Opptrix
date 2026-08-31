@@ -17,7 +17,7 @@ import {
 } from '../scripts/lib/opptrix/mirrors.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const CLI = path.join(ROOT, 'packages/selfhost/bin/opptrix.mjs')
+const CLI = path.join(ROOT, 'packages/selfhost/bin/opptrix.js')
 
 test('parseArgv extracts command, flags, and -- passthrough', () => {
   const a = parseArgv(['up', '--mirror', 'cn', '--skip-models', '-f'])
@@ -100,5 +100,5 @@ test('package.json bin maps opptrix to selfhost package', async () => {
       fs.promises.readFile(path.join(ROOT, 'package.json'), 'utf8'),
     ),
   )
-  assert.equal(pkg.bin['opptrix'], 'packages/selfhost/bin/opptrix.mjs')
+  assert.equal(pkg.bin['opptrix'], 'packages/selfhost/bin/opptrix.js')
 })

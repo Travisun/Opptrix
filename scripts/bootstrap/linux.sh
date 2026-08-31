@@ -331,7 +331,7 @@ ensure_repo() {
     script_dir="$(CDPATH= cd -- "$(dirname "$script_path")" && pwd)"
     root="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
     if [ -f "$root/docker-compose.yml" ] && {
-         [ -f "$root/packages/selfhost/bin/opptrix.mjs" ] || [ -f "$root/scripts/opptrix.mjs" ]
+         [ -f "$root/packages/selfhost/bin/opptrix.js" ] || [ -f "$root/scripts/opptrix.mjs" ]
        }; then
       REPO_ROOT="$root"
       log "使用仓库: $REPO_ROOT"
@@ -340,7 +340,7 @@ ensure_repo() {
   fi
 
   if [ -f "$OPPTRIX_REPO_DIR/docker-compose.yml" ] && {
-       [ -f "$OPPTRIX_REPO_DIR/packages/selfhost/bin/opptrix.mjs" ] \
+       [ -f "$OPPTRIX_REPO_DIR/packages/selfhost/bin/opptrix.js" ] \
        || [ -f "$OPPTRIX_REPO_DIR/scripts/opptrix.mjs" ]
      }; then
     REPO_ROOT="$OPPTRIX_REPO_DIR"
@@ -404,7 +404,7 @@ install_cli_wrapper() {
     warn "npm 全局安装失败，回退到仓库内 CLI 包装脚本"
   fi
 
-  local cli_js="$repo/packages/selfhost/bin/opptrix.mjs"
+  local cli_js="$repo/packages/selfhost/bin/opptrix.js"
   if [ ! -f "$cli_js" ]; then
     cli_js="$repo/scripts/opptrix.mjs"
   fi
@@ -434,7 +434,7 @@ EOF
 write_mirror_pref() {
   local repo="$1" mirror="$2"
   use_node_path
-  local cli="$repo/packages/selfhost/bin/opptrix.mjs"
+  local cli="$repo/packages/selfhost/bin/opptrix.js"
   [ -f "$cli" ] || cli="$repo/scripts/opptrix.mjs"
   (cd "$repo" && node "$cli" init --mirror "$mirror") || warn "opptrix init 失败（可稍后手动执行）"
 }

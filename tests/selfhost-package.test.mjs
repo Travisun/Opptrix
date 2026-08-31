@@ -15,20 +15,20 @@ import {
 } from '../packages/selfhost/src/paths.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const CLI = path.join(ROOT, 'packages/selfhost/bin/opptrix.mjs')
+const CLI = path.join(ROOT, 'packages/selfhost/bin/opptrix.js')
 
 test('selfhost package.json exposes bin opptrix', async () => {
   const pkg = JSON.parse(
     await fs.promises.readFile(path.join(ROOT, 'packages/selfhost/package.json'), 'utf8'),
   )
   assert.equal(pkg.name, '@opptrix/selfhost')
-  assert.equal(pkg.bin.opptrix, './bin/opptrix.mjs')
+  assert.equal(pkg.bin.opptrix, 'bin/opptrix.js')
   assert.equal(pkg.publishConfig?.access, 'public')
 })
 
 test('root package.json bin points at packages/selfhost', async () => {
   const pkg = JSON.parse(await fs.promises.readFile(path.join(ROOT, 'package.json'), 'utf8'))
-  assert.equal(pkg.bin.opptrix, 'packages/selfhost/bin/opptrix.mjs')
+  assert.equal(pkg.bin.opptrix, 'packages/selfhost/bin/opptrix.js')
 })
 
 test('build-bundle copies deploy assets', () => {

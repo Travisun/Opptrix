@@ -50,7 +50,7 @@ test('compose.env.example documents build mirror vars', () => {
 
 test('cn mirror profile exports via opptrix compose dry path', () => {
   // help does not need docker; ensure CLI loads under cn env
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'packages/selfhost/bin/opptrix.mjs'), 'help'], {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'packages/selfhost/bin/opptrix.js'), 'help'], {
     cwd: ROOT,
     env: { ...process.env, OPPTRIX_BUILD_MIRROR: 'cn' },
     encoding: 'utf8',
