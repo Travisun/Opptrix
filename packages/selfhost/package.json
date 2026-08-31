@@ -1,7 +1,7 @@
 {
   "name": "@opptrix/selfhost",
-  "version": "0.1.1",
-  "description": "Opptrix self-host CLI (opptrix) + Docker Compose deploy assets",
+  "version": "0.1.2",
+  "description": "Opptrix self-host CLI (opptrix): Docker Compose deploy, CN/foreign mirrors, start/stop/update",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Opptrix Team",
@@ -17,8 +17,12 @@
   "keywords": [
     "opptrix",
     "self-host",
+    "selfhost",
+    "docker",
     "docker-compose",
-    "cli"
+    "cli",
+    "investment-research",
+    "china-mirrors"
   ],
   "bin": {
     "opptrix": "bin/opptrix.js"

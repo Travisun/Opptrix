@@ -51,3 +51,14 @@ test('SELF-HOSTING.md documents Linux bootstrap and Win/Mac DIY', () => {
   assert.match(doc, /macOS \/ Windows/)
   assert.match(doc, /自备 Docker|自行安装 \*\*Docker\*\*/)
 })
+
+test('@opptrix/selfhost README covers install, commands, mirrors', () => {
+  const readme = fs.readFileSync(path.join(ROOT, 'packages/selfhost/README.md'), 'utf8')
+  assert.match(readme, /npm i -g @opptrix\/selfhost/)
+  assert.match(readme, /opptrix doctor/)
+  assert.match(readme, /--mirror cn/)
+  assert.match(readme, /Gitee/)
+  assert.match(readme, /OPPTRIX_DEPLOY_DIR/)
+  assert.match(readme, /常见问题/)
+  assert.match(readme, /Apache-2\.0/)
+})

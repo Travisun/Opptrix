@@ -6,6 +6,8 @@
 
 ### 方式 A：npm 全局 CLI（需已有 Node ≥ 24 + Docker）
 
+包说明与命令详解见 npm：[`@opptrix/selfhost`](https://www.npmjs.com/package/@opptrix/selfhost)（仓内 `packages/selfhost/README.md`）。
+
 ```bash
 npm i -g @opptrix/selfhost
 # 国内 registry 可选: npm i -g @opptrix/selfhost --registry https://registry.npmmirror.com
