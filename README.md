@@ -230,13 +230,10 @@ opptrix update
 
 如果觉得 Opptrix 有帮助，欢迎点亮 Star，让更多同路人看见：
 
+<!-- 静态快照（api.star-history.com 已不可用）；更新时替换 author/star-history-202691.png -->
 <p align="center">
   <a href="https://www.star-history.com/#Travisun/Opptrix&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Travisun/Opptrix&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Travisun/Opptrix&type=Date" />
-      <img alt="Opptrix GitHub Star History" src="https://api.star-history.com/svg?repos=Travisun/Opptrix&type=Date" width="680" />
-    </picture>
+    <img alt="Opptrix GitHub Star History" src="author/star-history-202691.png" width="680" />
   </a>
 </p>
 
