@@ -79,6 +79,94 @@ function resizePng(src, dest, size) {
   }
 }
 
+/** Cross-platform PNG square resize (Web/PWA + non-mac fallbacks). */
+async function resizePngSharp(src, dest, size) {
+  const { default: sharp } = await import('sharp')
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  await sharp(src)
+    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(dest)
+}
+
+function assertPngSize(file, size) {
+  const { width, height } = readPngDimensions(file)
+  if (width !== size || height !== size) {
+    throw new Error(`${file} must be ${size}x${size}, got ${width}x${height}`)
+  }
+}
+
+/**
+ * Stage browser favicons + PWA install icons into client-ui/public.
+ * Source of truth: icons/logo.png + logo@*.png (same as desktop).
+ */
+async function stageWebPwaIcons() {
+  const publicDir = path.join(REPO_ROOT, 'client-ui', 'public')
+  const iconsDir = path.join(publicDir, 'icons')
+  fs.mkdirSync(iconsDir, { recursive: true })
+
+  const master = path.join(SOURCE_DIR, 'logo.png')
+  const logo16 = path.join(SOURCE_DIR, 'logo@16.png')
+  const logo32 = path.join(SOURCE_DIR, 'logo@32.png')
+  const logo512 = path.join(SOURCE_DIR, 'logo@512.png')
+  for (const file of [master, logo16, logo32, logo512]) {
+    if (!fs.existsSync(file)) throw new Error(`Missing Web icon source: ${file}`)
+  }
+
+  const favicon16 = path.join(iconsDir, 'favicon-16.png')
+  const favicon32 = path.join(iconsDir, 'favicon-32.png')
+  const appleTouch = path.join(iconsDir, 'apple-touch-icon.png')
+  const icon192 = path.join(iconsDir, 'icon-192.png')
+  const icon512 = path.join(iconsDir, 'icon-512.png')
+  const icon512Maskable = path.join(iconsDir, 'icon-512-maskable.png')
+  const faviconIco = path.join(publicDir, 'favicon.ico')
+
+  copyFile(logo16, favicon16)
+  copyFile(logo32, favicon32)
+  assertPngSize(favicon16, 16)
+  assertPngSize(favicon32, 32)
+
+  await resizePngSharp(master, appleTouch, 180)
+  await resizePngSharp(master, icon192, 192)
+  copyFile(logo512, icon512)
+  assertPngSize(appleTouch, 180)
+  assertPngSize(icon192, 192)
+  assertPngSize(icon512, 512)
+
+  // Maskable: ~80% safe zone on light canvas (theme background_color).
+  {
+    const { default: sharp } = await import('sharp')
+    const canvas = 512
+    const inner = Math.round(canvas * 0.8)
+    const pad = Math.floor((canvas - inner) / 2)
+    const fg = await sharp(master)
+      .resize(inner, inner, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer()
+    await sharp({
+      create: {
+        width: canvas,
+        height: canvas,
+        channels: 4,
+        background: { r: 245, g: 245, b: 247, alpha: 1 },
+      },
+    })
+      .composite([{ input: fg, left: pad, top: pad }])
+      .png()
+      .toFile(icon512Maskable)
+    assertPngSize(icon512Maskable, 512)
+  }
+
+  const { default: pngToIco } = await import('png-to-ico')
+  const ico = await pngToIco([favicon16, favicon32])
+  fs.writeFileSync(faviconIco, ico)
+
+  // Drop mis-sized legacy names so manifest cannot keep pointing at wrong pixels.
+  for (const legacy of ['logo-192.png', 'logo-512.png']) {
+    fs.rmSync(path.join(iconsDir, legacy), { force: true })
+  }
+}
+
 /** Packaged / dock icon — keep source alpha (no solid pad). */
 function createAppIcon(master, dest) {
   copyFile(master, dest)
@@ -261,10 +349,12 @@ stageLinuxIcons()
 await stageTrayIcons()
 await createWindowsIco()
 await createNsisIcons()
+await stageWebPwaIcons()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
 console.log('  staged: icon.icon (mac App / Icon Composer)')
 console.log('  staged: icon.icns (DMG + Dock fallback)')
 console.log('  staged: tray/ (mac Template + Win tray.ico + Linux color PNG)')
 console.log('  staged: installerIcon.ico + uninstallerIcon.ico (NSIS ← icons/nsis/)')
 console.log('  synced: client-ui/public/app-icon.png ← logo@64.png')
+console.log('  synced: client-ui/public favicon + PWA icons (16/32/180/192/512 + maskable)')
 

@@ -621,7 +621,7 @@ function SettingsPageView({
                 />
                 <SettingsRow
                   title="界面字体"
-                  desc="全应用统一使用所选字体，含对话与报告"
+                  desc="使用本机系统字体，按设备自动适配；不下载额外字库"
                   control={(
                     <FontFamilyPreferencePicker
                       value={fontFamily}

@@ -32,9 +32,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Prepare UI fonts
-        run: npm run prepare:fonts
-
       # Cache staged models (single CI job; foreign-first mirrors on GitHub-hosted runners).
       - name: Cache staged LLM / SenseVoice assets
         uses: actions/cache@v4

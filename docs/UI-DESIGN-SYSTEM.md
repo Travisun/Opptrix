@@ -75,16 +75,14 @@
 
 ## 3. Typography
 
-跨平台统一打包开源字体（三端同一套；禁止仅 Windows 特判系统字体）。运行时通过 CSS 变量注入：
+使用**系统字体栈**（不打包 / 不下载 webfont）。按终端平台（Apple / Windows / Android / Linux）在运行时注入 CSS 变量：
 
-| 变量 | 默认值 | 用途 |
-|------|--------|------|
-| `--opptrix-font-sans` | `"Inter", "Noto Sans SC", sans-serif` | 界面正文（现代无衬线） |
-| `--opptrix-font-mono` | `"JetBrains Mono", …` | 代码 / 等宽 |
+| 变量 | 用途 |
+|------|------|
+| `--opptrix-font-sans` | 界面正文（本机无衬线 + 中文黑体回退） |
+| `--opptrix-font-mono` | 代码 / 等宽（`ui-monospace` + SF Mono / Cascadia / Consolas 等） |
 
-字重打包：Regular(400) + Medium(500) + Bold(700)。思源黑体与 Noto Sans SC 同源，通过 `@font-face family: "Source Han Sans SC"` 指向同一字体文件，避免双份 CJK 体积。许可证见 `client-ui/public/fonts/LICENSE`（OFL）。
-
-`client-ui/src/styles/source-han-alias.css` **不入库**（gitignore），由 `npm run prepare:fonts`（`scripts/prepare-ui-fonts.mjs`）在构建前从 `@fontsource/noto-sans-sc` 生成。根目录 `npm run build`、`client-ui` 的 `prebuild`、`check:ui` 与 CI 均会调用；升级 `@fontsource/noto-sans-sc` 后须重跑 `prepare:fonts`。
+实现：`theme/fontFamily.ts`（`detectFontUiPlatform` + `resolveFontFamilyStack`）；默认 FOUC 回退见 `styles/fonts.css`。
 
 ### 3.1 字体大小变量
 
@@ -105,15 +103,15 @@
 
 ### 3.2 界面字体预设
 
-用户可在「设置 → 常规 → 外观 → 界面字体」切换正文族（等宽始终为 JetBrains Mono）：
+用户可在「设置 → 常规 → 外观 → 界面字体」切换（均不下载字库）：
 
-| 预设 id | 展示名 | 字体栈 |
-|---------|--------|--------|
-| `inter`（默认） | 现代无衬线 | `"Inter", "Noto Sans SC", sans-serif` |
-| `noto-sans` | 清晰黑体 | `"Noto Sans SC", sans-serif` |
-| `source-han` | 思源黑体 | `"Source Han Sans SC", "Noto Sans SC", sans-serif` |
+| 预设 id | 展示名 | 说明 |
+|---------|--------|------|
+| `system`（默认） | 跟随系统 | 按 Apple / Windows / Android / Linux 选最佳 UI 栈 |
+| `hei` | 黑体优先 | 优先 PingFang / 微软雅黑 / Noto Sans CJK 等 |
+| `song` | 宋体阅读 | 优先 Songti / 宋体 / Noto Serif CJK |
 
-实现：`theme/fontFamily.ts` 提供 `applyFontFamily` / `readFontFamilyPreference` / `writeFontFamilyPreference`，持久化到 `localStorage` key `opptrix-font-family`；切换时派发 `opptrix-font-family-change`，行情图 / Mermaid / Canvas 监听并刷新。
+实现：`applyFontFamily` / `readFontFamilyPreference` / `writeFontFamilyPreference`，持久化到 `localStorage` key `opptrix-font-family`；旧值 `inter` / `noto-sans` / `source-han` 自动迁移。切换时派发 `opptrix-font-family-change`，行情图 / Mermaid / Canvas 监听并刷新。
 
 ### 3.3 字体大小预设切换
 

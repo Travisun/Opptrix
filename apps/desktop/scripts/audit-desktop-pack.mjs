@@ -711,12 +711,6 @@ console.log('audit-desktop-pack: start')
   if (!ciWf.includes('build:packages')) {
     fail('ci.yml must run build:packages before stage-python')
   } else ok('ci.yml builds packages before stage-python')
-  if (!ciWf.includes('prepare:fonts') && !ciWf.includes('prepare-ui-fonts')) {
-    fail('ci.yml must run prepare:fonts before UI build')
-  } else ok('ci.yml runs prepare:fonts')
-  if (!releaseWf.includes('prepare:fonts') && !releaseWf.includes('prepare-ui-fonts')) {
-    fail('release-desktop.yml must run prepare:fonts before desktop/UI build')
-  } else ok('release-desktop.yml runs prepare:fonts')
   if (!releaseWf.includes('build:packages')) {
     fail('release-desktop.yml must run build:packages before stage-python / audit')
   } else ok('release-desktop.yml builds packages before stage-python')
@@ -758,36 +752,55 @@ console.log('audit-desktop-pack: start')
   }
 }
 
-// ── 5b. UI fonts prepare wiring (source-han-alias generated, not committed) ─
+// ── 5b. UI fonts — system stacks only (no webfont / prepare:fonts) ─────────
 {
   const rootPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'))
   const clientPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'client-ui/package.json'), 'utf8'))
   const fontsCss = path.join(REPO_ROOT, 'client-ui/src/styles/fonts.css')
+  const fontFamilyTs = path.join(REPO_ROOT, 'client-ui/src/theme/fontFamily.ts')
   const prepareScript = path.join(REPO_ROOT, 'scripts/prepare-ui-fonts.mjs')
 
-  if (rootPkg.scripts?.['prepare:fonts'] !== 'node scripts/prepare-ui-fonts.mjs') {
-    fail('root package.json must define prepare:fonts → node scripts/prepare-ui-fonts.mjs')
-  } else ok('root prepare:fonts script')
+  if (rootPkg.scripts?.['prepare:fonts']) {
+    fail('root package.json must not define prepare:fonts (system fonts only)')
+  } else ok('root has no prepare:fonts')
 
-  if (!String(rootPkg.scripts?.build ?? '').includes('prepare:fonts')) {
-    fail('root build script must run prepare:fonts before client-ui build')
-  } else ok('root build runs prepare:fonts')
+  if (String(rootPkg.scripts?.build ?? '').includes('prepare:fonts')) {
+    fail('root build must not run prepare:fonts')
+  } else ok('root build skips prepare:fonts')
 
-  if (!String(clientPkg.scripts?.prebuild ?? '').includes('prepare-ui-fonts')) {
-    fail('client-ui package.json prebuild must run prepare-ui-fonts.mjs')
-  } else ok('client-ui prebuild prepares fonts')
+  if (clientPkg.scripts?.prebuild) {
+    fail('client-ui must not define prebuild prepare-ui-fonts')
+  } else ok('client-ui has no font prebuild')
 
-  if (!fs.existsSync(prepareScript)) {
-    fail('missing scripts/prepare-ui-fonts.mjs')
-  } else ok('present prepare-ui-fonts.mjs')
+  for (const dep of ['@fontsource/inter', '@fontsource/jetbrains-mono', '@fontsource/noto-sans-sc']) {
+    if (clientPkg.dependencies?.[dep] || clientPkg.devDependencies?.[dep]) {
+      fail(`client-ui must not depend on ${dep}`)
+    }
+  }
+  ok('client-ui has no @fontsource deps')
+
+  if (fs.existsSync(prepareScript)) {
+    fail('scripts/prepare-ui-fonts.mjs must be removed')
+  } else ok('prepare-ui-fonts.mjs removed')
 
   if (!fs.existsSync(fontsCss)) {
     fail('missing client-ui/src/styles/fonts.css (must be committed)')
   } else {
     const css = fs.readFileSync(fontsCss, 'utf8')
-    if (!css.includes('source-han-alias.css')) {
-      fail('fonts.css must import source-han-alias.css')
-    } else ok('fonts.css imports source-han-alias')
+    if (css.includes('@fontsource') || css.includes('source-han-alias')) {
+      fail('fonts.css must not import @fontsource or source-han-alias')
+    } else if (!css.includes('--opptrix-font-sans')) {
+      fail('fonts.css must define --opptrix-font-sans')
+    } else ok('fonts.css is system-stack only')
+  }
+
+  if (!fs.existsSync(fontFamilyTs)) {
+    fail('missing client-ui/src/theme/fontFamily.ts')
+  } else {
+    const src = fs.readFileSync(fontFamilyTs, 'utf8')
+    if (!src.includes('detectFontUiPlatform') || !src.includes('PingFang SC')) {
+      fail('fontFamily.ts must provide OS-aware system stacks')
+    } else ok('fontFamily.ts OS-aware system stacks')
   }
 }
 

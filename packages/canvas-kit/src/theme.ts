@@ -163,7 +163,7 @@ export type CanvasTokenGroups = {
 }
 
 const FONT_SANS_FALLBACK = '"Noto Sans SC", sans-serif'
-const FONT_MONO_FALLBACK = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+const FONT_MONO_FALLBACK = 'ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace'
 
 function readHostFont(cssVar: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback
