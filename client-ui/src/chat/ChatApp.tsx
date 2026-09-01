@@ -201,47 +201,59 @@ const useStyles = makeStyles({
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
+  /** Mobile：保持横向，左栏 / 主列 / 右 sheet 真推布局 */
   contentWorkspaceMobile: {
-    flexDirection: 'column',
+    flexDirection: 'row',
   },
-  /** Mobile ≤767：关注/文件全屏浮层（高于会话抽屉 z=200），自右滑入 */
+  contentWorkspaceElectron: {
+    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
+  },
+  /** Mobile：右栏推入（width 动画），非 fixed 遮罩覆盖 */
   mobileRightSheet: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 220,
+    position: 'relative',
+    flexShrink: 0,
+    width: 0,
+    height: '100%',
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
+    boxSizing: 'border-box',
+    transitionProperty: 'width',
+    transitionDuration: `${OVERLAY_SIDEBAR_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+    pointerEvents: 'none',
+    willChange: 'width',
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '1ms',
+    },
+  },
+  mobileRightSheetOpen: {
+    width: '100%',
+    pointerEvents: 'auto',
+  },
+  /** 锚定右缘，随 shell 变宽从右侧推出并挤开主列 */
+  mobileRightSheetInner: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: '100vw',
+    maxWidth: '100vw',
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box',
     paddingTop: 'env(safe-area-inset-top)',
     paddingRight: 'env(safe-area-inset-right)',
     paddingBottom: 'env(safe-area-inset-bottom)',
     paddingLeft: 'env(safe-area-inset-left)',
-    boxSizing: 'border-box',
-    overflow: 'hidden',
-    transform: 'translate3d(100%, 0, 0)',
-    opacity: 0,
-    pointerEvents: 'none',
-    transitionProperty: 'transform, opacity',
-    transitionDuration: `${OVERLAY_SIDEBAR_MS}ms`,
-    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
-    willChange: 'transform, opacity',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '1ms',
-    },
+    backgroundColor: opptrixCssVars.canvas,
     '& > *': {
       flex: 1,
       minHeight: 0,
       minWidth: 0,
-      width: '100%',
+      height: '100%',
     },
-  },
-  mobileRightSheetOpen: {
-    transform: 'translate3d(0, 0, 0)',
-    opacity: 1,
-    pointerEvents: 'auto',
-  },
-  contentWorkspaceElectron: {
-    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
   },
   chatColumn: {
     flex: 1,
@@ -2848,12 +2860,14 @@ export default function ChatApp() {
                 s.chatColumn,
                 electronChrome && s.chatColumnElectron,
               )}
+              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
             >
               <NewsCenterPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
                 isMobile={isMobile}
-                onOpenSidebar={openDrawer}
+                sidebarDrawerOpen={drawerOpen}
+                onOpenSidebar={toggleVisible}
                 onOpenSettings={openNewsSettings}
                 onDiscussArticle={handleDiscussArticle}
               />
@@ -2886,12 +2900,14 @@ export default function ChatApp() {
                 s.chatColumn,
                 electronChrome && s.chatColumnElectron,
               )}
+              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
             >
               <MarketDynamicsPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
                 isMobile={isMobile}
-                onOpenSidebar={openDrawer}
+                sidebarDrawerOpen={drawerOpen}
+                onOpenSidebar={toggleVisible}
               />
             </div>
           </div>
@@ -2922,12 +2938,14 @@ export default function ChatApp() {
                 s.chatColumn,
                 electronChrome && s.chatColumnElectron,
               )}
+              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
             >
               <CommunityFeedPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
                 isMobile={isMobile}
-                onOpenSidebar={openDrawer}
+                sidebarDrawerOpen={drawerOpen}
+                onOpenSidebar={toggleVisible}
               />
             </div>
           </div>
@@ -2958,12 +2976,14 @@ export default function ChatApp() {
                 s.chatColumn,
                 electronChrome && s.chatColumnElectron,
               )}
+              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
             >
               <ExpertMarketPage
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
                 isMobile={isMobile}
-                onOpenSidebar={openDrawer}
+                sidebarDrawerOpen={drawerOpen}
+                onOpenSidebar={toggleVisible}
                 onSelectExpert={handleSelectExpert}
                 onExpertSaved={() => setExpertRefreshKey(k => k + 1)}
               />
@@ -2999,6 +3019,7 @@ export default function ChatApp() {
                 electronChrome && s.chatColumnElectron,
                 isDragging && s.chatColumnDragging,
               )}
+              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
               style={!isMobile ? (
                 isDragging && showSplitter
                   ? {
@@ -3071,7 +3092,7 @@ export default function ChatApp() {
                   onClearContextRef={contextRef && collaborationViewTab === 'main' ? handleClearContextRef : undefined}
                   onModelChange={availableModels.length ? handleModelChange : undefined}
                   onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
-                  onOpenSidebar={openDrawer}
+                  onOpenSidebar={toggleVisible}
                   onNewChat={handleNew}
                   onOpenSettings={openSystemSettings}
                   onToggleSidebar={!isMobile ? handleToggleSidebar : undefined}
@@ -3135,20 +3156,22 @@ export default function ChatApp() {
               aria-label={mobileRightSheet === 'preview' ? '文件预览' : '关注与持仓'}
               aria-hidden={!mobileSheetPresented}
             >
-              <RightPanel
-                visible
-                fullWidth
-                transitionEnabled={false}
-                focusStockCode={focusStockCode}
-                onFocusStockConsumed={handleFocusStockConsumed}
-                onToggleRightPanel={closeMobileRightSheet}
-                onDiscussInChat={handleStockDiscuss}
-                previewMode={mobileRightSheet === 'preview'}
-                preview={preview}
-                previewSessionId={activeId}
-                onSelectAttachment={handleSelectPreviewAttachment}
-                onClosePreview={closeMobileRightSheet}
-              />
+              <div className={s.mobileRightSheetInner}>
+                <RightPanel
+                  visible
+                  fullWidth
+                  transitionEnabled={false}
+                  focusStockCode={focusStockCode}
+                  onFocusStockConsumed={handleFocusStockConsumed}
+                  onToggleRightPanel={closeMobileRightSheet}
+                  onDiscussInChat={handleStockDiscuss}
+                  previewMode={mobileRightSheet === 'preview'}
+                  preview={preview}
+                  previewSessionId={activeId}
+                  onSelectAttachment={handleSelectPreviewAttachment}
+                  onClosePreview={closeMobileRightSheet}
+                />
+              </div>
             </div>
           )}
         </div>

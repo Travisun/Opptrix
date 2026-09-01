@@ -93,6 +93,14 @@ const { cleanupStaleApiListeners } = require('../../desktop/electron/resolve-por
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
+/** 绑定 0.0.0.0/:: 时，进程内回调须用 loopback（fetch 不能访问 0.0.0.0） */
+function connectHostForBind(bindHost: string): string {
+  const raw = (bindHost || '127.0.0.1').trim()
+  if (raw === '::' || raw === '0.0.0.0' || raw === '::ffff:0.0.0.0') return '127.0.0.1'
+  if (raw.startsWith('::ffff:')) return raw.slice('::ffff:'.length)
+  return raw
+}
+const CONNECT_HOST = connectHostForBind(HOST)
 const APP_VERSION = resolveOpptrixAppVersion()
 
 const hub = new ResearchHub()
@@ -111,7 +119,7 @@ const serverAppContext = {
     version: APP_VERSION,
     runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
     desktop: process.env.OPPTRIX_DESKTOP === '1',
-    server: { host: HOST, port: PORT },
+    server: { host: HOST, port: PORT, connect_host: CONNECT_HOST },
     tool_count: agent.tools.list().length,
     mining_tool_count: agent.tools.miningTools().length,
   }),
@@ -124,7 +132,7 @@ agent = new AgentEngine(hub, {
   defaultTopN: cfg.default_top_n,
   appContext: serverAppContext,
 })
-agent.setApiBaseUrl(`http://${HOST}:${PORT}/api`)
+agent.setApiBaseUrl(`http://${CONNECT_HOST}:${PORT}/api`)
 
 /** 协作任务会话只读：禁止外部 REST 打断（Runner 仍可直调 engine.chat） */
 function isReadonlyCollaborationSession(sessionId: string): boolean {
@@ -2257,9 +2265,10 @@ async function bootstrap() {
   })
 
   await listenWithStaleCleanup()
-  console.log(`\n  Opptrix API → http://${HOST}:${PORT}/api/health`)
+  const bindNote = HOST !== CONNECT_HOST ? ` (bind ${HOST})` : ''
+  console.log(`\n  Opptrix API → http://${CONNECT_HOST}:${PORT}/api/health${bindNote}`)
   if (serveUi) {
-    console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
+    console.log(`  Desktop UI → http://${CONNECT_HOST}:${PORT}\n`)
   } else {
     console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
   }

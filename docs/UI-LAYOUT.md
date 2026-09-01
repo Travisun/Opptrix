@@ -41,7 +41,8 @@
 - **品牌行**：macOS / Web / 移动抽屉侧栏在「新对话」菜单区之上展示纯文字「Opptrix 工作台」与 `useAppVersion` 的 `v…` 版本（baseline 对齐，无 wordmark SVG）；左右内边距 `20px`，与顶部菜单行图标左缘（`margin 10 + padding 10`）对齐。Windows / Linux Electron 侧栏**不**再展示该行（品牌移至 frame titlebar），菜单区上边距收紧为约 `6px`
 - **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
-- **Web 打开入口**：移动 Web（≤767）在聊天 `MobileTopBar` 与新闻 / 市场 / 社区 / 专家页顶栏提供汉堡按钮（「打开导航」）唤出会话抽屉；桌面 Web 聊天顶栏左侧常显侧栏开合按钮（「打开侧栏」/「收起侧栏」），不依赖 Electron 标题栏工具
+- **Web 打开入口**：移动 Web（≤767）在聊天 `MobileTopBar` 与新闻 / 市场 / 社区 / 专家页顶栏使用同一套 `PanelLeftExpand/Contract` 侧栏开合按钮（随 `drawerOpen` 切换，点击 toggle）；桌面 Web 聊天顶栏左侧常显侧栏开合按钮，不依赖 Electron 标题栏工具
+- **移动推开布局**：左会话栏与右关注/文件栏均为 flex **width 推挤**主列（非遮罩覆盖）；开左侧栏主内容右移，开右侧栏主内容左移；时长与 `DESKTOP_SIDEBAR_LAYOUT_MS` 对齐；无半透明 backdrop
 - **移动端右栏**：聊天 `MobileTopBar` 可打开关注/持仓与文件预览为**全屏 sheet**（复用 `RightPanel` `fullWidth`，非并排分栏）；关闭后回到对话
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
 - 左列名称（名录同步全称，过长 hover 横向滚动）+ 代码在下；右列表头四指标——最新价、关注收益、成本价、持仓收益（持仓成本与收益来自组合账本，含费率）；列表区 `overflow: auto` 支持横向滚动，收窄时不重叠；hover 行显示编辑/删除，操作钮 sticky 吸附在面板可视区右缘（行不横滚时保持行尾原位）

@@ -52,6 +52,12 @@ const useStyles = makeStyles({
     padding: '10px 16px',
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
+  webHeadMobile: {
+    gap: '4px',
+    padding: '6px 8px',
+    paddingTop: 'max(6px, env(safe-area-inset-top))',
+    minHeight: '44px',
+  },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
@@ -258,6 +264,7 @@ interface Props {
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
   isMobile?: boolean
+  sidebarDrawerOpen?: boolean
   onOpenSidebar?: () => void
   onSelectExpert: (expertId: string) => void | Promise<void>
   /** 本地专家保存后通知聊天空态刷新快捷提问 */
@@ -268,6 +275,7 @@ export default function ExpertMarketPage({
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
+  sidebarDrawerOpen = false,
   onOpenSidebar,
   onSelectExpert,
   onExpertSaved,
@@ -388,9 +396,9 @@ export default function ExpertMarketPage({
           actions={refreshAction}
         />
       ) : (
-        <div className={s.webHead}>
+        <div className={mergeClasses(s.webHead, isMobile && s.webHeadMobile)}>
           {isMobile && onOpenSidebar ? (
-            <MobileNavMenuButton onClick={onOpenSidebar} />
+            <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
           ) : null}
           <Text className={s.webTitle}>专家中心</Text>
           <div className={s.webActions}>{refreshAction}</div>

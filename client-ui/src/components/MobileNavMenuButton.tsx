@@ -1,6 +1,6 @@
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { NavigationRegular } from '@fluentui/react-icons'
 import OpptrixButton from './opptrix/OpptrixButton'
+import { PanelLeftContractRegular, PanelLeftExpandRegular } from '../chat/chatIcons'
 import { opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
@@ -16,26 +16,32 @@ const useStyles = makeStyles({
 
 type Props = {
   onClick: () => void
+  /** 侧栏是否已展开（切换 PanelLeft 图标） */
+  open?: boolean
   className?: string
-  /** 默认「打开导航」 */
   'aria-label'?: string
 }
 
-/** Web 移动顶栏：打开会话侧栏抽屉的汉堡按钮（≥44×44 触控目标） */
+/** Web 移动顶栏：开合会话侧栏（与聊天 MobileTopBar 同图标 / 触控目标） */
 export default function MobileNavMenuButton({
   onClick,
+  open = false,
   className,
-  'aria-label': ariaLabel = '打开导航',
+  'aria-label': ariaLabel,
 }: Props) {
   const s = useStyles()
+  const label = ariaLabel ?? (open ? '收起侧栏' : '打开侧栏')
 
   return (
     <OpptrixButton
       className={mergeClasses(s.btn, className)}
       variant="ghost"
-      icon={<NavigationRegular fontSize={22} />}
+      icon={open
+        ? <PanelLeftContractRegular fontSize={22} />
+        : <PanelLeftExpandRegular fontSize={22} />}
       onClick={onClick}
-      aria-label={ariaLabel}
+      aria-label={label}
+      aria-pressed={open}
     />
   )
 }

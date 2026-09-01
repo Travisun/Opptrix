@@ -13,6 +13,8 @@ const clientPkg = JSON.parse(
 
 const API_TARGET = process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8711'
 const WEB_PORT = Number(process.env.WEB_PORT ?? 5173)
+/** 默认仅本机；设 WEB_HOST=0.0.0.0 可局域网访问 */
+const WEB_HOST = process.env.WEB_HOST ?? '127.0.0.1'
 
 export default defineConfig({
   plugins: [react()],
@@ -44,7 +46,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    host: '127.0.0.1',
+    host: WEB_HOST,
     port: WEB_PORT,
     strictPort: true,
     fs: {
@@ -62,6 +64,7 @@ export default defineConfig({
     },
   },
   preview: {
+    host: WEB_HOST,
     port: WEB_PORT,
     strictPort: true,
     proxy: {

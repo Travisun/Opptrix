@@ -1256,7 +1256,7 @@ npm run test:ci          # 仅测试（CI 等价）
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `STOCK_RESEARCH_PORT` | `8711` | API 服务端口 |
-| `STOCK_RESEARCH_HOST` | `127.0.0.1` | API 服务主机 |
+| `STOCK_RESEARCH_HOST` | `127.0.0.1`（可设 `0.0.0.0` 等） | API 监听地址 |
 | `WEB_PORT` | `5173` | Vite 开发服务器端口 |
 | `OPPTRIX_DATA_DIR` | `~/.opptrix` | 用户数据根目录 |
 | `OPPTRIX_DESKTOP` | - | 桌面模式标记 |

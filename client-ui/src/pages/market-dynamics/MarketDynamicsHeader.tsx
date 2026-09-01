@@ -40,7 +40,8 @@ const useStyles = makeStyles({
   rootWebMobile: {
     height: 'auto',
     minHeight: '44px',
-    padding: '0 8px',
+    padding: '6px 8px',
+    paddingTop: 'max(6px, env(safe-area-inset-top))',
   },
   titleTabs: {
     flexShrink: 0,
@@ -98,6 +99,8 @@ type Props = {
   chromeToolbarReserve?: number
   dragRegionClassName?: string
   isMobile?: boolean
+  /** 移动端会话侧栏是否展开（顶栏图标态） */
+  sidebarDrawerOpen?: boolean
   onOpenSidebar?: () => void
 }
 
@@ -109,6 +112,7 @@ export default function MarketDynamicsHeader({
   chromeToolbarReserve = 0,
   dragRegionClassName = 'opptrix-market-dynamics-title-drag',
   isMobile = false,
+  sidebarDrawerOpen = false,
   onOpenSidebar,
 }: Props) {
   const s = useStyles()
@@ -154,7 +158,7 @@ export default function MarketDynamicsHeader({
     >
       <div className={mergeClasses(s.titleTabs, 'opptrix-panel-title-no-drag')}>
         {!electronChrome && isMobile && onOpenSidebar ? (
-          <MobileNavMenuButton onClick={onOpenSidebar} />
+          <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
         ) : null}
         <Text className={s.title}>市场动态</Text>
       </div>
