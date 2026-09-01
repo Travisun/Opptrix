@@ -167,9 +167,23 @@ RUN mkdir -p "$NVM_DIR" \
     > /etc/profile.d/opptrix-nvm.sh
 
 # Single-user self-host: run as root so named/bind volumes are writable without
-# host UID mapping. Harden with reverse-proxy auth + claim account (see SELF-HOSTING).
-# /app = immutable seed tree; /system = hot-update slots (boot symlink → slots/<ver>).
-RUN mkdir -p /data /data/mounts /models /system
+# host UID mapping. Agent commands drop to opptrix-agent (DAC). Harden with
+# reverse-proxy auth + claim account (see SELF-HOSTING).
+# /app = immutable seed tree; /opptrix/system (or /system) = hot-update slots.
+# Fixed uid/gid for stable volume ownership across image rebuilds.
+RUN groupadd --gid 10001 opptrix-agent \
+  && useradd --uid 10001 --gid 10001 --home-dir /opptrix/workspace --shell /usr/sbin/nologin \
+    --no-create-home opptrix-agent \
+  && mkdir -p \
+    /opptrix/private \
+    /opptrix/workspace \
+    /opptrix/mounts \
+    /opptrix/models \
+    /opptrix/system \
+    /data /data/mounts /models /system \
+  && chown -R opptrix-agent:opptrix-agent /opptrix/workspace /opptrix/mounts \
+  && chmod 2770 /opptrix/workspace /opptrix/mounts \
+  && chmod 700 /opptrix/private /opptrix/system
 
 # Built monorepo tree (prefer correctness: keep workspace layout so Node resolution works)
 COPY --from=build /app /app
@@ -183,17 +197,24 @@ ENV NODE_ENV=production \
   STOCK_RESEARCH_HOST=0.0.0.0 \
   STOCK_RESEARCH_PORT=8711 \
   SERVE_UI=1 \
-  OPPTRIX_DATA_DIR=/data \
-  OPPTRIX_SYSTEM_DIR=/system \
+  OPPTRIX_HOME=/opptrix \
+  OPPTRIX_DATA_DIR=/opptrix/private \
+  OPPTRIX_AGENT_WORKSPACE_DIR=/opptrix/workspace \
+  OPPTRIX_MOUNTS_DIR=/opptrix/mounts \
+  OPPTRIX_MODELS_DIR=/opptrix/models \
+  OPPTRIX_SYSTEM_DIR=/opptrix/system \
   OPPTRIX_DOCKER=1 \
   OPPTRIX_AGENT_SANDBOX=off \
+  OPPTRIX_AGENT_USER=opptrix-agent \
+  OPPTRIX_AGENT_UID=10001 \
+  OPPTRIX_AGENT_GID=10001 \
   OPPTRIX_SEED_ROOT=/app \
   UI_DIST_PATH=/app/client-ui/dist \
-  OPPTRIX_LLM_DIR=/models/llms \
-  OPPTRIX_E5_BUNDLED_DIR=/models/llms/multilingual-e5-small \
-  OPPTRIX_RAPIDOCR_MODEL_DIR=/models/llms/rapidocr-ppocrv4-mobile \
-  OPPTRIX_RAPIDOCR_BUNDLED_DIR=/models/llms/rapidocr-ppocrv4-mobile \
-  OPPTRIX_SENSEVOICE_BUNDLED_DIR=/models/sensevoice \
+  OPPTRIX_LLM_DIR=/opptrix/models/llms \
+  OPPTRIX_E5_BUNDLED_DIR=/opptrix/models/llms/multilingual-e5-small \
+  OPPTRIX_RAPIDOCR_MODEL_DIR=/opptrix/models/llms/rapidocr-ppocrv4-mobile \
+  OPPTRIX_RAPIDOCR_BUNDLED_DIR=/opptrix/models/llms/rapidocr-ppocrv4-mobile \
+  OPPTRIX_SENSEVOICE_BUNDLED_DIR=/opptrix/models/sensevoice \
   OPPTRIX_WITH_MODELS=1 \
   OPPTRIX_BASE_VERSION=${OPPTRIX_BASE_VERSION} \
   OPPTRIX_RELEASE_TAG=${OPPTRIX_RELEASE_TAG}
@@ -202,7 +223,7 @@ ENV NODE_ENV=production \
 
 EXPOSE 8711
 
-VOLUME ["/data", "/models", "/system"]
+VOLUME ["/opptrix"]
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/scripts/docker-entrypoint.sh"]
 CMD ["node", "apps/server/dist/index.js"]

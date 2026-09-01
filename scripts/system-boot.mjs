@@ -7,8 +7,10 @@
  *   activate-pending  — if state.pendingVersion set, activate (boot←pending, backup←old)
  *   print-boot        — print absolute runtime root (boot symlink / pointer)
  *
- * Exit codes: 0 ok; 1 usage/error. Never touches OPPTRIX_DATA_DIR (/data).
+ * Exit codes: 0 ok; 1 usage/error. Never touches OPPTRIX_DATA_DIR (user private data).
  *
+ * ensure: first boot seeds slots/<ver>; when image seed > boot, flushes old hot pending
+ * and stages image seed as pending. activate-pending skips if needsBaseRefresh.
  * Usage:
  *   node scripts/system-boot.mjs ensure [--version X]
  *   node scripts/system-boot.mjs activate-pending
@@ -106,27 +108,62 @@ function usage() {
  */
 function cmdEnsure(su, versionFlag) {
   const paths = su.ensureSeedLayoutDirs()
+  const seedRoot = su.resolveSeedRoot()
+  const version = resolveSeedVersion(seedRoot, typeof versionFlag === 'string' ? versionFlag : undefined)
   const bootVer = su.readBootVersion(paths.systemDir)
-  if (bootVer) {
+
+  if (!bootVer) {
     process.stderr.write(
-      `[system-boot] ensure: boot already → ${bootVer} (${su.readDirectoryPointer(paths.bootLink)})\n`,
+      `[system-boot] ensure: seeding ${version} from ${seedRoot} → ${paths.systemDir}\n`,
+    )
+    const result = su.seedCurrentSlot({
+      systemDir: paths.systemDir,
+      seedRoot,
+      version,
+    })
+    process.stderr.write(
+      `[system-boot] ensure: ${result.seeded ? 'seeded' : 'skipped'} slot=${result.slotPath}\n`,
     )
     return
   }
 
-  const seedRoot = su.resolveSeedRoot()
-  const version = resolveSeedVersion(seedRoot, typeof versionFlag === 'string' ? versionFlag : undefined)
   process.stderr.write(
-    `[system-boot] ensure: seeding ${version} from ${seedRoot} → ${paths.systemDir}\n`,
+    `[system-boot] ensure: boot already → ${bootVer} (${su.readDirectoryPointer(paths.bootLink)})\n`,
   )
-  const result = su.seedCurrentSlot({
+
+  // Docker / 镜像升级：种子版本高于 boot 时写入 slots 并挂 pending，供 activate-pending + first-boot
+  const promote = su.stageSeedVersionAsPending({
     systemDir: paths.systemDir,
     seedRoot,
     version,
   })
+  if (promote.skipped) {
+    process.stderr.write(
+      `[system-boot] ensure: promote skipped (${promote.reason}) image=${version}\n`,
+    )
+    return
+  }
+  const flushNote = promote.flushedPending
+    ? ` flushedOldPending=${promote.flushedPendingVersion ?? 'job'}`
+    : ''
   process.stderr.write(
-    `[system-boot] ensure: ${result.seeded ? 'seeded' : 'skipped'} slot=${result.slotPath}\n`,
+    `[system-boot] ensure: image ${version} > boot ${bootVer} → pending`
+      + ` (${promote.reason})${flushNote} slot=${promote.slotPath}\n`,
   )
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof loadSystemUpdate>>} su
+ * @param {string} version
+ */
+function pendingNeedsBaseRefresh(su, version) {
+  const root = su.resolveSystemDir()
+  const dir = su.slotPath(root, version)
+  const marker = su.readRuntimeMarker(dir)
+  return su.evaluateRuntimeRequires(marker, {
+    isDocker: su.isDockerEnv(),
+    baseVersion: su.resolveHostBaseVersion(),
+  })
 }
 
 /**
@@ -138,6 +175,14 @@ function cmdActivatePending(su) {
   const state = su.readState(root)
   if (!state.pendingVersion) {
     process.stderr.write('[system-boot] activate-pending: no pendingVersion — noop\n')
+    return
+  }
+  const check = pendingNeedsBaseRefresh(su, state.pendingVersion)
+  if (check.needsBaseRefresh) {
+    process.stderr.write(
+      `[system-boot] activate-pending: skip ${state.pendingVersion}`
+        + ` (needsBaseRefresh: ${(check.reasons || []).join('; ') || 'host base incompatible'})\n`,
+    )
     return
   }
   process.stderr.write(

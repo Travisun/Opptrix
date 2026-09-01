@@ -266,16 +266,19 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
 
   if (opts.update) {
     console.log(
-      '[opptrix] 更新容器镜像；数据卷 / 模型卷 / 系统槽位卷默认保留，不会删除挂载数据',
+      '[opptrix] 更新容器镜像；数据卷（opptrix-home 或旧版三卷）默认保留，不会删除挂载数据',
     )
     console.log(
-      '[opptrix] 升级保留: compose.env / .opptrix.json / docker-compose.override.yml，以及 Docker 卷 opptrix-data、opptrix-models、opptrix-system',
+      '[opptrix] 升级保留: compose.env / .opptrix.json / docker-compose.override.yml，以及 Docker 卷 opptrix-home（或旧版 opptrix-data / opptrix-models / opptrix-system）',
     )
     console.log(
       '[opptrix] 优先拉取预构建镜像；已有核心模型不会重下（强制重下请在 compose.env 设 OPPTRIX_FORCE_MODEL_FETCH=1）',
     )
     console.log(
-      '[opptrix] 说明: 本命令用于运行环境 / Node / 镜像底座升级；应用内热更新请按产品内提示操作',
+      '[opptrix] 说明: 本命令升级 Docker 底座/镜像；启动时冲掉旧热更新 pending，以镜像内运行时晋升/激活并走库迁移与钩子（非应用内热更新下载）',
+    )
+    console.log(
+      '[opptrix] 目录: 新布局 OPPTRIX_HOME=/opptrix（private/workspace/mounts/models/system）；旧三卷用 docker-compose.legacy-volumes.yml',
     )
   }
 
@@ -451,6 +454,44 @@ async function cmdDoctor(parsed) {
     console.log(`[opptrix] ${ok ? 'OK' : 'MISSING'} ${rel}`)
     if (!ok) missing++
   }
+
+  const composePath = path.join(root, 'docker-compose.yml')
+  const composeEnvPathLocal = path.join(root, 'compose.env')
+  if (fs.existsSync(composePath)) {
+    const composeText = fs.readFileSync(composePath, 'utf8')
+    const usesHome = /opptrix-home:|OPPTRIX_HOME/.test(composeText)
+    const usesLegacy = /opptrix-data:|OPPTRIX_DATA_DIR:\s*"\/data"/.test(composeText)
+    if (usesHome) {
+      console.log('[opptrix] OK compose 使用统一卷 opptrix-home → /opptrix')
+    } else if (usesLegacy) {
+      console.log('[opptrix] OK compose 使用旧三卷布局（或 legacy 清单）')
+    } else {
+      console.log('[opptrix] 提示: 未能识别 compose 卷布局；请确认 OPPTRIX_DATA_DIR / OPPTRIX_SYSTEM_DIR')
+    }
+  }
+  if (fs.existsSync(composeEnvPathLocal)) {
+    const envText = fs.readFileSync(composeEnvPathLocal, 'utf8')
+    const dataDir = /(?:^|\n)\s*OPPTRIX_DATA_DIR\s*=\s*(\S+)/.exec(envText)?.[1]
+    const homeDir = /(?:^|\n)\s*OPPTRIX_HOME\s*=\s*(\S+)/.exec(envText)?.[1]
+    if (dataDir === '/data' && fs.existsSync(composePath)) {
+      const composeText = fs.readFileSync(composePath, 'utf8')
+      if (/OPPTRIX_HOME:\s*"\/opptrix"|opptrix-home:/.test(composeText) && homeDir !== '/opptrix') {
+        console.log(
+          '[opptrix] WARN: compose.env 仍为 OPPTRIX_DATA_DIR=/data，但 compose 已是 /opptrix 布局；'
+            + '请对照 compose.env.example 更新，或改用 docker-compose.legacy-volumes.yml',
+        )
+      }
+    }
+    if (homeDir === '/opptrix' || dataDir === '/opptrix/private') {
+      console.log('[opptrix] OK compose.env 指向统一 /opptrix 布局')
+    }
+  } else {
+    console.log('[opptrix] 提示: 尚无 compose.env（将使用镜像/compose 默认环境）')
+  }
+  if (fs.existsSync(path.join(root, 'docker-compose.legacy-volumes.yml'))) {
+    console.log('[opptrix] OK 附带 docker-compose.legacy-volumes.yml（旧三卷迁移）')
+  }
+
   const cfg = readHostConfig(root)
   console.log(`[opptrix] config mirror=${cfg.mirror ?? '(unset)'} appRef=${cfg.appRef ?? '(unset)'}`)
   try {
@@ -632,7 +673,7 @@ async function main() {
         const args = ['down']
         if (flagTrue(parsed.flags, 'volumes')) {
           console.warn(
-            '[opptrix] WARN: --volumes 将删除 Docker 卷（含 opptrix-data / opptrix-models / opptrix-system 及其中挂载数据），不可恢复',
+            '[opptrix] WARN: --volumes 将删除 Docker 卷（含 opptrix-home 或旧版 opptrix-data / opptrix-models / opptrix-system 及其中数据），不可恢复',
           )
           args.push('-v')
         } else {

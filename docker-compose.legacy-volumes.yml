@@ -1,26 +1,10 @@
-# Opptrix — recommended single-user self-host (Docker Compose)
+# Legacy 3-volume self-host (pre unified /opptrix home).
+# Prefer for existing named volumes opptrix-data / opptrix-models / opptrix-system:
 #
-# Prebuilt image (recommended via `opptrix up`):
-#   CLI sets OPPTRIX_IMAGE=ghcr.io/travisun/opptrix:opptrix-selfhost-vX.Y.Z then pull + up.
-#   Override registry/tag anytime: OPPTRIX_IMAGE=... docker compose up -d
+#   docker compose -f docker-compose.legacy-volumes.yml up -d --build
 #
-# Local build:
-#   cp compose.env.example compose.env   # optional runtime overrides
-#   docker compose up -d --build
-#   open http://127.0.0.1:8711
-#
-# Persistence: single named volume `opptrix-home` → `/opptrix`
-#   private/   user DB, auth, vault, sessions… (service-only)
-#   workspace/ Agent 工作区（opptrix-agent 可写）
-#   mounts/    额外挂载约定
-#   models/    本地模型
-#   system/    热更新槽位
-#
-# Agent isolation: service as root; opptrix_run drops to uid 10001 (opptrix-agent).
-# Legacy 3-volume layout: see docker-compose.legacy-volumes.yml
-#
-# Extra host folders (override):
-#   - ./host-research:/opptrix/mounts/research:ro
+# New installs should use docker-compose.yml (single opptrix-home volume).
+# Dual-user DAC (opptrix-agent) still applies via the same image/entrypoint.
 
 services:
   opptrix:
@@ -46,23 +30,24 @@ services:
       STOCK_RESEARCH_HOST: "0.0.0.0"
       STOCK_RESEARCH_PORT: "8711"
       SERVE_UI: "1"
-      OPPTRIX_HOME: "/opptrix"
-      OPPTRIX_DATA_DIR: "/opptrix/private"
-      OPPTRIX_AGENT_WORKSPACE_DIR: "/opptrix/workspace"
-      OPPTRIX_MOUNTS_DIR: "/opptrix/mounts"
-      OPPTRIX_SYSTEM_DIR: "/opptrix/system"
+      # Clear image default OPPTRIX_HOME → entrypoint legacy /data+/models+/system layout
+      OPPTRIX_HOME: ""
+      OPPTRIX_DATA_DIR: "/data"
+      OPPTRIX_AGENT_WORKSPACE_DIR: "/data/agent-workspace"
+      OPPTRIX_MOUNTS_DIR: "/data/mounts"
+      OPPTRIX_SYSTEM_DIR: "/system"
       OPPTRIX_DOCKER: "1"
       OPPTRIX_AGENT_SANDBOX: "${OPPTRIX_AGENT_SANDBOX:-off}"
       OPPTRIX_AGENT_USER: "opptrix-agent"
       OPPTRIX_AGENT_UID: "10001"
       OPPTRIX_AGENT_GID: "10001"
       OPPTRIX_SEED_ROOT: "/app"
-      OPPTRIX_MODELS_DIR: "/opptrix/models"
-      OPPTRIX_LLM_DIR: "/opptrix/models/llms"
-      OPPTRIX_E5_BUNDLED_DIR: "/opptrix/models/llms/multilingual-e5-small"
-      OPPTRIX_RAPIDOCR_MODEL_DIR: "/opptrix/models/llms/rapidocr-ppocrv4-mobile"
-      OPPTRIX_RAPIDOCR_BUNDLED_DIR: "/opptrix/models/llms/rapidocr-ppocrv4-mobile"
-      OPPTRIX_SENSEVOICE_BUNDLED_DIR: "/opptrix/models/sensevoice"
+      OPPTRIX_MODELS_DIR: "/models"
+      OPPTRIX_LLM_DIR: "/models/llms"
+      OPPTRIX_E5_BUNDLED_DIR: "/models/llms/multilingual-e5-small"
+      OPPTRIX_RAPIDOCR_MODEL_DIR: "/models/llms/rapidocr-ppocrv4-mobile"
+      OPPTRIX_RAPIDOCR_BUNDLED_DIR: "/models/llms/rapidocr-ppocrv4-mobile"
+      OPPTRIX_SENSEVOICE_BUNDLED_DIR: "/models/sensevoice"
       UI_DIST_PATH: "/app/client-ui/dist"
       OPPTRIX_WITH_MODELS: "${OPPTRIX_WITH_MODELS:-1}"
       OPPTRIX_FETCH_MODELS_ON_START: "${OPPTRIX_FETCH_MODELS_ON_START:-0}"
@@ -75,9 +60,9 @@ services:
       OPPTRIX_RELEASE_TAG: "${OPPTRIX_RELEASE_TAG:-}"
       OPPTRIX_BASE_VERSION: "${OPPTRIX_BASE_VERSION:-}"
     volumes:
-      - opptrix-home:/opptrix
-      # Extra research / docs folders:
-      # - ./host-research:/opptrix/mounts/research:ro
+      - opptrix-data:/data
+      - opptrix-models:/models
+      - opptrix-system:/system
     restart: unless-stopped
     stop_grace_period: 20s
     healthcheck:
@@ -88,4 +73,6 @@ services:
       start_period: 180s
 
 volumes:
-  opptrix-home:
+  opptrix-data:
+  opptrix-models:
+  opptrix-system:

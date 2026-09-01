@@ -5,8 +5,14 @@ import { resolveUserDataRoot } from '@opptrix/shared'
 import { WorkspaceError } from './errors.js'
 import { ensureDirectory } from './path-gate.js'
 
-/** Agent 工作区容器根（quota / 清理统计） */
+/**
+ * Agent 工作区容器根（quota / 清理统计）。
+ * Docker 双用户布局优先 `OPPTRIX_AGENT_WORKSPACE_DIR`（与 private 数据根分离）；
+ * 否则默认 `$OPPTRIX_DATA_DIR/agent-workspace`。
+ */
 export function resolveAgentWorkspaceRoot(): string {
+  const fromEnv = process.env.OPPTRIX_AGENT_WORKSPACE_DIR?.trim()
+  if (fromEnv) return path.resolve(fromEnv)
   return path.join(resolveUserDataRoot(), 'agent-workspace')
 }
 

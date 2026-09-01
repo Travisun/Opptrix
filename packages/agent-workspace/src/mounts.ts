@@ -44,7 +44,14 @@ export interface WorkspaceBrowseResult {
 const EMPTY_MOUNTS_REASON =
   '还没有可选用的已挂载目录。请先在服务器上添加需要共享的文件夹后刷新。本对话工作区与公共资产仍可正常使用。'
 
+/**
+ * 额外挂载约定根。Docker 双用户布局优先 `OPPTRIX_MOUNTS_DIR`
+ *（与 private 数据根分离，避免 0700 private 挡死 Agent）；
+ * 否则默认 `$OPPTRIX_DATA_DIR/mounts`。
+ */
 export function resolveMountsRoot(): string {
+  const fromEnv = process.env.OPPTRIX_MOUNTS_DIR?.trim()
+  if (fromEnv) return path.resolve(fromEnv)
   return path.join(resolveUserDataRoot(), MOUNTS_SUBDIR)
 }
 

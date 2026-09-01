@@ -59,8 +59,11 @@ jobs:
         run: |
           npm pack --dry-run
           test -f bundle/docker-compose.yml
+          test -f bundle/docker-compose.legacy-volumes.yml
           test -f bundle/Dockerfile
           test -f bin/opptrix.js
+          grep -q 'OPPTRIX_HOME=/opptrix' bundle/compose.env.example
+          grep -q 'opptrix-agent' bundle/Dockerfile
           node -e 'const p=require("./package.json"); if(!p.bin||!p.bin.opptrix) throw new Error("missing bin.opptrix")'
 
       - name: Publish

@@ -14,6 +14,7 @@ const BUNDLE = path.join(PKG, 'bundle')
 /** @type {{ src: string, dest: string }[]} */
 const FILES = [
   { src: 'docker-compose.yml', dest: 'docker-compose.yml' },
+  { src: 'docker-compose.legacy-volumes.yml', dest: 'docker-compose.legacy-volumes.yml' },
   { src: 'Dockerfile', dest: 'Dockerfile' },
   { src: 'compose.env.example', dest: 'compose.env.example' },
   { src: '.dockerignore', dest: '.dockerignore' },

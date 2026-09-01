@@ -226,7 +226,7 @@ export function overlayBundleCompose(root) {
   if (!fs.existsSync(path.join(bundle, 'docker-compose.yml'))) return
   if (isDevMonorepoRoot(root)) return
 
-  for (const rel of ['docker-compose.yml', 'Dockerfile', 'compose.env.example', '.dockerignore']) {
+  for (const rel of ['docker-compose.yml', 'docker-compose.legacy-volumes.yml', 'Dockerfile', 'compose.env.example', '.dockerignore']) {
     const src = path.join(bundle, rel)
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(root, rel))
   }

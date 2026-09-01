@@ -88,10 +88,21 @@ jobs:
             echo "::error::Dockerfile appears to COPY model paths — self-host image must stay model-free"
             exit 1
           fi
-          if ! grep -q 'OPPTRIX_MODELS_DIR\|/models' scripts/docker-entrypoint.sh; then
-            echo "::warning::entrypoint may not reference models volume — confirm volume detection still works"
+          if ! grep -q 'OPPTRIX_HOME\|OPPTRIX_MODELS_DIR\|/opptrix\|/models' scripts/docker-entrypoint.sh; then
+            echo "::warning::entrypoint may not reference persistence paths — confirm volume detection still works"
           fi
-          echo "Build context OK (monorepo + model-free Dockerfile)"
+          if ! grep -q 'opptrix-agent' Dockerfile; then
+            echo "::error::Dockerfile missing opptrix-agent user (dual-user DAC)"
+            exit 1
+          fi
+          if ! grep -q 'OPPTRIX_HOME=/opptrix' Dockerfile; then
+            echo "::error::Dockerfile missing OPPTRIX_HOME=/opptrix default"
+            exit 1
+          fi
+          if ! grep -q 'stageSeedVersionAsPending\|promote' scripts/system-boot.mjs; then
+            echo "::warning::system-boot may lack image→slot promote — confirm Docker upgrade path"
+          fi
+          echo "Build context OK (monorepo + model-free Dockerfile + DAC + /opptrix)"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
