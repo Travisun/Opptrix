@@ -10,6 +10,7 @@ import {
 } from '../api/client'
 import McpApiKeyField from '../components/opptrix/McpApiKeyField'
 import { useSettingsToast } from '../pages/settings/SettingsToast'
+import { openExternalUrl } from '../platform/openUrl'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { ONBOARDING_COPY } from './manifest'
@@ -76,6 +77,26 @@ const useStyles = makeStyles({
     color: opptrixCssVars.accent,
     lineHeight: 1.4,
   },
+  keyBlock: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
+  },
+  tutorialLink: {
+    alignSelf: 'flex-start',
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.accent,
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
+    ':hover': {
+      color: opptrixCssVars.accentHover,
+    },
+  },
   loading: {
     display: 'flex',
     alignItems: 'center',
@@ -112,7 +133,7 @@ export function OnboardingMcpPanel() {
       }
       if (Object.keys(keys).length) setApiKeys(prev => ({ ...prev, ...keys }))
     } catch (e) {
-      showToast(e instanceof Error ? e.message : '加载 MCP 预设失败', 'error')
+      showToast(e instanceof Error ? e.message : '加载扩展服务失败', 'error')
     } finally {
       setLoading(false)
     }
@@ -197,15 +218,30 @@ export function OnboardingMcpPanel() {
                   </div>
                 </div>
                 {mcpPresetNeedsSecret(preset) && (
-                  <McpApiKeyField
-                    value={apiKeys[preset.id] ?? ''}
-                    configured={configured}
-                    testing={false}
-                    onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
-                    onBlur={() => { void handleBlur(preset.id) }}
-                    onTest={() => {}}
-                    placeholder="输入数据密钥"
-                  />
+                  <div className={sx.keyBlock}>
+                    <McpApiKeyField
+                      className="opptrix-onboarding-input"
+                      value={apiKeys[preset.id] ?? ''}
+                      configured={configured}
+                      testing={false}
+                      onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
+                      onBlur={() => { void handleBlur(preset.id) }}
+                      onTest={() => {}}
+                      placeholder="输入数据密钥"
+                    />
+                    {preset.homepage ? (
+                      <button
+                        type="button"
+                        className={sx.tutorialLink}
+                        onClick={() => {
+                          const url = preset.homepage
+                          if (url) openExternalUrl(url)
+                        }}
+                      >
+                        前往获取数据密钥
+                      </button>
+                    ) : null}
+                  </div>
                 )}
               </div>
             )

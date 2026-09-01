@@ -808,6 +808,9 @@ function ProviderListRow({
                   onSaved={() => {
                     onSaved()
                   }}
+                  onCommitSaved={() => {
+                    setDialogOpen(false)
+                  }}
                 />
               </DialogContent>
             </DialogBody>

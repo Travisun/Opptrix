@@ -10,7 +10,7 @@ export const TONGHUASHUN_SETTINGS = secretKeySettings(
     placeholder: '粘贴同花顺数据密钥',
     subtitle: '同花顺行情与基本面数据',
     description: '在同花顺开放平台获取后填入即可使用',
-    helpUrl: 'https://fuyao.aicubes.cn/',
+    helpUrl: 'https://opptrix.net/t/topic/199',
     defaultEnabled: false,
   },
 )

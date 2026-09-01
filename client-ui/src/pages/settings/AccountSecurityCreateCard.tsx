@@ -10,10 +10,12 @@ import {
   AuthUsernameField,
 } from '../../auth/AuthFields'
 import { formatAuthError, validateOwnerCredentials } from '../../auth/authErrors'
+import { ONBOARDING_COPY } from '../../onboarding/manifest'
 import { opptrixCssVars } from '../../theme/tokens'
 import { SettingsGroup, SettingsStaticBlock } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import {
+  AccountSecurityActions,
   AccountSecurityBenefits,
   AccountSecurityFlowRoot,
   AccountSecurityHero,
@@ -29,14 +31,6 @@ const useStyles = makeStyles({
     lineHeight: 1.5,
     padding: '0 2px',
   },
-  introActions: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    width: '100%',
-  },
 })
 
 export function CreateAccountCard({
@@ -47,6 +41,7 @@ export function CreateAccountCard({
 }) {
   const s = useStyles()
   const toast = useSettingsToast()
+  const copy = ONBOARDING_COPY.account
   const { reload } = useAuthStatus()
   const [phase, setPhase] = useState<'intro' | 'form'>('intro')
   const [username, setUsername] = useState('')
@@ -77,16 +72,16 @@ export function CreateAccountCard({
     return (
       <AccountSecurityFlowRoot>
         <AccountSecurityStepRail steps={[...CREATE_STEPS]} activeIndex={0} />
-        <AccountSecurityHero lead="创建本地账户后，打开 Opptrix 需要登录。适合自托管或希望防止他人误入的场景。" />
+        <AccountSecurityHero lead={copy.desc} />
         <AccountSecurityBenefits
           items={[
             {
-              title: '防止未授权访问',
-              desc: '只有知道密码的人能进入你的投研工作台。',
+              title: '保护投研数据与密钥',
+              desc: '登录后才能进入工作台，降低误入与未授权访问风险。',
             },
             {
-              title: '可再加强一层',
-              desc: '创建后可开启两步验证，即使密码泄露也更安心。',
+              title: '两步验证一并开启',
+              desc: '创建账户后可继续用身份验证器完成验证，即使密码泄露也更安心。',
             },
             {
               title: '本机仍可先不建',
@@ -94,11 +89,11 @@ export function CreateAccountCard({
             },
           ]}
         />
-        <div className={s.introActions}>
+        <AccountSecurityActions>
           <OpptrixButton variant="primary" onClick={() => setPhase('form')}>
             开始创建
           </OpptrixButton>
-        </div>
+        </AccountSecurityActions>
       </AccountSecurityFlowRoot>
     )
   }

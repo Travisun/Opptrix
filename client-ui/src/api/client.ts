@@ -3880,6 +3880,13 @@ export type CoreModelsEnsureJob = {
   accepted: boolean
   started: boolean
   percent: number
+  modelPercent?: number
+  currentModelId?: string | null
+  currentModelLabel?: string | null
+  bytesReceived?: number | null
+  bytesTotal?: number | null
+  bytesPerSecond?: number | null
+  etaSeconds?: number | null
   allReady: boolean
   items: Array<{ id: string; phase: string; message?: string }>
   error: string | null

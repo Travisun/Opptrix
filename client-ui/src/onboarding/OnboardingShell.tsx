@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import { desktopFrameTitlebarHeight } from '../desktop/layout'
@@ -7,10 +7,10 @@ import MacTrafficLights from '../desktop/MacTrafficLights'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { electronPlatform, isElectron } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
-import {
-  type OnboardingNavStep,
-  stepCounter,
-} from './onboardingTheme'
+import { type OnboardingNavStep } from './onboardingTheme'
+
+/** Shared horizontal inset: tight on mobile, expands on wide screens. */
+const SHELL_PAD_X = 'clamp(16px, 4vw, 72px)'
 
 export const useOnboardingShellStyles = makeStyles({
   root: {
@@ -51,6 +51,7 @@ export const useOnboardingShellStyles = makeStyles({
     inset: 0,
     zIndex: 0,
   },
+  /** Shared by AuthWindowShell electron title bar (login), not onboarding chrome. */
   titleBarBrand: {
     position: 'absolute',
     left: '50%',
@@ -63,14 +64,6 @@ export const useOnboardingShellStyles = makeStyles({
     color: opptrixCssVars.accent,
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
-  },
-  titleBarMeta: {
-    position: 'relative',
-    zIndex: 2,
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
   },
   stage: {
     flex: 1,
@@ -88,39 +81,27 @@ export const useOnboardingShellStyles = makeStyles({
   },
   scrollInner: {
     width: '100%',
+    maxWidth: '100%',
     minHeight: '100%',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: 'clamp(16px, 3vh, 28px) clamp(24px, 8vw, 72px)',
-    paddingBottom: 'clamp(16px, 3vh, 28px)',
+    padding: `clamp(16px, 3vh, 28px) ${SHELL_PAD_X}`,
+    /** Clears fixed footer dock (~135px) on config/workflow steps */
+    paddingBottom: '150px',
   },
   scrollInnerFlush: {
     justifyContent: 'flex-start',
   },
   scrollInnerDisplay: {
     justifyContent: 'center',
-  },
-  webHead: {
-    position: 'relative',
-    width: '100%',
-    maxWidth: '640px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '24px',
-    marginBottom: 'clamp(20px, 3vh, 32px)',
-  },
-  webHeadMeta: {
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-    transform: 'translateY(-50%)',
+    paddingBottom: 'clamp(16px, 3vh, 28px)',
   },
   content: {
     width: '100%',
     maxWidth: '520px',
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -139,6 +120,7 @@ export const useOnboardingShellStyles = makeStyles({
   chromeRail: {
     width: '100%',
     maxWidth: '520px',
+    boxSizing: 'border-box',
     marginLeft: 'auto',
     marginRight: 'auto',
   },
@@ -151,8 +133,9 @@ export const useOnboardingShellStyles = makeStyles({
   progressDock: {
     flexShrink: 0,
     width: '100%',
+    boxSizing: 'border-box',
     backgroundColor: opptrixCssVars.canvas,
-    padding: 'clamp(14px, 2.5vh, 20px) clamp(24px, 8vw, 72px)',
+    padding: `clamp(14px, 2.5vh, 20px) ${SHELL_PAD_X}`,
   },
   progressDots: {
     display: 'flex',
@@ -244,30 +227,22 @@ export const useOnboardingShellStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     flexWrap: 'nowrap',
-    gap: '8px',
+    gap: '10px',
     marginTop: '14px',
+    padding: '12px 14px',
     textAlign: 'left',
     lineHeight: 1.4,
+    borderRadius: '10px',
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
+    backgroundColor: opptrixCssVars.surface,
+    boxSizing: 'border-box',
+    cursor: 'pointer',
     '& .fui-Checkbox': {
       margin: 0,
       flexShrink: 0,
     },
     '& .fui-Checkbox__indicator': {
       margin: 0,
-    },
-    '& .fui-Checkbox, & .fui-Checkbox *, & [class*="Checkbox"]:not(span), & [class*="Checkbox"] *': {
-      outline: 'none !important',
-      boxShadow: 'none !important',
-    },
-    '& [type="checkbox"]': {
-      appearance: 'none',
-      WebkitAppearance: 'none',
-      outline: 'none !important',
-      boxShadow: 'none !important',
-    },
-    '& [type="checkbox"]:focus, & [type="checkbox"]:focus-visible, & [type="checkbox"]:active': {
-      outline: 'none !important',
-      boxShadow: 'none !important',
     },
   },
   agreeText: {
@@ -327,13 +302,21 @@ export const useOnboardingShellStyles = makeStyles({
   footerDock: {
     flexShrink: 0,
     width: '100%',
-    borderTop: `1px solid ${opptrixCssVars.separator}`,
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
     backgroundColor: opptrixCssVars.canvas,
-    padding: 'clamp(14px, 2.5vh, 20px) clamp(24px, 8vw, 72px)',
-    paddingBottom: 'max(clamp(14px, 2.5vh, 20px), env(safe-area-inset-bottom, 0px))',
+    minHeight: '135px',
+    height: '135px',
+    paddingTop: 0,
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    paddingLeft: SHELL_PAD_X,
+    paddingRight: SHELL_PAD_X,
   },
   footer: {
     width: '100%',
+    minHeight: '44px',
+    boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -342,6 +325,8 @@ export const useOnboardingShellStyles = makeStyles({
   },
   footerSingle: {
     width: '100%',
+    minHeight: '44px',
+    boxSizing: 'border-box',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -464,12 +449,6 @@ export function OnboardingShell({
         aria-hidden
       />
       {showTrafficLights ? <MacTrafficLights /> : null}
-      <Text className={s.titleBarBrand} block>
-        Opptrix
-      </Text>
-      <Text className={mergeClasses(s.titleBarMeta, 'opptrix-panel-title-no-drag')} block>
-        {stepCounter(stepIndex, steps.length)}
-      </Text>
     </header>
   ) : null
 
@@ -489,17 +468,19 @@ export function OnboardingShell({
       <div className={s.stage}>
         {!hideProgress && (
           <div className={mergeClasses(s.progressDock, 'opptrix-onboarding-progress-dock')}>
-            <div className={s.progressDots} aria-hidden>
-              {steps.map((_, i) => (
-                <div
-                  key={i}
-                  className={mergeClasses(
-                    s.progressDot,
-                    i < stepIndex && s.progressDotDone,
-                    i === stepIndex && s.progressDotActive,
-                  )}
-                />
-              ))}
+            <div className={railClass}>
+              <div className={s.progressDots} aria-hidden>
+                {steps.map((_, i) => (
+                  <div
+                    key={i}
+                    className={mergeClasses(
+                      s.progressDot,
+                      i < stepIndex && s.progressDotDone,
+                      i === stepIndex && s.progressDotActive,
+                    )}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -517,15 +498,6 @@ export function OnboardingShell({
               isDisplay && s.scrollInnerDisplay,
             )}
           >
-            {!electronChrome && (
-              <div className={s.webHead}>
-                <Text className={s.titleBarBrand} block>Opptrix</Text>
-                <Text className={mergeClasses(s.titleBarMeta, s.webHeadMeta)} block>
-                  {stepCounter(stepIndex, steps.length)}
-                </Text>
-              </div>
-            )}
-
             <div
               className={mergeClasses(
                 s.content,

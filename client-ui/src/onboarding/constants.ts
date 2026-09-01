@@ -9,7 +9,7 @@ export const ONBOARDING_STATE_KEY = 'onboarding_state'
 export const LEGAL_AGREEMENTS_VERSION = '2026-03'
 
 /** 引导流程版本；改版引导 UI/步骤时 bump */
-export const ONBOARDING_FLOW_VERSION = '4'
+export const ONBOARDING_FLOW_VERSION = '5'
 
 export interface OnboardingState {
   completedAt: string | null

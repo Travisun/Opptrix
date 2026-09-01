@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Dropdown,
-  Option,
   ProgressBar,
   Spinner,
   Text,
@@ -13,24 +11,34 @@ import {
   CircleRegular,
 } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import OpptrixSelect, { OpptrixOption } from '../components/opptrix/OpptrixSelect'
+import { mergeOpptrixDropdownListboxProps } from '../components/opptrix/OpptrixDropdownPanel'
 import {
   ensureCoreModels,
   getCoreModelsStatus,
   importCoreModel,
   setCoreModelsSourceOrder,
+  type CoreModelsEnsureJob,
   type CoreModelsStatus,
 } from '../api/client'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ONBOARDING_COPY } from './manifest'
 import { useOnboardingShellStyles } from './OnboardingShell'
 
+const FALLBACK_MIRRORS = [
+  { id: 'modelscope', label: '魔搭（国内）' },
+  { id: 'hf-mirror', label: 'HF 镜像' },
+  { id: 'huggingface', label: 'Hugging Face' },
+]
+
 const useStyles = makeStyles({
   card: {
     marginTop: 'clamp(16px, 2.5vh, 22px)',
     padding: '16px 18px',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixCssVars.border}`,
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
     backgroundColor: opptrixCssVars.surface,
+    boxShadow: '0 1px 2px rgba(20, 20, 20, 0.04)',
     display: 'flex',
     flexDirection: 'column',
     gap: '14px',
@@ -87,12 +95,18 @@ const useStyles = makeStyles({
   },
   mirrorLabel: {
     fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
   },
   progressBlock: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '6px',
+  },
+  progressMeta: {
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.45,
   },
   errorText: {
     fontSize: 'var(--opptrix-font-md)',
@@ -123,6 +137,59 @@ function itemPhase(
   return 'pending'
 }
 
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '—'
+  if (n < 1024) return `${Math.round(n)} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function formatSpeed(bps: number | null | undefined): string | null {
+  if (bps == null || !Number.isFinite(bps) || bps < 256) return null
+  return `${formatBytes(bps)}/s`
+}
+
+function formatEta(sec: number | null | undefined): string | null {
+  if (sec == null || !Number.isFinite(sec) || sec <= 0) return null
+  if (sec < 60) return `约 ${sec} 秒`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m < 60) return s > 0 ? `约 ${m} 分 ${s} 秒` : `约 ${m} 分钟`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return rm > 0 ? `约 ${h} 小时 ${rm} 分` : `约 ${h} 小时`
+}
+
+function progressCaption(job: CoreModelsEnsureJob | undefined): {
+  title: string
+  meta: string[]
+} {
+  if (!job) return { title: '正在准备…', meta: [] }
+  const title = job.currentModelLabel
+    ? `正在下载「${job.currentModelLabel}」`
+    : (job.message || '正在下载…')
+  const meta: string[] = []
+  if (typeof job.modelPercent === 'number' && job.phase === 'downloading') {
+    meta.push(`本项 ${Math.max(0, Math.min(100, Math.round(job.modelPercent)))}%`)
+  }
+  if (typeof job.percent === 'number') {
+    meta.push(`整体 ${Math.max(0, Math.min(100, Math.round(job.percent)))}%`)
+  }
+  const speed = formatSpeed(job.bytesPerSecond)
+  if (speed) meta.push(speed)
+  if (
+    typeof job.bytesReceived === 'number'
+    && typeof job.bytesTotal === 'number'
+    && job.bytesTotal > 0
+  ) {
+    meta.push(`${formatBytes(job.bytesReceived)} / ${formatBytes(job.bytesTotal)}`)
+  }
+  const eta = formatEta(job.etaSeconds)
+  if (eta) meta.push(`预计 ${eta}`)
+  return { title, meta }
+}
+
 export function OnboardingCoreModelsPanel({
   onNavChange,
   onReadyChange,
@@ -148,7 +215,7 @@ export function OnboardingCoreModelsPanel({
       setStatus(next)
       onReadyChange(next.allReady)
       if (Array.isArray(next.sourceOrder) && next.sourceOrder.length) {
-        setMirrorOrder(next.sourceOrder)
+        setMirrorOrder(next.sourceOrder.filter(Boolean))
       }
       return next
     } catch (e) {
@@ -176,27 +243,35 @@ export function OnboardingCoreModelsPanel({
 
   const startPoll = useCallback(() => {
     stopPoll()
-    pollRef.current = setInterval(() => { void refresh() }, 2000)
+    pollRef.current = setInterval(() => { void refresh() }, 800)
   }, [refresh, stopPoll])
 
+  const persistMirrorOrder = useCallback(async (order: string[]) => {
+    const cleaned = order
+      .map(v => String(v ?? '').trim().toLowerCase())
+      .filter(v => FALLBACK_MIRRORS.some(m => m.id === v))
+    if (!cleaned.length) return
+    try {
+      await setCoreModelsSourceOrder(cleaned)
+    } catch {
+      /* 偏好保存失败不阻断下载 */
+    }
+  }, [])
+
   const handleMirrorChange = useCallback(async (_: unknown, data: { optionValue?: string }) => {
-    const picked = data.optionValue
+    const picked = typeof data.optionValue === 'string' ? data.optionValue.trim() : ''
     if (!picked) return
     const order = [picked, ...mirrorOrder.filter(m => m !== picked)]
     setMirrorOrder(order)
-    try {
-      await setCoreModelsSourceOrder(order)
-      await refresh()
-    } catch {
-      /* 偏好保存失败不阻断 */
-    }
-  }, [mirrorOrder, refresh])
+    await persistMirrorOrder(order)
+    await refresh()
+  }, [mirrorOrder, persistMirrorOrder, refresh])
 
   const handleDownload = useCallback(async () => {
     setError('')
     setDownloading(true)
     try {
-      await setCoreModelsSourceOrder(mirrorOrder)
+      await persistMirrorOrder(mirrorOrder)
       await ensureCoreModels()
       startPoll()
       await refresh()
@@ -205,7 +280,7 @@ export function OnboardingCoreModelsPanel({
     } finally {
       setDownloading(false)
     }
-  }, [copy.downloadFailed, mirrorOrder, refresh, startPoll])
+  }, [copy.downloadFailed, mirrorOrder, persistMirrorOrder, refresh, startPoll])
 
   useEffect(() => {
     const job = status?.job
@@ -235,7 +310,13 @@ export function OnboardingCoreModelsPanel({
 
   const allReady = Boolean(status?.allReady)
   const jobActive = status?.job?.phase === 'preparing' || status?.job?.phase === 'downloading'
+  const showProgress = jobActive || downloading
   const primaryMirror = mirrorOrder[0] ?? 'modelscope'
+  const mirrors = (status?.mirrors?.length ? status.mirrors : FALLBACK_MIRRORS)
+  const caption = progressCaption(status?.job)
+  const barValue = status?.job?.percent != null
+    ? Math.max(0, Math.min(1, status.job.percent / 100))
+    : undefined
 
   useEffect(() => {
     onNavChange({
@@ -265,21 +346,26 @@ export function OnboardingCoreModelsPanel({
       <div className={s.card}>
         <div className={s.mirrorRow}>
           <Text className={s.mirrorLabel}>{copy.mirrorLabel}</Text>
-          <Dropdown
-            value={status?.mirrors.find(m => m.id === primaryMirror)?.label ?? primaryMirror}
-            selectedOptions={[primaryMirror]}
-            onOptionSelect={handleMirrorChange}
-          >
-            {(status?.mirrors ?? []).map(m => (
-              <Option key={m.id} value={m.id} text={m.label}>{m.label}</Option>
-            ))}
-          </Dropdown>
+          <div className="opptrix-onboarding-select">
+            <OpptrixSelect
+              selectedOptions={[primaryMirror]}
+              onOptionSelect={handleMirrorChange}
+              listbox={mergeOpptrixDropdownListboxProps(undefined, 'opptrix-onboarding-select-listbox')}
+              aria-label={copy.mirrorLabel}
+            >
+              {mirrors.map(m => (
+                <OpptrixOption key={m.id} value={m.id} text={m.label}>{m.label}</OpptrixOption>
+              ))}
+            </OpptrixSelect>
+          </div>
         </div>
 
-        {(jobActive || downloading) && (
-          <div className={s.progressBlock}>
-            <ProgressBar value={status?.job?.percent != null ? status.job.percent / 100 : undefined} />
-            <Text className={s.rowHint}>{status?.job?.message ?? '正在下载…'}</Text>
+        {showProgress && (
+          <div className={s.progressBlock} aria-live="polite">
+            <ProgressBar value={barValue} />
+            <Text className={s.progressMeta} block>
+              {[caption.title, ...caption.meta].filter(Boolean).join(' · ')}
+            </Text>
           </div>
         )}
 

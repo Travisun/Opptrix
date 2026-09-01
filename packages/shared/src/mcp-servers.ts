@@ -353,7 +353,7 @@ export const MCP_BUILTIN_PRESETS: McpPresetDef[] = [
     title: '同花顺（扶摇）',
     description: 'A 股行情、指数与元数据。一个配置覆盖三个后端服务。',
     sortOrder: 0,
-    homepage: 'https://fuyao.aicubes.cn/?ref=opptrix',
+    homepage: 'https://opptrix.net/t/topic/199',
     services: [
       {
         serverId: 'fuyao-a-share',
@@ -380,7 +380,7 @@ export const MCP_BUILTIN_PRESETS: McpPresetDef[] = [
     title: '东方财富（妙想）',
     description: '行情数据与资讯，通过东方财富妙想 MCP 接入。',
     sortOrder: 1,
-    homepage: 'https://choice.eastmoney.com/mcp/?ref=opptrix',
+    homepage: 'https://opptrix.net/t/topic/200',
     services: [
       {
         serverId: 'mx-ds-mcp',
@@ -395,7 +395,7 @@ export const MCP_BUILTIN_PRESETS: McpPresetDef[] = [
     title: '问财',
     description: '用自然语言选股，并检索新闻、公告与研报。',
     sortOrder: 2,
-    homepage: 'https://www.iwencai.com/skillhub',
+    homepage: 'https://opptrix.net/t/topic/203',
     services: [
       {
         serverId: 'iwencai',

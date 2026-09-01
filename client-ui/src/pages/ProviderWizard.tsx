@@ -12,6 +12,7 @@ import {
 } from '../api/client'
 import { useSettingsToast } from './settings/SettingsToast'
 import { ProxySettingsFields, type ProviderProxyMode } from './settings/ProxySettingsFields'
+import { openExternalUrl } from '../platform/openUrl'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { focusRing, ghostInteractive } from '../theme/mixins'
 
@@ -132,6 +133,11 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
+  stepHelper: {
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+  },
   formGrid: {
     display: 'flex',
     flexDirection: 'column',
@@ -150,13 +156,18 @@ const useStyles = makeStyles({
     lineHeight: 1.4,
   },
   signupLink: {
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     color: opptrixCssVars.accent,
-    textDecoration: 'none',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
     lineHeight: 1.4,
     ':hover': {
-      textDecoration: 'underline',
+      color: opptrixCssVars.accentHover,
     },
     ':focus-visible': {
       ...focusRing,
@@ -696,9 +707,11 @@ export default function ProviderWizard({
     </button>
   )
 
+  const onboardingInputClass = isOnboarding ? 'opptrix-onboarding-input' : undefined
+
   return (
     <div className={s.root}>
-      {!compact && (
+      {(isOnboarding || !compact) && (
       <div className={s.steps}>
         {[1, 2, 3].map(n => (
           <div key={n} className={mergeClasses(s.stepDot, n <= step && s.stepActive)} />
@@ -711,12 +724,14 @@ export default function ProviderWizard({
 
           {step === 1 && showPresetList && (
             <>
-              <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>选择提供商</Text>
-                <Text className={s.stepDesc} block>
-                  选一个预置服务，直接填写密钥；也可自定义服务地址。
-                </Text>
-              </div>
+              {!isOnboarding && (
+                <div className={s.stepIntro}>
+                  <Text className={s.stepTitle} block>选择提供商</Text>
+                  <Text className={s.stepDesc} block>
+                    选一个预置服务，直接填写密钥；也可自定义服务地址。
+                  </Text>
+                </div>
+              )}
               <div className={s.presetList}>
                 {flatPresets.map(p => {
                   const promoId = PROMO_PRESET_IDS.find(id => id === p.id)
@@ -733,19 +748,26 @@ export default function ProviderWizard({
 
           {step === 1 && (isEdit || showCustomForm) && (
             <>
-              <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>
-                  {isEdit ? '编辑提供商' : '自定义提供商'}
+              {!isOnboarding ? (
+                <div className={s.stepIntro}>
+                  <Text className={s.stepTitle} block>
+                    {isEdit ? '编辑提供商' : '自定义提供商'}
+                  </Text>
+                  <Text className={s.stepDesc} block>
+                    {isEdit
+                      ? '可调整显示名称与服务地址'
+                      : '填写显示名称与服务地址，下一步再配置密钥'}
+                  </Text>
+                </div>
+              ) : (
+                <Text className={s.stepHelper} block>
+                  {isEdit ? '可调整显示名称与服务地址' : '填写名称与服务地址，下一步再配置密钥'}
                 </Text>
-                <Text className={s.stepDesc} block>
-                  {isEdit
-                    ? '可调整显示名称与服务地址'
-                    : '填写显示名称与服务地址，下一步再配置密钥'}
-                </Text>
-              </div>
+              )}
               <div className={s.formGrid}>
                 <OpptrixField label="显示名称">
                   <OpptrixInput
+                    className={onboardingInputClass}
                     value={name}
                     onChange={(_, d) => setName(d.value || '')}
                     placeholder="例如 我的服务"
@@ -756,6 +778,7 @@ export default function ProviderWizard({
                   hint="填写完整兼容接口根地址；路径因服务而异（如 /v1、/v4、/openai），系统不会自动补全"
                 >
                   <OpptrixInput
+                    className={onboardingInputClass}
                     value={baseUrl}
                     onChange={(_, d) => setBaseUrl(d.value || '')}
                     placeholder="https://api.example.com/v1"
@@ -767,34 +790,41 @@ export default function ProviderWizard({
 
           {step === 2 && (
             <>
-              <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>填写密钥</Text>
-                <Text className={s.stepDesc} block>
-                  {isEdit
-                    ? '留空表示沿用已保存的密钥；填写新密钥将重新验证并拉取模型列表。'
-                    : isOnboarding
-                      ? '密钥保存在你的电脑上。点「继续」将自动验证并拉取可用模型。'
+              {!isOnboarding ? (
+                <div className={s.stepIntro}>
+                  <Text className={s.stepTitle} block>填写密钥</Text>
+                  <Text className={s.stepDesc} block>
+                    {isEdit
+                      ? '留空表示沿用已保存的密钥；填写新密钥将重新验证并拉取模型列表。'
                       : '密钥保存在本地。点击「下一步」将自动验证并拉取可用模型。'}
-                </Text>
-              </div>
+                  </Text>
+                </div>
+              ) : null}
               <div className={s.formGrid}>
                 {name.trim() ? (
                   <div className={s.providerMeta}>
                     <Text className={s.providerMetaName}>{name.trim()}</Text>
                     {signupUrl ? (
-                      <a
+                      <button
+                        type="button"
                         className={s.signupLink}
-                        href={signupUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        onClick={() => openExternalUrl(signupUrl)}
                       >
                         点此获取密钥
-                      </a>
+                      </button>
                     ) : null}
                   </div>
                 ) : null}
-                <OpptrixField label={isEdit ? '密钥（可选）' : '密钥'}>
+                <OpptrixField
+                  label={isEdit ? '密钥（可选）' : '密钥'}
+                  hint={isOnboarding
+                    ? (isEdit
+                      ? '留空沿用已保存密钥；填写新密钥将重新验证'
+                      : '密钥仅保存在本机。点「继续」将自动验证并拉取可用模型')
+                    : undefined}
+                >
                   <OpptrixInput
+                    className={onboardingInputClass}
                     type="password"
                     value={apiKey}
                     onChange={(_, d) => setApiKey(d.value || '')}
@@ -816,10 +846,14 @@ export default function ProviderWizard({
 
           {step === 3 && (
             <>
-              <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>启用模型</Text>
-                <Text className={s.stepDesc} block>勾选要启用的大模型，也可手动添加</Text>
-              </div>
+              {!isOnboarding ? (
+                <div className={s.stepIntro}>
+                  <Text className={s.stepTitle} block>启用模型</Text>
+                  <Text className={s.stepDesc} block>勾选要启用的大模型，也可手动添加</Text>
+                </div>
+              ) : (
+                <Text className={s.stepHelper} block>勾选要启用的模型，也可手动添加</Text>
+              )}
 
               {discoverHint && (
                 <div className={s.statusLine}>
@@ -850,6 +884,7 @@ export default function ProviderWizard({
               <div className={s.customBlock}>
                 <OpptrixField label="自定义模型" hint="无需等待远程拉取，可立即添加">
                   <OpptrixInput
+                    className={onboardingInputClass}
                     value={customModel}
                     onChange={(_, d) => setCustomModel(d.value || '')}
                     placeholder="deepseek-chat"

@@ -40,17 +40,19 @@
 
 ### 核心本地模型（Docker 自托管引导）
 
-镜像不含 E5 / OCR / 语音 / 离线翻译权重；首次使用请在产品引导中下载或离线导入至 `/models`（`OPPTRIX_MODELS_DIR`）。下载通道偏好键：`core_model_source_order`（user-store）。
+镜像不含 E5 / OCR / 语音权重；首次使用请在产品引导中下载或离线导入至 `/models`（`OPPTRIX_MODELS_DIR`）。下载通道偏好键：`core_model_source_order`（user-store）。
+
+**门禁语义**：`required` / `items` / `allReady` 仅覆盖引导必需三项（E5、OCR、SenseVoice）。离线翻译（`core.hy-mt-q4`）为可选组件，不阻塞 `allReady`，亦不在引导 `ensure` 默认下载列表中；按需经设置中的翻译流程或 `import` 获取。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/system/core-models/status` | `{ required, items[{ id, label, ready, pathHint }], allReady, sourceOrder, mirrors, featureRequired, job? }` |
+| GET | `/api/system/core-models/status` | `{ required, items[{ id, label, ready, pathHint }], allReady, sourceOrder, mirrors, featureRequired, job? }`；`required`/`items`/`allReady` 仅必需三项；`job` 含整体 `percent`、当前项 `modelPercent` / `currentModelLabel`、字节进度 `bytesReceived`/`bytesTotal`、`bytesPerSecond`、`etaSeconds` |
 | PUT | `/api/system/core-models/source-order` | Body `{ order: string[] }`（`modelscope` / `hf-mirror` / `huggingface`）；账户已创建时需登录 |
-| POST | `/api/system/core-models/ensure` | 后台下载缺失组件；返回 `{ job, status }`；轮询 GET status 或 GET ensure |
+| POST | `/api/system/core-models/ensure` | 后台下载缺失的**必需**组件；返回 `{ job, status }`；轮询 GET status 或 GET ensure |
 | GET | `/api/system/core-models/ensure` | `{ job, status }` |
-| POST | `/api/system/core-models/import` | multipart：`modelId`（内部 id）+ `file`（可多个）；GGUF 校验 magic；写入规范路径；失败 **400** `import_invalid` |
+| POST | `/api/system/core-models/import` | multipart：`modelId`（内部 id，含可选 `core.hy-mt-q4`）+ `file`（可多个）；GGUF 校验 magic；写入规范路径；失败 **400** `import_invalid` |
 
-内部 id → 卷内布局：`core.e5-multilingual-small` → `llms/multilingual-e5-small/`；`core.rapidocr-ppocrv4-mobile` → `llms/rapidocr-ppocrv4-mobile/`；`core.sensevoice-small-q8` → `sensevoice/*.gguf`；`core.hy-mt-q4` → `llms/HY-MT1.5-1.8B-Q4_K_M.gguf`。
+必需 id → 卷内布局：`core.e5-multilingual-small` → `llms/multilingual-e5-small/`；`core.rapidocr-ppocrv4-mobile` → `llms/rapidocr-ppocrv4-mobile/`；`core.sensevoice-small-q8` → `sensevoice/*.gguf`。可选：`core.hy-mt-q4` → `llms/HY-MT1.5-1.8B-Q4_K_M.gguf`。
 
 - `channel` / `releaseTag`：仅当环境变量 `OPPTRIX_RELEASE_CHANNEL` / `OPPTRIX_RELEASE_TAG` 有值时出现（Docker 自托管由 Compose 注入；桌面包通常无此二字段）。
 

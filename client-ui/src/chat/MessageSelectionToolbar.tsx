@@ -19,7 +19,6 @@ import { listRowKey } from '../utils/listRowKey'
 
 const QUICK_ASKS = [
   { label: '解释一下', message: '请解释一下这段内容的含义。' },
-  { label: '翻译', message: '请翻译这段内容。' },
   { label: '总结要点', message: '请总结这段内容的要点。' },
   { label: '举个例子', message: '请举一个相关的例子帮助理解。' },
 ] as const
