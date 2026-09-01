@@ -482,6 +482,8 @@ interface ChatViewProps {
   contextUsage?: ChatContextUsage | null
   isMobile?: boolean
   sidebarVisible?: boolean
+  /** 移动端会话侧栏抽屉是否打开（顶栏 PanelLeft 图标态） */
+  sidebarDrawerOpen?: boolean
   llmLabel?: string
   backendOk?: boolean
   onSubmit: (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => void
@@ -550,6 +552,7 @@ function ChatView({
   contextUsage = null,
   isMobile = false,
   sidebarVisible = false,
+  sidebarDrawerOpen = false,
   llmLabel = '',
   backendOk = false,
   onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, backgroundJobs = [], onCancelBackgroundJob, collaborationTasks = [], onCancelCollaborationTask, onDismissCollaborationTask,
@@ -996,19 +999,13 @@ function ChatView({
 
   return (
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
-      {isMobile && onOpenSidebar && onNewChat && onOpenSettings && (
+      {isMobile && onOpenSidebar && onNewChat && (
         <MobileTopBar
           title={title}
-          llmLabel={llmLabel}
           backendOk={backendOk}
-          availableModels={availableModels}
-          sessionModel={sessionModel}
-          sessionLlmParams={sessionLlmParams}
-          onModelChange={onModelChange}
-          onLlmParamsChange={onLlmParamsChange}
+          drawerOpen={sidebarDrawerOpen}
           onOpenDrawer={onOpenSidebar}
           onNewChat={onNewChat}
-          onOpenSettings={onOpenSettings}
           onOpenMarketPanel={onOpenMobileMarketPanel}
           marketPanelOpen={rightPanelOpen}
           onOpenFilesPanel={onOpenMobileFilesPanel}

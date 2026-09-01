@@ -107,6 +107,7 @@ import { copyTextToClipboard } from '../platform/clipboard'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
+import { OVERLAY_SIDEBAR_MS, useOverlaySidebarAnimation } from '../hooks/useOverlaySidebarAnimation'
 import { electronPlatform, isElectron } from '../platform/detect'
 import {
   buildChatAskNotification,
@@ -203,7 +204,7 @@ const useStyles = makeStyles({
   contentWorkspaceMobile: {
     flexDirection: 'column',
   },
-  /** Mobile ≤767：关注/文件全屏浮层（高于会话抽屉 z=200） */
+  /** Mobile ≤767：关注/文件全屏浮层（高于会话抽屉 z=200），自右滑入 */
   mobileRightSheet: {
     position: 'fixed',
     inset: 0,
@@ -217,12 +218,27 @@ const useStyles = makeStyles({
     paddingLeft: 'env(safe-area-inset-left)',
     boxSizing: 'border-box',
     overflow: 'hidden',
+    transform: 'translate3d(100%, 0, 0)',
+    opacity: 0,
+    pointerEvents: 'none',
+    transitionProperty: 'transform, opacity',
+    transitionDuration: `${OVERLAY_SIDEBAR_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+    willChange: 'transform, opacity',
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '1ms',
+    },
     '& > *': {
       flex: 1,
       minHeight: 0,
       minWidth: 0,
       width: '100%',
     },
+  },
+  mobileRightSheetOpen: {
+    transform: 'translate3d(0, 0, 0)',
+    opacity: 1,
+    pointerEvents: 'auto',
   },
   contentWorkspaceElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
@@ -337,6 +353,8 @@ export default function ChatApp() {
   const previewAutoOpenDismissedRef = useRef(false)
   /** 移动端右栏全屏 sheet：行情 / 文件预览（与桌面 split 独立） */
   const [mobileRightSheet, setMobileRightSheet] = useState<null | 'market' | 'preview'>(null)
+  const mobileSheetOpen = isMobile && view === 'chat' && mobileRightSheet != null
+  const { mounted: mobileSheetMounted, presented: mobileSheetPresented } = useOverlaySidebarAnimation(mobileSheetOpen)
 
   useEffect(() => {
     if (!isMobile || view !== 'chat') {
@@ -3024,6 +3042,7 @@ export default function ChatApp() {
                   contextUsage={contextUsage}
                   isMobile={isMobile}
                   sidebarVisible={sidebarVisible}
+                  sidebarDrawerOpen={drawerOpen}
                   llmLabel={llmLabel}
                   backendOk={backendOk}
                   onSubmit={handleSubmit}
@@ -3105,12 +3124,16 @@ export default function ChatApp() {
             />
           )}
 
-          {isMobile && view === 'chat' && mobileRightSheet != null && (
+          {mobileSheetMounted && mobileRightSheet != null && (
             <div
-              className={s.mobileRightSheet}
+              className={mergeClasses(
+                s.mobileRightSheet,
+                mobileSheetPresented && s.mobileRightSheetOpen,
+              )}
               role="dialog"
               aria-modal="true"
               aria-label={mobileRightSheet === 'preview' ? '文件预览' : '关注与持仓'}
+              aria-hidden={!mobileSheetPresented}
             >
               <RightPanel
                 visible

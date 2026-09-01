@@ -1,11 +1,12 @@
 import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
+import { FolderListRegular } from '@fluentui/react-icons'
 import {
-  NavigationRegular, SettingsRegular, FolderListRegular,
-} from '@fluentui/react-icons'
-import { ChatAddRegular, PanelRightExpandRegular } from './chatIcons'
-import type { AvailableModel, SessionLlmParams } from '../types/chat'
-import ModelSelector from './ModelSelector'
-import type { SessionLlmParamsPatch } from './ModelSelector'
+  ChatAddRegular,
+  PanelLeftContractRegular,
+  PanelLeftExpandRegular,
+  PanelRightContractRegular,
+  PanelRightExpandRegular,
+} from './chatIcons'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, hairlineBottom } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
@@ -23,8 +24,9 @@ const useStyles = makeStyles({
     zIndex: 10,
     minHeight: '44px',
   },
-  menuBtn: {...ghostInteractive,
-minWidth: '44px',
+  menuBtn: {
+    ...ghostInteractive,
+    minWidth: '44px',
     height: '44px',
     color: opptrixCssVars.textPrimary,
     flexShrink: 0,
@@ -33,44 +35,19 @@ minWidth: '44px',
     flex: 1,
     minWidth: 0,
     display: 'flex',
-    flexDirection: 'column',
-    gap: '1px',
+    alignItems: 'center',
+    gap: '8px',
     padding: '0 4px',
   },
   title: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-  },
-  subtitle: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textTertiary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    minWidth: 0,
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    flexShrink: 0,
-  },
-  actionBtn: {...ghostInteractive,
-minWidth: '44px',
-    height: '44px',
-    color: opptrixCssVars.textSecondary,
-  },
-  actionBtnActive: {
-    color: opptrixCssVars.textPrimary,
   },
   statusDot: {
     width: '6px',
@@ -80,20 +57,30 @@ minWidth: '44px',
   },
   statusOk: { backgroundColor: opptrixCssVars.success },
   statusErr: { backgroundColor: opptrixCssVars.error },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
+  },
+  actionBtn: {
+    ...ghostInteractive,
+    minWidth: '44px',
+    height: '44px',
+    color: opptrixCssVars.textSecondary,
+  },
+  actionBtnActive: {
+    color: opptrixCssVars.textPrimary,
+  },
 })
 
 interface MobileTopBarProps {
   title: string
-  llmLabel: string
   backendOk: boolean
-  availableModels?: AvailableModel[]
-  sessionModel?: string
-  sessionLlmParams?: SessionLlmParams | null
-  onModelChange?: (ref: string) => void
-  onLlmParamsChange?: (patch: SessionLlmParamsPatch) => void
+  /** 会话侧栏抽屉是否打开（切换 PanelLeft 图标） */
+  drawerOpen?: boolean
   onOpenDrawer: () => void
   onNewChat: () => void
-  onOpenSettings: () => void
   /** 打开关注 / 组合·持仓全屏面板 */
   onOpenMarketPanel?: () => void
   marketPanelOpen?: boolean
@@ -105,13 +92,11 @@ interface MobileTopBarProps {
 }
 
 export default function MobileTopBar({
-  title, llmLabel, backendOk,
-  availableModels = [],
-  sessionModel,
-  sessionLlmParams,
-  onModelChange,
-  onLlmParamsChange,
-  onOpenDrawer, onNewChat, onOpenSettings,
+  title,
+  backendOk,
+  drawerOpen = false,
+  onOpenDrawer,
+  onNewChat,
   onOpenMarketPanel,
   marketPanelOpen = false,
   onOpenFilesPanel,
@@ -125,31 +110,19 @@ export default function MobileTopBar({
       <OpptrixButton
         className={s.menuBtn}
         variant="ghost"
-        icon={<NavigationRegular fontSize={22} />}
+        icon={drawerOpen
+          ? <PanelLeftContractRegular fontSize={22} />
+          : <PanelLeftExpandRegular fontSize={22} />}
         onClick={onOpenDrawer}
-        aria-label="打开对话列表"
+        aria-label={drawerOpen ? '收起侧栏' : '打开侧栏'}
+        aria-pressed={drawerOpen}
       />
       <div className={s.center}>
+        <span
+          className={mergeClasses(s.statusDot, backendOk ? s.statusOk : s.statusErr)}
+          aria-label={backendOk ? '服务已连接' : '服务未连接'}
+        />
         <Text className={s.title}>{title || '新对话'}</Text>
-        <div className={s.statusRow}>
-          <span
-            className={mergeClasses(s.statusDot, backendOk ? s.statusOk : s.statusErr)}
-            aria-label={backendOk ? '服务已连接' : '服务未连接'}
-          />
-          {onModelChange && availableModels.length > 0 ? (
-            <ModelSelector
-              models={availableModels}
-              value={sessionModel}
-              isMobile
-              showParams
-              llmParams={sessionLlmParams}
-              onLlmParamsChange={onLlmParamsChange}
-              onChange={onModelChange}
-            />
-          ) : (
-            <Text className={s.subtitle}>{llmLabel}</Text>
-          )}
-        </div>
       </div>
       <div className={s.actions}>
         <OpptrixButton
@@ -163,9 +136,11 @@ export default function MobileTopBar({
           <OpptrixButton
             className={mergeClasses(s.actionBtn, marketPanelOpen && s.actionBtnActive)}
             variant="ghost"
-            icon={<PanelRightExpandRegular fontSize={22} />}
+            icon={marketPanelOpen
+              ? <PanelRightContractRegular fontSize={22} />
+              : <PanelRightExpandRegular fontSize={22} />}
             onClick={onOpenMarketPanel}
-            aria-label="打开关注与持仓"
+            aria-label={marketPanelOpen ? '收起关注与持仓' : '打开关注与持仓'}
             aria-pressed={marketPanelOpen}
           />
         ) : null}
@@ -176,17 +151,10 @@ export default function MobileTopBar({
             icon={<FolderListRegular fontSize={22} />}
             onClick={onOpenFilesPanel}
             disabled={filesPanelDisabled}
-            aria-label="打开文件预览"
+            aria-label={filesPanelOpen ? '收起文件预览' : '打开文件预览'}
             aria-pressed={filesPanelOpen}
           />
         ) : null}
-        <OpptrixButton
-          className={s.actionBtn}
-          variant="ghost"
-          icon={<SettingsRegular fontSize={22} />}
-          onClick={onOpenSettings}
-          aria-label="设置"
-        />
       </div>
     </header>
   )
