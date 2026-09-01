@@ -59,6 +59,8 @@ const useStyles = makeStyles({
     gap: '6px',
     overflowX: 'auto',
     overflowY: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    touchAction: 'pan-x',
   },
   chip: {...ghostInteractive,
     flexShrink: 0,
@@ -144,6 +146,9 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
+    WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
+    touchAction: 'pan-y',
   },
   listCentered: {
     justifyContent: 'center',

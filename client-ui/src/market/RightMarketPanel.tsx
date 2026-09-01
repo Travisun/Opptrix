@@ -136,6 +136,8 @@ const useStyles = makeStyles({
     overflowX: 'auto',
     overflowY: 'hidden',
     scrollbarWidth: 'none',
+    WebkitOverflowScrolling: 'touch',
+    touchAction: 'pan-x',
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
     '&::-webkit-scrollbar': { display: 'none' },

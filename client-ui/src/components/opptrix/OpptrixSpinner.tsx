@@ -1,5 +1,7 @@
 /**
- * 协作 / 状态行统一 Spinner — 避免各处覆写 `.fui-Spinner__spinner`。
+ * 协作 / 状态行统一 Spinner — 尺寸与颜色只打在 `.fui-Spinner__spinner` 上，
+ * 避免给根节点设宽高/颜色导致整块方块旋转。
+ * （对齐 ComposerBackgroundJobsBar）
  */
 import { Spinner, mergeClasses } from '@fluentui/react-components'
 import { makeStyles } from '@fluentui/react-components'
@@ -15,7 +17,11 @@ const useStyles = makeStyles({
     fontSize: '0.85em',
     width: '0.85em',
     height: '0.85em',
-    color: 'currentColor',
+    '& .fui-Spinner__spinner': {
+      width: '1em',
+      height: '1em',
+      color: 'currentColor',
+    },
   },
   status: {
     flexShrink: 0,
@@ -24,7 +30,11 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     width: '1em',
     height: '1em',
-    color: opptrixCssVars.textTertiary,
+    '& .fui-Spinner__spinner': {
+      width: '1em',
+      height: '1em',
+      color: opptrixCssVars.textTertiary,
+    },
   },
 })
 

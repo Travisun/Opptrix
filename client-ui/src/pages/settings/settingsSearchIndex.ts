@@ -9,6 +9,8 @@ export interface SettingsSearchEntry {
   keywords?: string[]
   /** 仅桌面壳展示（如登录托盘启动） */
   desktopOnly?: boolean
+  /** 仅浏览器 / PWA 展示（如安装到桌面） */
+  webOnly?: boolean
 }
 
 function fold(text: string): string {
@@ -65,6 +67,23 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', group: '偏好', title: '评分卡', desc: '因子评估默认使用的评分模板', keywords: ['scorecard', 'G=B+M', '因子'] },
   { section: 'general', group: '连接', title: '后端连接', desc: '检查 API 服务与 LLM 提供商配置', keywords: ['测试', 'health', '连接'] },
   { section: 'general', group: '网络', title: '网络代理', desc: '未单独覆盖的外部请求默认走此代理', keywords: ['代理', 'proxy', 'socks', '网络', '全局代理', '网络代理'] },
+  {
+    section: 'general',
+    group: '本机应用',
+    title: '安装到桌面',
+    desc: '将工作台安装到本机桌面或主屏幕',
+    keywords: ['PWA', '主屏幕', '安装', '桌面', '添加到主屏幕', 'install'],
+    webOnly: true,
+  },
+  {
+    section: 'general',
+    group: '本机应用',
+    title: '添加到主屏幕',
+    desc: '在浏览器菜单中添加到主屏幕',
+    keywords: ['主屏幕', 'Safari', 'iPhone', '安装'],
+    webOnly: true,
+  },
+
 
   // 账户与安全
   { section: 'account_security', group: '账户', title: '创建账户', desc: '设置用户名与密码，保护工作台', keywords: ['创建账户', '注册', '用户名', '密码'] },
@@ -208,6 +227,7 @@ export function searchSettingsEntries(
 
   for (const entry of [...SETTINGS_SEARCH_INDEX, ...dynamic]) {
     if (entry.desktopOnly && !isElectron()) continue
+    if (entry.webOnly && isElectron()) continue
     const hay = haystack(entry)
     if (!tokens.every(token => hay.includes(token))) continue
     const key = `${entry.section}\0${entry.group ?? ''}\0${entry.title}`

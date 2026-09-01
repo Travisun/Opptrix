@@ -5,8 +5,8 @@ import TradingViewChart from '../../market/TradingViewChart'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { motion } from '../../theme/mixins'
 import {
+  MARKET_INSIGHT_CHART_DRAWER_HEIGHT,
   MARKET_PANEL_DRAWER_CLOSE_MS,
-  MARKET_PANEL_DRAWER_MAX_HEIGHT,
 } from '../../market/marketPanelDrawer'
 import type { InstrumentRef } from '../../types/instrument'
 import { CnInsightStockSelectProvider } from './cnInsightStockContext'
@@ -111,7 +111,6 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     pointerEvents: 'none',
     padding: 0,
-    paddingBottom: 'env(safe-area-inset-bottom)',
     boxSizing: 'border-box',
   },
   portalDrawer: {
@@ -120,7 +119,9 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    maxHeight: MARKET_PANEL_DRAWER_MAX_HEIGHT,
+    /* 固定高度：避免加载时缩成矮条贴在屏幕底部 */
+    height: MARKET_INSIGHT_CHART_DRAWER_HEIGHT,
+    maxHeight: MARKET_INSIGHT_CHART_DRAWER_HEIGHT,
     borderRadius: `${opptrixTokens.radiusXl} ${opptrixTokens.radiusXl} 0 0`,
     borderTop: `1px solid ${opptrixCssVars.separatorStrong}`,
     backgroundColor: opptrixCssVars.canvas,
@@ -138,13 +139,60 @@ const useStyles = makeStyles({
   portalDrawerOpen: {
     transform: 'translateY(0)',
   },
+  /** 触控区：底部多留白，拖拽条视觉更靠上 */
+  portalHandleHit: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    flexShrink: 0,
+    paddingTop: '10px',
+    paddingBottom: '12px',
+    boxSizing: 'border-box',
+  },
   portalHandle: {
     width: '36px',
     height: '4px',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: opptrixCssVars.borderStrong,
-    margin: '8px auto 4px',
     flexShrink: 0,
+  },
+  portalChart: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  portalFooter: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    /* safe-area 吃在抽屉底栏内，避免锚点 padding 透出遮罩缝 */
+    paddingTop: '10px',
+    paddingLeft: '16px',
+    paddingRight: '16px',
+    paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
+    borderTop: `1px solid ${opptrixCssVars.separatorHairline}`,
+    backgroundColor: opptrixCssVars.canvas,
+  },
+  portalFooterName: {
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 650,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+  },
+  portalFooterCode: {
+    flexShrink: 0,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.3,
   },
 })
 
@@ -238,13 +286,21 @@ function MobileInsightChartDrawer({
           aria-label={`${stock.name} 走势`}
           onTransitionEnd={onTransitionEnd}
         >
-          <div className={s.portalHandle} aria-hidden />
-          <ChartPane
-            stock={stock}
-            onClose={onBeginClose}
-            instrumentFromCode={instrumentFromCode}
-            chartInputCodeFn={chartInputCodeFn}
-          />
+          <div className={s.portalHandleHit} aria-hidden>
+            <div className={s.portalHandle} />
+          </div>
+          <div className={s.portalChart}>
+            <ChartPane
+              stock={stock}
+              onClose={onBeginClose}
+              instrumentFromCode={instrumentFromCode}
+              chartInputCodeFn={chartInputCodeFn}
+            />
+          </div>
+          <div className={s.portalFooter}>
+            <span className={s.portalFooterName}>{stock.name}</span>
+            <span className={s.portalFooterCode}>{stock.code}</span>
+          </div>
         </div>
       </div>
     </>,

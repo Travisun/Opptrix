@@ -116,10 +116,13 @@ async function stageWebPwaIcons() {
   const favicon16 = path.join(iconsDir, 'favicon-16.png')
   const favicon32 = path.join(iconsDir, 'favicon-32.png')
   const appleTouch = path.join(iconsDir, 'apple-touch-icon.png')
+  /** Safari often probes site-root /apple-touch-icon.png */
+  const appleTouchRoot = path.join(publicDir, 'apple-touch-icon.png')
   const icon192 = path.join(iconsDir, 'icon-192.png')
   const icon512 = path.join(iconsDir, 'icon-512.png')
   const icon512Maskable = path.join(iconsDir, 'icon-512-maskable.png')
   const faviconIco = path.join(publicDir, 'favicon.ico')
+  const screenshotsDir = path.join(publicDir, 'screenshots')
 
   copyFile(logo16, favicon16)
   copyFile(logo32, favicon32)
@@ -127,9 +130,11 @@ async function stageWebPwaIcons() {
   assertPngSize(favicon32, 32)
 
   await resizePngSharp(master, appleTouch, 180)
+  copyFile(appleTouch, appleTouchRoot)
   await resizePngSharp(master, icon192, 192)
   copyFile(logo512, icon512)
   assertPngSize(appleTouch, 180)
+  assertPngSize(appleTouchRoot, 180)
   assertPngSize(icon192, 192)
   assertPngSize(icon512, 512)
 
@@ -157,6 +162,10 @@ async function stageWebPwaIcons() {
     assertPngSize(icon512Maskable, 512)
   }
 
+  fs.mkdirSync(screenshotsDir, { recursive: true })
+  await writePwaScreenshot(path.join(screenshotsDir, 'narrow.png'), 1080, 1920, master)
+  await writePwaScreenshot(path.join(screenshotsDir, 'wide.png'), 1920, 1080, master)
+
   const { default: pngToIco } = await import('png-to-ico')
   const ico = await pngToIco([favicon16, favicon32])
   fs.writeFileSync(faviconIco, ico)
@@ -165,6 +174,44 @@ async function stageWebPwaIcons() {
   for (const legacy of ['logo-192.png', 'logo-512.png']) {
     fs.rmSync(path.join(iconsDir, legacy), { force: true })
   }
+}
+
+/** Branded PWA install screenshots (Chrome rich install UI). */
+async function writePwaScreenshot(dest, width, height, logoPath) {
+  const { default: sharp } = await import('sharp')
+  const logoSize = Math.round(Math.min(width, height) * 0.22)
+  const fg = await sharp(logoPath)
+    .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer()
+  const left = Math.floor((width - logoSize) / 2)
+  const top = Math.floor((height - logoSize) / 2) - Math.round(height * 0.06)
+  const titleSize = Math.round(Math.min(width, height) * 0.045)
+  const subtitleSize = Math.round(Math.min(width, height) * 0.028)
+  const svg = Buffer.from(
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">` +
+      `<text x="50%" y="${top + logoSize + Math.round(height * 0.08)}" text-anchor="middle" ` +
+      `font-family="system-ui, -apple-system, sans-serif" font-size="${titleSize}" ` +
+      `fill="#1D1D1F" font-weight="600">Opptrix</text>` +
+      `<text x="50%" y="${top + logoSize + Math.round(height * 0.12)}" text-anchor="middle" ` +
+      `font-family="system-ui, -apple-system, sans-serif" font-size="${subtitleSize}" ` +
+      `fill="#6E6E73">投研工作台</text>` +
+      `</svg>`,
+  )
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 243, g: 243, b: 243, alpha: 1 },
+    },
+  })
+    .composite([
+      { input: fg, left, top },
+      { input: svg, left: 0, top: 0 },
+    ])
+    .png()
+    .toFile(dest)
 }
 
 /** Packaged / dock icon — keep source alpha (no solid pad). */

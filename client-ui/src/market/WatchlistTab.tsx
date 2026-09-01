@@ -18,7 +18,6 @@ import SidebarListEmpty from './SidebarListEmpty'
 import WatchlistGroupFilterBar from './WatchlistGroupFilterBar'
 import WatchlistGroupSummaryStrip from './WatchlistGroupSummaryStrip'
 import WatchlistGroupsDrawer from './WatchlistGroupsDrawer'
-import { useTouchAxisLockedScroll } from '../hooks/useTouchAxisLockedScroll'
 import { computeWatchlistGroupSummary } from './watchlistGroupCalc'
 import { filterWatchlistByGroup, useWatchlistGroups } from './WatchlistGroupsContext'
 import { research } from '../api/client'
@@ -146,6 +145,8 @@ const useStyles = makeStyles({
     gap: '6px',
     overflowX: 'auto',
     overflowY: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    touchAction: 'pan-x',
   },
   chip: {...ghostInteractive,
     flexShrink: 0,
@@ -285,11 +286,21 @@ const useStyles = makeStyles({
   list: {
     flex: 1,
     minHeight: 0,
-    overflow: 'auto',
+    overflowX: 'hidden',
+    overflowY: 'auto',
     padding: `10px ${CONTENT_PAD}`,
-    /* 双轴可滚；斜向由 useTouchAxisLockedScroll 主轴锁定 */
-    touchAction: 'none',
+    /* 纵滑交给原生惯性；横滑在内层 listHScroll */
+    touchAction: 'pan-y',
     WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
+  },
+  listHScroll: {
+    width: '100%',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    touchAction: 'pan-x',
+    WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
   },
   listCentered: {
     display: 'flex',
@@ -652,8 +663,6 @@ export default function WatchlistTab({
   onRefreshingChange,
 }: Props) {
   const s = useStyles()
-  const listRef = useRef<HTMLDivElement>(null)
-  useTouchAxisLockedScroll(listRef)
   const {
     groups,
     membership,
@@ -1211,7 +1220,6 @@ export default function WatchlistTab({
       )}
 
       <div
-        ref={listRef}
         className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !filteredItems.length && s.listCentered)}
       >
         {!filteredItems.length && !items.length && (
@@ -1229,6 +1237,7 @@ export default function WatchlistTab({
           />
         )}
         {filteredItems.length > 0 && (
+          <div className={mergeClasses(s.listHScroll, 'opptrix-scroll-x')}>
           <div className={s.listTable}>
             <div className={s.tableHeader}>
               <span className={s.headerIdentity}>名称</span>
@@ -1510,6 +1519,7 @@ export default function WatchlistTab({
                 </div>
               )
             })}
+          </div>
           </div>
         )}
       </div>

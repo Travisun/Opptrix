@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { DismissRegular } from '@fluentui/react-icons'
+import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { DismissRegular, ErrorCircleRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
+import OpptrixSpinner from '../components/opptrix/OpptrixSpinner'
+import ChartEmbedSkeleton from './ChartEmbedSkeleton'
 import { instrumentKey, normalizeInstrumentRefLocal, resolveCnInstrumentIdentity, tryParseInstrumentInput } from './instrument'
 import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
@@ -191,8 +194,50 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    gap: '8px',
+    backgroundColor: 'color-mix(in srgb, var(--opptrix-canvas) 72%, transparent)',
     pointerEvents: 'none',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textSecondary,
+  },
+  emptyStatus: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    maxWidth: '240px',
+    padding: '0 16px',
+    textAlign: 'center',
+  },
+  emptyIconWrap: {
+    width: '40px',
+    height: '40px',
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: opptrixCssVars.textSecondary,
+    flexShrink: 0,
+  },
+  emptyIconError: {
+    color: opptrixCssVars.textSecondary,
+  },
+  emptyTitle: {
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.45,
+  },
+  emptyHint: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.5,
+  },
+  emptyAction: {
+    marginTop: '2px',
   },
   chartStack: {
     display: 'flex',
@@ -648,6 +693,10 @@ export default function TradingViewChart({
     }
   }, [instrumentRef, cnEquityChart, canChart, isIndexChart])
 
+  const retryLoad = useCallback(() => {
+    void loadChart(periodRef.current, fetchCountRef.current)
+  }, [loadChart])
+
   const handleNeedHistory = useCallback(() => {
     const now = Date.now()
     if (now - lastHistoryLoadRef.current < 1500) return
@@ -952,8 +1001,8 @@ export default function TradingViewChart({
           s.empty,
           (expanded || useInsightOverlay) && s.emptyExpanded,
           useEmbedLayout && s.emptyEmbed,
-        )}>
-          <Spinner size="tiny" label="加载图表…" />
+        )} role="status" aria-live="polite">
+          <ChartEmbedSkeleton indexChart={isIndexChart} />
         </div>
       )}
       {!loading && error && !data && (
@@ -961,7 +1010,26 @@ export default function TradingViewChart({
           s.empty,
           (expanded || useInsightOverlay) && s.emptyExpanded,
           useEmbedLayout && s.emptyEmbed,
-        )}>{error}</div>
+        )} role="alert">
+          <div className={s.emptyStatus}>
+            <div className={mergeClasses(s.emptyIconWrap, s.emptyIconError)} aria-hidden>
+              <ErrorCircleRegular fontSize={22} />
+            </div>
+            <Text className={s.emptyTitle} block>暂时无法显示走势</Text>
+            <Text className={s.emptyHint} block>
+              {error.includes('暂不支持')
+                ? error
+                : '网络不稳或行情暂不可用，可稍后再试'}
+            </Text>
+            {!error.includes('暂不支持') ? (
+              <div className={s.emptyAction}>
+                <OpptrixButton variant="ghost" size="small" onClick={retryLoad}>
+                  重新加载
+                </OpptrixButton>
+              </div>
+            ) : null}
+          </div>
+        </div>
       )}
 
       <div className={mergeClasses(
@@ -978,8 +1046,9 @@ export default function TradingViewChart({
           useEmbedLayout && s.chartFrameEmbed,
         )}>
           {refreshing && (
-            <div className={s.chartOverlay}>
-              <Spinner size="tiny" label={`加载 ${periodLabel(period)}…`} />
+            <div className={s.chartOverlay} role="status" aria-live="polite">
+              <OpptrixSpinner size="status" />
+              <Text>正在更新…</Text>
             </div>
           )}
 

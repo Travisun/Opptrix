@@ -1,13 +1,19 @@
 {
+  "id": "/",
   "name": "Opptrix",
   "short_name": "Opptrix",
   "description": "Opptrix 投研工作台",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F5F5F7",
-  "theme_color": "#FFFFFF",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#F3F3F3",
+  "theme_color": "#F3F3F3",
   "lang": "zh-CN",
+  "dir": "ltr",
+  "orientation": "any",
+  "categories": ["finance", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -26,6 +32,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/narrow.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Opptrix 投研工作台"
+    },
+    {
+      "src": "/screenshots/wide.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Opptrix 投研工作台"
     }
   ]
 }

@@ -27,6 +27,7 @@ import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
 import PortfolioFeeSettingsSection from './settings/PortfolioFeeSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import AccountSecuritySettingsSection from './settings/AccountSecuritySettingsSection'
+import PwaInstallSettingsSection from './settings/PwaInstallSettingsSection'
 import { SystemProxySettingsSection } from './settings/SystemProxySettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -698,6 +699,12 @@ function SettingsPageView({
                 />
               </SettingsGroup>
             </div>
+
+            {!isElectron() && (
+              <div className={s.sectionBlock}>
+                <PwaInstallSettingsSection />
+              </div>
+            )}
           </>
         )
 

@@ -3,19 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="description" content="Opptrix 投研工作台" />
+  <meta name="application-name" content="Opptrix" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Opptrix" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#F5F5F7" />
+  <!-- 首屏兜底；applyTheme 会重建为无 media 单条以跟随 App 主题（含 iOS 运行时切换） -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3F3F3" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141414" />
+  <meta property="og:title" content="Opptrix" />
+  <meta property="og:description" content="Opptrix 投研工作台" />
+  <meta property="og:image" content="/icons/icon-512.png" />
+  <meta property="og:type" content="website" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <!-- Root path first: Safari probes /apple-touch-icon.png by convention -->
+  <link rel="apple-touch-icon" sizes="180x180" type="image/png" href="/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" type="image/png" href="/icons/apple-touch-icon.png" />
   <title>Opptrix</title>
   <script>
     (function () {
       var KEY = 'opptrix-theme-preference';
+      /* 与左侧边栏 canvasAlt / THEME_CHROME_* 一致 */
+      var CHROME_LIGHT = '#F3F3F3';
+      var CHROME_DARK = '#141414';
       var pref = 'system';
       try {
         var raw = localStorage.getItem(KEY);
@@ -25,14 +39,21 @@
       var scheme = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : (dark ? 'dark' : 'light');
       var root = document.documentElement;
       root.dataset.theme = scheme;
-      var bg = scheme === 'dark' ? '#1C1C1E' : '#F5F5F7';
-      var canvas = scheme === 'dark' ? '#1C1C1E' : '#FFFFFF';
-      root.style.background = bg;
+      root.style.colorScheme = scheme;
+      var chrome = scheme === 'dark' ? CHROME_DARK : CHROME_LIGHT;
+      root.style.background = chrome;
       var style = document.createElement('style');
-      style.textContent = 'html,body{background:' + bg + '!important;color:' + (scheme === 'dark' ? '#F5F5F7' : '#1D1D1F') + ';}';
+      style.textContent = 'html,body{background:' + chrome + '!important;color:' + (scheme === 'dark' ? '#F0F0F0' : '#1D1D1F') + ';}';
       document.head.appendChild(style);
-      var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute('content', canvas);
+      /* 立即写成无 media 单条，避免 iOS 粘在旧 media 上 */
+      var old = document.querySelectorAll('meta[name="theme-color"]');
+      for (var i = 0; i < old.length; i++) old[i].parentNode.removeChild(old[i]);
+      var meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      meta.content = chrome;
+      document.head.appendChild(meta);
+      var appleBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (appleBar) appleBar.setAttribute('content', scheme === 'dark' ? 'black' : 'default');
     })();
   </script>
 </head>
