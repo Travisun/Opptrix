@@ -106,6 +106,12 @@ import {
 } from './instrument-router.js'
 import { mergeFundDetailParts } from './fund-detail.js'
 import {
+  normalizeMarketDynamicsMarket,
+  readMarketDynamicsCache,
+  writeMarketDynamicsCache,
+  type MarketDynamicsCacheMarket,
+} from './market-dynamics-cache.js'
+import {
   routeInstrumentEvaluation,
   routeInstrumentIndicators,
   routeInstrumentStrategySignal,
@@ -274,8 +280,12 @@ export class ResearchHub {
       quotes: Map<string, { price: number | null; change_pct: number | null; change_amt: number | null }>
     }
   >()
-  /** A 股 market_dynamics 短 TTL — 去重 30s 轮询内的重复 bulk */
-  private marketDynamicsCnCache: { at: number; payload: ResearchResult } | null = null
+  /** A 股 market_dynamics 短 TTL — 去重轮询内的重复 bulk；磁盘缓存可即时返回 */
+  private marketDynamicsMemCache = new Map<
+    MarketDynamicsCacheMarket,
+    { at: number; payload: ResearchResult }
+  >()
+  private marketDynamicsRefreshInflight = new Map<MarketDynamicsCacheMarket, Promise<ResearchResult>>()
 
   private static readonly THS_SECTOR_CATALOG_TTL_MS = 15 * 60 * 1000
   private static readonly MARKET_DYNAMICS_CN_TTL_MS = 22_000
@@ -1301,21 +1311,55 @@ export class ResearchHub {
   }
 
   private async marketDynamics(t0: number, params: Record<string, unknown> = {}) {
-    const market = String(params.market ?? 'cn').trim().toLowerCase()
-    if (market === 'us') return this.marketDynamicsUs(t0)
-    if (market === 'hk') return this.marketDynamicsHk(t0)
+    const market = normalizeMarketDynamicsMarket(params.market)
     const force = params.force === true || params.refresh === true
+
     if (!force) {
-      const cached = this.marketDynamicsCnCache
-      if (cached && Date.now() - cached.at < ResearchHub.MARKET_DYNAMICS_CN_TTL_MS) {
-        return cached.payload
+      const mem = this.marketDynamicsMemCache.get(market)
+      if (mem && Date.now() - mem.at < ResearchHub.MARKET_DYNAMICS_CN_TTL_MS) {
+        return mem.payload
+      }
+
+      const disk = readMarketDynamicsCache(market)
+      if (disk?.data) {
+        const payload = ok({
+          ...disk.data,
+          from_cache: true,
+        }, disk.message, t0)
+        this.marketDynamicsMemCache.set(market, { at: disk.cached_at_ms, payload })
+
+        const stale = Date.now() - disk.cached_at_ms >= ResearchHub.MARKET_DYNAMICS_CN_TTL_MS
+        if (stale && !this.marketDynamicsRefreshInflight.has(market)) {
+          const inflight = this.fetchMarketDynamics(market, Date.now())
+            .then(result => {
+              if (result.success) {
+                writeMarketDynamicsCache(market, result)
+                this.marketDynamicsMemCache.set(market, { at: Date.now(), payload: result })
+              }
+              return result
+            })
+            .finally(() => {
+              this.marketDynamicsRefreshInflight.delete(market)
+            })
+          this.marketDynamicsRefreshInflight.set(market, inflight)
+          void inflight
+        }
+        return payload
       }
     }
-    const result = await this.marketDynamicsCn(t0)
+
+    const result = await this.fetchMarketDynamics(market, t0)
     if (result.success) {
-      this.marketDynamicsCnCache = { at: Date.now(), payload: result }
+      writeMarketDynamicsCache(market, result)
+      this.marketDynamicsMemCache.set(market, { at: Date.now(), payload: result })
     }
     return result
+  }
+
+  private fetchMarketDynamics(market: MarketDynamicsCacheMarket, t0: number): Promise<ResearchResult> {
+    if (market === 'us') return this.marketDynamicsUs(t0)
+    if (market === 'hk') return this.marketDynamicsHk(t0)
+    return this.marketDynamicsCn(t0)
   }
 
   private async fetchHkSectorBoardViaTickflow() {

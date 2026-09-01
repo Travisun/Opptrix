@@ -4,6 +4,8 @@ import type { MarketDynamicsData } from '../../types/schemas'
 /** 与 Hub `MARKET_DYNAMICS_CN_TTL_MS`(22s) 对齐，略长以避免边界重复打满 */
 export const MARKET_DYNAMICS_CN_REFRESH_MS = 30_000
 
+const SESSION_CACHE_KEY = 'opptrix-market-dynamics-cn'
+
 export type MarketDynamicsCnSnapshot = {
   data: MarketDynamicsData | null
   loading: boolean
@@ -11,8 +13,32 @@ export type MarketDynamicsCnSnapshot = {
   error: string
 }
 
+function readSessionCache(): MarketDynamicsData | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(SESSION_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as MarketDynamicsData
+    if (!parsed || !Array.isArray(parsed.sections)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeSessionCache(data: MarketDynamicsData): void {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(data))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+const bootCached = readSessionCache()
+
 let snapshot: MarketDynamicsCnSnapshot = {
-  data: null,
+  data: bootCached,
   loading: false,
   refreshing: false,
   error: '',
@@ -49,11 +75,13 @@ async function loadMarketDynamicsCn(opts?: { silent?: boolean; force?: boolean }
         ...(force ? { refresh: true } : {}),
       })
       if (resp.success && resp.data) {
+        const data: MarketDynamicsData = {
+          ...resp.data,
+          market: resp.data.market ?? 'cn',
+        }
+        writeSessionCache(data)
         snapshot = {
-          data: {
-            ...resp.data,
-            market: resp.data.market ?? 'cn',
-          },
+          data,
           loading: false,
           refreshing: false,
           error: '',
