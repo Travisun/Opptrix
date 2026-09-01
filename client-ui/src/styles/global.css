@@ -274,11 +274,11 @@ html.opptrix-electron .opptrix-onboarding-title-drag {
 }
 
 html.opptrix-electron .opptrix-onboarding-footer-dock {
-  background: var(--opptrix-canvas) !important;
+  background: transparent !important;
 }
 
 html.opptrix-electron .opptrix-onboarding-progress-dock {
-  background: var(--opptrix-canvas) !important;
+  background: transparent !important;
 }
 
 /* 引导协议勾选 — 彻底去除 Checkbox 所有状态下的 outline / ring / box-shadow */

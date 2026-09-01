@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
@@ -7,6 +7,7 @@ import MacTrafficLights from '../desktop/MacTrafficLights'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { electronPlatform, isElectron } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
+import { OnboardingAtmosphere } from './OnboardingAtmosphere'
 import { type OnboardingNavStep } from './onboardingTheme'
 
 /** Shared horizontal inset: tight on mobile, expands on wide screens. */
@@ -22,12 +23,22 @@ export const useOnboardingShellStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
+  stage: {
+    position: 'relative',
+    zIndex: 1,
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
   rootFrameTitlebar: {
     paddingTop: `${DESKTOP_FRAME_TITLEBAR_HEIGHT}px`,
     boxSizing: 'border-box',
   },
   electronTitleBar: {
     position: 'relative',
+    zIndex: 2,
     flexShrink: 0,
     height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
     boxSizing: 'border-box',
@@ -36,7 +47,7 @@ export const useOnboardingShellStyles = makeStyles({
     justifyContent: 'flex-end',
     paddingLeft: '12px',
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
-    backgroundColor: opptrixCssVars.canvas,
+    backgroundColor: 'transparent',
   },
   electronTitleBarMac: {
     justifyContent: 'flex-end',
@@ -64,13 +75,6 @@ export const useOnboardingShellStyles = makeStyles({
     color: opptrixCssVars.accent,
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
-  },
-  stage: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
   },
   scrollViewport: {
     flex: 1,
@@ -134,7 +138,7 @@ export const useOnboardingShellStyles = makeStyles({
     flexShrink: 0,
     width: '100%',
     boxSizing: 'border-box',
-    backgroundColor: opptrixCssVars.canvas,
+    backgroundColor: 'transparent',
     padding: `clamp(14px, 2.5vh, 20px) ${SHELL_PAD_X}`,
   },
   progressDots: {
@@ -305,7 +309,7 @@ export const useOnboardingShellStyles = makeStyles({
     boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
-    backgroundColor: opptrixCssVars.canvas,
+    backgroundColor: 'transparent',
     minHeight: '135px',
     height: '135px',
     paddingTop: 0,
@@ -425,6 +429,7 @@ export function OnboardingShell({
   children,
 }: OnboardingShellProps) {
   const s = useOnboardingShellStyles()
+  const shellRef = useRef<HTMLDivElement>(null)
   const macFullscreen = useElectronFullscreen()
   const electronChrome = isElectron()
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
@@ -454,15 +459,18 @@ export function OnboardingShell({
 
   return (
     <div
+      ref={shellRef}
       className={mergeClasses(
         s.root,
         electronWin && s.rootFrameTitlebar,
         'opptrix-onboarding-shell',
       )}
+      style={{ '--onb-dx': '0', '--onb-dy': '0' } as CSSProperties}
       role="dialog"
       aria-modal="true"
       aria-label="Opptrix 启动引导"
     >
+      <OnboardingAtmosphere hostRef={shellRef} />
       {electronTitleBar}
 
       <div className={s.stage}>
