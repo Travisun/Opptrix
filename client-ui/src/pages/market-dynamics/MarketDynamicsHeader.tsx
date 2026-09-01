@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowSyncRegular } from '@fluentui/react-icons'
 import PanelTitleTabs, { type PanelTitleTabItem } from '../../components/PanelTitleTabs'
+import MobileNavMenuButton from '../../components/MobileNavMenuButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars } from '../../theme/tokens'
@@ -36,10 +37,16 @@ const useStyles = makeStyles({
     height: '40px',
     padding: '0 12px',
   },
+  rootWebMobile: {
+    height: 'auto',
+    minHeight: '44px',
+    padding: '0 8px',
+  },
   titleTabs: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
+    gap: '4px',
     minHeight: '28px',
     position: 'relative',
     zIndex: 1,
@@ -90,6 +97,8 @@ type Props = {
   electronChrome?: boolean
   chromeToolbarReserve?: number
   dragRegionClassName?: string
+  isMobile?: boolean
+  onOpenSidebar?: () => void
 }
 
 export default function MarketDynamicsHeader({
@@ -99,6 +108,8 @@ export default function MarketDynamicsHeader({
   electronChrome = false,
   chromeToolbarReserve = 0,
   dragRegionClassName = 'opptrix-market-dynamics-title-drag',
+  isMobile = false,
+  onOpenSidebar,
 }: Props) {
   const s = useStyles()
   const paddingLeft = electronChrome
@@ -133,6 +144,7 @@ export default function MarketDynamicsHeader({
         s.root,
         electronChrome && s.rootElectron,
         !electronChrome && s.rootWeb,
+        !electronChrome && isMobile && s.rootWebMobile,
         'opptrix-market-dynamics-title-bar',
       )}
       style={{
@@ -141,6 +153,9 @@ export default function MarketDynamicsHeader({
       }}
     >
       <div className={mergeClasses(s.titleTabs, 'opptrix-panel-title-no-drag')}>
+        {!electronChrome && isMobile && onOpenSidebar ? (
+          <MobileNavMenuButton onClick={onOpenSidebar} />
+        ) : null}
         <Text className={s.title}>市场动态</Text>
       </div>
       <div

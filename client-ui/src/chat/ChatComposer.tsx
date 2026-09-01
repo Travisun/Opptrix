@@ -465,27 +465,20 @@ const useStyles = makeStyles({
   composerFooterMobile: {
     paddingBottom: `max(${opptrixTokens.chatComposerBottomInset}, env(safe-area-inset-bottom))`,
   },
-  /** 底栏 AI 提示行：轻量居中文案 + 右侧上下文用量（无独立底色） */
+  /** 底栏 AI 提示：相对 composer 水平居中（用量改到工具栏模型左侧） */
   disclaimerRow: {
     position: 'relative',
     zIndex: 1,
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
     width: '100%',
     margin: '2px 0 0',
     padding: '4px 10px 0',
     boxSizing: 'border-box',
     userSelect: 'none',
-  },
-  disclaimerSide: {
-    flex: '1 1 0',
-    minWidth: 0,
-    display: 'flex',
-    alignItems: 'center',
-  },
-  disclaimerSideEnd: {
-    justifyContent: 'flex-end',
+    minHeight: '22px',
   },
   disclaimer: {
     flexShrink: 0,
@@ -494,7 +487,15 @@ const useStyles = makeStyles({
     lineHeight: 1.4,
     color: opptrixCssVars.textTertiary,
     margin: 0,
-    padding: '0 8px',
+    padding: 0,
+  },
+  /** 模型选择左侧的精简上下文/缓存用量 */
+  toolbarContextUsage: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    maxWidth: '88px',
+    marginRight: '2px',
   },
 })
 
@@ -1201,6 +1202,11 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
               </div>
               <div className={s.toolbarCenter} />
               <div className={s.toolbarEnd}>
+                {!speechListening && contextUsage ? (
+                  <div className={s.toolbarContextUsage}>
+                    <ContextUsageMeter usage={contextUsage} compact />
+                  </div>
+                ) : null}
                 {onModelChange && (
                   <div className={s.toolbarModel}>
                     <ModelSelector
@@ -1273,13 +1279,9 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
           )}
         >
           <div className={s.disclaimerRow}>
-            <div className={s.disclaimerSide} aria-hidden />
             <span className={s.disclaimer}>
               内容由AI生成，不构成投资建议，请核实重要信息
             </span>
-            <div className={mergeClasses(s.disclaimerSide, s.disclaimerSideEnd)}>
-              {!speechListening && <ContextUsageMeter usage={contextUsage} />}
-            </div>
           </div>
         </div>
       </div>

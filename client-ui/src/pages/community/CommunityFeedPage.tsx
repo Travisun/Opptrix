@@ -9,6 +9,7 @@ import {
 } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import OpptrixSegmentedControl from '../../components/opptrix/OpptrixSegmentedControl'
+import MobileNavMenuButton from '../../components/MobileNavMenuButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
@@ -211,6 +212,8 @@ const useStyles = makeStyles({
 type Props = {
   electronChrome?: boolean
   chromeToolbarReserve?: number
+  isMobile?: boolean
+  onOpenSidebar?: () => void
 }
 
 function formatRelativeTime(iso: string | null): string {
@@ -296,6 +299,8 @@ function TopicRow({
 function CommunityFeedContent({
   electronChrome = false,
   chromeToolbarReserve = 0,
+  isMobile = false,
+  onOpenSidebar,
 }: Props) {
   const s = useStyles()
   const feed = useCommunityFeed()
@@ -398,6 +403,9 @@ function CommunityFeedContent({
         />
       ) : (
         <div className={s.webHead}>
+          {isMobile && onOpenSidebar ? (
+            <MobileNavMenuButton onClick={onOpenSidebar} />
+          ) : null}
           <Text className={s.webTitle}>社区讨论</Text>
           {toolbar}
         </div>

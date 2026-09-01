@@ -21,6 +21,7 @@ import ChromeToolButton from '../../desktop/ChromeToolButton'
 import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import OpptrixInput from '../../components/opptrix/OpptrixInput'
+import MobileNavMenuButton from '../../components/MobileNavMenuButton'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import { deleteExpert, listExperts } from '../../api/client'
 import type { ExpertCatalogEntry, ExpertDefinition } from '../../types/chat'
@@ -256,6 +257,8 @@ interface Props {
   electronChrome?: boolean
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
+  isMobile?: boolean
+  onOpenSidebar?: () => void
   onSelectExpert: (expertId: string) => void | Promise<void>
   /** 本地专家保存后通知聊天空态刷新快捷提问 */
   onExpertSaved?: (expert: ExpertDefinition) => void
@@ -264,6 +267,8 @@ interface Props {
 export default function ExpertMarketPage({
   electronChrome = false,
   chromeToolbarReserve = 0,
+  isMobile = false,
+  onOpenSidebar,
   onSelectExpert,
   onExpertSaved,
 }: Props) {
@@ -384,6 +389,9 @@ export default function ExpertMarketPage({
         />
       ) : (
         <div className={s.webHead}>
+          {isMobile && onOpenSidebar ? (
+            <MobileNavMenuButton onClick={onOpenSidebar} />
+          ) : null}
           <Text className={s.webTitle}>专家中心</Text>
           <div className={s.webActions}>{refreshAction}</div>
         </div>

@@ -1,6 +1,7 @@
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowSyncRegular, SettingsRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
+import MobileNavMenuButton from '../../components/MobileNavMenuButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import { opptrixCssVars } from '../../theme/tokens'
@@ -91,6 +92,8 @@ type Props = {
   electronChrome?: boolean
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
+  isMobile?: boolean
+  onOpenSidebar?: () => void
   onOpenSettings?: () => void
   onDiscussArticle?: (article: FeedArticle) => void
 }
@@ -98,6 +101,8 @@ type Props = {
 function NewsCenterContent({
   electronChrome = false,
   chromeToolbarReserve = 0,
+  isMobile = false,
+  onOpenSidebar,
   onOpenSettings,
   onDiscussArticle,
 }: Props) {
@@ -185,6 +190,9 @@ function NewsCenterContent({
 
   const webHead = !electronChrome ? (
     <div className={s.webHead}>
+      {isMobile && onOpenSidebar ? (
+        <MobileNavMenuButton onClick={onOpenSidebar} />
+      ) : null}
       <Text className={s.webTitle} block>新闻中心</Text>
       {updatedLabel && <Text className={s.toolbarMeta}>更新 {updatedLabel}</Text>}
       <div className={s.toolbarActions}>
