@@ -48,6 +48,8 @@ export class ApiHttpError extends Error {
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 const REQUEST_TIMEOUT = 10000 // 10s — quick reads / mutations
+/** Grouped news feed may scan many subscriptions locally on the server. */
+const NEWS_GROUPED_FEED_TIMEOUT = 60_000
 /** 本机重活（语义模型卸载、深度整理卸载、大附件上传等）；勿抬高全局 REQUEST_TIMEOUT。 */
 const LOCAL_HEAVY_TIMEOUT = 180_000
 /** Agent chat: multiple LLM + tool rounds (server LLM timeout up to 10m per round). */
@@ -2655,8 +2657,12 @@ export type SenseVoiceEnsureJobSnapshot = {
   error: string | null
 }
 
-async function newsJsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  return jsonFetch<T>(path, init)
+async function newsJsonFetch<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT,
+): Promise<T> {
+  return jsonFetch<T>(path, init, timeoutMs)
 }
 
 export const news = {
@@ -2765,7 +2771,7 @@ export const news = {
   },
 
   getGroupedFeed: () =>
-    newsJsonFetch<NewsGroupedFeed>('/news/feed/grouped'),
+    newsJsonFetch<NewsGroupedFeed>('/news/feed/grouped', undefined, NEWS_GROUPED_FEED_TIMEOUT),
 
   getArticle: (id: string) =>
     newsJsonFetch<{ article: FeedArticle }>(`/news/articles/${encodeURIComponent(id)}`),

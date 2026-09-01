@@ -536,6 +536,39 @@ export class NewsFeedStore {
     return this.listArticlesPage({ subscription_id: subscriptionId, limit }).articles
   }
 
+  /**
+   * Single index pass: bucket article ids by subscription, dedupe per bucket, cap each.
+   * Avoids O(subscriptions × articles) rescans from repeated listArticlesPage calls.
+   */
+  listArticlesBucketedBySubscription(maxPerSub: number): Map<string, FeedArticle[]> {
+    this.ensureMigrated()
+    const subs = this.listSubscriptions()
+    const subIds = new Set(subs.map(s => s.id))
+    const idBuckets = new Map<string, string[]>()
+    for (const sub of subs) idBuckets.set(sub.id, [])
+
+    const index = this.getIndex()
+    for (const id of index.article_order) {
+      const doc = this.getArticleDoc(id)
+      if (!doc || !subIds.has(doc.subscription_id)) continue
+      idBuckets.get(doc.subscription_id)!.push(id)
+    }
+
+    const result = new Map<string, FeedArticle[]>()
+    for (const sub of subs) {
+      const dedupedIds = dedupeArticleIdsByContentKey(
+        idBuckets.get(sub.id) ?? [],
+        id => this.getArticleDoc(id),
+      )
+      const articles = dedupedIds
+        .slice(0, maxPerSub)
+        .map(articleId => this.getArticleDoc(articleId))
+        .filter((a): a is FeedArticle => !!a)
+      result.set(sub.id, articles)
+    }
+    return result
+  }
+
   listArticles(limit = 100): FeedArticle[] {
     return this.listArticlesPage({ limit }).articles
   }

@@ -13,6 +13,9 @@ import { enhanceFeedMedia, formatRelativeTime, sanitizeFeedHtml, stripHtml, buil
 import { useArticleTranslation } from './useArticleTranslation'
 import { useArticleEnrichment } from './useArticleEnrichment'
 
+/** 内容预览顶栏：暂时隐藏翻译与配图音视频入口 */
+const SHOW_ARTICLE_PREVIEW_TRANSLATION_ENRICHMENT = false
+
 const useStyles = makeStyles({
   root: {
     display: 'flex',
@@ -339,7 +342,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               查看原文
             </span>
           )}
-          {translation.available && (
+          {SHOW_ARTICLE_PREVIEW_TRANSLATION_ENRICHMENT && translation.available && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
               <button
@@ -370,7 +373,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </button>
             </>
           )}
-          {translation.hasTranslation && (
+          {SHOW_ARTICLE_PREVIEW_TRANSLATION_ENRICHMENT && translation.hasTranslation && (
             <div className={s.viewToggle}>
               <button
                 type="button"
@@ -394,7 +397,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </button>
             </div>
           )}
-          {enrichment.available && (
+          {SHOW_ARTICLE_PREVIEW_TRANSLATION_ENRICHMENT && enrichment.available && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
               <button
@@ -438,9 +441,10 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
           )}
         </div>
       </div>
-      {(progressLabel || translation.error || enrichment.progressLabel || enrichment.error
-        || (!translation.available && translation.likelyForeign)
-        || (!translation.canTranslate && translation.available && !translation.hasTranslation)) && (
+      {SHOW_ARTICLE_PREVIEW_TRANSLATION_ENRICHMENT
+        && (progressLabel || translation.error || enrichment.progressLabel || enrichment.error
+          || (!translation.available && translation.likelyForeign)
+          || (!translation.canTranslate && translation.available && !translation.hasTranslation)) && (
         <Text
           block
           className={mergeClasses(

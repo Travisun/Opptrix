@@ -59,14 +59,11 @@ export function useNewsFeed() {
     if (subscriptionId) setNewsFeedSourceFilter(subscriptionId)
   }, [])
 
-  const listReady = snap.hydrated || (
-    snap.view === 'timeline'
-      ? snap.articles.length > 0
-      : snap.grouped != null
-  )
+  const listReady = snap.hydrated || snap.articles.length > 0
 
   return {
     articles: snap.articles,
+    filteredArticles: snap.filteredArticles,
     grouped: snap.grouped,
     subscriptions: snap.subscriptions,
     groups: snap.groups,
@@ -80,8 +77,10 @@ export function useNewsFeed() {
     selectedId: snap.selectedId,
     selected: getSelectedArticle(),
     hasMore: snap.hasMore,
+    filteredHasMore: snap.filteredHasMore,
     listCapReached: snap.listCapReached,
     total: snap.total,
+    filteredTotal: snap.filteredTotal,
     view: snap.view,
     timelineDate: snap.timelineDate,
     groupFilterId: snap.groupFilterId,
