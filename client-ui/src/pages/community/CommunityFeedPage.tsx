@@ -24,6 +24,12 @@ import {
   mobileHeaderIconBtn,
   mobileHeaderTitle,
 } from '../../theme/mobileChrome'
+import {
+  desktopPageHeaderActions,
+  desktopPageHeaderBar,
+  desktopPageHeaderMeta,
+  desktopPageHeaderTitle,
+} from '../../theme/desktopPageChrome'
 import { openExternalUrl } from '../../platform/openUrl'
 import { OPPTRIX_COMMUNITY, OPPTRIX_COMMUNITY_INVITE_CODE } from '../settings/aboutLinks'
 import type { CommunityFeedKind, CommunityTopic } from '../../types/schemas'
@@ -49,41 +55,22 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
   },
   webHead: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '10px 16px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    ...desktopPageHeaderBar,
   },
   webHeadMobile: {
     ...mobileHeaderBar,
     backgroundColor: opptrixCssVars.canvas,
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
-  webTitle: {
-    fontSize: 'var(--opptrix-font-xl)',
-    fontWeight: 650,
-    color: opptrixCssVars.textPrimary,
-    flex: 1,
-  },
+  webTitle: desktopPageHeaderTitle,
   webTitleMobile: mobileHeaderTitle,
   mobileActionBtn: {
     ...ghostInteractive,
     ...mobileHeaderIconBtn,
     color: opptrixCssVars.textSecondary,
   },
-  toolbarMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-  },
-  toolbarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
-  },
+  toolbarMeta: desktopPageHeaderMeta,
+  toolbarActions: desktopPageHeaderActions,
   body: {
     flex: 1,
     minHeight: 0,
@@ -227,6 +214,7 @@ const useStyles = makeStyles({
 })
 
 type Props = {
+  pageActive?: boolean
   electronChrome?: boolean
   chromeToolbarReserve?: number
   isMobile?: boolean
@@ -315,6 +303,7 @@ function TopicRow({
 }
 
 function CommunityFeedContent({
+  pageActive = true,
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
@@ -322,7 +311,7 @@ function CommunityFeedContent({
   onOpenSidebar,
 }: Props) {
   const s = useStyles()
-  const feed = useCommunityFeed()
+  const feed = useCommunityFeed(pageActive)
   const {
     kind,
     setKind,
@@ -350,7 +339,7 @@ function CommunityFeedContent({
     : null
 
   const statusLabel = refreshing
-    ? '刷新中…'
+    ? (topics.length > 0 ? '正在拉取最新记录' : '刷新中…')
     : updatedLabel
       ? `更新于 ${updatedLabel}`
       : null

@@ -35,6 +35,7 @@ import {
   DESKTOP_TOOL_GAP,
   DESKTOP_Z_PANEL_TITLE,
 } from '../desktop/constants'
+import { desktopPageHeaderMeta } from '../theme/desktopPageChrome'
 import {
   PanelRightContractRegular,
   ArrowMaximizeRegular,
@@ -190,6 +191,10 @@ const useStyles = makeStyles({
     minWidth: '8px',
     alignSelf: 'stretch',
   },
+  titleBarMeta: {
+    ...desktopPageHeaderMeta,
+    flexShrink: 0,
+  },
   titleBarActions: {
     flexShrink: 0,
     display: 'flex',
@@ -263,6 +268,7 @@ function RightMarketPanel({
     holdingsByCode,
     summary: portfolioSummary,
     loading: portfolioLoading,
+    refreshing: portfolioRefreshing,
     error: portfolioError,
     loadTrades,
     submitTrade,
@@ -274,6 +280,18 @@ function RightMarketPanel({
   })
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
   const [dialogPrice, setDialogPrice] = useState<number | null>(null)
+  const [watchlistRefreshing, setWatchlistRefreshing] = useState(false)
+
+  const handleWatchlistRefreshingChange = useCallback((refreshing: boolean) => {
+    setWatchlistRefreshing(refreshing)
+  }, [])
+
+  const panelStatusLabel = useMemo(() => {
+    if (!panelVisible) return ''
+    if (tab === 'watchlist' && watchlistRefreshing) return '正在拉取最新记录'
+    if (tab === 'portfolio' && portfolioRefreshing) return '正在拉取最新记录'
+    return ''
+  }, [panelVisible, tab, watchlistRefreshing, portfolioRefreshing])
 
   const selectedCode = selected?.code ?? null
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
@@ -521,6 +539,12 @@ function RightMarketPanel({
           aria-hidden
         />
 
+        {panelStatusLabel ? (
+          <Text className={mergeClasses(s.titleBarMeta, 'opptrix-panel-title-no-drag')}>
+            {panelStatusLabel}
+          </Text>
+        ) : null}
+
         {showWorkspaceActions && (
           <div
             className={mergeClasses(
@@ -588,6 +612,7 @@ function RightMarketPanel({
             onAdd={handleAdd}
             onPatchItem={updateItem}
             onRemove={handleRemove}
+            onRefreshingChange={handleWatchlistRefreshingChange}
           />
         </div>
         <div className={mergeClasses(s.tabPane, tab !== 'portfolio' && s.tabPaneHidden)}>
@@ -598,7 +623,7 @@ function RightMarketPanel({
             summary={portfolioSummary}
             loading={portfolioLoading}
             error={portfolioError}
-            onRetry={() => { void refreshHoldings() }}
+            onRetry={() => { void refreshHoldings({ force: true }) }}
             watchlistItems={items}
             holdingsByCode={holdingsByCode}
           />

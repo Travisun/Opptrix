@@ -150,11 +150,17 @@ const useSectorGridStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gridAutoRows: 'min-content',
     alignContent: 'start',
     gap: '8px',
     padding: '10px 12px 12px',
+  },
+  gridDesktop: {
+    containerType: 'inline-size',
+    '@container (max-width: 220px)': {
+      gridTemplateColumns: '1fr',
+    },
   },
   card: {
     padding: '10px 12px',
@@ -172,10 +178,20 @@ const useSectorGridStyles = makeStyles({
   spark: { ...skBar('100%', '24px', opptrixTokens.radiusMd) },
 })
 
-export function CnSectorGridSkeleton({ count = 10 }: { count?: number }) {
+export function CnSectorGridSkeleton({
+  count = 10,
+  isMobile = false,
+}: {
+  count?: number
+  isMobile?: boolean
+}) {
   const s = useSectorGridStyles()
   return (
-    <div className={s.grid} aria-busy="true" aria-label="加载板块">
+    <div
+      className={mergeClasses(s.grid, !isMobile && s.gridDesktop)}
+      aria-busy="true"
+      aria-label="加载板块"
+    >
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className={s.card} aria-hidden>
           <Skeleton><SkeletonItem className={s.name} /></Skeleton>

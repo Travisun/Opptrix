@@ -33,18 +33,24 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     padding: '10px 12px 12px',
   },
+  scrollWrapDesktop: {
+    containerType: 'inline-size',
+  },
   grid: {
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gridAutoRows: 'min-content',
     alignContent: 'start',
     gap: '8px',
   },
-  gridCols2: {
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  /** 桌面右栏：2 列，极窄时降为 1 列 */
+  gridDesktop: {
+    '@container (max-width: 220px)': {
+      gridTemplateColumns: '1fr',
+    },
   },
   cardInner: {
     padding: '10px 12px',
@@ -67,8 +73,8 @@ type Props = {
   selectedCode?: string | null
   loading?: boolean
   emptyHint?: string
-  /** 每行列数；手机信息流默认 2 */
-  columns?: 2 | 3
+  /** 手机信息流：固定 2 列；桌面右栏走响应式 2→1 列 */
+  isMobile?: boolean
   onSelect?: (item: MarketIndexQuote) => void
 }
 
@@ -77,7 +83,7 @@ export default function CnSectorDiscoverGrid({
   selectedCode,
   loading = false,
   emptyHint,
-  columns = 3,
+  isMobile = false,
   onSelect,
 }: Props) {
   const s = useStyles()
@@ -119,17 +125,11 @@ export default function CnSectorDiscoverGrid({
         ariaLabel: '板块分类',
       }}
     >
-      <div className={s.scrollWrap}>
+      <div className={mergeClasses(s.scrollWrap, !isMobile && s.scrollWrapDesktop)}>
         {loading && !sectors.length ? (
-          <CnSectorGridSkeleton />
+          <CnSectorGridSkeleton isMobile={isMobile} />
         ) : (
-          <div
-            className={mergeClasses(
-              s.grid,
-              columns === 2 && s.gridCols2,
-              'opptrix-scroll-hidden',
-            )}
-          >
+          <div className={mergeClasses(s.grid, !isMobile && s.gridDesktop, 'opptrix-scroll-hidden')}>
             {!items.length ? (
               <Text className={s.empty} block>{emptyHint ?? '暂无板块数据'}</Text>
             ) : (
@@ -148,6 +148,7 @@ export default function CnSectorDiscoverGrid({
                 >
                   <CnQuoteUnitCard
                     compact
+                    compactHeadStack={!isMobile}
                     name={item.name}
                     midLabel={tagLabel}
                     midAsTag

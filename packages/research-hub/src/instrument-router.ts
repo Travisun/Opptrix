@@ -180,7 +180,7 @@ export interface FailedInstrumentRef {
   reason: QuoteFailedReason
 }
 
-function resolveQuoteRefs(params: Record<string, unknown>): InstrumentRef[] {
+export function resolveQuoteRefs(params: Record<string, unknown>): InstrumentRef[] {
   const rawList = params.instruments ?? params.refs ?? params.codes
   if (!Array.isArray(rawList)) return []
   const refs = instrumentRefsFromList(rawList)

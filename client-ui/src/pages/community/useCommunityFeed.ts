@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { fetchCommunityFeed } from '../../api/client'
 import type { CommunityFeedKind, CommunityFeedResponse, CommunityTopic } from '../../types/schemas'
 import {
+  acquireCommunityFeedPagePolling,
   getCommunityFeedCacheEntry,
   invalidateCommunityFeedCache,
   isCommunityFeedCacheFresh,
   loadCommunityFeedCached,
+  releaseCommunityFeedPagePolling,
   subscribeCommunityFeedCache,
 } from './communityFeedCache'
 import { persistCommunityFeedKind, readStoredCommunityFeedKind } from './communityFeedMeta'
@@ -52,7 +54,7 @@ function applyPageZero(res: CommunityFeedResponse): {
   }
 }
 
-export function useCommunityFeed(initialKind?: CommunityFeedKind) {
+export function useCommunityFeed(pageActive: boolean, initialKind?: CommunityFeedKind) {
   const [kind, setKindState] = useState<CommunityFeedKind>(
     () => initialKind ?? readStoredCommunityFeedKind(),
   )
@@ -71,6 +73,8 @@ export function useCommunityFeed(initialKind?: CommunityFeedKind) {
   const [staleHint, setStaleHint] = useState('')
   const requestIdRef = useRef(0)
   const loadMoreIdRef = useRef(0)
+  const kindRef = useRef(kind)
+  kindRef.current = kind
 
   const cacheVersion = useSyncExternalStore(
     subscribeCommunityFeedCache,
@@ -121,6 +125,8 @@ export function useCommunityFeed(initialKind?: CommunityFeedKind) {
       invalidateCommunityFeedCache(nextKind)
     } else if (!cached) {
       setLoading(true)
+    } else if (cached) {
+      setRefreshing(true)
     }
 
     if (!refresh) setError('')
@@ -163,8 +169,11 @@ export function useCommunityFeed(initialKind?: CommunityFeedKind) {
   }, [])
 
   useEffect(() => {
-    void load(kind, false)
-  }, [kind, load])
+    if (!pageActive) return undefined
+    const tick = () => { void load(kindRef.current, false) }
+    acquireCommunityFeedPagePolling(tick)
+    return releaseCommunityFeedPagePolling
+  }, [pageActive, load])
 
   const refresh = useCallback(() => {
     void load(kind, true)

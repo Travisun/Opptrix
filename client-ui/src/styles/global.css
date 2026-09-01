@@ -184,6 +184,20 @@ html.opptrix-desktop {
   --opptrix-chrome-top-offset: 5px;
 }
 
+/* 桌面 inline / overlay 侧栏（非 mobile drawer）：会话标题不可选中 */
+.opptrix-sidebar-panel-chrome .opptrix-session-item,
+.opptrix-sidebar-panel-chrome .opptrix-archive-session-item {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.opptrix-sidebar-panel-chrome .opptrix-hover-marquee {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: inherit;
+}
+
 /* ── Electron: 壳层透明以露出窗口材质（vibrancy/mica） ──
  * 路线 1：BrowserWindow 本身不开 transparent；圆角/阴影由系统窗形提供。
  * vibrancy 开启时侧栏/主区用 color-mix 轻穿透（对齐 Cursor glass）；
@@ -2718,28 +2732,36 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
 
   .opptrix-follow-item:hover,
   .opptrix-follow-item:focus-within {
-    background-color: transparent;
+    background-color: var(--opptrix-surface-hover);
   }
 
-  .opptrix-follow-item:hover .opptrix-follow-quote {
+  .opptrix-follow-item.opptrix-follow-item-active:hover,
+  .opptrix-follow-item.opptrix-follow-item-active:focus-within {
+    background-color: var(--opptrix-accent-soft);
+  }
+
+  .opptrix-follow-item:hover .opptrix-follow-quote,
+  .opptrix-follow-item:focus-within .opptrix-follow-quote {
     opacity: 0;
     pointer-events: none;
   }
 
-  .opptrix-follow-item:hover .opptrix-follow-actions {
+  .opptrix-follow-item:hover .opptrix-follow-actions,
+  .opptrix-follow-item:focus-within .opptrix-follow-actions {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .opptrix-follow-item:hover .opptrix-follow-trailing {
-    background-color: var(--opptrix-surface-hover);
-    box-shadow: -10px 0 12px -6px var(--opptrix-surface-hover);
+  .opptrix-follow-item:hover .opptrix-follow-trailing,
+  .opptrix-follow-item:focus-within .opptrix-follow-trailing {
+    background-color: transparent;
+    box-shadow: none;
   }
 }
 
 .opptrix-follow-item-active .opptrix-follow-trailing {
-  background-color: var(--opptrix-accent-soft);
-  box-shadow: -10px 0 12px -6px var(--opptrix-accent-soft);
+  background-color: transparent;
+  box-shadow: none;
 }
 
 @keyframes opptrix-hover-marquee-scroll {

@@ -13,6 +13,12 @@ import {
   mobileHeaderTitle,
 } from '../../theme/mobileChrome'
 import {
+  desktopPageHeaderActions,
+  desktopPageHeaderBar,
+  desktopPageHeaderMeta,
+  desktopPageHeaderTitle,
+} from '../../theme/desktopPageChrome'
+import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
 } from '../../desktop/constants'
@@ -39,36 +45,17 @@ const useStyles = makeStyles({
   rootElectron: {
     backgroundColor: 'transparent',
   },
-  toolbarMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-  },
-  toolbarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
-  },
+  toolbarMeta: desktopPageHeaderMeta,
+  toolbarActions: desktopPageHeaderActions,
   webHead: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '10px 16px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    ...desktopPageHeaderBar,
   },
   webHeadMobile: {
     ...mobileHeaderBar,
     backgroundColor: opptrixCssVars.canvas,
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
-  webTitle: {
-    fontSize: 'var(--opptrix-font-xl)',
-    fontWeight: 650,
-    color: opptrixCssVars.textPrimary,
-    flex: 1,
-  },
+  webTitle: desktopPageHeaderTitle,
   webTitleMobile: mobileHeaderTitle,
   mobileActionBtn: {
     ...ghostInteractive,
@@ -117,6 +104,7 @@ const useStyles = makeStyles({
 })
 
 type Props = {
+  pageActive?: boolean
   electronChrome?: boolean
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
@@ -128,6 +116,7 @@ type Props = {
 }
 
 function NewsCenterContent({
+  pageActive = true,
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
@@ -137,7 +126,7 @@ function NewsCenterContent({
   onDiscussArticle,
 }: Props) {
   const s = useStyles()
-  const feed = useNewsFeed()
+  const feed = useNewsFeed(pageActive)
   const {
     articles,
     filteredArticles,
@@ -185,7 +174,7 @@ function NewsCenterContent({
     : null
 
   const statusLabel = refreshing
-    ? '刷新中…'
+    ? (hasAnyArticles ? '正在拉取最新记录' : '刷新中…')
     : updatedLabel
       ? `更新 ${updatedLabel}`
       : '尚未刷新'
@@ -251,19 +240,23 @@ function NewsCenterContent({
           </>
         ) : (
           <>
-            {onOpenSettings && (
-              <OpptrixButton variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
-                订阅设置
-              </OpptrixButton>
-            )}
-            <OpptrixButton
-              variant="secondary"
-              icon={<ArrowSyncRegular />}
+            {onOpenSettings ? (
+              <ChromeToolButton
+                label="订阅设置"
+                iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                onClick={onOpenSettings}
+              >
+                <SettingsRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+              </ChromeToolButton>
+            ) : null}
+            <ChromeToolButton
+              label={refreshing ? '正在刷新' : '刷新列表'}
+              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
               disabled={refreshing}
               onClick={() => { void refresh() }}
             >
-              {refreshing ? '刷新中…' : '刷新列表'}
-            </OpptrixButton>
+              <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            </ChromeToolButton>
           </>
         )}
       </div>

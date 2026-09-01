@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import {
-  ensureNewsFeedBootstrapped,
+  acquireNewsFeedPagePolling,
   getNewsFeedSnapshot,
   getSelectedArticle,
   loadMoreNewsFeed,
@@ -8,6 +8,7 @@ import {
   NEWS_PRELOAD_THRESHOLD,
   refreshNewsFeed,
   reloadNewsFeed,
+  releaseNewsFeedPagePolling,
   setNewsFeedGroupFilter,
   setNewsFeedSelectedId,
   setNewsFeedSourceFilter,
@@ -20,7 +21,7 @@ import {
 
 export { type NewsListView, NEWS_PAGE_SIZE, NEWS_PRELOAD_THRESHOLD }
 
-export function useNewsFeed() {
+export function useNewsFeed(pageActive = true) {
   const snap = useSyncExternalStore(
     subscribeNewsFeed,
     getNewsFeedSnapshot,
@@ -28,8 +29,10 @@ export function useNewsFeed() {
   )
 
   useEffect(() => {
-    ensureNewsFeedBootstrapped()
-  }, [])
+    if (!pageActive) return undefined
+    acquireNewsFeedPagePolling()
+    return releaseNewsFeedPagePolling
+  }, [pageActive])
 
   const changeView = useCallback((next: NewsListView) => {
     setNewsFeedView(next)

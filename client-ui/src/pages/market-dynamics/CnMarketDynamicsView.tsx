@@ -294,7 +294,7 @@ export default function CnMarketDynamicsView({
       selectedCode={selectedSectorCode}
       loading={loading}
       emptyHint={data?.cn_sector_hint}
-      columns={isMobile ? 2 : 3}
+      isMobile={isMobile}
       onSelect={handleSectorSelect}
     />
   )

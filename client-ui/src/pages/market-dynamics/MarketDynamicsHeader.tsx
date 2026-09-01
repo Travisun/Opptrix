@@ -14,6 +14,12 @@ import {
   mobileHeaderTitle,
 } from '../../theme/mobileChrome'
 import {
+  desktopPageHeaderActions,
+  desktopPageHeaderBar,
+  desktopPageHeaderMeta,
+  desktopPageHeaderTitle,
+} from '../../theme/desktopPageChrome'
+import {
   DESKTOP_CHROME_TOP_OFFSET,
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -41,8 +47,7 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
   },
   rootWeb: {
-    height: '40px',
-    padding: '0 12px',
+    ...desktopPageHeaderBar,
   },
   rootWebMobile: {
     ...mobileHeaderBar,
@@ -61,13 +66,7 @@ const useStyles = makeStyles({
     position: 'relative',
     zIndex: 1,
   },
-  title: {
-    fontSize: 'var(--opptrix-font-md)',
-    fontWeight: 650,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.2,
-    whiteSpace: 'nowrap',
-  },
+  title: desktopPageHeaderTitle,
   titleMobile: mobileHeaderTitle,
   mobileActionBtn: {
     ...ghostInteractive,
@@ -79,18 +78,8 @@ const useStyles = makeStyles({
     minWidth: '8px',
     alignSelf: 'stretch',
   },
-  meta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
-  },
+  meta: desktopPageHeaderMeta,
+  actions: desktopPageHeaderActions,
   sectionRow: {
     flexShrink: 0,
     display: 'flex',
@@ -156,14 +145,13 @@ export default function MarketDynamicsHeader({
     />
   ) : (
     <OpptrixButton
-      variant="secondary"
+      variant="ghost"
       size="small"
       icon={<ArrowSyncRegular />}
       disabled={refreshing}
       onClick={onRefresh}
-    >
-      刷新
-    </OpptrixButton>
+      aria-label={refreshing ? '正在刷新' : '刷新'}
+    />
   )
 
   return (

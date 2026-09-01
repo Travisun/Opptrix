@@ -42,6 +42,15 @@ import {
   runWatchlistQuoteBatches,
   shouldSuppressWatchlistQuoteFailure,
 } from './watchlistQuotes'
+import {
+  readWatchlistQuotesSessionCache,
+  writeWatchlistQuotesSessionCache,
+} from './rightPanelSessionCache'
+import {
+  markWatchlistQuotesFetched,
+  runWatchlistQuotesRefreshIfNeeded,
+  shouldPollWatchlistQuotesAt,
+} from './watchlistQuotesRefresh'
 import { useWatchlist } from './useWatchlist'
 import { useInstrumentSearchWithUniversePrep, UNIVERSE_PREP_COPY } from './useInstrumentSearchWithUniversePrep'
 import { hasApplicationCapability } from './capabilities'
@@ -454,6 +463,10 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     backgroundColor: opptrixCssVars.canvas,
     boxShadow: `-10px 0 12px -6px ${opptrixCssVars.canvas}`,
+    '@media (hover: hover)': {
+      backgroundColor: 'transparent',
+      boxShadow: 'none',
+    },
   },
   headerEndPad: {
     flexShrink: 0,
@@ -464,6 +477,9 @@ const useStyles = makeStyles({
     right: 0,
     zIndex: 2,
     backgroundColor: opptrixCssVars.canvas,
+    '@media (hover: hover)': {
+      backgroundColor: 'transparent',
+    },
   },
   rowQuote: {
     display: 'flex',
@@ -620,6 +636,7 @@ interface Props {
   onAdd: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => Promise<WatchlistItem> | WatchlistItem
   onRemove: (item: WatchlistItem) => void
   onPatchItem: (code: string, patch: Partial<WatchlistItem>) => void
+  onRefreshingChange?: (refreshing: boolean) => void
 }
 
 export default function WatchlistTab({
@@ -632,6 +649,7 @@ export default function WatchlistTab({
   onAdd,
   onRemove,
   onPatchItem,
+  onRefreshingChange,
 }: Props) {
   const s = useStyles()
   const listRef = useRef<HTMLDivElement>(null)
@@ -654,10 +672,13 @@ export default function WatchlistTab({
     universePrep,
     refreshingAfterPrep,
   } = useInstrumentSearchWithUniversePrep({ keyword, limit: 20 })
-  const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
+  const [quotes, setQuotes] = useState<Record<string, MarketQuote>>(
+    () => readWatchlistQuotesSessionCache()?.quotes ?? {},
+  )
   const [radar, setRadar] = useState<Record<string, WatchlistRadarItem>>({})
   const [strategyByCode, setStrategyByCode] = useState<Record<string, string>>({})
   const [loadingQuotes, setLoadingQuotes] = useState(false)
+  const [refreshingQuotes, setRefreshingQuotes] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [failedByKey, setFailedByKey] = useState<Record<string, QuoteFailedReason>>({})
   const [, setGraceTick] = useState(0)
@@ -697,157 +718,172 @@ export default function WatchlistTab({
     [items, membership, selectedGroupId, quotes, holdingsByCode, fxRates],
   )
 
-  const refreshQuotes = useCallback(async (opts?: { silent?: boolean }) => {
-    const currentItems = itemsRef.current
-    if (!currentItems.length) {
-      setQuotes({})
-      setFailedByKey({})
-      quotesRef.current = {}
-      failedByKeyRef.current = {}
-      setQuoteError('')
-      return
-    }
-    const seq = ++loadSeqRef.current
-    const silent = opts?.silent === true
-    if (!silent) setLoadingQuotes(true)
-    try {
-      const instruments = currentItems
-        .map(resolveWatchlistInstrument)
-        .filter((r): r is NonNullable<typeof r> => r != null)
-      if (!instruments.length) {
+  const refreshQuotes = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
+    const hasDisplayed = Object.keys(quotesRef.current).length > 0
+    await runWatchlistQuotesRefreshIfNeeded(async () => {
+      const currentItems = itemsRef.current
+      if (!currentItems.length) {
         setQuotes({})
         setFailedByKey({})
         quotesRef.current = {}
         failedByKeyRef.current = {}
         setQuoteError('')
+        setRefreshingQuotes(false)
+        onRefreshingChange?.(false)
         return
       }
-
-      const itemByInstrumentKey = new Map<string, WatchlistItem>()
-      for (const item of currentItems) {
-        const itemRef = resolveWatchlistInstrument(item)
-        if (itemRef) itemByInstrumentKey.set(instrumentKey(itemRef), item)
+      const seq = ++loadSeqRef.current
+      const silent = opts?.silent === true
+      const hard = opts?.force === true
+      if (!silent) {
+        setLoadingQuotes(true)
+      } else if (hasDisplayed) {
+        setRefreshingQuotes(true)
+        onRefreshingChange?.(true)
       }
-
-      const shouldMarkQuoteFailed = (itemRef: NonNullable<ReturnType<typeof resolveWatchlistInstrument>>) => {
-        const item = itemByInstrumentKey.get(instrumentKey(itemRef))
-        if (!item) return true
-        const cached = lookupWatchlistQuote(quotesRef.current, item, itemRef)
-        return !shouldSuppressWatchlistQuoteFailure(item, {
-          loadingQuotes: !silent,
-          hasPrice: cached?.price != null,
-        })
-      }
-
-      const applyMerge = (
-        patch: Record<string, MarketQuote>,
-        failedMap: Record<string, QuoteFailedReason>,
-        touchUpdatedAt: boolean,
-      ) => {
-        const merged = mergeWatchlistQuoteRefresh({
-          prevQuotes: quotesRef.current,
-          prevFailed: failedByKeyRef.current,
-          patch,
-          failedMap,
-        })
-        quotesRef.current = merged.quotes
-        failedByKeyRef.current = merged.failedByKey
-        setQuotes(merged.quotes)
-        setFailedByKey(merged.failedByKey)
-        if (touchUpdatedAt) {
-          setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+      try {
+        const instruments = currentItems
+          .map(resolveWatchlistInstrument)
+          .filter((r): r is NonNullable<typeof r> => r != null)
+        if (!instruments.length) {
+          setQuotes({})
+          setFailedByKey({})
+          quotesRef.current = {}
+          failedByKeyRef.current = {}
+          setQuoteError('')
+          return
         }
-      }
 
-      let lastBatchErrorMessage: string | undefined
-      const { okCount, failCount } = await runWatchlistQuoteBatches({
-        items: instruments,
-        shouldAbort: () => seq !== loadSeqRef.current,
-        onBatchError: (err) => {
-          if (err instanceof Error && err.message) {
-            lastBatchErrorMessage = err.message
+        const itemByInstrumentKey = new Map<string, WatchlistItem>()
+        for (const item of currentItems) {
+          const itemRef = resolveWatchlistInstrument(item)
+          if (itemRef) itemByInstrumentKey.set(instrumentKey(itemRef), item)
+        }
+
+        const shouldMarkQuoteFailed = (itemRef: NonNullable<ReturnType<typeof resolveWatchlistInstrument>>) => {
+          const item = itemByInstrumentKey.get(instrumentKey(itemRef))
+          if (!item) return true
+          const cached = lookupWatchlistQuote(quotesRef.current, item, itemRef)
+          return !shouldSuppressWatchlistQuoteFailure(item, {
+            loadingQuotes: !silent,
+            hasPrice: cached?.price != null,
+          })
+        }
+
+        const applyMerge = (
+          patch: Record<string, MarketQuote>,
+          failedMap: Record<string, QuoteFailedReason>,
+          touchUpdatedAt: boolean,
+        ) => {
+          const merged = mergeWatchlistQuoteRefresh({
+            prevQuotes: quotesRef.current,
+            prevFailed: failedByKeyRef.current,
+            patch,
+            failedMap,
+          })
+          quotesRef.current = merged.quotes
+          failedByKeyRef.current = merged.failedByKey
+          setQuotes(merged.quotes)
+          setFailedByKey(merged.failedByKey)
+          const fetchedAtMs = Date.now()
+          writeWatchlistQuotesSessionCache(merged.quotes, fetchedAtMs)
+          markWatchlistQuotesFetched(fetchedAtMs)
+          if (touchUpdatedAt) {
+            setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
           }
-        },
-        runBatch: async (batch) => {
-          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
-          const resp = await research.instrumentQuotes(batch)
-          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+        }
 
-          const quotesArr = resp.data?.quotes
-          const hasQuotesArray = Array.isArray(quotesArr)
+        let lastBatchErrorMessage: string | undefined
+        const { okCount, failCount } = await runWatchlistQuoteBatches({
+          items: instruments,
+          shouldAbort: () => seq !== loadSeqRef.current,
+          onBatchError: (err) => {
+            if (err instanceof Error && err.message) {
+              lastBatchErrorMessage = err.message
+            }
+          },
+          runBatch: async (batch) => {
+            if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+            const resp = await research.instrumentQuotes(batch, hard ? { fresh: true } : undefined)
+            if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
 
-          // success:false 且无 quotes：软失败 — 写 failedMap，保留已有价，不 throw
-          if (!hasQuotesArray) {
-            const reason = classifyWatchlistBatchFailReason(resp.message)
-            const failedMap: Record<string, QuoteFailedReason> = {}
-            for (const itemRef of batch) {
-              if (!shouldMarkQuoteFailed(itemRef)) continue
+            const quotesArr = resp.data?.quotes
+            const hasQuotesArray = Array.isArray(quotesArr)
+
+            if (!hasQuotesArray) {
+              const reason = classifyWatchlistBatchFailReason(resp.message)
+              const failedMap: Record<string, QuoteFailedReason> = {}
+              for (const itemRef of batch) {
+                if (!shouldMarkQuoteFailed(itemRef)) continue
+                const code = displayCodeFromInstrument(itemRef)
+                const rowKey = watchlistItemKey({ code, name: code, instrument: itemRef })
+                failedMap[code] = reason
+                failedMap[rowKey] = reason
+                failedMap[instrumentKey(itemRef)] = reason
+              }
+              if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
+              applyMerge({}, failedMap, false)
+              return
+            }
+
+            const patch: Record<string, MarketQuote> = {}
+            for (const q of quotesArr) {
+              const itemRef = q.instrument ?? resolveWatchlistInstrument({
+                code: q.code,
+                name: q.name,
+              })
+              if (!itemRef) continue
+              const mq = unifiedQuoteToMarketQuote(q)
               const code = displayCodeFromInstrument(itemRef)
-              const rowKey = watchlistItemKey({ code, name: code, instrument: itemRef })
-              failedMap[code] = reason
-              failedMap[rowKey] = reason
-              failedMap[instrumentKey(itemRef)] = reason
+              const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
+              const quote: MarketQuote = {
+                ...mq,
+                code,
+                name: mq.name ?? code,
+              }
+              patch[code] = quote
+              patch[rowKey] = quote
+              patch[instrumentKey(itemRef)] = quote
+            }
+            const failedMap: Record<string, QuoteFailedReason> = {}
+            for (const f of resp.data?.failed ?? []) {
+              const itemRef = f.instrument ?? resolveWatchlistInstrument({ code: f.code, name: f.code })
+              if (itemRef && !shouldMarkQuoteFailed(itemRef)) continue
+              failedMap[f.code] = f.reason
+              if (itemRef) failedMap[instrumentKey(itemRef)] = f.reason
             }
             if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
-            applyMerge({}, failedMap, false)
-            return
-          }
+            applyMerge(patch, failedMap, Object.keys(patch).length > 0)
+          },
+        })
 
-          const patch: Record<string, MarketQuote> = {}
-          for (const q of quotesArr) {
-            const itemRef = q.instrument ?? resolveWatchlistInstrument({
-              code: q.code,
-              name: q.name,
-            })
-            if (!itemRef) continue
-            const mq = unifiedQuoteToMarketQuote(q)
-            const code = displayCodeFromInstrument(itemRef)
-            const rowKey = watchlistItemKey({ code, name: mq.name, instrument: itemRef })
-            const quote: MarketQuote = {
-              ...mq,
-              code,
-              name: mq.name ?? code,
-            }
-            patch[code] = quote
-            patch[rowKey] = quote
-            patch[instrumentKey(itemRef)] = quote
+        if (seq !== loadSeqRef.current) return
+        if (okCount > 0) {
+          setQuoteError('')
+        } else if (failCount > 0) {
+          const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
+          if (!(silent && hasCachedQuote)) {
+            setQuoteError(watchlistQuoteErrorCopy(lastBatchErrorMessage))
           }
-          const failedMap: Record<string, QuoteFailedReason> = {}
-          for (const f of resp.data?.failed ?? []) {
-            const itemRef = f.instrument ?? resolveWatchlistInstrument({ code: f.code, name: f.code })
-            if (itemRef && !shouldMarkQuoteFailed(itemRef)) continue
-            failedMap[f.code] = f.reason
-            if (itemRef) failedMap[instrumentKey(itemRef)] = f.reason
-          }
-          if (seq !== loadSeqRef.current) throw new WatchlistQuoteBatchAbortError()
-          applyMerge(patch, failedMap, Object.keys(patch).length > 0)
-        },
-      })
-
-      if (seq !== loadSeqRef.current) return
-      // 有成功批则清 footer；仅整轮无成功且确有硬失败才抬红字
-      if (okCount > 0) {
-        setQuoteError('')
-      } else if (failCount > 0) {
-        const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
-        if (!(silent && hasCachedQuote)) {
-          setQuoteError(watchlistQuoteErrorCopy(lastBatchErrorMessage))
+        } else {
+          setQuoteError('')
         }
-      } else {
-        setQuoteError('')
-      }
-    } catch {
-      // 外层兜底：不清空已有 quotes
-      if (seq === loadSeqRef.current) {
-        const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
-        if (!(silent && hasCachedQuote)) {
-          setQuoteError('行情暂时繁忙，请稍后刷新')
+      } catch {
+        if (seq === loadSeqRef.current) {
+          const hasCachedQuote = Object.values(quotesRef.current).some(q => q.price != null)
+          if (!(silent && hasCachedQuote)) {
+            setQuoteError('行情暂时繁忙，请稍后刷新')
+          }
+        }
+      } finally {
+        if (seq === loadSeqRef.current) {
+          setLoadingQuotes(false)
+          setRefreshingQuotes(false)
+          onRefreshingChange?.(false)
         }
       }
-    } finally {
-      if (seq === loadSeqRef.current) setLoadingQuotes(false)
-    }
-  }, [])
+    }, { force: opts?.force, hasDisplayedData: hasDisplayed })
+  }, [onRefreshingChange])
 
   const refreshRadar = useCallback(async () => {
     const currentItems = itemsRef.current
@@ -925,6 +961,7 @@ export default function WatchlistTab({
     failedByKeyRef.current = merged.failedByKey
     setQuotes(merged.quotes)
     setFailedByKey(merged.failedByKey)
+    writeWatchlistQuotesSessionCache(merged.quotes)
     setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
   }, [])
 
@@ -932,8 +969,11 @@ export default function WatchlistTab({
 
   useEffect(() => {
     if (!active || syncedItemsKey !== itemsKey) return undefined
-    void refreshQuotes()
-    const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, WATCHLIST_QUOTES_POLL_MS)
+    void refreshQuotes({ silent: Object.keys(quotesRef.current).length > 0 })
+    const timer = window.setInterval(() => {
+      if (document.hidden || !shouldPollWatchlistQuotesAt()) return
+      void refreshQuotes({ silent: true })
+    }, WATCHLIST_QUOTES_POLL_MS)
     return () => window.clearInterval(timer)
   }, [refreshQuotes, active, itemsKey, syncedItemsKey])
 
@@ -1475,21 +1515,25 @@ export default function WatchlistTab({
       </div>
 
       <div className={s.footer}>
-        <span className={mergeClasses(quoteError && !loadingQuotes && s.footerError)}>
-          {loadingQuotes
-            ? '正在更新行情…'
-            : quoteError
-              ? quoteError
-              : selectedGroupId
-                ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''} · 约每 1 分钟更新${updatedAt ? ` · ${updatedAt}` : ''}`
-                : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''} · 约每 1 分钟更新${updatedAt ? ` · ${updatedAt}` : ''}`}
+        <span className={mergeClasses(quoteError && !loadingQuotes && !refreshingQuotes && s.footerError)}>
+          {loadingQuotes && !Object.keys(quotes).length
+            ? '正在加载行情…'
+            : refreshingQuotes
+              ? '正在拉取最新记录'
+              : loadingQuotes
+                ? '正在更新行情…'
+                : quoteError
+                  ? quoteError
+                  : selectedGroupId
+                    ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''} · 约每 1 分钟更新${updatedAt ? ` · ${updatedAt}` : ''}`
+                    : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''} · 约每 1 分钟更新${updatedAt ? ` · ${updatedAt}` : ''}`}
         </span>
         <button
           type="button"
           className={s.footerAction}
           aria-label="刷新行情"
-          disabled={loadingQuotes}
-          onClick={() => void refreshQuotes()}
+          disabled={loadingQuotes || refreshingQuotes}
+          onClick={() => void refreshQuotes({ force: true })}
         >
           刷新
         </button>

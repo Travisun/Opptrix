@@ -14,6 +14,7 @@ import ThinkingDots from '../components/ThinkingDots'
 import { isElectron, electronPlatform, supportsNativeWindowVibrancy } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { DESKTOP_PAGE_HEADER_HEIGHT } from '../theme/desktopPageChrome'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
 import AppUpdateNotice from '../desktop/AppUpdateNotice'
 import { useAppVersion } from '../onboarding/useAppVersion'
@@ -69,7 +70,7 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvasAlt,
   },
   sidebarTopElectron: {
-    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT + 4}px`,
+    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
     boxSizing: 'border-box',
     height: '100%',
   },
@@ -100,14 +101,19 @@ const useStyles = makeStyles({
   },
   brandRow: {
     display: 'flex',
-    alignItems: 'baseline',
     gap: '6px',
     flexShrink: 0,
     minWidth: 0,
-    /* 与 sidebarTopMenuRow 图标左缘对齐：margin 10 + padding 10 = 20 */
-    padding: '4px 20px 0',
     overflow: 'hidden',
-    lineHeight: 1,
+  },
+  /** 桌面 inline / overlay 侧栏：与右侧 ChatView header 同高 */
+  brandRowDesktop: {
+    alignItems: 'center',
+    height: `${DESKTOP_PAGE_HEADER_HEIGHT}px`,
+    minHeight: `${DESKTOP_PAGE_HEADER_HEIGHT}px`,
+    boxSizing: 'border-box',
+    padding: '0 20px',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   /** 移动抽屉：与右栏 sheet header 同高，品牌文字垂直居中 */
   brandRowDrawer: {
@@ -418,7 +424,10 @@ function SessionSidebar({
     <>
       {showSidebarBrand ? (
         <div
-          className={mergeClasses(s.brandRow, isDrawer && s.brandRowDrawer)}
+          className={mergeClasses(
+            s.brandRow,
+            isDrawer ? s.brandRowDrawer : s.brandRowDesktop,
+          )}
           aria-label={brandAriaLabel}
         >
           <span className={s.brandName} aria-hidden="true">Opptrix 工作台</span>
@@ -647,6 +656,7 @@ function SessionSidebar({
             s.sidebar,
             electronChrome && s.sidebarElectron,
             electronChrome && s.sidebarTopElectron,
+            'opptrix-sidebar-panel-chrome',
           )}
         >
           {sidebarBody}
@@ -666,6 +676,7 @@ function SessionSidebar({
         electronChrome && s.sidebarElectron,
         sidebarSolidDark && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
+        !isDrawer && 'opptrix-sidebar-panel-chrome',
         sidebarGlass && 'opptrix-glass-sidebar',
         isDrawer && 'opptrix-sidebar-edge',
       )}

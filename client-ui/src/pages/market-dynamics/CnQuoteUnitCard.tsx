@@ -27,6 +27,19 @@ const useStyles = makeStyles({
     alignItems: 'center',
     minWidth: 0,
   },
+  headRowCompact: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '4px',
+  },
+  headRowCompactMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '6px',
+    minWidth: 0,
+  },
   name: {
     minWidth: 0,
     fontSize: CN_DASH.labelSize,
@@ -122,6 +135,8 @@ export type CnQuoteUnitCardProps = {
   changeAmt?: number | null
   sparkSeed: string
   compact?: boolean
+  /** 桌面窄卡：标题与标签分行，避免重叠 */
+  compactHeadStack?: boolean
   className?: string
   changeSlot?: ReactNode
 }
@@ -135,6 +150,7 @@ export default function CnQuoteUnitCard({
   changeAmt,
   sparkSeed,
   compact = false,
+  compactHeadStack = false,
   className,
   changeSlot,
 }: CnQuoteUnitCardProps) {
@@ -142,18 +158,37 @@ export default function CnQuoteUnitCard({
   const delta = resolveIndexChangeAmt(price, changePct, changeAmt)
   const deltaText = formatIndexChangePoints(delta, 2) || '—'
 
+  const stackCompactHead = compact && compactHeadStack
+
   return (
     <div className={mergeClasses(s.root, className)}>
-      <div className={s.headRow}>
+      <div className={mergeClasses(s.headRow, stackCompactHead && s.headRowCompact)}>
         <span className={s.name}>{name}</span>
-        {midLabel ? (
-          <span className={mergeClasses(s.midSlot, midAsTag && s.midTag)}>{midLabel}</span>
-        ) : null}
-        <span className={s.changeSlot}>
-          {changeSlot ?? (
-            <CnChangePill changePct={changePct} ghost compact />
-          )}
-        </span>
+        {stackCompactHead ? (
+          <div className={s.headRowCompactMeta}>
+            {midLabel ? (
+              <span className={mergeClasses(s.midSlot, midAsTag && s.midTag)}>{midLabel}</span>
+            ) : (
+              <span aria-hidden />
+            )}
+            <span className={s.changeSlot}>
+              {changeSlot ?? (
+                <CnChangePill changePct={changePct} ghost compact />
+              )}
+            </span>
+          </div>
+        ) : (
+          <>
+            {midLabel ? (
+              <span className={mergeClasses(s.midSlot, midAsTag && s.midTag)}>{midLabel}</span>
+            ) : null}
+            <span className={s.changeSlot}>
+              {changeSlot ?? (
+                <CnChangePill changePct={changePct} ghost compact />
+              )}
+            </span>
+          </>
+        )}
       </div>
 
       <div className={s.valueRow}>
