@@ -4,7 +4,7 @@ import type { FeedArticle } from '../../types/schemas'
 import {
   decideRevalidate,
   resolveFetchedAtMs,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 import {
   ensureNewsFeedRefreshPolicyHydrated,
   getNewsFeedClientPollMs,

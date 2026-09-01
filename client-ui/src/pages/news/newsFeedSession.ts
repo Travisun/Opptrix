@@ -2,7 +2,7 @@ import { news } from '../../api/client'
 import {
   decideRevalidate,
   resolveFetchedAtMs,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 import { createVisibilityPoller, type VisibilityPoller } from '../../data/cacheControl'
 import {
   applyNewsFeedRefreshIntervalMin,

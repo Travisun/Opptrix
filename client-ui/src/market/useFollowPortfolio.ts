@@ -22,7 +22,7 @@ import {
   UI_POLL_INTERVAL_MS,
   decideRevalidate,
   resolveFetchedAtMs,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 import {
   readPortfolioSummarySessionCache,
   writePortfolioSummarySessionCache,

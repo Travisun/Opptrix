@@ -10,7 +10,7 @@ export {
   parseIsoToMs,
   resolveFetchedAtMs,
   type RevalidateMode,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 
 export type VisibilityPoller = {
   acquire: () => void
