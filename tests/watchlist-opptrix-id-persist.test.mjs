@@ -71,12 +71,13 @@ describe('watchlist Opptrix ID persistence', () => {
     assert.equal(reloaded[0]?.instrument?.assetClass, 'REIT')
   })
 
-  it('legacy CN:SZ namespace items unchanged', () => {
+  it('legacy CN:SZ namespace normalizes to OpptrixQuant ID', () => {
     const legacy = normalizeWatchlistItem({
       code: 'CN:SZ.600519',
       name: '贵州茅台',
       instrument: { market: 'CN', assetClass: 'EQUITY', symbol: '600519', exchange: 'SH' },
     })
-    assert.equal(legacy.code, 'CN:SH.600519')
+    assert.equal(legacy.code, 'CN:STOCK:600519.SH')
+    assert.equal(legacy.instrument?.exchange, 'SH')
   })
 })

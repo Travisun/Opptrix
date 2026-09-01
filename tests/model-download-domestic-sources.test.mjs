@@ -116,7 +116,7 @@ test('orderSources puts ModelScope before hf-mirror before huggingface.co', asyn
 
 test('docker-fetch-models hyMtSources include Tencent-Hunyuan ModelScope', async () => {
   const src = await import('node:fs').then((fs) =>
-    fs.promises.readFile(path.join(ROOT, 'scripts/docker-fetch-models.mjs'), 'utf8'),
+    fs.promises.readFile(path.join(ROOT, 'scripts/lib/core-models.mjs'), 'utf8'),
   )
   assert.match(src, /Tencent-Hunyuan\/HY-MT1\.5-1\.8B-GGUF/)
   assert.match(src, /OPPTRIX_HY_MT_MODELSCOPE_REPO/)

@@ -11,8 +11,8 @@ import {
 } from '@opptrix/shared'
 import { resolveInstrumentQueryPlan } from '@opptrix/a-stock-layer'
 
-/** 标准 CN:PF 样例 — 场外开放式 + 场内 SH ETF + 场内 SZ ETF/LOF */
-const STANDARD_FUND_CASES = [
+/** 场外 CN:PF — 解析后仍为 FUND + PF 命名空间 */
+const OFF_MARKET_FUND_CASES = [
   {
     label: '场外开放式',
     namespace: 'CN:PF.110022',
@@ -22,22 +22,29 @@ const STANDARD_FUND_CASES = [
     sinaWire: '110022',
     tushareNavTsCode: '110022.OF',
   },
+]
+
+/**
+ * 历史 CN:PF 输入中的场内 ETF 码 — resolveCnInstrumentIdentity 纠偏为交易所 ETF。
+ * provider-wire / Driver 仍可用裸码 + wired 后缀访问 fund_* 能力。
+ */
+const LISTED_ETF_FROM_PF_CASES = [
   {
-    label: '场内 SH',
-    namespace: 'CN:PF.510330',
+    label: '场内 SH ETF',
+    inputNamespace: 'CN:PF.510330',
     symbol: '510330',
-    venue: 'E',
-    listing: 'SH',
+    expectedNamespace: 'CN:SH.510330',
+    exchange: 'SH',
     tushareWire: '510330.SH',
     sinaWire: '510330',
     tushareNavTsCode: '510330.SH',
   },
   {
-    label: '场内 SZ',
-    namespace: 'CN:PF.159915',
+    label: '场内 SZ ETF',
+    inputNamespace: 'CN:PF.159915',
     symbol: '159915',
-    venue: 'E',
-    listing: 'SZ',
+    expectedNamespace: 'CN:SZ.159915',
+    exchange: 'SZ',
     tushareWire: '159915.SZ',
     sinaWire: '159915',
     tushareNavTsCode: '159915.SZ',
@@ -56,8 +63,8 @@ const FUND_REGISTRY_METHODS = [
   { capability: 'fund_dividend', method: 'fundDividend' },
 ]
 
-test('CN:PF 标准命名空间 — 场内外解析与规范化', () => {
-  for (const c of STANDARD_FUND_CASES) {
+test('CN:PF 标准命名空间 — 场外解析与规范化', () => {
+  for (const c of OFF_MARKET_FUND_CASES) {
     const ref = parseInstrumentNamespace(c.namespace)
     assert.ok(ref, c.label)
     assert.equal(ref.market, 'CN', c.label)
@@ -72,8 +79,24 @@ test('CN:PF 标准命名空间 — 场内外解析与规范化', () => {
   }
 })
 
-test('resolveInstrumentQueryPlan — 标准 CN:PF 路由至 fund_* registry', () => {
-  for (const c of STANDARD_FUND_CASES) {
+test('CN:PF 输入 — 场内 ETF 码纠偏为交易所命名空间', () => {
+  for (const c of LISTED_ETF_FROM_PF_CASES) {
+    const ref = parseInstrumentNamespace(c.inputNamespace)
+    assert.ok(ref, c.label)
+    assert.equal(ref.market, 'CN', c.label)
+    assert.equal(ref.assetClass, 'ETF', c.label)
+    assert.equal(ref.symbol, c.symbol, c.label)
+    assert.equal(ref.exchange, c.exchange, c.label)
+    assert.equal(buildInstrumentNamespace(ref), c.expectedNamespace, c.label)
+
+    const legacy = parseInstrumentNamespace(c.inputNamespace.replace('CN:PF', 'CN:OF'))
+    assert.ok(legacy, `${c.label} legacy OF`)
+    assert.equal(buildInstrumentNamespace(legacy), c.expectedNamespace, `${c.label} legacy canonical`)
+  }
+})
+
+test('resolveInstrumentQueryPlan — 场外 CN:PF 路由至 fund_* registry', () => {
+  for (const c of OFF_MARKET_FUND_CASES) {
     const ref = parseInstrumentNamespace(c.namespace)
     for (const { capability, method } of FUND_REGISTRY_METHODS) {
       const plan = resolveInstrumentQueryPlan(ref, capability)
@@ -89,13 +112,23 @@ test('resolveInstrumentQueryPlan — 标准 CN:PF 路由至 fund_* registry', ()
   }
 })
 
+test('resolveInstrumentQueryPlan — 纠偏后的场内 ETF 不走 fund_* registry', () => {
+  for (const c of LISTED_ETF_FROM_PF_CASES) {
+    const ref = parseInstrumentNamespace(c.inputNamespace)
+    for (const { capability } of FUND_REGISTRY_METHODS) {
+      const plan = resolveInstrumentQueryPlan(ref, capability)
+      assert.equal(plan, null, `${c.label} ${capability}`)
+    }
+  }
+})
+
 test('provider-wire — tushare / tonghuashun 场内外标准码', async () => {
   const { wireProviderSymbolArg, wireRegistryMethodArgs } = await import(
     '../packages/a-stock-layer/dist/core/provider-wire.js',
   )
 
-  for (const c of STANDARD_FUND_CASES) {
-    const ref = parseInstrumentNamespace(c.namespace)
+  for (const c of [...OFF_MARKET_FUND_CASES, ...LISTED_ETF_FROM_PF_CASES]) {
+    const ref = parseInstrumentNamespace(c.namespace ?? c.inputNamespace)
 
     assert.equal(
       wireProviderSymbolArg('tushare', 'code', 'fundNav', ref),
@@ -146,7 +179,7 @@ test('fundTsCode — 场内外自动识别', async () => {
   assert.ok(fundTsCodeCandidates('159915').includes('159915.SZ'))
 })
 
-test('Provider 门禁 — CN:PF FUND ref', async () => {
+test('Provider 门禁 — 场外 CN:PF FUND ref', async () => {
   const { tushareFundGate } = await import(
     '../packages/a-stock-layer/dist/providers/tushare/markets/cn/fund.js',
   )
@@ -154,10 +187,15 @@ test('Provider 门禁 — CN:PF FUND ref', async () => {
     '../packages/a-stock-layer/dist/core/fund-instrument.js',
   )
 
-  for (const c of STANDARD_FUND_CASES) {
+  for (const c of OFF_MARKET_FUND_CASES) {
     const ref = parseInstrumentNamespace(c.namespace)
     assert.equal(tushareFundGate(ref), true, c.label)
     assert.doesNotThrow(() => assertCnPublicFundCode(ref.symbol), c.label)
+  }
+
+  for (const c of LISTED_ETF_FROM_PF_CASES) {
+    const ref = parseInstrumentNamespace(c.inputNamespace)
+    assert.equal(tushareFundGate(ref), false, c.label)
   }
 
   const etfRef = normalizeInstrumentRef({

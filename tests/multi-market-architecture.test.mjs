@@ -237,15 +237,17 @@ test('gateInstrumentAnalytics — CN evaluation still cn_factor_scorecard', () =
   assert.equal(resolveInstrumentAnalyticsProfile(ref).mode, 'cn_factor_scorecard')
 })
 
-test('online search maps CN/US instruments via Tickflow exact', { timeout: 30_000 }, async () => {
+test('online search maps CN/US instruments via OpptrixQuant', {
+  timeout: 30_000,
+  skip: !process.env.OPPTRIX_STOCKINDEX_API_KEY,
+}, async () => {
   const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const de = new MarketDataEngine(false)
   const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
-  // Tickflow free 通常可用；无网时允许空结果但不抛
-  if (cn.length) assert.ok(cn.some(h => h.instrument.symbol === '600519'))
+  assert.ok(cn.some(h => h.instrument.symbol === '600519'))
   const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
-  if (us.length) assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
+  assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
 })
 
 test('cross-market list sync jobs are no-op', async () => {

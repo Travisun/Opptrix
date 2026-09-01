@@ -98,10 +98,11 @@ test('resolveInstrumentQueryPlan kline keeps assetClass; 000001 EQUITY is not in
     { market: 'CN', assetClass: 'INDEX', symbol: '000001', exchange: 'SH' },
     'kline',
   )
-  assert.equal(index?.kind, 'cn_kline')
-  if (index?.kind === 'cn_kline') {
+  assert.equal(index?.kind, 'registry')
+  if (index?.kind === 'registry') {
     assert.equal(index.assetClass, 'INDEX')
-    assert.equal(index.exchange, 'SH')
+    assert.equal(index.method, 'indexKline')
+    assert.deepEqual(index.args, ['000001', 'daily', '', '', 120])
   }
 })
 
@@ -129,11 +130,23 @@ test('routeInstrumentQuotes matches 000001 by exchange, not bare code', async ()
       data: {
         quotes: refs.map(r => ({
           code: r.symbol,
-          name: r.exchange === 'SH' ? '上证指数' : '平安银行',
-          price: r.exchange === 'SH' ? 3100 : 11.5,
+          name: '平安银行',
+          price: 11.5,
           exchange: r.exchange,
           instrument: r,
         })),
+      },
+    }),
+    cnInstrumentRealtime: async (ref) => ({
+      success: true,
+      message: 'ok',
+      elapsed: 0,
+      data: {
+        code: ref.symbol,
+        name: '上证指数',
+        price: 3100,
+        exchange: ref.exchange,
+        instrument: ref,
       },
     }),
   }

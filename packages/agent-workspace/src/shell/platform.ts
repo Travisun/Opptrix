@@ -137,6 +137,8 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
       message: '命令在已授权工作区内运行（容器 + 工作区边界），无需系统级沙盒组件',
       needs_elevation: false,
       can_auto_install: false,
+      needs_linux_install: platform === 'linux' ? false : undefined,
+      userns_restricted: platform === 'linux' ? false : undefined,
       network_isolation_level: 'basic',
       isolation_mode: 'workspace',
       agent_sandbox: 'full',

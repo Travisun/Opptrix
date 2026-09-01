@@ -414,8 +414,9 @@ test('backfill disambiguates duplicate instrument_ns before unique index', () =>
     SELECT asset_class, instrument_ns FROM instruments WHERE code = '000977' ORDER BY asset_class
   `).all()
   assert.equal(rows.length, 2)
+  // 000977 个股在 SZ；000xxx 指数在 SH — 命名空间自然分离，无需 @INDEX 后缀
   assert.equal(rows[0].instrument_ns, 'CN:SZ.000977')
-  assert.equal(rows[1].instrument_ns, 'CN:SZ.000977@INDEX')
+  assert.equal(rows[1].instrument_ns, 'CN:SH.000977')
   store.close()
 })
 

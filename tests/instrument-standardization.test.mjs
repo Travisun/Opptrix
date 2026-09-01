@@ -106,7 +106,7 @@ test('Engine resolveInstrumentQueryPlan uses registry for US realtime', () => {
   if (plan?.kind === 'registry') {
     assert.equal(plan.market, 'US')
     assert.equal(plan.method, 'realtime')
-    assert.deepEqual(plan.args, ['AAPL'])
+    assert.deepEqual(plan.args, ['AAPL', 'US'])
   }
 })
 
@@ -140,16 +140,20 @@ test('Engine resolveInstrumentQueryPlan HK kline', () => {
   if (plan?.kind === 'registry') {
     assert.equal(plan.market, 'HK')
     assert.equal(plan.method, 'kline')
-    assert.deepEqual(plan.args, ['00700', 'daily', '', '', 120])
+    assert.deepEqual(plan.args, ['00700', 'daily', '', '', 120, 'HK'])
   }
 })
 
-test('Engine resolveInstrumentQueryPlan JP snapshot returns null (not connected)', () => {
+test('Engine resolveInstrumentQueryPlan JP snapshot uses composite', () => {
   const plan = resolveInstrumentQueryPlan(
     { market: 'JP', assetClass: 'EQUITY', symbol: '7203' },
     'snapshot',
   )
-  assert.equal(plan, null)
+  assert.equal(plan?.kind, 'composite_snapshot')
+  if (plan?.kind === 'composite_snapshot') {
+    assert.equal(plan.market, 'JP')
+    assert.equal(plan.symbol, '7203')
+  }
 })
 
 test('Engine resolveInstrumentQueryPlan KR instrument_search returns null (not connected)', () => {

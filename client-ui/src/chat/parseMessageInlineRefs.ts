@@ -4,13 +4,25 @@
  * - `@skill:valid-name`
  * - `名称(CODE)` — CODE 为 OpptrixQuant 统一 ID（如 CN:STOCK:600519.SH）或 legacy 命名空间（CN:SH.600519）
  */
-import type { InstrumentRef } from '../types/instrument'
+import type { InstrumentRef } from '../types/instrument.ts'
 import {
-  marketDisplayName,
   normalizeInstrumentRef,
   parseInstrumentNamespace,
   parseOpptrixInstrumentId,
-} from '../market/instrument'
+} from '@opptrix/shared/instrument-symbol'
+
+/** 与 client-ui marketDisplayName 同口径（避免经 instrument.ts 拉入 AppContext） */
+function marketDisplayName(market: string): string {
+  switch (market) {
+    case 'CN': return 'A股'
+    case 'US': return '美股'
+    case 'HK': return '港股'
+    case 'JP': return '日股'
+    case 'KR': return '韩股'
+    case 'CRYPTO': return 'Crypto'
+    default: return market
+  }
+}
 
 export type MessageInlineRefSegment =
   | { kind: 'text'; value: string }
