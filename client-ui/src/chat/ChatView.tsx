@@ -45,6 +45,7 @@ import {
   DESKTOP_TOOL_ICON_SIZE,
 } from '../desktop/constants'
 import { pickWelcomeVariant } from './chatWelcomeVariants'
+import ChatWelcomeMarketPulse from './ChatWelcomeMarketPulse'
 import MessageOutlineRail, { buildOutlineEntries } from './MessageOutlineRail'
 
 /** 消息区底 padding 初始/下限（ResizeObserver 测 composerInner 后覆盖） */
@@ -423,6 +424,9 @@ const useStyles = makeStyles({
     lineHeight: 1.6,
     maxWidth: '100%',
     animationDelay: '0.75s',
+  },
+  welcomePulse: {
+    animationDelay: '0.9s',
   },
   loadingRow: {
     alignSelf: 'stretch',
@@ -1174,6 +1178,14 @@ function ChatView({
                     <Text className={mergeClasses(s.welcomeSub, s.welcomeEnter)}>
                       {welcomeSubtitle}
                     </Text>
+                  ) : null}
+                  {!isExpertSession ? (
+                    <ChatWelcomeMarketPulse
+                      enabled={isEmpty}
+                      isMobile={isMobile}
+                      shuffleEpoch={welcomeEpoch}
+                      className={mergeClasses(s.welcomePulse, s.welcomeEnter)}
+                    />
                   ) : null}
                 </div>
               )}

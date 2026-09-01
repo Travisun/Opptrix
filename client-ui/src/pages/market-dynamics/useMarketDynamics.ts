@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { news, research } from '../../api/client'
-import type { FeedArticle, MarketDynamicsData } from '../../types/schemas'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { news } from '../../api/client'
+import type { FeedArticle } from '../../types/schemas'
+import {
+  acquireMarketDynamicsCnPolling,
+  getMarketDynamicsCnSnapshot,
+  refreshMarketDynamicsCn,
+  releaseMarketDynamicsCnPolling,
+  subscribeMarketDynamicsCn,
+} from './marketDynamicsCnStore'
 
 const NEWS_REFRESH_MS = 60_000
-const MARKET_REFRESH_MS = 30_000
 
 function filterCnArticles(articles: FeedArticle[]): FeedArticle[] {
   return articles.filter(article => {
@@ -50,58 +56,23 @@ export function useMarketInsights() {
 }
 
 export function useMarketDynamics() {
-  const [data, setData] = useState<MarketDynamicsData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState('')
-  const mountedRef = useRef(true)
-
-  const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
-    const silent = opts?.silent ?? false
-    if (!silent) setLoading(true)
-    else setRefreshing(true)
-    setError('')
-    try {
-      const resp = await research.marketDynamics({
-        market: 'cn',
-        ...(opts?.force ? { refresh: true } : {}),
-      })
-      if (!mountedRef.current) return
-      if (resp.success && resp.data) {
-        setData({
-          ...resp.data,
-          market: resp.data.market ?? 'cn',
-        })
-      } else {
-        setError(resp.message || '暂时无法获取市场数据')
-      }
-    } catch (e) {
-      if (!mountedRef.current) return
-      setError(e instanceof Error ? e.message : '加载失败，请检查网络后重试')
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-        setRefreshing(false)
-      }
-    }
+  useEffect(() => {
+    acquireMarketDynamicsCnPolling()
+    return releaseMarketDynamicsCnPolling
   }, [])
 
-  useEffect(() => {
-    mountedRef.current = true
-    void load()
-    const timer = setInterval(() => { void load({ silent: true }) }, MARKET_REFRESH_MS)
-    return () => {
-      mountedRef.current = false
-      clearInterval(timer)
-    }
-  }, [load])
+  const snap = useSyncExternalStore(
+    subscribeMarketDynamicsCn,
+    getMarketDynamicsCnSnapshot,
+    getMarketDynamicsCnSnapshot,
+  )
 
   return {
-    data,
-    loading,
-    refreshing,
-    error,
-    refreshedAt: data?.refreshed_at ?? null,
-    refresh: () => load({ silent: true, force: true }),
+    data: snap.data,
+    loading: snap.loading,
+    refreshing: snap.refreshing,
+    error: snap.error,
+    refreshedAt: snap.data?.refreshed_at ?? null,
+    refresh: () => refreshMarketDynamicsCn(true),
   }
 }
