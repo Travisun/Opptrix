@@ -49,9 +49,5 @@ export function stepLabel(step: OnboardingNavStep): string {
   return '协议'
 }
 
-export function stepCounter(index: number, total: number): string {
-  return `${index + 1} / ${total}`
-}
-
 /** 介绍轮播每屏停留时长 */
 export const ONBOARDING_INTRO_SLIDE_MS = 3000

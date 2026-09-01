@@ -36,6 +36,7 @@ import {
   SettingsSectionLabel,
   SettingsStaticBlock,
 } from './SettingsPrimitives'
+import { openExternalUrl } from '../../platform/openUrl'
 
 const useStyles = makeStyles({
   root: {
@@ -82,12 +83,24 @@ const useStyles = makeStyles({
   homepageLink: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.accent,
-    textDecoration: 'none',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
     fontWeight: 500,
-    marginLeft: '6px',
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    marginTop: '6px',
+    alignSelf: 'flex-start',
+    ':hover': {
+      color: opptrixCssVars.accentHover,
+    },
   },
   keyBlock: {
     width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
   },
 
   // ── 高级入口 ──
@@ -436,17 +449,6 @@ export default function McpServersSettingsSection() {
                       desc={(
                         <>
                           <span>{preset.description}</span>
-                          {preset.homepage && (
-                            <a
-                              href={preset.homepage}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={s.homepageLink}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              了解更多
-                            </a>
-                          )}
                           {serviceHint && (
                             <span style={{ display: 'block', marginTop: 2 }}>
                               包含：{serviceHint}
@@ -474,6 +476,18 @@ export default function McpServersSettingsSection() {
                             onTest={() => { void handleTestPreset(preset) }}
                             placeholder={preset.services.length > 1 ? '输入共用数据密钥' : '输入数据密钥'}
                           />
+                          {preset.homepage ? (
+                            <button
+                              type="button"
+                              className={s.homepageLink}
+                              onClick={() => {
+                                const url = preset.homepage
+                                if (url) openExternalUrl(url)
+                              }}
+                            >
+                              前往获取数据密钥
+                            </button>
+                          ) : null}
                         </div>
                       </SettingsStaticBlock>
                     )}

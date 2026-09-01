@@ -4,13 +4,13 @@ import { CheckmarkCircleRegular } from '@fluentui/react-icons'
 import { getProviderCatalog } from '../api/client'
 import type { PublicProviderRuntime } from '../types/provider'
 import { ProviderSettingsForm } from '../pages/settings/ProviderSettingsForm'
-import { openExternalUrl } from '../platform/openUrl'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ONBOARDING_COPY } from './manifest'
-import { OnboardingTextLink, useOnboardingShellStyles } from './OnboardingShell'
+import { useOnboardingShellStyles } from './OnboardingShell'
 
 export const TONGHUASHUN_PROVIDER_ID = 'tonghuashun'
-export const FUYAO_PORTAL_URL = 'https://fuyao.aicubes.cn/'
+/** 同花顺扶摇数据密钥教程 */
+export const FUYAO_PORTAL_URL = 'https://opptrix.net/t/topic/199'
 
 export type OnboardingFuyaoNavState = {
   canAdvance: boolean
@@ -48,26 +48,6 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.55,
-  },
-  guideTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.4,
-  },
-  guideList: {
-    margin: 0,
-    paddingLeft: '18px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.55,
-  },
-  portalLink: {
-    alignSelf: 'flex-start',
-    fontSize: 'var(--opptrix-font-md)',
   },
   loading: {
     display: 'flex',
@@ -235,19 +215,7 @@ export function OnboardingFuyaoPanel({
       <Text className={shell.sectionTitle} block>{ONBOARDING_COPY.fuyao.title}</Text>
       <Text className={shell.sectionLead} block>{ONBOARDING_COPY.fuyao.desc}</Text>
       <div className={s.card}>
-        <Text className={s.guideTitle} block>{ONBOARDING_COPY.fuyao.apiGuideTitle}</Text>
-        <ol className={s.guideList}>
-          {ONBOARDING_COPY.fuyao.apiGuideSteps.map(step => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <OnboardingTextLink
-          className={s.portalLink}
-          onClick={() => { openExternalUrl(FUYAO_PORTAL_URL) }}
-        >
-          {ONBOARDING_COPY.fuyao.apiPortalLinkLabel}
-        </OnboardingTextLink>
-        <ProviderSettingsForm provider={provider} onSaved={handleSaved} />
+        <ProviderSettingsForm provider={provider} onSaved={handleSaved} controlTone="onboarding" />
       </div>
     </>
   )

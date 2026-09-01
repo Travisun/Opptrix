@@ -218,6 +218,9 @@ function DataProviderRow({
                   onSaved={() => {
                     onSaved()
                   }}
+                  onCommitSaved={() => {
+                    setDialogOpen(false)
+                  }}
                 />
               </DialogContent>
             </DialogBody>

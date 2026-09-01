@@ -18,7 +18,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
-import { Readable } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 
 const DOWNLOAD_MAX_ATTEMPTS = 3
 const RETRYABLE_HTTP = new Set([502, 503, 429])
@@ -121,22 +121,65 @@ export function isRetryableFailure(err, status) {
 }
 
 /**
+ * @typedef {{ received: number, total: number | null }} DownloadByteProgress
+ */
+
+/**
  * @param {string} url
  * @param {string} destPath
- * @param {{ logPrefix?: string, headers?: Record<string, string> }} [opts]
+ * @param {{
+ *   logPrefix?: string,
+ *   headers?: Record<string, string>,
+ *   onProgress?: (p: DownloadByteProgress) => void,
+ * }} [opts]
  */
 export async function downloadWithRetries(url, destPath, opts = {}) {
   const logPrefix = opts.logPrefix ?? 'model-download'
-  const headers = { ...hfAuthHeaders(), ...(opts.headers ?? {}) }
+  const baseHeaders = { ...hfAuthHeaders(), ...(opts.headers ?? {}) }
+  const onProgress = opts.onProgress
   let lastErr = /** @type {unknown} */ (null)
+
+  await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
+  const tempPath = `${destPath}.download`
 
   for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
     try {
       if (attempt > 1) {
         console.log(`${logPrefix}: download attempt ${attempt}/${DOWNLOAD_MAX_ATTEMPTS}`)
       }
+
+      let existing = 0
+      try {
+        existing = (await fs.promises.stat(tempPath)).size
+      } catch {
+        existing = 0
+      }
+
+      /** @type {Record<string, string>} */
+      const headers = { ...baseHeaders }
+      if (existing > 0) {
+        headers.Range = `bytes=${existing}-`
+      }
+
       const resp = await fetch(url, { redirect: 'follow', headers })
-      if (!resp.ok) {
+
+      // Range not honored → restart from zero with full body.
+      let startOffset = existing
+      if (existing > 0 && resp.status === 200) {
+        startOffset = 0
+        try {
+          await fs.promises.unlink(tempPath)
+        } catch {
+          /* ignore */
+        }
+      } else if (existing > 0 && resp.status === 416) {
+        // Partial already complete according to server — finalize.
+        await fs.promises.rename(tempPath, destPath)
+        onProgress?.({ received: existing, total: existing })
+        return
+      }
+
+      if (!resp.ok && resp.status !== 206) {
         const err = new Error(`HTTP ${resp.status}`)
         if (attempt < DOWNLOAD_MAX_ATTEMPTS && isRetryableFailure(err, resp.status)) {
           const backoffMs = 500 * 2 ** (attempt - 1)
@@ -151,18 +194,45 @@ export async function downloadWithRetries(url, destPath, opts = {}) {
       }
       if (!resp.body) throw new Error('empty body')
 
-      await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
-      const tempPath = `${destPath}.download`
+      const contentLength = Number(resp.headers.get('content-length') || 0) || 0
+      /** @type {number | null} */
+      let total = null
+      if (resp.status === 206) {
+        const cr = String(resp.headers.get('content-range') || '')
+        const m = /\/(\d+)\s*$/.exec(cr)
+        if (m) total = Number(m[1])
+        else if (contentLength > 0) total = startOffset + contentLength
+      } else if (contentLength > 0) {
+        total = contentLength
+      }
+
+      let received = startOffset
+      let lastEmit = 0
+      const emit = (force = false) => {
+        if (!onProgress) return
+        const now = Date.now()
+        if (!force && now - lastEmit < 200 && total != null && received < total) return
+        lastEmit = now
+        onProgress({ received, total })
+      }
+      emit(true)
+
+      const counter = new Transform({
+        transform(chunk, _enc, cb) {
+          received += chunk.length
+          emit()
+          cb(null, chunk)
+        },
+      })
+
+      const writeFlags = startOffset > 0 ? 'a' : 'w'
       try {
-        const nodeStream = Readable.fromWeb(resp.body)
-        await pipeline(nodeStream, createWriteStream(tempPath))
+        const nodeStream = Readable.fromWeb(/** @type {any} */ (resp.body))
+        await pipeline(nodeStream, counter, createWriteStream(tempPath, { flags: writeFlags }))
         await fs.promises.rename(tempPath, destPath)
+        emit(true)
       } catch (err) {
-        try {
-          await fs.promises.unlink(tempPath)
-        } catch {
-          /* ignore */
-        }
+        // Keep `.download` partial for resume on next attempt / next ensure.
         throw err
       }
       return
@@ -245,7 +315,7 @@ export function orderSources(candidates) {
 /**
  * @param {DownloadSource[]} sources
  * @param {string} dest
- * @param {{ logPrefix?: string }} [opts]
+ * @param {{ logPrefix?: string, onProgress?: (p: DownloadByteProgress) => void }} [opts]
  */
 export async function downloadFromSources(sources, dest, opts = {}) {
   const logPrefix = opts.logPrefix ?? 'model-download'
@@ -254,7 +324,10 @@ export async function downloadFromSources(sources, dest, opts = {}) {
   for (const source of ordered) {
     try {
       console.log(`${logPrefix}: downloading ${path.basename(dest)} (${source.label}) …`)
-      await downloadWithRetries(source.url, dest, { logPrefix })
+      await downloadWithRetries(source.url, dest, {
+        logPrefix,
+        onProgress: opts.onProgress,
+      })
       console.log(`${logPrefix}: saved ${path.basename(dest)}`)
       return
     } catch (err) {

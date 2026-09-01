@@ -143,6 +143,7 @@ export default function AccountSecuritySettingsSection() {
           <RecoveryCodesBlock
             codes={recoveryCodes ?? []}
             onCopied={() => toast.showToast('恢复码已复制，请妥善保存', 'success')}
+            onDownloaded={() => toast.showToast('备份文件已开始下载', 'success')}
             onDone={() => {
               setRecoveryCodes(null)
               setNudgeTotp(false)

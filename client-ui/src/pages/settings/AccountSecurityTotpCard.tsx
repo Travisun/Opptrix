@@ -13,8 +13,10 @@ import {
   AuthFieldStack,
   AuthPasswordField,
 } from '../../auth/AuthFields'
+import { TotpInstallGuide, type TotpInstallDevice } from '../../auth/TotpInstallGuide'
 import { TotpQrCanvas } from '../../auth/TotpQrCanvas'
 import { formatAuthError } from '../../auth/authErrors'
+import { ONBOARDING_COPY } from '../../onboarding/manifest'
 import { inputShellInteractive } from '../../theme/mixins'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { SettingsGroup, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
@@ -28,7 +30,7 @@ import {
   AccountSecurityStepRail,
 } from './AccountSecurityStepChrome'
 
-const TOTP_STEPS = ['了解', '添加验证器', '确认开启'] as const
+const TOTP_STEPS = ['安装验证器', '扫码开启', '保存恢复码'] as const
 
 const useStyles = makeStyles({
   setup: {
@@ -108,7 +110,7 @@ const useStyles = makeStyles({
   },
 })
 
-type TotpPhase = 'idle' | 'intro' | 'scan' | 'disable'
+type TotpPhase = 'idle' | 'intro' | 'install' | 'scan' | 'disable'
 
 export function TotpSettingsCard({
   enabled,
@@ -123,8 +125,11 @@ export function TotpSettingsCard({
 }) {
   const s = useStyles()
   const toast = useSettingsToast()
+  const copy = ONBOARDING_COPY.account
   const { reload } = useAuthStatus()
   const [phase, setPhase] = useState<TotpPhase>(autoStart && !enabled ? 'intro' : 'idle')
+  const [installDevice, setInstallDevice] = useState<TotpInstallDevice>('wechat')
+  const [installConfirmed, setInstallConfirmed] = useState(false)
   const [setupUrl, setSetupUrl] = useState('')
   const [secret, setSecret] = useState('')
   const [code, setCode] = useState('')
@@ -136,11 +141,20 @@ export function TotpSettingsCard({
     setSetupUrl('')
     setSecret('')
     setCode('')
+    setInstallDevice('wechat')
+    setInstallConfirmed(false)
     setPhase('idle')
     onDismissNudge?.()
   }, [onDismissNudge])
 
   const begin = useCallback(async () => {
+    if (!installConfirmed) {
+      toast.showToast(
+        installDevice === 'wechat' ? '请先确认已打开小程序' : '请先确认已安装并打开 App',
+        'error',
+      )
+      return
+    }
     setBusy(true)
     try {
       const result = await beginTotpSetup()
@@ -153,7 +167,7 @@ export function TotpSettingsCard({
     } finally {
       setBusy(false)
     }
-  }, [toast])
+  }, [installConfirmed, installDevice, toast])
 
   const confirm = useCallback(async () => {
     if (!/^\d{6}$/.test(code)) {
@@ -211,12 +225,12 @@ export function TotpSettingsCard({
     return (
       <AccountSecurityFlowRoot>
         <AccountSecurityStepRail steps={[...TOTP_STEPS]} activeIndex={0} />
-        <AccountSecurityHero lead="登录时除密码外，还需手机身份验证器中的动态验证码。" />
+        <AccountSecurityHero lead={copy.installDesc} />
         <AccountSecurityBenefits
           items={[
             {
               title: '兼容主流验证器',
-              desc: 'Google Authenticator、微软 Authenticator、1Password 等均可。',
+              desc: '微信小程序「腾讯身份验证器」，或手机上的 Microsoft Authenticator。',
             },
             {
               title: '提供恢复码',
@@ -235,9 +249,52 @@ export function TotpSettingsCard({
           <OpptrixButton
             variant="primary"
             disabled={busy}
+            onClick={() => {
+              setInstallDevice('wechat')
+              setInstallConfirmed(false)
+              setPhase('install')
+            }}
+          >
+            下一步
+          </OpptrixButton>
+        </AccountSecurityActions>
+      </AccountSecurityFlowRoot>
+    )
+  }
+
+  if (phase === 'install' && !enabled) {
+    return (
+      <AccountSecurityFlowRoot>
+        <AccountSecurityStepRail steps={[...TOTP_STEPS]} activeIndex={0} />
+        <AccountSecurityHero lead={copy.installDesc} />
+        <TotpInstallGuide
+          device={installDevice}
+          onDeviceChange={next => {
+            setInstallDevice(next)
+            setInstallConfirmed(false)
+          }}
+          confirmed={installConfirmed}
+          onConfirmedChange={setInstallConfirmed}
+          disabled={busy}
+          readyHint="勾选确认后，点「继续」进入扫码。"
+        />
+        <AccountSecurityActions>
+          <OpptrixButton
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              setInstallConfirmed(false)
+              setPhase('intro')
+            }}
+          >
+            返回
+          </OpptrixButton>
+          <OpptrixButton
+            variant="primary"
+            disabled={busy || !installConfirmed}
             onClick={() => { void begin() }}
           >
-            {busy ? '正在准备…' : '下一步'}
+            {busy ? '正在准备…' : '继续'}
           </OpptrixButton>
         </AccountSecurityActions>
       </AccountSecurityFlowRoot>
@@ -250,15 +307,9 @@ export function TotpSettingsCard({
       <AccountSecurityFlowRoot>
         <AccountSecurityStepRail
           steps={[...TOTP_STEPS]}
-          activeIndex={codeReady ? 2 : 1}
+          activeIndex={1}
         />
-        <AccountSecurityHero
-          lead={
-            codeReady
-              ? '核对验证码后确认开启。成功后会显示恢复码，请务必保存。'
-              : '用身份验证器扫描二维码；无法扫码时复制密钥手动添加。'
-          }
-        />
+        <AccountSecurityHero lead={copy.scanDesc} />
         <SettingsGroup>
           <SettingsStaticBlock>
             <div className={s.setup}>

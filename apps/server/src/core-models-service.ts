@@ -32,7 +32,16 @@ export interface CoreModelsEnsureJobSnapshot {
   message: string
   accepted: boolean
   started: boolean
+  /** Overall progress across all core models (0–100). */
   percent: number
+  /** Progress within the current model (0–100). */
+  modelPercent: number
+  currentModelId: string | null
+  currentModelLabel: string | null
+  bytesReceived: number | null
+  bytesTotal: number | null
+  bytesPerSecond: number | null
+  etaSeconds: number | null
   allReady: boolean
   items: CoreModelItemProgress[]
   error: string | null
@@ -42,6 +51,8 @@ let coreModelsMod: CoreModelsSharedModule | null = null
 let lastJob: CoreModelsEnsureJobSnapshot = createIdleJob()
 let activePromise: Promise<void> | null = null
 
+type SpeedSample = { atMs: number; bytes: number }
+
 function createIdleJob(): CoreModelsEnsureJobSnapshot {
   return {
     phase: 'idle',
@@ -49,6 +60,13 @@ function createIdleJob(): CoreModelsEnsureJobSnapshot {
     accepted: false,
     started: false,
     percent: 0,
+    modelPercent: 0,
+    currentModelId: null,
+    currentModelLabel: null,
+    bytesReceived: null,
+    bytesTotal: null,
+    bytesPerSecond: null,
+    etaSeconds: null,
     allReady: false,
     items: [],
     error: null,
@@ -118,6 +136,60 @@ function toUserError(err: unknown): string {
   return cleaned.length > 120 ? '下载未完成，请稍后重试' : cleaned
 }
 
+function labelForModel(modelId: string, items: Array<{ id: string; label: string }>): string {
+  return items.find((i) => i.id === modelId)?.label ?? '组件'
+}
+
+function computeOverallPercent(
+  items: CoreModelItemProgress[],
+  currentModelId: string | null,
+  modelRatio: number,
+): number {
+  const total = items.length || 1
+  let sum = 0
+  for (const item of items) {
+    if (item.phase === 'ready') {
+      sum += 1
+      continue
+    }
+    if (item.id === currentModelId && item.phase === 'downloading') {
+      sum += Math.max(0, Math.min(1, modelRatio))
+    }
+  }
+  return Math.max(0, Math.min(99, Math.round((sum / total) * 100)))
+}
+
+function updateSpeedEta(
+  sample: SpeedSample | null,
+  received: number,
+  total: number | null,
+): { sample: SpeedSample; bytesPerSecond: number | null; etaSeconds: number | null } {
+  const now = Date.now()
+  if (!sample || now - sample.atMs < 400) {
+    return {
+      sample: sample ?? { atMs: now, bytes: received },
+      bytesPerSecond: lastJob.bytesPerSecond,
+      etaSeconds: lastJob.etaSeconds,
+    }
+  }
+  const dt = (now - sample.atMs) / 1000
+  const db = received - sample.bytes
+  let bps = lastJob.bytesPerSecond
+  if (dt > 0 && db >= 0) {
+    const instant = db / dt
+    bps = bps != null && bps > 0 ? bps * 0.65 + instant * 0.35 : instant
+  }
+  let eta: number | null = null
+  if (bps != null && bps > 512 && total != null && total > received) {
+    eta = Math.max(1, Math.round((total - received) / bps))
+  }
+  return {
+    sample: { atMs: now, bytes: received },
+    bytesPerSecond: bps != null && Number.isFinite(bps) ? Math.round(bps) : null,
+    etaSeconds: eta,
+  }
+}
+
 async function runEnsurePipeline(sourceOrder: string[]): Promise<void> {
   const mod = await loadCoreModelsModule()
   const status = mod.buildCoreModelsStatus()
@@ -128,6 +200,13 @@ async function runEnsurePipeline(sourceOrder: string[]): Promise<void> {
     started: true,
     error: null,
     percent: 2,
+    modelPercent: 0,
+    currentModelId: null,
+    currentModelLabel: null,
+    bytesReceived: null,
+    bytesTotal: null,
+    bytesPerSecond: null,
+    etaSeconds: null,
     message: '正在准备本地能力组件…',
     items: status.items.map((item) => ({
       id: item.id,
@@ -140,8 +219,15 @@ async function runEnsurePipeline(sourceOrder: string[]): Promise<void> {
       updateJob({
         phase: 'ready',
         percent: 100,
+        modelPercent: 100,
         allReady: true,
         message: '本地能力组件已就绪',
+        currentModelId: null,
+        currentModelLabel: null,
+        bytesReceived: null,
+        bytesTotal: null,
+        bytesPerSecond: null,
+        etaSeconds: null,
         items: status.items.map((item) => ({ id: item.id, phase: 'ready' })),
       })
       return
@@ -149,52 +235,93 @@ async function runEnsurePipeline(sourceOrder: string[]): Promise<void> {
 
     updateJob({ phase: 'downloading', percent: 5, message: '正在下载…' })
 
-    let pulse = 5
-    const pulseTimer = setInterval(() => {
-      if (!isActivePhase(lastJob.phase)) return
-      pulse = Math.min(90, pulse + 3)
-      updateJob({ percent: pulse })
-    }, 2000)
-    if (typeof pulseTimer === 'object' && pulseTimer !== null && 'unref' in pulseTimer) {
-      pulseTimer.unref()
-    }
+    let speedSample: SpeedSample | null = null
 
-    try {
-      await mod.ensureAllCoreModels({
-        logPrefix: 'core-models',
-        sourceOrder: sourceOrder.length ? sourceOrder : undefined,
-        onProgress: ({ modelId, phase, message }) => {
-          const items = [...lastJob.items]
-          const idx = items.findIndex((i) => i.id === modelId)
-          const entry: CoreModelItemProgress = {
-            id: modelId,
-            phase: phase === 'ready'
-              ? 'ready'
-              : phase === 'error'
-                ? 'error'
-                : 'downloading',
-            message,
-          }
-          if (idx >= 0) items[idx] = entry
-          else items.push(entry)
-          updateJob({
-            phase: 'downloading',
-            items,
-            message: phase === 'downloading' ? '正在下载组件…' : lastJob.message,
-          })
-        },
-      })
-    } finally {
-      clearInterval(pulseTimer)
-    }
+    await mod.ensureAllCoreModels({
+      logPrefix: 'core-models',
+      sourceOrder: sourceOrder.length ? sourceOrder : undefined,
+      onProgress: (evt) => {
+        const items = [...lastJob.items]
+        const idx = items.findIndex((i) => i.id === evt.modelId)
+        const entry: CoreModelItemProgress = {
+          id: evt.modelId,
+          phase: evt.phase === 'ready'
+            ? 'ready'
+            : evt.phase === 'error'
+              ? 'error'
+              : 'downloading',
+          message: evt.message,
+        }
+        if (idx >= 0) items[idx] = entry
+        else items.push(entry)
+
+        const modelRatio = typeof evt.modelRatio === 'number'
+          ? Math.max(0, Math.min(1, evt.modelRatio))
+          : evt.phase === 'ready'
+            ? 1
+            : 0
+        const modelPercent = Math.round(modelRatio * 100)
+        const label = labelForModel(evt.modelId, status.items)
+        const overall = evt.phase === 'ready' && items.every((i) => i.phase === 'ready')
+          ? 100
+          : computeOverallPercent(items, evt.modelId, modelRatio)
+
+        let bytesReceived = lastJob.bytesReceived
+        let bytesTotal = lastJob.bytesTotal
+        let bytesPerSecond = lastJob.bytesPerSecond
+        let etaSeconds = lastJob.etaSeconds
+
+        if (typeof evt.bytesReceived === 'number') {
+          bytesReceived = evt.bytesReceived
+          bytesTotal = typeof evt.bytesTotal === 'number' ? evt.bytesTotal : null
+          const speed = updateSpeedEta(speedSample, evt.bytesReceived, bytesTotal)
+          speedSample = speed.sample
+          bytesPerSecond = speed.bytesPerSecond
+          etaSeconds = speed.etaSeconds
+        } else if (evt.phase === 'ready' || evt.phase === 'error') {
+          bytesReceived = null
+          bytesTotal = null
+          bytesPerSecond = null
+          etaSeconds = null
+          speedSample = null
+        }
+
+        const message = evt.phase === 'ready'
+          ? `「${label}」已就绪`
+          : evt.phase === 'error'
+            ? `「${label}」未能完成`
+            : `正在下载「${label}」`
+
+        updateJob({
+          phase: 'downloading',
+          items,
+          percent: overall,
+          modelPercent,
+          currentModelId: evt.phase === 'downloading' ? evt.modelId : lastJob.currentModelId,
+          currentModelLabel: evt.phase === 'downloading' ? label : lastJob.currentModelLabel,
+          bytesReceived,
+          bytesTotal,
+          bytesPerSecond,
+          etaSeconds,
+          message,
+        })
+      },
+    })
 
     const after = mod.buildCoreModelsStatus()
     updateJob({
       phase: after.allReady ? 'ready' : 'error',
-      percent: after.allReady ? 100 : 0,
+      percent: after.allReady ? 100 : lastJob.percent,
+      modelPercent: after.allReady ? 100 : lastJob.modelPercent,
       allReady: after.allReady,
       message: after.allReady ? '本地能力组件已就绪' : '部分组件未能就绪，请重试或从本地导入',
       error: after.allReady ? null : '部分组件未能就绪',
+      currentModelId: null,
+      currentModelLabel: null,
+      bytesReceived: null,
+      bytesTotal: null,
+      bytesPerSecond: null,
+      etaSeconds: null,
       items: after.items.map((item) => ({
         id: item.id,
         phase: item.ready ? 'ready' : 'error',
@@ -205,10 +332,16 @@ async function runEnsurePipeline(sourceOrder: string[]): Promise<void> {
     const after = mod.buildCoreModelsStatus()
     updateJob({
       phase: 'error',
-      percent: 0,
+      percent: lastJob.percent,
       allReady: after.allReady,
       message,
       error: message,
+      currentModelId: null,
+      currentModelLabel: null,
+      bytesReceived: null,
+      bytesTotal: null,
+      bytesPerSecond: null,
+      etaSeconds: null,
       items: after.items.map((item) => ({
         id: item.id,
         phase: item.ready ? 'ready' : 'error',
@@ -229,9 +362,16 @@ export function getCoreModelsEnsureJobStatus(): CoreModelsEnsureJobSnapshot {
           phase: 'ready',
           allReady: true,
           percent: 100,
+          modelPercent: 100,
           message: '本地能力组件已就绪',
           items: status.items.map((item) => ({ id: item.id, phase: 'ready' })),
           error: null,
+          currentModelId: null,
+          currentModelLabel: null,
+          bytesReceived: null,
+          bytesTotal: null,
+          bytesPerSecond: null,
+          etaSeconds: null,
         }
       }
     }).catch(() => { /* ignore */ })
@@ -264,6 +404,13 @@ export function startCoreModelsEnsureJob(): CoreModelsEnsureJobSnapshot {
           accepted: true,
           started: false,
           percent: 100,
+          modelPercent: 100,
+          currentModelId: null,
+          currentModelLabel: null,
+          bytesReceived: null,
+          bytesTotal: null,
+          bytesPerSecond: null,
+          etaSeconds: null,
           allReady: true,
           items: status.items.map((item) => ({ id: item.id, phase: 'ready' })),
           error: null,

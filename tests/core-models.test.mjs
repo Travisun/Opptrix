@@ -64,11 +64,15 @@ describe('core models catalog', () => {
     assert.equal(mod.areAllCoreModelsReady(tmpDir), false)
     const status = mod.buildCoreModelsStatus(tmpDir)
     assert.equal(status.allReady, false)
-    assert.equal(status.items.length, 4)
+    assert.equal(status.items.length, 3)
+    assert.deepEqual(status.required, mod.REQUIRED_CORE_MODEL_IDS)
+    assert.ok(!status.required.includes('core.hy-mt-q4'))
     assert.ok(status.items.every(i => i.ready === false))
+    assert.ok(mod.OPTIONAL_CORE_MODEL_IDS.includes('core.hy-mt-q4'))
+    assert.ok(mod.CORE_MODEL_IDS.includes('core.hy-mt-q4'))
   })
 
-  it('allReady true when markers present', async () => {
+  it('allReady true when required markers present without hy-mt', async () => {
     const mod = await importCoreModels()
     const dirs = mod.resolveCoreModelPaths(tmpDir)
     await fs.promises.mkdir(path.join(dirs.e5Dir, 'onnx'), { recursive: true })
@@ -84,12 +88,13 @@ describe('core models catalog', () => {
     for (const f of mod.SENSEVOICE_FILES) {
       await fs.promises.writeFile(path.join(dirs.sensevoiceDir, f.filename), mod.GGUF_MAGIC)
     }
-    await fs.promises.mkdir(dirs.llmDir, { recursive: true })
-    await fs.promises.writeFile(dirs.hyMtPath, mod.GGUF_MAGIC)
 
+    assert.equal(mod.isCoreModelReady('core.hy-mt-q4', tmpDir), false)
     assert.equal(mod.areAllCoreModelsReady(tmpDir), true)
     const status = mod.buildCoreModelsStatus(tmpDir)
     assert.equal(status.allReady, true)
+    assert.equal(status.items.length, 3)
+    assert.ok(!status.items.some(i => i.id === 'core.hy-mt-q4'))
   })
 
   it('normalizeSourceOrderInput filters unknown mirrors', async () => {
@@ -111,5 +116,53 @@ describe('core models catalog', () => {
       'x.gguf',
     )
     assert.equal(good.ok, true)
+  })
+
+  it('offline import writes required files and marks ready', async () => {
+    const mod = await importCoreModels()
+    const dirs = mod.resolveCoreModelPaths(tmpDir)
+    const payload = Buffer.alloc(128, 0x42)
+
+    assert.equal(
+      mod.validateImportBuffer('core.e5-multilingual-small', payload, 'model_quantized.onnx').ok,
+      true,
+    )
+    await fs.promises.mkdir(path.join(dirs.e5Dir, 'onnx'), { recursive: true })
+    for (const f of ['config.json', 'tokenizer.json', 'tokenizer_config.json']) {
+      await mod.writeImportFile(path.join(dirs.e5Dir, f), payload)
+    }
+    await mod.writeImportFile(
+      mod.mapImportDest('core.e5-multilingual-small', 'model_quantized.onnx', tmpDir),
+      payload,
+    )
+    assert.equal(mod.isCoreModelReady('core.e5-multilingual-small', tmpDir), true)
+
+    assert.equal(
+      mod.validateImportBuffer(
+        'core.rapidocr-ppocrv4-mobile',
+        payload,
+        'ch_PP-OCRv4_det_mobile.onnx',
+      ).ok,
+      true,
+    )
+    for (const f of mod.RAPIDOCR_FILES) {
+      await mod.writeImportFile(
+        mod.mapImportDest('core.rapidocr-ppocrv4-mobile', f.local, tmpDir),
+        payload,
+      )
+    }
+    assert.equal(mod.isCoreModelReady('core.rapidocr-ppocrv4-mobile', tmpDir), true)
+
+    const gguf = Buffer.concat([mod.GGUF_MAGIC, Buffer.alloc(128)])
+    await mod.writeImportFile(
+      mod.mapImportDest('core.sensevoice-small-q8', 'sensevoice-small-q8.gguf', tmpDir),
+      gguf,
+    )
+    await mod.writeImportFile(
+      mod.mapImportDest('core.sensevoice-small-q8', 'fsmn-vad.gguf', tmpDir),
+      gguf,
+    )
+    assert.equal(mod.isCoreModelReady('core.sensevoice-small-q8', tmpDir), true)
+    assert.equal(mod.areAllCoreModelsReady(tmpDir), true)
   })
 })

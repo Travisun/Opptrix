@@ -4,6 +4,7 @@ import {
   Switch,
   Text,
   makeStyles,
+  mergeClasses,
 } from '@fluentui/react-components'
 import {
   FlashRegular,
@@ -35,6 +36,13 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     overflow: 'hidden',
   },
+  fieldStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    width: '100%',
+    minWidth: 0,
+  },
   fieldLabel: {
     fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
@@ -46,7 +54,6 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
-    paddingLeft: '2px',
   },
   combo: {
     ...inputShellInteractive,
@@ -86,7 +93,6 @@ const useStyles = makeStyles({
     alignItems: 'center',
     width: '100%',
     minWidth: 0,
-    marginTop: '4px',
   },
   comboSegment: {
     display: 'flex',
@@ -100,10 +106,14 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     paddingLeft: '2px',
   },
+  helpRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    gap: '4px 12px',
+    paddingLeft: '2px',
+  },
   helpLink: {
-    alignSelf: 'flex-start',
-    marginTop: '4px',
-    marginLeft: '2px',
     padding: 0,
     border: 'none',
     background: 'transparent',
@@ -114,6 +124,7 @@ const useStyles = makeStyles({
     textAlign: 'left',
     textDecoration: 'underline',
     textUnderlineOffset: '2px',
+    whiteSpace: 'nowrap',
     ':hover': {
       color: opptrixCssVars.accentHover,
     },
@@ -132,9 +143,9 @@ function FieldHelp({
   const s = useStyles()
   if (!description && !helpUrl) return null
   return (
-    <>
+    <div className={s.helpRow}>
       {description ? (
-        <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{description}</Text>
+        <Text className={s.fieldDesc}>{description}</Text>
       ) : null}
       {helpUrl ? (
         <button
@@ -146,7 +157,7 @@ function FieldHelp({
           {secret ? '前往获取数据密钥' : '了解更多'}
         </button>
       ) : null}
-    </>
+    </div>
   )
 }
 
@@ -198,9 +209,15 @@ function readSecretValues(provider: PublicProviderRuntime): Record<string, strin
 export function ProviderSettingsForm({
   provider,
   onSaved,
+  onCommitSaved,
+  controlTone = 'default',
 }: {
   provider: PublicProviderRuntime
   onSaved: () => void
+  /** 勾选保存（checkmark）成功后回调，用于关闭配置对话框 */
+  onCommitSaved?: () => void
+  /** onboarding：输入框可见边框，与引导其他控件对齐 */
+  controlTone?: 'default' | 'onboarding'
 }) {
   const s = useStyles()
   const toast = useSettingsToast()
@@ -295,6 +312,7 @@ export function ProviderSettingsForm({
       }
       toast.showSuccess(hasSecretChanges ? '密钥已保存，数据源已自动启用' : '设置已保存')
       onSaved()
+      onCommitSaved?.()
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '保存失败')
     } finally {
@@ -353,6 +371,7 @@ export function ProviderSettingsForm({
           onChange={v => { void handlePlainFieldChange(field, v) }}
           onSave={() => { void handleSave() }}
           saving={saving}
+          controlTone={controlTone}
         />
       ))}
 
@@ -372,6 +391,7 @@ export function ProviderSettingsForm({
             saveDisabled={!canSave && !provider.secretsConfigured[field.key]}
             configured={provider.secretsConfigured[field.key]}
             preview={provider.secretPreviews?.[field.key]}
+            controlTone={controlTone}
           />
         ))
       )}
@@ -398,6 +418,7 @@ function ProviderFieldRow({
   saveDisabled = false,
   configured = false,
   preview,
+  controlTone = 'default',
 }: {
   field: ProviderSettingsField
   value: unknown
@@ -411,14 +432,16 @@ function ProviderFieldRow({
   saveDisabled?: boolean
   configured?: boolean
   preview?: string
+  controlTone?: 'default' | 'onboarding'
 }) {
   const s = useStyles()
   const [visible, setVisible] = useState(false)
   const showConfiguredHint = configured && !String(value ?? '').trim()
+  const onboardingControl = controlTone === 'onboarding'
 
   if (field.type === 'boolean') {
     return (
-      <div>
+      <div className={s.fieldStack}>
         <Text className={s.fieldLabel} block>{field.label}</Text>
         <div className={s.standaloneControl}>
           <Switch
@@ -436,10 +459,11 @@ function ProviderFieldRow({
   if (field.type === 'select') {
     const selected = String(value ?? field.default ?? '')
     return (
-      <div>
+      <div className={s.fieldStack}>
         <Text className={s.fieldLabel} block>{field.label}</Text>
         <div className={s.standaloneControl}>
           <OpptrixSelect
+            className={onboardingControl ? 'opptrix-onboarding-select' : undefined}
             style={{ width: '100%' }}
             selectedOptions={[selected]}
             value={selected}
@@ -459,9 +483,9 @@ function ProviderFieldRow({
   }
 
   return (
-    <div>
+    <div className={s.fieldStack}>
       <Text className={s.fieldLabel} block>{field.label}</Text>
-      <div className={s.combo}>
+      <div className={mergeClasses(s.combo, onboardingControl && 'opptrix-onboarding-input')}>
         <Input
           className={s.comboInput}
           appearance="filled-darker"

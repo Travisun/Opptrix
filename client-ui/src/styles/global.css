@@ -1569,6 +1569,143 @@ select:focus-visible {
   background-color: rgba(29, 29, 31, 0.07);
 }
 
+/* Onboarding：实底下拉，避免与 canvas 毛玻璃融合 */
+.fui-Dropdown__listbox.opptrix-onboarding-select-listbox,
+.fui-Combobox__listbox.opptrix-onboarding-select-listbox {
+  background: var(--opptrix-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--opptrix-border-strong) !important;
+  box-shadow:
+    0 1px 2px rgba(20, 20, 20, 0.06),
+    0 10px 28px rgba(20, 20, 20, 0.12) !important;
+  border-radius: var(--opptrix-radius-lg, 14px) !important;
+  padding: 6px !important;
+  z-index: 2400 !important;
+}
+
+.opptrix-onboarding-select-listbox .fui-Option {
+  border-radius: var(--opptrix-radius-md, 10px);
+  min-height: 36px;
+  font-size: var(--opptrix-font-base, 13px);
+  font-weight: 600;
+  color: var(--opptrix-text-primary, var(--opptrix-text, #1d1d1f));
+}
+
+.opptrix-onboarding-select-listbox .fui-Option:hover,
+.opptrix-onboarding-select-listbox .fui-Option[data-activedescendant-focusvisible] {
+  background-color: var(--opptrix-input-bg-hover) !important;
+}
+
+.opptrix-onboarding-select-listbox .fui-Option[aria-selected='true'] {
+  background-color: var(--opptrix-accent-muted) !important;
+  color: var(--opptrix-text-primary, var(--opptrix-text, #1d1d1f));
+}
+
+/* Onboarding 表单控件：可见边框 + 紧凑统一高度（~34px） */
+.opptrix-onboarding-shell .opptrix-input-shell,
+.opptrix-onboarding-shell .opptrix-onboarding-input {
+  min-height: 34px !important;
+  box-sizing: border-box;
+  background-color: var(--opptrix-input-bg) !important;
+  border: 1px solid var(--opptrix-border-strong) !important;
+  border-radius: var(--opptrix-radius-md, 10px) !important;
+  box-shadow: none !important;
+}
+
+.opptrix-onboarding-shell .opptrix-input-shell:hover:not(:focus-within),
+.opptrix-onboarding-shell .opptrix-onboarding-input:hover:not(:focus-within) {
+  background-color: var(--opptrix-input-bg-hover) !important;
+}
+
+.opptrix-onboarding-shell .opptrix-input-shell:focus-within,
+.opptrix-onboarding-shell .opptrix-onboarding-input:focus-within {
+  background-color: var(--opptrix-input-bg-focus) !important;
+  border-color: var(--opptrix-focus-border, var(--opptrix-border-strong)) !important;
+}
+
+.opptrix-onboarding-shell .opptrix-input-shell .fui-Input,
+.opptrix-onboarding-shell .opptrix-input-shell .fui-Input__input,
+.opptrix-onboarding-shell .opptrix-onboarding-input .fui-Input,
+.opptrix-onboarding-shell .opptrix-onboarding-input .fui-Input__input {
+  min-height: 32px;
+  font-size: var(--opptrix-font-base, 13px);
+  color: var(--opptrix-text-primary, var(--opptrix-text, #1d1d1f));
+}
+
+.opptrix-onboarding-shell .opptrix-onboarding-select .fui-Dropdown {
+  min-height: 34px;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--opptrix-input-bg) !important;
+  border: 1px solid var(--opptrix-border-strong) !important;
+  border-radius: var(--opptrix-radius-md, 10px) !important;
+  box-shadow: none !important;
+}
+
+.opptrix-onboarding-shell .opptrix-onboarding-select .fui-Dropdown:hover {
+  background-color: var(--opptrix-input-bg-hover) !important;
+}
+
+.opptrix-onboarding-shell .opptrix-onboarding-select .fui-Dropdown:focus-within,
+.opptrix-onboarding-shell .opptrix-onboarding-select .fui-Dropdown[aria-expanded='true'] {
+  background-color: var(--opptrix-input-bg-focus) !important;
+  border-color: var(--opptrix-focus-border, var(--opptrix-border-strong)) !important;
+}
+
+.opptrix-onboarding-shell .opptrix-onboarding-select .fui-Dropdown__button {
+  min-height: 32px;
+  font-size: var(--opptrix-font-base, 13px);
+  font-weight: 550;
+  color: var(--opptrix-text-primary, var(--opptrix-text, #1d1d1f));
+}
+
+/* 两步验证：安装引导左图右文（引导 / 设置页共用） */
+.opptrix-totp-install-guide {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: flex-start !important;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.opptrix-totp-install-guide-visual {
+  flex: 0 0 120px !important;
+  width: 120px !important;
+  max-width: 120px !important;
+}
+
+.opptrix-totp-install-guide-main {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+}
+
+.opptrix-totp-install-confirm .fui-Checkbox__indicator,
+.opptrix-onboarding-shell .opptrix-onboarding-agree-checkbox .fui-Checkbox__indicator {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 5px !important;
+  border: 1.5px solid var(--opptrix-border-strong) !important;
+  background-color: var(--opptrix-surface) !important;
+  color: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.opptrix-totp-install-confirm[aria-checked='true'] .fui-Checkbox__indicator,
+.opptrix-totp-install-confirm[aria-checked='mixed'] .fui-Checkbox__indicator,
+.opptrix-totp-install-confirm[data-checked] .fui-Checkbox__indicator,
+.opptrix-totp-install-confirm .fui-Checkbox__input:checked ~ .fui-Checkbox__indicator,
+.opptrix-onboarding-shell .opptrix-onboarding-agree-checkbox[aria-checked='true'] .fui-Checkbox__indicator,
+.opptrix-onboarding-shell .opptrix-onboarding-agree-checkbox[aria-checked='mixed'] .fui-Checkbox__indicator,
+.opptrix-onboarding-shell .opptrix-onboarding-agree-checkbox[data-checked] .fui-Checkbox__indicator,
+.opptrix-onboarding-shell .opptrix-onboarding-agree-checkbox .fui-Checkbox__input:checked ~ .fui-Checkbox__indicator {
+  background-color: var(--opptrix-accent) !important;
+  border-color: var(--opptrix-accent) !important;
+  color: #fff !important;
+}
+
 .opptrix-news-video-external::before {
   content: '';
   position: absolute;

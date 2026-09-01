@@ -53,6 +53,16 @@ export const CORE_MODEL_META = {
 
 export const CORE_MODEL_IDS = Object.keys(CORE_MODEL_META)
 
+/** Gate / onboarding / ensureAll — blocks allReady when missing. */
+export const REQUIRED_CORE_MODEL_IDS = [
+  'core.e5-multilingual-small',
+  'core.rapidocr-ppocrv4-mobile',
+  'core.sensevoice-small-q8',
+]
+
+/** Catalog-only; download via settings translation flow or includeOptional. */
+export const OPTIONAL_CORE_MODEL_IDS = ['core.hy-mt-q4']
+
 const E5_MODELSCOPE_REPO = String(
   process.env.OPPTRIX_E5_MODELSCOPE_REPO ?? 'Xenova/multilingual-e5-small',
 ).replace(/^\/+|\/+$/g, '')
@@ -177,11 +187,11 @@ export function isCoreModelReady(modelId, modelsDir) {
 }
 
 export function areAllCoreModelsReady(modelsDir) {
-  return CORE_MODEL_IDS.every((id) => isCoreModelReady(id, modelsDir))
+  return REQUIRED_CORE_MODEL_IDS.every((id) => isCoreModelReady(id, modelsDir))
 }
 
 export function buildCoreModelsStatus(modelsDir = resolveModelsDir()) {
-  const items = CORE_MODEL_IDS.map((id) => {
+  const items = REQUIRED_CORE_MODEL_IDS.map((id) => {
     const meta = CORE_MODEL_META[id]
     return {
       id,
@@ -191,7 +201,7 @@ export function buildCoreModelsStatus(modelsDir = resolveModelsDir()) {
     }
   })
   return {
-    required: [...CORE_MODEL_IDS],
+    required: [...REQUIRED_CORE_MODEL_IDS],
     items,
     allReady: items.every((i) => i.ready),
     sourceOrder: resolveEffectiveSourceOrder(),
@@ -334,90 +344,241 @@ function hyMtSources(filename) {
 
 async function ensureE5(logPrefix, onProgress) {
   const { e5Dir } = resolveCoreModelPaths()
-  if (isCoreModelReady('core.e5-multilingual-small')) {
-    onProgress?.({ modelId: 'core.e5-multilingual-small', phase: 'ready' })
+  const modelId = 'core.e5-multilingual-small'
+  if (isCoreModelReady(modelId)) {
+    onProgress?.({ modelId, phase: 'ready' })
     return
   }
-  onProgress?.({ modelId: 'core.e5-multilingual-small', phase: 'downloading' })
+  onProgress?.({ modelId, phase: 'downloading' })
   await fs.promises.mkdir(e5Dir, { recursive: true })
-  for (const file of E5_FILES) {
+  const files = E5_FILES
+  let done = 0
+  for (const file of files) {
     const dest = path.join(e5Dir, file)
-    if (exists(dest) && !forceModelFetch()) continue
+    if (exists(dest) && !forceModelFetch()) {
+      done += 1
+      onProgress?.({
+        modelId,
+        phase: 'downloading',
+        fileName: file,
+        fileIndex: done,
+        fileCount: files.length,
+        modelRatio: done / files.length,
+      })
+      continue
+    }
     try {
-      await downloadFromSources(e5Sources(file), dest, { logPrefix })
+      await downloadFromSources(e5Sources(file), dest, {
+        logPrefix,
+        onProgress: (bp) => {
+          const fileRatio = bp.total && bp.total > 0 ? bp.received / bp.total : 0
+          onProgress?.({
+            modelId,
+            phase: 'downloading',
+            fileName: file,
+            fileIndex: done,
+            fileCount: files.length,
+            bytesReceived: bp.received,
+            bytesTotal: bp.total,
+            modelRatio: (done + fileRatio) / files.length,
+          })
+        },
+      })
     } catch (err) {
-      if (E5_OPTIONAL.has(file)) continue
+      if (E5_OPTIONAL.has(file)) {
+        done += 1
+        continue
+      }
       throw err
     }
+    done += 1
+    onProgress?.({
+      modelId,
+      phase: 'downloading',
+      fileName: file,
+      fileIndex: done,
+      fileCount: files.length,
+      modelRatio: done / files.length,
+    })
   }
-  if (!isCoreModelReady('core.e5-multilingual-small')) {
+  if (!isCoreModelReady(modelId)) {
     const missing = E5_REQUIRED.filter((f) => !exists(path.join(e5Dir, f)))
     throw new Error(`语义检索组件不完整：缺少 ${missing.join(', ')}`)
   }
-  onProgress?.({ modelId: 'core.e5-multilingual-small', phase: 'ready' })
+  onProgress?.({ modelId, phase: 'ready', modelRatio: 1 })
 }
 
 async function ensureRapidOcr(logPrefix, onProgress) {
   const { rapidocrDir } = resolveCoreModelPaths()
-  if (isCoreModelReady('core.rapidocr-ppocrv4-mobile')) {
-    onProgress?.({ modelId: 'core.rapidocr-ppocrv4-mobile', phase: 'ready' })
+  const modelId = 'core.rapidocr-ppocrv4-mobile'
+  if (isCoreModelReady(modelId)) {
+    onProgress?.({ modelId, phase: 'ready' })
     return
   }
-  onProgress?.({ modelId: 'core.rapidocr-ppocrv4-mobile', phase: 'downloading' })
+  onProgress?.({ modelId, phase: 'downloading' })
   await fs.promises.mkdir(rapidocrDir, { recursive: true })
-  for (const entry of RAPIDOCR_FILES) {
+  const files = RAPIDOCR_FILES
+  let done = 0
+  for (const entry of files) {
     const dest = path.join(rapidocrDir, entry.local)
-    if (exists(dest) && !forceModelFetch()) continue
-    await downloadFromSources(rapidocrSources(entry.remote), dest, { logPrefix })
+    if (exists(dest) && !forceModelFetch()) {
+      done += 1
+      onProgress?.({
+        modelId,
+        phase: 'downloading',
+        fileName: entry.local,
+        fileIndex: done,
+        fileCount: files.length,
+        modelRatio: done / files.length,
+      })
+      continue
+    }
+    await downloadFromSources(rapidocrSources(entry.remote), dest, {
+      logPrefix,
+      onProgress: (bp) => {
+        const fileRatio = bp.total && bp.total > 0 ? bp.received / bp.total : 0
+        onProgress?.({
+          modelId,
+          phase: 'downloading',
+          fileName: entry.local,
+          fileIndex: done,
+          fileCount: files.length,
+          bytesReceived: bp.received,
+          bytesTotal: bp.total,
+          modelRatio: (done + fileRatio) / files.length,
+        })
+      },
+    })
+    done += 1
+    onProgress?.({
+      modelId,
+      phase: 'downloading',
+      fileName: entry.local,
+      fileIndex: done,
+      fileCount: files.length,
+      modelRatio: done / files.length,
+    })
   }
-  if (!isCoreModelReady('core.rapidocr-ppocrv4-mobile')) {
+  if (!isCoreModelReady(modelId)) {
     const missing = RAPIDOCR_FILES.filter((f) => !exists(path.join(rapidocrDir, f.local)))
       .map((f) => f.local)
     throw new Error(`文档识别组件不完整：缺少 ${missing.join(', ')}`)
   }
-  onProgress?.({ modelId: 'core.rapidocr-ppocrv4-mobile', phase: 'ready' })
+  onProgress?.({ modelId, phase: 'ready', modelRatio: 1 })
 }
 
 async function ensureSenseVoice(logPrefix, onProgress) {
   const { sensevoiceDir } = resolveCoreModelPaths()
-  if (isCoreModelReady('core.sensevoice-small-q8')) {
-    onProgress?.({ modelId: 'core.sensevoice-small-q8', phase: 'ready' })
+  const modelId = 'core.sensevoice-small-q8'
+  if (isCoreModelReady(modelId)) {
+    onProgress?.({ modelId, phase: 'ready' })
     return
   }
-  onProgress?.({ modelId: 'core.sensevoice-small-q8', phase: 'downloading' })
+  onProgress?.({ modelId, phase: 'downloading' })
   await fs.promises.mkdir(sensevoiceDir, { recursive: true })
-  for (const spec of SENSEVOICE_FILES) {
+  const files = SENSEVOICE_FILES
+  let done = 0
+  for (const spec of files) {
     const dest = path.join(sensevoiceDir, spec.filename)
-    if (exists(dest) && !forceModelFetch()) continue
-    await downloadFromSources(sensevoiceSources(spec.repo, spec.filename), dest, { logPrefix })
+    if (exists(dest) && !forceModelFetch()) {
+      done += 1
+      onProgress?.({
+        modelId,
+        phase: 'downloading',
+        fileName: spec.filename,
+        fileIndex: done,
+        fileCount: files.length,
+        modelRatio: done / files.length,
+      })
+      continue
+    }
+    await downloadFromSources(sensevoiceSources(spec.repo, spec.filename), dest, {
+      logPrefix,
+      onProgress: (bp) => {
+        const fileRatio = bp.total && bp.total > 0 ? bp.received / bp.total : 0
+        onProgress?.({
+          modelId,
+          phase: 'downloading',
+          fileName: spec.filename,
+          fileIndex: done,
+          fileCount: files.length,
+          bytesReceived: bp.received,
+          bytesTotal: bp.total,
+          modelRatio: (done + fileRatio) / files.length,
+        })
+      },
+    })
+    done += 1
+    onProgress?.({
+      modelId,
+      phase: 'downloading',
+      fileName: spec.filename,
+      fileIndex: done,
+      fileCount: files.length,
+      modelRatio: done / files.length,
+    })
   }
-  if (!isCoreModelReady('core.sensevoice-small-q8')) {
+  if (!isCoreModelReady(modelId)) {
     const missing = SENSEVOICE_FILES.filter((f) => !exists(path.join(sensevoiceDir, f.filename)))
       .map((f) => f.filename)
     throw new Error(`语音转写组件不完整：缺少 ${missing.join(', ')}`)
   }
-  onProgress?.({ modelId: 'core.sensevoice-small-q8', phase: 'ready' })
+  onProgress?.({ modelId, phase: 'ready', modelRatio: 1 })
 }
 
 async function ensureHyMt(logPrefix, onProgress) {
   const { llmDir, hyMtPath } = resolveCoreModelPaths()
-  if (isCoreModelReady('core.hy-mt-q4')) {
-    onProgress?.({ modelId: 'core.hy-mt-q4', phase: 'ready' })
+  const modelId = 'core.hy-mt-q4'
+  if (isCoreModelReady(modelId)) {
+    onProgress?.({ modelId, phase: 'ready' })
     return
   }
-  onProgress?.({ modelId: 'core.hy-mt-q4', phase: 'downloading' })
+  onProgress?.({ modelId, phase: 'downloading' })
   await fs.promises.mkdir(llmDir, { recursive: true })
   if (!exists(hyMtPath) || forceModelFetch()) {
-    await downloadFromSources(hyMtSources(HY_MT_FILENAME), hyMtPath, { logPrefix })
+    await downloadFromSources(hyMtSources(HY_MT_FILENAME), hyMtPath, {
+      logPrefix,
+      onProgress: (bp) => {
+        const fileRatio = bp.total && bp.total > 0 ? bp.received / bp.total : 0
+        onProgress?.({
+          modelId,
+          phase: 'downloading',
+          fileName: HY_MT_FILENAME,
+          fileIndex: 0,
+          fileCount: 1,
+          bytesReceived: bp.received,
+          bytesTotal: bp.total,
+          modelRatio: fileRatio,
+        })
+      },
+    })
   }
-  if (!isCoreModelReady('core.hy-mt-q4')) {
+  if (!isCoreModelReady(modelId)) {
     throw new Error('离线翻译组件不完整')
   }
-  onProgress?.({ modelId: 'core.hy-mt-q4', phase: 'ready' })
+  onProgress?.({ modelId, phase: 'ready', modelRatio: 1 })
 }
 
 /**
- * @param {{ logPrefix?: string, sourceOrder?: string[], onProgress?: (p: { modelId: string, phase: string }) => void }} [opts]
+ * Ensures required core models (E5 / OCR / SenseVoice).
+ * Pass `includeOptional: true` to also fetch hy-mt offline translation.
+ *
+ * @param {{
+ *   logPrefix?: string,
+ *   sourceOrder?: string[],
+ *   includeOptional?: boolean,
+ *   onProgress?: (p: {
+ *     modelId: string,
+ *     phase: string,
+ *     message?: string,
+ *     fileName?: string,
+ *     fileIndex?: number,
+ *     fileCount?: number,
+ *     bytesReceived?: number,
+ *     bytesTotal?: number | null,
+ *     modelRatio?: number,
+ *   }) => void,
+ * }} [opts]
  */
 export async function ensureAllCoreModels(opts = {}) {
   const logPrefix = opts.logPrefix ?? 'core-models'
@@ -428,12 +589,15 @@ export async function ensureAllCoreModels(opts = {}) {
   try {
     const { llmDir } = resolveCoreModelPaths()
     await fs.promises.mkdir(llmDir, { recursive: true })
+    /** @type {Array<[string, (log: string, onProgress?: typeof opts.onProgress) => Promise<void>]>} */
     const tasks = [
       ['core.e5-multilingual-small', ensureE5],
       ['core.rapidocr-ppocrv4-mobile', ensureRapidOcr],
       ['core.sensevoice-small-q8', ensureSenseVoice],
-      ['core.hy-mt-q4', ensureHyMt],
     ]
+    if (opts.includeOptional) {
+      tasks.push(['core.hy-mt-q4', ensureHyMt])
+    }
     const errors = []
     for (const [name, fn] of tasks) {
       try {

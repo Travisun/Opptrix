@@ -1,5 +1,11 @@
+import { useCallback, useState } from 'react'
 import { Text, makeStyles } from '@fluentui/react-components'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
+import {
+  copyRecoveryCodes,
+  downloadRecoveryCodesTxt,
+} from '../../auth/recoveryCodesExport'
+import { useCopyButtonFeedback } from '../../auth/useCopyButtonFeedback'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { SettingsGroup, SettingsStaticBlock } from './SettingsPrimitives'
 import {
@@ -41,32 +47,42 @@ const useStyles = makeStyles({
 export function RecoveryCodesBlock({
   codes,
   onCopied,
+  onDownloaded,
   onDone,
 }: {
   codes: string[]
   onCopied: () => void
+  onDownloaded?: () => void
   onDone: () => void
 }) {
   const s = useStyles()
+  const { label: copyLabel, flash: flashCopy } = useCopyButtonFeedback()
+  const [copyBusy, setCopyBusy] = useState(false)
 
-  const copyAll = async () => {
+  const copyAll = useCallback(async () => {
+    setCopyBusy(true)
     try {
-      await navigator.clipboard.writeText(codes.join('\n'))
-      onCopied()
-    } catch {
-      onCopied()
+      const ok = await copyRecoveryCodes(codes)
+      flashCopy(ok)
+      if (ok) onCopied()
+    } finally {
+      setCopyBusy(false)
     }
+  }, [codes, flashCopy, onCopied])
+
+  const downloadAll = () => {
+    if (downloadRecoveryCodesTxt(codes)) onDownloaded?.()
   }
 
   return (
     <AccountSecurityFlowRoot>
       <AccountSecurityStepRail
-        steps={['了解两步验证', '添加验证器', '保存恢复码']}
+        steps={['安装验证器', '扫码开启', '保存恢复码']}
         activeIndex={2}
       />
       <AccountSecurityHero lead="离开本页后将无法再次查看。每条恢复码只能使用一次，请立即保存。" />
       <Text className={s.warn} block role="status">
-        建议复制到密码管理器或离线安全处，不要只保存在手机相册。
+        建议复制或下载到密码管理器 / 离线安全处，不要只保存在手机相册。
       </Text>
       <SettingsGroup>
         <SettingsStaticBlock>
@@ -76,8 +92,15 @@ export function RecoveryCodesBlock({
             ))}
           </div>
           <AccountSecurityActions>
-            <OpptrixButton variant="secondary" onClick={() => { void copyAll() }}>
-              复制全部恢复码
+            <OpptrixButton
+              variant="secondary"
+              disabled={copyBusy}
+              onClick={() => { void copyAll() }}
+            >
+              {copyLabel}
+            </OpptrixButton>
+            <OpptrixButton variant="secondary" onClick={downloadAll}>
+              下载备份文件
             </OpptrixButton>
             <OpptrixButton variant="primary" onClick={onDone}>
               我已妥善保存

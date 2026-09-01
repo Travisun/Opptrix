@@ -141,7 +141,7 @@ export default function McpApiKeyField({
           <button
             type="button"
             className={s.eyeBtn}
-            aria-label={revealed ? '隐藏 API Key' : '显示 API Key'}
+            aria-label={revealed ? '隐藏密钥' : '显示密钥'}
             onClick={toggleReveal}
             tabIndex={-1}
           >

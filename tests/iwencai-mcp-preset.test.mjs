@@ -27,7 +27,7 @@ test('MCP_BUILTIN_PRESETS includes iwencai stdio with IWENCAI_API_KEY', () => {
   const preset = MCP_BUILTIN_PRESETS.find(p => p.id === 'iwencai')
   assert.ok(preset)
   assert.equal(preset.title, '问财')
-  assert.equal(preset.homepage, 'https://www.iwencai.com/skillhub')
+  assert.equal(preset.homepage, 'https://opptrix.net/t/topic/203')
   assert.equal(preset.services.length, 1)
   const svc = preset.services[0]
   assert.equal(svc.serverId, 'iwencai')

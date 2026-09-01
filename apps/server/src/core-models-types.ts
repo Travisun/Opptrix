@@ -21,7 +21,18 @@ export interface CoreModelsSharedModule {
   ensureAllCoreModels: (opts?: {
     logPrefix?: string
     sourceOrder?: string[]
-    onProgress?: (p: { modelId: string; phase: string; message?: string }) => void
+    includeOptional?: boolean
+    onProgress?: (p: {
+      modelId: string
+      phase: string
+      message?: string
+      fileName?: string
+      fileIndex?: number
+      fileCount?: number
+      bytesReceived?: number
+      bytesTotal?: number | null
+      modelRatio?: number
+    }) => void
   }) => Promise<void>
   isCoreModelReady: (modelId: string, modelsDir?: string) => boolean
   validateImportBuffer: (

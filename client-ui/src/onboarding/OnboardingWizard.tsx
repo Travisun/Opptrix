@@ -99,10 +99,10 @@ export default function OnboardingWizard({
   const [coreModelsRequired, setCoreModelsRequired] = useState(false)
   const steps = useMemo(
     () => buildOnboardingSteps({
-      includeAccount: !authStatus?.claimed,
+      includeAccount: !authStatus?.claimed || !authStatus?.totp_enabled,
       includeCoreModels: coreModelsRequired,
     }),
-    [authStatus?.claimed, coreModelsRequired],
+    [authStatus?.claimed, authStatus?.totp_enabled, coreModelsRequired],
   )
 
   const [stepIndex, setStepIndex] = useState(0)
@@ -206,11 +206,6 @@ export default function OnboardingWizard({
       return
     }
     goBack()
-  }
-
-  const skipAccount = () => {
-    setAccountNav(null)
-    goNext()
   }
 
   const handleAccountCreated = useCallback(() => {
@@ -446,18 +441,13 @@ export default function OnboardingWizard({
         onNavChange={setAccountNav}
       />
     )
-    footerSecondary = (
-      <OpptrixButton variant="ghost" onClick={skipAccount}>
-        仅本机使用，暂不创建
-      </OpptrixButton>
-    )
     footerPrimary = (
       <OpptrixButton
         variant="primary"
         disabled={!accountNav?.canAdvance}
         onClick={() => { void accountNav?.advance() }}
       >
-        {accountNav?.advancing ? '正在创建…' : '创建账户'}
+        {accountNav?.advanceLabel ?? '创建账户'}
       </OpptrixButton>
     )
   } else {
