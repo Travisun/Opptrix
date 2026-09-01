@@ -63,7 +63,6 @@ import NewsCenterPage from '../pages/news/NewsCenterPage'
 import ExpertMarketPage from '../pages/experts/ExpertMarketPage'
 import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
 import CommunityFeedPage from '../pages/community/CommunityFeedPage'
-import { startCommunityFeedBackgroundRefresh } from '../pages/community/communityFeedCache'
 import type { SettingsSection } from '../pages/settings/SettingsSidebar'
 import { normalizeSettingsSection } from '../pages/settings/settingsTypes'
 import RightPanel from './RightPanel'
@@ -1700,10 +1699,6 @@ export default function ChatApp() {
     return () => { cancelled = true; clearInterval(timer) }
   }, [refreshHealth, refreshSessions, loadSession])
 
-  useEffect(() => {
-    if (!backendOk) return
-    return startCommunityFeedBackgroundRefresh()
-  }, [backendOk])
 
   useEffect(() => {
     if (view === 'news') setNewsCenterMounted(true)
@@ -2938,6 +2933,7 @@ export default function ChatApp() {
                   onClick={drawerOpen ? closeDrawer : undefined}
                 >
                   <NewsCenterPage
+                    pageActive={isNews}
                     electronChrome={electronChrome}
                     chromeToolbarReserve={chromeToolbarReserve}
                     isMobile={isMobile}
@@ -2951,6 +2947,7 @@ export default function ChatApp() {
             ) : (
               <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
                 <NewsCenterPage
+                  pageActive={isNews}
                   electronChrome={electronChrome}
                   chromeToolbarReserve={chromeToolbarReserve}
                   isMobile={isMobile}
@@ -2992,6 +2989,7 @@ export default function ChatApp() {
                   onClick={drawerOpen ? closeDrawer : undefined}
                 >
                   <MarketDynamicsPage
+                    pageActive={isMarket}
                     electronChrome={electronChrome}
                     chromeToolbarReserve={chromeToolbarReserve}
                     isMobile={isMobile}
@@ -3003,6 +3001,7 @@ export default function ChatApp() {
             ) : (
               <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
                 <MarketDynamicsPage
+                  pageActive={isMarket}
                   electronChrome={electronChrome}
                   chromeToolbarReserve={chromeToolbarReserve}
                   isMobile={isMobile}
@@ -3042,6 +3041,7 @@ export default function ChatApp() {
                   onClick={drawerOpen ? closeDrawer : undefined}
                 >
                   <CommunityFeedPage
+                    pageActive={isCommunity}
                     electronChrome={electronChrome}
                     chromeToolbarReserve={chromeToolbarReserve}
                     isMobile={isMobile}
@@ -3053,6 +3053,7 @@ export default function ChatApp() {
             ) : (
               <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
                 <CommunityFeedPage
+                  pageActive={isCommunity}
                   electronChrome={electronChrome}
                   chromeToolbarReserve={chromeToolbarReserve}
                   isMobile={isMobile}

@@ -715,12 +715,19 @@ export const research = {
       count: number
     }>('/instruments/resolve-names', { instruments }, signal),
 
-  instrumentQuotes: (instruments: InstrumentRef[], signal?: AbortSignal) =>
-    postInstrument<UnifiedInstrumentQuotesDto>(
+  instrumentQuotes: (
+    instruments: InstrumentRef[],
+    optsOrSignal?: { fresh?: boolean; signal?: AbortSignal } | AbortSignal,
+  ) => {
+    const opts = optsOrSignal instanceof AbortSignal
+      ? { signal: optsOrSignal }
+      : optsOrSignal ?? {}
+    return postInstrument<UnifiedInstrumentQuotesDto>(
       '/instruments/quotes',
-      { instruments },
-      signal,
-    ),
+      { instruments, ...(opts.fresh ? { fresh: true } : {}) },
+      opts.signal,
+    )
+  },
 
   /** 单标的最新价 — 关注添加后立即拉价；默认 fresh 跳过覆盖层缓存 */
   instrumentQuote: (
@@ -877,8 +884,11 @@ export const research = {
   portfolioTrades: (code = '', market?: string) =>
     apiCall<import('../types/schemas').PortfolioLedgerData>('portfolio_trades', { code, market }),
 
-  portfolioSummary: () =>
-    apiCall<import('../types/schemas').PortfolioSummaryData>('portfolio_summary', {}),
+  portfolioSummary: (opts?: { refresh?: boolean }) =>
+    apiCall<import('../types/schemas').PortfolioSummaryData>(
+      'portfolio_summary',
+      opts?.refresh ? { refresh: true } : {},
+    ),
 }
 
 export async function fetchFxRatesToCny() {

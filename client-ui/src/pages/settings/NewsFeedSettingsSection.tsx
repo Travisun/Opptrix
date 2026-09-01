@@ -20,6 +20,7 @@ import {
   FolderRegular,
 } from '@fluentui/react-icons'
 import { news } from '../../api/client'
+import { reloadNewsFeed, syncNewsFeedRefreshPolicy } from '../news/newsFeedSession'
 import type { FeedSubscription, FeedGroup, NewsSettings } from '../../types/schemas'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import OpptrixField from '../../components/opptrix/OpptrixField'
@@ -266,10 +267,15 @@ export default function NewsFeedSettingsSection() {
     ) return
 
     setSaveState('pending')
+    const prevRefreshIntervalMin = baseline.refresh_interval_min
     news.saveSettings(settings)
       .then(resp => {
         setSettings(resp.settings)
         settingsBaseline.current = resp.settings
+        if (prevRefreshIntervalMin !== resp.settings.refresh_interval_min) {
+          syncNewsFeedRefreshPolicy(resp.settings.refresh_interval_min)
+          void reloadNewsFeed()
+        }
         setSaveState('saved')
         toast.showSuccess('已保存')
         window.setTimeout(() => setSaveState('idle'), 2000)

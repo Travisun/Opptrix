@@ -39,6 +39,7 @@ const useStyles = makeStyles({
 })
 
 type Props = {
+  pageActive?: boolean
   electronChrome?: boolean
   chromeToolbarReserve?: number
   isMobile?: boolean
@@ -47,6 +48,7 @@ type Props = {
 }
 
 function MarketDynamicsContent({
+  pageActive = true,
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
@@ -54,20 +56,19 @@ function MarketDynamicsContent({
   onOpenSidebar,
 }: Props) {
   const s = useStyles()
-  const { data, loading, refreshing, error, refresh } = useMarketDynamics()
-  const insights = useMarketInsights()
+  const { data, loading, refreshing, error, refresh } = useMarketDynamics(pageActive)
+  const insights = useMarketInsights(pageActive)
 
   const panelData = data?.market === 'cn' ? data : null
   const panelLoading = loading || (data != null && data.market !== 'cn')
+  const hasData = Boolean(panelData?.sections.length)
 
   const updatedLabel = panelData?.refreshed_at ? formatCnDateTime(panelData.refreshed_at) : null
   const statusLabel = refreshing
-    ? '刷新中…'
+    ? (hasData ? '正在拉取最新记录' : '刷新中…')
     : updatedLabel
       ? `更新 ${updatedLabel}`
       : '尚未刷新'
-
-  const hasData = Boolean(panelData?.sections.length)
 
   const handleRefresh = () => {
     void refresh()

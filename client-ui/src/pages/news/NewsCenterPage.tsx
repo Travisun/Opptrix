@@ -104,6 +104,7 @@ const useStyles = makeStyles({
 })
 
 type Props = {
+  pageActive?: boolean
   electronChrome?: boolean
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
@@ -115,6 +116,7 @@ type Props = {
 }
 
 function NewsCenterContent({
+  pageActive = true,
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
@@ -124,7 +126,7 @@ function NewsCenterContent({
   onDiscussArticle,
 }: Props) {
   const s = useStyles()
-  const feed = useNewsFeed()
+  const feed = useNewsFeed(pageActive)
   const {
     articles,
     filteredArticles,
@@ -172,7 +174,7 @@ function NewsCenterContent({
     : null
 
   const statusLabel = refreshing
-    ? '刷新中…'
+    ? (hasAnyArticles ? '正在拉取最新记录' : '刷新中…')
     : updatedLabel
       ? `更新 ${updatedLabel}`
       : '尚未刷新'

@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import TradingViewChart from '../../market/TradingViewChart'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { motion } from '../../theme/mixins'
+import {
+  MARKET_PANEL_DRAWER_CLOSE_MS,
+  MARKET_PANEL_DRAWER_MAX_HEIGHT,
+} from '../../market/marketPanelDrawer'
 import type { InstrumentRef } from '../../types/instrument'
 import { CnInsightStockSelectProvider } from './cnInsightStockContext'
 import type { CnInsightStockPick } from './cnInsightStockUtils'
 import { cnInsightChartInputCode, cnInsightInstrumentFromCode } from './cnInsightStockUtils'
+
+const DRAWER_CLOSE_MS = MARKET_PANEL_DRAWER_CLOSE_MS
 
 const useStyles = makeStyles({
   root: {
@@ -74,53 +81,65 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     overflow: 'hidden',
   },
-  scrim: {
-    position: 'absolute',
+  /** 手机：全视口底部 sheet（portal 到 body） */
+  portalScrim: {
+    position: 'fixed',
     inset: 0,
-    zIndex: 20,
+    zIndex: 2200,
     border: 'none',
     padding: 0,
     margin: 0,
     backgroundColor: 'rgba(29, 29, 31, 0.18)',
+    cursor: 'default',
     opacity: 0,
     pointerEvents: 'none',
     transitionProperty: 'opacity',
     transitionDuration: motion.normal,
     transitionTimingFunction: motion.ease,
   },
-  scrimOpen: {
+  portalScrimOpen: {
     opacity: 1,
     pointerEvents: 'auto',
   },
-  drawer: {
-    position: 'absolute',
+  portalAnchor: {
+    position: 'fixed',
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 21,
-    height: 'min(72%, 420px)',
-    minHeight: '280px',
+    zIndex: 2201,
+    display: 'flex',
+    justifyContent: 'center',
+    pointerEvents: 'none',
+    padding: 0,
+    paddingBottom: 'env(safe-area-inset-bottom)',
+    boxSizing: 'border-box',
+  },
+  portalDrawer: {
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    boxSizing: 'border-box',
+    maxHeight: MARKET_PANEL_DRAWER_MAX_HEIGHT,
     borderRadius: `${opptrixTokens.radiusXl} ${opptrixTokens.radiusXl} 0 0`,
-    borderTop: `1px solid ${opptrixCssVars.separatorHairline}`,
-    backgroundColor: opptrixCssVars.surface,
-    boxShadow: '0 -8px 28px rgba(0, 0, 0, 0.12)',
-    transform: 'translateY(105%)',
+    borderTop: `1px solid ${opptrixCssVars.separatorStrong}`,
+    backgroundColor: opptrixCssVars.canvas,
+    boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.12)',
+    transform: 'translateY(100%)',
     transitionProperty: 'transform',
     transitionDuration: motion.normal,
     transitionTimingFunction: motion.easeOut,
+    pointerEvents: 'auto',
     overflow: 'hidden',
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '1ms',
     },
   },
-  drawerOpen: {
+  portalDrawerOpen: {
     transform: 'translateY(0)',
   },
-  drawerHandle: {
-    width: '32px',
+  portalHandle: {
+    width: '36px',
     height: '4px',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: opptrixCssVars.borderStrong,
@@ -135,7 +154,7 @@ type Props = {
   children: React.ReactNode
   instrumentFromCode?: (code: string) => InstrumentRef
   chartInputCode?: (ref: InstrumentRef) => string
-  /** split=桌面分栏；drawer=手机底部抽屉 */
+  /** split=桌面分栏；drawer=手机全屏底部 sheet */
   presentation?: 'split' | 'drawer'
 }
 
@@ -178,6 +197,61 @@ function ChartPane({
   )
 }
 
+function MobileInsightChartDrawer({
+  stock,
+  presented,
+  onBeginClose,
+  onTransitionEnd,
+  instrumentFromCode,
+  chartInputCodeFn,
+}: {
+  stock: CnInsightStockPick
+  presented: boolean
+  onBeginClose: () => void
+  onTransitionEnd: (e: React.TransitionEvent<HTMLDivElement>) => void
+  instrumentFromCode: (code: string) => InstrumentRef
+  chartInputCodeFn: (ref: InstrumentRef) => string
+}) {
+  const s = useStyles()
+
+  return createPortal(
+    <>
+      <button
+        type="button"
+        className={mergeClasses(
+          s.portalScrim,
+          'opptrix-cn-insight-chart-drawer-scrim',
+          presented && s.portalScrimOpen,
+        )}
+        aria-label="关闭个股走势"
+        onClick={onBeginClose}
+      />
+      <div className={s.portalAnchor}>
+        <div
+          className={mergeClasses(
+            s.portalDrawer,
+            'opptrix-cn-insight-chart-drawer',
+            presented && s.portalDrawerOpen,
+          )}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${stock.name} 走势`}
+          onTransitionEnd={onTransitionEnd}
+        >
+          <div className={s.portalHandle} aria-hidden />
+          <ChartPane
+            stock={stock}
+            onClose={onBeginClose}
+            instrumentFromCode={instrumentFromCode}
+            chartInputCodeFn={chartInputCodeFn}
+          />
+        </div>
+      </div>
+    </>,
+    document.body,
+  )
+}
+
 export default function CnInsightSplitView({
   selected,
   onSelect,
@@ -189,31 +263,77 @@ export default function CnInsightSplitView({
   const s = useStyles()
   const drawerMode = presentation === 'drawer'
   const open = selected != null
-  const [drawerPresented, setDrawerPresented] = useState(false)
+  const closingRef = useRef(false)
+  const [presented, setPresented] = useState(false)
+
+  const finishClose = useCallback(() => {
+    if (!closingRef.current) return
+    closingRef.current = false
+    onSelect(null)
+  }, [onSelect])
+
+  const beginClose = useCallback(() => {
+    if (closingRef.current) return
+    if (!presented) {
+      onSelect(null)
+      return
+    }
+    closingRef.current = true
+    setPresented(false)
+  }, [onSelect, presented])
+
+  const handleDrawerTransitionEnd = useCallback((e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return
+    if (e.propertyName !== 'transform') return
+    finishClose()
+  }, [finishClose])
+
+  useEffect(() => {
+    if (!drawerMode || !open) return undefined
+    closingRef.current = false
+    setPresented(false)
+    const id = requestAnimationFrame(() => setPresented(true))
+    return () => cancelAnimationFrame(id)
+  }, [drawerMode, open, selected?.code])
 
   useEffect(() => {
     if (!drawerMode) {
-      setDrawerPresented(false)
+      setPresented(false)
+      closingRef.current = false
       return
     }
-    if (open) {
-      const raf = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setDrawerPresented(true))
-      })
-      return () => cancelAnimationFrame(raf)
+    if (!open && presented) {
+      closingRef.current = true
+      setPresented(false)
     }
-    setDrawerPresented(false)
-    return undefined
-  }, [drawerMode, open])
+  }, [drawerMode, open, presented])
+
+  useEffect(() => {
+    if (!drawerMode || !presented || !closingRef.current) return undefined
+    const timer = window.setTimeout(finishClose, DRAWER_CLOSE_MS + 40)
+    return () => window.clearTimeout(timer)
+  }, [drawerMode, presented, finishClose])
+
+  useEffect(() => {
+    if (!drawerMode || !open || !presented) return undefined
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') beginClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [beginClose, drawerMode, open, presented])
 
   const chart = selected ? (
     <ChartPane
       stock={selected}
-      onClose={() => onSelect(null)}
+      onClose={drawerMode ? beginClose : () => onSelect(null)}
       instrumentFromCode={instrumentFromCode}
       chartInputCodeFn={chartInputCodeFn}
     />
   ) : null
+
+  const showMobileDrawer = drawerMode && selected != null
+    && (open || presented || closingRef.current)
 
   return (
     <CnInsightStockSelectProvider selected={selected} onSelect={onSelect}>
@@ -238,26 +358,19 @@ export default function CnInsightSplitView({
           <div className={mergeClasses(s.chartPane, open && s.chartPaneOpen)}>
             {chart}
           </div>
-        ) : open ? (
-          <>
-            <button
-              type="button"
-              className={mergeClasses(s.scrim, drawerPresented && s.scrimOpen)}
-              aria-label="关闭个股走势"
-              onClick={() => onSelect(null)}
-            />
-            <div
-              className={mergeClasses(s.drawer, drawerPresented && s.drawerOpen)}
-              role="dialog"
-              aria-modal="true"
-              aria-label={selected ? `${selected.name} 走势` : '个股走势'}
-            >
-              <div className={s.drawerHandle} aria-hidden />
-              {chart}
-            </div>
-          </>
         ) : null}
       </div>
+
+      {showMobileDrawer && selected ? (
+        <MobileInsightChartDrawer
+          stock={selected}
+          presented={presented}
+          onBeginClose={beginClose}
+          onTransitionEnd={handleDrawerTransitionEnd}
+          instrumentFromCode={instrumentFromCode}
+          chartInputCodeFn={chartInputCodeFn}
+        />
+      ) : null}
     </CnInsightStockSelectProvider>
   )
 }

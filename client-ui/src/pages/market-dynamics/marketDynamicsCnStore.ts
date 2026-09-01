@@ -1,51 +1,59 @@
 import { research } from '../../api/client'
 import type { MarketDynamicsData } from '../../types/schemas'
-
-/** 与 Hub `MARKET_DYNAMICS_CN_TTL_MS`(22s) 对齐，略长以避免边界重复打满 */
-export const MARKET_DYNAMICS_CN_REFRESH_MS = 30_000
+import {
+  UI_CACHE_TTL_MS,
+  UI_POLL_INTERVAL_MS,
+  decideRevalidate,
+  resolveFetchedAtMs,
+} from '@opptrix/shared'
+import { createVisibilityPoller, type VisibilityPoller } from '../../data/cacheControl'
+import {
+  readSessionCacheEnvelope,
+  writeSessionCacheEnvelope,
+} from '../../data/sessionCacheEnvelope'
 
 const SESSION_CACHE_KEY = 'opptrix-market-dynamics-cn'
+
+export const MARKET_DYNAMICS_CN_REFRESH_MS = UI_POLL_INTERVAL_MS.marketDynamicsCn
 
 export type MarketDynamicsCnSnapshot = {
   data: MarketDynamicsData | null
   loading: boolean
   refreshing: boolean
   error: string
+  lastFetchedAtMs: number
 }
 
-function readSessionCache(): MarketDynamicsData | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = sessionStorage.getItem(SESSION_CACHE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as MarketDynamicsData
-    if (!parsed || !Array.isArray(parsed.sections)) return null
-    return parsed
-  } catch {
-    return null
-  }
+function isMarketDynamicsData(data: unknown): data is MarketDynamicsData {
+  return !!data
+    && typeof data === 'object'
+    && Array.isArray((data as MarketDynamicsData).sections)
 }
 
-function writeSessionCache(data: MarketDynamicsData): void {
-  if (typeof window === 'undefined') return
-  try {
-    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(data))
-  } catch {
-    /* quota / private mode */
-  }
+function readSessionCache(): { data: MarketDynamicsData; cached_at_ms: number } | null {
+  const hit = readSessionCacheEnvelope(SESSION_CACHE_KEY, isMarketDynamicsData)
+  if (!hit) return null
+  return hit
+}
+
+function writeSessionCache(data: MarketDynamicsData, cachedAtMs: number): void {
+  writeSessionCacheEnvelope(SESSION_CACHE_KEY, data, cachedAtMs)
 }
 
 const bootCached = readSessionCache()
 
 let snapshot: MarketDynamicsCnSnapshot = {
-  data: bootCached,
+  data: bootCached?.data ?? null,
   loading: false,
   refreshing: false,
   error: '',
+  lastFetchedAtMs: bootCached
+    ? resolveFetchedAtMs(bootCached.cached_at_ms, bootCached.data.refreshed_at)
+    : 0,
 }
 
-let pollRefCount = 0
-let refreshTimer: number | null = null
+let pagePollRefCount = 0
+let pagePoller: VisibilityPoller | null = null
 let inflightLoad: Promise<void> | null = null
 const listeners = new Set<() => void>()
 
@@ -53,16 +61,33 @@ function emit(): void {
   listeners.forEach(listener => listener())
 }
 
+function scheduleLoad(opts?: { force?: boolean; userInitiated?: boolean }): void {
+  const hasDisplayedData = snapshot.data != null
+  const mode = decideRevalidate({
+    cachedAtMs: snapshot.lastFetchedAtMs,
+    ttlMs: UI_CACHE_TTL_MS.marketDynamicsCn,
+    force: opts?.force,
+    hasDisplayedData,
+  })
+  if (mode === 'skip') return
+
+  void loadMarketDynamicsCn({
+    silent: hasDisplayedData,
+    force: mode === 'hard' || opts?.userInitiated === true,
+  })
+}
+
 async function loadMarketDynamicsCn(opts?: { silent?: boolean; force?: boolean }): Promise<void> {
   if (inflightLoad) return inflightLoad
 
   const silent = opts?.silent ?? false
   const force = opts?.force ?? false
+  const hasDisplayedData = snapshot.data != null
 
-  if (!silent && !snapshot.data) {
+  if (!hasDisplayedData && !silent) {
     snapshot = { ...snapshot, loading: true }
     emit()
-  } else if (silent && snapshot.data) {
+  } else if (hasDisplayedData) {
     snapshot = { ...snapshot, refreshing: true }
     emit()
   }
@@ -79,12 +104,14 @@ async function loadMarketDynamicsCn(opts?: { silent?: boolean; force?: boolean }
           ...resp.data,
           market: resp.data.market ?? 'cn',
         }
-        writeSessionCache(data)
+        const fetchedAtMs = resolveFetchedAtMs(Date.now(), data.refreshed_at)
+        writeSessionCache(data, fetchedAtMs)
         snapshot = {
           data,
           loading: false,
           refreshing: false,
           error: '',
+          lastFetchedAtMs: fetchedAtMs,
         }
       } else {
         snapshot = {
@@ -110,30 +137,38 @@ async function loadMarketDynamicsCn(opts?: { silent?: boolean; force?: boolean }
   return inflightLoad
 }
 
-function startPolling(): void {
-  if (refreshTimer != null) return
-  void loadMarketDynamicsCn()
-  refreshTimer = window.setInterval(() => {
-    if (document.hidden) return
-    void loadMarketDynamicsCn({ silent: true })
-  }, MARKET_DYNAMICS_CN_REFRESH_MS)
+function ensurePagePoller(): VisibilityPoller {
+  if (!pagePoller) {
+    pagePoller = createVisibilityPoller(MARKET_DYNAMICS_CN_REFRESH_MS, () => {
+      scheduleLoad()
+    })
+  }
+  return pagePoller
 }
 
-function stopPolling(): void {
-  if (refreshTimer == null) return
-  window.clearInterval(refreshTimer)
-  refreshTimer = null
+function startPagePolling(): void {
+  scheduleLoad()
+  ensurePagePoller().acquire()
 }
 
-/** 有消费者时开启轮询；多路（市场动态页 + 聊天欢迎区）共享同一份内存态与 inflight */
-export function acquireMarketDynamicsCnPolling(): void {
-  pollRefCount += 1
-  if (pollRefCount === 1) startPolling()
+function stopPagePolling(): void {
+  ensurePagePoller().release()
 }
 
-export function releaseMarketDynamicsCnPolling(): void {
-  pollRefCount = Math.max(0, pollRefCount - 1)
-  if (pollRefCount === 0) stopPolling()
+/** 市场动态页可见时开启轮询；离开页面完全停止 */
+export function acquireMarketDynamicsCnPagePolling(): void {
+  pagePollRefCount += 1
+  if (pagePollRefCount === 1) startPagePolling()
+}
+
+export function releaseMarketDynamicsCnPagePolling(): void {
+  pagePollRefCount = Math.max(0, pagePollRefCount - 1)
+  if (pagePollRefCount === 0) stopPagePolling()
+}
+
+/** 聊天欢迎区脉搏：单次按需刷新，不开启轮询 */
+export function ensureMarketDynamicsCnPulseRefresh(): void {
+  scheduleLoad()
 }
 
 export function subscribeMarketDynamicsCn(onStoreChange: () => void): () => void {

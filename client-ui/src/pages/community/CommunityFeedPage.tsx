@@ -214,6 +214,7 @@ const useStyles = makeStyles({
 })
 
 type Props = {
+  pageActive?: boolean
   electronChrome?: boolean
   chromeToolbarReserve?: number
   isMobile?: boolean
@@ -302,6 +303,7 @@ function TopicRow({
 }
 
 function CommunityFeedContent({
+  pageActive = true,
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
@@ -309,7 +311,7 @@ function CommunityFeedContent({
   onOpenSidebar,
 }: Props) {
   const s = useStyles()
-  const feed = useCommunityFeed()
+  const feed = useCommunityFeed(pageActive)
   const {
     kind,
     setKind,
@@ -337,7 +339,7 @@ function CommunityFeedContent({
     : null
 
   const statusLabel = refreshing
-    ? '刷新中…'
+    ? (topics.length > 0 ? '正在拉取最新记录' : '刷新中…')
     : updatedLabel
       ? `更新于 ${updatedLabel}`
       : null

@@ -59,6 +59,7 @@ import {
   inferCnAssetClassFromSymbol,
   type InstrumentRef,
   type InstrumentHubCapability,
+  UI_CACHE_TTL_MS,
 } from '@opptrix/shared'
 import { canonicalHkSymbol } from '@opptrix/shared/instrument-symbol'
 import {
@@ -102,6 +103,7 @@ import {
   routeInstrumentQuote,
   routeInstrumentSearch,
   routeInstrumentSnapshot,
+  resolveQuoteRefs,
   type InstrumentRouteHandlers,
 } from './instrument-router.js'
 import { mergeFundDetailParts } from './fund-detail.js'
@@ -111,6 +113,15 @@ import {
   writeMarketDynamicsCache,
   type MarketDynamicsCacheMarket,
 } from './market-dynamics-cache.js'
+import {
+  instrumentQuotesInflightKey,
+  readInstrumentQuotesCache,
+  readPortfolioSummaryCache,
+  RIGHT_PANEL_PORTFOLIO_TTL_MS,
+  RIGHT_PANEL_QUOTE_TTL_MS,
+  writeInstrumentQuotesFromResult,
+  writePortfolioSummaryCache,
+} from './right-panel-cache.js'
 import {
   routeInstrumentEvaluation,
   routeInstrumentIndicators,
@@ -287,8 +298,13 @@ export class ResearchHub {
   >()
   private marketDynamicsRefreshInflight = new Map<MarketDynamicsCacheMarket, Promise<ResearchResult>>()
 
+  /** 右侧关注行情 / 组合汇总 — 磁盘缓存即时返回 */
+  private portfolioSummaryMemCache: { at: number; payload: ResearchResult } | null = null
+  private portfolioSummaryRefreshInflight: Promise<ResearchResult> | null = null
+  private instrumentQuotesRefreshInflight = new Map<string, Promise<ResearchResult>>()
+
   private static readonly THS_SECTOR_CATALOG_TTL_MS = 15 * 60 * 1000
-  private static readonly MARKET_DYNAMICS_CN_TTL_MS = 22_000
+  private static readonly MARKET_DYNAMICS_CN_TTL_MS = UI_CACHE_TTL_MS.marketDynamicsCn
   private static readonly HOT_HISTORY_TODAY_TTL_MS = 5 * 60 * 1000
 
   initMarketDataAutoSync(): void {
@@ -380,7 +396,7 @@ export class ResearchHub {
         }
         case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), params.market != null ? String(params.market) : undefined, t0)
         case 'portfolio_holdings': return this.portfolioHoldings(t0)
-        case 'portfolio_summary': return this.portfolioSummary(t0)
+        case 'portfolio_summary': return this.portfolioSummary(t0, params)
         case 'portfolio_fee_global': return this.portfolioFeeGlobal(t0)
         case 'portfolio_fee_global_save': return this.portfolioFeeGlobalSave(params, t0)
         case 'portfolio_fee_instrument': return this.portfolioFeeInstrument(String(params.code ?? ''), params.market != null ? String(params.market) : undefined, t0)
@@ -4743,7 +4759,39 @@ export class ResearchHub {
   }
 
   private async instrumentQuotes(params: Record<string, unknown>, t0: number) {
-    return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0), t0)
+    const force = params.fresh === true || params.refresh === true || params.force === true
+    const refs = resolveQuoteRefs(params)
+
+    if (!force && refs.length) {
+      const { quotes, newestMs } = readInstrumentQuotesCache(refs)
+      if (quotes.length) {
+        const payload = ok(
+          { quotes, failed: [], from_cache: true },
+          `缓存 ${quotes.length} 只`,
+          t0,
+        )
+
+        const stale = !newestMs || Date.now() - newestMs >= RIGHT_PANEL_QUOTE_TTL_MS
+        const inflightKey = instrumentQuotesInflightKey(refs)
+        if (stale && !this.instrumentQuotesRefreshInflight.has(inflightKey)) {
+          const inflight = routeInstrumentQuotes(params, this.instrumentRouteHandlers(Date.now()), Date.now())
+            .then(result => {
+              if (result.success) writeInstrumentQuotesFromResult(result)
+              return result
+            })
+            .finally(() => {
+              this.instrumentQuotesRefreshInflight.delete(inflightKey)
+            })
+          this.instrumentQuotesRefreshInflight.set(inflightKey, inflight)
+          void inflight
+        }
+        return payload
+      }
+    }
+
+    const result = await routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0), t0)
+    if (result.success) writeInstrumentQuotesFromResult(result)
+    return result
   }
 
   private async instrumentQuote(params: Record<string, unknown>, t0: number) {
@@ -5347,7 +5395,53 @@ export class ResearchHub {
     return ok({ holdings, count: holdings.length }, `当前持仓 ${holdings.length} 只`, t0)
   }
 
-  private async portfolioSummary(t0: number) {
+  private async portfolioSummary(t0: number, params: Record<string, unknown> = {}) {
+    const force = params.force === true || params.refresh === true
+
+    if (!force) {
+      const mem = this.portfolioSummaryMemCache
+      if (mem && Date.now() - mem.at < RIGHT_PANEL_PORTFOLIO_TTL_MS) {
+        return mem.payload
+      }
+
+      const disk = readPortfolioSummaryCache()
+      if (disk?.data) {
+        const payload = ok(
+          { ...disk.data, from_cache: true },
+          disk.message,
+          t0,
+        )
+        this.portfolioSummaryMemCache = { at: disk.cached_at_ms, payload }
+
+        const stale = Date.now() - disk.cached_at_ms >= RIGHT_PANEL_PORTFOLIO_TTL_MS
+        if (stale && !this.portfolioSummaryRefreshInflight) {
+          const inflight = this.fetchPortfolioSummary(Date.now())
+            .then(result => {
+              if (result.success) {
+                writePortfolioSummaryCache(result)
+                this.portfolioSummaryMemCache = { at: Date.now(), payload: result }
+              }
+              return result
+            })
+            .finally(() => {
+              this.portfolioSummaryRefreshInflight = null
+            })
+          this.portfolioSummaryRefreshInflight = inflight
+          void inflight
+        }
+        return payload
+      }
+    }
+
+    const result = await this.fetchPortfolioSummary(t0)
+    if (result.success) {
+      writePortfolioSummaryCache(result)
+      this.portfolioSummaryMemCache = { at: Date.now(), payload: result }
+    }
+    return result
+  }
+
+  private async fetchPortfolioSummary(t0: number) {
     const summary = await this.de.portfolio.summary(true)
     return ok(summary, `持仓 ${summary.holdingsCount} 只`, t0)
   }

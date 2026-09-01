@@ -1,4 +1,15 @@
 import { news } from '../../api/client'
+import {
+  decideRevalidate,
+  resolveFetchedAtMs,
+} from '@opptrix/shared'
+import { createVisibilityPoller, type VisibilityPoller } from '../../data/cacheControl'
+import {
+  applyNewsFeedRefreshIntervalMin,
+  getNewsFeedClientPollMs,
+  getNewsFeedClientTtlMs,
+  subscribeNewsFeedRefreshPolicy,
+} from './newsFeedRefreshPolicy'
 import type {
   FeedArticle,
   FeedGroup,
@@ -91,6 +102,79 @@ const listeners = new Set<() => void>()
 let bootstrapped = false
 let bootstrapPromise: Promise<void> | null = null
 let softSyncPromise: Promise<void> | null = null
+let lastSyncedAtMs = 0
+let pagePollRefCount = 0
+let pagePoller: VisibilityPoller | null = null
+let refreshPolicyHydrated = false
+let refreshPolicyPromise: Promise<void> | null = null
+
+export {
+  getNewsFeedClientPollMs,
+  getNewsFeedClientTtlMs,
+  subscribeNewsFeedRefreshPolicy,
+} from './newsFeedRefreshPolicy'
+
+function resetNewsPagePoller(): void {
+  if (pagePoller) {
+    pagePoller.dispose()
+    pagePoller = null
+  }
+  if (pagePollRefCount > 0) {
+    pagePoller = createVisibilityPoller(getNewsFeedClientPollMs(), () => {
+      scheduleNewsFeedSync()
+    })
+    pagePoller.acquire()
+  }
+}
+
+export function syncNewsFeedRefreshPolicy(refreshIntervalMin: unknown): void {
+  if (!applyNewsFeedRefreshIntervalMin(refreshIntervalMin)) return
+  resetNewsPagePoller()
+}
+
+export function ensureNewsFeedRefreshPolicyHydrated(): Promise<void> {
+  if (refreshPolicyHydrated) return Promise.resolve()
+  if (!refreshPolicyPromise) {
+    refreshPolicyPromise = news.getSettings()
+      .then(resp => {
+        syncNewsFeedRefreshPolicy(resp.settings.refresh_interval_min)
+        refreshPolicyHydrated = true
+      })
+      .catch(() => {
+        refreshPolicyHydrated = true
+      })
+  }
+  return refreshPolicyPromise
+}
+
+function markNewsFeedSynced(refreshedAt: string | null | undefined): void {
+  lastSyncedAtMs = resolveFetchedAtMs(Date.now(), refreshedAt ?? null)
+}
+
+function ensureNewsPagePoller(): VisibilityPoller {
+  if (!pagePoller) {
+    pagePoller = createVisibilityPoller(getNewsFeedClientPollMs(), () => {
+      scheduleNewsFeedSync()
+    })
+  }
+  return pagePoller
+}
+
+function scheduleNewsFeedSync(opts?: { force?: boolean }): void {
+  const hasDisplayed = snapshot.hydrated && snapshot.articles.length > 0
+  const mode = decideRevalidate({
+    cachedAtMs: lastSyncedAtMs,
+    ttlMs: getNewsFeedClientTtlMs(),
+    force: opts?.force,
+    hasDisplayedData: hasDisplayed,
+  })
+  if (mode === 'skip') return
+  if (!snapshot.hydrated) {
+    void bootstrap()
+    return
+  }
+  void softSync({ silent: hasDisplayed })
+}
 
 function emit() {
   for (const listener of listeners) listener()
@@ -165,11 +249,18 @@ function pruneSelection() {
 }
 
 async function loadMeta() {
-  const resp = await news.listSubscriptions()
+  const [subsResp, settingsResp] = await Promise.all([
+    news.listSubscriptions(),
+    news.getSettings().catch(() => null),
+  ])
   patch({
-    subscriptions: resp.subscriptions,
-    groups: resp.groups,
+    subscriptions: subsResp.subscriptions,
+    groups: subsResp.groups,
   })
+  if (settingsResp?.settings?.refresh_interval_min != null) {
+    syncNewsFeedRefreshPolicy(settingsResp.settings.refresh_interval_min)
+    refreshPolicyHydrated = true
+  }
 }
 
 function groupedHasContent(grouped: NewsGroupedFeed | null): grouped is NewsGroupedFeed {
@@ -229,6 +320,7 @@ async function loadFilteredPage(append: boolean) {
     filteredTotal: resp.total,
     refreshedAt: resp.refreshed_at ?? snapshot.refreshedAt,
   })
+  markNewsFeedSynced(resp.refreshed_at ?? snapshot.refreshedAt)
   pruneSelection()
 }
 
@@ -285,12 +377,17 @@ async function loadTimelinePage(append: boolean) {
     refreshedAt: resp.refreshed_at,
     articles,
   })
+  markNewsFeedSynced(resp.refreshed_at)
   pruneSelection()
   return resp
 }
 
-async function softSync() {
+async function softSync(opts?: { silent?: boolean }) {
   if (softSyncPromise) return softSyncPromise
+  const silent = opts?.silent === true
+  if (silent && snapshot.articles.length > 0) {
+    patch({ refreshing: true })
+  }
   softSyncPromise = (async () => {
     try {
       await loadMeta()
@@ -302,6 +399,7 @@ async function softSync() {
         error: e instanceof Error ? e.message : '同步资讯失败',
       })
     } finally {
+      patch({ refreshing: false })
       softSyncPromise = null
     }
   })()
@@ -331,17 +429,33 @@ async function bootstrap() {
   return bootstrapPromise
 }
 
+export function acquireNewsFeedPagePolling(): void {
+  void ensureNewsFeedRefreshPolicyHydrated()
+  pagePollRefCount += 1
+  if (pagePollRefCount === 1) {
+    if (!bootstrapped) {
+      bootstrapped = true
+      void bootstrap()
+    } else {
+      scheduleNewsFeedSync()
+    }
+    ensureNewsPagePoller().acquire()
+  }
+}
+
+export function releaseNewsFeedPagePolling(): void {
+  pagePollRefCount = Math.max(0, pagePollRefCount - 1)
+  if (pagePollRefCount === 0) {
+    ensureNewsPagePoller().release()
+  }
+}
+
+/** 一次性引导（不开启轮询）；页面可见时请用 acquireNewsFeedPagePolling */
 export function ensureNewsFeedBootstrapped() {
   if (!bootstrapped) {
     bootstrapped = true
     void bootstrap()
-    return
   }
-  if (!snapshot.hydrated) {
-    void bootstrap()
-    return
-  }
-  void softSync()
 }
 
 export function setNewsFeedView(next: NewsListView) {
@@ -424,6 +538,7 @@ export async function refreshNewsFeed(): Promise<NewsFeedRefreshResult> {
     await syncCurrentViewLists()
     normalizeListFilters()
     patch({ hydrated: true, listPulseEpoch: snapshot.listPulseEpoch + 1 })
+    markNewsFeedSynced(snapshot.refreshedAt)
     pruneSelection()
     return { ok: true }
   } catch (e) {
@@ -438,5 +553,6 @@ export async function refreshNewsFeed(): Promise<NewsFeedRefreshResult> {
 /** 设置页变更订阅后，由外部触发重新同步 */
 export async function reloadNewsFeed() {
   patch({ cursor: null, filteredCursor: null })
+  lastSyncedAtMs = 0
   await softSync()
 }

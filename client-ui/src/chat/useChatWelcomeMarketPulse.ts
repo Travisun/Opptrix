@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import {
-  acquireMarketDynamicsCnPolling,
+  ensureMarketDynamicsCnPulseRefresh,
   getMarketDynamicsCnSnapshot,
-  releaseMarketDynamicsCnPolling,
   subscribeMarketDynamicsCn,
 } from '../pages/market-dynamics/marketDynamicsCnStore'
 import {
@@ -24,9 +23,9 @@ export function useChatWelcomeMarketPulse(
 ): State {
   useEffect(() => {
     if (!enabled) return undefined
-    acquireMarketDynamicsCnPolling()
-    return releaseMarketDynamicsCnPolling
-  }, [enabled])
+    ensureMarketDynamicsCnPulseRefresh()
+    return undefined
+  }, [enabled, shuffleEpoch])
 
   const snap = useSyncExternalStore(
     subscribeMarketDynamicsCn,

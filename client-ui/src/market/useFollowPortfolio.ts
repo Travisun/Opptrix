@@ -17,6 +17,16 @@ import {
   resolvePortfolioTradeLookupCode,
 } from './portfolioTradeLookup'
 import type { InstrumentRef, Market } from '../types/instrument'
+import {
+  UI_CACHE_TTL_MS,
+  UI_POLL_INTERVAL_MS,
+  decideRevalidate,
+  resolveFetchedAtMs,
+} from '@opptrix/shared'
+import {
+  readPortfolioSummarySessionCache,
+  writePortfolioSummarySessionCache,
+} from './rightPanelSessionCache'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
 
@@ -79,40 +89,76 @@ function indexHoldingRow(map: Record<string, HoldingSnapshot>, row: HoldingSnaps
   }
 }
 
+function buildHoldingsMap(data: PortfolioSummaryData): Record<string, HoldingSnapshot> {
+  const map: Record<string, HoldingSnapshot> = {}
+  for (const row of data.holdings) {
+    indexHoldingRow(map, row)
+  }
+  return map
+}
+
 export function useFollowPortfolio(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true
-  const [holdingsByCode, setHoldingsByCode] = useState<Record<string, HoldingSnapshot>>({})
-  const [summary, setSummary] = useState<PortfolioSummaryData | null>(null)
-  const [loading, setLoading] = useState(false)
+  const bootCache = readPortfolioSummarySessionCache()
+  const lastFetchedAtRef = useRef(bootCache?.cached_at_ms ?? 0)
+
+  const [holdingsByCode, setHoldingsByCode] = useState<Record<string, HoldingSnapshot>>(() => {
+    return bootCache ? buildHoldingsMap(bootCache.data) : {}
+  })
+  const [summary, setSummary] = useState<PortfolioSummaryData | null>(
+    () => bootCache?.data ?? null,
+  )
+  const [loading, setLoading] = useState(() => !bootCache)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const tradesCache = useRef<Record<string, PortfolioTradeItem[]>>({})
 
-  const refreshHoldings = useCallback(async () => {
-    setLoading(true)
+  const refreshHoldings = useCallback(async (opts?: { force?: boolean }) => {
+    const hasDisplayed = summary != null
+    const mode = decideRevalidate({
+      cachedAtMs: lastFetchedAtRef.current,
+      ttlMs: UI_CACHE_TTL_MS.portfolioSummary,
+      force: opts?.force,
+      hasDisplayedData: hasDisplayed,
+    })
+    if (mode === 'skip') return
+
+    const silent = hasDisplayed
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
     setError('')
     try {
-      const resp = await research.portfolioSummary()
+      const resp = await research.portfolioSummary(mode === 'hard' ? { refresh: true } : undefined)
       if (resp.success && resp.data) {
+        const fetchedAtMs = resolveFetchedAtMs(Date.now(), null)
+        writePortfolioSummarySessionCache(resp.data, fetchedAtMs)
+        lastFetchedAtRef.current = fetchedAtMs
         setSummary(resp.data)
         const map: Record<string, HoldingSnapshot> = {}
         for (const row of resp.data.holdings) {
           indexHoldingRow(map, row)
         }
         setHoldingsByCode(map)
-      } else {
+      } else if (!summary) {
         setError(resp.message || '组合数据加载失败')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '组合数据加载失败')
+      if (!summary) {
+        setError(e instanceof Error ? e.message : '组合数据加载失败')
+      }
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [])
+  }, [summary])
 
   useEffect(() => {
     if (!enabled) return undefined
     void refreshHoldings()
-    const timer = window.setInterval(() => { void refreshHoldings() }, 20000)
+    const timer = window.setInterval(() => {
+      if (document.hidden) return
+      void refreshHoldings()
+    }, UI_POLL_INTERVAL_MS.portfolioSummary)
     return () => window.clearInterval(timer)
   }, [refreshHoldings, enabled])
 
@@ -169,7 +215,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
       assetClass: payload.assetClass ?? instrument?.assetClass,
       instrument,
     })
-    await refreshHoldings()
+    await refreshHoldings({ force: true })
     return loadTrades(code, payload.market ?? instrument?.market, ac)
   }, [loadTrades, refreshHoldings])
 
@@ -180,7 +226,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     assetClass?: InstrumentRef['assetClass'],
   ) => {
     await portfolioDeleteTrade(id)
-    await refreshHoldings()
+    await refreshHoldings({ force: true })
     return loadTrades(code, market, assetClass)
   }, [loadTrades, refreshHoldings])
 
@@ -216,23 +262,18 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
           symbol: code.trim(),
         })
       }
-      const keys = new Set<string>()
-      keys.add(portfolioHoldingsKey(code, market, assetClass as InstrumentRef['assetClass'] | undefined))
-      keys.add(code.trim())
       if (ref) {
         for (const alias of portfolioHoldingsStorageKeyAliases(ref)) {
-          keys.add(alias)
+          delete next[alias]
         }
-        keys.add(instrumentKey(ref))
-        keys.add(buildOpptrixInstrumentId(ref))
-        keys.add(portfolioHoldingsStorageKey(ref))
+        delete next[instrumentKey(ref)]
+        delete next[buildOpptrixInstrumentId(ref)]
       }
-      for (const k of keys) {
-        if (k) delete next[k]
-      }
+      delete next[portfolioHoldingsKey(code, market)]
+      delete next[code.trim()]
       return next
     })
-    await refreshHoldings()
+    await refreshHoldings({ force: true })
   }, [refreshHoldings])
 
   const isHolding = useCallback((code: string, market?: string) => {
@@ -254,6 +295,7 @@ export function useFollowPortfolio(options?: { enabled?: boolean }) {
     holdingsByCode,
     summary,
     loading,
+    refreshing,
     error,
     refreshHoldings,
     loadTrades,
