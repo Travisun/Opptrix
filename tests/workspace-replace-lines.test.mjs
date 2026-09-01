@@ -4,7 +4,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 
 test('applyLineEdits: single line replace', async () => {
@@ -83,22 +82,17 @@ test('WorkspaceService.replaceLines: atomic mismatch leaves file unchanged', asy
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-replace-lines-'))
   const sessionId = 'test-replace-lines'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    const file = path.join(tmp, 'demo.py')
-    await fs.writeFile(file, 'print(1)\nprint(2)\n', 'utf8')
-    const before = await fs.readFile(file, 'utf8')
-    const r = await ws.replaceLines(sessionId, grant.root_id, 'demo.py', [
-      { start_line: 1, new_text: 'print(9)', expect_text: 'nope' },
-    ])
-    assert.equal(r.ok, false)
-    assert.equal(await fs.readFile(file, 'utf8'), before)
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  const file = path.join(grant.abs_path, 'demo.py')
+  await fs.writeFile(file, 'print(1)\nprint(2)\n', 'utf8')
+  const before = await fs.readFile(file, 'utf8')
+  const r = await ws.replaceLines(sessionId, grant.root_id, 'demo.py', [
+    { start_line: 1, new_text: 'print(9)', expect_text: 'nope' },
+  ])
+  assert.equal(r.ok, false)
+  assert.equal(await fs.readFile(file, 'utf8'), before)
 })
 
 test('WorkspaceService.replaceLines: success + numbered read', async () => {
@@ -106,31 +100,26 @@ test('WorkspaceService.replaceLines: success + numbered read', async () => {
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-replace-lines-ok-'))
   const sessionId = 'test-replace-lines-ok'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await fs.writeFile(path.join(tmp, 'demo.py'), 'a\nb\nc\n', 'utf8')
-    const r = await ws.replaceLines(sessionId, grant.root_id, 'demo.py', [
-      { start_line: 2, new_text: 'B', expect_text: 'b' },
-    ])
-    assert.equal(r.ok, true)
-    assert.equal(r.applied, 1)
-    assert.match((await fs.readFile(path.join(tmp, 'demo.py'), 'utf8')), /^a\nB\nc\n$/)
-    assert.ok(r.numbered_snippets?.length)
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await fs.writeFile(path.join(grant.abs_path, 'demo.py'), 'a\nb\nc\n', 'utf8')
+  const r = await ws.replaceLines(sessionId, grant.root_id, 'demo.py', [
+    { start_line: 2, new_text: 'B', expect_text: 'b' },
+  ])
+  assert.equal(r.ok, true)
+  assert.equal(r.applied, 1)
+  assert.match((await fs.readFile(path.join(grant.abs_path, 'demo.py'), 'utf8')), /^a\nB\nc\n$/)
+  assert.ok(r.numbered_snippets?.length)
 
-    const numbered = await ws.readFile(sessionId, grant.root_id, 'demo.py', undefined, {
-      start_line: 1,
-      end_line: 2,
-      numbered: true,
-    })
-    assert.match(numbered.content, /^0001\|a\n0002\|B\n$/)
-    assert.equal(numbered.start_line, 1)
-    assert.equal(numbered.end_line, 2)
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const numbered = await ws.readFile(sessionId, grant.root_id, 'demo.py', undefined, {
+    start_line: 1,
+    end_line: 2,
+    numbered: true,
+  })
+  assert.match(numbered.content, /^0001\|a\n0002\|B\n$/)
+  assert.equal(numbered.start_line, 1)
+  assert.equal(numbered.end_line, 2)
 })
 
 test('WorkspaceService.replaceLines: missing file errors clearly', async () => {
@@ -139,16 +128,11 @@ test('WorkspaceService.replaceLines: missing file errors clearly', async () => {
   )
   const { WorkspaceError } = await import('../packages/agent-workspace/dist/errors.js')
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-replace-missing-'))
   const sessionId = 'test-replace-missing'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await assert.rejects(
-      () => ws.replaceLines(sessionId, grant.root_id, 'nope.py', [{ start_line: 1, new_text: 'x' }]),
-      (err) => err instanceof WorkspaceError && /不存在|workspace_write/.test(err.message),
-    )
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await assert.rejects(
+    () => ws.replaceLines(sessionId, grant.root_id, 'nope.py', [{ start_line: 1, new_text: 'x' }]),
+    (err) => err instanceof WorkspaceError && /不存在|workspace_write/.test(err.message),
+  )
 })

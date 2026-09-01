@@ -934,59 +934,73 @@ test('resolveBundledSandboxBinConfig is safe on host without runtime stage', asy
 
 test('opptrix_run ping requires single merged confirm then grants host', async () => {
   await withTmpDataDir(async () => {
-    const egress = new SessionNetworkEgressStore()
-    const svc = new WorkspaceService({ sessionNetworkEgress: egress })
-    const sessionId = 'ping-session-host'
-    await svc.ensureDefaultRoot(sessionId)
-    let confirmCalls = 0
+    const prevIso = process.env.OPPTRIX_SHELL_ISOLATION
+    process.env.OPPTRIX_SHELL_ISOLATION = 'srt'
     try {
-      await svc.shellRun({
-        sessionId,
-        rootId: 'default',
-        argv: ['ping', '-c', '1', 'baidu.com'],
-      }, async (payload) => {
-        confirmCalls++
-        assert.match(payload.prompt, /baidu\.com/)
-        assert.ok(payload.options.some(o => o.id === 'allow_host_session'))
-        assert.ok(!payload.options.some(o => o.id === 'allow_all_session'))
-        return { selected_ids: ['allow_host_session'] }
-      })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!/隔离|就绪|platform|sandbox/i.test(msg)) throw err
+      const egress = new SessionNetworkEgressStore()
+      const svc = new WorkspaceService({ sessionNetworkEgress: egress })
+      const sessionId = 'ping-session-host'
+      await svc.ensureDefaultRoot(sessionId)
+      let confirmCalls = 0
+      try {
+        await svc.shellRun({
+          sessionId,
+          rootId: 'default',
+          argv: ['ping', '-c', '1', 'baidu.com'],
+        }, async (payload) => {
+          confirmCalls++
+          assert.match(payload.prompt, /baidu\.com/)
+          assert.ok(payload.options.some(o => o.id === 'allow_host_session'))
+          assert.ok(!payload.options.some(o => o.id === 'allow_all_session'))
+          return { selected_ids: ['allow_host_session'] }
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!/隔离|就绪|platform|sandbox/i.test(msg)) throw err
+      }
+      assert.equal(confirmCalls, 1)
+      assert.equal(egress.hasHost(sessionId, 'baidu.com'), true)
+      const cfg = await buildSandboxConfigFromGrantPaths(
+        [{ abs_path: '/tmp/ws', mode: 'rw' }],
+        false,
+        ['baidu.com'],
+        egress.snapshot(sessionId),
+      )
+      assert.ok(cfg.network.allowedDomains.includes('baidu.com'))
+    } finally {
+      if (prevIso == null) delete process.env.OPPTRIX_SHELL_ISOLATION
+      else process.env.OPPTRIX_SHELL_ISOLATION = prevIso
     }
-    assert.equal(confirmCalls, 1)
-    assert.equal(egress.hasHost(sessionId, 'baidu.com'), true)
-    const cfg = await buildSandboxConfigFromGrantPaths(
-      [{ abs_path: '/tmp/ws', mode: 'rw' }],
-      false,
-      ['baidu.com'],
-      egress.snapshot(sessionId),
-    )
-    assert.ok(cfg.network.allowedDomains.includes('baidu.com'))
   })
 })
 
 test('opptrix_run merged ping confirm is single dialog on cancel', async () => {
   await withTmpDataDir(async () => {
-    const svc = new WorkspaceService()
-    const sessionId = 'ping-confirm'
-    await svc.ensureDefaultRoot(sessionId)
-    let confirmCalls = 0
-    await assert.rejects(
-      () => svc.shellRun({
-        sessionId,
-        rootId: 'default',
-        argv: ['ping', '-c', '1', 'baidu.com'],
-      }, async (payload) => {
-        confirmCalls++
-        assert.match(payload.prompt, /ping/)
-        assert.match(payload.prompt, /baidu\.com/)
-        return { selected_ids: ['cancel'] }
-      }),
-      /取消|外网/,
-    )
-    assert.equal(confirmCalls, 1)
+    const prevIso = process.env.OPPTRIX_SHELL_ISOLATION
+    process.env.OPPTRIX_SHELL_ISOLATION = 'srt'
+    try {
+      const svc = new WorkspaceService()
+      const sessionId = 'ping-confirm'
+      await svc.ensureDefaultRoot(sessionId)
+      let confirmCalls = 0
+      await assert.rejects(
+        () => svc.shellRun({
+          sessionId,
+          rootId: 'default',
+          argv: ['ping', '-c', '1', 'baidu.com'],
+        }, async (payload) => {
+          confirmCalls++
+          assert.match(payload.prompt, /ping/)
+          assert.match(payload.prompt, /baidu\.com/)
+          return { selected_ids: ['cancel'] }
+        }),
+        /取消|外网/,
+      )
+      assert.equal(confirmCalls, 1)
+    } finally {
+      if (prevIso == null) delete process.env.OPPTRIX_SHELL_ISOLATION
+      else process.env.OPPTRIX_SHELL_ISOLATION = prevIso
+    }
   })
 })
 

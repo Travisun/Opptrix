@@ -14,7 +14,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-env/
+# Root Python venv only — do not ignore packages/*/src/env (source modules)
+/env/
 
 # IDE
 .vscode/

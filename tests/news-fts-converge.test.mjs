@@ -94,7 +94,7 @@ describe('news FTS converge (single index)', { concurrency: false }, () => {
 
     const stubHub = { marketData: { searchStocks: () => [] } }
     const searchHub = new SearchHub(/** @type {any} */ (stubHub))
-    const unified = searchHub.search('UNIQUEAGENTNEWS772', 10)
+    const unified = await searchHub.search('UNIQUEAGENTNEWS772', 10)
     assert.ok(unified.news.some(n => n.id === article.id), 'SearchHub 须命中资讯 FTS')
 
     const svc = getDocLibraryService()

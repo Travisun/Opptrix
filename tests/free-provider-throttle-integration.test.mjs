@@ -44,7 +44,8 @@ async function bootEngine() {
   const configStore = getProviderConfigStore()
   for (const id of engine.registry.listDrivers()) {
     if (id === 'baostock') {
-      configStore.save(id, { enabled: true })
+      // 暂时下线源不在推荐栈，manifest 默认 sort 会得到负 priority，须 custom 才可路由
+      configStore.save(id, { enabled: true, priorityMode: 'custom', priority: 100 })
     } else {
       configStore.save(id, { enabled: false })
     }

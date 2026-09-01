@@ -91,7 +91,10 @@ describe('Engine batchRealtime sharding', () => {
     let scopedCalls = 0
     engine.qScoped = async (...args) => {
       scopedCalls += 1
-      const part = /** @type {string[]} */ (args[args.length - 1] ?? [])
+      const batchArg = args[args.length - 1]
+      const part = Array.isArray(batchArg?.[0])
+        ? /** @type {string[]} */ (batchArg[0])
+        : /** @type {string[]} */ (batchArg ?? [])
       if (scopedCalls === 2) return { success: false, error: 'us chunk fail' }
       return {
         success: true,
@@ -120,9 +123,22 @@ describe('Tickflow batchRealtime POST sharding (source + behavior)', () => {
 
   it('250 symbols → ≥3 postQuotes; one chunk throw still merges others', async () => {
     const prevKey = process.env.TICKFLOW_API_KEY
+    const prevDataDir = process.env.OPPTRIX_DATA_DIR
     process.env.TICKFLOW_API_KEY = 'test-shard-key'
+    const { mkdtemp, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const isolatedDir = await mkdtemp(join(tmpdir(), 'opptrix-tickflow-shard-'))
+    process.env.OPPTRIX_DATA_DIR = isolatedDir
     try {
-      // 清掉可能缓存的 free-tier 判定依赖（loadTickflowConfig 读 store / env）
+      const { getProviderConfigStore } = await import(
+        '../packages/a-stock-layer/dist/providers/config-store.js'
+      )
+      // store 中空 apiKey 会覆盖 env，须显式写入付费档 Key
+      getProviderConfigStore().save('tickflow', {
+        enabled: true,
+        extra: { apiKey: 'test-shard-key' },
+      })
       const { TickflowMarketHandler } = await import(
         '../packages/a-stock-layer/dist/providers/tickflow/markets/handler.js'
       )
@@ -150,8 +166,13 @@ describe('Tickflow batchRealtime POST sharding (source + behavior)', () => {
       assert.ok(postCalls >= 3, `expected ≥3 postQuotes, got ${postCalls}`)
       assert.ok(rows && rows.length >= 150, `expected ≥150 rows, got ${rows?.length}`)
     } finally {
+      const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+      getUserDataStore().close()
+      await rm(isolatedDir, { recursive: true, force: true })
       if (prevKey == null) delete process.env.TICKFLOW_API_KEY
       else process.env.TICKFLOW_API_KEY = prevKey
+      if (prevDataDir == null) delete process.env.OPPTRIX_DATA_DIR
+      else process.env.OPPTRIX_DATA_DIR = prevDataDir
     }
   })
 })

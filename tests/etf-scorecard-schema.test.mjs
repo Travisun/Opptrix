@@ -45,7 +45,8 @@ describe('etf scorecard schema + hub await', () => {
     assert.ok(!String(result.message).includes('no such column: amount'))
     if (result.success) {
       const data = /** @type {{ code?: string, source?: string }} */ (result.data)
-      assert.equal(data?.code, '510300')
+      // Hub 在线路径经 instrumentHubCode 返回 Opptrix ETF ID
+      assert.equal(data?.code, 'CN:ETF:510300.SH')
       assert.ok(data?.source === 'local' || data?.source === 'online')
     } else {
       assert.ok(result.message.length > 0)

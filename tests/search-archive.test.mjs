@@ -222,15 +222,15 @@ test('ensureIndexes pages session/news into FTS without holding full article arr
 
     assert.equal(store.getMetaFlag('search_index_v1'), true)
 
-    const result = hub.search('TOKENBYD', 10)
+    const result = await hub.search('TOKENBYD', 10)
     assert.ok(result.sessions.some(h => h.id === sess.id))
 
-    assert.ok(hub.search('TOKENNEWTITLE', 10).news.some(h => h.id === articleId))
-    assert.ok(hub.search('TOKENLFP', 10).news.some(h => h.id === articleId))
-    assert.ok(hub.search('TOKENSOLIDSTATE', 10).news.some(h => h.id === articleId))
+    assert.ok((await hub.search('TOKENNEWTITLE', 10)).news.some(h => h.id === articleId))
+    assert.ok((await hub.search('TOKENLFP', 10)).news.some(h => h.id === articleId))
+    assert.ok((await hub.search('TOKENSOLIDSTATE', 10)).news.some(h => h.id === articleId))
 
     hub.ensureIndexes()
-    assert.ok(hub.search('TOKENLFP', 5).news.some(h => h.id === articleId))
+    assert.ok((await hub.search('TOKENLFP', 5)).news.some(h => h.id === articleId))
 
     store.close()
   } finally {
@@ -296,12 +296,12 @@ test('search hydrates session meta by hit id without listAll', async () => {
     hub.ensureIndexes()
 
     listAllCalls = 0
-    const empty = hub.search('ZZZNOHITTOKENXYZ', 10)
+    const empty = await hub.search('ZZZNOHITTOKENXYZ', 10)
     assert.equal(empty.sessions.length, 0)
     assert.equal(listAllCalls, 0, 'FTS miss must not call listAll')
 
     listAllCalls = 0
-    const result = hub.search('METAKEYWORD', 20)
+    const result = await hub.search('METAKEYWORD', 20)
     assert.equal(listAllCalls, 0, 'search must not call listAll to hydrate meta')
 
     const activeHit = result.sessions.find(h => h.id === active.id)
@@ -381,7 +381,7 @@ test('after INDEX_FLAG, incremental session/news upsert+delete are searchable wi
     sessions.save(rec)
 
     assert.equal(store.getMetaFlag('search_index_v1'), true, 'incremental must not clear INDEX_FLAG')
-    assert.ok(hub.search('INCRSESSBODY', 10).sessions.some(h => h.id === sess.id))
+    assert.ok((await hub.search('INCRSESSBODY', 10)).sessions.some(h => h.id === sess.id))
 
     // 增量新增资讯（经 NewsFeedStore persist hook）
     const feed = new NewsFeedStore()
@@ -406,15 +406,15 @@ test('after INDEX_FLAG, incremental session/news upsert+delete are searchable wi
     }])
 
     assert.equal(store.getMetaFlag('search_index_v1'), true)
-    assert.ok(hub.search('INCRNEWSTITLE', 10).news.some(h => h.id === articleId))
-    assert.ok(hub.search('INCRNEWSBODY', 10).news.some(h => h.id === articleId))
+    assert.ok((await hub.search('INCRNEWSTITLE', 10)).news.some(h => h.id === articleId))
+    assert.ok((await hub.search('INCRNEWSBODY', 10)).news.some(h => h.id === articleId))
 
     // 删除后不再命中
     sessions.delete(sess.id)
-    assert.equal(hub.search('INCRSESSBODY', 10).sessions.some(h => h.id === sess.id), false)
+    assert.equal((await hub.search('INCRSESSBODY', 10)).sessions.some(h => h.id === sess.id), false)
 
     feed.deleteSubscription('sub-incr')
-    assert.equal(hub.search('INCRNEWSTITLE', 10).news.some(h => h.id === articleId), false)
+    assert.equal((await hub.search('INCRNEWSTITLE', 10)).news.some(h => h.id === articleId), false)
 
     // 全量 rebuild 路径仍可用（显式 rebuild，不清 INDEX_FLAG 语义）
     const sess2 = sessions.create('REBUILDTOKEN session')
@@ -428,7 +428,7 @@ test('after INDEX_FLAG, incremental session/news upsert+delete are searchable wi
     sessions.save(rec2)
     rebuildSessionSearchIndex()
     rebuildNewsSearchIndex()
-    assert.ok(hub.search('REBUILDTOKEN', 10).sessions.some(h => h.id === sess2.id))
+    assert.ok((await hub.search('REBUILDTOKEN', 10)).sessions.some(h => h.id === sess2.id))
     assert.equal(store.getMetaFlag('search_index_v1'), true)
 
     setSessionPersistHooks({})

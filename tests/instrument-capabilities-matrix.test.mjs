@@ -9,13 +9,15 @@ import {
 const ref = (market, assetClass, symbol = 'TEST') => ({ market, assetClass, symbol })
 
 test('INSTRUMENT_CAPABILITY_MATRIX — row count and key market+assetClass pairs', () => {
-  assert.equal(INSTRUMENT_CAPABILITY_MATRIX.length, 12)
+  assert.equal(INSTRUMENT_CAPABILITY_MATRIX.length, 14)
 
   const keys = INSTRUMENT_CAPABILITY_MATRIX.map(row => `${row.market}:${row.assetClass}`)
   for (const key of [
     'CN:EQUITY',
     'CN:INDEX',
     'CN:ETF',
+    'CN:LOF',
+    'CN:REIT',
     'CN:FUND',
     'US:EQUITY',
     'US:ETF',
