@@ -4,7 +4,7 @@ import {
   UI_CACHE_TTL_MS,
   UI_POLL_INTERVAL_MS,
   decideRevalidate,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 import { createVisibilityPoller, type VisibilityPoller } from '../../data/cacheControl'
 
 /** 数据结构变更时递增，使旧内存缓存失效 */

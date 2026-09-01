@@ -2,7 +2,7 @@ import {
   UI_CACHE_TTL_MS,
   decideRevalidate,
   resolveFetchedAtMs,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 import { readWatchlistQuotesSessionCache } from './rightPanelSessionCache'
 
 /** 跨组件（右栏关注 / 市场动态看板）共享的上次成功拉取时间，避免重复打 Hub */

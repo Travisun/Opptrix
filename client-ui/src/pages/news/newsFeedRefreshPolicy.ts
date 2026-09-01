@@ -3,7 +3,7 @@ import {
   clampNewsRefreshIntervalMin,
   newsFeedPollIntervalMs,
   newsFeedTtlMs,
-} from '@opptrix/shared'
+} from '@opptrix/shared/ui-cache-policy'
 
 let refreshIntervalMin: number = NEWS_FEED_REFRESH_INTERVAL_MIN.default
 let clientTtlMs = newsFeedTtlMs(refreshIntervalMin)
