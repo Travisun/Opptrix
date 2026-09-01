@@ -6,6 +6,13 @@ import MobileNavMenuButton from '../../components/MobileNavMenuButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars } from '../../theme/tokens'
+import { ghostInteractive } from '../../theme/mixins'
+import {
+  MOBILE_HEADER_ICON_SIZE,
+  mobileHeaderBar,
+  mobileHeaderIconBtn,
+  mobileHeaderTitle,
+} from '../../theme/mobileChrome'
 import {
   DESKTOP_CHROME_TOP_OFFSET,
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -38,10 +45,12 @@ const useStyles = makeStyles({
     padding: '0 12px',
   },
   rootWebMobile: {
+    ...mobileHeaderBar,
     height: 'auto',
-    minHeight: '44px',
-    padding: '6px 8px',
-    paddingTop: 'max(6px, env(safe-area-inset-top))',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    backgroundColor: opptrixCssVars.canvas,
+    position: 'relative',
+    zIndex: DESKTOP_Z_PANEL_TITLE,
   },
   titleTabs: {
     flexShrink: 0,
@@ -58,6 +67,12 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.2,
     whiteSpace: 'nowrap',
+  },
+  titleMobile: mobileHeaderTitle,
+  mobileActionBtn: {
+    ...ghostInteractive,
+    ...mobileHeaderIconBtn,
+    color: opptrixCssVars.textSecondary,
   },
   spacer: {
     flex: 1,
@@ -130,6 +145,15 @@ export default function MarketDynamicsHeader({
     >
       <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
     </ChromeToolButton>
+  ) : isMobile ? (
+    <OpptrixButton
+      className={s.mobileActionBtn}
+      variant="ghost"
+      icon={<ArrowSyncRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+      disabled={refreshing}
+      onClick={onRefresh}
+      aria-label={refreshing ? '正在刷新' : '刷新'}
+    />
   ) : (
     <OpptrixButton
       variant="secondary"
@@ -147,7 +171,7 @@ export default function MarketDynamicsHeader({
       className={mergeClasses(
         s.root,
         electronChrome && s.rootElectron,
-        !electronChrome && s.rootWeb,
+        !electronChrome && !isMobile && s.rootWeb,
         !electronChrome && isMobile && s.rootWebMobile,
         'opptrix-market-dynamics-title-bar',
       )}
@@ -160,13 +184,15 @@ export default function MarketDynamicsHeader({
         {!electronChrome && isMobile && onOpenSidebar ? (
           <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
         ) : null}
-        <Text className={s.title}>市场动态</Text>
+        <Text className={mergeClasses(s.title, isMobile && s.titleMobile)}>市场动态</Text>
       </div>
       <div
         className={mergeClasses(s.spacer, electronChrome && dragRegionClassName)}
         aria-hidden
       />
-      <Text className={mergeClasses(s.meta, 'opptrix-panel-title-no-drag')}>{statusLabel}</Text>
+      {!isMobile ? (
+        <Text className={mergeClasses(s.meta, 'opptrix-panel-title-no-drag')}>{statusLabel}</Text>
+      ) : null}
       <div className={mergeClasses(s.actions, 'opptrix-panel-title-no-drag')}>
         {refreshBtn}
       </div>

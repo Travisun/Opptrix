@@ -2,15 +2,14 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from './opptrix/OpptrixButton'
 import { PanelLeftContractRegular, PanelLeftExpandRegular } from '../chat/chatIcons'
 import { opptrixCssVars } from '../theme/tokens'
+import { MOBILE_HEADER_ICON_SIZE, mobileHeaderIconBtn } from '../theme/mobileChrome'
 import { ghostInteractive } from '../theme/mixins'
 
 const useStyles = makeStyles({
   btn: {
     ...ghostInteractive,
-    minWidth: '44px',
-    height: '44px',
+    ...mobileHeaderIconBtn,
     color: opptrixCssVars.textPrimary,
-    flexShrink: 0,
   },
 })
 
@@ -37,8 +36,8 @@ export default function MobileNavMenuButton({
       className={mergeClasses(s.btn, className)}
       variant="ghost"
       icon={open
-        ? <PanelLeftContractRegular fontSize={22} />
-        : <PanelLeftExpandRegular fontSize={22} />}
+        ? <PanelLeftContractRegular fontSize={MOBILE_HEADER_ICON_SIZE} />
+        : <PanelLeftExpandRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
       onClick={onClick}
       aria-label={label}
       aria-pressed={open}

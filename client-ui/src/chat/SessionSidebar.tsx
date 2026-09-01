@@ -2,11 +2,12 @@ import { useState, useRef, useCallback, memo, useEffect } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, GlobeRegular, CommentMultipleRegular, PeopleTeamRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, NewsRegular, ArchiveRegular, GlobeRegular, CommentMultipleRegular, PeopleTeamRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
+import { MOBILE_HEADER_BAR_HEIGHT, mobileHeaderBarInset } from '../theme/mobileChrome'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
 import ThinkingDots from '../components/ThinkingDots'
@@ -72,53 +73,30 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     height: '100%',
   },
-  /** Mobile push shell：宽 0↔drawer，挤开主列（非 fixed 遮罩） */
+  /** Mobile 滑轨内左栏：固定宽，由外层 track translate 露出（不挤主列） */
   drawerShell: {
     flexShrink: 0,
-    width: 0,
+    width: 'var(--opptrix-mobile-drawer-width, min(88vw, 272px))',
+    maxWidth: '300px',
     height: '100%',
     overflow: 'hidden',
-    pointerEvents: 'none',
-    transitionProperty: 'width',
-    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
-    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
     backgroundColor: opptrixCssVars.canvasAlt,
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '1ms',
-    },
+    boxSizing: 'border-box',
   },
-  drawerShellOpen: {
-    width: opptrixTokens.mobileDrawerWidth,
-    maxWidth: '300px',
+  drawerShellInteractive: {
     pointerEvents: 'auto',
   },
+  drawerShellInert: {
+    pointerEvents: 'none',
+  },
   sidebarDrawer: {
-    width: opptrixTokens.mobileDrawerWidth,
-    maxWidth: '300px',
+    width: '100%',
     height: '100%',
     boxSizing: 'border-box',
     paddingTop: 'env(safe-area-inset-top)',
     paddingBottom: 'env(safe-area-inset-bottom)',
     backgroundColor: opptrixCssVars.canvasAlt,
     borderRight: `1px solid ${opptrixCssVars.separator}`,
-    opacity: 0,
-    transform: 'translate3d(-12px, 0, 0)',
-    transitionProperty: 'opacity, transform',
-    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
-    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '1ms',
-    },
-  },
-  sidebarDrawerOpen: {
-    opacity: 1,
-    transform: 'translate3d(0, 0, 0)',
-  },
-  drawerHead: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    padding: '8px 8px 0',
   },
   brandRow: {
     display: 'flex',
@@ -130,6 +108,16 @@ const useStyles = makeStyles({
     padding: '4px 20px 0',
     overflow: 'hidden',
     lineHeight: 1,
+  },
+  /** 移动抽屉：与右栏 sheet header 同高，品牌文字垂直居中 */
+  brandRowDrawer: {
+    ...mobileHeaderBarInset,
+    /* 覆盖 inset 左右垫，保持与菜单图标左缘对齐 */
+    paddingLeft: '20px',
+    paddingRight: '20px',
+    height: `${MOBILE_HEADER_BAR_HEIGHT}px`,
+    minHeight: `${MOBILE_HEADER_BAR_HEIGHT}px`,
+    alignItems: 'center',
   },
   brandName: {
     flexShrink: 0,
@@ -229,12 +217,17 @@ const useStyles = makeStyles({
   itemTrailing: {
     position: 'relative',
     flexShrink: 0,
+    zIndex: 1,
     height: '18px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
     transitionProperty: 'min-width',
     transitionDuration: motion.fast,
+    /* 触控：归档+删除常显，预留宽度避免压住标题（穿透） */
+    '@media (hover: none)': {
+      minWidth: '44px',
+    },
   },
   itemSpinner: {
     display: 'inline-flex',
@@ -312,12 +305,6 @@ const useStyles = makeStyles({
     paddingTop: '5px',
     paddingBottom: '5px',
     borderRadius: opptrixTokens.radiusMd,
-  },
-  iconBtn: {
-    minWidth: '36px',
-    height: '36px',
-    borderRadius: opptrixTokens.radiusMd,
-    color: opptrixCssVars.textTertiary,
   },
 })
 
@@ -429,14 +416,11 @@ function SessionSidebar({
 
   const sidebarBody = (
     <>
-      {isDrawer && (
-        <div className={s.drawerHead}>
-          <OpptrixButton className={s.iconBtn} variant="ghost" icon={<DismissRegular />} onClick={onClose} aria-label="关闭" />
-        </div>
-      )}
-
       {showSidebarBrand ? (
-        <div className={s.brandRow} aria-label={brandAriaLabel}>
+        <div
+          className={mergeClasses(s.brandRow, isDrawer && s.brandRowDrawer)}
+          aria-label={brandAriaLabel}
+        >
           <span className={s.brandName} aria-hidden="true">Opptrix 工作台</span>
           {versionLabel ? (
             <span className={s.brandVersion} aria-hidden="true">{versionLabel}</span>
@@ -678,7 +662,6 @@ function SessionSidebar({
         isDrawer && s.sidebarDrawer,
         !isDrawer && s.sidebarPanel,
         !isDrawer && visible && s.sidebarPanelVisible,
-        isDrawer && drawerOpen && s.sidebarDrawerOpen,
         !electronChrome && !isDrawer && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
         sidebarSolidDark && s.sidebarElectronSolid,
@@ -695,7 +678,10 @@ function SessionSidebar({
   if (isDrawer) {
     return (
       <div
-        className={mergeClasses(s.drawerShell, drawerOpen && s.drawerShellOpen)}
+        className={mergeClasses(
+          s.drawerShell,
+          drawerOpen ? s.drawerShellInteractive : s.drawerShellInert,
+        )}
         aria-hidden={!drawerOpen}
       >
         {sidebarEl}

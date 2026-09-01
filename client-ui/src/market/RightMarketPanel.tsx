@@ -17,6 +17,15 @@ import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
+import {
+  MOBILE_HEADER_BAR_HEIGHT,
+  MOBILE_HEADER_HIT,
+  MOBILE_HEADER_ICON_SIZE,
+  MOBILE_HEADER_PAD_X,
+  mobileHeaderBarInset,
+  mobileHeaderIconBtn,
+} from '../theme/mobileChrome'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   DESKTOP_CHROME_TOP_OFFSET,
@@ -90,6 +99,17 @@ const useStyles = makeStyles({
     height: '40px',
     zIndex: 1,
   },
+  /** 移动全屏 sheet：与 MobileTopBar 同高/同触控（父级已垫 safe-area） */
+  titleBarMobile: {
+    ...mobileHeaderBarInset,
+    height: `${MOBILE_HEADER_BAR_HEIGHT}px`,
+    minHeight: `${MOBILE_HEADER_BAR_HEIGHT}px`,
+    zIndex: 1,
+    paddingRight: `${MOBILE_HEADER_PAD_X}px`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    backgroundColor: opptrixCssVars.canvas,
+    position: 'relative',
+  },
   /**
    * Match DesktopWindowChrome tool band: top inset + center within remaining
    * chromeBand so tabs / actions share the file-box vertical midline.
@@ -118,6 +138,10 @@ const useStyles = makeStyles({
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
     '&::-webkit-scrollbar': { display: 'none' },
+  },
+  tabsWrapMobile: {
+    height: `${MOBILE_HEADER_HIT}px`,
+    paddingLeft: '4px',
   },
   /** Text pill — same hit height as ChromeToolButton md (28×28), ghost / accentSoft. */
   tab: {
@@ -174,6 +198,15 @@ const useStyles = makeStyles({
     height: '28px',
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
+  },
+  titleBarActionsMobile: {
+    height: `${MOBILE_HEADER_HIT}px`,
+    gap: '2px',
+  },
+  mobileActionBtn: {
+    ...ghostInteractive,
+    ...mobileHeaderIconBtn,
+    color: opptrixCssVars.textSecondary,
   },
   content: {
     flex: 1,
@@ -426,13 +459,15 @@ function RightMarketPanel({
   )
 
   const showWorkspaceActions = Boolean(onToggleRightPanel || onToggleChatColumn)
+  const mobileChrome = panelFullWidth && !electronChrome
 
   return (
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
       <div
         className={mergeClasses(
           s.titleBar,
-          !electronChrome && s.titleBarWeb,
+          !electronChrome && !mobileChrome && s.titleBarWeb,
+          mobileChrome && s.titleBarMobile,
           electronChrome && s.titleBarElectron,
           electronChrome && s.titleBarElectronFill,
           electronChrome && 'opptrix-right-panel-title-bar',
@@ -447,7 +482,11 @@ function RightMarketPanel({
           />
         )}
         <div
-          className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}
+          className={mergeClasses(
+            s.tabsWrap,
+            mobileChrome && s.tabsWrapMobile,
+            'opptrix-panel-title-no-drag',
+          )}
           role="tablist"
           aria-label="行情面板"
         >
@@ -483,27 +522,55 @@ function RightMarketPanel({
         />
 
         {showWorkspaceActions && (
-          <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
+          <div
+            className={mergeClasses(
+              s.titleBarActions,
+              mobileChrome && s.titleBarActionsMobile,
+              'opptrix-panel-title-no-drag',
+            )}
+          >
             {onToggleChatColumn && (
-              <ChromeToolButton
-                label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
-                iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                onClick={onToggleChatColumn}
-              >
-                {chatColumnVisible
-                  ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                  : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
-              </ChromeToolButton>
+              mobileChrome ? (
+                <OpptrixButton
+                  className={s.mobileActionBtn}
+                  variant="ghost"
+                  icon={chatColumnVisible
+                    ? <ArrowMaximizeRegular fontSize={MOBILE_HEADER_ICON_SIZE} />
+                    : <ArrowMinimizeRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+                  onClick={onToggleChatColumn}
+                  aria-label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
+                />
+              ) : (
+                <ChromeToolButton
+                  label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
+                  iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                  onClick={onToggleChatColumn}
+                >
+                  {chatColumnVisible
+                    ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                    : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                </ChromeToolButton>
+              )
             )}
             {onToggleRightPanel && (
-              <ChromeToolButton
-                label="收起右侧面板"
-                iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                active
-                onClick={onToggleRightPanel}
-              >
-                <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-              </ChromeToolButton>
+              mobileChrome ? (
+                <OpptrixButton
+                  className={s.mobileActionBtn}
+                  variant="ghost"
+                  icon={<PanelRightContractRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+                  onClick={onToggleRightPanel}
+                  aria-label="收起右侧面板"
+                />
+              ) : (
+                <ChromeToolButton
+                  label="收起右侧面板"
+                  iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                  active
+                  onClick={onToggleRightPanel}
+                >
+                  <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                </ChromeToolButton>
+              )
             )}
           </div>
         )}

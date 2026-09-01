@@ -309,12 +309,16 @@ const useStyles = makeStyles({
   sessionTrailing: {
     position: 'relative',
     flexShrink: 0,
+    zIndex: 1,
     height: '18px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
     transitionProperty: 'min-width',
     transitionDuration: motion.fast,
+    '@media (hover: none)': {
+      minWidth: '22px',
+    },
   },
   sessionSpinner: {
     display: 'inline-flex',

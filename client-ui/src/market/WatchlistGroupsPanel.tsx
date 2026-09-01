@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import {
   Checkbox,
   Input,
@@ -65,7 +65,7 @@ const useStyles = makeStyles({
   },
   columnLeftDrawer: {
     flex: '0 0 auto',
-    maxHeight: '148px',
+    maxHeight: 'none',
   },
   columnRightDrawer: {
     flex: 1,
@@ -116,6 +116,13 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
+  },
+  /** 抽屉：分组列表最多约 3 行，超出纵滚 */
+  groupListDrawer: {
+    flex: '0 1 auto',
+    maxHeight: 'calc(32px * 3 + 4px * 2)',
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
   },
   groupRow: {
     display: 'flex',
@@ -539,6 +546,32 @@ export default function WatchlistGroupsPanel({
     await onSave(toPersistableDoc(nextDoc))
   }, [newTitle, onSave, selectGroup, toPersistableDoc])
 
+  /** 触屏：在 pointerDown 确认，避免 Input 失焦吞掉对勾点击 */
+  const confirmNewGroupPointer = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    void addGroup()
+  }, [addGroup])
+
+  const confirmEditPointer = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    void commitEdit()
+  }, [commitEdit])
+
+  const cancelCreatePointer = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCreating(false)
+    setNewTitle('')
+  }, [])
+
+  const cancelEditPointer = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    cancelEdit()
+  }, [cancelEdit])
+
   const moveGroup = useCallback(async (id: string, direction: 'up' | 'down') => {
     const prev = draftRef.current
     const sorted = sortGroups(prev.groups)
@@ -654,19 +687,28 @@ export default function WatchlistGroupsPanel({
                         value={newTitle}
                         onChange={(_, data) => setNewTitle(data.value)}
                         onKeyDown={e => {
+                          if (e.nativeEvent.isComposing || e.keyCode === 229) return
                           if (e.key === 'Enter') void addGroup()
                           if (e.key === 'Escape') { setCreating(false); setNewTitle('') }
                         }}
                         autoFocus
                       />
                       <div className={s.rowActions}>
-                        <button type="button" className={s.iconBtn} aria-label="创建分组" onClick={() => { void addGroup() }}>
+                        <button
+                          type="button"
+                          className={s.iconBtn}
+                          aria-label="创建分组"
+                          disabled={!newTitle.trim()}
+                          onPointerDown={confirmNewGroupPointer}
+                          onClick={() => { void addGroup() }}
+                        >
                           <CheckmarkRegular fontSize={14} />
                         </button>
                         <button
                           type="button"
                           className={s.iconBtn}
                           aria-label="取消"
+                          onPointerDown={cancelCreatePointer}
                           onClick={() => { setCreating(false); setNewTitle('') }}
                         >
                           <DismissRegular fontSize={14} />
@@ -679,7 +721,7 @@ export default function WatchlistGroupsPanel({
                       新建分组
                     </button>
                   )}
-                  <div className={mergeClasses(s.groupList, 'opptrix-scroll')}>
+                  <div className={mergeClasses(s.groupList, isDrawer && s.groupListDrawer, 'opptrix-scroll')}>
                     {sortedGroups.length === 0 && !creating && (
                       <Text className={s.emptyHint} block>
                         还没有自定义分组{'\n'}新建分组后，可把已有关注加入其中
@@ -719,16 +761,30 @@ export default function WatchlistGroupsPanel({
                               onClick={stopRowClick}
                               onKeyDown={e => {
                                 e.stopPropagation()
+                                if (e.nativeEvent.isComposing || e.keyCode === 229) return
                                 if (e.key === 'Enter') void commitEdit()
                                 if (e.key === 'Escape') cancelEdit()
                               }}
                               autoFocus
                             />
                             <div className={s.rowActions} onClick={stopRowClick}>
-                              <button type="button" className={s.iconBtn} aria-label="保存名称" onClick={() => { void commitEdit() }}>
+                              <button
+                                type="button"
+                                className={s.iconBtn}
+                                aria-label="保存名称"
+                                disabled={!editTitle.trim()}
+                                onPointerDown={confirmEditPointer}
+                                onClick={() => { void commitEdit() }}
+                              >
                                 <CheckmarkRegular fontSize={14} />
                               </button>
-                              <button type="button" className={s.iconBtn} aria-label="取消编辑" onClick={cancelEdit}>
+                              <button
+                                type="button"
+                                className={s.iconBtn}
+                                aria-label="取消编辑"
+                                onPointerDown={cancelEditPointer}
+                                onClick={cancelEdit}
+                              >
                                 <DismissRegular fontSize={14} />
                               </button>
                             </div>

@@ -18,6 +18,7 @@ import SidebarListEmpty from './SidebarListEmpty'
 import WatchlistGroupFilterBar from './WatchlistGroupFilterBar'
 import WatchlistGroupSummaryStrip from './WatchlistGroupSummaryStrip'
 import WatchlistGroupsDrawer from './WatchlistGroupsDrawer'
+import { useTouchAxisLockedScroll } from '../hooks/useTouchAxisLockedScroll'
 import { computeWatchlistGroupSummary } from './watchlistGroupCalc'
 import { filterWatchlistByGroup, useWatchlistGroups } from './WatchlistGroupsContext'
 import { research } from '../api/client'
@@ -277,6 +278,9 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflow: 'auto',
     padding: `10px ${CONTENT_PAD}`,
+    /* 双轴可滚；斜向由 useTouchAxisLockedScroll 主轴锁定 */
+    touchAction: 'none',
+    WebkitOverflowScrolling: 'touch',
   },
   listCentered: {
     display: 'flex',
@@ -324,14 +328,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     fontVariantNumeric: 'tabular-nums',
   },
-  headerEndPad: {
-    flexShrink: 0,
-    width: ROW_SCROLL_END_PAD,
-    minWidth: ROW_SCROLL_END_PAD,
-    height: '1px',
-  },
   row: {...ghostInteractive,
-
     display: 'grid',
     gridTemplateColumns: `${IDENTITY_WIDTH} minmax(${METRICS_MIN_WIDTH}, 1fr) ${ROW_SCROLL_END_PAD}`,
     gridTemplateRows: '48px',
@@ -348,6 +345,25 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     color: opptrixCssVars.textPrimary,
     cursor: 'pointer',
+    /* 触屏：无 sticky focus/hover 底；保留操作列 */
+    '@media (hover: none)': {
+      ':hover': {
+        backgroundColor: 'transparent',
+      },
+      ':active': {
+        backgroundColor: 'transparent',
+        opacity: 1,
+      },
+      ':focus': {
+        outline: 'none',
+        boxShadow: 'none',
+        backgroundColor: 'transparent',
+      },
+      ':focus-visible': {
+        outline: 'none',
+        boxShadow: 'none',
+      },
+    },
   },
   rowActive: {...sidebarItemSelected},
   rowIdentity: {
@@ -436,14 +452,18 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'flex-end',
     boxSizing: 'border-box',
+    backgroundColor: opptrixCssVars.canvas,
+    boxShadow: `-10px 0 12px -6px ${opptrixCssVars.canvas}`,
   },
-  rowMetricsWrap: {
-    gridColumn: '2',
-    gridRow: '1',
-    zIndex: 1,
-    minWidth: METRICS_MIN_WIDTH,
-    display: 'flex',
-    alignItems: 'center',
+  headerEndPad: {
+    flexShrink: 0,
+    width: ROW_SCROLL_END_PAD,
+    minWidth: ROW_SCROLL_END_PAD,
+    height: '1px',
+    position: 'sticky',
+    right: 0,
+    zIndex: 2,
+    backgroundColor: opptrixCssVars.canvas,
   },
   rowQuote: {
     display: 'flex',
@@ -453,9 +473,6 @@ const useStyles = makeStyles({
     width: '100%',
     transitionProperty: 'opacity',
     transitionDuration: motion.fast,
-    '@media (hover: none)': {
-      display: 'none',
-    },
   },
   rowActions: {
     display: 'inline-flex',
@@ -465,6 +482,7 @@ const useStyles = makeStyles({
     pointerEvents: 'none',
     transitionProperty: 'opacity',
     transitionDuration: motion.fast,
+    /* 触屏：常显编辑/删除，不依赖 hover/focus */
     '@media (hover: none)': {
       opacity: 1,
       pointerEvents: 'auto',
@@ -484,10 +502,40 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     lineHeight: 0,
     flexShrink: 0,
-    ':hover': {
-      backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: opptrixCssVars.textPrimary,
+    WebkitTapHighlightColor: 'transparent',
+    '@media (hover: hover)': {
+      ':hover': {
+        backgroundColor: 'rgba(29, 29, 31, 0.08)',
+        color: opptrixCssVars.textPrimary,
+      },
     },
+    '@media (hover: none)': {
+      ':hover': {
+        backgroundColor: 'transparent',
+        color: opptrixCssVars.textSecondary,
+      },
+      ':focus': {
+        outline: 'none',
+        boxShadow: 'none',
+        backgroundColor: 'transparent',
+      },
+      ':focus-visible': {
+        outline: 'none',
+        boxShadow: 'none',
+      },
+      ':active': {
+        opacity: 0.55,
+        backgroundColor: 'transparent',
+      },
+    },
+  },
+  rowMetricsWrap: {
+    gridColumn: '2',
+    gridRow: '1',
+    zIndex: 1,
+    minWidth: METRICS_MIN_WIDTH,
+    display: 'flex',
+    alignItems: 'center',
   },
   empty: {
     padding: `12px ${CONTENT_PAD}`,
@@ -586,6 +634,8 @@ export default function WatchlistTab({
   onPatchItem,
 }: Props) {
   const s = useStyles()
+  const listRef = useRef<HTMLDivElement>(null)
+  useTouchAxisLockedScroll(listRef)
   const {
     groups,
     membership,
@@ -1121,6 +1171,7 @@ export default function WatchlistTab({
       )}
 
       <div
+        ref={listRef}
         className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !filteredItems.length && s.listCentered)}
       >
         {!filteredItems.length && !items.length && (
@@ -1231,11 +1282,15 @@ export default function WatchlistTab({
                   role="button"
                   tabIndex={0}
                   title={rowTooltip}
-                  onClick={() => onSelect(item)}
+                  onClick={e => {
+                    onSelect(item)
+                    if (e.currentTarget instanceof HTMLElement) e.currentTarget.blur()
+                  }}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
                       onSelect(item)
+                      if (e.currentTarget instanceof HTMLElement) e.currentTarget.blur()
                     }
                   }}
                 >
@@ -1378,7 +1433,7 @@ export default function WatchlistTab({
                     </div>
                   </div>
                   <div
-                    className={s.rowTrailing}
+                    className={mergeClasses(s.rowTrailing, 'opptrix-follow-trailing')}
                     onPointerDown={stopRowActionPointer}
                     onMouseDown={stopRowActionPointer}
                     onClick={stopRowActionPointer}
@@ -1388,8 +1443,12 @@ export default function WatchlistTab({
                         <button
                           type="button"
                           className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
-                          aria-label={`修改 ${displayName}`}
-                          onClick={() => onManage(item)}
+                          aria-label={`编辑持仓 ${displayName}`}
+                          onClick={e => {
+                            e.stopPropagation()
+                            onManage(item)
+                            e.currentTarget.blur()
+                          }}
                         >
                           <EditRegular fontSize={14} />
                         </button>
@@ -1398,7 +1457,11 @@ export default function WatchlistTab({
                         type="button"
                         className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
                         aria-label={`删除 ${displayName}`}
-                        onClick={() => onRemove(item)}
+                        onClick={e => {
+                          e.stopPropagation()
+                          onRemove(item)
+                          e.currentTarget.blur()
+                        }}
                       >
                         <DeleteRegular fontSize={14} />
                       </button>

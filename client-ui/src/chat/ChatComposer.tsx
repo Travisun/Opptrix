@@ -104,8 +104,8 @@ const useStyles = makeStyles({
     gap: '8px',
   },
   startersMobile: {
-    flexWrap: 'nowrap',
-    overflowX: 'auto',
+    flexWrap: 'wrap',
+    overflowX: 'hidden',
   },
   /** 专家快捷：贴在 composer 输入区顶部；与「接下来」分区（无标题，省纵向空间） */
   expertStarterBar: {
@@ -120,11 +120,11 @@ const useStyles = makeStyles({
   },
   expertStarterTrack: {
     display: 'flex',
-    flexWrap: 'nowrap',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: '8px',
     width: '100%',
-    overflowX: 'auto',
+    overflowX: 'hidden',
     overflowY: 'hidden',
   },
   starterChip: {
@@ -463,7 +463,7 @@ const useStyles = makeStyles({
     paddingBottom: opptrixTokens.chatComposerBottomInset,
   },
   composerFooterMobile: {
-    paddingBottom: `max(${opptrixTokens.chatComposerBottomInset}, env(safe-area-inset-bottom))`,
+    paddingBottom: `max(${opptrixTokens.chatComposerBottomInsetMobile}, env(safe-area-inset-bottom))`,
   },
   /** 底栏 AI 提示：相对 composer 水平居中（用量改到工具栏模型左侧） */
   disclaimerRow: {
@@ -479,6 +479,11 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     userSelect: 'none',
     minHeight: '22px',
+  },
+  disclaimerRowMobile: {
+    margin: '0',
+    padding: '2px 10px 0',
+    minHeight: '18px',
   },
   disclaimer: {
     flexShrink: 0,
@@ -1052,7 +1057,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
           )}
         >
           <Text className={s.startersLabel}>你可以这样问</Text>
-          <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
+          <div className={mergeClasses(s.starters, isMobile && s.startersMobile)}>
             {starters.map((st, index) => (
               <OpptrixButton
                 key={listRowKey(index, st.label, st.text)}
@@ -1278,7 +1283,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
             isMobile && s.composerFooterMobile,
           )}
         >
-          <div className={s.disclaimerRow}>
+          <div className={mergeClasses(s.disclaimerRow, isMobile && s.disclaimerRowMobile)}>
             <span className={s.disclaimer}>
               内容由AI生成，不构成投资建议，请核实重要信息
             </span>

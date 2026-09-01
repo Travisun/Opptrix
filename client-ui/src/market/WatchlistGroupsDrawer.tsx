@@ -5,7 +5,7 @@ import type { WatchlistGroupsDocument, WatchlistItem } from '../types/market'
 import WatchlistGroupsPanel from './WatchlistGroupsPanel'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, nativeIconInteractive } from '../theme/mixins'
-import { MARKET_PANEL_DRAWER_CLOSE_MS, MARKET_PANEL_DRAWER_MAX_WIDTH } from './marketPanelDrawer'
+import { MARKET_PANEL_DRAWER_CLOSE_MS, MARKET_PANEL_DRAWER_MAX_HEIGHT, MARKET_PANEL_DRAWER_MAX_WIDTH } from './marketPanelDrawer'
 
 const DRAWER_CLOSE_MS = MARKET_PANEL_DRAWER_CLOSE_MS
 
@@ -48,7 +48,7 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
-    maxHeight: 'min(88%, 560px)',
+    maxHeight: MARKET_PANEL_DRAWER_MAX_HEIGHT,
     borderRadius: `${opptrixTokens.radiusXl} ${opptrixTokens.radiusXl} 0 0`,
     borderTop: '1px solid rgba(255, 255, 255, 0.55)',
     backgroundColor: 'rgba(255, 255, 255, 0.88)',

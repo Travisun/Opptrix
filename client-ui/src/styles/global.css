@@ -2684,6 +2684,16 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
     opacity: 1;
     pointer-events: auto;
   }
+
+  .opptrix-follow-item:hover .opptrix-follow-trailing {
+    background-color: var(--opptrix-surface-hover);
+    box-shadow: -10px 0 12px -6px var(--opptrix-surface-hover);
+  }
+}
+
+.opptrix-follow-item-active .opptrix-follow-trailing {
+  background-color: var(--opptrix-accent-soft);
+  box-shadow: -10px 0 12px -6px var(--opptrix-accent-soft);
 }
 
 @keyframes opptrix-hover-marquee-scroll {
@@ -2698,6 +2708,69 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
 }
 
 @media (hover: none) {
+  /* 关注列表：常显编辑/删除；禁止 sticky focus / hover 底影响操作 */
+  .opptrix-follow-item,
+  .opptrix-follow-item:hover,
+  .opptrix-follow-item:focus,
+  .opptrix-follow-item:focus-visible,
+  .opptrix-follow-item:focus-within,
+  .opptrix-follow-item:active {
+    background-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .opptrix-follow-item.opptrix-follow-item-active,
+  .opptrix-follow-item.opptrix-follow-item-active:hover,
+  .opptrix-follow-item.opptrix-follow-item-active:focus-within {
+    background-color: var(--opptrix-accent-soft) !important;
+  }
+
+  .opptrix-follow-item:hover .opptrix-follow-quote,
+  .opptrix-follow-item:focus-within .opptrix-follow-quote {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .opptrix-follow-item .opptrix-follow-actions,
+  .opptrix-follow-item:hover .opptrix-follow-actions,
+  .opptrix-follow-item:focus-within .opptrix-follow-actions {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: inline-flex !important;
+  }
+
+  .opptrix-follow-item .opptrix-follow-trailing,
+  .opptrix-follow-item:hover .opptrix-follow-trailing,
+  .opptrix-follow-item:focus-within .opptrix-follow-trailing {
+    background-color: var(--opptrix-canvas) !important;
+    box-shadow: -10px 0 12px -6px var(--opptrix-canvas) !important;
+  }
+
+  .opptrix-follow-item.opptrix-follow-item-active .opptrix-follow-trailing,
+  .opptrix-follow-item.opptrix-follow-item-active:hover .opptrix-follow-trailing,
+  .opptrix-follow-item.opptrix-follow-item-active:focus-within .opptrix-follow-trailing {
+    background-color: var(--opptrix-accent-soft) !important;
+    box-shadow: -10px 0 12px -6px var(--opptrix-accent-soft) !important;
+  }
+
+  .opptrix-follow-item .opptrix-focusable:focus,
+  .opptrix-follow-item .opptrix-focusable:focus-visible,
+  .opptrix-follow-item.opptrix-focusable:focus,
+  .opptrix-follow-item.opptrix-focusable:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .opptrix-session-item .opptrix-session-trailing {
+    min-width: 44px;
+  }
+
+  .opptrix-archive-session-item .opptrix-archive-session-trailing {
+    min-width: 22px;
+  }
+
   .opptrix-archive-folder-head .opptrix-archive-folder-count {
     display: none;
   }

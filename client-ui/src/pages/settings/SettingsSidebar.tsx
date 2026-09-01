@@ -302,7 +302,7 @@ export default function SettingsSidebar({
 
   const body = (
     <>
-      {onBack && <SettingsBackRow onClick={onBack} />}
+      {onBack && <SettingsBackRow onClick={onBack} mobile={isMobile} />}
 
       {!isMobile && (
         <div className={mergeClasses(s.searchWrap, isOverlay && s.searchWrapOverlay)}>
