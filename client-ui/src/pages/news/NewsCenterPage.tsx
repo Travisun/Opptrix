@@ -18,6 +18,7 @@ import {
 } from '../../desktop/constants'
 import NewsFeedSidebar from './NewsFeedSidebar'
 import NewsArticleDetail from './NewsArticleDetail'
+import NewsArticleDrawer from './NewsArticleDrawer'
 import NewsReaderEmpty from './NewsReaderEmpty'
 import { useNewsFeed } from './useNewsFeed'
 import type { FeedArticle } from '../../types/schemas'
@@ -32,6 +33,7 @@ const useStyles = makeStyles({
     height: '100%',
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
+    position: 'relative',
   },
   /** Electron: let app-main tint show through (sidebar/detail keep own surfaces). */
   rootElectron: {
@@ -89,6 +91,14 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     overflow: 'hidden',
   },
+  listFull: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
   detail: {
     flex: 1,
     minWidth: 0,
@@ -130,6 +140,7 @@ function NewsCenterContent({
   const feed = useNewsFeed()
   const {
     articles,
+    filteredArticles,
     grouped,
     groups,
     subscriptions,
@@ -140,8 +151,10 @@ function NewsCenterContent({
     selectedId,
     selected,
     hasMore,
+    filteredHasMore,
     listCapReached,
     total,
+    filteredTotal,
     view,
     setSelectedId,
     setView,
@@ -263,11 +276,13 @@ function NewsCenterContent({
       {webHead}
 
       <div className={s.body}>
-        <div className={s.sidebar}>
+        <div className={isMobile ? s.listFull : s.sidebar}>
           <NewsFeedSidebar
+            fullWidth={isMobile}
             view={view}
             onViewChange={setView}
             articles={articles}
+            filteredArticles={filteredArticles}
             grouped={grouped}
             groups={groups}
             subscriptions={subscriptions}
@@ -284,29 +299,43 @@ function NewsCenterContent({
             loading={loading}
             loadingMore={loadingMore}
             hasMore={hasMore}
+            filteredHasMore={filteredHasMore}
             listCapReached={listCapReached}
             total={total}
+            filteredTotal={filteredTotal}
             hasAnyArticles={hasAnyArticles}
             hasSubscriptions={subscriptions.length > 0}
             onLoadMore={() => { void loadMore() }}
             error={error}
           />
         </div>
-        <div className={s.detail}>
-          {loading && !selected ? (
-            <div className={s.detailLoading}>
-              <Spinner size="medium" label="正在加载资讯…" />
-            </div>
-          ) : selected ? (
-            <NewsArticleDetail article={selected} onDiscussArticle={onDiscussArticle} />
-          ) : (
-            <NewsReaderEmpty
-              hasArticles={hasAnyArticles}
-              hasSubscriptions={subscriptions.length > 0}
-            />
-          )}
-        </div>
+        {!isMobile ? (
+          <div className={s.detail}>
+            {loading && !selected ? (
+              <div className={s.detailLoading}>
+                <Spinner size="medium" label="正在加载资讯…" />
+              </div>
+            ) : selected ? (
+              <NewsArticleDetail article={selected} onDiscussArticle={onDiscussArticle} />
+            ) : (
+              <NewsReaderEmpty
+                hasArticles={hasAnyArticles}
+                hasSubscriptions={subscriptions.length > 0}
+              />
+            )}
+          </div>
+        ) : null}
       </div>
+
+      {isMobile && selectedId ? (
+        <NewsArticleDrawer
+          open={Boolean(selectedId)}
+          article={selected}
+          loading={loading && !selected}
+          onClose={() => setSelectedId(null)}
+          onDiscussArticle={onDiscussArticle}
+        />
+      ) : null}
     </div>
   )
 }

@@ -211,10 +211,7 @@ export function getArticlesGrouped(): {
   const subs = store.listSubscriptions()
   const groups = store.listGroups()
 
-  const bySub = new Map<string, FeedArticle[]>()
-  for (const sub of subs) {
-    bySub.set(sub.id, store.listArticlesBySubscription(sub.id, MAX_ARTICLES_PER_FETCH))
-  }
+  const bySub = store.listArticlesBucketedBySubscription(MAX_ARTICLES_PER_FETCH)
 
   const by_source = subs.map(sub => ({
     subscription_id: sub.id,

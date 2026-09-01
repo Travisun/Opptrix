@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { NewsGroupedFeed } from '../../types/schemas'
 import type { NewsListView } from './useNewsFeed'
@@ -15,6 +14,9 @@ const useStyles = makeStyles({
     height: '100%',
     backgroundColor: opptrixCssVars.canvas,
     borderRight: `1px solid ${opptrixCssVars.separatorStrong}`,
+  },
+  rootFullWidth: {
+    borderRight: 'none',
   },
   chrome: {
     flexShrink: 0,
@@ -68,12 +70,11 @@ const useStyles = makeStyles({
   },
 })
 
-type Section = { key: string; label: string; articles: FeedArticle[] }
-
 type Props = {
   view: NewsListView
   onViewChange: (view: NewsListView) => void
   articles: FeedArticle[]
+  filteredArticles: FeedArticle[]
   grouped: NewsGroupedFeed | null
   groups: FeedGroup[]
   subscriptions: FeedSubscription[]
@@ -90,39 +91,22 @@ type Props = {
   loading: boolean
   loadingMore: boolean
   hasMore: boolean
+  filteredHasMore: boolean
   listCapReached?: boolean
   total: number
+  filteredTotal: number
   hasAnyArticles: boolean
   hasSubscriptions: boolean
   onLoadMore: () => void
   error?: string
-}
-
-function buildGroupSections(
-  grouped: NewsGroupedFeed,
-  groupFilterId: string,
-): Section[] {
-  if (groupFilterId === '__ungrouped__') {
-    return grouped.ungrouped.length
-      ? [{ key: '__ungrouped__', label: '未分组', articles: grouped.ungrouped }]
-      : []
-  }
-  const g = grouped.groups.find(x => x.id === groupFilterId)
-  return g ? [{ key: g.id, label: g.title, articles: g.articles }] : []
-}
-
-function buildSourceSections(
-  grouped: NewsGroupedFeed,
-  sourceFilterId: string,
-): Section[] {
-  const s = grouped.by_source.find(x => x.subscription_id === sourceFilterId)
-  return s ? [{ key: s.subscription_id, label: s.title, articles: s.articles }] : []
+  fullWidth?: boolean
 }
 
 export default function NewsFeedSidebar({
   view,
   onViewChange,
   articles,
+  filteredArticles,
   grouped,
   groups,
   subscriptions,
@@ -139,35 +123,25 @@ export default function NewsFeedSidebar({
   loading,
   loadingMore,
   hasMore,
+  filteredHasMore,
   listCapReached = false,
   total,
+  filteredTotal,
   hasAnyArticles,
   hasSubscriptions,
   onLoadMore,
   error = '',
+  fullWidth = false,
 }: Props) {
   const s = useStyles()
 
-  const sections = useMemo(() => {
-    if (!grouped || view === 'timeline') return undefined
-    if (view === 'group') {
-      if (!groupFilterId) return []
-      return buildGroupSections(grouped, groupFilterId)
-    }
-    if (!sourceFilterId) return []
-    return buildSourceSections(grouped, sourceFilterId)
-  }, [grouped, view, groupFilterId, sourceFilterId])
-
-  const visibleCount = useMemo(() => {
-    if (view === 'timeline') return articles.length
-    if (!sections) return 0
-    return sections.reduce((sum, sec) => sum + sec.articles.length, 0)
-  }, [view, articles.length, sections])
-
-  const displayTotal = view === 'timeline' ? total : visibleCount
+  const listArticles = view === 'timeline' ? articles : filteredArticles
+  const listHasMore = view === 'timeline' ? hasMore : filteredHasMore
+  const displayTotal = view === 'timeline' ? total : filteredTotal
+  const visibleCount = listArticles.length
 
   return (
-    <div className={mergeClasses(s.root, 'opptrix-news-sidebar')}>
+    <div className={mergeClasses(s.root, fullWidth && s.rootFullWidth, 'opptrix-news-sidebar')}>
       <div className={s.chrome}>
         <div className={s.tabs}>
           <TabList
@@ -186,6 +160,7 @@ export default function NewsFeedSidebar({
           view={view}
           groups={groups}
           subscriptions={subscriptions}
+          grouped={grouped}
           timelineDate={timelineDate}
           groupFilterId={groupFilterId}
           sourceFilterId={sourceFilterId}
@@ -209,16 +184,15 @@ export default function NewsFeedSidebar({
           </div>
         ) : (
           <NewsArticleList
-            sections={sections}
-            articles={view === 'timeline' ? articles : undefined}
+            articles={listArticles}
             selectedId={selectedId}
             onSelect={onSelect}
             compact
             listPulseEpoch={listPulseEpoch}
             loadingMore={loadingMore || listSyncing}
-            hasMore={view === 'timeline' ? hasMore : false}
+            hasMore={listHasMore}
             listCapReached={view === 'timeline' ? listCapReached : false}
-            onLoadMore={view === 'timeline' ? onLoadMore : undefined}
+            onLoadMore={onLoadMore}
             hasAnyArticles={hasAnyArticles}
             hasSubscriptions={hasSubscriptions}
           />

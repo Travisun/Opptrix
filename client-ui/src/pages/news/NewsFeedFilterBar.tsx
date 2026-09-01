@@ -1,12 +1,21 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Text, makeStyles } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
 import TradeDateField from '../../market/TradeDateField'
-import type { FeedGroup, FeedSubscription } from '../../types/schemas'
+import type { FeedGroup, FeedSubscription, NewsGroupedFeed } from '../../types/schemas'
 import type { NewsListView } from './useNewsFeed'
-import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import { opptrixCssVars } from '../../theme/tokens'
+import {
+  buildGroupFilterOptions,
+  buildSourceFilterOptions,
+} from './newsFeedFilters'
+
+const FILTER_LISTBOX_STYLE = {
+  minWidth: 'min(240px, 88vw)',
+  maxWidth: 'min(360px, 92vw)',
+} as const
 
 const useStyles = makeStyles({
   bar: {
@@ -28,7 +37,7 @@ const useStyles = makeStyles({
   },
   filterField: {
     flex: 1,
-    minWidth: 0,
+    minWidth: '120px',
   },
   meta: {
     flexShrink: 0,
@@ -44,12 +53,20 @@ const useStyles = makeStyles({
   clearBtn: {
     flexShrink: 0,
   },
+  filterHint: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.35,
+  },
 })
 
 type Props = {
   view: NewsListView
   groups: FeedGroup[]
   subscriptions: FeedSubscription[]
+  grouped: NewsGroupedFeed | null
   timelineDate: string | null
   groupFilterId: string | null
   sourceFilterId: string | null
@@ -75,6 +92,7 @@ export default function NewsFeedFilterBar({
   view,
   groups,
   subscriptions,
+  grouped,
   timelineDate,
   groupFilterId,
   sourceFilterId,
@@ -87,6 +105,15 @@ export default function NewsFeedFilterBar({
 }: Props) {
   const s = useStyles()
   const [dateDraft, setDateDraft] = useState(timelineDate ?? '')
+
+  const groupOptions = useMemo(
+    () => buildGroupFilterOptions(groups, grouped),
+    [groups, grouped],
+  )
+  const sourceOptions = useMemo(
+    () => buildSourceFilterOptions(subscriptions, grouped),
+    [subscriptions, grouped],
+  )
 
   useEffect(() => {
     setDateDraft(timelineDate ?? '')
@@ -139,38 +166,47 @@ export default function NewsFeedFilterBar({
               )}
             </>
           )}
-          {view === 'group' && groupFilterId && (
-            <OpptrixSelect
-              className={s.filterField}
-              size="small"
-              selectedOptions={[groupFilterId]}
-              positioning={{ autoSize: 'width' }}
-              onOptionSelect={(_, d) => {
-                const v = d.optionValue
-                if (v) onGroupFilterChange(v)
-              }}
-            >
-              {groups.map(g => (
-                <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
-              ))}
-              <OpptrixOption value="__ungrouped__">未分组</OpptrixOption>
-            </OpptrixSelect>
+          {view === 'group' && (
+            groupOptions.length > 0 && groupFilterId ? (
+              <OpptrixSelect
+                className={s.filterField}
+                size="small"
+                selectedOptions={[groupFilterId]}
+                positioning={{ position: 'below', align: 'start' }}
+                listbox={{ style: FILTER_LISTBOX_STYLE }}
+                onOptionSelect={(_, d) => {
+                  const v = d.optionValue
+                  if (v) onGroupFilterChange(v)
+                }}
+              >
+                {groupOptions.map(option => (
+                  <OpptrixOption key={option.id} value={option.id}>{option.title}</OpptrixOption>
+                ))}
+              </OpptrixSelect>
+            ) : (
+              <Text className={s.filterHint} block>暂无可用分组</Text>
+            )
           )}
-          {view === 'source' && sourceFilterId && (
-            <OpptrixSelect
-              className={s.filterField}
-              size="small"
-              selectedOptions={[sourceFilterId]}
-              positioning={{ autoSize: 'width' }}
-              onOptionSelect={(_, d) => {
-                const v = d.optionValue
-                if (v) onSourceFilterChange(v)
-              }}
-            >
-              {subscriptions.map(sub => (
-                <OpptrixOption key={sub.id} value={sub.id}>{sub.title}</OpptrixOption>
-              ))}
-            </OpptrixSelect>
+          {view === 'source' && (
+            sourceOptions.length > 0 && sourceFilterId ? (
+              <OpptrixSelect
+                className={s.filterField}
+                size="small"
+                selectedOptions={[sourceFilterId]}
+                positioning={{ position: 'below', align: 'start' }}
+                listbox={{ style: FILTER_LISTBOX_STYLE }}
+                onOptionSelect={(_, d) => {
+                  const v = d.optionValue
+                  if (v) onSourceFilterChange(v)
+                }}
+              >
+                {sourceOptions.map(option => (
+                  <OpptrixOption key={option.id} value={option.id}>{option.title}</OpptrixOption>
+                ))}
+              </OpptrixSelect>
+            ) : (
+              <Text className={s.filterHint} block>暂无可用来源</Text>
+            )
           )}
         </div>
         <Text className={s.meta} block title={metaText}>{metaText}</Text>

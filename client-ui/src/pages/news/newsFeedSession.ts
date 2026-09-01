@@ -10,6 +10,11 @@ import {
   NEWS_ARTICLES_MEMORY_CAP,
 } from './articlesMemoryCap'
 import { dedupeArticlesByTitle } from './newsUtils'
+import {
+  buildGroupedFeedFallback,
+  resolveGroupFilterId as resolveGroupFilter,
+  resolveSourceFilterId as resolveSourceFilter,
+} from './newsFeedFilters'
 
 export type NewsListView = 'timeline' | 'group' | 'source'
 
@@ -20,6 +25,11 @@ export { NEWS_ARTICLES_MEMORY_CAP }
 export type NewsFeedSnapshot = {
   articles: FeedArticle[]
   grouped: NewsGroupedFeed | null
+  /** 分组 / 来源视图：经 /news/feed 分页筛选，不依赖 grouped 大包 */
+  filteredArticles: FeedArticle[]
+  filteredCursor: string | null
+  filteredHasMore: boolean
+  filteredTotal: number
   subscriptions: FeedSubscription[]
   groups: FeedGroup[]
   refreshedAt: string | null
@@ -50,6 +60,10 @@ function emptySnapshot(): NewsFeedSnapshot {
   return {
     articles: [],
     grouped: null,
+    filteredArticles: [],
+    filteredCursor: null,
+    filteredHasMore: false,
+    filteredTotal: 0,
     subscriptions: [],
     groups: [],
     refreshedAt: null,
@@ -96,14 +110,13 @@ export function subscribeNewsFeed(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-function findSelected(
-  selectedId: string | null,
-  articles: FeedArticle[],
-  grouped: NewsGroupedFeed | null,
-): FeedArticle | null {
+function findSelected(selectedId: string | null): FeedArticle | null {
   if (!selectedId) return null
-  const fromTimeline = articles.find(a => a.id === selectedId)
+  const fromTimeline = snapshot.articles.find(a => a.id === selectedId)
   if (fromTimeline) return fromTimeline
+  const fromFiltered = snapshot.filteredArticles.find(a => a.id === selectedId)
+  if (fromFiltered) return fromFiltered
+  const grouped = snapshot.grouped
   if (!grouped) return null
   return grouped.groups.flatMap(g => g.articles).find(a => a.id === selectedId)
     ?? grouped.ungrouped.find(a => a.id === selectedId)
@@ -112,59 +125,16 @@ function findSelected(
 }
 
 export function getSelectedArticle(): FeedArticle | null {
-  return findSelected(snapshot.selectedId, snapshot.articles, snapshot.grouped)
-}
-
-function defaultGroupFilterId(
-  groups: FeedGroup[],
-  grouped: NewsGroupedFeed | null,
-): string | null {
-  if (groups.length > 0) return groups[0].id
-  if ((grouped?.ungrouped.length ?? 0) > 0) return '__ungrouped__'
-  return null
-}
-
-function defaultSourceFilterId(
-  subscriptions: FeedSubscription[],
-  grouped: NewsGroupedFeed | null,
-): string | null {
-  if (grouped?.by_source.length) return grouped.by_source[0].subscription_id
-  const sub = subscriptions.find(s => s.enabled) ?? subscriptions[0]
-  return sub?.id ?? null
-}
-
-function resolveGroupFilterId(
-  groups: FeedGroup[],
-  grouped: NewsGroupedFeed | null,
-  current: string | null,
-): string | null {
-  const fallback = defaultGroupFilterId(groups, grouped)
-  if (!current) return fallback
-  if (current === '__ungrouped__') {
-    return (grouped?.ungrouped.length ?? 0) > 0 ? current : fallback
-  }
-  return groups.some(g => g.id === current) ? current : fallback
-}
-
-function resolveSourceFilterId(
-  subscriptions: FeedSubscription[],
-  grouped: NewsGroupedFeed | null,
-  current: string | null,
-): string | null {
-  const fallback = defaultSourceFilterId(subscriptions, grouped)
-  if (!current) return fallback
-  if (grouped?.by_source.some(s => s.subscription_id === current)) return current
-  if (subscriptions.some(s => s.id === current)) return current
-  return fallback
+  return findSelected(snapshot.selectedId)
 }
 
 function normalizeListFilters() {
-  const groupFilterId = resolveGroupFilterId(
+  const groupFilterId = resolveGroupFilter(
     snapshot.groups,
     snapshot.grouped,
     snapshot.groupFilterId,
   )
-  const sourceFilterId = resolveSourceFilterId(
+  const sourceFilterId = resolveSourceFilter(
     snapshot.subscriptions,
     snapshot.grouped,
     snapshot.sourceFilterId,
@@ -175,7 +145,7 @@ function normalizeListFilters() {
 }
 
 function articleVisibleInCurrentView(articleId: string): boolean {
-  const { view, articles, grouped, timelineDate, groupFilterId, sourceFilterId } = snapshot
+  const { view, articles, filteredArticles, timelineDate } = snapshot
   if (view === 'timeline') {
     const hit = articles.some(a => a.id === articleId)
     if (!hit) return false
@@ -185,16 +155,7 @@ function articleVisibleInCurrentView(articleId: string): boolean {
     const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     return ymd === timelineDate
   }
-  if (!grouped) return false
-  if (view === 'group') {
-    if (groupFilterId === '__ungrouped__') {
-      return grouped.ungrouped.some(a => a.id === articleId)
-    }
-    const sec = grouped.groups.find(g => g.id === groupFilterId)
-    return sec?.articles.some(a => a.id === articleId) ?? false
-  }
-  const sec = grouped.by_source.find(s => s.subscription_id === sourceFilterId)
-  return sec?.articles.some(a => a.id === articleId) ?? false
+  return filteredArticles.some(a => a.id === articleId)
 }
 
 function pruneSelection() {
@@ -211,9 +172,97 @@ async function loadMeta() {
   })
 }
 
+function groupedHasContent(grouped: NewsGroupedFeed | null): grouped is NewsGroupedFeed {
+  if (!grouped) return false
+  return grouped.by_source.length > 0
+    || grouped.groups.length > 0
+    || grouped.ungrouped.length > 0
+}
+
 async function loadGrouped() {
-  const grouped = await news.getGroupedFeed()
-  patch({ grouped })
+  try {
+    const grouped = await news.getGroupedFeed()
+    patch({ grouped })
+    normalizeListFilters()
+    return
+  } catch {
+    if (groupedHasContent(snapshot.grouped)) return
+    const fallback = buildGroupedFeedFallback(
+      snapshot.articles,
+      snapshot.subscriptions,
+      snapshot.groups,
+    )
+    if (groupedHasContent(fallback)) {
+      patch({ grouped: fallback })
+      normalizeListFilters()
+    }
+  }
+}
+
+async function loadFilteredPage(append: boolean) {
+  const { view, groupFilterId, sourceFilterId } = snapshot
+  const query: {
+    limit: number
+    cursor: string | null
+    group_id?: string | null
+    subscription_id?: string | null
+  } = {
+    limit: NEWS_PAGE_SIZE,
+    cursor: append ? snapshot.filteredCursor : null,
+  }
+  if (view === 'group') {
+    if (!groupFilterId) return
+    query.group_id = groupFilterId
+  } else if (view === 'source') {
+    if (!sourceFilterId) return
+    query.subscription_id = sourceFilterId
+  } else {
+    return
+  }
+
+  const resp = await news.getFeed(query)
+  const merged = append ? [...snapshot.filteredArticles, ...resp.articles] : resp.articles
+  patch({
+    filteredArticles: merged,
+    filteredCursor: resp.next_cursor,
+    filteredHasMore: resp.has_more,
+    filteredTotal: resp.total,
+    refreshedAt: resp.refreshed_at ?? snapshot.refreshedAt,
+  })
+  pruneSelection()
+}
+
+async function loadFilteredView() {
+  const { view, groupFilterId, sourceFilterId } = snapshot
+  if (view === 'group' && !groupFilterId) return
+  if (view === 'source' && !sourceFilterId) return
+  patch({
+    listSyncing: true,
+    error: '',
+    filteredCursor: null,
+    filteredArticles: [],
+    filteredHasMore: false,
+    filteredTotal: 0,
+  })
+  try {
+    await loadFilteredPage(false)
+  } catch (e) {
+    patch({ error: e instanceof Error ? e.message : '加载筛选列表失败' })
+  } finally {
+    patch({ listSyncing: false })
+  }
+}
+
+async function syncFeedLists() {
+  await loadTimelinePage(false)
+  void loadGrouped()
+}
+
+async function syncCurrentViewLists() {
+  await syncFeedLists()
+  if (snapshot.view === 'group' || snapshot.view === 'source') {
+    await loadFilteredView()
+  }
 }
 
 async function loadTimelinePage(append: boolean) {
@@ -245,10 +294,7 @@ async function softSync() {
   softSyncPromise = (async () => {
     try {
       await loadMeta()
-      await Promise.all([
-        loadTimelinePage(false),
-        loadGrouped(),
-      ])
+      await syncCurrentViewLists()
       normalizeListFilters()
       patch({ hydrated: true, error: '' })
     } catch (e) {
@@ -270,10 +316,7 @@ async function bootstrap() {
   bootstrapPromise = (async () => {
     try {
       await loadMeta()
-      await Promise.all([
-        loadTimelinePage(false),
-        loadGrouped(),
-      ])
+      await syncFeedLists()
       normalizeListFilters()
       patch({ hydrated: true, error: '' })
     } catch (e) {
@@ -305,6 +348,9 @@ export function setNewsFeedView(next: NewsListView) {
   patch({ view: next })
   normalizeListFilters()
   pruneSelection()
+  if (next === 'group' || next === 'source') {
+    void loadFilteredView()
+  }
 }
 
 export function setNewsFeedSelectedId(id: string | null) {
@@ -327,22 +373,41 @@ export async function setNewsFeedTimelineDate(date: string | null) {
 export function setNewsFeedGroupFilter(groupId: string) {
   patch({ groupFilterId: groupId })
   pruneSelection()
+  if (snapshot.view === 'group') void loadFilteredView()
 }
 
 export function setNewsFeedSourceFilter(subscriptionId: string) {
   patch({ sourceFilterId: subscriptionId })
   pruneSelection()
+  if (snapshot.view === 'source') void loadFilteredView()
 }
 
 export async function loadMoreNewsFeed() {
-  if (snapshot.view !== 'timeline' || snapshot.loadingMore || !snapshot.hasMore || snapshot.listSyncing) return
-  if (snapshot.listCapReached || snapshot.articles.length >= NEWS_ARTICLES_MEMORY_CAP) {
-    patch({ hasMore: false, listCapReached: true })
+  if (snapshot.loadingMore || snapshot.listSyncing) return
+
+  if (snapshot.view === 'timeline') {
+    if (!snapshot.hasMore) return
+    if (snapshot.listCapReached || snapshot.articles.length >= NEWS_ARTICLES_MEMORY_CAP) {
+      patch({ hasMore: false, listCapReached: true })
+      return
+    }
+    patch({ loadingMore: true, error: '' })
+    try {
+      await loadTimelinePage(true)
+    } catch (e) {
+      patch({ error: e instanceof Error ? e.message : '加载更多失败' })
+    } finally {
+      patch({ loadingMore: false })
+    }
     return
   }
+
+  if (snapshot.view !== 'group' && snapshot.view !== 'source') return
+  if (!snapshot.filteredHasMore) return
+
   patch({ loadingMore: true, error: '' })
   try {
-    await loadTimelinePage(true)
+    await loadFilteredPage(true)
   } catch (e) {
     patch({ error: e instanceof Error ? e.message : '加载更多失败' })
   } finally {
@@ -356,10 +421,7 @@ export async function refreshNewsFeed(): Promise<NewsFeedRefreshResult> {
   try {
     patch({ cursor: null })
     await loadMeta()
-    await Promise.all([
-      loadTimelinePage(false),
-      loadGrouped(),
-    ])
+    await syncCurrentViewLists()
     normalizeListFilters()
     patch({ hydrated: true, listPulseEpoch: snapshot.listPulseEpoch + 1 })
     pruneSelection()
@@ -375,6 +437,6 @@ export async function refreshNewsFeed(): Promise<NewsFeedRefreshResult> {
 
 /** 设置页变更订阅后，由外部触发重新同步 */
 export async function reloadNewsFeed() {
-  patch({ cursor: null })
+  patch({ cursor: null, filteredCursor: null })
   await softSync()
 }
