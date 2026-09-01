@@ -20,6 +20,9 @@ import {
   appendRelativePathNudge,
   WORKSPACE_TEXT_ENCODING_HINT,
   WorkspaceTextEncodingError,
+  DOCKER_PERSISTENCE_NOTE,
+  isDockerEnv,
+  resolveAgentSandboxMode,
   type ConfirmHandler,
   type WorkspaceGrant,
   type ShellSecretRef,
@@ -389,7 +392,8 @@ function summarizeWorkspaceGrants(grants: WorkspaceGrant[]): Record<string, unkn
     grants: grants.map(formatGrantForAgent),
     note:
       '使用 root_id + 相对 path/cwd 调用 workspace_glob/read/write、opptrix_run；禁止把 abs_path 当工具路径；'
-      + '成功后勿反复 list 同一授权集；公共包/dump 用 shared；需要更多目录请 request_folder_access 或请用户在界面授权',
+      + '成功后勿反复 list 同一授权集；公共包/dump 用 shared；需要更多目录请 request_folder_access 或请用户在界面授权'
+      + (isDockerEnv() ? `；${DOCKER_PERSISTENCE_NOTE}` : ''),
   }
 }
 
@@ -938,15 +942,21 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         }
       }
       // 主路径仅暴露 opptrix_run；shell_run / opptrix_install / request_shell_network 不再进入聊天 tools
+      const agentSandboxOff = resolveAgentSandboxMode() === 'off'
+      const opptrixRunDescription = agentSandboxOff
+        ? '在 Docker 容器内以系统权限运行命令（shell/node/npm/python 可用；默认无 Agent 沙箱围栏）。'
+          + 'cwd=cwdRel（相对 root）；重要产物须写入 /data、/models、/system 或 /data/mounts/*（仅此持久化）。'
+          + '短命令直接调用；长命令传 background=true 立即返回 job_id。'
+          + '硬禁：勿用 cat/head/tail/sed/awk/echo>/heredoc 读或改文件内容（改用 workspace_*）；找搜优先 workspace_glob/grep。测网站延迟优先 http_fetch'
+        : '在隔离环境中运行任意命令（command 字符串；仅限已授权文件夹；会话级隔离复用）。'
+          + 'HOME=grant 根、cwd=cwdRel；路径相对 cwd/grant，禁宿主绝对路径与用 ~/ 当相对 cwd。'
+          + '包源默认已放行；其它域名运行时确认或看 suggested_escalate。短命令直接调用；长命令传 background=true 立即返回 job_id。'
+          + '硬禁：勿用 cat/head/tail/sed/awk/echo>/heredoc 读或改文件内容（改用 workspace_*）；找搜优先 workspace_glob/grep。测网站延迟优先 http_fetch'
       return [
         {
           name: 'opptrix_run',
           category: '工作区',
-          description:
-            '在隔离环境中运行任意命令（command 字符串；仅限已授权文件夹；会话级隔离复用）。'
-            + 'HOME=grant 根、cwd=cwdRel；路径相对 cwd/grant，禁宿主绝对路径与用 ~/ 当相对 cwd。'
-            + '包源默认已放行；其它域名运行时确认或看 suggested_escalate。短命令直接调用；长命令传 background=true 立即返回 job_id。'
-            + '硬禁：勿用 cat/head/tail/sed/awk/echo>/heredoc 读或改文件内容（改用 workspace_*）；找搜优先 workspace_glob/grep。测网站延迟优先 http_fetch',
+          description: opptrixRunDescription,
           parameters: opptrixRunParams,
           handler: opptrixRunHandler,
         },

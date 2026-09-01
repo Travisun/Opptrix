@@ -30,9 +30,27 @@
   "model": "deepseek-chat",
   "scorecard": "综合评估",
   "tools": 19,
-  "factors": 40
+  "factors": 40,
+  "core_models_required": true,
+  "core_models_ready": false
 }
 ```
+
+- `core_models_required` / `core_models_ready`：Docker 自托管且需卷内核心模型时出现；桌面安装包通常无 `core_models_required` 或恒为 `ready`。引导流程据此决定是否展示「本地能力」步骤。
+
+### 核心本地模型（Docker 自托管引导）
+
+镜像不含 E5 / OCR / 语音 / 离线翻译权重；首次使用请在产品引导中下载或离线导入至 `/models`（`OPPTRIX_MODELS_DIR`）。下载通道偏好键：`core_model_source_order`（user-store）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/system/core-models/status` | `{ required, items[{ id, label, ready, pathHint }], allReady, sourceOrder, mirrors, featureRequired, job? }` |
+| PUT | `/api/system/core-models/source-order` | Body `{ order: string[] }`（`modelscope` / `hf-mirror` / `huggingface`）；账户已创建时需登录 |
+| POST | `/api/system/core-models/ensure` | 后台下载缺失组件；返回 `{ job, status }`；轮询 GET status 或 GET ensure |
+| GET | `/api/system/core-models/ensure` | `{ job, status }` |
+| POST | `/api/system/core-models/import` | multipart：`modelId`（内部 id）+ `file`（可多个）；GGUF 校验 magic；写入规范路径；失败 **400** `import_invalid` |
+
+内部 id → 卷内布局：`core.e5-multilingual-small` → `llms/multilingual-e5-small/`；`core.rapidocr-ppocrv4-mobile` → `llms/rapidocr-ppocrv4-mobile/`；`core.sensevoice-small-q8` → `sensevoice/*.gguf`；`core.hy-mt-q4` → `llms/HY-MT1.5-1.8B-Q4_K_M.gguf`。
 
 - `channel` / `releaseTag`：仅当环境变量 `OPPTRIX_RELEASE_CHANNEL` / `OPPTRIX_RELEASE_TAG` 有值时出现（Docker 自托管由 Compose 注入；桌面包通常无此二字段）。
 
@@ -109,6 +127,59 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 | POST | `/api/auth/step-up` | `{ code }` — 敏感操作提权，约 8 分钟 |
 
 `GET /api/health` 与 `GET /api/legal/*` 无需登录。已创建账户或非本机访问时，health 只返回 `status` 与 `version`。
+
+## 系统更新（自托管热更新）
+
+面向 Docker / 裸 Node 自托管。桌面端默认关闭（`OPPTRIX_DESKTOP=1`）；可用 `OPPTRIX_UPDATE_ENABLED=1` 强制开启，`=0` 强制关闭。
+
+静默检查并下载新版本后，若当前运行环境可安装，则 `GET /api/system-update/status` 的 `readyToApply` 为 `true`；用户确认后 `POST .../apply` 写入待应用状态并在短延迟后以退出码 **42** 退出，由外部监督进程切换版本。激活后首次启动进入 `first_boot_hooks`（退出码 **43**）；回退为 **44**。
+
+若新版本的 `opptrix-runtime.json` 要求更高运行环境（Node / 平台 / `requiresBaseRefresh`），状态会带：
+
+| 字段 | 说明 |
+|------|------|
+| `needsBaseRefresh` | `true` 时不可热应用 |
+| `baseRefreshHint` | 面向用户的中文说明（引导在服务器执行命令） |
+| `cliCommand` | 如 `opptrix update`，供 UI 等宽展示或复制 |
+
+此时 `readyToApply` 为 `false`，`availableVersion` / `pendingVersion` 仍会展示已下载的包；`POST .../apply` 返回 **409** `{ code: "needs_base_refresh", error, cliCommand }`，**不会**以 42 退出。请在服务器执行 `opptrix update` 升级底座（数据与系统卷保留）。底座身份见 `OPPTRIX_BASE_VERSION`（可由 `OPPTRIX_RELEASE_TAG` 回退）。
+
+若某版本在首启迁移/钩子中失败：服务会还原主库快照、回退到上一槽位、将该版本写入 `blockedVersions`，并以退出码 **44** 软重启。此后：
+
+| 字段 | 说明 |
+|------|------|
+| `updateBlocked` | 当前 `pendingVersion` 落在封锁列表时为 `true`（不可再点「立即更新」） |
+| `blockedVersions` | 已失败、不再自动重试的版本列表 |
+| `lastBlockedReason` | 最近一次封锁原因（面向用户文案） |
+
+`readyToApply` 为 `false`。检查更新时若 CDN `latest` **仍等于**封锁版本则跳过；仅当 `latest` **严格新于**封锁版本时才下载该 latest（中间失败版可跳过）。成功完成某版本首启后会清除 `≤` 该版本的封锁项。
+
+主库快照范围：`opptrix.db` 及其 SQLite WAL/SHM 旁路文件（不含 models）。细节见 [`SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)。
+
+当 `uiPhase` 为 `wizard_apply` 或 `first_boot_hooks` 时，除白名单外的 `/api/*` 返回 `503` `{ code: "system_update_locked" }`。白名单：`/api/health`、`/api/auth/status`、`/api/system-update/*`；`wizard_apply` 额外允许登录接口。静态 UI（非 `/api`）不受影响。
+
+### 环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `OPPTRIX_UPDATE_CHANNEL` | 通道，默认 `selfhost` |
+| `OPPTRIX_UPDATE_CDN_BASE` | 热更新 CDN 根，默认 `https://update.opptrix.org` |
+| `OPPTRIX_UPDATE_ENABLED` | `1` 强制开 / `0` 强制关 |
+| `OPPTRIX_SYSTEM_DIR` | 系统槽位根目录（见 `@opptrix/system-update`） |
+| `OPPTRIX_BASE_VERSION` | Docker/自托管底座身份（如 `opptrix-selfhost-v1.4.0`）；热更新对照 `requires.minBaseImage` |
+| `OPPTRIX_RELEASE_TAG` | 发版标签；未设 `OPPTRIX_BASE_VERSION` 时可作为底座回退 |
+
+检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（固定返回 latest）；包 `{base}/hot/packages/opptrix-runtime-vX.Y.Z.bin` + 同名 `.sha256`。打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
+
+### 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/system-update/status` | `{ enabled, currentVersion, availableVersion, readyToApply, needsBaseRefresh, baseRefreshHint, cliCommand, updateBlocked, blockedVersions, lastBlockedReason, uiPhase, download, firstBoot, error, … }` |
+| POST | `/api/system-update/check` | 立即检查；发现可用新版本（非封锁）则后台静默下载 latest |
+| POST | `/api/system-update/apply` | 确认应用（账户已创建时需登录）；成功则返回后进程退出 42；若需底座升级则 **409** `needs_base_refresh`；封锁版本不可应用 |
+| POST | `/api/system-update/rollback` | 回退到上一槽位（需登录）；返回后进程退出 44 |
+| POST | `/api/system-update/import` | 离线导入 CDN 格式更新包（multipart：`package` + `sha256`；需登录当账户已创建）；成功返回 `{ ok, version, status }`；校验失败 **400**（`bad_digest` / `invalid_archive` / `missing_sha`）；封锁版本 **409** `version_blocked` |
 
 ## Hub Features
 

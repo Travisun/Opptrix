@@ -1,6 +1,7 @@
 /**
  * Shell 隔离模式：Docker-first 默认走 workspace（grant + Deny + env/策略），
  * 不初始化 SRT。`OPPTRIX_SHELL_ISOLATION=srt` 为测试/遗留逃生舱。
+ * Agent 沙箱开关见 `OPPTRIX_AGENT_SANDBOX`（Docker 默认 off = 系统级）。
  */
 
 export type OpptrixShellIsolationMode = 'workspace' | 'srt'

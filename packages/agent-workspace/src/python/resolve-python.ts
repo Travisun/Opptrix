@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { resolvePythonRuntimeRoot } from '@opptrix/shared'
+import { isDockerEnv } from '../env/docker-env.js'
 import { getPythonSettings } from '../python-settings-store.js'
 import {
   bundledPythonCandidatePaths,
@@ -293,11 +294,18 @@ function buildStatusMessage(
   ready: boolean,
   activeSource: PythonActiveSource,
   bundledAvailable: boolean,
+  docker: boolean,
 ): string {
   if (!ready) {
+    if (docker) {
+      return 'Docker 镜像未检测到系统 Python。请在 Dockerfile 中安装 python3 后重建镜像。'
+    }
     return bundledAvailable
       ? '正在准备随应用提供的 Python…若仍不可用，可在设置中重新安装托管版本。'
       : '尚未检测到可用的 Python。可在设置中安装托管版本，或先在系统中安装 Python。'
+  }
+  if (activeSource === 'system' && docker) {
+    return '已使用容器内系统 Python（Docker 自托管），可直接运行脚本与安装依赖。'
   }
   if (activeSource === 'opptrix') {
     return bundledAvailable
@@ -314,17 +322,20 @@ function buildStatusMessage(
  */
 export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   getPythonSettings()
-  await seedBundledPythonIfNeeded()
+  const docker = isDockerEnv()
+  if (!docker) {
+    await seedBundledPythonIfNeeded()
+  }
 
   const [explicit, system, opptrix, bundled] = await Promise.all([
     probeExplicitPython(),
     probeSystemPython(),
-    probeOpptrixPython(),
-    probeBundledPython(),
+    docker ? Promise.resolve(null) : probeOpptrixPython(),
+    docker ? Promise.resolve(null) : probeBundledPython(),
   ])
 
-  const bundled_available = bundled != null
-  const opptrixEffective = opptrix ?? bundled
+  const bundled_available = docker ? false : bundled != null
+  const opptrixEffective = docker ? null : (opptrix ?? bundled)
 
   let active_source: PythonActiveSource = 'none'
   let active_path: string | null = null
@@ -334,6 +345,12 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
     active_source = classifyExplicitSource(explicit.path)
     active_path = explicit.path
     active_version = explicit.version
+  } else if (docker) {
+    if (system) {
+      active_source = 'system'
+      active_path = system.path
+      active_version = system.version
+    }
   } else if (opptrix) {
     active_source = 'opptrix'
     active_path = opptrix.path
@@ -349,7 +366,7 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   }
 
   const ready = active_path != null
-  const recommend_install = !ready
+  const recommend_install = docker ? false : !ready
 
   return {
     system_path: system?.path ?? null,
@@ -362,7 +379,7 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
     ready,
     recommend_install,
     bundled_available,
-    message: buildStatusMessage(ready, active_source, bundled_available),
+    message: buildStatusMessage(ready, active_source, bundled_available, docker),
   }
 }
 

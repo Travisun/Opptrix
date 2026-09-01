@@ -1551,6 +1551,8 @@ export async function getHealth() {
     model: string | null
     available_models?: number
     scorecard: string
+    core_models_required?: boolean
+    core_models_ready?: boolean
   }>
 }
 
@@ -3678,4 +3680,264 @@ export const parseEnginesSettings = {
       { method: 'POST' },
       LOCAL_HEAVY_TIMEOUT,
     ),
+}
+
+// ─── System update (Web / self-host; not Electron updater) ───
+
+export type SystemUpdatePhase =
+  | 'normal'
+  | 'wizard_apply'
+  | 'first_boot_hooks'
+  | 'failed'
+
+export type SystemUpdateDownloadDto = {
+  status: string
+  bytesReceived: number
+  bytesTotal: number | null
+  version: string | null
+  error: string | null
+}
+
+export type SystemUpdateFirstBootDto = {
+  version: string
+  phase: string
+  /** 0–100 */
+  progress: number
+  error: string | null
+}
+
+/** Matches `GET /api/system-update/status` (server SystemUpdateStatusDto). */
+export type SystemUpdateStatus = {
+  enabled: boolean
+  currentVersion: string | null
+  availableVersion: string | null
+  pendingVersion?: string | null
+  backupVersion?: string | null
+  uiPhase: SystemUpdatePhase
+  readyToApply: boolean
+  /** Pending package needs a newer host base — run `opptrix update` on the server. */
+  needsBaseRefresh?: boolean
+  baseRefreshHint?: string | null
+  cliCommand?: string | null
+  download?: SystemUpdateDownloadDto | null
+  firstBoot?: SystemUpdateFirstBootDto | null
+  error?: string | null
+  channel?: string
+  blockedVersions?: string[]
+  updateBlocked?: boolean
+  lastBlockedReason?: string | null
+}
+
+export type SystemUpdateApplyResult = {
+  ok: boolean
+  message?: string
+  exitCode?: number
+  toVersion?: string
+  status?: SystemUpdateStatus
+}
+
+/** Disabled / unavailable — used when Electron or endpoint missing. */
+export const SYSTEM_UPDATE_DISABLED: SystemUpdateStatus = {
+  enabled: false,
+  currentVersion: null,
+  availableVersion: null,
+  pendingVersion: null,
+  backupVersion: null,
+  uiPhase: 'normal',
+  readyToApply: false,
+  needsBaseRefresh: false,
+  baseRefreshHint: null,
+  cliCommand: null,
+  download: null,
+  firstBoot: null,
+  error: null,
+  blockedVersions: [],
+  updateBlocked: false,
+  lastBlockedReason: null,
+}
+
+export async function getSystemUpdateStatus(): Promise<SystemUpdateStatus> {
+  return jsonFetch<SystemUpdateStatus>('/system-update/status')
+}
+
+export async function checkSystemUpdate(): Promise<SystemUpdateStatus> {
+  return jsonFetch<SystemUpdateStatus>('/system-update/check', { method: 'POST' })
+}
+
+export async function applySystemUpdate(): Promise<SystemUpdateApplyResult> {
+  return jsonFetch<SystemUpdateApplyResult>(
+    '/system-update/apply',
+    { method: 'POST' },
+    30_000,
+  )
+}
+
+export type SystemUpdateImportResult = {
+  ok: boolean
+  version?: string
+  status?: SystemUpdateStatus
+}
+
+export async function importSystemUpdatePackage(
+  packageFile: File,
+  sha256File: File,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<SystemUpdateImportResult> {
+  const form = new FormData()
+  form.append('package', packageFile, packageFile.name)
+  form.append('sha256', sha256File, sha256File.name)
+
+  const timeoutMs = Math.min(
+    600_000,
+    Math.max(LOCAL_HEAVY_TIMEOUT, packageFile.size + sha256File.size > 20 * 1024 * 1024
+      ? LOCAL_HEAVY_TIMEOUT + 60_000
+      : LOCAL_HEAVY_TIMEOUT),
+  )
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const headers = new Headers()
+    if (isElectron()) headers.set('X-Opptrix-Client', 'desktop')
+
+    const resp = await fetch(`${API_BASE}/system-update/import`, {
+      method: 'POST',
+      body: form,
+      credentials: 'include',
+      headers,
+      signal: controller.signal,
+    })
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({})) as { error?: string; code?: string }
+      if (err.code === 'auth_required') emitAuthRequired()
+      throw new ApiHttpError(
+        err.error || `API error: ${resp.status}`,
+        resp.status,
+        err.code,
+      )
+    }
+
+    onProgress?.(packageFile.size + sha256File.size, packageFile.size + sha256File.size)
+    return resp.json() as Promise<SystemUpdateImportResult>
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function rollbackSystemUpdate(): Promise<SystemUpdateApplyResult> {
+  return jsonFetch<SystemUpdateApplyResult>(
+    '/system-update/rollback',
+    { method: 'POST' },
+    30_000,
+  )
+}
+
+export function systemUpdateDownloadPercent(status: SystemUpdateStatus): number | undefined {
+  const d = status.download
+  if (!d) return undefined
+  if (d.status === 'done') return 100
+  if (d.bytesTotal == null || d.bytesTotal <= 0) {
+    return d.bytesReceived > 0 ? undefined : 0
+  }
+  return Math.min(100, Math.round((d.bytesReceived / d.bytesTotal) * 100))
+}
+
+export function systemUpdateApplyProgress(status: SystemUpdateStatus): {
+  percent?: number
+  message?: string
+} {
+  if (status.uiPhase === 'first_boot_hooks' && status.firstBoot) {
+    return {
+      percent: status.firstBoot.progress,
+      message: status.firstBoot.error ?? undefined,
+    }
+  }
+  if (status.uiPhase === 'wizard_apply') {
+    return { message: '正在准备新版本…' }
+  }
+  const percent = systemUpdateDownloadPercent(status)
+  if (percent == null && !status.download) return {}
+  return {
+    percent,
+    message: status.download?.error ?? undefined,
+  }
+}
+
+export type CoreModelMirror = { id: string; label: string }
+
+export type CoreModelStatusItem = {
+  id: string
+  label: string
+  ready: boolean
+  pathHint: string
+}
+
+export type CoreModelsEnsureJob = {
+  phase: 'idle' | 'preparing' | 'downloading' | 'ready' | 'error'
+  message: string
+  accepted: boolean
+  started: boolean
+  percent: number
+  allReady: boolean
+  items: Array<{ id: string; phase: string; message?: string }>
+  error: string | null
+}
+
+export type CoreModelsStatus = {
+  required: string[]
+  items: CoreModelStatusItem[]
+  allReady: boolean
+  sourceOrder: string[]
+  mirrors: CoreModelMirror[]
+  featureRequired?: boolean
+  job?: CoreModelsEnsureJob
+}
+
+export async function getCoreModelsStatus(): Promise<CoreModelsStatus> {
+  return jsonFetch<CoreModelsStatus>('/system/core-models/status')
+}
+
+export async function setCoreModelsSourceOrder(order: string[]): Promise<{ order: string[]; sourceOrder: string[] }> {
+  return jsonFetch('/system/core-models/source-order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order }),
+  })
+}
+
+export async function ensureCoreModels(): Promise<{ job: CoreModelsEnsureJob; status: CoreModelsStatus }> {
+  return jsonFetch('/system/core-models/ensure', { method: 'POST' }, 30_000)
+}
+
+export async function importCoreModel(modelId: string, files: File[]): Promise<{ ok: boolean; status: CoreModelsStatus }> {
+  const form = new FormData()
+  form.append('modelId', modelId)
+  for (const file of files) {
+    form.append('file', file, file.name)
+  }
+  const totalSize = files.reduce((n, f) => n + f.size, 0)
+  const timeoutMs = Math.min(600_000, Math.max(LOCAL_HEAVY_TIMEOUT, totalSize > 20 * 1024 * 1024 ? LOCAL_HEAVY_TIMEOUT + 60_000 : LOCAL_HEAVY_TIMEOUT))
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const headers = new Headers()
+    if (isElectron()) headers.set('X-Opptrix-Client', 'desktop')
+    const resp = await fetch(`${API_BASE}/system/core-models/import`, {
+      method: 'POST',
+      body: form,
+      credentials: 'include',
+      headers,
+      signal: controller.signal,
+    })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({})) as { error?: string; code?: string }
+      if (err.code === 'auth_required') emitAuthRequired()
+      throw new ApiHttpError(err.error || `API error: ${resp.status}`, resp.status, err.code)
+    }
+    return resp.json() as Promise<{ ok: boolean; status: CoreModelsStatus }>
+  } finally {
+    clearTimeout(timer)
+  }
 }

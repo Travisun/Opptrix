@@ -17,6 +17,7 @@ import {
   UNELEVATED_COMPONENT_UNAVAILABLE_MESSAGE,
 } from './windows-unelevated/index.js'
 import { resolveShellIsolationMode } from './isolation-mode.js'
+import { isDockerEnv, resolveAgentSandboxMode } from '../env/docker-env.js'
 
 function nodePlatformToSandboxPlatform(): Platform | 'unsupported' {
   if (!SandboxManager.isSupportedPlatform()) return 'unsupported'
@@ -106,6 +107,23 @@ function windowsHint(canAutoInstall: boolean, unelevatedReady: boolean): string 
 
 export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
   const platform = nodePlatformToSandboxPlatform()
+  const agentSandbox = resolveAgentSandboxMode()
+
+  if (agentSandbox === 'off') {
+    return {
+      platform: platform === 'unsupported' ? 'unknown' : platform,
+      supported: true,
+      sandbox_available: false,
+      ready: true,
+      message: isDockerEnv()
+        ? 'Docker 自托管：命令以容器内系统权限运行（shell/node/npm/python 可用），未启用 Agent 沙箱围栏'
+        : '命令以系统权限运行，未启用 Agent 沙箱围栏',
+      needs_elevation: false,
+      can_auto_install: false,
+      network_isolation_level: 'basic',
+      agent_sandbox: 'off',
+    }
+  }
 
   // Docker-first：默认 workspace 隔离，不依赖 bwrap / SRT
   if (resolveShellIsolationMode() === 'workspace') {
@@ -119,6 +137,7 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
       can_auto_install: false,
       network_isolation_level: 'basic',
       isolation_mode: 'workspace',
+      agent_sandbox: 'full',
     }
   }
 
@@ -233,5 +252,6 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
     windows_isolation_mode: windowsIsolationMode,
     network_isolation_level: networkIsolationLevel,
     isolation_mode: 'srt',
+    agent_sandbox: 'full',
   }
 }

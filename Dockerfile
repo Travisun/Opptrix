@@ -5,35 +5,62 @@
 # Native modules (better-sqlite3, duckdb, sharp, onnxruntime-node, @lancedb/lancedb,
 # node-llama-cpp) are compiled/installed against linux glibc Node 24 in the build stage.
 #
+# Runtime toolchain:
+#   - Default PATH Node: official node:24-bookworm-slim (stable)
+#   - Optional track: nvm under /opt/nvm installs Node 22 LTS (does NOT replace PATH default)
+#   - Python: bookworm python3 (3.11) + pip + venv + dev headers
+#
 # Build mirrors (CN / foreign) — pass via --build-arg or Compose:
 #   NODE_IMAGE_PREFIX  e.g. docker.1ms.run/library/  (must end with /)
 #   NPM_REGISTRY       e.g. https://registry.npmmirror.com
 #   APT_MIRROR         e.g. mirrors.aliyun.com  (host only, no scheme)
-# Empty = Docker Hub + registry.npmjs.org + deb.debian.org (foreign default).
+#   MIRROR_AUTO=1      probe npmmirror / npmjs / aliyun / debian (scripts/docker-select-mirrors.mjs)
+# Empty = Docker Hub + registry.npmjs.org + deb.debian.org (foreign default; CI uses this).
+#
+# Models: this image is intentionally model-free. Do NOT download SenseVoice / E5 /
+# RapidOCR / HY-MT during docker build. Models are fetched via product onboarding or
+# optional OPPTRIX_FETCH_MODELS_ON_START=1 at container start.
 
 ARG NODE_VERSION=24
 ARG NODE_IMAGE_PREFIX=
+ARG MIRROR_AUTO=
 
 # ── Stage: build ─────────────────────────────────────────────────────────────
 FROM ${NODE_IMAGE_PREFIX}node:${NODE_VERSION}-bookworm AS build
 
 ARG APT_MIRROR=
 ARG NPM_REGISTRY=
-ARG NODE_VERSION
+ARG NODE_VERSION=
+ARG MIRROR_AUTO=
+ARG NODE_IMAGE_PREFIX=
 
 WORKDIR /app
 
-# Optional Debian mirror (bookworm uses deb822 *.sources and/or *.list)
-RUN if [ -n "${APT_MIRROR}" ]; then \
+COPY scripts/docker-select-mirrors.mjs /tmp/docker-select-mirrors.mjs
+
+# Optional Debian / npm mirrors (explicit build-args or MIRROR_AUTO probe)
+RUN set -eu; \
+    _APT="${APT_MIRROR}"; \
+    _NPM="${NPM_REGISTRY}"; \
+    _PREFIX="${NODE_IMAGE_PREFIX}"; \
+    if [ "${MIRROR_AUTO}" = "1" ] && [ -z "${_APT}" ] && [ -z "${_NPM}" ] && [ -z "${_PREFIX}" ]; then \
+      eval "$(node /tmp/docker-select-mirrors.mjs --build-eval)"; \
+      _APT="${APT_MIRROR:-}"; \
+      _NPM="${NPM_REGISTRY:-}"; \
+      echo "[opptrix-build] MIRROR_AUTO profile=${OPPTRIX_MIRROR_PROFILE:-unknown} APT=${_APT} NPM=${_NPM}"; \
+    fi; \
+    if [ -n "${_APT}" ]; then \
       find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -print0 \
         | xargs -0 -r sed -i \
-          -e "s|deb.debian.org|${APT_MIRROR}|g" \
-          -e "s|security.debian.org|${APT_MIRROR}|g"; \
-      echo "[opptrix-build] APT_MIRROR=${APT_MIRROR}"; \
+          -e "s|deb.debian.org|${_APT}|g" \
+          -e "s|security.debian.org|${_APT}|g"; \
+      echo "[opptrix-build] APT_MIRROR=${_APT}"; \
     fi \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     python3 \
+    python3-pip \
+    python3-venv \
     make \
     g++ \
     build-essential \
@@ -55,9 +82,15 @@ COPY README.md LICENSE ./
 
 # Full workspace install (devDeps needed for TypeScript / Vite build)
 ENV NODE_ENV=development
-RUN if [ -n "${NPM_REGISTRY}" ]; then \
-      echo "[opptrix-build] NPM_REGISTRY=${NPM_REGISTRY}"; \
-      npm config set registry "${NPM_REGISTRY}"; \
+RUN set -eu; \
+    _NPM="${NPM_REGISTRY}"; \
+    if [ "${MIRROR_AUTO}" = "1" ] && [ -z "${_NPM}" ]; then \
+      eval "$(node /tmp/docker-select-mirrors.mjs --build-eval)"; \
+      _NPM="${NPM_REGISTRY:-}"; \
+    fi; \
+    if [ -n "${_NPM}" ]; then \
+      echo "[opptrix-build] NPM_REGISTRY=${_NPM}"; \
+      npm config set registry "${_NPM}"; \
     fi \
   && npm ci
 
@@ -71,53 +104,105 @@ RUN npm prune --omit=dev
 # Re-declare ARGs after FROM (build-args do not carry across stages).
 ARG NODE_VERSION=24
 ARG NODE_IMAGE_PREFIX=
+ARG MIRROR_AUTO=
+ARG OPPTRIX_BASE_VERSION=
+ARG OPPTRIX_RELEASE_TAG=
+
 FROM ${NODE_IMAGE_PREFIX}node:${NODE_VERSION}-bookworm-slim AS runtime
 
 ARG APT_MIRROR=
+ARG MIRROR_AUTO=
+ARG OPPTRIX_BASE_VERSION=
+ARG OPPTRIX_RELEASE_TAG=
 
 WORKDIR /app
 
-RUN if [ -n "${APT_MIRROR}" ]; then \
+COPY scripts/docker-select-mirrors.mjs /tmp/docker-select-mirrors.mjs
+
+# Base tools for Agent (opptrix_run): system Node 24 (image default) + nvm Node 22 +
+# system Python/shell/git. build-essential retained for occasional native npm at runtime.
+RUN set -eu; \
+    _APT="${APT_MIRROR}"; \
+    if [ "${MIRROR_AUTO}" = "1" ] && [ -z "${_APT}" ]; then \
+      eval "$(node /tmp/docker-select-mirrors.mjs --build-eval)"; \
+      _APT="${APT_MIRROR:-}"; \
+      echo "[opptrix-build] MIRROR_AUTO profile=${OPPTRIX_MIRROR_PROFILE:-unknown} APT=${_APT}"; \
+    fi; \
+    if [ -n "${_APT}" ]; then \
       find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -print0 \
         | xargs -0 -r sed -i \
-          -e "s|deb.debian.org|${APT_MIRROR}|g" \
-          -e "s|security.debian.org|${APT_MIRROR}|g"; \
+          -e "s|deb.debian.org|${_APT}|g" \
+          -e "s|security.debian.org|${_APT}|g"; \
     fi \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    git \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    build-essential \
     libstdc++6 \
     libgomp1 \
     tini \
-  && rm -rf /var/lib/apt/lists/*
+    bash \
+  && rm -rf /var/lib/apt/lists/* \
+  && python3 -m pip install --break-system-packages --no-cache-dir pip \
+  && ln -sf /usr/bin/python3 /usr/local/bin/python \
+  && ln -sf /usr/bin/pip3 /usr/local/bin/pip
+
+# nvm optional track — default PATH stays official Node 24 from the base image.
+ENV NVM_DIR=/opt/nvm
+RUN mkdir -p "$NVM_DIR" \
+  && curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh \
+    | NVM_DIR="$NVM_DIR" PROFILE=/dev/null bash \
+  && . "$NVM_DIR/nvm.sh" \
+  && nvm install 22 \
+  && nvm cache clear \
+  && printf '%s\n' \
+    'export NVM_DIR="/opt/nvm"' \
+    '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' \
+    > /etc/profile.d/opptrix-nvm.sh
 
 # Single-user self-host: run as root so named/bind volumes are writable without
 # host UID mapping. Harden with reverse-proxy auth + claim account (see SELF-HOSTING).
-RUN mkdir -p /data /data/mounts /models
+# /app = immutable seed tree; /system = hot-update slots (boot symlink → slots/<ver>).
+RUN mkdir -p /data /data/mounts /models /system
 
 # Built monorepo tree (prefer correctness: keep workspace layout so Node resolution works)
 COPY --from=build /app /app
 
-RUN chmod +x /app/scripts/docker-entrypoint.sh
+RUN chmod +x /app/scripts/docker-entrypoint.sh \
+  && chmod +x /app/scripts/system-boot.mjs \
+  && chmod +x /app/scripts/opptrix-node-supervisor.mjs \
+  && chmod +x /app/scripts/docker-select-mirrors.mjs
 
 ENV NODE_ENV=production \
   STOCK_RESEARCH_HOST=0.0.0.0 \
   STOCK_RESEARCH_PORT=8711 \
   SERVE_UI=1 \
   OPPTRIX_DATA_DIR=/data \
+  OPPTRIX_SYSTEM_DIR=/system \
+  OPPTRIX_DOCKER=1 \
+  OPPTRIX_AGENT_SANDBOX=off \
+  OPPTRIX_SEED_ROOT=/app \
   UI_DIST_PATH=/app/client-ui/dist \
   OPPTRIX_LLM_DIR=/models/llms \
   OPPTRIX_E5_BUNDLED_DIR=/models/llms/multilingual-e5-small \
   OPPTRIX_RAPIDOCR_MODEL_DIR=/models/llms/rapidocr-ppocrv4-mobile \
   OPPTRIX_RAPIDOCR_BUNDLED_DIR=/models/llms/rapidocr-ppocrv4-mobile \
   OPPTRIX_SENSEVOICE_BUNDLED_DIR=/models/sensevoice \
-  OPPTRIX_WITH_MODELS=1
+  OPPTRIX_WITH_MODELS=1 \
+  OPPTRIX_BASE_VERSION=${OPPTRIX_BASE_VERSION} \
+  OPPTRIX_RELEASE_TAG=${OPPTRIX_RELEASE_TAG}
 # Runtime release identity may be overridden by Compose env (OPPTRIX_APP_VERSION / CHANNEL / TAG)
+# Entrypoint seeds /system from /app, then runs server from /system/boot (supervisor loop).
 
 EXPOSE 8711
 
-VOLUME ["/data", "/models"]
+VOLUME ["/data", "/models", "/system"]
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/scripts/docker-entrypoint.sh"]
 CMD ["node", "apps/server/dist/index.js"]

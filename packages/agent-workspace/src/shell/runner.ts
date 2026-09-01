@@ -104,6 +104,7 @@ import {
 } from './shell-command-job.js'
 import { getUserDataStore } from '@opptrix/user-store'
 import { resolveShellIsolationMode } from './isolation-mode.js'
+import { resolveAgentSandboxMode } from '../env/docker-env.js'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_STREAM_BYTES = 200_000
@@ -224,11 +225,15 @@ const SHELL_PATH_NOTE =
 const WORKSPACE_PATH_NOTE =
   '命令在已授权工作区内运行（容器 + 工作区边界）；HOME=grant 根；仅限已授权工作区路径。'
 
+const SYSTEM_FREE_PATH_NOTE =
+  '命令在容器内以系统权限运行（shell/node/npm/python 可用）；持久化数据仅 /data、/models、/system 与 /data/mounts/*。'
+
 async function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
   cwdAbs: string,
   grantRootAbs: string,
   electronRunAsNode: boolean,
+  systemFree = false,
 ): Promise<NodeJS.ProcessEnv> {
   const out: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(base)) {
@@ -237,8 +242,14 @@ async function sanitizeChildEnv(
     out[key] = value
   }
   out.PWD = cwdAbs
-  out.HOME = grantRootAbs
-  out.USERPROFILE = grantRootAbs
+  if (systemFree) {
+    if (base.HOME) out.HOME = base.HOME
+    if (base.USERPROFILE) out.USERPROFILE = base.USERPROFILE
+    if (base.PATH) out.PATH = base.PATH
+  } else {
+    out.HOME = grantRootAbs
+    out.USERPROFILE = grantRootAbs
+  }
   const pipTarget = path.join(cwdAbs, '.opptrix-packages')
   out.PIP_TARGET = pipTarget
   out.PIP_USER = '0'
@@ -856,12 +867,15 @@ async function executeUnsandboxedOnce(ctx: {
   onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void
   /** 默认 basic（出围栏）；workspace 模式传 'workspace' */
   isolation?: ShellIsolation
+  /** Docker 自托管系统级：保留容器 HOME/PATH */
+  systemFree?: boolean
 }): Promise<{ exitCode: number | null; stdout: string; stderr: string; isolation: ShellIsolation }> {
   const childEnv = await sanitizeChildEnv(
     { ...process.env },
     ctx.cwdAbs,
     ctx.grantRootAbs,
     usesElectronAsNodeArgv(ctx.normalizedArgv),
+    ctx.systemFree === true,
   )
   const spawnArgv = ctx.useShellWrap
     ? shellWrapArgv(ctx.commandString)
@@ -986,13 +1000,17 @@ export class ShellRunner {
     }
 
     const escalate = params.escalate === 'unsandboxed' ? 'unsandboxed' as const : 'none' as const
+    const agentSandbox = resolveAgentSandboxMode()
+    const useSystemFree = agentSandbox === 'off' && escalate !== 'unsandboxed'
     if (escalate === 'unsandboxed') {
       await requireUnsandboxedConfirmation(normalizedArgv, confirm)
     }
 
     // workspace 默认：外网直通，不做出站授权；仅遗留 SRT 路径保留域名确认
     const isolationMode = resolveShellIsolationMode()
-    const useWorkspaceIsolation = isolationMode === 'workspace' && escalate !== 'unsandboxed'
+    const useWorkspaceIsolation = !useSystemFree
+      && isolationMode === 'workspace'
+      && escalate !== 'unsandboxed'
 
     let egressGrants: EgressRunGrants = { onceHosts: [], runWithDeniedNetwork: false }
 
@@ -1030,8 +1048,8 @@ export class ShellRunner {
 
     await resolvePreferredPipIndexUrl(getPythonSettings().pip_index_urls)
 
-    // workspace 默认路径：跳过 SRT / assertShellReady；仅 srt 逃生舱走完整隔离
-    if (escalate !== 'unsandboxed' && !useWorkspaceIsolation) {
+    // workspace / system-free 默认路径：跳过 SRT / assertShellReady；仅 srt 逃生舱走完整隔离
+    if (escalate !== 'unsandboxed' && !useWorkspaceIsolation && !useSystemFree) {
       await this.assertShellReady(true)
     }
 
@@ -1077,13 +1095,19 @@ export class ShellRunner {
     )
 
     const commandSummary = summarizeShellArgv(execArgv)
-    const resultSandbox = escalate !== 'unsandboxed' && !useWorkspaceIsolation
+    const resultSandbox = escalate !== 'unsandboxed' && !useWorkspaceIsolation && !useSystemFree
     const bgIsolation: ShellIsolation = escalate === 'unsandboxed'
       ? 'basic'
+      : useSystemFree
+        ? 'basic'
+        : useWorkspaceIsolation
+          ? 'workspace'
+          : 'full'
+    const pathNote = useSystemFree
+      ? SYSTEM_FREE_PATH_NOTE
       : useWorkspaceIsolation
-        ? 'workspace'
-        : 'full'
-    const pathNote = useWorkspaceIsolation ? WORKSPACE_PATH_NOTE : SHELL_PATH_NOTE
+        ? WORKSPACE_PATH_NOTE
+        : SHELL_PATH_NOTE
 
     if (wantBackground) {
       const jobTitleRaw = typeof params.title === 'string'
@@ -1110,6 +1134,7 @@ export class ShellRunner {
           }
           try {
             const sandboxAskCallback = useWorkspaceIsolation
+              || useSystemFree
               || egressGrants.runWithDeniedNetwork
               || escalate === 'unsandboxed'
               ? undefined
@@ -1136,6 +1161,19 @@ export class ShellRunner {
                 timeoutMs,
                 signal: linked.signal,
                 onOutput,
+              })
+            } else if (useSystemFree) {
+              result = await executeUnsandboxedOnce({
+                commandString: execCommandString,
+                normalizedArgv: execArgv,
+                useShellWrap,
+                cwdAbs,
+                grantRootAbs: grant.abs_path,
+                timeoutMs,
+                signal: linked.signal,
+                onOutput,
+                isolation: 'basic',
+                systemFree: true,
               })
             } else if (useWorkspaceIsolation) {
               result = await executeUnsandboxedOnce({
@@ -1203,6 +1241,7 @@ export class ShellRunner {
     }
 
     const sandboxAskCallback = useWorkspaceIsolation
+      || useSystemFree
       || egressGrants.runWithDeniedNetwork
       || escalate === 'unsandboxed'
       ? undefined
@@ -1230,6 +1269,18 @@ export class ShellRunner {
         grantRootAbs: grant.abs_path,
         timeoutMs,
         signal: params.signal,
+      })
+    } else if (useSystemFree) {
+      result = await executeUnsandboxedOnce({
+        commandString: execCommandString,
+        normalizedArgv: execArgv,
+        useShellWrap,
+        cwdAbs,
+        grantRootAbs: grant.abs_path,
+        timeoutMs,
+        signal: params.signal,
+        isolation: 'basic',
+        systemFree: true,
       })
     } else if (useWorkspaceIsolation) {
       result = await executeUnsandboxedOnce({
@@ -1285,7 +1336,7 @@ export class ShellRunner {
       cwd: cwdRel || '.',
       command: execArgv,
       command_string: execCommandString,
-      home_is_grant_root: true,
+      home_is_grant_root: useSystemFree ? undefined : true,
       path_note: pathNote,
       isolation: result.isolation,
       escalated: escalate === 'unsandboxed' || undefined,

@@ -825,4 +825,18 @@ export const ONBOARDING_COPY = {
     title: '开始使用前',
     desc: '请阅读下方用户协议。勾选即表示同意用户协议与隐私政策。本软件仅供学习与研究参考，不构成任何投资建议。',
   },
+  coreModels: {
+    title: '准备本地能力',
+    desc: '下载基础识别、语音与翻译组件，文档检索与离线翻译等功能才能在本机完整运行。可切换下载通道，或从本地导入已下载的文件。',
+    downloadPrimary: '开始下载',
+    continue: '继续',
+    mirrorLabel: '下载通道',
+    readyBadge: '已就绪',
+    pendingBadge: '待准备',
+    importing: '正在导入…',
+    importButton: '从本地导入',
+    importFailed: '导入未通过，请确认文件完整后重试',
+    downloadFailed: '下载未完成，可更换通道后重试，或从本地导入',
+    allReadyHint: '全部组件就绪后可继续',
+  },
 } as const

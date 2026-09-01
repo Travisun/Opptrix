@@ -9,6 +9,11 @@ import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStor
 import { getUserDataStore } from '@opptrix/user-store'
 import { registerAuthRoutes } from './auth-routes.js'
 import { registerOwnerAuthHook, shouldExposeFullHealth } from './auth-hook.js'
+import {
+  registerSystemUpdateLockHook,
+  registerSystemUpdateRoutes,
+  startSystemUpdateAfterListen,
+} from './system-update-routes.js'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
@@ -49,6 +54,8 @@ import { registerCommunityRoutes } from './community-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
+import { registerCoreModelsRoutes } from './core-models-routes.js'
+import { buildCoreModelsStatusDto, isCoreModelsFeatureRequired } from './core-models-service.js'
 import { registerHarnessSettingsRoutes } from './harness-settings-routes.js'
 import { registerMarketDataPackageRoutes } from './market-data-package-routes.js'
 import { registerDocLibrarySettingsRoutes } from './doc-library-settings-routes.js'
@@ -270,8 +277,11 @@ setEnrichmentPersistHook(doc => {
 })
 
 const app = Fastify({ logger: true, bodyLimit: ATTACHMENT_UPLOAD_BODY_LIMIT })
+registerSystemUpdateLockHook(app)
 registerOwnerAuthHook(app)
 registerAuthRoutes(app)
+registerSystemUpdateRoutes(app)
+registerCoreModelsRoutes(app)
 
 const scheduleService = getScheduleService()
 const workspaceService = getWorkspaceService()
@@ -338,6 +348,18 @@ app.get('/api/health', async (req) => {
   if (!shouldExposeFullHealth(req)) return publicBody
   const channel = process.env.OPPTRIX_RELEASE_CHANNEL?.trim() || undefined
   const releaseTag = process.env.OPPTRIX_RELEASE_TAG?.trim() || undefined
+  let coreModelsRequired = false
+  let coreModelsReady = true
+  if (isCoreModelsFeatureRequired()) {
+    try {
+      const cm = await buildCoreModelsStatusDto()
+      coreModelsRequired = cm.featureRequired
+      coreModelsReady = cm.allReady
+    } catch {
+      coreModelsRequired = true
+      coreModelsReady = false
+    }
+  }
   return {
     ...publicBody,
     ...(channel ? { channel } : {}),
@@ -352,6 +374,8 @@ app.get('/api/health', async (req) => {
     mcp_tools: agent.tools.mcpTools().length,
     mining_tools: agent.tools.miningTools().length,
     factors: REGISTRY.count(),
+    core_models_required: coreModelsRequired,
+    core_models_ready: coreModelsReady,
   }
 })
 
@@ -2276,6 +2300,9 @@ async function bootstrap() {
   } else {
     console.log(`  Web UI → npm run dev → https://127.0.0.1:5173（自签名；设 WEB_HTTPS=0 可回退 HTTP）\n`)
   }
+
+  // System hot-update: first-boot hooks + silent check (after listen so status API works)
+  startSystemUpdateAfterListen()
 
   // ── phaseB：listen 之后再跑调度/预热等非路由重活。
   // Fastify 5：listen 后路由树锁定，禁止再 app.register / app.get|post|… 注册新路由。

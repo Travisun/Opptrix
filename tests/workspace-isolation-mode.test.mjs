@@ -26,9 +26,13 @@ async function withTmpDataDir(fn) {
   const prevData = process.env.OPPTRIX_DATA_DIR
   const prevIso = process.env.OPPTRIX_SHELL_ISOLATION
   const prevDesktop = process.env.OPPTRIX_DESKTOP
+  const prevDocker = process.env.OPPTRIX_DOCKER
+  const prevAgentSandbox = process.env.OPPTRIX_AGENT_SANDBOX
   process.env.OPPTRIX_DATA_DIR = tmp
   delete process.env.OPPTRIX_SHELL_ISOLATION
   delete process.env.OPPTRIX_DESKTOP
+  delete process.env.OPPTRIX_DOCKER
+  process.env.OPPTRIX_AGENT_SANDBOX = 'full'
   resetSharedWorkspaceLayoutCacheForTests()
   try {
     await fn(tmp)
@@ -39,6 +43,10 @@ async function withTmpDataDir(fn) {
     else process.env.OPPTRIX_SHELL_ISOLATION = prevIso
     if (prevDesktop == null) delete process.env.OPPTRIX_DESKTOP
     else process.env.OPPTRIX_DESKTOP = prevDesktop
+    if (prevDocker == null) delete process.env.OPPTRIX_DOCKER
+    else process.env.OPPTRIX_DOCKER = prevDocker
+    if (prevAgentSandbox == null) delete process.env.OPPTRIX_AGENT_SANDBOX
+    else process.env.OPPTRIX_AGENT_SANDBOX = prevAgentSandbox
     resetSharedWorkspaceLayoutCacheForTests()
     await fs.rm(tmp, { recursive: true, force: true })
   }
@@ -46,8 +54,12 @@ async function withTmpDataDir(fn) {
 
 test('resolveShellIsolationMode defaults to workspace; srt via env', () => {
   const prev = process.env.OPPTRIX_SHELL_ISOLATION
+  const prevDocker = process.env.OPPTRIX_DOCKER
+  const prevSandbox = process.env.OPPTRIX_AGENT_SANDBOX
   try {
     delete process.env.OPPTRIX_SHELL_ISOLATION
+    delete process.env.OPPTRIX_DOCKER
+    process.env.OPPTRIX_AGENT_SANDBOX = 'full'
     assert.equal(resolveShellIsolationMode(), 'workspace')
     process.env.OPPTRIX_SHELL_ISOLATION = 'SRT'
     assert.equal(resolveShellIsolationMode(), 'srt')
@@ -56,6 +68,10 @@ test('resolveShellIsolationMode defaults to workspace; srt via env', () => {
   } finally {
     if (prev == null) delete process.env.OPPTRIX_SHELL_ISOLATION
     else process.env.OPPTRIX_SHELL_ISOLATION = prev
+    if (prevDocker == null) delete process.env.OPPTRIX_DOCKER
+    else process.env.OPPTRIX_DOCKER = prevDocker
+    if (prevSandbox == null) delete process.env.OPPTRIX_AGENT_SANDBOX
+    else process.env.OPPTRIX_AGENT_SANDBOX = prevSandbox
   }
 })
 

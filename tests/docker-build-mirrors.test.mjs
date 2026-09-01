@@ -14,7 +14,7 @@ function read(rel) {
   return fs.readFileSync(path.join(ROOT, rel), 'utf8')
 }
 
-test('Dockerfile declares NODE_IMAGE_PREFIX / NPM_REGISTRY / APT_MIRROR build-args', () => {
+test('Dockerfile declares NODE_IMAGE_PREFIX / NPM_REGISTRY / APT_MIRROR / MIRROR_AUTO build-args', () => {
   const df = read('Dockerfile')
   assert.match(df, /ARG NODE_IMAGE_PREFIX=/)
   assert.match(df, /FROM \$\{NODE_IMAGE_PREFIX\}node:\$\{NODE_VERSION\}-bookworm AS build/)
@@ -22,7 +22,12 @@ test('Dockerfile declares NODE_IMAGE_PREFIX / NPM_REGISTRY / APT_MIRROR build-ar
   assert.match(df, /ARG NPM_REGISTRY=/)
   assert.match(df, /npm config set registry/)
   assert.match(df, /ARG APT_MIRROR=/)
+  assert.match(df, /ARG MIRROR_AUTO=/)
+  assert.match(df, /ARG OPPTRIX_BASE_VERSION=/)
+  assert.match(df, /docker-select-mirrors\.mjs/)
   assert.match(df, /deb\.debian\.org/)
+  assert.match(df, /NVM_DIR=\/opt\/nvm/)
+  assert.match(df, /model-free|Do NOT download SenseVoice/i)
 })
 
 test('docker-compose.yml passes build mirror args from env', () => {
@@ -30,13 +35,15 @@ test('docker-compose.yml passes build mirror args from env', () => {
   assert.match(yml, /NODE_IMAGE_PREFIX:\s*"\$\{OPPTRIX_DOCKER_IMAGE_PREFIX:-\}"/)
   assert.match(yml, /NPM_REGISTRY:\s*"\$\{OPPTRIX_NPM_REGISTRY:-\}"/)
   assert.match(yml, /APT_MIRROR:\s*"\$\{OPPTRIX_APT_MIRROR:-\}"/)
+  assert.match(yml, /MIRROR_AUTO:\s*"\$\{OPPTRIX_MIRROR_AUTO_BUILD:-\}"/)
+  assert.match(yml, /OPPTRIX_FETCH_MODELS_ON_START:\s*"\$\{OPPTRIX_FETCH_MODELS_ON_START:-0\}"/)
 })
 
 test('docker-compose-with-mirrors.sh delegates to opptrix', () => {
   const script = path.join(ROOT, 'scripts/docker-compose-with-mirrors.sh')
   assert.ok(fs.existsSync(script))
   const src = read('scripts/docker-compose-with-mirrors.sh')
-  assert.match(src, /packages\/selfhost\/bin\/opptrix\.mjs|opptrix\.mjs/)
+  assert.match(src, /packages\/selfhost\/bin\/opptrix\.(js|mjs)/)
   assert.match(src, /OPPTRIX_BUILD_MIRROR/)
 })
 
@@ -45,6 +52,8 @@ test('compose.env.example documents build mirror vars', () => {
   assert.match(env, /OPPTRIX_DOCKER_IMAGE_PREFIX/)
   assert.match(env, /OPPTRIX_NPM_REGISTRY/)
   assert.match(env, /OPPTRIX_APT_MIRROR/)
+  assert.match(env, /OPPTRIX_MIRROR_AUTO/)
+  assert.match(env, /OPPTRIX_FETCH_MODELS_ON_START/)
   assert.match(env, /opptrix|docker-compose-with-mirrors/)
 })
 

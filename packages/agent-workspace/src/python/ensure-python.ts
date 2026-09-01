@@ -12,6 +12,7 @@ import {
 import { getPythonPlatformStatus } from './python-platform-status.js'
 import type { PythonActiveSource, PythonRuntimeStatus } from './resolve-python.js'
 import type { PythonSettings, ValidatePythonSettingsResult } from '@opptrix/shared'
+import { isDockerEnv } from '../env/docker-env.js'
 
 /** Agent 可见的安装进度态；勿在 tool 内死等 20min */
 export type EnsurePythonStatus = 'ready' | 'preparing' | 'installing' | 'failed'
@@ -196,6 +197,19 @@ export async function ensurePythonReady(options?: {
       active_source: status.active_source,
       active_version: status.active_version,
       message: status.message,
+    }
+  }
+
+  if (isDockerEnv()) {
+    return {
+      ok: false,
+      ready: false,
+      status: 'failed',
+      active_source: status.active_source,
+      active_version: status.active_version,
+      recommend_install: false,
+      message: status.message
+        || 'Docker 镜像未检测到系统 Python。请在 Dockerfile 中安装 python3 后重建镜像，勿使用托管安装。',
     }
   }
 

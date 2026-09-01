@@ -115,10 +115,12 @@ test('resolveReleaseIdentity from tag and main', () => {
   assert.equal(tagged.OPPTRIX_APP_VERSION, '1.3.6')
   assert.equal(tagged.OPPTRIX_RELEASE_CHANNEL, 'selfhost')
   assert.equal(tagged.OPPTRIX_RELEASE_TAG, 'opptrix-selfhost-v1.3.6')
+  assert.equal(tagged.OPPTRIX_BASE_VERSION, 'opptrix-selfhost-v1.3.6')
 
   const main = resolveReleaseIdentity('main', { shortSha: 'abc1234dead' })
   assert.equal(main.OPPTRIX_RELEASE_CHANNEL, 'selfhost')
   assert.equal(main.OPPTRIX_RELEASE_TAG, 'main@abc1234')
+  assert.equal(main.OPPTRIX_BASE_VERSION, undefined)
 })
 
 test('classifyTagRelation upgrade/rollback/current', () => {

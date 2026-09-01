@@ -1,0 +1,262 @@
+# Publish Opptrix runtime hot-update assets to CDN (R2), GitHub Release, and Gitee
+# Triggers: push tag opptrix-selfhost-v*  or  workflow_dispatch
+#
+# Assets (must match candidateRuntimeAssetNames / runtimeArchiveFilename):
+#   opptrix-runtime-vX.Y.Z.bin + .sha256          (CDN primary)
+#   opptrix-runtime-vX.Y.Z.tar.gz (+ .sha256)
+#   opptrix-runtime-linux-x64-vX.Y.Z.tar.gz (+ .sha256)  — same bytes, platform alias
+#
+# Runs on ubuntu-latest after npm ci / build / prune so native modules match
+# Docker linux/glibc runtime. Clients fetch hot updates from CDN check-update.
+name: Publish runtime assets
+
+on:
+  push:
+    tags:
+      - 'opptrix-selfhost-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'App tag or version (e.g. opptrix-selfhost-v1.4.0 or 1.4.0)'
+        required: true
+        type: string
+      skip_gitee:
+        description: 'Skip Gitee upload attempt'
+        type: boolean
+        default: false
+      skip_r2:
+        description: 'Skip R2/CDN sync (local/fork testing)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-runtime-assets-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  OPPTRIX_UPDATE_CDN_BASE: 'https://update.opptrix.org'
+
+jobs:
+  pack-and-upload:
+    name: Pack runtime & upload release assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Resolve version tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          RAW="${RAW#refs/tags/}"
+          if [[ "$RAW" == opptrix-selfhost-v* ]]; then
+            FULL_TAG="$RAW"
+            VERSION="${RAW#opptrix-selfhost-v}"
+          elif [[ "$RAW" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+            VERSION="$RAW"
+            FULL_TAG="opptrix-selfhost-v${VERSION}"
+          else
+            echo "::error::Invalid tag '${RAW}'. Expect opptrix-selfhost-vX.Y.Z or X.Y.Z"
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+            echo "::error::Invalid semver in '${FULL_TAG}'"
+            exit 1
+          fi
+          echo "full_tag=${FULL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved FULL_TAG=${FULL_TAG} VERSION=${VERSION}"
+
+      - name: Require R2 secrets (tag push)
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [[ -z "${{ secrets.R2_ACCOUNT_ID }}" ]]; then
+            echo "::error::Missing GitHub secret R2_ACCOUNT_ID — required for tag push CDN publish"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.R2_ACCESS_KEY_ID }}" ]]; then
+            echo "::error::Missing GitHub secret R2_ACCESS_KEY_ID — required for tag push CDN publish"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.R2_SECRET_ACCESS_KEY }}" ]]; then
+            echo "::error::Missing GitHub secret R2_SECRET_ACCESS_KEY — required for tag push CDN publish"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.R2_BUCKET }}" ]]; then
+            echo "::error::Missing GitHub secret R2_BUCKET — required for tag push CDN publish"
+            missing=1
+          fi
+          if [[ "$missing" -ne 0 ]]; then exit 1; fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.meta.outputs.full_tag }}
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install build tools (native modules)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 make g++ build-essential pkg-config
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build monorepo
+        run: npm run build
+
+      - name: Prune devDependencies
+        run: npm prune --omit=dev
+
+      - name: Pack runtime tarball
+        env:
+          OPPTRIX_APP_VERSION: ${{ steps.meta.outputs.version }}
+          OPPTRIX_RELEASE_TAG: ${{ steps.meta.outputs.full_tag }}
+        run: |
+          set -euo pipefail
+          node scripts/pack-opptrix-runtime.mjs --help | head -5
+          node scripts/pack-opptrix-runtime.mjs \
+            --version "${{ steps.meta.outputs.version }}" \
+            --out-dir dist-runtime \
+            --also-platform-name
+          ls -lah dist-runtime/
+
+      - name: Ensure GitHub Release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.full_tag }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$TAG" \
+              --notes "Opptrix self-host runtime assets for ${{ steps.meta.outputs.version }}." \
+              --verify-tag
+          fi
+
+      - name: Upload assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.full_tag }}"
+          VER="${{ steps.meta.outputs.version }}"
+          gh release upload "$TAG" \
+            "dist-runtime/opptrix-runtime-v${VER}.bin" \
+            "dist-runtime/opptrix-runtime-v${VER}.sha256" \
+            "dist-runtime/opptrix-runtime-v${VER}.tar.gz" \
+            "dist-runtime/opptrix-runtime-v${VER}.tar.gz.sha256" \
+            "dist-runtime/opptrix-runtime-linux-x64-v${VER}.tar.gz" \
+            "dist-runtime/opptrix-runtime-linux-x64-v${VER}.tar.gz.sha256" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Sync hot assets to R2 (CDN)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_r2) && secrets.R2_ACCESS_KEY_ID != '' }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          OPPTRIX_UPDATE_CDN_BASE: ${{ env.OPPTRIX_UPDATE_CDN_BASE }}
+          OPPTRIX_RELEASE_TAG: ${{ steps.meta.outputs.full_tag }}
+          OPPTRIX_MIN_BASE_IMAGE: ${{ steps.meta.outputs.full_tag }}
+        run: |
+          set -euo pipefail
+          node scripts/sync-hot-to-r2.mjs \
+            --dir dist-runtime \
+            --version "${{ steps.meta.outputs.version }}"
+
+      - name: Note skipped R2 sync
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.skip_r2) || secrets.R2_ACCESS_KEY_ID == '' }}
+        shell: bash
+        run: |
+          echo "::warning::R2/CDN sync skipped (fork/manual without secrets or skip_r2=true)"
+
+      - name: Purge hot CDN cache (optional)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_r2) && secrets.R2_ACCESS_KEY_ID != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          OPPTRIX_UPDATE_CDN_BASE: ${{ env.OPPTRIX_UPDATE_CDN_BASE }}
+          OPPTRIX_APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: node scripts/purge-hot-cdn-cache.mjs --version "${{ steps.meta.outputs.version }}"
+
+      - name: Mirror to Gitee (optional)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_gitee) }}
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          OPPTRIX_UPDATE_GITEE_REPO: Travisun/Opptrix
+        run: |
+          set -euo pipefail
+          EXTRA=""
+          if [[ -n "${GITEE_TOKEN:-}" ]]; then
+            EXTRA="--require-token"
+          fi
+          node scripts/upload-runtime-gitee.mjs \
+            --version "${{ steps.meta.outputs.version }}" \
+            --dir dist-runtime \
+            --tag "${{ steps.meta.outputs.full_tag }}" \
+            $EXTRA
+
+      - name: Smoke verify CDN check-update
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_r2) && secrets.R2_ACCESS_KEY_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="${OPPTRIX_UPDATE_CDN_BASE}/hot/check-update"
+          VER="${{ steps.meta.outputs.version }}"
+          echo "Fetching ${URL} …"
+          if ! BODY="$(curl -fsS --max-time 30 "$URL")"; then
+            echo "::warning::CDN check-update fetch failed (may need cache purge propagation)"
+            exit 0
+          fi
+          echo "$BODY" | node -e "
+            const v = process.argv[1];
+            let j;
+            try { j = JSON.parse(require('fs').readFileSync(0, 'utf8')); }
+            catch (e) { console.error('invalid JSON'); process.exit(1); }
+            if (!j.latest || j.latest.version !== v) {
+              console.error('latest.version mismatch:', j.latest?.version, 'expected', v);
+              process.exit(1);
+            }
+            if (!String(j.latest.bin || '').includes('opptrix-runtime-v' + v + '.bin')) {
+              console.error('latest.bin URL unexpected');
+              process.exit(1);
+            }
+            console.log('CDN check-update OK for', v);
+          " "$VER"
+
+      - name: Summarize
+        shell: bash
+        run: |
+          VER="${{ steps.meta.outputs.version }}"
+          TAG="${{ steps.meta.outputs.full_tag }}"
+          BASE="${OPPTRIX_UPDATE_CDN_BASE}"
+          {
+            echo "### Runtime assets"
+            echo "- Tag: \`${TAG}\`"
+            echo "- CDN: \`${BASE}/hot/check-update\` → \`opptrix-runtime-v${VER}.bin\`"
+            echo "- GitHub Release: \`.bin\`, \`.sha256\`, \`.tar.gz\` (+ linux-x64 aliases)"
+            echo "- Gitee mirror: same set when \`GITEE_TOKEN\` configured"
+            echo "- Docs: \`docs/SYSTEM-UPDATE.md\`"
+          } >> "$GITHUB_STEP_SUMMARY"

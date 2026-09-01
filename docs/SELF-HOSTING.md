@@ -49,7 +49,18 @@ opptrix up            # 优先拉取 GHCR 预构建镜像并启动
 | 仓库 | CI 推送至 `ghcr.io/travisun/opptrix`；国内 pull 经 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速代理主机名 |
 | 覆盖 | `OPPTRIX_IMAGE`（完整引用）、`OPPTRIX_IMAGE_REPO`、`OPPTRIX_GHCR_MIRROR`（仅改 registry 主机） |
 | Tag | 与 git 一致的 `opptrix-selfhost-vX.Y.Z`、纯 semver `X.Y.Z`、浮动 `selfhost` |
-| 大模型 | **不在镜像内**；运行时写入卷 `opptrix-models`，升级不重下 |
+| 大模型 | **不在镜像内**；产品引导下载至卷 `opptrix-models`，升级不重下 |
+
+### 容器工具链
+
+| 组件 | 说明 |
+|------|------|
+| **Node（默认）** | 官方 `node:24-bookworm-slim`，`/usr/local/bin/node` 为稳定 PATH |
+| **Node（可选）** | nvm 在 `/opt/nvm`，已预装 **22 LTS**；`nvm use 22` 切换，不替换默认 24 |
+| **Python** | Debian bookworm `python3`（3.11）+ `pip3` + `venv` + `python3-dev` |
+| **Agent 沙箱** | 默认 `OPPTRIX_AGENT_SANDBOX=off`（单用户信任：容器内系统级 shell） |
+| **构建镜像** | `OPPTRIX_BUILD_MIRROR` / 显式 `OPPTRIX_*_REGISTRY`；或 `OPPTRIX_MIRROR_AUTO_BUILD=1` 构建时探测 |
+| **运行时镜像** | `OPPTRIX_MIRROR_AUTO=1` 为 pip/npm 自动选国内/海外源 |
 
 查看与切换应用版本：
 
@@ -105,7 +116,7 @@ opptrix up
 | `opptrix up` | 优先 pull 预构建并后台启动 |
 | `opptrix up --build` | 强制本地编译后启动 |
 | `opptrix up --ref <tag\|main>` | 本次使用指定版本 |
-| `opptrix update` | 优先 pull 新 tag 镜像；保留 compose.env / 卷 |
+| `opptrix update` | 升级运行环境/镜像底座（重建容器）；**默认保留** `opptrix-data` / `opptrix-models` / `opptrix-system` 与挂载；应用内热更新另见产品内提示与 [`SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)「底座 / 运行环境升级」 |
 | `opptrix stop` / `start` / `restart` | 停 / 启 / 重启 |
 | `opptrix down` | 停止并移除容器（默认**保留**数据卷） |
 | `opptrix logs -f` | 跟踪日志 |
@@ -151,10 +162,12 @@ curl -fsS http://127.0.0.1:8711/api/health
 | `OPPTRIX_DOCKER_IMAGE_PREFIX` | Node 基础镜像前缀（须以 `/` 结尾） | `docker.1ms.run/library/` |
 | `OPPTRIX_NPM_REGISTRY` | `npm ci` 注册表 | `https://registry.npmmirror.com` |
 | `OPPTRIX_APT_MIRROR` | Debian apt 主机名（无 `https://`） | `mirrors.aliyun.com` |
+| `OPPTRIX_MIRROR_AUTO_BUILD` | 构建时 `MIRROR_AUTO=1` 探测源 | `1` |
+| `OPPTRIX_MIRROR_AUTO` | 运行时 pip/npm 自动选源 | `1` |
 
-`opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还需进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。
+`opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还可进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。
 
-首次启动（未 `--skip-models`）会在空的 **models** 卷中拉取核心本地模型（约 1GB+）。**运行时模型下载**默认国内优先：ModelScope → hf-mirror → Hugging Face。健康检查 `start_period` 约 15 分钟。
+**核心本地模型不在镜像内。** 默认启动**不会**在 entrypoint 阻塞下载；请在产品**引导流程**中按需下载（E5 / OCR / 语音 / 离线翻译等，约 1GB+）。若需旧版「首启自动拉模型」，设置 `OPPTRIX_FETCH_MODELS_ON_START=1`。`opptrix up --skip-models` 与 `OPPTRIX_SKIP_MODEL_FETCH=1` 仍强制跳过。运行时模型下载默认国内优先：ModelScope → hf-mirror → Hugging Face。健康检查 `start_period` 默认约 3 分钟（首启拉模型时请调大或设 `OPPTRIX_FETCH_MODELS_ON_START=1`）。
 
 不必自建「数据集」镜像：权重应挂 **Model** 仓。四套核心模型在 ModelScope 均有官方/上游仓；自建 Opptrix 合集仓仅在需要钉死版本或内网二次分发时有价值。
 
@@ -168,9 +181,14 @@ curl -fsS http://127.0.0.1:8711/api/health
 |----------|------------|------|
 | `/data` | `opptrix-data` | 用户数据根（`OPPTRIX_DATA_DIR`）：库、会话、设置、工作区等 |
 | `/models` | `opptrix-models` | 本地核心模型（与镜像分离，升级不丢） |
+| `/system` | `opptrix-system` | 运行时槽位与热更新状态（`OPPTRIX_SYSTEM_DIR`）：`boot` → `slots/<ver>`、`update/`、`state.json`；与 `/data` 分离，seed/activate **不触碰**用户数据 |
 | `/data/mounts/<name>` | 可选 bind | 宿主机额外目录约定（只读或读写） |
 
-**升级镜像不会清空卷。** 数据与模型都在卷里，换镜像 / `docker compose pull`（或重建）后仍沿用原卷。
+**升级镜像不会清空卷。** 数据、模型与 system 槽位都在卷里，换镜像 / `docker compose pull`（或重建）后仍沿用原卷。
+
+镜像内 `/app` 仍是**种子树**；容器启动时 entrypoint 若发现 `/system` 尚无当前槽位，会从 `/app` 种子到 `slots/<version>` 并让 `boot` 指向它，随后以 supervisor 循环从 boot 路径启动服务。服务进程 exit **42** 时 supervisor 会 `activatePending`（若有 `pendingVersion`）再重启；**43/44** 为软重启不切换槽位。
+
+完整热更新协议（布局、资产命名、**必需**的 `.sha256` sidecar、打包/CI、Gitee 镜像、裸 Node 监督进程）见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**；当 UI 提示需刷新底座时走 `opptrix update`（同文档「底座 / 运行环境升级」）。库层 API 摘要见 `@opptrix/system-update`（`packages/system-update/README.md`）。
 
 ### 备份
 
@@ -220,19 +238,32 @@ opptrix use opptrix-selfhost-vX.Y.Z --apply
 |------|------|------|
 | 账户 / 会话 / 设置 | 卷 `opptrix-data` → `/data` | `down` 不带 `--volumes` 即保留 |
 | 核心模型 | 卷 `opptrix-models` → `/models` | 已有文件**不会**再下载 |
+| 运行时槽位 / 热更新状态 | 卷 `opptrix-system` → `/system` | 与用户数据分离；镜像 `/app` 仅作种子 |
 | 运行时配置 | 部署目录 `compose.env`、`.opptrix.json` | 升级不覆盖 |
 | 额外目录映射 | `docker-compose.override.yml` | 升级不覆盖；Compose 自动合并 |
 
-启动时 entrypoint 会检测模型卷：齐全则跳过下载。仅当编排指定时才重下：
+启动时 entrypoint **默认跳过**模型下载（引导内按需下载）。卷内已有 marker 文件时同样跳过。仅当显式开启时才拉取：
 
 ```bash
-# compose.env
+# compose.env — 旧版首启自动下载
+OPPTRIX_FETCH_MODELS_ON_START=1
+# 或强制重下
 OPPTRIX_FORCE_MODEL_FETCH=1
 ```
 
-冒烟、完全不拉模型：`OPPTRIX_SKIP_MODEL_FETCH=1` 或 `opptrix up --skip-models`。
+冒烟、完全不拉模型：`OPPTRIX_SKIP_MODEL_FETCH=1` 或 `opptrix up --skip-models`（与默认行为一致）。
 
-不要删除 named volume；`opptrix down --volumes` 会清空数据与模型。
+不要删除 named volume；`opptrix down --volumes` 会清空数据、模型与 system 槽位。
+
+裸 Node（非 Docker）可用同一 `$OPPTRIX_SYSTEM_DIR` 布局，用仓库内 supervisor 包装启动：
+
+```bash
+export OPPTRIX_SYSTEM_DIR=~/.opptrix/system
+export OPPTRIX_SEED_ROOT="$(pwd)"   # 首次会从当前树种子到 slots/
+node scripts/opptrix-node-supervisor.mjs
+```
+
+相关环境变量（Compose / `compose.env` 均可）：`OPPTRIX_SYSTEM_DIR`（默认 `/system`）、`OPPTRIX_SEED_ROOT`（默认 `/app`）、`OPPTRIX_DOCKER=1`、`OPPTRIX_ONCE=1`（干净退出码 0 时停 supervisor）、`OPPTRIX_SUPERVISOR_MAX_RETRIES`（可选崩溃重试上限）。`opptrix up` 使用仓库/`@opptrix/selfhost` 自带的 `docker-compose.yml` 时会自动挂载 `opptrix-system`；若自管旧版 compose，请补上该卷与上述环境变量。
 
 ## 额外目录挂载
 
@@ -260,7 +291,13 @@ services:
 
 ## 安全模型（命令与工作区）
 
-自托管默认采用 **工作区隔离**，不要求宿主机 OS 级沙箱提升（无默认 SRT / 系统授权安装）：
+Docker 自托管默认 **`OPPTRIX_AGENT_SANDBOX=off`**：Agent 在容器内以**系统级**运行 `opptrix_run`（镜像预装 shell、Node、npm、Python/pip、git），不启用工作区 grant 围栏或 OS 级 SRT。单用户信任模型——勿将未加反向代理认证的实例暴露给不可信用户。设 **`OPPTRIX_AGENT_SANDBOX=full`** 可恢复工作区隔离（grant + Deny）。
+
+镜像 runtime 阶段通过 apt 安装 `python3`、`python3-pip`、`python3-venv`、`git` 等基础工具；Python 解析**不**走托管/bundled 安装路径，直接使用系统 Python。
+
+**持久化目录（Agent 须知晓）**：跨重启仅 **`/data`**、**`/models`**、**`/system`** 与 **`/data/mounts/*`**；会话工作区与其它容器内路径不会保留，重要产物请写入上述卷或挂载。
+
+自托管在 `OPPTRIX_AGENT_SANDBOX=full` 时采用 **工作区隔离**，不要求宿主机 OS 级沙箱提升（无默认 SRT / 系统授权安装）：
 
 | 层 | 作用 |
 |----|------|
@@ -317,7 +354,7 @@ docker compose down -v       # ⚠ 删除数据与模型卷
 
 | 现象 | 处理 |
 |------|------|
-| `health` 长时间 unhealthy | 看 `docker compose logs`：是否在拉模型；可临时 `OPPTRIX_SKIP_MODEL_FETCH=1` |
+| `health` 长时间 unhealthy | 看 `docker compose logs`：若设了 `OPPTRIX_FETCH_MODELS_ON_START=1` 可能在拉模型；否则查端口/seed |
 | 原生模块 / ABI 报错 | 镜像须用 **glibc bookworm + Node ≥ 24** 构建，勿改 alpine |
 | UI 空白但 API 正常 | 确认 `SERVE_UI=1` 且镜像内存在 `/app/client-ui/dist` |
 | 远程无法访问未认领实例 | 预期行为；本机创建账户或经受信代理后再访问 |

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { resolveNodeRuntime, resolvePythonRuntime } from '@opptrix/agent-workspace'
+import { resolveNodeRuntime, resolvePythonRuntime, resolveAgentSandboxMode, isDockerEnv, DOCKER_PERSISTENCE_NOTE } from '@opptrix/agent-workspace'
 import { isDesktopRuntime, resolveOpptrixAppVersion, resolveUserDataRoot } from '@opptrix/shared'
 
 const DATA_ROOT = resolveUserDataRoot()
@@ -73,12 +73,14 @@ export function buildAgentSafeProjectInfo(
   }
 }
 
-export async function getSystemInfo() {
+export async function getSystemInfo(): Promise<Record<string, unknown>> {
   const now = new Date()
   const [nodeRuntime, pythonRuntime] = await Promise.all([
     resolveNodeRuntime(),
     resolvePythonRuntime(),
   ])
+  const docker = isDockerEnv()
+  const agentSandbox = resolveAgentSandboxMode()
   return {
     platform: process.platform,
     arch: process.arch,
@@ -108,6 +110,9 @@ export async function getSystemInfo() {
       : pythonRuntime.active_source,
     python_argv_hint:
       'opptrix_run 的 command 请用「python」或「pip」字面量；运行时会改写到当前优先解释器。禁止手写系统/托管绝对路径。',
+    agent_sandbox: agentSandbox,
+    docker_self_host: docker,
+    persistence_note: docker ? DOCKER_PERSISTENCE_NOTE : undefined,
     at: now.toISOString(),
   }
 }

@@ -137,6 +137,8 @@ jobs:
             NODE_IMAGE_PREFIX=
             NPM_REGISTRY=
             APT_MIRROR=
+            OPPTRIX_BASE_VERSION=${{ steps.meta.outputs.full_tag }}
+            OPPTRIX_RELEASE_TAG=${{ steps.meta.outputs.full_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
@@ -148,4 +150,4 @@ jobs:
           echo "- Image: \`${{ steps.meta.outputs.image }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tags: \`${{ steps.meta.outputs.full_tag }}\`, \`${{ steps.meta.outputs.version }}\`, \`selfhost\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Models: not included (volume /models at runtime)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Models: not included — download via product onboarding or set \`OPPTRIX_FETCH_MODELS_ON_START=1\`" >> "$GITHUB_STEP_SUMMARY"

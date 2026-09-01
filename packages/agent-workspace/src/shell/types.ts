@@ -131,6 +131,8 @@ export interface ShellPlatformStatus {
   network_isolation_level?: ShellNetworkIsolationLevel
   /** 产品隔离形态：默认 workspace；OPPTRIX_SHELL_ISOLATION=srt 时为 srt */
   isolation_mode?: 'workspace' | 'srt'
+  /** Agent 命令沙箱：Docker 默认 off（系统级）；full = 工作区/SRT 围栏 */
+  agent_sandbox?: 'off' | 'full'
 }
 
 export interface ShellInstallParams {

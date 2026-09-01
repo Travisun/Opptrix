@@ -1,5 +1,6 @@
 export type OnboardingPhase =
   | 'intro'
+  | 'coreModels'
   | 'llm'
   | 'mcp'
   | 'data'
@@ -12,15 +13,23 @@ export interface OnboardingNavStep {
   phase: OnboardingPhase
 }
 
-export function buildOnboardingSteps(opts?: { includeAccount?: boolean }): OnboardingNavStep[] {
+export function buildOnboardingSteps(opts?: {
+  includeAccount?: boolean
+  includeCoreModels?: boolean
+}): OnboardingNavStep[] {
   const steps: OnboardingNavStep[] = [
     { phase: 'intro' },
+  ]
+  if (opts?.includeCoreModels) {
+    steps.push({ phase: 'coreModels' })
+  }
+  steps.push(
     { phase: 'llm' },
     { phase: 'mcp' },
     { phase: 'data' },
     { phase: 'fuyao' },
     { phase: 'community' },
-  ]
+  )
   if (opts?.includeAccount !== false) {
     steps.push({ phase: 'account' })
   }
@@ -30,6 +39,7 @@ export function buildOnboardingSteps(opts?: { includeAccount?: boolean }): Onboa
 
 export function stepLabel(step: OnboardingNavStep): string {
   if (step.phase === 'intro') return '介绍'
+  if (step.phase === 'coreModels') return '本地能力'
   if (step.phase === 'llm') return '模型'
   if (step.phase === 'mcp') return '扩展服务'
   if (step.phase === 'data') return '行情'

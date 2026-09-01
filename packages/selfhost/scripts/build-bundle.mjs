@@ -18,6 +18,8 @@ const FILES = [
   { src: 'compose.env.example', dest: 'compose.env.example' },
   { src: '.dockerignore', dest: '.dockerignore' },
   { src: 'scripts/docker-entrypoint.sh', dest: 'scripts/docker-entrypoint.sh' },
+  { src: 'scripts/system-boot.mjs', dest: 'scripts/system-boot.mjs' },
+  { src: 'scripts/opptrix-node-supervisor.mjs', dest: 'scripts/opptrix-node-supervisor.mjs' },
 ]
 
 function main() {

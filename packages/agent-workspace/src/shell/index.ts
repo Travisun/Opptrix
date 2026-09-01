@@ -127,6 +127,12 @@ export {
   type OpptrixShellIsolationMode,
 } from './isolation-mode.js'
 export {
+  isDockerEnv,
+  resolveAgentSandboxMode,
+  DOCKER_PERSISTENCE_NOTE,
+  type AgentSandboxMode,
+} from '../env/docker-env.js'
+export {
   ensureLinuxSandboxReady,
   linuxSandboxProfileStillNeeded,
   resetLinuxSandboxAutoInstallAttempt,

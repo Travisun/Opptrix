@@ -3,7 +3,7 @@ import { Spinner, Text, mergeClasses } from '@fluentui/react-components'
 import type { OnboardingState } from './constants'
 import { shouldShowOnboarding } from './constants'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { getConfig, getProviderCatalog, saveProviderConfig } from '../api/client'
+import { getConfig, getHealth, getProviderCatalog, saveProviderConfig } from '../api/client'
 import type { PublicProviderRuntime } from '../types/provider'
 import ProviderWizard, { type ProviderWizardNavState } from '../pages/ProviderWizard'
 import { SettingsToastProvider } from '../pages/settings/SettingsToast'
@@ -25,6 +25,10 @@ import { OnboardingCommunityPanel } from './OnboardingCommunityPanel'
 import { OnboardingLegalPanel } from './OnboardingLegalPanel'
 import { OnboardingLlmReadyPanel } from './OnboardingLlmReadyPanel'
 import { OnboardingMcpPanel } from './OnboardingMcpPanel'
+import {
+  OnboardingCoreModelsPanel,
+  type OnboardingCoreModelsNavState,
+} from './OnboardingCoreModelsPanel'
 import { resolveActiveLlmFromConfig, type LlmActiveSummary } from './llmSummary'
 import {
   OnboardingHeroBlock,
@@ -92,9 +96,13 @@ export default function OnboardingWizard({
   const s = useOnboardingShellStyles()
   const release = useMemo(() => resolveOnboardingRelease(appVersion), [appVersion])
   const { status: authStatus, reload: reloadAuth } = useAuthStatus()
+  const [coreModelsRequired, setCoreModelsRequired] = useState(false)
   const steps = useMemo(
-    () => buildOnboardingSteps({ includeAccount: !authStatus?.claimed }),
-    [authStatus?.claimed],
+    () => buildOnboardingSteps({
+      includeAccount: !authStatus?.claimed,
+      includeCoreModels: coreModelsRequired,
+    }),
+    [authStatus?.claimed, coreModelsRequired],
   )
 
   const [stepIndex, setStepIndex] = useState(0)
@@ -103,6 +111,8 @@ export default function OnboardingWizard({
   const [llmSummary, setLlmSummary] = useState<LlmActiveSummary | null>(null)
   const [llmNav, setLlmNav] = useState<ProviderWizardNavState | null>(null)
   const [llmReconfiguring, setLlmReconfiguring] = useState(false)
+  const [coreModelsReady, setCoreModelsReady] = useState(false)
+  const [, setCoreModelsNav] = useState<OnboardingCoreModelsNavState | null>(null)
   const [fuyaoReady, setFuyaoReady] = useState(false)
   const [fuyaoProvider, setFuyaoProvider] = useState<PublicProviderRuntime | null>(null)
   const [fuyaoNav, setFuyaoNav] = useState<OnboardingFuyaoNavState | null>(null)
@@ -140,11 +150,30 @@ export default function OnboardingWizard({
   }, [])
 
   useEffect(() => {
+    void getHealth()
+      .then(h => {
+        const req = Boolean((h as { core_models_required?: boolean }).core_models_required)
+        setCoreModelsRequired(req)
+        if ((h as { core_models_ready?: boolean }).core_models_ready) {
+          setCoreModelsReady(true)
+        }
+      })
+      .catch(() => {
+        setCoreModelsRequired(false)
+      })
+  }, [])
+
+  useEffect(() => {
     if (current.phase === 'llm') void refreshLlmStatus()
     else {
       setLlmNav(null)
       setLlmReconfiguring(false)
       setLlmSummary(null)
+    }
+    if (current.phase === 'coreModels') {
+      /* status refreshed inside panel */
+    } else {
+      setCoreModelsNav(null)
     }
     if (current.phase === 'fuyao') void refreshFuyaoStatus()
     else {
@@ -165,11 +194,6 @@ export default function OnboardingWizard({
 
   const goNext = () => {
     if (!isLast) setStepIndex(i => i + 1)
-  }
-
-  const goToConfig = () => {
-    const llmIndex = steps.findIndex(s => s.phase === 'llm')
-    if (llmIndex >= 0) setStepIndex(llmIndex)
   }
 
   const goBack = () => {
@@ -251,8 +275,27 @@ export default function OnboardingWizard({
       />
     )
     footerPrimary = (
-      <OpptrixButton variant="primary" onClick={goToConfig}>
+      <OpptrixButton variant="primary" onClick={goNext}>
         开始配置
+      </OpptrixButton>
+    )
+  } else if (current.phase === 'coreModels') {
+    bodyFlush = true
+    contentWide = true
+    contentAlignStart = true
+    body = (
+      <OnboardingCoreModelsPanel
+        onNavChange={setCoreModelsNav}
+        onReadyChange={setCoreModelsReady}
+      />
+    )
+    footerPrimary = (
+      <OpptrixButton
+        variant="primary"
+        disabled={!coreModelsReady}
+        onClick={goNext}
+      >
+        {ONBOARDING_COPY.coreModels.continue}
       </OpptrixButton>
     )
   } else if (current.phase === 'llm') {

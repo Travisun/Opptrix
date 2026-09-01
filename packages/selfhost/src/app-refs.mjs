@@ -228,6 +228,7 @@ export function resolveAppRef(opts = {}) {
  *   OPPTRIX_APP_VERSION: string,
  *   OPPTRIX_RELEASE_CHANNEL: string,
  *   OPPTRIX_RELEASE_TAG: string,
+ *   OPPTRIX_BASE_VERSION?: string,
  * }}
  */
 export function resolveReleaseIdentity(ref, opts = {}) {
@@ -237,6 +238,7 @@ export function resolveReleaseIdentity(ref, opts = {}) {
       OPPTRIX_APP_VERSION: parsed.version,
       OPPTRIX_RELEASE_CHANNEL: RELEASE_CHANNEL_SELFHOST,
       OPPTRIX_RELEASE_TAG: parsed.tag,
+      OPPTRIX_BASE_VERSION: parsed.tag,
     }
   }
 

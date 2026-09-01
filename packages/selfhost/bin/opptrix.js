@@ -75,9 +75,11 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   start             启动已有容器（不重建）
   stop              停止容器
   restart           重启容器
-  down              停止并移除容器（默认保留数据卷）
+  down              停止并移除容器（默认保留数据卷；加 --volumes 才会删卷）
   build             仅本地构建镜像
-  update            优先拉取新版本预构建镜像；保留 compose.env / 卷
+  update            升级运行环境/镜像/Node 底座：拉新预构建并重建容器；
+                    默认保留数据卷 / 模型卷 / 系统槽位卷与挂载，不会清空挂载数据。
+                    应用内热更新另见产品内提示（与本命令分工不同）
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
   health            探测 http://127.0.0.1:8711/api/health
@@ -95,7 +97,7 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
   --build               强制本地编译镜像（不优先 pull 预构建）
   --no-build            本地路径下 up 时不加 --build（已有镜像时）
-  --volumes             down 时删除数据卷（危险）
+  --volumes             down 时删除数据/模型/系统槽位卷（危险，不可恢复）
   -f, --follow          logs 跟踪输出
   --tail <n>            logs 尾部行数（默认 200）
 
@@ -263,8 +265,18 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
   const noBuild = flagTrue(parsed.flags, 'no-build')
 
   if (opts.update) {
-    console.log('[opptrix] 升级保留: compose.env / .opptrix.json / docker-compose.override.yml，以及 Docker 卷 opptrix-data、opptrix-models')
-    console.log('[opptrix] 优先拉取预构建镜像；已有核心模型不会重下（强制重下请在 compose.env 设 OPPTRIX_FORCE_MODEL_FETCH=1）')
+    console.log(
+      '[opptrix] 更新容器镜像；数据卷 / 模型卷 / 系统槽位卷默认保留，不会删除挂载数据',
+    )
+    console.log(
+      '[opptrix] 升级保留: compose.env / .opptrix.json / docker-compose.override.yml，以及 Docker 卷 opptrix-data、opptrix-models、opptrix-system',
+    )
+    console.log(
+      '[opptrix] 优先拉取预构建镜像；已有核心模型不会重下（强制重下请在 compose.env 设 OPPTRIX_FORCE_MODEL_FETCH=1）',
+    )
+    console.log(
+      '[opptrix] 说明: 本命令用于运行环境 / Node / 镜像底座升级；应用内热更新请按产品内提示操作',
+    )
   }
 
   if (forceBuild) {
@@ -618,7 +630,16 @@ async function main() {
       case 'down': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
         const args = ['down']
-        if (flagTrue(parsed.flags, 'volumes')) args.push('-v')
+        if (flagTrue(parsed.flags, 'volumes')) {
+          console.warn(
+            '[opptrix] WARN: --volumes 将删除 Docker 卷（含 opptrix-data / opptrix-models / opptrix-system 及其中挂载数据），不可恢复',
+          )
+          args.push('-v')
+        } else {
+          console.log(
+            '[opptrix] 移除容器；数据卷 / 模型卷 / 系统槽位卷默认保留（不会删除挂载数据）。若要清空卷请显式加 --volumes',
+          )
+        }
         return runCompose(args, { root, mirror, releaseEnv })
       }
       case 'build': {

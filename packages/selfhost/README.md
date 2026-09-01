@@ -172,7 +172,9 @@ npm update -g @opptrix/selfhost    # 仅升级管理命令本身（selfhost-v*�
 opptrix update                     # 优先拉新预构建镜像；保留配置与卷
 ```
 
-**效果：** 应用与 CLI 分轨升级/回退；**沿用**原 `compose.env`、挂载 override、数据卷与模型卷。已有核心模型跳过下载；强制重下见 `OPPTRIX_FORCE_MODEL_FETCH=1`。默认不会静默跟 `main`。维护者打 `opptrix-selfhost-v*` 后 CI 推送镜像到 `ghcr.io/travisun/opptrix`；国内 `opptrix up` 会对 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速后拉取。
+**效果：** 应用与 CLI 分轨升级/回退；**沿用**原 `compose.env`、挂载 override、数据卷 `opptrix-data`、模型卷 `opptrix-models`、系统槽位卷 `opptrix-system`。已有核心模型跳过下载；强制重下见 `OPPTRIX_FORCE_MODEL_FETCH=1`。默认不会静默跟 `main`。维护者打 `opptrix-selfhost-v*` 后 CI 推送镜像到 `ghcr.io/travisun/opptrix`；国内 `opptrix up` 会对 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速后拉取。
+
+**热更新 vs `opptrix update`：** 产品内「系统更新」在**不换镜像**的前提下，把新运行时解压进 `/system` 槽位并切换 `boot`（协议见 [SYSTEM-UPDATE.md](https://github.com/Travisun/Opptrix/blob/main/docs/SYSTEM-UPDATE.md)）。当提示需要刷新**底座 / 运行环境 / Node** 时，请用本 CLI 的 **`opptrix update`**：它重建容器、换镜像，但默认保留上述三个命名卷与 operator 挂载，不会清空挂载数据；只有 `opptrix down --volumes` 才会删卷。
 
 ---
 
@@ -251,7 +253,7 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `opptrix start` / `stop` / `restart` | 启停重启 | 不强制重建镜像 |
 | `opptrix down` | 移除容器 | 默认保留数据；加 `--volumes` 清空 |
 | `opptrix build` | 只本地构建镜像 | 不启动容器 |
-| `opptrix update` | 优先 pull 新版本镜像 | 保留配置与卷 |
+| `opptrix update` | 升级镜像 / 运行环境底座 | 重建容器；默认保留 data / models / system 卷与挂载；热更新另见产品内提示 |
 | `opptrix logs` | 查看日志 | `-f` 持续跟踪 |
 | `opptrix status` | 容器状态 | 等同 compose ps |
 | `opptrix health` | HTTP 健康检查 | 确认 API 已就绪 |
@@ -297,6 +299,7 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 |------|------|-------------------|
 | 用户数据、会话、设置等 | Docker 卷 `opptrix-data`（容器内 `/data`） | **默认保留** |
 | 本地模型等 | 卷 `opptrix-models`（`/models`） | **默认保留** |
+| 运行时槽位 / 热更新状态 | 卷 `opptrix-system`（`/system`） | **默认保留** |
 | 访问地址 | http://127.0.0.1:8711（默认只监听本机） | — |
 
 远程公网访问请自己加反向代理与 HTTPS；完整挂载与安全说明见 [SELF-HOSTING.md](https://github.com/Travisun/Opptrix/blob/main/docs/SELF-HOSTING.md)。

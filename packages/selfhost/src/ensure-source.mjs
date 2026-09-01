@@ -236,6 +236,14 @@ export function overlayBundleCompose(root) {
     fs.mkdirSync(path.dirname(epDest), { recursive: true })
     fs.copyFileSync(epSrc, epDest)
   }
+  for (const name of ['system-boot.mjs', 'opptrix-node-supervisor.mjs']) {
+    const src = path.join(bundle, 'scripts', name)
+    const dest = path.join(root, 'scripts', name)
+    if (fs.existsSync(src)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.copyFileSync(src, dest)
+    }
+  }
 }
 
 /**
