@@ -37,24 +37,19 @@
 
 ## 💬 技术交流与作者动态
 
-**优先加入 QQ 用户群**扫码进群，使用问题、功能建议与同路人交流更方便；也可扫码加入微信技术交流群，或在抖音关注项目作者获取动态：
+**扫码加入 QQ 用户群**，使用问题、功能建议与同路人交流更方便；也可在抖音关注项目作者获取动态：
 
 <table align="center">
   <tr>
-    <td align="center" width="25%">
+    <td align="center" width="33%">
       <img src="author/qq_group.jpg" alt="Opptrix QQ 用户群 — 扫码加入" width="220" /><br />
-      <sub><strong>QQ · Opptrix 用户群（优先）</strong></sub>
+      <sub><strong>QQ · Opptrix 用户群</strong></sub>
     </td>
-    <td align="center" width="25%">
-      <img src="https://opptrix.org/images/wechat-group-qr.jpg?v=202608241038" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
-      <sub>微信 · Opptrix 技术交流群</sub>
-      <!-- 维护备注：群二维码过期后替换官网 docs/public/images/wechat-group-qr.jpg，并更新 ?v= 缓存戳 -->
-    </td>
-    <td align="center" width="25%">
+    <td align="center" width="33%">
       <img src="author/douyin-qr.jpg" alt="抖音扫码关注项目作者动态" width="220" /><br />
       <sub>抖音 · 关注项目作者动态</sub>
     </td>
-    <td align="center" width="25%">
+    <td align="center" width="33%">
       <img src="author/zanshang-weixin.webp" alt="微信扫码成为 Opptrix 赞助者" width="220" /><br />
       <sub>微信扫码·成为Opptrix 赞助者</sub>
     </td>

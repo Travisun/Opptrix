@@ -160,14 +160,14 @@
 │ 计划任务          │  │  └─────────────────────────────┘│ │
 │ Python            │  │                                      │
 │ 关于              │  │                                      │
-│ 用户交流群        │  └─────────────────────────────────┘ │
+│ QQ 群             │  └─────────────────────────────────┘ │
 │  （弹 Dialog）    │                                      │
 └───────────────────┴──────────────────────────────────────┘
 ```
 
 侧栏宽度默认 **260px**，panel 模式可通过 `WorkspaceSplitDivider` 拖拽调整（约 **200–360px**，并受内容区最小宽度约束），写入 `localStorage`（`opptrix-settings-sidebar-width`）。分割条与聊天左侧栏同宽、同色（默认 `tone`，非 `subtle`），panel 不另叠 `opptrix-sidebar-edge`。Overlay / 窄屏模式无分割条，仍使用同一动态宽度。内容区仅保留章节 `pageTitle` / `pageSubtitle`；不渲染 mac 次级「设置」title band。列表型章节（工作流技能、新闻订阅源、大模型提供商）默认只展示名称行；详情 / 地址在 Dialog 中编辑；「添加」入口用 `SettingsPanelHeader` 顶栏按钮。
 
-侧栏「用户交流群」为动作项（`WechatCommunityDialog`）：点击弹出扫码入群 Dialog，不切换右侧章节；二维码图为远程资源 `https://opptrix.org/images/wechat-group-qr.jpg`。
+侧栏「QQ 群」为动作项（`WechatCommunityDialog`）：点击弹出扫码入群 Dialog，不切换右侧章节；二维码为打包资源 `/images/qq-group-qr.jpg`（与 `author/qq_group.jpg` 同步）。
 
 ### 7.1 内容区宽度控制
 

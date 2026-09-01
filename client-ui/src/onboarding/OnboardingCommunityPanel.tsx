@@ -99,7 +99,7 @@ export function OnboardingCommunityPanel() {
               <img
                 className={imgLoading ? s.qrImageHidden : s.qrImage}
                 src={WECHAT_GROUP_QR_URL}
-                alt="微信用户交流群二维码"
+                alt="Opptrix QQ 用户群二维码"
                 width={220}
                 height={220}
                 decoding="async"

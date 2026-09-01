@@ -394,7 +394,7 @@ export default function SettingsSidebar({
               className={mergeClasses(s.navIcon, isOverlay && s.navIconOverlay)}
               fontSize={isOverlay ? SIDEBAR_TOP_MENU_ICON_SIZE : 17}
             />
-            <span>用户交流群</span>
+            <span>QQ 群</span>
           </button>
         )}
       </nav>

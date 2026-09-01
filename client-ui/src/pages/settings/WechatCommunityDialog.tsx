@@ -14,8 +14,11 @@ import {
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars } from '../../theme/tokens'
 
-/** 官网托管的微信群二维码；可在服务端直接替换文件，客户端无需发版。 */
-export const WECHAT_GROUP_QR_URL = 'https://opptrix.org/images/wechat-group-qr.jpg'
+/** 打包进 UI 的 QQ 群二维码；更新时同步替换 author/qq_group.jpg 与本文件。 */
+export const QQ_GROUP_QR_URL = '/images/qq-group-qr.jpg'
+
+/** @deprecated 使用 {@link QQ_GROUP_QR_URL} */
+export const WECHAT_GROUP_QR_URL = QQ_GROUP_QR_URL
 
 interface WechatCommunityDialogProps {
   open: boolean
@@ -134,10 +137,10 @@ export default function WechatCommunityDialog({ open, onClose }: WechatCommunity
         )}
       >
         <DialogBody>
-          <DialogTitle>加入用户交流群</DialogTitle>
+          <DialogTitle>加入 QQ 群</DialogTitle>
           <DialogContent className={s.body}>
             <Text className={s.intro} block>
-              扫码加入微信交流群，和其他用户一起聊聊使用心得，也欢迎把遇到的问题告诉我们。
+              扫码加入 QQ 用户群，和其他用户一起聊聊使用心得，也欢迎把遇到的问题告诉我们。
             </Text>
             <div className={s.qrWrap}>
               <div className={s.qrFrame} aria-busy={imgLoading && !imgFailed} aria-hidden={imgFailed}>
@@ -158,8 +161,8 @@ export default function WechatCommunityDialog({ open, onClose }: WechatCommunity
                     <img
                       key={loadGen}
                       className={imgLoading ? s.qrImageHidden : s.qrImage}
-                      src={WECHAT_GROUP_QR_URL}
-                      alt="微信用户交流群二维码"
+                      src={QQ_GROUP_QR_URL}
+                      alt="Opptrix QQ 用户群二维码"
                       width={220}
                       height={220}
                       decoding="async"
