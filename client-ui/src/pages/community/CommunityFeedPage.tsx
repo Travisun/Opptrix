@@ -50,6 +50,12 @@ const useStyles = makeStyles({
     padding: '10px 16px',
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
+  webHeadMobile: {
+    gap: '4px',
+    padding: '6px 8px',
+    paddingTop: 'max(6px, env(safe-area-inset-top))',
+    minHeight: '44px',
+  },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
@@ -213,6 +219,7 @@ type Props = {
   electronChrome?: boolean
   chromeToolbarReserve?: number
   isMobile?: boolean
+  sidebarDrawerOpen?: boolean
   onOpenSidebar?: () => void
 }
 
@@ -300,6 +307,7 @@ function CommunityFeedContent({
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
+  sidebarDrawerOpen = false,
   onOpenSidebar,
 }: Props) {
   const s = useStyles()
@@ -402,9 +410,9 @@ function CommunityFeedContent({
           )}
         />
       ) : (
-        <div className={s.webHead}>
+        <div className={mergeClasses(s.webHead, isMobile && s.webHeadMobile)}>
           {isMobile && onOpenSidebar ? (
-            <MobileNavMenuButton onClick={onOpenSidebar} />
+            <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
           ) : null}
           <Text className={s.webTitle}>社区讨论</Text>
           {toolbar}

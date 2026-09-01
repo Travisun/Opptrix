@@ -72,25 +72,47 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     height: '100%',
   },
-  sidebarDrawer: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    bottom: 0,
+  /** Mobile push shell：宽 0↔drawer，挤开主列（非 fixed 遮罩） */
+  drawerShell: {
+    flexShrink: 0,
+    width: 0,
+    height: '100%',
+    overflow: 'hidden',
+    pointerEvents: 'none',
+    transitionProperty: 'width',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '1ms',
+    },
+  },
+  drawerShellOpen: {
     width: opptrixTokens.mobileDrawerWidth,
     maxWidth: '300px',
-    zIndex: 200,
+    pointerEvents: 'auto',
+  },
+  sidebarDrawer: {
+    width: opptrixTokens.mobileDrawerWidth,
+    maxWidth: '300px',
+    height: '100%',
+    boxSizing: 'border-box',
     paddingTop: 'env(safe-area-inset-top)',
     paddingBottom: 'env(safe-area-inset-bottom)',
-    transform: 'translateX(-100%)',
-    transitionProperty: 'transform',
-    transitionDuration: motion.slow,
-    transitionTimingFunction: motion.easeOut,
-    backgroundColor: opptrixCssVars.canvas,
-    borderLeft: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    borderRight: `1px solid ${opptrixCssVars.separator}`,
+    opacity: 0,
+    transform: 'translate3d(-12px, 0, 0)',
+    transitionProperty: 'opacity, transform',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '1ms',
+    },
   },
   sidebarDrawerOpen: {
-    transform: 'translateX(0)',
+    opacity: 1,
+    transform: 'translate3d(0, 0, 0)',
   },
   drawerHead: {
     display: 'flex',
@@ -290,21 +312,6 @@ const useStyles = makeStyles({
     paddingTop: '5px',
     paddingBottom: '5px',
     borderRadius: opptrixTokens.radiusMd,
-  },
-  backdrop: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
-    backdropFilter: 'blur(4px)',
-    zIndex: 150,
-    opacity: 0,
-    pointerEvents: 'none',
-    transitionProperty: 'opacity',
-    transitionDuration: motion.slow,
-  },
-  backdropVisible: {
-    opacity: 1,
-    pointerEvents: 'auto',
   },
   iconBtn: {
     minWidth: '36px',
@@ -687,14 +694,12 @@ function SessionSidebar({
 
   if (isDrawer) {
     return (
-      <>
-        <div
-          className={mergeClasses(s.backdrop, drawerOpen && s.backdropVisible)}
-          onClick={onClose}
-          aria-hidden="true"
-        />
+      <div
+        className={mergeClasses(s.drawerShell, drawerOpen && s.drawerShellOpen)}
+        aria-hidden={!drawerOpen}
+      >
         {sidebarEl}
-      </>
+      </div>
     )
   }
 

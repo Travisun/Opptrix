@@ -166,7 +166,7 @@ export default function UpdateManualInstallDialog({ open, onClose }: UpdateManua
           <DialogTitle>更新未成功，可手动安装</DialogTitle>
           <DialogContent className={s.body}>
             <Text className={s.intro} block>
-              自动更新多次未成功。你可以到官网下载最新安装包，安装时覆盖当前版本即可。需要帮助时，扫码加入微信交流群。
+              自动更新多次未成功。你可以到官网下载最新安装包，安装时覆盖当前版本即可。需要帮助时，扫码加入 QQ 群。
             </Text>
             <div className={s.qrWrap}>
               <div className={s.qrFrame} aria-busy={imgLoading && !imgFailed} aria-hidden={imgFailed}>
@@ -188,7 +188,7 @@ export default function UpdateManualInstallDialog({ open, onClose }: UpdateManua
                       key={loadGen}
                       className={imgLoading ? s.qrImageHidden : s.qrImage}
                       src={WECHAT_GROUP_QR_URL}
-                      alt="微信用户交流群二维码"
+                      alt="Opptrix QQ 用户群二维码"
                       width={200}
                       height={200}
                       decoding="async"
@@ -205,7 +205,7 @@ export default function UpdateManualInstallDialog({ open, onClose }: UpdateManua
                 )}
               </div>
               <Text className={s.hint} block>
-                扫码加入交流群，遇到问题可以随时问我们
+                扫码加入 QQ 群，遇到问题可以随时问我们
               </Text>
             </div>
           </DialogContent>

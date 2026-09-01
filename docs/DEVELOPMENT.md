@@ -68,6 +68,12 @@ npm run dev:web          # 仅 Vite（需另开 dev:api）
 npm run dev:desktop      # Electron + HMR
 ```
 
+局域网访问时指定监听地址，例如：
+
+```bash
+STOCK_RESEARCH_HOST=0.0.0.0 WEB_HOST=0.0.0.0 npm run dev
+```
+
 修改 `packages/*` 后需 `npm run build:packages` 并重启 API（`dev:api` 会 rebuild server；改其他包时需手动 build）。
 
 ## 修改代码的常见位置

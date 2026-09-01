@@ -49,6 +49,12 @@ const useStyles = makeStyles({
     padding: '10px 16px',
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
+  webHeadMobile: {
+    gap: '4px',
+    padding: '6px 8px',
+    paddingTop: 'max(6px, env(safe-area-inset-top))',
+    minHeight: '44px',
+  },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
@@ -93,6 +99,7 @@ type Props = {
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
   isMobile?: boolean
+  sidebarDrawerOpen?: boolean
   onOpenSidebar?: () => void
   onOpenSettings?: () => void
   onDiscussArticle?: (article: FeedArticle) => void
@@ -102,6 +109,7 @@ function NewsCenterContent({
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
+  sidebarDrawerOpen = false,
   onOpenSidebar,
   onOpenSettings,
   onDiscussArticle,
@@ -189,10 +197,10 @@ function NewsCenterContent({
   ) : null
 
   const webHead = !electronChrome ? (
-    <div className={s.webHead}>
+    <div className={mergeClasses(s.webHead, isMobile && s.webHeadMobile)}>
       {isMobile && onOpenSidebar ? (
-        <MobileNavMenuButton onClick={onOpenSidebar} />
-      ) : null}
+            <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
+          ) : null}
       <Text className={s.webTitle} block>新闻中心</Text>
       {updatedLabel && <Text className={s.toolbarMeta}>更新 {updatedLabel}</Text>}
       <div className={s.toolbarActions}>

@@ -42,6 +42,7 @@ type Props = {
   electronChrome?: boolean
   chromeToolbarReserve?: number
   isMobile?: boolean
+  sidebarDrawerOpen?: boolean
   onOpenSidebar?: () => void
 }
 
@@ -49,6 +50,7 @@ function MarketDynamicsContent({
   electronChrome = false,
   chromeToolbarReserve = 0,
   isMobile = false,
+  sidebarDrawerOpen = false,
   onOpenSidebar,
 }: Props) {
   const s = useStyles()
@@ -81,6 +83,7 @@ function MarketDynamicsContent({
         electronChrome={electronChrome}
         chromeToolbarReserve={chromeToolbarReserve}
         isMobile={isMobile}
+        sidebarDrawerOpen={sidebarDrawerOpen}
         onOpenSidebar={onOpenSidebar}
       />
 
