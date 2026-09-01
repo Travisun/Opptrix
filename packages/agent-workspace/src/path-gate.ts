@@ -3,6 +3,7 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { DenyPathError, PathEscapeError } from './errors.js'
 import { isPathDenied, isSensitiveRelPath } from './deny.js'
+import { maybeChownForDockerAgent } from './env/docker-env.js'
 
 function isUnderRoot(target: string, root: string): boolean {
   const rel = path.relative(root, target)
@@ -103,4 +104,5 @@ export async function resolveSafePath(
 
 export async function ensureDirectory(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true })
+  maybeChownForDockerAgent(dir)
 }

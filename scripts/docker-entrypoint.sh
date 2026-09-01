@@ -1,15 +1,23 @@
 #!/bin/sh
-# Opptrix Docker entrypoint — volumes, optional model fetch, system slot boot + supervisor.
+# Opptrix Docker entrypoint — volumes, dual-user DAC, optional model fetch, system slot boot + supervisor.
 #
 # Models: image is model-free. By default we do NOT run docker-fetch-models.mjs on start
 # (set OPPTRIX_FETCH_MODELS_ON_START=1 to restore legacy first-boot download). Product
-# onboarding downloads models into /models. OPPTRIX_SKIP_MODEL_FETCH=1 always skips.
+# onboarding downloads models into models dir. OPPTRIX_SKIP_MODEL_FETCH=1 always skips.
 #
 # Mirrors: OPPTRIX_MIRROR_AUTO=1 probes registries and exports PIP_INDEX_URL / npm registry.
 #
-# Layout ($OPPTRIX_SYSTEM_DIR, default /system):
-#   boot -> slots/<ver>, backup -> slots/<prev>, update/, slots/, state.json
-# Image /app is the seed tree; runtime code runs from /system/boot.
+# Layout (preferred — OPPTRIX_HOME=/opptrix, single volume):
+#   private/   → OPPTRIX_DATA_DIR (service-only 0700)
+#   workspace/ → OPPTRIX_AGENT_WORKSPACE_DIR (opptrix-agent writable)
+#   mounts/    → OPPTRIX_MOUNTS_DIR
+#   models/    → OPPTRIX_MODELS_DIR (group-readable)
+#   system/    → OPPTRIX_SYSTEM_DIR (service-only 0700)
+#
+# Legacy (no OPPTRIX_HOME): /data + /models + /system；workspace/mounts 仍在 data 下并 chown 给 agent。
+#
+# Agent isolation: service runs as root; opptrix_run spawns as opptrix-agent (DAC).
+# umask 002 + setgid on workspace/mounts so root-created session dirs stay group-writable.
 #
 # Supervisor exit codes (server process):
 #   42 — activate pending (if any), then restart
@@ -18,33 +26,104 @@
 #   0 — restart unless OPPTRIX_ONCE=1
 set -eu
 
-DATA_DIR="${OPPTRIX_DATA_DIR:-/data}"
-MODELS_DIR="${OPPTRIX_MODELS_DIR:-/models}"
-SYSTEM_DIR="${OPPTRIX_SYSTEM_DIR:-/system}"
 SEED_ROOT="${OPPTRIX_SEED_ROOT:-/app}"
+AGENT_USER="${OPPTRIX_AGENT_USER:-opptrix-agent}"
 
-mkdir -p "$DATA_DIR" "$DATA_DIR/mounts" "$MODELS_DIR" \
+if [ -n "${OPPTRIX_HOME:-}" ]; then
+  HOME_ROOT="$OPPTRIX_HOME"
+  DATA_DIR="${OPPTRIX_DATA_DIR:-$HOME_ROOT/private}"
+  MODELS_DIR="${OPPTRIX_MODELS_DIR:-$HOME_ROOT/models}"
+  SYSTEM_DIR="${OPPTRIX_SYSTEM_DIR:-$HOME_ROOT/system}"
+  WORKSPACE_DIR="${OPPTRIX_AGENT_WORKSPACE_DIR:-$HOME_ROOT/workspace}"
+  MOUNTS_DIR="${OPPTRIX_MOUNTS_DIR:-$HOME_ROOT/mounts}"
+else
+  DATA_DIR="${OPPTRIX_DATA_DIR:-/data}"
+  MODELS_DIR="${OPPTRIX_MODELS_DIR:-/models}"
+  SYSTEM_DIR="${OPPTRIX_SYSTEM_DIR:-/system}"
+  WORKSPACE_DIR="${OPPTRIX_AGENT_WORKSPACE_DIR:-$DATA_DIR/agent-workspace}"
+  MOUNTS_DIR="${OPPTRIX_MOUNTS_DIR:-$DATA_DIR/mounts}"
+fi
+
+mkdir -p "$DATA_DIR" "$MODELS_DIR" "$SYSTEM_DIR" "$WORKSPACE_DIR" "$MOUNTS_DIR" \
   "$MODELS_DIR/llms" \
   "$MODELS_DIR/llms/multilingual-e5-small" \
   "$MODELS_DIR/llms/rapidocr-ppocrv4-mobile" \
-  "$MODELS_DIR/sensevoice" \
-  "$SYSTEM_DIR"
+  "$MODELS_DIR/sensevoice"
 
 # Default model layout (with-models):
-#   /models/llms/multilingual-e5-small/     → OPPTRIX_E5_BUNDLED_DIR
-#   /models/llms/rapidocr-ppocrv4-mobile/   → OPPTRIX_RAPIDOCR_MODEL_DIR / BUNDLED
-#   /models/llms/*.gguf                    → HY-MT offline translation (OPPTRIX_LLM_DIR)
-#   /models/sensevoice/                    → OPPTRIX_SENSEVOICE_BUNDLED_DIR (q8 + VAD)
-#   /models/llms                           → OPPTRIX_LLM_DIR
+#   models/llms/multilingual-e5-small/     → OPPTRIX_E5_BUNDLED_DIR
+#   models/llms/rapidocr-ppocrv4-mobile/   → OPPTRIX_RAPIDOCR_MODEL_DIR / BUNDLED
+#   models/llms/*.gguf                    → HY-MT offline translation (OPPTRIX_LLM_DIR)
+#   models/sensevoice/                    → OPPTRIX_SENSEVOICE_BUNDLED_DIR (q8 + VAD)
 export OPPTRIX_DATA_DIR="$DATA_DIR"
 export OPPTRIX_SYSTEM_DIR="$SYSTEM_DIR"
 export OPPTRIX_SEED_ROOT="$SEED_ROOT"
 export OPPTRIX_DOCKER="${OPPTRIX_DOCKER:-1}"
+export OPPTRIX_AGENT_WORKSPACE_DIR="$WORKSPACE_DIR"
+export OPPTRIX_MOUNTS_DIR="$MOUNTS_DIR"
 export OPPTRIX_LLM_DIR="${OPPTRIX_LLM_DIR:-$MODELS_DIR/llms}"
 export OPPTRIX_E5_BUNDLED_DIR="${OPPTRIX_E5_BUNDLED_DIR:-$MODELS_DIR/llms/multilingual-e5-small}"
 export OPPTRIX_RAPIDOCR_MODEL_DIR="${OPPTRIX_RAPIDOCR_MODEL_DIR:-$MODELS_DIR/llms/rapidocr-ppocrv4-mobile}"
 export OPPTRIX_RAPIDOCR_BUNDLED_DIR="${OPPTRIX_RAPIDOCR_BUNDLED_DIR:-$MODELS_DIR/llms/rapidocr-ppocrv4-mobile}"
 export OPPTRIX_SENSEVOICE_BUNDLED_DIR="${OPPTRIX_SENSEVOICE_BUNDLED_DIR:-$MODELS_DIR/sensevoice}"
+if [ -n "${OPPTRIX_HOME:-}" ]; then
+  export OPPTRIX_HOME
+fi
+
+# ── Dual-user DAC: private/system for service; workspace/mounts for opptrix-agent ──
+AGENT_UID=""
+AGENT_GID=""
+if id "$AGENT_USER" >/dev/null 2>&1; then
+  AGENT_UID="$(id -u "$AGENT_USER")"
+  AGENT_GID="$(id -g "$AGENT_USER")"
+  export OPPTRIX_AGENT_USER="$AGENT_USER"
+  export OPPTRIX_AGENT_UID="$AGENT_UID"
+  export OPPTRIX_AGENT_GID="$AGENT_GID"
+fi
+
+if [ "$(id -u)" = "0" ] && [ -n "$AGENT_UID" ]; then
+  # Root-created files under setgid dirs need group-write for the agent user
+  umask 002
+
+  case "$WORKSPACE_DIR" in
+    "$DATA_DIR"|"$DATA_DIR"/*)
+      # Legacy: workspace under data — keep data traversable; lock sensitive leaves
+      chmod 755 "$DATA_DIR" || true
+      for leaf in \
+        opptrix.db opptrix.db-wal opptrix.db-shm \
+        providers sessions session-state agent-privileges \
+        market-data runtimes auth.key vault.key \
+        tushare-config.json watchlist.json portfolio.json \
+        news-translation-cache.json browser-screenshots
+      do
+        if [ -e "$DATA_DIR/$leaf" ]; then
+          chown -R root:root "$DATA_DIR/$leaf" 2>/dev/null || true
+          chmod -R go-rwx "$DATA_DIR/$leaf" 2>/dev/null || true
+        fi
+      done
+      ;;
+    *)
+      chown -R root:root "$DATA_DIR" 2>/dev/null || true
+      chmod 700 "$DATA_DIR" || true
+      ;;
+  esac
+
+  chown -R root:root "$SYSTEM_DIR" 2>/dev/null || true
+  chmod 700 "$SYSTEM_DIR" || true
+
+  chown -R "${AGENT_UID}:${AGENT_GID}" "$WORKSPACE_DIR" "$MOUNTS_DIR" 2>/dev/null || true
+  chmod 2770 "$WORKSPACE_DIR" "$MOUNTS_DIR" || true
+
+  # Models: readable by agent group (optional RO use); writable by root
+  chown -R "root:${AGENT_GID}" "$MODELS_DIR" 2>/dev/null || true
+  chmod 755 "$MODELS_DIR" || true
+  find "$MODELS_DIR" -type d -exec chmod 755 {} + 2>/dev/null || true
+  find "$MODELS_DIR" -type f -exec chmod 644 {} + 2>/dev/null || true
+
+  echo "[opptrix] agent-dac user=$AGENT_USER uid=$AGENT_UID gid=$AGENT_GID workspace=$WORKSPACE_DIR mounts=$MOUNTS_DIR"
+else
+  echo "[opptrix] WARN: agent DAC skipped (need root + user $AGENT_USER); shell runs as service uid"
+fi
 
 # Optional runtime mirror auto (pip / npm registry env)
 if [ "${OPPTRIX_MIRROR_AUTO:-0}" = "1" ]; then
@@ -56,9 +135,6 @@ if [ "${OPPTRIX_MIRROR_AUTO:-0}" = "1" ]; then
     echo "[opptrix] OPPTRIX_MIRROR_AUTO profile=${OPPTRIX_MIRROR_PROFILE:-unknown}"
   fi
 fi
-
-# Extra host mounts convention (bind from compose): /data/mounts/<name>
-# Sibling API resolves these under OPPTRIX_DATA_DIR/mounts.
 
 WITH_MODELS="${OPPTRIX_WITH_MODELS:-1}"
 FETCH_ON_START="${OPPTRIX_FETCH_MODELS_ON_START:-0}"
@@ -139,6 +215,7 @@ case "$UI_DIST_PATH" in
 esac
 
 echo "[opptrix] data=$OPPTRIX_DATA_DIR models=$MODELS_DIR system=$OPPTRIX_SYSTEM_DIR"
+echo "[opptrix] workspace=$OPPTRIX_AGENT_WORKSPACE_DIR mounts=$OPPTRIX_MOUNTS_DIR"
 echo "[opptrix] boot=$BOOT ui=$UI_DIST_PATH"
 echo "[opptrix] listening on ${STOCK_RESEARCH_HOST}:${STOCK_RESEARCH_PORT}"
 

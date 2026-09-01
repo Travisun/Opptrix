@@ -944,8 +944,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       // 主路径仅暴露 opptrix_run；shell_run / opptrix_install / request_shell_network 不再进入聊天 tools
       const agentSandboxOff = resolveAgentSandboxMode() === 'off'
       const opptrixRunDescription = agentSandboxOff
-        ? '在 Docker 容器内以系统权限运行命令（shell/node/npm/python 可用；默认无 Agent 沙箱围栏）。'
-          + 'cwd=cwdRel（相对 root）；重要产物须写入 /data、/models、/system 或 /data/mounts/*（仅此持久化）。'
+        ? '在 Docker 容器内以受限用户运行命令（shell/node/npm/python 可用；private/system 由系统权限隔离）。'
+          + 'cwd=cwdRel（相对 root）；重要产物须写入 workspace、mounts 或 models（统一布局 /opptrix/…，或旧版 /data/mounts）。'
           + '短命令直接调用；长命令传 background=true 立即返回 job_id。'
           + '硬禁：勿用 cat/head/tail/sed/awk/echo>/heredoc 读或改文件内容（改用 workspace_*）；找搜优先 workspace_glob/grep。测网站延迟优先 http_fetch'
         : '在隔离环境中运行任意命令（command 字符串；仅限已授权文件夹；会话级隔离复用）。'

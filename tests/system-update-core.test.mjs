@@ -103,6 +103,63 @@ describe('system-update seed → activate → rollback', () => {
     assert.equal(skip.skipped, true)
   })
 
+  it('stageSeedVersionAsPending promotes newer image seed without moving boot', () => {
+    const seedV2 = path.join(tmpRoot, 'seed-promote')
+    makeSeedTree(seedV2, '2.1.0')
+    process.env.OPPTRIX_SEED_ROOT = seedV2
+
+    const r = su.stageSeedVersionAsPending({
+      systemDir,
+      seedRoot: seedV2,
+      version: '2.1.0',
+    })
+    assert.equal(r.skipped, false)
+    assert.equal(r.pendingSet, true)
+    assert.equal(r.version, '2.1.0')
+    assert.equal(r.flushedPending, false)
+    assert.equal(su.readBootVersion(systemDir), '1.0.0')
+    assert.equal(su.readState(systemDir).pendingVersion, '2.1.0')
+    assert.equal(su.readState(systemDir).uiPhase, 'wizard_apply')
+    const marker = su.readRuntimeMarker(path.join(systemDir, 'slots', '2.1.0'))
+    assert.equal(marker?.requires?.minBaseImage, 'opptrix-selfhost-v2.1.0')
+
+    // Newer image seed flushes prior pending and becomes authority
+    const seedV22 = path.join(tmpRoot, 'seed-promote-22')
+    makeSeedTree(seedV22, '2.2.0')
+    const flush = su.stageSeedVersionAsPending({
+      systemDir,
+      seedRoot: seedV22,
+      version: '2.2.0',
+    })
+    assert.equal(flush.skipped, false)
+    assert.equal(flush.pendingSet, true)
+    assert.equal(flush.flushedPending, true)
+    assert.equal(flush.flushedPendingVersion, '2.1.0')
+    assert.ok(String(flush.reason).includes('flushed-pending'))
+    assert.equal(su.readState(systemDir).pendingVersion, '2.2.0')
+    assert.equal(su.readBootVersion(systemDir), '1.0.0')
+  })
+
+  it('stageSeedVersionAsPending flushes hot-update pending when image is newer', () => {
+    const hotSlot = path.join(systemDir, 'slots', '1.9.0')
+    makeSeedTree(hotSlot, '1.9.0')
+    su.setPendingVersion('1.9.0', systemDir)
+    assert.equal(su.readState(systemDir).pendingVersion, '1.9.0')
+
+    const seedImg = path.join(tmpRoot, 'seed-image-auth')
+    makeSeedTree(seedImg, '2.0.0')
+    const r = su.stageSeedVersionAsPending({
+      systemDir,
+      seedRoot: seedImg,
+      version: '2.0.0',
+    })
+    assert.equal(r.skipped, false)
+    assert.equal(r.flushedPending, true)
+    assert.equal(r.flushedPendingVersion, '1.9.0')
+    assert.equal(su.readState(systemDir).pendingVersion, '2.0.0')
+    assert.equal(su.readState(systemDir).downloadJob, null)
+  })
+
   it('activates pending then rollbacks to backup', async () => {
     const seedV2 = path.join(tmpRoot, 'seed-v2')
     makeSeedTree(seedV2, '2.0.0')

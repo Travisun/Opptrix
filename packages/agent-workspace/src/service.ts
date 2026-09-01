@@ -8,6 +8,7 @@ import {
   WorkspaceError,
 } from './errors.js'
 import { resolveSafePath, ensureDirectory } from './path-gate.js'
+import { maybeChownForDockerAgent } from './env/docker-env.js'
 import {
   GrantStore,
   assertReadable,
@@ -441,6 +442,7 @@ export class WorkspaceService {
     const outBuf = encodeWorkspaceText(applied.content, { relPath, eol: decoded.eol })
     await this.quota.assertCanWrite(outBuf.length)
     await fs.writeFile(abs, outBuf)
+    maybeChownForDockerAgent(abs)
 
     const { content: _written, ...rest } = applied
     return { path: relPath, ...rest }
@@ -490,6 +492,7 @@ export class WorkspaceService {
     const outBuf = encodeWorkspaceText(applied.content, { relPath, eol: decoded.eol })
     await this.quota.assertCanWrite(outBuf.length)
     await fs.writeFile(abs, outBuf)
+    maybeChownForDockerAgent(abs)
     return { path: relPath, ok: true, replacements: applied.replacements }
   }
 
@@ -530,7 +533,9 @@ export class WorkspaceService {
         const outBuf = encodeWorkspaceText(content, { relPath, eol })
         await this.quota.assertCanWrite(outBuf.length)
         await fs.mkdir(path.dirname(abs), { recursive: true })
+        maybeChownForDockerAgent(path.dirname(abs))
         await fs.writeFile(abs, outBuf)
+        maybeChownForDockerAgent(abs)
       },
       deletePath: async (relPath) => {
         await this.deletePath(sessionId, rootId, relPath, confirm)
@@ -615,7 +620,9 @@ export class WorkspaceService {
       await this.requireConfirmation(sessionId, rootId, relPath, 'overwrite', confirm)
     }
     await fs.mkdir(path.dirname(abs), { recursive: true })
+    maybeChownForDockerAgent(path.dirname(abs))
     await fs.writeFile(abs, buf)
+    maybeChownForDockerAgent(abs)
     return { path: relPath, bytes: buf.length }
   }
 

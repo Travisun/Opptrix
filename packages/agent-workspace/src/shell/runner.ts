@@ -104,7 +104,11 @@ import {
 } from './shell-command-job.js'
 import { getUserDataStore } from '@opptrix/user-store'
 import { resolveShellIsolationMode } from './isolation-mode.js'
-import { resolveAgentSandboxMode } from '../env/docker-env.js'
+import {
+  resolveAgentSandboxMode,
+  resolveDockerAgentDropIds,
+  resolveDockerAgentIdentity,
+} from '../env/docker-env.js'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_STREAM_BYTES = 200_000
@@ -226,7 +230,8 @@ const WORKSPACE_PATH_NOTE =
   '命令在已授权工作区内运行（容器 + 工作区边界）；HOME=grant 根；仅限已授权工作区路径。'
 
 const SYSTEM_FREE_PATH_NOTE =
-  '命令在容器内以系统权限运行（shell/node/npm/python 可用）；持久化数据仅 /data、/models、/system 与 /data/mounts/*。'
+  '命令在容器内以受限用户运行（shell/node/npm/python 可用）；无法读写 private 库与 system 槽位；'
+  + '持久化请写入 workspace / mounts（或旧版 /data/mounts）。'
 
 async function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
@@ -242,13 +247,25 @@ async function sanitizeChildEnv(
     out[key] = value
   }
   out.PWD = cwdAbs
+  const agentDrop = resolveDockerAgentDropIds() != null
+  const agentIdentity = resolveDockerAgentIdentity()
   if (systemFree) {
-    if (base.HOME) out.HOME = base.HOME
-    if (base.USERPROFILE) out.USERPROFILE = base.USERPROFILE
+    // 自由编程：保留系统 PATH；有 DAC 降权时 HOME 仍落在 grant，避免写到 root home
     if (base.PATH) out.PATH = base.PATH
+    if (agentDrop) {
+      out.HOME = grantRootAbs
+      out.USERPROFILE = grantRootAbs
+    } else {
+      if (base.HOME) out.HOME = base.HOME
+      if (base.USERPROFILE) out.USERPROFILE = base.USERPROFILE
+    }
   } else {
     out.HOME = grantRootAbs
     out.USERPROFILE = grantRootAbs
+  }
+  if (agentIdentity && agentDrop) {
+    out.USER = agentIdentity.user
+    out.LOGNAME = agentIdentity.user
   }
   const pipTarget = path.join(cwdAbs, '.opptrix-packages')
   out.PIP_TARGET = pipTarget
@@ -1434,11 +1451,13 @@ function spawnSandboxed(
       reject(new WorkspaceError('沙箱命令为空'))
       return
     }
+    const drop = resolveDockerAgentDropIds()
     const child = spawn(argv[0], argv.slice(1), {
       cwd,
       env,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...(drop ? { uid: drop.uid, gid: drop.gid } : {}),
     })
 
     let stdout = ''

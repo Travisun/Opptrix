@@ -49,7 +49,7 @@ opptrix up            # 优先拉取 GHCR 预构建镜像并启动
 | 仓库 | CI 推送至 `ghcr.io/travisun/opptrix`；国内 pull 经 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速代理主机名 |
 | 覆盖 | `OPPTRIX_IMAGE`（完整引用）、`OPPTRIX_IMAGE_REPO`、`OPPTRIX_GHCR_MIRROR`（仅改 registry 主机） |
 | Tag | 与 git 一致的 `opptrix-selfhost-vX.Y.Z`、纯 semver `X.Y.Z`、浮动 `selfhost` |
-| 大模型 | **不在镜像内**；产品引导下载至卷 `opptrix-models`，升级不重下 |
+| 大模型 | **不在镜像内**；产品引导下载至 `/opptrix/models`（卷 `opptrix-home`），升级不重下 |
 
 ### 容器工具链
 
@@ -58,7 +58,7 @@ opptrix up            # 优先拉取 GHCR 预构建镜像并启动
 | **Node（默认）** | 官方 `node:24-bookworm-slim`，`/usr/local/bin/node` 为稳定 PATH |
 | **Node（可选）** | nvm 在 `/opt/nvm`，已预装 **22 LTS**；`nvm use 22` 切换，不替换默认 24 |
 | **Python** | Debian bookworm `python3`（3.11）+ `pip3` + `venv` + `python3-dev` |
-| **Agent 沙箱** | 默认 `OPPTRIX_AGENT_SANDBOX=off`（单用户信任：容器内系统级 shell） |
+| **Agent 隔离** | 默认 `OPPTRIX_AGENT_SANDBOX=off`：自由编程 + **双用户 DAC**（`opptrix_run` 降权为 `opptrix-agent`，无法读写 private/system） |
 | **构建镜像** | `OPPTRIX_BUILD_MIRROR` / 显式 `OPPTRIX_*_REGISTRY`；或 `OPPTRIX_MIRROR_AUTO_BUILD=1` 构建时探测 |
 | **运行时镜像** | `OPPTRIX_MIRROR_AUTO=1` 为 pip/npm 自动选国内/海外源 |
 
@@ -116,7 +116,7 @@ opptrix up
 | `opptrix up` | 优先 pull 预构建并后台启动 |
 | `opptrix up --build` | 强制本地编译后启动 |
 | `opptrix up --ref <tag\|main>` | 本次使用指定版本 |
-| `opptrix update` | 升级运行环境/镜像底座（重建容器）；**默认保留** `opptrix-data` / `opptrix-models` / `opptrix-system` 与挂载；应用内热更新另见产品内提示与 [`SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)「底座 / 运行环境升级」 |
+| `opptrix update` | 升级运行环境/镜像底座（重建容器）；**默认保留** `opptrix-home`（或旧版三卷）与挂载；应用内热更新另见产品内提示与 [`SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)「底座 / 运行环境升级」 |
 | `opptrix stop` / `start` / `restart` | 停 / 启 / 重启 |
 | `opptrix down` | 停止并移除容器（默认**保留**数据卷） |
 | `opptrix logs -f` | 跟踪日志 |
@@ -171,56 +171,75 @@ curl -fsS http://127.0.0.1:8711/api/health
 
 不必自建「数据集」镜像：权重应挂 **Model** 仓。四套核心模型在 ModelScope 均有官方/上游仓；自建 Opptrix 合集仓仅在需要钉死版本或内网二次分发时有价值。
 
-离线新闻翻译跑在 **服务端 HTTP**（`POST /api/news/translate` + `/api/news/translation/*`），不依赖 Electron；Docker `with-models` 会把 `HY-MT1.5-1.8B-Q4_K_M.gguf` 放到 `/models/llms`（`OPPTRIX_LLM_DIR`），与 `resolveTranslationModelPath` 搜索顺序一致。设置页从目录下载的 GGUF 同样写入 `OPPTRIX_LLM_DIR`（Compose 默认 `/models/llms`，落在 models 卷），而不是容器内易失的 `~/.opptrix/llms`。翻译请求可走 SSE（`Accept: text/event-stream` 或 `?stream=1`，事件 `progress` / `result` / `error`）；未声明流式时仍返回完整 JSON。文章级译文缓存在 `$OPPTRIX_DATA_DIR/news-translation-cache.json`（Compose 下即 `/data/…`），命中时响应含 `fromCache: true`。
+离线新闻翻译跑在 **服务端 HTTP**（`POST /api/news/translate` + `/api/news/translation/*`），不依赖 Electron；Docker `with-models` 会把 `HY-MT1.5-1.8B-Q4_K_M.gguf` 放到 models 卷的 `llms/`（`OPPTRIX_LLM_DIR`，默认 `/opptrix/models/llms`），与 `resolveTranslationModelPath` 搜索顺序一致。设置页从目录下载的 GGUF 同样写入 `OPPTRIX_LLM_DIR`，而不是容器内易失的 `~/.opptrix/llms`。翻译请求可走 SSE（`Accept: text/event-stream` 或 `?stream=1`，事件 `progress` / `result` / `error`）；未声明流式时仍返回完整 JSON。文章级译文缓存在 `$OPPTRIX_DATA_DIR/news-translation-cache.json`（Compose 下即 `/opptrix/private/…`），命中时响应含 `fromCache: true`。
 
 可选环境变量见仓库根目录 `compose.env.example`。
 
 ## 数据与模型卷
 
-| 容器路径 | Compose 卷 | 用途 |
-|----------|------------|------|
-| `/data` | `opptrix-data` | 用户数据根（`OPPTRIX_DATA_DIR`）：库、会话、设置、工作区等 |
-| `/models` | `opptrix-models` | 本地核心模型（与镜像分离，升级不丢） |
-| `/system` | `opptrix-system` | 运行时槽位与热更新状态（`OPPTRIX_SYSTEM_DIR`）：`boot` → `slots/<ver>`、`update/`、`state.json`；与 `/data` 分离，seed/activate **不触碰**用户数据 |
-| `/data/mounts/<name>` | 可选 bind | 宿主机额外目录约定（只读或读写） |
+推荐 **单卷** `opptrix-home` → `/opptrix`：
 
-**升级镜像不会清空卷。** 数据、模型与 system 槽位都在卷里，换镜像 / `docker compose pull`（或重建）后仍沿用原卷。
+| 容器路径 | 用途 | Agent（opptrix-agent） |
+|----------|------|------------------------|
+| `/opptrix/private` | 用户数据根（`OPPTRIX_DATA_DIR`）：库、认证、保险箱、会话状态等 | **不可读写**（DAC 0700 + Deny） |
+| `/opptrix/workspace` | Agent 工作区（`OPPTRIX_AGENT_WORKSPACE_DIR`） | 可读写 |
+| `/opptrix/mounts/<name>` | 可选 bind（`OPPTRIX_MOUNTS_DIR`） | 可读写（视挂载权限） |
+| `/opptrix/models` | 本地核心模型 | 可读 |
+| `/opptrix/system` | 运行时槽位与热更新（`OPPTRIX_SYSTEM_DIR`） | **不可读写** |
 
-镜像内 `/app` 仍是**种子树**；容器启动时 entrypoint 若发现 `/system` 尚无当前槽位，会从 `/app` 种子到 `slots/<version>` 并让 `boot` 指向它，随后以 supervisor 循环从 boot 路径启动服务。服务进程 exit **42** 时 supervisor 会 `activatePending`（若有 `pendingVersion`）再重启；**43/44** 为软重启不切换槽位。
+旧版三卷（`/data`、`/models`、`/system`）仍可用独立清单 `docker-compose.legacy-volumes.yml`；entrypoint 会对 `/data/agent-workspace` 与 `/data/mounts` 做同样的 agent 属主引导。
 
-完整热更新协议（布局、资产命名、**必需**的 `.sha256` sidecar、打包/CI、Gitee 镜像、裸 Node 监督进程）见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**；当 UI 提示需刷新底座时走 `opptrix update`（同文档「底座 / 运行环境升级」）。库层 API 摘要见 `@opptrix/system-update`（`packages/system-update/README.md`）。
+**升级镜像不会清空卷。** 换镜像 / `docker compose pull` 后仍沿用原卷。
+
+镜像内 `/app` 仍是**种子树**；容器启动时 `system-boot ensure`：无 boot 则从 `/app` 种子到 `slots/<version>`；若镜像版本高于当前 boot，则**冲掉**旧热更新 pending，以镜像种子设 pending，再由 `activate-pending`（底座满足 `minBaseImage` 时）切入并走 first-boot。服务进程 exit **42** 时 supervisor 会 `activatePending`（若有 `pendingVersion` 且非 needsBaseRefresh）再重启；**43/44** 为软重启不切换槽位。
+
+完整热更新协议见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。库层 API 摘要见 `@opptrix/system-update`。
+
+### 从三卷迁到单卷（可选）
+
+```bash
+# 示例：把旧卷内容拷入新 home（项目名/卷名按 docker volume ls 调整）
+docker volume create opptrix_opptrix-home
+docker run --rm \
+  -v opptrix_opptrix-data:/old-data \
+  -v opptrix_opptrix-models:/old-models \
+  -v opptrix_opptrix-system:/old-system \
+  -v opptrix_opptrix-home:/opptrix \
+  alpine sh -c '
+    mkdir -p /opptrix/private /opptrix/models /opptrix/system /opptrix/workspace /opptrix/mounts
+    cp -a /old-data/. /opptrix/private/
+    cp -a /old-models/. /opptrix/models/
+    cp -a /old-system/. /opptrix/system/
+    if [ -d /opptrix/private/agent-workspace ]; then mv /opptrix/private/agent-workspace/* /opptrix/workspace/ 2>/dev/null || true; fi
+    if [ -d /opptrix/private/mounts ]; then cp -a /opptrix/private/mounts/. /opptrix/mounts/; fi
+  '
+```
+
+迁完后改用默认 `docker-compose.yml`（勿再挂旧三卷）。
 
 ### 备份
 
 ```bash
-# 停服务更稳妥
 docker compose stop
 
 docker run --rm \
-  -v opptrix_opptrix-data:/data \
+  -v opptrix_opptrix-home:/opptrix \
   -v "$(pwd)/backup:/backup" \
-  alpine tar czf /backup/opptrix-data-$(date +%Y%m%d).tgz -C /data .
-
-docker run --rm \
-  -v opptrix_opptrix-models:/models \
-  -v "$(pwd)/backup:/backup" \
-  alpine tar czf /backup/opptrix-models-$(date +%Y%m%d).tgz -C /models .
+  alpine tar czf /backup/opptrix-home-$(date +%Y%m%d).tgz -C /opptrix .
 ```
 
-> 卷名前缀取决于 Compose 项目名（默认多为目录名，如 `opptrix_opptrix-data`）。用 `docker volume ls | grep opptrix` 确认。
+> 卷名前缀取决于 Compose 项目名。用 `docker volume ls | grep opptrix` 确认。旧三卷备份仍可对 `opptrix-data` / `opptrix-models` / `opptrix-system` 分别打包。
 
 ### 恢复
 
 ```bash
 docker compose stop
 docker run --rm \
-  -v opptrix_opptrix-data:/data \
+  -v opptrix_opptrix-home:/opptrix \
   -v "$(pwd)/backup:/backup" \
-  alpine sh -c 'rm -rf /data/* && tar xzf /backup/opptrix-data-YYYYMMDD.tgz -C /data'
+  alpine sh -c 'rm -rf /opptrix/* && tar xzf /backup/opptrix-home-YYYYMMDD.tgz -C /opptrix'
 docker compose start
 ```
-
-模型卷同理。
 
 ## 升级（不丢数据与配置）
 
@@ -236,9 +255,7 @@ opptrix use opptrix-selfhost-vX.Y.Z --apply
 
 | 内容 | 位置 | 说明 |
 |------|------|------|
-| 账户 / 会话 / 设置 | 卷 `opptrix-data` → `/data` | `down` 不带 `--volumes` 即保留 |
-| 核心模型 | 卷 `opptrix-models` → `/models` | 已有文件**不会**再下载 |
-| 运行时槽位 / 热更新状态 | 卷 `opptrix-system` → `/system` | 与用户数据分离；镜像 `/app` 仅作种子 |
+| 账户 / 会话 / 设置 / 工作区 / 模型 / 槽位 | 卷 `opptrix-home` → `/opptrix` | `down` 不带 `--volumes` 即保留 |
 | 运行时配置 | 部署目录 `compose.env`、`.opptrix.json` | 升级不覆盖 |
 | 额外目录映射 | `docker-compose.override.yml` | 升级不覆盖；Compose 自动合并 |
 
@@ -253,7 +270,7 @@ OPPTRIX_FORCE_MODEL_FETCH=1
 
 冒烟、完全不拉模型：`OPPTRIX_SKIP_MODEL_FETCH=1` 或 `opptrix up --skip-models`（与默认行为一致）。
 
-不要删除 named volume；`opptrix down --volumes` 会清空数据、模型与 system 槽位。
+不要删除 named volume；`opptrix down --volumes` 会清空数据。
 
 裸 Node（非 Docker）可用同一 `$OPPTRIX_SYSTEM_DIR` 布局，用仓库内 supervisor 包装启动：
 
@@ -263,23 +280,23 @@ export OPPTRIX_SEED_ROOT="$(pwd)"   # 首次会从当前树种子到 slots/
 node scripts/opptrix-node-supervisor.mjs
 ```
 
-相关环境变量（Compose / `compose.env` 均可）：`OPPTRIX_SYSTEM_DIR`（默认 `/system`）、`OPPTRIX_SEED_ROOT`（默认 `/app`）、`OPPTRIX_DOCKER=1`、`OPPTRIX_ONCE=1`（干净退出码 0 时停 supervisor）、`OPPTRIX_SUPERVISOR_MAX_RETRIES`（可选崩溃重试上限）。`opptrix up` 使用仓库/`@opptrix/selfhost` 自带的 `docker-compose.yml` 时会自动挂载 `opptrix-system`；若自管旧版 compose，请补上该卷与上述环境变量。
+相关环境变量：`OPPTRIX_HOME`（默认 `/opptrix`）、`OPPTRIX_DATA_DIR`、`OPPTRIX_AGENT_WORKSPACE_DIR`、`OPPTRIX_MOUNTS_DIR`、`OPPTRIX_SYSTEM_DIR`、`OPPTRIX_SEED_ROOT`、`OPPTRIX_DOCKER=1`、`OPPTRIX_AGENT_UID`/`GID`、`OPPTRIX_ONCE=1`、`OPPTRIX_SUPERVISOR_MAX_RETRIES`。
 
 ## 额外目录挂载
 
-约定：宿主机目录挂到 **`/data/mounts/<name>`**，`<name>` 为短标识（如 `research`、`docs`）。
+约定：宿主机目录挂到 **`/opptrix/mounts/<name>`**（旧版三卷则为 `/data/mounts/<name>`）。
 
-请写在 **`docker-compose.override.yml`**（与 `docker-compose.yml` 同目录），升级覆盖主 compose 时不会丢掉你的映射：
+请写在 **`docker-compose.override.yml`**：
 
 ```yaml
 # docker-compose.override.yml
 services:
   opptrix:
     volumes:
-      - ./host-research:/data/mounts/research:ro
+      - ./host-research:/opptrix/mounts/research:ro
 ```
 
-只读（`:ro`）适合资料库；需要工作区内写入时去掉 `:ro`。应用侧按挂载名访问这些路径（与数据根下的 `mounts` 约定一致）。
+只读（`:ro`）适合资料库；需要工作区内写入时去掉 `:ro`。
 
 ## 账户与访问控制
 
@@ -291,25 +308,21 @@ services:
 
 ## 安全模型（命令与工作区）
 
-Docker 自托管默认 **`OPPTRIX_AGENT_SANDBOX=off`**：Agent 在容器内以**系统级**运行 `opptrix_run`（镜像预装 shell、Node、npm、Python/pip、git），不启用工作区 grant 围栏或 OS 级 SRT。单用户信任模型——勿将未加反向代理认证的实例暴露给不可信用户。设 **`OPPTRIX_AGENT_SANDBOX=full`** 可恢复工作区隔离（grant + Deny）。
-
-镜像 runtime 阶段通过 apt 安装 `python3`、`python3-pip`、`python3-venv`、`git` 等基础工具；Python 解析**不**走托管/bundled 安装路径，直接使用系统 Python。
-
-**持久化目录（Agent 须知晓）**：跨重启仅 **`/data`**、**`/models`**、**`/system`** 与 **`/data/mounts/*`**；会话工作区与其它容器内路径不会保留，重要产物请写入上述卷或挂载。
-
-自托管在 `OPPTRIX_AGENT_SANDBOX=full` 时采用 **工作区隔离**，不要求宿主机 OS 级沙箱提升（无默认 SRT / 系统授权安装）：
+Docker 自托管默认 **`OPPTRIX_AGENT_SANDBOX=off`**：`opptrix_run` **不**启用 SRT / bwrap，可在已授权树内自由使用 shell/node/npm/python；硬边界是 **双 Linux 用户（DAC）**：
 
 | 层 | 作用 |
 |----|------|
-| Docker 外层 | 容器边界与卷挂载；限制进程可见的宿主机面 |
-| 工作区 grant | 助手命令与文件工具仅能触及本对话已授权的文件夹 |
-| Deny | 敏感路径（用户库、密钥保险箱、配置等）即使误授权也不可访问 |
-| 出站网络 | 工作区模式下默认可访问公网，无需逐次授权。硬边界依赖 Docker / 宿主机防火墙；`http_fetch` 等仍防内网 SSRF。遗留 `OPPTRIX_SHELL_ISOLATION=srt` 时才按域名围栏与确认 |
+| 服务进程 | 常以 root 跑 HTTP / 读 private / 热更新；**不**把私钥明文塞进 Agent 工具结果 |
+| `opptrix-agent` | `opptrix_run` 子进程 `uid/gid=10001`；对 `/opptrix/private`、`/opptrix/system` 无权限 → Python `open()` 亦 EACCES |
+| entrypoint | 创建目录、`chown`/`chmod`、`umask 002` + setgid，保证 workspace/mounts 对 Agent 可写 |
+| Deny（纵深） | 文件工具仍拒绝 private/system；**不能**单独当作绝对隔离 |
+| Docker 外层 | 容器边界与卷挂载 |
 
-**密钥勿放进工作区目录**（含 `/data/mounts/...` 与会话工作区）：明文密钥应走应用内保险箱，不要写进可被助手读写的文件夹。
+设 **`OPPTRIX_AGENT_SANDBOX=full`** 可额外恢复工作区 grant 围栏。遗留 `OPPTRIX_SHELL_ISOLATION=srt` 时跳过 uid 降权（避免破坏 SRT wrap）。
 
-遗留完整系统隔离（可选）：设置环境变量 `OPPTRIX_SHELL_ISOLATION=srt` 后走旧路径（需平台沙盒组件）；日常自托管无需开启。
+**密钥勿放进工作区目录**（含 mounts 与会话工作区）：明文密钥应走应用内保险箱。
 
+仍须假设：容器逃逸、Agent 对**已授权**工作区内容的外传、服务进程自身泄露——不在本模型保证范围内。
 ## TLS 与反向代理
 
 容器内默认明文 HTTP（`8711`）。生产请在前面加 Nginx / Caddy / Traefik 终止 TLS，并配置：

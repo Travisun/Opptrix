@@ -3,8 +3,9 @@
  *
  * Resolution order for the system root:
  * 1. `OPPTRIX_SYSTEM_DIR` (always wins)
- * 2. Docker (`/.dockerenv` or `OPPTRIX_DOCKER=1`) → `/system`
- * 3. `OPPTRIX_DATA_DIR` set → sibling `../system` of the data dir
+ * 2. `OPPTRIX_DATA_DIR` set → sibling `../system` of the data dir
+ *    （含 Docker `/opptrix/private` → `/opptrix/system`）
+ * 3. Docker（无 data dir）→ `/system`（旧三卷默认）
  * 4. Else → `~/.opptrix/system`
  */
 import fs from 'node:fs'
@@ -36,12 +37,12 @@ export function resolveSystemDir(override?: string): string {
   const fromEnv = process.env.OPPTRIX_SYSTEM_DIR?.trim()
   if (fromEnv) return path.resolve(fromEnv)
 
-  if (isDockerEnv()) return path.resolve('/system')
-
   const dataDir = process.env.OPPTRIX_DATA_DIR?.trim()
   if (dataDir) {
     return path.resolve(path.join(dataDir, '..', 'system'))
   }
+
+  if (isDockerEnv()) return path.resolve('/system')
 
   return path.resolve(path.join(os.homedir(), '.opptrix', 'system'))
 }

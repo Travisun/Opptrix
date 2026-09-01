@@ -60,11 +60,19 @@ export { verifySlotDirectory, verifySlotVersion } from './verify.js'
 export type { VerifySlotResult } from './verify.js'
 
 export {
+  ensureRuntimeMarkerForSeed,
   ensureSeedLayoutDirs,
+  flushPendingUpdateState,
   seedCurrentSlot,
+  stageSeedVersionAsPending,
   writeRuntimeMarker,
 } from './seed.js'
-export type { SeedOptions, SeedResult } from './seed.js'
+export type {
+  SeedOptions,
+  SeedResult,
+  StageSeedPendingOptions,
+  StageSeedPendingResult,
+} from './seed.js'
 
 export {
   DEFAULT_RUNTIME_NODE_RANGE,

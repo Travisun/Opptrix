@@ -129,8 +129,13 @@ export {
 export {
   isDockerEnv,
   resolveAgentSandboxMode,
+  resolveDockerAgentIdentity,
+  resolveDockerAgentDropIds,
+  maybeChownForDockerAgent,
+  isUnderDockerAgentWritableTree,
   DOCKER_PERSISTENCE_NOTE,
   type AgentSandboxMode,
+  type DockerAgentIdentity,
 } from '../env/docker-env.js'
 export {
   ensureLinuxSandboxReady,

@@ -116,7 +116,7 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
       sandbox_available: false,
       ready: true,
       message: isDockerEnv()
-        ? 'Docker 自托管：命令以容器内系统权限运行（shell/node/npm/python 可用），未启用 Agent 沙箱围栏'
+        ? 'Docker 自托管：命令以受限用户运行（可自由编程；private/system 由系统权限隔离），未启用 SRT'
         : '命令以系统权限运行，未启用 Agent 沙箱围栏',
       needs_elevation: false,
       can_auto_install: false,

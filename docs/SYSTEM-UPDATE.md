@@ -32,12 +32,12 @@ $OPPTRIX_SYSTEM_DIR/
 
 | 容器路径 | 卷 | 说明 |
 |----------|-----|------|
-| `/system` | `opptrix-system` | 槽位与 `state.json`（`OPPTRIX_SYSTEM_DIR`） |
-| `/data` | `opptrix-data` | 用户数据（`OPPTRIX_DATA_DIR`）— seed/activate **不触碰** |
-| `/models` | `opptrix-models` | 本地模型（镜像不含权重；引导或 `OPPTRIX_FETCH_MODELS_ON_START=1`） |
+| `/opptrix/system`（或旧 `/system`） | `opptrix-home` 子目录（或 `opptrix-system`） | 槽位与 `state.json`（`OPPTRIX_SYSTEM_DIR`） |
+| `/opptrix/private`（或旧 `/data`） | 同上（或 `opptrix-data`） | 用户数据（`OPPTRIX_DATA_DIR`）— seed/activate **不触碰** |
+| `/opptrix/models`（或旧 `/models`） | 同上（或 `opptrix-models`） | 本地模型（镜像不含权重；引导或 `OPPTRIX_FETCH_MODELS_ON_START=1`） |
 | `/app` | 镜像只读层 | **种子树**；首次启动拷入 `slots/<ver>` |
 
-默认 system 根解析顺序见 `@opptrix/system-update`：Docker → `/system`；否则 `$OPPTRIX_DATA_DIR/../system`；再否则 `~/.opptrix/system`。
+默认 system 根解析顺序见 `@opptrix/system-update`：Docker → `$OPPTRIX_SYSTEM_DIR`（默认 `/opptrix/system` 或旧 `/system`）；否则 `$OPPTRIX_DATA_DIR/../system`；再否则 `~/.opptrix/system`。
 
 ---
 
@@ -260,11 +260,12 @@ API 细节见 `docs/API.md`。
 应用内热更新（下载 runtime 归档 → 槽位切换）**不能**替换 Docker 镜像、宿主 Node、或 Compose 编排本身。当产品内提示「需要刷新底座 / 运行环境」时：
 
 1. 在宿主机执行 **`opptrix update`**（或 `opptrix use <tag> --apply`）— 拉取新预构建镜像并 `compose up` 重建**容器**。
-2. **默认保留** named volume：`opptrix-data`、`opptrix-models`、`opptrix-system`，以及 `compose.env` / `.opptrix.json` / `docker-compose.override.yml` 与 operator bind 挂载；**不会**因更新镜像而清空挂载数据。
-3. `/system` 槽位与 `state.json` 留在 `opptrix-system` 卷内，容器重建后仍可沿用；镜像内 `/app` 仅作种子树。
-4. 只有显式 `opptrix down --volumes` 才会删除上述卷（危险、不可恢复）。
+2. **默认保留** named volume：`opptrix-home`（或旧版 `opptrix-data` / `opptrix-models` / `opptrix-system`），以及 `compose.env` / `.opptrix.json` / `docker-compose.override.yml` 与 operator bind 挂载；**不会**因更新镜像而清空挂载数据。
+3. `/opptrix/system`（或旧 `/system`）槽位与 `state.json` 留在卷内，容器重建后仍可沿用；镜像内 `/app` 为种子树。
+4. **启动时晋升（镜像权威）**：`system-boot ensure` 若镜像种子版本（`OPPTRIX_APP_VERSION`）**高于**当前 `boot`，会**冲掉**旧热更新 `pending` / 下载任务，把 `/app` 拷入 `slots/<ver>` 并设 `pendingVersion`（种子写入 `opptrix-runtime.json` 的 `requires.minBaseImage`）。随后 `activate-pending` 仅在 **不** `needsBaseRefresh` 时切入新槽并进入 `first_boot_hooks`（库迁移 + `hooks/post-activate`）；若仍需更高底座则跳过激活，保留 pending 供产品内提示。
+5. 只有显式 `opptrix down --volumes` 才会删除上述卷（危险、不可恢复）。
 
-热更新与底座升级的分工，以及卷约定，亦见 [`docs/SELF-HOSTING.md`](./SELF-HOSTING.md)「数据与模型卷」「升级」与 `@opptrix/selfhost` README。
+因此：`opptrix update` **不是**再走 CDN 热更新下载，而是换底座镜像 → **冲掉旧 pending** → 用**新镜像携带的运行时**走正常晋升/激活与 DB/钩子。热更新包的底座依赖记录在 marker `requires.minBaseImage`（非 postActivate hooks）。
 
 ---
 
