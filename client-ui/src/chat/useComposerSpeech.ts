@@ -142,6 +142,8 @@ export function useComposerSpeech({
   const recordStartedAtRef = useRef(0)
   const heardSpeechRef = useRef(false)
   const stopRecordingRef = useRef<() => void>(() => {})
+  /** 按住说话松手过快：作废进行中的 startRecording */
+  const startGenRef = useRef(0)
 
   const setPhaseSafe = useCallback((next: ComposerSpeechPhase) => {
     phaseRef.current = next
@@ -337,10 +339,18 @@ export function useComposerSpeech({
     if (!available || disabled) return
     if (phaseRef.current !== 'idle') return
 
+    const startGen = startGenRef.current + 1
+    startGenRef.current = startGen
+
     setPhaseSafe('requesting')
     setStatusHint('正在请求麦克风…')
 
     const permission = await ensureMicPermission()
+    if (startGen !== startGenRef.current) {
+      setPhaseSafe('idle')
+      setStatusHint(null)
+      return
+    }
     if (permission === 'denied') {
       onError?.('需要麦克风权限才能语音输入。可在系统设置中开启后重试')
       setPhaseSafe('idle')
@@ -356,6 +366,12 @@ export function useComposerSpeech({
         },
         video: false,
       })
+      if (startGen !== startGenRef.current) {
+        for (const track of stream.getTracks()) track.stop()
+        setPhaseSafe('idle')
+        setStatusHint(null)
+        return
+      }
       mediaStreamRef.current = stream
       mimeRef.current = pickRecorderMime()
       chunksRef.current = []
@@ -392,6 +408,11 @@ export function useComposerSpeech({
         stopRecording()
       }, MAX_RECORD_MS)
     } catch {
+      if (startGen !== startGenRef.current) {
+        setPhaseSafe('idle')
+        setStatusHint(null)
+        return
+      }
       cleanupRecorder()
       onError?.('无法使用麦克风。请检查权限后重试，或在系统设置中开启')
       setPhaseSafe('idle')
@@ -421,6 +442,13 @@ export function useComposerSpeech({
   }, [available, disabled, startRecording, stopRecording])
 
   const cancel = useCallback(() => {
+    startGenRef.current += 1
+    if (phaseRef.current === 'requesting') {
+      cleanupRecorder()
+      setPhaseSafe('idle')
+      setStatusHint(null)
+      return
+    }
     if (phaseRef.current === 'recording') {
       clearMaxTimer()
       clearSilenceWatch()
@@ -443,7 +471,7 @@ export function useComposerSpeech({
       setPhaseSafe('idle')
       setStatusHint(null)
     }
-  }, [clearMaxTimer, clearSilenceWatch, setPhaseSafe, stopTracks])
+  }, [cleanupRecorder, clearMaxTimer, clearSilenceWatch, setPhaseSafe, stopTracks])
 
   useEffect(() => {
     if (phase !== 'recording') return
@@ -467,6 +495,26 @@ export function useComposerSpeech({
     void window.electronAPI?.mediaOpenMicSettings?.()
   }, [])
 
+  const start = useCallback(() => {
+    if (!available || disabled) return Promise.resolve()
+    if (phaseRef.current !== 'idle') return Promise.resolve()
+    return startRecording()
+  }, [available, disabled, startRecording])
+
+  const stop = useCallback(() => {
+    // 作废尚未完成的 getUserMedia / 权限等待
+    startGenRef.current += 1
+    if (phaseRef.current === 'requesting') {
+      cleanupRecorder()
+      setPhaseSafe('idle')
+      setStatusHint(null)
+      return
+    }
+    if (phaseRef.current === 'recording') {
+      stopRecording()
+    }
+  }, [cleanupRecorder, setPhaseSafe, stopRecording])
+
   return {
     available,
     phase,
@@ -475,6 +523,10 @@ export function useComposerSpeech({
     isBusy: phase === 'requesting' || phase === 'recording' || phase === 'transcribing',
     isRecording: phase === 'recording',
     toggle,
+    /** 按住说话：按下开始（返回 Promise，便于松手过快时立刻停） */
+    start,
+    /** 按住说话：松手结束 */
+    stop,
     cancel,
     openMicSettings,
   }

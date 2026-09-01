@@ -316,7 +316,7 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 ## Composer 语音输入（本机 ASR）
 
-聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。主进程转写等待上限 **180s**（冷启 + 较长录音）；与 UI 本机重接口超时一致，全局快路径仍为 10s。
+聊天输入框支持语音输入。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → HTTP `/api/speech/transcribe`（桌面可经主进程 IPC 兜底）→ 文本插入 composer 光标处。**桌面**：工具栏麦钮，点击开始 / 再点或空格结束。**移动 Web**：在输入框长按说话、松手结束（短按仍聚焦输入；不显示麦钮）。主进程转写等待上限 **180s**（冷启 + 较长录音）；与 UI 本机重接口超时一致，全局快路径仍为 10s。
 
 **打包不变量**：桌面 `stage-runtime` **必须**把 `ffmpeg-static` 平台二进制打进 sidecar（`runtime-stage` → 安装包内 `node_modules/ffmpeg-static/ffmpeg[.exe]`）；缺失则 stage / `verify-packaged-runtime` **硬失败**，禁止 warn 后继续。打包后校验除存在性外还要求 **可执行**（posix `X_OK`；Windows 以 `.exe` 存在为准），host 与目标平台一致时再跑 `ffmpeg -version` 冒烟。sidecar 经 `FFMPEG_PATH` 指向该二进制。Stage 断言后会 `chmod +x` 并用 `ffmpeg -version` 冒烟（host 与目标平台一致时）；运行时若二进制无执行位也会尝试修复，避免开发机 `ffmpeg-static` 偶发 0644 导致 `spawn EACCES`。
 

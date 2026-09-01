@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowUpRegular, MicFilled, MicRegular, PauseFilled } from '@fluentui/react-icons'
+import { ArrowUpRegular, DismissRegular, MicFilled, MicRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import type { SessionLlmParamsPatch } from './ModelSelector'
 import ContextUsageMeter from './ContextUsageMeter'
@@ -56,6 +56,9 @@ import {
 } from './composerEditor'
 import { useComposerSpeech } from './useComposerSpeech'
 import ComposerSpeechListeningBar from './ComposerSpeechListeningBar'
+import ComposerMobileHoldSpeechLabel from './ComposerMobileHoldSpeechLabel'
+import { useComposerMobileHoldSpeech } from './useComposerMobileHoldSpeech'
+import { unlockChatCueSound } from '../platform/chatSound'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, ghostInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
 import ComposerAttachmentStrip from './ComposerAttachmentStrip'
@@ -185,28 +188,39 @@ const useStyles = makeStyles({
       boxShadow: opptrixCssVars.composerFloatShadowFocus,
     },
   },
+	  panelMobileCompact: {
+	    padding: '6px 10px 8px',
+	    gap: '6px',
+	  },
 	  inputRow: {
 	    display: 'flex',
 	    flexDirection: 'column',
 	    gap: '3px',
 	    width: '100%',
 	  },
-		  /** 上行：全宽 editor（录音中仍可见已输入文字） */
-		  editorRow: {
-		    position: 'relative',
-		    width: '100%',
-		    minWidth: 0,
-		    display: 'flex',
-		    alignItems: 'center',
-		  },
+	  inputRowMobile: {
+	    gap: '6px',
+	  },
+	  /** 上行：全宽 editor（录音中仍可见已输入文字） */
+	  editorRow: {
+	    position: 'relative',
+	    width: '100%',
+	    minWidth: 0,
+	    display: 'flex',
+	    alignItems: 'center',
+	  },
+	  /** 手机紧凑态：editor 保留 DOM，供 focus / 草稿 / 转写 */
+	  editorRowCollapsedMobile: {
+	    display: 'none',
+	  },
 	  mentionAnchor: {
-    position: 'absolute',
-    left: 0,
-    bottom: '2px',
-    width: '24px',
-    height: '20px',
-    pointerEvents: 'none',
-  },
+	    position: 'absolute',
+	    left: 0,
+	    bottom: '2px',
+	    width: '24px',
+	    height: '20px',
+	    pointerEvents: 'none',
+	  },
   editor: {
     position: 'relative',
     width: '100%',
@@ -227,9 +241,9 @@ const useStyles = makeStyles({
     wordBreak: 'break-word',
     cursor: 'text',
   },
-  editorMobile: {
-    fontSize: 'var(--opptrix-font-2xl)',
-  },
+	  editorMobile: {
+	    fontSize: 'var(--opptrix-font-2xl)',
+	  },
   /** 下行 toolbar：左 +/授权 | 中弹性空白 | 右 模型/mic+send（可并存）/stop；与 28px 按钮齐平 */
   toolbarRow: {
     display: 'flex',
@@ -250,6 +264,9 @@ const useStyles = makeStyles({
     minWidth: 0,
     height: `${ACTION_BTN}px`,
   },
+  toolbarStartMobile: {
+    flex: '0 0 auto',
+  },
   toolbarCenter: {
     display: 'flex',
     alignItems: 'center',
@@ -259,6 +276,12 @@ const useStyles = makeStyles({
     height: `${ACTION_BTN}px`,
     overflow: 'hidden',
   },
+  toolbarCenterMobile: {
+    justifyContent: 'flex-start',
+    alignSelf: 'stretch',
+    height: 'auto',
+    minHeight: `${ACTION_BTN}px`,
+  },
   toolbarEnd: {
     display: 'flex',
     alignItems: 'center',
@@ -267,6 +290,13 @@ const useStyles = makeStyles({
     flex: '0 1 auto',
     minWidth: 0,
     height: `${ACTION_BTN}px`,
+  },
+  toolbarEndMobile: {
+    alignItems: 'center',
+    height: `${ACTION_BTN}px`,
+    minHeight: `${ACTION_BTN}px`,
+    gap: '6px',
+    flexShrink: 0,
   },
   /** 右侧模型区：窄宽时可收缩省略，不挤掉 28px 圆钮 */
   toolbarModel: {
@@ -281,18 +311,59 @@ const useStyles = makeStyles({
    * 录音/识别：纵向柱波叠在整个 panel 正中（非 toolbar 中缝）。
    * 轻遮罩挡住空态 placeholder / 底稿；overlay 不拦截点击，ListeningBar 自身 pointer-events:auto。
    */
-  speechListeningOverlay: {
-    position: 'absolute',
-    inset: 0,
-    zIndex: 2,
+	  speechListeningOverlay: {
+	    position: 'absolute',
+	    inset: 0,
+	    zIndex: 2,
+	    display: 'flex',
+	    alignItems: 'center',
+	    justifyContent: 'center',
+	    pointerEvents: 'none',
+	    padding: '8px 12px',
+	    boxSizing: 'border-box',
+	    borderRadius: opptrixTokens.chatComposerRadius,
+	    backgroundColor: 'color-mix(in srgb, var(--opptrix-canvas) 92%, transparent)',
+	  },
+	  /** 手机聆听：遮罩拦截触摸，避免穿透选中底稿 */
+	  speechListeningOverlayMobileCapture: {
+	    pointerEvents: 'auto',
+	    touchAction: 'none',
+	    WebkitUserSelect: 'none',
+	    userSelect: 'none',
+	    WebkitTouchCallout: 'none',
+	  },
+  /** 手机：柱波居中，右侧关闭 */
+  speechListeningOverlayMobile: {
+    justifyContent: 'flex-start',
+    gap: '6px',
+  },
+  speechListeningCenter: {
+    flex: '1 1 auto',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 0,
     pointerEvents: 'none',
-    padding: '8px 12px',
-    boxSizing: 'border-box',
-    borderRadius: opptrixTokens.chatComposerRadius,
-    backgroundColor: 'color-mix(in srgb, var(--opptrix-canvas) 92%, transparent)',
+  },
+  speechListeningDismiss: {
+    ...ghostInteractive,
+    pointerEvents: 'auto',
+    flexShrink: 0,
+    alignSelf: 'center',
+    borderRadius: opptrixTokens.radiusFull,
+    minWidth: `${ACTION_BTN}px`,
+    maxWidth: `${ACTION_BTN}px`,
+    width: `${ACTION_BTN}px`,
+    minHeight: `${ACTION_BTN}px`,
+    maxHeight: `${ACTION_BTN}px`,
+    height: `${ACTION_BTN}px`,
+    padding: 0,
+    color: opptrixCssVars.textSecondary,
+    backgroundColor: opptrixCssVars.surfaceMuted,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
   },
   /** 发送 / 停止：accent 实心圆 */
   sendBtn: {
@@ -524,6 +595,7 @@ interface ChatComposerProps {
   sessionModel?: string
   sessionLlmParams?: SessionLlmParams | null
   contextUsage?: ChatContextUsage | null
+  onRefreshContextUsage?: () => void
   onSubmit: (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => void
   onStop?: () => void
   onModelChange?: (ref: string) => void
@@ -574,6 +646,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   sessionModel,
   sessionLlmParams,
   contextUsage,
+  onRefreshContextUsage,
   onSubmit,
   onStop,
   onModelChange,
@@ -604,6 +677,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   const caretRangeRef = useRef<Range | null>(null)
   // 有无可发送内容（文字或 chip）；驱动发送按钮与 placeholder。
   const [hasContent, setHasContent] = useState(false)
+  const [editorFocused, setEditorFocused] = useState(false)
+  const [mobileInputExpanded, setMobileInputExpanded] = useState(false)
   const [speechError, setSpeechError] = useState('')
   const {
     pinned,
@@ -883,11 +958,71 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
     isBusy: speechBusy,
     isRecording,
     toggle: toggleSpeech,
+    start: startSpeech,
+    stop: stopSpeech,
+    cancel: cancelSpeech,
   } = useComposerSpeech({
     disabled: composerLocked || uploading,
     onTranscript: handleSpeechTranscript,
     onError: (message) => setSpeechError(message),
   })
+
+  const mobileSpeechBaseEligible = isMobile
+    && speechAvailable
+    && !composerLocked
+    && !uploading
+    && !hasContent
+
+  const openMobileInput = useCallback(() => {
+    setMobileInputExpanded(true)
+    window.requestAnimationFrame(() => {
+      editorRef.current?.focus()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isMobile) return
+    if (hasContent || pinned.length > 0 || contextRef || speechBusy) {
+      setMobileInputExpanded(true)
+    }
+  }, [contextRef, hasContent, isMobile, pinned.length, speechBusy])
+
+  const showMobileEditorBlock = !isMobile
+    || mobileInputExpanded
+    || hasContent
+    || pinned.length > 0
+    || Boolean(contextRef)
+    || speechBusy
+
+  const {
+    holdControlActive,
+    holdPending,
+    showMobileDismiss,
+    handleHoldPointerDown,
+    handleHoldPointerUp,
+    handleMobileSpeechRelease,
+    handleDismiss: handleMobileSpeechDismiss,
+  } = useComposerMobileHoldSpeech({
+    baseEligible: mobileSpeechBaseEligible,
+    inputExpanded: mobileInputExpanded,
+    editorFocused,
+    mentionOpen: mentionState.open,
+    slashOpen: slashState.open,
+    composingRef,
+    speechBusy,
+    speechPhase,
+    editorRef,
+    startSpeech,
+    stopSpeech,
+    cancelSpeech,
+    onTapToInput: openMobileInput,
+  })
+
+  const handleMicClick = useCallback(() => {
+    if (isMobile) return
+    unlockChatCueSound()
+    toggleSpeech()
+  }, [isMobile, toggleSpeech])
 
   const speechListening = speechBusy
   const speechListeningPhase = speechPhase !== 'idle' ? speechPhase : null
@@ -898,8 +1033,9 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   const stopAriaLabel = hasActiveCollaboration
     ? '停止生成与协作任务'
     : '停止生成'
-  const showMic = !showStop && speechAvailable
-  const showSend = canSend
+  const showMic = !showStop && speechAvailable && !isMobile
+  const showMobileSend = isMobile && !showStop
+  const showSend = isMobile ? showMobileSend : canSend
 
   const handleStopClick = useCallback(async () => {
     if (!onStop) return
@@ -916,6 +1052,18 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
     onStop()
   }, [confirm, hasActiveCollaboration, onStop])
 
+  const mobileHoldLabel = holdPending ? '继续按住…' : '按住说话'
+  const mobileHoldAriaLabel = holdPending
+    ? '继续按住说话'
+    : '按住说话；点按切换为文字输入'
+  const editorPlaceholder = loading
+    ? (collaborationSteerHint
+      ? '发送补充说明…'
+      : (isMobile ? '继续输入，可补充说明…' : '继续输入，发送后作为补充说明…'))
+    : (isMobile
+      ? '输入问题，@ 股票，/ 技能…'
+      : '输入问题，@ 选择股票，/ 引用技能，Enter 发送…')
+  const editorAriaLabel = '输入问题，@ 选择股票，/ 引用技能'
   /** 空态仅麦 → primary 实心底；与发送并排 → ghost 透明图标 */
   const micSolo = showMic && !showSend && !speechListening
   const micBesideSend = showMic && showSend && !speechListening
@@ -1039,12 +1187,22 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
 
   // 失焦时延迟关闭面板，避免与菜单项点击（mousedown）产生时序竞争。
   const handleBlur = useCallback(() => {
+    setEditorFocused(false)
     window.setTimeout(() => {
       if (composingRef.current) return
       closeMention()
       closeSlash()
+      const root = editorRef.current
+      const empty = !root || !editorHasContent(root)
+      if (isMobile && empty && pinned.length === 0 && !contextRef && !speechBusy) {
+        setMobileInputExpanded(false)
+      }
     }, 120)
-  }, [closeMention, closeSlash])
+  }, [closeMention, closeSlash, contextRef, isMobile, pinned.length, speechBusy])
+
+  const handleEditorFocus = useCallback(() => {
+    setEditorFocused(true)
+  }, [])
 
   return (
     <div className={s.wrap}>
@@ -1091,15 +1249,51 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
           />
         )}
         <div
-          className={mergeClasses(s.panel, 'opptrix-composer-shell')}
+          className={mergeClasses(
+            s.panel,
+            'opptrix-composer-shell',
+            isMobile && !showMobileEditorBlock && s.panelMobileCompact,
+          )}
+          data-speech-listening={speechListening ? 'true' : undefined}
+          data-hold-pending={holdPending ? 'true' : undefined}
+          data-mobile-speech={mobileSpeechBaseEligible ? 'true' : undefined}
+          data-mobile-compact={isMobile && !showMobileEditorBlock ? 'true' : undefined}
         >
           {speechListening && speechListeningPhase && (
-            <div className={s.speechListeningOverlay}>
-              <ComposerSpeechListeningBar
-                phase={speechListeningPhase}
-                levelRms={levelRms}
-                onEnd={isRecording ? toggleSpeech : undefined}
-              />
+            <div
+              className={mergeClasses(
+                s.speechListeningOverlay,
+                isMobile && s.speechListeningOverlayMobile,
+                isMobile && s.speechListeningOverlayMobileCapture,
+              )}
+              onPointerUp={isMobile
+                ? (e) => {
+                    if ((e.target as HTMLElement).closest('button')) return
+                    handleMobileSpeechRelease()
+                  }
+                : undefined}
+              onPointerCancel={isMobile ? handleMobileSpeechRelease : undefined}
+              onContextMenu={isMobile ? (e) => e.preventDefault() : undefined}
+            >
+              <div className={s.speechListeningCenter}>
+                <ComposerSpeechListeningBar
+                  phase={speechListeningPhase}
+                  levelRms={levelRms}
+                  onEnd={isRecording && !isMobile ? toggleSpeech : undefined}
+                  holdToTalk={isMobile}
+                />
+              </div>
+              {showMobileDismiss && (
+                <OpptrixButton
+                  className={mergeClasses(s.speechListeningDismiss, 'opptrix-round-icon-btn')}
+                  variant="ghost"
+                  icon={<DismissRegular fontSize={16} />}
+                  aria-label="关闭麦克风"
+                  title="关闭麦克风"
+                  onClick={handleMobileSpeechDismiss}
+                  onPointerUp={(e) => e.stopPropagation()}
+                />
+              )}
             </div>
           )}
           {backgroundJobs.length > 0 && (
@@ -1137,20 +1331,27 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
               if (picked.length) void offerFiles(picked)
             }}
           />
-          <div className={s.inputRow}>
-            {contextRef && (
+          <div className={mergeClasses(s.inputRow, isMobile && s.inputRowMobile)}>
+            {showMobileEditorBlock && contextRef && (
               <ComposerContextRefTag
                 contextRef={contextRef}
                 onClear={onClearContextRef}
               />
             )}
-            <ComposerAttachmentStrip
-              items={pinned}
-              sessionId={sessionId}
-              onRemove={removePinned}
-              onPreview={onOpenPreview && sessionId ? (item) => onOpenPreview(sessionId, item) : undefined}
-            />
-            <div className={s.editorRow}>
+            {showMobileEditorBlock && (
+              <ComposerAttachmentStrip
+                items={pinned}
+                sessionId={sessionId}
+                onRemove={removePinned}
+                onPreview={onOpenPreview && sessionId ? (item) => onOpenPreview(sessionId, item) : undefined}
+              />
+            )}
+            <div
+              className={mergeClasses(
+                s.editorRow,
+                isMobile && !showMobileEditorBlock && s.editorRowCollapsedMobile,
+              )}
+            >
               <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
               <div
                 ref={editorRef}
@@ -1164,18 +1365,11 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                 suppressContentEditableWarning
                 role="textbox"
                 aria-multiline="true"
-                aria-label="输入问题，@ 选择股票，/ 引用技能"
-                data-placeholder={
-                  loading
-                    ? (collaborationSteerHint
-                      ? '发送补充说明…'
-                      : (isMobile ? '继续输入，可补充说明…' : '继续输入，发送后作为补充说明…'))
-                    : (isMobile
-                      ? '输入问题，@ 股票，/ 技能…'
-                      : '输入问题，@ 选择股票，/ 引用技能，Enter 发送…')
-                }
+                aria-label={editorAriaLabel}
+                data-placeholder={editorPlaceholder}
                 data-empty={hasContent || speechListening ? undefined : 'true'}
                 data-speech-listening={speechListening ? 'true' : undefined}
+                data-hold-pending={holdPending ? 'true' : undefined}
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleSelect}
@@ -1183,11 +1377,12 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                 onPaste={handlePaste}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
+                onFocus={handleEditorFocus}
                 onBlur={handleBlur}
               />
             </div>
             <div className={s.toolbarRow}>
-              <div className={s.toolbarStart}>
+              <div className={mergeClasses(s.toolbarStart, isMobile && s.toolbarStartMobile)}>
                 <ComposerPlusMenu
                   disabled={composerLocked || speechListening}
                   attachmentsAllowed={attachmentsAllowed && !uploading}
@@ -1205,27 +1400,63 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                   disabled={composerLocked || speechListening}
                 />
               </div>
-              <div className={s.toolbarCenter} />
-              <div className={s.toolbarEnd}>
-                {!speechListening && contextUsage ? (
-                  <div className={s.toolbarContextUsage}>
-                    <ContextUsageMeter usage={contextUsage} compact />
-                  </div>
-                ) : null}
-                {onModelChange && (
-                  <div className={s.toolbarModel}>
-                    <ModelSelector
-                      models={availableModels}
-                      value={sessionModel}
-                      disabled={composerLocked || speechListening}
-                      isMobile={isMobile}
-                      compact
-                      showParams
-                      llmParams={sessionLlmParams}
-                      onLlmParamsChange={onLlmParamsChange}
-                      onChange={onModelChange}
-                    />
-                  </div>
+              <div className={mergeClasses(s.toolbarCenter, isMobile && s.toolbarCenterMobile)}>
+                {isMobile && (
+                  <ComposerMobileHoldSpeechLabel
+                    active={holdControlActive}
+                    holdPending={holdPending}
+                    label={mobileHoldLabel}
+                    ariaLabel={mobileHoldAriaLabel}
+                    onPointerDown={handleHoldPointerDown}
+                    onPointerUp={handleHoldPointerUp}
+                    onPointerCancel={handleHoldPointerUp}
+                  />
+                )}
+              </div>
+              <div className={mergeClasses(s.toolbarEnd, isMobile && s.toolbarEndMobile)}>
+                {isMobile ? (
+                  onModelChange ? (
+                    <div className={s.toolbarModel}>
+                      <ModelSelector
+                        models={availableModels}
+                        value={sessionModel}
+                        disabled={composerLocked || speechListening}
+                        isMobile={isMobile}
+                        compact
+                        showParams
+                        llmParams={sessionLlmParams}
+                        onLlmParamsChange={onLlmParamsChange}
+                        onChange={onModelChange}
+                        contextUsage={contextUsage}
+                        onPanelOpenChange={(open) => {
+                          if (open) onRefreshContextUsage?.()
+                        }}
+                      />
+                    </div>
+                  ) : null
+                ) : (
+                  <>
+                    {!speechListening && contextUsage ? (
+                      <div className={s.toolbarContextUsage}>
+                        <ContextUsageMeter usage={contextUsage} compact />
+                      </div>
+                    ) : null}
+                    {onModelChange && (
+                      <div className={s.toolbarModel}>
+                        <ModelSelector
+                          models={availableModels}
+                          value={sessionModel}
+                          disabled={composerLocked || speechListening}
+                          isMobile={isMobile}
+                          compact
+                          showParams
+                          llmParams={sessionLlmParams}
+                          onLlmParamsChange={onLlmParamsChange}
+                          onChange={onModelChange}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
                 {showStop && (
                   <OpptrixButton
@@ -1259,7 +1490,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
                     aria-label={isRecording ? '结束聆听' : speechBusy ? '正在识别' : '语音输入'}
                     aria-pressed={isRecording}
                     title={isRecording ? '点击或空格结束 · Esc 取消' : '语音输入'}
-                    onClick={toggleSpeech}
+                    onClick={handleMicClick}
                   />
                 )}
                 {showSend && (

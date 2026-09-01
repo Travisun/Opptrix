@@ -72,6 +72,8 @@ const {
   resolveWebPort,
   logPortPlan,
   forceReleaseApiPort,
+  webDevOrigin,
+  isWebDevHttps,
 } = require('./resolve-ports.cjs')
 const { createBootloader } = require('./bootloader.cjs')
 const { registerDesktopBootloader } = require('./bootloader-register.cjs')
@@ -567,7 +569,7 @@ function stopSidecarAndWait(timeoutMs = SIDECAR_GRACEFUL_MS) {
 }
 
 function appUrl() {
-  if (isDev) return `http://127.0.0.1:${WEB_DEV_PORT}`
+  if (isDev) return webDevOrigin(WEB_DEV_PORT, '127.0.0.1')
   return `http://${API_HOST}:${API_PORT}`
 }
 
@@ -1690,6 +1692,16 @@ if (!gotTheLock) {
     clearMacAppQuarantine()
     configureNotificationIdentity(APP_ID)
     installMediaPermissionHandlers(session.defaultSession)
+    if (isDev && isWebDevHttps()) {
+      session.defaultSession.setCertificateVerifyProc((request, callback) => {
+        const host = request.hostname
+        if (host === '127.0.0.1' || host === 'localhost') {
+          callback(0)
+          return
+        }
+        callback(-3)
+      })
+    }
     applyAppIcon(app)
     setupDesktopChrome()
     registerWindowIpc()

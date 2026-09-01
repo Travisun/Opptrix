@@ -1782,8 +1782,9 @@ export async function getSession(id: string) {
   }>(`/sessions/${id}`)
 }
 
-export async function getSessionContextUsage(id: string) {
-  return jsonFetch<{ contextUsage: ChatContextUsage }>(`/sessions/${id}/context-usage`)
+export async function getSessionContextUsage(id: string, opts?: { force?: boolean }) {
+  const query = opts?.force ? '?force=1' : ''
+  return jsonFetch<{ contextUsage: ChatContextUsage }>(`/sessions/${id}/context-usage${query}`)
 }
 
 export async function renameSession(id: string, title: string) {

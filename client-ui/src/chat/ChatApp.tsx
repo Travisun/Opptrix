@@ -116,7 +116,7 @@ import {
   maybeShowChatLocalNotification,
   resolveWindowFocused,
 } from '../platform/chatNotifications'
-import { playChatCueSound } from '../platform/chatSound'
+import { playChatCueSound, unlockChatCueSound } from '../platform/chatSound'
 import {
   DESKTOP_SIDEBAR_LAYOUT_MS,
   DESKTOP_SIDEBAR_LAYOUT_EASE,
@@ -327,6 +327,19 @@ export default function ChatApp() {
     const onResize = () => setViewportWidth(window.innerWidth)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  /** 首次用户手势解锁完成铃（移动端 autoplay 策略） */
+  useEffect(() => {
+    const unlock = () => {
+      unlockChatCueSound()
+    }
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
   }, [])
 
   const {
@@ -1146,26 +1159,6 @@ export default function ChatApp() {
     }
   }, [])
 
-  useEffect(() => {
-    const onVisibilityOrFocusChange = () => {
-      void markStreamingSessionsAwayIfNeeded()
-    }
-
-    document.addEventListener('visibilitychange', onVisibilityOrFocusChange)
-    window.addEventListener('blur', onVisibilityOrFocusChange)
-    window.addEventListener('focus', onVisibilityOrFocusChange)
-    const timer = window.setInterval(() => {
-      void markStreamingSessionsAwayIfNeeded()
-    }, 2000)
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityOrFocusChange)
-      window.removeEventListener('blur', onVisibilityOrFocusChange)
-      window.removeEventListener('focus', onVisibilityOrFocusChange)
-      window.clearInterval(timer)
-    }
-  }, [markStreamingSessionsAwayIfNeeded])
-
   const applyBackgroundJobProgressEvent = useCallback((
     targetSessionId: string,
     event: ChatProgressEvent,
@@ -1416,9 +1409,12 @@ export default function ChatApp() {
     return list
   }, [])
 
-  const refreshContextUsage = useCallback(async (sessionId: string) => {
+  const refreshContextUsage = useCallback(async (
+    sessionId: string,
+    opts?: { force?: boolean },
+  ) => {
     try {
-      const { contextUsage: next } = await getSessionContextUsage(sessionId)
+      const { contextUsage: next } = await getSessionContextUsage(sessionId, opts)
       if (activeIdRef.current === sessionId) {
         setContextUsage(next)
       }
@@ -1429,11 +1425,61 @@ export default function ChatApp() {
     }
   }, [])
 
+  /** 从服务端同步当前会话（消息/引用/用量）；移动端前后台切换时避免依赖本地缓存 */
+  const syncActiveSessionFromServer = useCallback(async () => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    if (streamingSessionIdsRef.current.has(sid)) {
+      void refreshContextUsage(sid, { force: true })
+      return
+    }
+    try {
+      const fresh = await getSession(sid)
+      if (activeIdRef.current !== sid) return
+      setActiveSessionMeta(fresh.session)
+      setMessages(fresh.messages)
+      setContextRef(fresh.contextRef ?? null)
+      setSessionModelState(fresh.session.model)
+      setSessionLlmParamsState(fresh.session.llmParams)
+      await refreshContextUsage(sid, { force: true })
+    } catch {
+      await refreshContextUsage(sid, { force: true })
+    }
+  }, [refreshContextUsage])
+
+  const handleModelPanelOpenChange = useCallback((open: boolean) => {
+    if (!open || !activeIdRef.current) return
+    void refreshContextUsage(activeIdRef.current, { force: true })
+  }, [refreshContextUsage])
+
+  useEffect(() => {
+    const onVisibilityOrFocusChange = () => {
+      void markStreamingSessionsAwayIfNeeded()
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void syncActiveSessionFromServer()
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityOrFocusChange)
+    window.addEventListener('blur', onVisibilityOrFocusChange)
+    window.addEventListener('focus', onVisibilityOrFocusChange)
+    const timer = window.setInterval(() => {
+      void markStreamingSessionsAwayIfNeeded()
+    }, 2000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityOrFocusChange)
+      window.removeEventListener('blur', onVisibilityOrFocusChange)
+      window.removeEventListener('focus', onVisibilityOrFocusChange)
+      window.clearInterval(timer)
+    }
+  }, [markStreamingSessionsAwayIfNeeded, syncActiveSessionFromServer])
+
   /** 切到新空会话 / 清空活动会话：先清 React 残留，再拉本窗用量 */
   const resetContextUsageForSession = useCallback((sessionId: string | null) => {
     setContextUsage(null)
     if (!sessionId) return
-    void refreshContextUsage(sessionId)
+    void refreshContextUsage(sessionId, { force: true })
   }, [refreshContextUsage])
 
   // 订阅 live-progress：wake 到期续跑的 thinking/tool/done 推到同一会话 UI
@@ -1631,10 +1677,7 @@ export default function ChatApp() {
     setContextUsage(data.contextUsage ?? null)
     setError('')
     setChatScrollEpoch(epoch => epoch + 1)
-    // miss 时异步补拉，不阻塞消息切换
-    if (!data.contextUsage) {
-      void refreshContextUsage(id)
-    }
+    void refreshContextUsage(id, { force: true })
   }, [pushComposerDraft, refreshContextUsage])
 
   useEffect(() => {
@@ -3125,6 +3168,9 @@ export default function ChatApp() {
                     sessionModel={resolvedSessionModel}
                     sessionLlmParams={sessionLlmParams}
                     contextUsage={contextUsage}
+                    onRefreshContextUsage={() => {
+                      void handleModelPanelOpenChange(true)
+                    }}
                     isMobile={isMobile}
                     sidebarVisible={sidebarVisible}
                     sidebarDrawerOpen={drawerOpen}
@@ -3250,6 +3296,9 @@ export default function ChatApp() {
                       sessionModel={resolvedSessionModel}
                       sessionLlmParams={sessionLlmParams}
                       contextUsage={contextUsage}
+                    onRefreshContextUsage={() => {
+                      void handleModelPanelOpenChange(true)
+                    }}
                       isMobile={isMobile}
                       sidebarVisible={sidebarVisible}
                       sidebarDrawerOpen={drawerOpen}
