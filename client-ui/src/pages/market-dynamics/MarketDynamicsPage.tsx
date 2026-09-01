@@ -94,6 +94,7 @@ function MarketDynamicsContent({
           loading={panelLoading && !hasData}
           articles={insights.articles}
           insightsLoading={insights.loading}
+          isMobile={isMobile}
         />
       </div>
     </div>

@@ -54,13 +54,20 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '4px',
     fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     padding: '4px 8px',
     borderRadius: '6px',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
     ':hover': { backgroundColor: opptrixCssVars.surfaceHover },
+  },
+  clearBtnIcon: {
+    minWidth: '32px',
+    height: '32px',
+    padding: 0,
   },
   body: {
     flex: 1,
@@ -139,6 +146,7 @@ type Props = {
   onClearSector: () => void
   activeTab?: InsightTab
   onTabChange?: (tab: InsightTab) => void
+  isMobile?: boolean
 }
 
 export default function CnMarketInsightPanel({
@@ -158,6 +166,7 @@ export default function CnMarketInsightPanel({
   onClearSector,
   activeTab,
   onTabChange,
+  isMobile = false,
 }: Props) {
   const s = useStyles()
   const [internalTab, setInternalTab] = useState<InsightTab>('gainers')
@@ -185,11 +194,12 @@ export default function CnMarketInsightPanel({
       <CnInsightSplitView
         selected={selectedStock}
         onSelect={setSelectedStock}
+        presentation={isMobile ? 'drawer' : 'split'}
       >
         {content}
       </CnInsightSplitView>
     )
-  }, [selectedStock, tab])
+  }, [selectedStock, tab, isMobile])
 
   const tabs = useMemo(() => {
     const base = [
@@ -216,8 +226,9 @@ export default function CnMarketInsightPanel({
     selectedSector,
   ])
 
+  const panelTitle = selectedSector ? selectedSector.name : '数据明细'
   const panelSubtitle = selectedSector
-    ? `${selectedSector.name} · ${formatIndexPoints(selectedSector.price, 2)} 点`
+    ? `${formatIndexPoints(selectedSector.price, 2)} 点`
     : '涨幅、跌幅、涨停、连板、龙虎与资讯'
 
   const renderContent = () => {
@@ -413,9 +424,11 @@ export default function CnMarketInsightPanel({
 
   return (
     <CnDashboardFlexPanel
-      title="数据明细"
+      title={panelTitle}
       subtitle={panelSubtitle}
       fill
+      titleWrap={Boolean(selectedSector)}
+      stackedHead={isMobile && Boolean(selectedSector)}
       tabConfig={{
         tabs,
         value: tab,
@@ -424,14 +437,22 @@ export default function CnMarketInsightPanel({
       }}
       headExtra={selectedSector ? (
         <div className={s.sectorHeadExtra}>
-          <CnChangePill
-            changePct={selectedSector.change_pct}
-            changeAmt={selectedSector.change_amt}
-            ghost
-          />
-          <button type="button" className={s.clearBtn} onClick={onClearSector}>
-            <DismissRegular fontSize={12} />
-            取消板块
+          {!isMobile ? (
+            <CnChangePill
+              changePct={selectedSector.change_pct}
+              changeAmt={selectedSector.change_amt}
+              ghost
+            />
+          ) : null}
+          <button
+            type="button"
+            className={mergeClasses(s.clearBtn, isMobile && s.clearBtnIcon)}
+            onClick={onClearSector}
+            aria-label="取消板块"
+            title="取消板块"
+          >
+            <DismissRegular fontSize={isMobile ? 16 : 12} />
+            {!isMobile ? '取消板块' : null}
           </button>
         </div>
       ) : null}

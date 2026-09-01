@@ -85,6 +85,37 @@ const useStyles = makeStyles({
   breadcrumbActive: {
     color: opptrixCssVars.textSecondary,
   },
+  breadcrumbCompact: {
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
+    width: '100%',
+  },
+  breadcrumbTail: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  breadcrumbName: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    color: opptrixCssVars.textPrimary,
+    fontWeight: 650,
+  },
+  breadcrumbCode: {
+    flexShrink: 0,
+    fontSize: '9px',
+    fontWeight: 650,
+    fontVariantNumeric: 'tabular-nums',
+    color: opptrixCssVars.textTertiary,
+    padding: '1px 5px',
+    borderRadius: '4px',
+    backgroundColor: opptrixCssVars.surfaceMuted,
+    lineHeight: 1.3,
+  },
   titleRow: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -193,6 +224,44 @@ const useStyles = makeStyles({
     borderRadius: CN_DASH.cardRadius,
     backgroundColor: opptrixCssVars.canvasAlt,
   },
+  panelCompact: {
+    height: '100%',
+  },
+  compactHead: {
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '8px 12px 6px',
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+  },
+  compactChart: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
+    backgroundColor: opptrixCssVars.canvasAlt,
+  },
+  compactEmpty: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    boxSizing: 'border-box',
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textTertiary,
+    textAlign: 'center',
+    lineHeight: 1.55,
+  },
+  metricsGridCompact: {
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '8px',
+    marginTop: 0,
+  },
+  metricValueCompact: {
+    fontSize: '16px',
+  },
 })
 
 function chartDisplayCode(
@@ -226,6 +295,8 @@ type Props = {
   quoteTime?: string | null
   tradeState?: string | null
   loading?: boolean
+  /** 手机：元数据在上、图在下，避免左栏挤占 */
+  compact?: boolean
 }
 
 export default function CnMarketChartPanel({
@@ -239,6 +310,7 @@ export default function CnMarketChartPanel({
   quoteTime,
   tradeState,
   loading = false,
+  compact = false,
 }: Props) {
   const s = useStyles()
 
@@ -262,7 +334,7 @@ export default function CnMarketChartPanel({
     <>
       <div className={s.breadcrumb}>
         {breadcrumb.map((crumb, i) => (
-          <span key={crumb} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+          <span key={`${crumb}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
             {i > 0 ? <ChevronRightRegular className={s.breadcrumbSep} fontSize={9} /> : null}
             <span className={i === breadcrumb.length - 1 ? s.breadcrumbActive : undefined}>
               {crumb}
@@ -277,8 +349,91 @@ export default function CnMarketChartPanel({
     </>
   )
 
+  /** 手机：名称+代码并入面包屑末级，省掉独立标题行 */
+  const compactMeta = (
+    <div className={mergeClasses(s.breadcrumb, s.breadcrumbCompact)}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+        市场动态
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+        <ChevronRightRegular className={s.breadcrumbSep} fontSize={9} />
+        指数
+      </span>
+      <span className={s.breadcrumbTail}>
+        <ChevronRightRegular className={s.breadcrumbSep} fontSize={9} />
+        <span className={s.breadcrumbName}>{title}</span>
+        {displayCode ? <span className={s.breadcrumbCode}>{displayCode}</span> : null}
+      </span>
+    </div>
+  )
+
+  const metrics = (
+    <div className={mergeClasses(s.metricsGrid, compact && s.metricsGridCompact)}>
+      <div className={mergeClasses(s.metricCell, !compact && s.metricCellWide)}>
+        <span className={s.metricLabel}>最新点位</span>
+        <span>
+          <span className={mergeClasses(s.metricValue, compact && s.metricValueCompact)}>
+            {formatIndexPoints(price, 2)}
+          </span>
+          <span className={s.metricUnit}>点</span>
+        </span>
+      </div>
+      <div className={s.metricCell}>
+        <span className={s.metricLabel}>今日涨跌</span>
+        <span className={mergeClasses(s.metricValueSm, deltaClass(s, changePct))}>
+          {changeAmtText}
+        </span>
+      </div>
+      <div className={s.metricCell}>
+        <span className={s.metricLabel}>涨跌幅</span>
+        <CnChangePill changePct={changePct} ghost compact />
+      </div>
+      {!compact ? (
+        <div className={mergeClasses(s.metricCell, s.metricCellWide)}>
+          <span className={s.metricLabel}>行情状态</span>
+          <span className={mergeClasses(s.metricValueSm, s.deltaFlat)}>
+            {quoteTime
+              ? `更新 ${quoteTime}${tradeState ? ` · ${tradeState}` : ''}`
+              : `${displayCode} · 日 K`}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  )
+
   if (loading) {
     return <CnChartPanelSkeleton />
+  }
+
+  if (compact) {
+    return (
+      <section className={mergeClasses(s.panel, s.panelCompact, 'opptrix-cn-chart-panel')}>
+        <div className={s.compactHead}>
+          {compactMeta}
+          {chartCode ? metrics : (
+            <Text className={s.heroNote} block>
+              在顶部选择宽基指数，查看点位与走势
+            </Text>
+          )}
+        </div>
+        <div className={s.compactChart}>
+          {chartCode && instrument ? (
+            <TradingViewChart
+              code={chartInputCode}
+              instrument={instrument}
+              chartVariant="index"
+              expanded
+              embedMode
+              active
+            />
+          ) : (
+            <Text className={s.compactEmpty} block>
+              点击顶部宽基指数卡片，查看点位与走势
+            </Text>
+          )}
+        </div>
+      </section>
+    )
   }
 
   if (!chartCode) {
@@ -316,33 +471,7 @@ export default function CnMarketChartPanel({
         </div>
         <aside className={s.leftCol}>
           {leftMeta}
-          <div className={s.metricsGrid}>
-            <div className={mergeClasses(s.metricCell, s.metricCellWide)}>
-              <span className={s.metricLabel}>最新点位</span>
-              <span>
-                <span className={s.metricValue}>{formatIndexPoints(price, 2)}</span>
-                <span className={s.metricUnit}>点</span>
-              </span>
-            </div>
-            <div className={s.metricCell}>
-              <span className={s.metricLabel}>今日涨跌</span>
-              <span className={mergeClasses(s.metricValueSm, deltaClass(s, changePct))}>
-                {changeAmtText}
-              </span>
-            </div>
-            <div className={s.metricCell}>
-              <span className={s.metricLabel}>涨跌幅</span>
-              <CnChangePill changePct={changePct} ghost compact />
-            </div>
-            <div className={mergeClasses(s.metricCell, s.metricCellWide)}>
-              <span className={s.metricLabel}>行情状态</span>
-              <span className={mergeClasses(s.metricValueSm, s.deltaFlat)}>
-                {quoteTime
-                  ? `更新 ${quoteTime}${tradeState ? ` · ${tradeState}` : ''}`
-                  : `${displayCode} · 日 K`}
-              </span>
-            </div>
-          </div>
+          {metrics}
         </aside>
       </div>
     </section>

@@ -14,7 +14,7 @@ import { resolveIndexDisplayName } from './cnIndexFormat'
 import { chartCodeFromIndex } from './marketBoardUtils'
 import { sectorIndexCode } from './MarketSectorStrip'
 import { useMarketDynamicsLayout } from './useMarketDynamicsLayout'
-import { CN_DASH } from './cnDashboardTokens'
+import { CN_DASH, CN_DASH_MOBILE } from './cnDashboardTokens'
 
 const useStyles = makeStyles({
   root: {
@@ -26,6 +26,10 @@ const useStyles = makeStyles({
     padding: CN_DASH.pagePad,
     overflow: 'hidden',
     backgroundColor: opptrixCssVars.canvasAlt,
+  },
+  rootMobile: {
+    gap: 0,
+    padding: 0,
   },
   body: {
     flex: 1,
@@ -88,6 +92,53 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     overflow: 'hidden',
   },
+  /** 手机信息流：单列纵滚 */
+  feedScroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: CN_DASH_MOBILE.pageGap,
+    padding: CN_DASH_MOBILE.pagePad,
+    paddingBottom: `max(16px, env(safe-area-inset-bottom))`,
+    boxSizing: 'border-box',
+  },
+  /** 顶部指数 / KPI：禁止被下方高块 flex 压扁 */
+  feedLead: {
+    flexShrink: 0,
+    minWidth: 0,
+  },
+  feedChart: {
+    flexShrink: 0,
+    height: CN_DASH_MOBILE.chartHeight,
+    minHeight: '240px',
+    maxHeight: '320px',
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  feedBlock: {
+    flexShrink: 0,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  feedBlockSectors: {
+    height: 'min(52vh, 360px)',
+    minHeight: '280px',
+  },
+  feedBlockInsight: {
+    height: 'min(62vh, 440px)',
+    minHeight: '320px',
+  },
+  feedBlockHot: {
+    height: 'min(52vh, 360px)',
+    minHeight: '280px',
+  },
 })
 
 type Props = {
@@ -95,6 +146,7 @@ type Props = {
   loading: boolean
   articles: FeedArticle[]
   insightsLoading: boolean
+  isMobile?: boolean
 }
 
 export default function CnMarketDynamicsView({
@@ -102,11 +154,15 @@ export default function CnMarketDynamicsView({
   loading,
   articles,
   insightsLoading,
+  isMobile = false,
 }: Props) {
   const s = useStyles()
   const containerRef = useRef<HTMLDivElement>(null)
+  const feedScrollRef = useRef<HTMLDivElement>(null)
+  const insightBlockRef = useRef<HTMLDivElement>(null)
   const layoutMode = useMarketDynamicsLayout(containerRef)
-  const stacked = layoutMode === 'stacked'
+  /** 手机走信息流；窄桌面仍用 stacked */
+  const stacked = !isMobile && layoutMode === 'stacked'
 
   const sections = useMemo(() => data?.sections ?? [], [data?.sections])
   const cnIndices = useMemo(
@@ -143,6 +199,13 @@ export default function CnMarketDynamicsView({
     writeCnIndexChartCode(defaultCode)
   }, [chartCode, cnIndices])
 
+  const scrollInsightIntoView = useCallback(() => {
+    if (!isMobile) return
+    requestAnimationFrame(() => {
+      insightBlockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [isMobile])
+
   const handleIndexSelect = (item: MarketIndexQuote, code: string) => {
     setActiveIndex(item)
     setChartCode(code)
@@ -156,6 +219,8 @@ export default function CnMarketDynamicsView({
       return
     }
     setSelectedSector(item)
+    setInsightTab('constituents')
+    scrollInsightIntoView()
   }
 
   const handleClearSector = () => setSelectedSector(null)
@@ -177,11 +242,118 @@ export default function CnMarketDynamicsView({
       if (topSector) {
         setSelectedSector(topSector)
         setInsightTab('constituents')
+        scrollInsightIntoView()
       }
       return
     }
     setInsightTab(action)
-  }, [topSector])
+    scrollInsightIntoView()
+  }, [topSector, scrollInsightIntoView])
+
+  const chartPanel = (
+    <CnMarketChartPanel
+      chartCode={chartCode}
+      activeIndex={activeIndex}
+      loading={loading}
+      compact={isMobile}
+      title={activeIndex ? resolveIndexDisplayName(activeIndex) : '指数走势'}
+      indexCode={activeIndex?.qt_code ?? activeIndex?.code}
+      price={activeIndex?.price}
+      changePct={activeIndex?.change_pct}
+      changeAmt={activeIndex?.change_amt}
+      quoteTime={activeIndex?.quote_time}
+      tradeState={activeIndex?.trade_state_label}
+    />
+  )
+
+  const insightPanel = (
+    <CnMarketInsightPanel
+      selectedSector={selectedSector}
+      selectedSectorCode={selectedSectorCode}
+      gainers={data?.cn_gainers ?? []}
+      losers={data?.cn_losers ?? []}
+      limitUp={data?.cn_limit_up}
+      limitBreak={data?.cn_limit_break}
+      skyrocket={data?.cn_skyrocket}
+      limitLadder={data?.cn_limit_ladder}
+      dragonTiger={data?.cn_dragon_tiger ?? []}
+      dragonTigerDate={data?.cn_dragon_tiger_date}
+      articles={articles}
+      insightsLoading={insightsLoading}
+      marketLoading={loading}
+      onClearSector={handleClearSector}
+      activeTab={insightTab}
+      onTabChange={setInsightTab}
+      isMobile={isMobile}
+    />
+  )
+
+  const sectorPanel = (
+    <CnSectorDiscoverGrid
+      sectors={sectorIndices}
+      selectedCode={selectedSectorCode}
+      loading={loading}
+      emptyHint={data?.cn_sector_hint}
+      columns={isMobile ? 2 : 3}
+      onSelect={handleSectorSelect}
+    />
+  )
+
+  const hotPanel = (
+    <CnHotBoardPanel
+      skyrocket={data?.cn_skyrocket}
+      hotStocks={data?.cn_hot_stocks}
+      loading={loading}
+      emotionSource={data?.cn_emotion_source ?? null}
+      isMobile={isMobile}
+    />
+  )
+
+  if (isMobile) {
+    return (
+      <div
+        ref={containerRef}
+        className={mergeClasses(s.root, s.rootMobile, 'opptrix-cn-market-dynamics')}
+      >
+        <div
+          ref={feedScrollRef}
+          className={mergeClasses(s.feedScroll, 'opptrix-scroll')}
+        >
+          <div className={s.feedLead}>
+            <CnHeroIndexStrip
+              indices={cnIndices}
+              cnIndices={cnIndices}
+              selectedCode={chartCode}
+              loading={loading}
+              compact
+              onSelect={handleIndexSelect}
+            />
+          </div>
+          <div className={s.feedLead}>
+            <CnCompactKpiRow
+              data={data}
+              sectors={sectorIndices}
+              loading={loading && !data}
+              onMetricClick={handleKpiClick}
+            />
+          </div>
+          <div className={s.feedChart}>{chartPanel}</div>
+          <div className={mergeClasses(s.feedBlock, s.feedBlockSectors)}>
+            {sectorPanel}
+          </div>
+          <div
+            ref={insightBlockRef}
+            className={mergeClasses(s.feedBlock, s.feedBlockInsight)}
+          >
+            {insightPanel}
+          </div>
+          <div className={mergeClasses(s.feedBlock, s.feedBlockHot)}>
+            {hotPanel}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -205,60 +377,13 @@ export default function CnMarketDynamicsView({
 
       <div className={mergeClasses(s.body, stacked && s.bodyStacked)}>
         <div className={s.mainCol}>
-          <div className={s.chartCol}>
-            <CnMarketChartPanel
-              chartCode={chartCode}
-              activeIndex={activeIndex}
-              loading={loading}
-              title={activeIndex ? resolveIndexDisplayName(activeIndex) : '指数走势'}
-              indexCode={activeIndex?.qt_code ?? activeIndex?.code}
-              price={activeIndex?.price}
-              changePct={activeIndex?.change_pct}
-              changeAmt={activeIndex?.change_amt}
-              quoteTime={activeIndex?.quote_time}
-              tradeState={activeIndex?.trade_state_label}
-            />
-          </div>
-          <div className={s.detailCol}>
-            <CnMarketInsightPanel
-              selectedSector={selectedSector}
-              selectedSectorCode={selectedSectorCode}
-              gainers={data?.cn_gainers ?? []}
-              losers={data?.cn_losers ?? []}
-              limitUp={data?.cn_limit_up}
-              limitBreak={data?.cn_limit_break}
-              skyrocket={data?.cn_skyrocket}
-              limitLadder={data?.cn_limit_ladder}
-              dragonTiger={data?.cn_dragon_tiger ?? []}
-              dragonTigerDate={data?.cn_dragon_tiger_date}
-              articles={articles}
-              insightsLoading={insightsLoading}
-              marketLoading={loading}
-              onClearSector={handleClearSector}
-              activeTab={insightTab}
-              onTabChange={setInsightTab}
-            />
-          </div>
+          <div className={s.chartCol}>{chartPanel}</div>
+          <div className={s.detailCol}>{insightPanel}</div>
         </div>
 
         <div className={s.sideCol}>
-          <div className={s.sectorCol}>
-            <CnSectorDiscoverGrid
-              sectors={sectorIndices}
-              selectedCode={selectedSectorCode}
-              loading={loading}
-              emptyHint={data?.cn_sector_hint}
-              onSelect={handleSectorSelect}
-            />
-          </div>
-          <div className={s.hotBoardCol}>
-            <CnHotBoardPanel
-              skyrocket={data?.cn_skyrocket}
-              hotStocks={data?.cn_hot_stocks}
-              loading={loading}
-              emotionSource={data?.cn_emotion_source ?? null}
-            />
-          </div>
+          <div className={s.sectorCol}>{sectorPanel}</div>
+          <div className={s.hotBoardCol}>{hotPanel}</div>
         </div>
       </div>
     </div>
