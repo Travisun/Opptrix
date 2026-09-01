@@ -13,6 +13,7 @@ import {
   isPathDenied,
   resolveDockerAgentIdentity,
   resolveDockerAgentDropIds,
+  isDockerEnv,
   DOCKER_PERSISTENCE_NOTE,
   resetSharedWorkspaceLayoutCacheForTests,
 } from '../packages/agent-workspace/dist/index.js'
@@ -127,4 +128,13 @@ test('resolveDockerAgentDropIds skips SRT escape hatch', async () => {
 test('DOCKER_PERSISTENCE_NOTE mentions agent isolation', () => {
   assert.match(DOCKER_PERSISTENCE_NOTE, /opptrix-agent/)
   assert.match(DOCKER_PERSISTENCE_NOTE, /workspace/)
+})
+
+test('isDockerEnv requires OPPTRIX_DOCKER=1', async () => {
+  await withEnv({ OPPTRIX_DOCKER: undefined }, async () => {
+    assert.equal(isDockerEnv(), false)
+  })
+  await withEnv({ OPPTRIX_DOCKER: '1' }, async () => {
+    assert.equal(isDockerEnv(), true)
+  })
 })

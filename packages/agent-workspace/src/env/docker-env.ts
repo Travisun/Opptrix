@@ -17,12 +17,9 @@ export interface DockerAgentIdentity {
 }
 
 export function isDockerEnv(): boolean {
-  if (process.env.OPPTRIX_DOCKER === '1') return true
-  try {
-    return fs.existsSync('/.dockerenv')
-  } catch {
-    return false
-  }
+  // 仅认显式 Opptrix 自托管标记。裸 /.dockerenv 会命中 GitHub Actions 等通用容器，
+  // 不得因此关闭 Agent 沙箱或改写 system/seed 默认路径。
+  return process.env.OPPTRIX_DOCKER === '1'
 }
 
 /**

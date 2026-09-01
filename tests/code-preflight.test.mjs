@@ -4,7 +4,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 
 test('L0 empty file fails', async () => {
@@ -160,30 +159,25 @@ test('L0 python syntax fail via WorkspaceService.codePreflight', async () => {
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-preflight-'))
   const sessionId = 'test-preflight-syntax'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await fs.writeFile(path.join(tmp, 'bad.py'), 'def broken(\n', 'utf8')
-    const r = await ws.codePreflight({
-      sessionId,
-      rootId: grant.root_id,
-      path: 'bad.py',
-      levels: ['l0'],
-    })
-    const syn = r.checks.find(c => c.id === 'l0_python_syntax')
-    assert.ok(syn, 'expected python syntax check')
-    if (syn.status === 'skip') {
-      assert.ok(r.fix_hints.some(h => /ensure_python/.test(h)))
-    } else {
-      assert.equal(syn.status, 'fail')
-      assert.equal(r.ok, false)
-      assert.ok(r.diagnostics.some(d => d.id === 'l0_python_syntax' && d.severity === 'error'))
-      assert.ok(r.fix_hints.some(h => /首条|ruff|biome/i.test(h)))
-    }
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await fs.writeFile(path.join(grant.abs_path, 'bad.py'), 'def broken(\n', 'utf8')
+  const r = await ws.codePreflight({
+    sessionId,
+    rootId: grant.root_id,
+    path: 'bad.py',
+    levels: ['l0'],
+  })
+  const syn = r.checks.find(c => c.id === 'l0_python_syntax')
+  assert.ok(syn, 'expected python syntax check')
+  if (syn.status === 'skip') {
+    assert.ok(r.fix_hints.some(h => /ensure_python/.test(h)))
+  } else {
+    assert.equal(syn.status, 'fail')
+    assert.equal(r.ok, false)
+    assert.ok(r.diagnostics.some(d => d.id === 'l0_python_syntax' && d.severity === 'error'))
+    assert.ok(r.fix_hints.some(h => /首条|ruff|biome/i.test(h)))
   }
 })
 
@@ -192,27 +186,22 @@ test('L0 python syntax pass', async () => {
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-preflight-'))
   const sessionId = 'test-preflight-pass'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await fs.writeFile(path.join(tmp, 'ok.py'), 'print(1)\n', 'utf8')
-    const r = await ws.codePreflight({
-      sessionId,
-      rootId: grant.root_id,
-      path: 'ok.py',
-      levels: ['l0'],
-    })
-    const syn = r.checks.find(c => c.id === 'l0_python_syntax')
-    assert.ok(syn)
-    if (syn.status === 'pass') {
-      assert.equal(r.ok, true)
-    } else {
-      assert.equal(syn.status, 'skip')
-    }
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await fs.writeFile(path.join(grant.abs_path, 'ok.py'), 'print(1)\n', 'utf8')
+  const r = await ws.codePreflight({
+    sessionId,
+    rootId: grant.root_id,
+    path: 'ok.py',
+    levels: ['l0'],
+  })
+  const syn = r.checks.find(c => c.id === 'l0_python_syntax')
+  assert.ok(syn)
+  if (syn.status === 'pass') {
+    assert.equal(r.ok, true)
+  } else {
+    assert.equal(syn.status, 'skip')
   }
 })
 
@@ -221,24 +210,19 @@ test('L0 js syntax pass with node --check', async () => {
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-preflight-'))
   const sessionId = 'test-preflight-js'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await fs.writeFile(path.join(tmp, 'ok.mjs'), 'console.log(1)\n', 'utf8')
-    const r = await ws.codePreflight({
-      sessionId,
-      rootId: grant.root_id,
-      path: 'ok.mjs',
-      levels: ['l0'],
-    })
-    const syn = r.checks.find(c => c.id === 'l0_js_syntax')
-    assert.ok(syn)
-    if (syn.status === 'pass') assert.equal(r.ok, true)
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await fs.writeFile(path.join(grant.abs_path, 'ok.mjs'), 'console.log(1)\n', 'utf8')
+  const r = await ws.codePreflight({
+    sessionId,
+    rootId: grant.root_id,
+    path: 'ok.mjs',
+    levels: ['l0'],
+  })
+  const syn = r.checks.find(c => c.id === 'l0_js_syntax')
+  assert.ok(syn)
+  if (syn.status === 'pass') assert.equal(r.ok, true)
 })
 
 test('default levels include l1; without tools skips without exploding', async () => {
@@ -246,27 +230,22 @@ test('default levels include l1; without tools skips without exploding', async (
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-preflight-'))
   const sessionId = 'test-preflight-l1-default'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await fs.writeFile(path.join(tmp, 'ok.py'), 'print(1)\n', 'utf8')
-    // 不传 levels → 默认 l0+l1
-    const r = await ws.codePreflight({
-      sessionId,
-      rootId: grant.root_id,
-      path: 'ok.py',
-    })
-    const l1 = r.checks.filter(c => c.level === 'l1')
-    assert.ok(l1.length >= 1, 'default should attempt L1')
-    assert.ok(l1.every(c =>
-      c.status === 'pass' || c.status === 'skip' || c.status === 'fail' || c.status === 'warn',
-    ))
-    assert.ok(Array.isArray(r.diagnostics))
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await fs.writeFile(path.join(grant.abs_path, 'ok.py'), 'print(1)\n', 'utf8')
+  // 不传 levels → 默认 l0+l1
+  const r = await ws.codePreflight({
+    sessionId,
+    rootId: grant.root_id,
+    path: 'ok.py',
+  })
+  const l1 = r.checks.filter(c => c.level === 'l1')
+  assert.ok(l1.length >= 1, 'default should attempt L1')
+  assert.ok(l1.every(c =>
+    c.status === 'pass' || c.status === 'skip' || c.status === 'fail' || c.status === 'warn',
+  ))
+  assert.ok(Array.isArray(r.diagnostics))
 })
 
 test('L1 without tools skips without exploding', async () => {
@@ -274,26 +253,21 @@ test('L1 without tools skips without exploding', async () => {
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-preflight-'))
   const sessionId = 'test-preflight-l1'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    await fs.writeFile(path.join(tmp, 'ok.py'), 'print(1)\n', 'utf8')
-    const r = await ws.codePreflight({
-      sessionId,
-      rootId: grant.root_id,
-      path: 'ok.py',
-      levels: ['l0', 'l1'],
-    })
-    const l1 = r.checks.filter(c => c.level === 'l1')
-    assert.ok(l1.length >= 1)
-    assert.ok(l1.every(c =>
-      c.status === 'pass' || c.status === 'skip' || c.status === 'fail' || c.status === 'warn',
-    ))
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  await fs.writeFile(path.join(grant.abs_path, 'ok.py'), 'print(1)\n', 'utf8')
+  const r = await ws.codePreflight({
+    sessionId,
+    rootId: grant.root_id,
+    path: 'ok.py',
+    levels: ['l0', 'l1'],
+  })
+  const l1 = r.checks.filter(c => c.level === 'l1')
+  assert.ok(l1.length >= 1)
+  assert.ok(l1.every(c =>
+    c.status === 'pass' || c.status === 'skip' || c.status === 'fail' || c.status === 'warn',
+  ))
 })
 
 test('path outside grant fails without leaking /Users absolute path', async () => {
@@ -301,25 +275,20 @@ test('path outside grant fails without leaking /Users absolute path', async () =
     '../packages/agent-workspace/dist/service.js'
   )
   resetWorkspaceService()
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'opptrix-preflight-'))
   const sessionId = 'test-preflight-escape'
-  try {
-    const ws = new WorkspaceService()
-    const grant = ws.addGrant(sessionId, tmp, 'rw', 'tmp')
-    const r = await ws.codePreflight({
-      sessionId,
-      rootId: grant.root_id,
-      path: '../outside.py',
-      levels: ['l0'],
-    })
-    assert.equal(r.ok, false)
-    assert.equal(r.checks[0]?.message, '路径不在授权工作区内')
-    assert.deepEqual(r.errors, [r.checks[0].message])
-    assert.ok(r.diagnostics.some(d => d.severity === 'error'))
-    assert.ok(r.fix_hints.some(h => /授权|越出/.test(h)))
-    const blob = JSON.stringify(r)
-    assert.doesNotMatch(blob, /\/Users\/[^/"']+/)
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {})
-  }
+  const ws = new WorkspaceService()
+  const grant = await ws.ensureDefaultRoot(sessionId)
+  const r = await ws.codePreflight({
+    sessionId,
+    rootId: grant.root_id,
+    path: '../outside.py',
+    levels: ['l0'],
+  })
+  assert.equal(r.ok, false)
+  assert.equal(r.checks[0]?.message, '路径不在授权工作区内')
+  assert.deepEqual(r.errors, [r.checks[0].message])
+  assert.ok(r.diagnostics.some(d => d.severity === 'error'))
+  assert.ok(r.fix_hints.some(h => /授权|越出/.test(h)))
+  const blob = JSON.stringify(r)
+  assert.doesNotMatch(blob, /\/Users\/[^/"']+/)
 })

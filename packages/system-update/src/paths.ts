@@ -8,7 +8,6 @@
  * 3. Docker（无 data dir）→ `/system`（旧三卷默认）
  * 4. Else → `~/.opptrix/system`
  */
-import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -22,12 +21,8 @@ export interface SystemPaths {
 }
 
 export function isDockerEnv(): boolean {
-  if (process.env.OPPTRIX_DOCKER === '1') return true
-  try {
-    return fs.existsSync('/.dockerenv')
-  } catch {
-    return false
-  }
+  // 仅认 OPPTRIX_DOCKER=1（entrypoint/compose 注入）。裸 /.dockerenv 会误判 CI 容器。
+  return process.env.OPPTRIX_DOCKER === '1'
 }
 
 export function resolveSystemDir(override?: string): string {
