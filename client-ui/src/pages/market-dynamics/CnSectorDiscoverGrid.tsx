@@ -43,6 +43,9 @@ const useStyles = makeStyles({
     alignContent: 'start',
     gap: '8px',
   },
+  gridCols2: {
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  },
   cardInner: {
     padding: '10px 12px',
     borderRadius: '10px',
@@ -64,6 +67,8 @@ type Props = {
   selectedCode?: string | null
   loading?: boolean
   emptyHint?: string
+  /** 每行列数；手机信息流默认 2 */
+  columns?: 2 | 3
   onSelect?: (item: MarketIndexQuote) => void
 }
 
@@ -72,6 +77,7 @@ export default function CnSectorDiscoverGrid({
   selectedCode,
   loading = false,
   emptyHint,
+  columns = 3,
   onSelect,
 }: Props) {
   const s = useStyles()
@@ -117,7 +123,13 @@ export default function CnSectorDiscoverGrid({
         {loading && !sectors.length ? (
           <CnSectorGridSkeleton />
         ) : (
-          <div className={mergeClasses(s.grid, 'opptrix-scroll-hidden')}>
+          <div
+            className={mergeClasses(
+              s.grid,
+              columns === 2 && s.gridCols2,
+              'opptrix-scroll-hidden',
+            )}
+          >
             {!items.length ? (
               <Text className={s.empty} block>{emptyHint ?? '暂无板块数据'}</Text>
             ) : (

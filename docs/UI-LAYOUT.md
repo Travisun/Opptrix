@@ -74,7 +74,7 @@
 | 概览 | Dashboard | Stat 行 + Module 网格 |
 | 个股研究 | StockResearch | PageHeader + Tab + 内容卡片 |
 | 机会与组合 | PortfolioHub | Tab + 表格/表单卡片 |
-| 市场动态 | MarketDynamicsPage | A股 **Stocky 式 Dashboard**：英雄指数卡（大价 + 涨跌 Pill + Sparkline）→ 紧凑 KPI 条 → 主区左（面包屑 + 大价 K 线 + 数据明细 Tab 表）/ 右（板块发现 2×N 网格）；美股不变 |
+| 市场动态 | MarketDynamicsPage | A股 **Stocky 式 Dashboard**：英雄指数卡 → 紧凑 KPI → 主区左（大价 K 线 + 数据明细）/ 右（板块发现 + 热榜）。**移动 Web**：单列信息流——更宽指数卡（隐代码）→ KPI → 更高紧凑图 → 板块（2 列）→ 明细 → 热榜；点个股走势以底部抽屉拉出；选中板块时标题展示完整板块名、清除为图标。美股不变 |
 | 投研写作 | StockWriter | 双栏 Editor 卡片 |
 | 设置 | Settings | 表单卡片堆叠 |
 | 新闻中心 | NewsCenter | 侧栏入口；feed / reader 双模式 |

@@ -85,6 +85,7 @@ type Props = {
   hotStocks?: MarketHotItem[]
   loading?: boolean
   emotionSource?: 'tonghuashun' | null
+  isMobile?: boolean
 }
 
 function HotBoardList({
@@ -127,6 +128,7 @@ export default function CnHotBoardPanel({
   hotStocks = [],
   loading = false,
   emotionSource,
+  isMobile = false,
 }: Props) {
   const s = useStyles()
   const [tab, setTab] = useState<HotBoardTab>('skyrocket')
@@ -230,7 +232,11 @@ export default function CnHotBoardPanel({
             ) : null}
           </div>
         ) : null}
-        <CnInsightSplitView selected={selected} onSelect={setSelected}>
+        <CnInsightSplitView
+          selected={selected}
+          onSelect={setSelected}
+          presentation={isMobile ? 'drawer' : 'split'}
+        >
           {renderList()}
         </CnInsightSplitView>
       </div>
