@@ -492,6 +492,8 @@ export interface MarketDynamicsData {
   hk_trending?: MarketStockMover[]
   hk_sector_status?: 'ok' | 'empty' | 'error'
   hk_sector_hint?: string
+  /** Hub 返回：数据来自服务端持久化缓存 */
+  from_cache?: boolean
 }
 
 export interface StockSearchItem {

@@ -15,6 +15,7 @@
     "@opptrix/institutions": "*",
     "@opptrix/t-strategy": "*",
     "@opptrix/news-feed": "*",
-    "@opptrix/article-enrichment": "*"
+    "@opptrix/article-enrichment": "*",
+    "@opptrix/user-store": "*"
   }
 }
