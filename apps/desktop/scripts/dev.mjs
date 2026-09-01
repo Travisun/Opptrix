@@ -3,6 +3,7 @@
  * Electron dev: API sidecar + Vite HMR, then open the desktop window.
  */
 import { spawn, spawnSync } from 'node:child_process'
+import https from 'node:https'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,10 +23,26 @@ spawnSync(NODE_CMD, ['scripts/prepare-icons.mjs'], {
 
 async function waitForUrl(url, timeoutMs = 60_000) {
   const started = Date.now()
+  const isHttps = url.startsWith('https:')
   while (Date.now() - started < timeoutMs) {
     try {
-      const resp = await fetch(url)
-      if (resp.ok) return
+      if (isHttps) {
+        const ok = await new Promise((resolve) => {
+          const req = https.get(url, { rejectUnauthorized: false }, (res) => {
+            resolve(res.statusCode === 200 || res.statusCode === 304)
+            res.resume()
+          })
+          req.on('error', () => resolve(false))
+          req.setTimeout(2500, () => {
+            req.destroy()
+            resolve(false)
+          })
+        })
+        if (ok) return
+      } else {
+        const resp = await fetch(url)
+        if (resp.ok || resp.status === 304) return
+      }
     } catch {
       /* retry */
     }
@@ -69,7 +86,8 @@ process.on('SIGTERM', () => {
 })
 
 await waitForUrl(`http://127.0.0.1:${apiPlan.port}/api/health`)
-await waitForUrl(`http://127.0.0.1:${webPlan.port}/`)
+const webScheme = process.env.WEB_HTTPS !== '0' ? 'https' : 'http'
+await waitForUrl(`${webScheme}://127.0.0.1:${webPlan.port}/`)
 
 const electronPath = resolveElectronExecutable()
 const electron = spawn(electronPath, ['.'], {

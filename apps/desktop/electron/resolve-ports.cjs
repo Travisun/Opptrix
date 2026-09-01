@@ -3,6 +3,7 @@
  * Used by Electron main (production) and dev launch scripts.
  */
 const net = require('node:net')
+const https = require('node:https')
 const { execSync, spawnSync } = require('node:child_process')
 
 const API_HOST = '127.0.0.1'
@@ -44,7 +45,45 @@ async function probeOpptrixHealth(port, host = API_HOST) {
   }
 }
 
+function isWebDevHttps() {
+  return process.env.WEB_HTTPS !== '0'
+}
+
+function webDevScheme() {
+  return isWebDevHttps() ? 'https' : 'http'
+}
+
+function webDevOrigin(port, host = API_HOST) {
+  return `${webDevScheme()}://${host}:${port}`
+}
+
+function probeWebDevServerHttps(port, host = API_HOST) {
+  return new Promise((resolve) => {
+    const req = https.get(
+      {
+        host,
+        port,
+        path: '/',
+        rejectUnauthorized: false,
+        timeout: 2500,
+      },
+      (res) => {
+        resolve(res.statusCode === 200 || res.statusCode === 304)
+        res.resume()
+      },
+    )
+    req.on('error', () => resolve(false))
+    req.on('timeout', () => {
+      req.destroy()
+      resolve(false)
+    })
+  })
+}
+
 async function probeWebDevServer(port, host = API_HOST) {
+  if (isWebDevHttps()) {
+    return probeWebDevServerHttps(port, host)
+  }
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 2500)
@@ -361,7 +400,10 @@ function describePortPlan(label, plan) {
 
 function logPortPlan(apiPlan, webPlan) {
   const lines = ['[ports] 启动端口：', `  - ${describePortPlan('API', apiPlan)}`]
-  if (webPlan) lines.push(`  - ${describePortPlan('Web', webPlan)}`)
+  if (webPlan) {
+    lines.push(`  - ${describePortPlan('Web', webPlan)}`)
+    lines.push(`  - Web 开发地址 → ${webDevOrigin(webPlan.port)}`)
+  }
   console.log(lines.join('\n'))
 }
 
@@ -371,6 +413,7 @@ function applyPortEnv(apiPlan, webPlan) {
     OPPTRIX_API_PORT_MODE: apiPlan.mode,
     OPPTRIX_PORTS_RESOLVED: '1',
     API_PROXY_TARGET: `http://${API_HOST}:${apiPlan.port}`,
+    WEB_HTTPS: process.env.WEB_HTTPS ?? '1',
   }
   if (webPlan) {
     env.WEB_PORT = String(webPlan.port)
@@ -388,8 +431,11 @@ module.exports = {
   describePortPlan,
   forceReleaseApiPort,
   isPortListening,
+  isWebDevHttps,
   logPortPlan,
   probeOpptrixHealth,
   resolveApiPort,
   resolveWebPort,
+  webDevOrigin,
+  webDevScheme,
 }

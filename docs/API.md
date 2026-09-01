@@ -1,6 +1,6 @@
 # API 参考
 
-浏览器访问 **http://127.0.0.1:5173**，API 路径 `/api/*` 由 Vite 代理到后台（默认 `127.0.0.1:8711`）。直接调 API 示例：`curl http://127.0.0.1:8711/api/health`
+浏览器访问 **https://127.0.0.1:5173**（`npm run dev` 默认自签名 HTTPS；设 `WEB_HTTPS=0` 可回退 HTTP），API 路径 `/api/*` 由 Vite 代理到后台（默认 `127.0.0.1:8711`）。直接调 API 示例：`curl http://127.0.0.1:8711/api/health`
 
 ## 通用响应
 

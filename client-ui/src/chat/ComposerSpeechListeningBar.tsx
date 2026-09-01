@@ -22,12 +22,17 @@ import { motion } from '../theme/mixins'
       padding: '2px 4px',
       minWidth: 0,
       userSelect: 'none',
-      /* 父 overlay 为 pointer-events:none，条自身可点以结束聆听 */
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+      /* 父 overlay 为 pointer-events:none，条自身可点以结束聆听（桌面） */
       pointerEvents: 'auto',
     },
-    rootClickable: {
-      cursor: 'pointer',
+    rootHoldToTalk: {
+      pointerEvents: 'none',
     },
+  rootClickable: {
+    cursor: 'pointer',
+  },
   wave: {
     display: 'flex',
     alignItems: 'center',
@@ -81,20 +86,33 @@ type ComposerSpeechListeningBarProps = {
   phase: Exclude<ComposerSpeechPhase, 'idle'>
   levelRms: number
   onEnd?: () => void
+  /** 手机按住说话：文案改为松手结束 */
+  holdToTalk?: boolean
 }
 
-function phaseCopy(phase: Exclude<ComposerSpeechPhase, 'idle'>): {
+function phaseCopy(
+  phase: Exclude<ComposerSpeechPhase, 'idle'>,
+  holdToTalk: boolean,
+): {
   label: string
   /** 完整说明（含 Esc），供 title / aria */
   detail: string
 } {
   switch (phase) {
     case 'requesting':
-      return { label: '正在准备…', detail: '正在准备麦克风…' }
+      return holdToTalk
+        ? { label: '正在准备…', detail: '正在准备麦克风… · 点右侧 × 可取消' }
+        : { label: '正在准备…', detail: '正在准备麦克风…' }
     case 'transcribing':
       return { label: '正在识别…', detail: '正在识别语音…' }
     case 'recording':
     default:
+      if (holdToTalk) {
+        return {
+          label: '正在聆听 · 松手结束',
+          detail: '正在聆听 · 松手结束 · 点右侧 × 可取消',
+        }
+      }
       return {
         label: '正在聆听 · 点击或空格结束',
         detail: '正在聆听 · 点击或空格结束，Esc 取消',
@@ -116,17 +134,18 @@ export default function ComposerSpeechListeningBar({
   phase,
   levelRms,
   onEnd,
+  holdToTalk = false,
 }: ComposerSpeechListeningBarProps) {
   const s = useStyles()
   const weights = useMemo(() => barWeights(BAR_COUNT), [])
-  const { label, detail } = phaseCopy(phase)
+  const { label, detail } = phaseCopy(phase, holdToTalk)
   const live = phase === 'recording'
   const level = live ? Math.min(1, Math.max(0, levelRms)) : 0
   const clickable = live && Boolean(onEnd)
 
   return (
     <div
-      className={mergeClasses(s.root, clickable && s.rootClickable)}
+      className={mergeClasses(s.root, holdToTalk && s.rootHoldToTalk, clickable && s.rootClickable)}
       role="status"
       aria-live="polite"
       aria-label={detail}

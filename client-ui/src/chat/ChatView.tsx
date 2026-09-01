@@ -480,6 +480,7 @@ interface ChatViewProps {
   sessionModel?: string
   sessionLlmParams?: SessionLlmParams | null
   contextUsage?: ChatContextUsage | null
+  onRefreshContextUsage?: () => void
   isMobile?: boolean
   sidebarVisible?: boolean
   /** 移动端会话侧栏抽屉是否打开（顶栏 PanelLeft 图标态） */
@@ -549,7 +550,8 @@ function ChatView({
   availableModels = [],
   sessionModel,
   sessionLlmParams,
-  contextUsage = null,
+  contextUsage,
+  onRefreshContextUsage,
   isMobile = false,
   sidebarVisible = false,
   sidebarDrawerOpen = false,
@@ -1311,6 +1313,7 @@ function ChatView({
               sessionModel={sessionModel}
               sessionLlmParams={sessionLlmParams}
               contextUsage={contextUsage}
+              onRefreshContextUsage={onRefreshContextUsage}
               onSubmit={handleSubmit}
               onStop={onStop}
               onModelChange={onModelChange}

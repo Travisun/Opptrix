@@ -48,6 +48,7 @@ import {
 } from '../theme/fontFamily'
 import {
   playChatCueSound,
+  unlockChatCueSound,
   readChatSoundPreference,
   writeChatSoundPreference,
 } from '../platform/chatSound'
@@ -390,7 +391,10 @@ function SettingsPageView({
   const setChatSound = useCallback((enabled: boolean) => {
     writeChatSoundPreference(enabled)
     setChatSoundEnabled(enabled)
-    if (enabled) playChatCueSound()
+    if (enabled) {
+      unlockChatCueSound()
+      playChatCueSound()
+    }
   }, [])
   const s = useStyles()
   const [viewportWidth, setViewportWidth] = useState(() =>

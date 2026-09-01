@@ -1308,11 +1308,15 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   }
 })
 
-app.get<{ Params: { id: string } }>('/api/sessions/:id/context-usage', async (req, reply) => {
-  const contextUsage = await agent.getSessionContextUsage(req.params.id)
-  if (!contextUsage) return reply.code(404).send({ error: 'session not found' })
-  return { contextUsage }
-})
+app.get<{ Params: { id: string }; Querystring: { force?: string } }>(
+  '/api/sessions/:id/context-usage',
+  async (req, reply) => {
+    const force = req.query.force === '1' || req.query.force === 'true'
+    const contextUsage = await agent.getSessionContextUsage(req.params.id, { force })
+    if (!contextUsage) return reply.code(404).send({ error: 'session not found' })
+    return { contextUsage }
+  },
+)
 
 app.get<{ Params: { id: string } }>('/api/sessions/:id/role-persona', async (req, reply) => {
   try {
@@ -2270,7 +2274,7 @@ async function bootstrap() {
   if (serveUi) {
     console.log(`  Desktop UI → http://${CONNECT_HOST}:${PORT}\n`)
   } else {
-    console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
+    console.log(`  Web UI → npm run dev → https://127.0.0.1:5173（自签名；设 WEB_HTTPS=0 可回退 HTTP）\n`)
   }
 
   // ── phaseB：listen 之后再跑调度/预热等非路由重活。

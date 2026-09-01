@@ -18,6 +18,8 @@ import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
 } from './ComposerTooltipMenu'
+import ContextUsageMeter from './ContextUsageMeter'
+import type { ChatContextUsage } from '../types/chat'
 
 const useStyles = makeStyles({
   root: {
@@ -129,6 +131,14 @@ const useStyles = makeStyles({
     fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textTertiary,
   },
+  contextInfoBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    marginTop: '8px',
+    paddingTop: '8px',
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
+  },
   slider: {
     width: '100%',
     accentColor: opptrixCssVars.accent,
@@ -142,18 +152,20 @@ const MODEL_PARAMS_PANEL_WIDTH = 300
 const MODEL_LIST_MAX_HEIGHT = 280
 /** 温度 / 长度 / 思考强度 footer 约占高度；列表 maxHeight 与之分离 */
 const MODEL_PARAMS_FOOTER_RESERVE = 148
+const MODEL_CONTEXT_INFO_RESERVE = 48
 
 /**
  * showParams 时：列表可滚、footer 固定在 ComposerTooltipMenu 外。
  * 整体预算约 min(70vh, 420)，减去 footer 后给列表。
  */
-function resolveModelListMaxHeight(showParams: boolean): number {
+function resolveModelListMaxHeight(showParams: boolean, hasContextInfo: boolean): number {
   if (!showParams) return MODEL_LIST_MAX_HEIGHT
   const viewportCap = typeof window === 'undefined'
     ? 420
     : Math.floor(window.innerHeight * 0.7)
   const panelBudget = Math.min(420, viewportCap)
-  return Math.max(180, panelBudget - MODEL_PARAMS_FOOTER_RESERVE)
+  const footerReserve = MODEL_PARAMS_FOOTER_RESERVE + (hasContextInfo ? MODEL_CONTEXT_INFO_RESERVE : 0)
+  return Math.max(180, panelBudget - footerReserve)
 }
 
 export type SessionLlmParamsPatch = {
@@ -175,6 +187,10 @@ interface ModelSelectorProps {
   showParams?: boolean
   llmParams?: SessionLlmParams | null
   onLlmParamsChange?: (patch: SessionLlmParamsPatch) => void
+  /** 手机 Composer：在参数面板底部展示上下文与缓存 */
+  contextUsage?: ChatContextUsage | null
+  /** 面板展开/收起（用于从服务端刷新上下文用量） */
+  onPanelOpenChange?: (open: boolean) => void
 }
 
 function groupModelsByProvider(models: AvailableModel[]) {
@@ -235,10 +251,17 @@ export default function ModelSelector({
   showParams = false,
   llmParams,
   onLlmParamsChange,
+  contextUsage,
+  onPanelOpenChange,
 }: ModelSelectorProps) {
   const s = useStyles()
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+
+  const setPanelOpen = (next: boolean) => {
+    setOpen(next)
+    onPanelOpenChange?.(next)
+  }
 
   const activeRef = useMemo(() => {
     if (value && models.some(m => m.ref === value)) return value
@@ -320,8 +343,15 @@ export default function ModelSelector({
           }}
         />
       </div>
+      {contextUsage ? (
+        <div className={s.contextInfoBar}>
+          <ContextUsageMeter usage={contextUsage} panel />
+        </div>
+      ) : null}
     </div>
   ) : undefined
+
+  const listMaxHeight = resolveModelListMaxHeight(showParams, Boolean(contextUsage))
 
   return (
     <div
@@ -341,7 +371,7 @@ export default function ModelSelector({
         disabled={disabled}
         aria-label={`当前模型：${displayModel}`}
         aria-expanded={open}
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setPanelOpen(!open)}
       >
         <span className={s.triggerLabel}>{displayModel}</span>
         <ChevronDownRegular className={s.triggerIcon} />
@@ -352,9 +382,9 @@ export default function ModelSelector({
         anchorRef={triggerRef}
         align="end"
         width={showParams ? MODEL_PARAMS_PANEL_WIDTH : COMPOSER_MENU_WIDTH.model}
-        maxHeight={resolveModelListMaxHeight(showParams)}
+        maxHeight={listMaxHeight}
         ariaLabel={showParams ? '模型与参数' : '模型列表'}
-        onClose={() => setOpen(false)}
+        onClose={() => setPanelOpen(false)}
         footer={paramsFooter}
       >
         {groups.map((group, groupIndex) => (
@@ -367,7 +397,7 @@ export default function ModelSelector({
                 active={activeRef === model.ref}
                 onClick={() => {
                   onChange(model.ref)
-                  setOpen(false)
+                  setPanelOpen(false)
                 }}
               >
                 <span className={s.modelName}>{model.model}</span>

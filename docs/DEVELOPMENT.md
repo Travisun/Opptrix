@@ -62,11 +62,13 @@ npm run build
 ## 日常开发
 
 ```bash
-npm run dev              # API + Vite → http://127.0.0.1:5173
+npm run dev              # API + Vite → https://127.0.0.1:5173（自签名 HTTPS，默认开启）
 npm run dev:api          # 仅 API :8711
 npm run dev:web          # 仅 Vite（需另开 dev:api）
 npm run dev:desktop      # Electron + HMR
 ```
+
+开发前端默认 **HTTPS 自签名**（`@vitejs/plugin-basic-ssl`），便于手机浏览器测试麦克风等需安全上下文的 API。首次访问需在浏览器信任证书；回退 HTTP：`WEB_HTTPS=0 npm run dev`。
 
 局域网访问时指定监听地址，例如：
 

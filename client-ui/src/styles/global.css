@@ -827,6 +827,52 @@ html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-extern
   display: none;
 }
 
+/* 移动 Web：输入框长按说话 — 禁用系统长按选词/放大镜 */
+.opptrix-composer-editor.opptrix-composer-editor-mobile-hold,
+.opptrix-composer-editor[data-mobile-hold-speech='true'] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+/* 手机空态：触摸层在上，编辑器不显示 placeholder、不接收触摸 */
+.opptrix-composer-editor[data-touch-layer='true']::before {
+  content: none;
+  display: none;
+}
+
+.opptrix-composer-editor[data-touch-layer='true'],
+.opptrix-composer-editor[data-hold-pending='true'],
+.opptrix-composer-editor[data-speech-listening='true'] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  pointer-events: none;
+}
+
+.opptrix-composer-editor[data-empty='true']:focus::before {
+  content: none;
+  display: none;
+}
+
+.opptrix-composer-mobile-hold-speech-zone {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+.opptrix-composer-shell[data-mobile-compact='true'] {
+  min-height: 0;
+}
+
+.opptrix-composer-shell[data-speech-listening='true'] .opptrix-composer-editor {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Inline reference chip — behaves like a single atomic character in the text flow. */
 .opptrix-composer-inline-chip {
   display: inline-flex;
