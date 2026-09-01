@@ -87,6 +87,13 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflow: 'hidden',
   },
+  /** Onboarding: grow with content; outer OnboardingShell scroll handles overflow */
+  rootOnboarding: {
+    flex: 'none',
+    minHeight: 'auto',
+    overflow: 'visible',
+    width: '100%',
+  },
   steps: {
     display: 'flex',
     gap: '6px',
@@ -110,6 +117,13 @@ const useStyles = makeStyles({
     overflowY: 'auto',
     marginRight: '-4px',
     paddingRight: '4px',
+  },
+  scrollOnboarding: {
+    flex: 'none',
+    minHeight: 'auto',
+    overflow: 'visible',
+    marginRight: 0,
+    paddingRight: 0,
   },
   bodyInner: {
     display: 'flex',
@@ -181,7 +195,7 @@ const useStyles = makeStyles({
     border: `1px solid ${opptrixCssVars.border}`,
     borderRadius: opptrixTokens.radiusMd,
     padding: '4px',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   presetRow: {
     ...ghostInteractive,
@@ -710,7 +724,7 @@ export default function ProviderWizard({
   const onboardingInputClass = isOnboarding ? 'opptrix-onboarding-input' : undefined
 
   return (
-    <div className={s.root}>
+    <div className={mergeClasses(s.root, isOnboarding && s.rootOnboarding)}>
       {(isOnboarding || !compact) && (
       <div className={s.steps}>
         {[1, 2, 3].map(n => (
@@ -719,7 +733,7 @@ export default function ProviderWizard({
       </div>
       )}
 
-      <div className={`${s.scroll} opptrix-scroll`}>
+      <div className={mergeClasses(s.scroll, isOnboarding && s.scrollOnboarding, 'opptrix-scroll')}>
         <div className={s.bodyInner}>
 
           {step === 1 && showPresetList && (
