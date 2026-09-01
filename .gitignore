@@ -8,9 +8,6 @@ dist/
 client-ui/dist/
 *.tsbuildinfo
 
-# Generated UI font alias (Source Han → Noto Sans SC); always `npm run prepare:fonts`
-client-ui/src/styles/source-han-alias.css
-
 # Python (legacy — removed from repo)
 __pycache__/
 *.py[cod]

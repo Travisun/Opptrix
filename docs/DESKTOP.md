@@ -114,7 +114,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 6. Linux 用户退出时与 Windows 一样有短超时 `app.exit` 兜底，避免 AppImage 幽灵进程占住下一版安装  
 
 
-托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）。
+托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）。同一脚本还会把 favicon / PWA 安装图标同步到 `client-ui/public/`（见 [PWA.md](./PWA.md)）。
 
 #### 仓库内当前 PNG（运行时直接加载）
 
