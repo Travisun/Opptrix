@@ -32,6 +32,16 @@ import {
 } from '../desktop/constants'
 import { electronPlatform } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
+import {
+  MOBILE_HEADER_BAR_HEIGHT,
+  MOBILE_HEADER_HIT,
+  MOBILE_HEADER_ICON_SIZE,
+  MOBILE_HEADER_PAD_X,
+  mobileHeaderBarInset,
+  mobileHeaderIconBtn,
+} from '../theme/mobileChrome'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const MONO_FONT = 'var(--opptrix-font-mono)'
 
@@ -68,6 +78,16 @@ const useStyles = makeStyles({
     height: '40px',
     zIndex: 1,
   },
+  headerMobile: {
+    ...mobileHeaderBarInset,
+    height: `${MOBILE_HEADER_BAR_HEIGHT}px`,
+    minHeight: `${MOBILE_HEADER_BAR_HEIGHT}px`,
+    zIndex: 1,
+    paddingRight: `${MOBILE_HEADER_PAD_X}px`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
+    backgroundColor: opptrixCssVars.canvas,
+    position: 'relative',
+  },
   /**
    * Match DesktopWindowChrome / RightMarketPanel: top inset + center within
    * remaining chromeBand so tools / title share the left chrome midline.
@@ -96,12 +116,25 @@ const useStyles = makeStyles({
     paddingLeft: '8px',
     overflow: 'hidden',
   },
+  titleClusterMobile: {
+    height: `${MOBILE_HEADER_HIT}px`,
+    paddingLeft: '4px',
+  },
   headerTrail: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     gap: `${DESKTOP_TOOL_GAP}px`,
     height: '28px',
+  },
+  headerTrailMobile: {
+    height: `${MOBILE_HEADER_HIT}px`,
+    gap: '2px',
+  },
+  mobileActionBtn: {
+    ...ghostInteractive,
+    ...mobileHeaderIconBtn,
+    color: opptrixCssVars.textSecondary,
   },
   /** 非 PDF 预览内部工具条（与 PdfPreviewViewer toolbar 对齐） */
   previewTools: {
@@ -599,12 +632,15 @@ export default function FilePreviewPanel({
     && !isWeb
     && !showCenterPicker
 
+  const mobileChrome = panelFullWidth && !electronChrome
+
   return (
     <div className={mergeClasses(s.root, electronChrome && s.rootElectron)}>
       <div
         className={mergeClasses(
           s.header,
-          !electronChrome && s.headerWeb,
+          !electronChrome && !mobileChrome && s.headerWeb,
+          mobileChrome && s.headerMobile,
           electronChrome && s.headerElectron,
           electronChrome && s.headerElectronFill,
           electronChrome && 'opptrix-right-panel-title-bar',
@@ -618,17 +654,35 @@ export default function FilePreviewPanel({
             aria-hidden
           />
         )}
-        <div className={mergeClasses(s.titleCluster, 'opptrix-panel-title-no-drag')}>
+        <div
+          className={mergeClasses(
+            s.titleCluster,
+            mobileChrome && s.titleClusterMobile,
+            'opptrix-panel-title-no-drag',
+          )}
+        >
           {attachment ? (
-            <ChromeToolButton
-              label={fileListToggleLabel}
-              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-              active={showSidebarList}
-              onClick={toggleFileList}
-              disabled={!sessionId || !hasAttachment}
-            >
-              <TextBulletListSquareRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-            </ChromeToolButton>
+            mobileChrome ? (
+              <OpptrixButton
+                className={s.mobileActionBtn}
+                variant="ghost"
+                icon={<TextBulletListSquareRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+                onClick={toggleFileList}
+                disabled={!sessionId || !hasAttachment}
+                aria-label={fileListToggleLabel}
+                aria-pressed={showSidebarList}
+              />
+            ) : (
+              <ChromeToolButton
+                label={fileListToggleLabel}
+                iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                active={showSidebarList}
+                onClick={toggleFileList}
+                disabled={!sessionId || !hasAttachment}
+              >
+                <TextBulletListSquareRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+              </ChromeToolButton>
+            )
           ) : (
             <span className={s.name}>文件预览</span>
           )}
@@ -640,14 +694,30 @@ export default function FilePreviewPanel({
           )}
           aria-hidden
         />
-        <div className={mergeClasses(s.headerTrail, 'opptrix-panel-title-no-drag')}>
-          <ChromeToolButton
-            label="关闭预览"
-            iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-            onClick={onClose}
-          >
-            <DismissRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-          </ChromeToolButton>
+        <div
+          className={mergeClasses(
+            s.headerTrail,
+            mobileChrome && s.headerTrailMobile,
+            'opptrix-panel-title-no-drag',
+          )}
+        >
+          {mobileChrome ? (
+            <OpptrixButton
+              className={s.mobileActionBtn}
+              variant="ghost"
+              icon={<DismissRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+              onClick={onClose}
+              aria-label="关闭预览"
+            />
+          ) : (
+            <ChromeToolButton
+              label="关闭预览"
+              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+              onClick={onClose}
+            >
+              <DismissRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            </ChromeToolButton>
+          )}
         </div>
       </div>
       <div className={s.main}>

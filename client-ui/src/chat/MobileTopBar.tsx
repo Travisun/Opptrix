@@ -8,28 +8,26 @@ import {
   PanelRightExpandRegular,
 } from './chatIcons'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import {
+  MOBILE_HEADER_ICON_SIZE,
+  mobileHeaderBar,
+  mobileHeaderIconBtn,
+  mobileHeaderTitle,
+} from '../theme/mobileChrome'
 import { ghostInteractive, hairlineBottom } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   bar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '6px 8px',
-    paddingTop: 'max(6px, env(safe-area-inset-top))',
+    ...mobileHeaderBar,
     backgroundColor: opptrixCssVars.surface,
     ...hairlineBottom,
-    flexShrink: 0,
     zIndex: 10,
-    minHeight: '44px',
   },
   menuBtn: {
     ...ghostInteractive,
-    minWidth: '44px',
-    height: '44px',
+    ...mobileHeaderIconBtn,
     color: opptrixCssVars.textPrimary,
-    flexShrink: 0,
   },
   center: {
     flex: 1,
@@ -39,16 +37,7 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '0 4px',
   },
-  title: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 'var(--opptrix-font-2xl)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
+  title: mobileHeaderTitle,
   statusDot: {
     width: '6px',
     height: '6px',
@@ -65,8 +54,7 @@ const useStyles = makeStyles({
   },
   actionBtn: {
     ...ghostInteractive,
-    minWidth: '44px',
-    height: '44px',
+    ...mobileHeaderIconBtn,
     color: opptrixCssVars.textSecondary,
   },
   actionBtnActive: {
@@ -111,8 +99,8 @@ export default function MobileTopBar({
         className={s.menuBtn}
         variant="ghost"
         icon={drawerOpen
-          ? <PanelLeftContractRegular fontSize={22} />
-          : <PanelLeftExpandRegular fontSize={22} />}
+          ? <PanelLeftContractRegular fontSize={MOBILE_HEADER_ICON_SIZE} />
+          : <PanelLeftExpandRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
         onClick={onOpenDrawer}
         aria-label={drawerOpen ? '收起侧栏' : '打开侧栏'}
         aria-pressed={drawerOpen}
@@ -128,31 +116,31 @@ export default function MobileTopBar({
         <OpptrixButton
           className={s.actionBtn}
           variant="ghost"
-          icon={<ChatAddRegular fontSize={22} />}
+          icon={<ChatAddRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
           onClick={onNewChat}
           aria-label="新对话"
         />
+        {onOpenFilesPanel ? (
+          <OpptrixButton
+            className={mergeClasses(s.actionBtn, filesPanelOpen && s.actionBtnActive)}
+            variant="ghost"
+            icon={<FolderListRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+            onClick={onOpenFilesPanel}
+            disabled={filesPanelDisabled}
+            aria-label={filesPanelOpen ? '收起文件预览' : '打开文件预览'}
+            aria-pressed={filesPanelOpen}
+          />
+        ) : null}
         {onOpenMarketPanel ? (
           <OpptrixButton
             className={mergeClasses(s.actionBtn, marketPanelOpen && s.actionBtnActive)}
             variant="ghost"
             icon={marketPanelOpen
-              ? <PanelRightContractRegular fontSize={22} />
-              : <PanelRightExpandRegular fontSize={22} />}
+              ? <PanelRightContractRegular fontSize={MOBILE_HEADER_ICON_SIZE} />
+              : <PanelRightExpandRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
             onClick={onOpenMarketPanel}
             aria-label={marketPanelOpen ? '收起关注与持仓' : '打开关注与持仓'}
             aria-pressed={marketPanelOpen}
-          />
-        ) : null}
-        {onOpenFilesPanel ? (
-          <OpptrixButton
-            className={mergeClasses(s.actionBtn, filesPanelOpen && s.actionBtnActive)}
-            variant="ghost"
-            icon={<FolderListRegular fontSize={22} />}
-            onClick={onOpenFilesPanel}
-            disabled={filesPanelDisabled}
-            aria-label={filesPanelOpen ? '收起文件预览' : '打开文件预览'}
-            aria-pressed={filesPanelOpen}
           />
         ) : null}
       </div>

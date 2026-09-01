@@ -42,8 +42,9 @@
 - **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 - **Web 打开入口**：移动 Web（≤767）在聊天 `MobileTopBar` 与新闻 / 市场 / 社区 / 专家页顶栏使用同一套 `PanelLeftExpand/Contract` 侧栏开合按钮（随 `drawerOpen` 切换，点击 toggle）；桌面 Web 聊天顶栏左侧常显侧栏开合按钮，不依赖 Electron 标题栏工具
-- **移动推开布局**：左会话栏与右关注/文件栏均为 flex **width 推挤**主列（非遮罩覆盖）；开左侧栏主内容右移，开右侧栏主内容左移；时长与 `DESKTOP_SIDEBAR_LAYOUT_MS` 对齐；无半透明 backdrop
-- **移动端右栏**：聊天 `MobileTopBar` 可打开关注/持仓与文件预览为**全屏 sheet**（复用 `RightPanel` `fullWidth`，非并排分栏）；关闭后回到对话
+- **移动端顶栏规格**：共享 `client-ui/src/theme/mobileChrome.ts`（触控目标 40、图标 20、内边距 `4px 8px`、safe-area；内容带约 48px）。聊天 / 各 Web 页顶栏、设置「返回应用」、右栏全屏 sheet 顶栏均对齐该规格；右 sheet 外壳已垫 safe-area 时内栏用 inset 变体避免双垫。左会话抽屉不设独立关闭钮（由主列顶栏侧栏 icon 收起），品牌行上移与顶栏内容带对齐。移动端 composer 底栏 inset 为 `max(12px, safe-area-inset-bottom)`（桌面仍为 25px）。
+- **移动推开布局**：左会话栏与右关注/文件栏均为三列固定宽滑轨（drawer + 视口宽主列 + 视口宽右栏），以 `translate3d` **整轨平移**；主列宽度恒为视口，不被挤压。关闭时轨偏移 `-drawerW` 露出主列；开左归零；开右再偏 `-(drawerW+视口宽)`。左栏与右栏均**常驻于轨上**（不二次挂载），开合只改轨偏移；时长与 `DESKTOP_SIDEBAR_LAYOUT_MS` 对齐。开右时关左；开左时若右开则先关右。
+- **移动端右栏**：聊天 `MobileTopBar` 可打开关注/持仓与文件预览为轨上全屏列（复用 `RightPanel` `fullWidth`，非并排分栏）；关闭后轨回到主列。
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
 - 左列名称（名录同步全称，过长 hover 横向滚动）+ 代码在下；右列表头四指标——最新价、关注收益、成本价、持仓收益（持仓成本与收益来自组合账本，含费率）；列表区 `overflow: auto` 支持横向滚动，收窄时不重叠；hover 行显示编辑/删除，操作钮 sticky 吸附在面板可视区右缘（行不横滚时保持行尾原位）
 - **窗口标题栏**：macOS 为 `hiddenInset`，系统红绿灯隐藏后由二级 chrome 内紧凑自定义红绿灯（约 14px）承接；侧栏展开时顶栏工具与 Windows 一致——收起在左（红绿灯右侧）、前进/后退靠右贴侧栏分割线。Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 纯文字「Opptrix工作台」（无 wordmark SVG、无版本号）+ 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。

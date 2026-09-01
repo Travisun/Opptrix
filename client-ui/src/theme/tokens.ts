@@ -42,6 +42,9 @@ const layoutTokens = {
   chatComposerRadius: '20px',
   chatComposerBottomInset: '25px',
   chatComposerBottomInsetPx: 25,
+  /** 移动 Web：底栏再贴底一点（仍不低于 safe-area） */
+  chatComposerBottomInsetMobile: '12px',
+  chatComposerBottomInsetMobilePx: 12,
   chatThreadScrollPadBottom: '212px',
   chatThreadScrollPadBottomMobile: '196px',
   chatThreadAlignInset: '3px',

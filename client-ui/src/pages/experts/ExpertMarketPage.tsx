@@ -12,7 +12,13 @@ import {
   SearchRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
-import { inputShellInteractive, nativeIconInteractive } from '../../theme/mixins'
+import { inputShellInteractive, nativeIconInteractive, ghostInteractive } from '../../theme/mixins'
+import {
+  MOBILE_HEADER_ICON_SIZE,
+  mobileHeaderBar,
+  mobileHeaderIconBtn,
+  mobileHeaderTitle,
+} from '../../theme/mobileChrome'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -53,10 +59,9 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webHeadMobile: {
-    gap: '4px',
-    padding: '6px 8px',
-    paddingTop: 'max(6px, env(safe-area-inset-top))',
-    minHeight: '44px',
+    ...mobileHeaderBar,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
@@ -64,11 +69,17 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textPrimary,
     flex: 1,
   },
+  webTitleMobile: mobileHeaderTitle,
   webActions: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     flexShrink: 0,
+  },
+  mobileActionBtn: {
+    ...ghostInteractive,
+    ...mobileHeaderIconBtn,
+    color: opptrixCssVars.textSecondary,
   },
   scrollBody: {
     flex: 1,
@@ -362,6 +373,15 @@ export default function ExpertMarketPage({
     >
       <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
     </ChromeToolButton>
+  ) : isMobile ? (
+    <OpptrixButton
+      className={s.mobileActionBtn}
+      variant="ghost"
+      icon={<ArrowSyncRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+      disabled={loading}
+      onClick={() => { void loadExperts(debouncedQuery) }}
+      aria-label={loading ? '正在刷新' : '刷新'}
+    />
   ) : (
     <OpptrixButton
       variant="secondary"
@@ -396,11 +416,11 @@ export default function ExpertMarketPage({
           actions={refreshAction}
         />
       ) : (
-        <div className={mergeClasses(s.webHead, isMobile && s.webHeadMobile)}>
+        <div className={isMobile ? s.webHeadMobile : s.webHead}>
           {isMobile && onOpenSidebar ? (
             <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
           ) : null}
-          <Text className={s.webTitle}>专家中心</Text>
+          <Text className={mergeClasses(s.webTitle, isMobile && s.webTitleMobile)}>专家中心</Text>
           <div className={s.webActions}>{refreshAction}</div>
         </div>
       )}

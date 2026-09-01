@@ -107,7 +107,6 @@ import { copyTextToClipboard } from '../platform/clipboard'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
-import { OVERLAY_SIDEBAR_MS, useOverlaySidebarAnimation } from '../hooks/useOverlaySidebarAnimation'
 import { electronPlatform, isElectron } from '../platform/detect'
 import {
   buildChatAskNotification,
@@ -201,53 +200,61 @@ const useStyles = makeStyles({
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
-  /** Mobile：保持横向，左栏 / 主列 / 右 sheet 真推布局 */
+  /** Mobile：裁切视口；内层 track 整段 translate（主列不被挤压） */
   contentWorkspaceMobile: {
     flexDirection: 'row',
+    position: 'relative',
+    overflow: 'hidden',
   },
   contentWorkspaceElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
   },
-  /** Mobile：右栏推入（width 动画），非 fixed 遮罩覆盖 */
-  mobileRightSheet: {
-    position: 'relative',
-    flexShrink: 0,
-    width: 0,
-    height: '100%',
-    overflow: 'hidden',
+  /** [drawer | main | right?] 固定宽滑轨 */
+  mobileSlideTrack: {
     display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: opptrixCssVars.canvas,
-    boxSizing: 'border-box',
-    transitionProperty: 'width',
-    transitionDuration: `${OVERLAY_SIDEBAR_MS}ms`,
+    flexDirection: 'row',
+    flexShrink: 0,
+    height: '100%',
+    willChange: 'transform',
+    transitionProperty: 'transform',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
-    pointerEvents: 'none',
-    willChange: 'width',
     '@media (prefers-reduced-motion: reduce)': {
       transitionDuration: '1ms',
     },
   },
-  mobileRightSheetOpen: {
-    width: '100%',
-    pointerEvents: 'auto',
-  },
-  /** 锚定右缘，随 shell 变宽从右侧推出并挤开主列 */
-  mobileRightSheetInner: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: '100vw',
-    maxWidth: '100vw',
+  /** 主列：恒为视口宽，随轨平移 */
+  mobileSlideMain: {
+    flexShrink: 0,
+    height: '100%',
+    minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+  },
+  /** 右栏：恒为视口宽，挂在轨上 */
+  mobileRightSheet: {
+    flexShrink: 0,
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    backgroundColor: opptrixCssVars.canvas,
     boxSizing: 'border-box',
     paddingTop: 'env(safe-area-inset-top)',
     paddingRight: 'env(safe-area-inset-right)',
     paddingBottom: 'env(safe-area-inset-bottom)',
     paddingLeft: 'env(safe-area-inset-left)',
-    backgroundColor: opptrixCssVars.canvas,
+  },
+  mobileRightSheetInner: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
     '& > *': {
       flex: 1,
       minHeight: 0,
@@ -363,10 +370,9 @@ export default function ChatApp() {
   const [preview, setPreview] = useState<{ sessionId: string; attachment: ChatAttachmentMeta } | null>(null)
   /** 本会话停留期间用户主动关闭预览后，不再自动打开 */
   const previewAutoOpenDismissedRef = useRef(false)
-  /** 移动端右栏全屏 sheet：行情 / 文件预览（与桌面 split 独立） */
+  /** 移动端右栏：与左抽屉同轨 translate（常驻第三列，不二次挂载） */
   const [mobileRightSheet, setMobileRightSheet] = useState<null | 'market' | 'preview'>(null)
   const mobileSheetOpen = isMobile && view === 'chat' && mobileRightSheet != null
-  const { mounted: mobileSheetMounted, presented: mobileSheetPresented } = useOverlaySidebarAnimation(mobileSheetOpen)
 
   useEffect(() => {
     if (!isMobile || view !== 'chat') {
@@ -427,6 +433,29 @@ export default function ChatApp() {
     openDrawer,
     closeDrawer,
   } = useSidebarPreference(isMobile, sidebarWidth)
+  /** 与 SessionSidebar drawer / tokens.mobileDrawerWidth 对齐 */
+  const mobileDrawerPx = Math.min(Math.round(viewportWidth * 0.88), 272)
+  /** 关闭：主列居中（轨左移 drawer）；开左：轨归零；开右：再左移一个视口 */
+  const mobileTrackX = !isMobile
+    ? 0
+    : mobileSheetOpen
+      ? -(mobileDrawerPx + viewportWidth)
+      : drawerOpen
+        ? 0
+        : -mobileDrawerPx
+  const mobileSlideTrackStyle = {
+    ['--opptrix-mobile-drawer-width' as string]: `${mobileDrawerPx}px`,
+    transform: `translate3d(${mobileTrackX}px, 0, 0)`,
+  }
+  const mobileSlideMainStyle = {
+    flex: `0 0 ${viewportWidth}px`,
+    width: viewportWidth,
+  }
+  const mobileRightSheetStyle = {
+    flex: `0 0 ${viewportWidth}px`,
+    width: viewportWidth,
+    pointerEvents: mobileSheetOpen ? 'auto' as const : 'none' as const,
+  }
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.innerWidth >= sidebarExpandThreshold(SIDEBAR_DEFAULT_WIDTH)
@@ -478,8 +507,11 @@ export default function ChatApp() {
       setSettingsSidebarVisible(prev => !prev)
       return
     }
+    if (isMobile && mobileRightSheet != null) {
+      closeMobileRightSheet()
+    }
     toggleVisible()
-  }, [view, toggleVisible])
+  }, [view, toggleVisible, isMobile, mobileRightSheet, closeMobileRightSheet])
 
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [archivedGroups, setArchivedGroups] = useState<ArchiveFolderGroup[]>([])
@@ -2846,32 +2878,46 @@ export default function ChatApp() {
             )}
             aria-hidden={!isNews}
           >
-            {isMobile && isNews && (
-              <SessionSidebar
-                mode="drawer"
-                width={sidebarWidth}
-                drawerOpen={drawerOpen}
-                onClose={closeDrawer}
-                {...sidebarProps}
-              />
+            {isMobile ? (
+              <div className={s.mobileSlideTrack} style={mobileSlideTrackStyle}>
+                {isNews ? (
+                  <SessionSidebar
+                    mode="drawer"
+                    width={sidebarWidth}
+                    drawerOpen={drawerOpen}
+                    onClose={closeDrawer}
+                    {...sidebarProps}
+                  />
+                ) : null}
+                <div
+                  className={mergeClasses(s.chatColumn, s.mobileSlideMain)}
+                  style={mobileSlideMainStyle}
+                  onClick={drawerOpen ? closeDrawer : undefined}
+                >
+                  <NewsCenterPage
+                    electronChrome={electronChrome}
+                    chromeToolbarReserve={chromeToolbarReserve}
+                    isMobile={isMobile}
+                    sidebarDrawerOpen={drawerOpen}
+                    onOpenSidebar={toggleVisible}
+                    onOpenSettings={openNewsSettings}
+                    onDiscussArticle={handleDiscussArticle}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
+                <NewsCenterPage
+                  electronChrome={electronChrome}
+                  chromeToolbarReserve={chromeToolbarReserve}
+                  isMobile={isMobile}
+                  sidebarDrawerOpen={drawerOpen}
+                  onOpenSidebar={toggleVisible}
+                  onOpenSettings={openNewsSettings}
+                  onDiscussArticle={handleDiscussArticle}
+                />
+              </div>
             )}
-            <div
-              className={mergeClasses(
-                s.chatColumn,
-                electronChrome && s.chatColumnElectron,
-              )}
-              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
-            >
-              <NewsCenterPage
-                electronChrome={electronChrome}
-                chromeToolbarReserve={chromeToolbarReserve}
-                isMobile={isMobile}
-                sidebarDrawerOpen={drawerOpen}
-                onOpenSidebar={toggleVisible}
-                onOpenSettings={openNewsSettings}
-                onDiscussArticle={handleDiscussArticle}
-              />
-            </div>
           </div>
         )}
 
@@ -2886,30 +2932,42 @@ export default function ChatApp() {
             )}
             aria-hidden={!isMarket}
           >
-            {isMobile && isMarket && (
-              <SessionSidebar
-                mode="drawer"
-                width={sidebarWidth}
-                drawerOpen={drawerOpen}
-                onClose={closeDrawer}
-                {...sidebarProps}
-              />
+            {isMobile ? (
+              <div className={s.mobileSlideTrack} style={mobileSlideTrackStyle}>
+                {isMarket ? (
+                  <SessionSidebar
+                    mode="drawer"
+                    width={sidebarWidth}
+                    drawerOpen={drawerOpen}
+                    onClose={closeDrawer}
+                    {...sidebarProps}
+                  />
+                ) : null}
+                <div
+                  className={mergeClasses(s.chatColumn, s.mobileSlideMain)}
+                  style={mobileSlideMainStyle}
+                  onClick={drawerOpen ? closeDrawer : undefined}
+                >
+                  <MarketDynamicsPage
+                    electronChrome={electronChrome}
+                    chromeToolbarReserve={chromeToolbarReserve}
+                    isMobile={isMobile}
+                    sidebarDrawerOpen={drawerOpen}
+                    onOpenSidebar={toggleVisible}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
+                <MarketDynamicsPage
+                  electronChrome={electronChrome}
+                  chromeToolbarReserve={chromeToolbarReserve}
+                  isMobile={isMobile}
+                  sidebarDrawerOpen={drawerOpen}
+                  onOpenSidebar={toggleVisible}
+                />
+              </div>
             )}
-            <div
-              className={mergeClasses(
-                s.chatColumn,
-                electronChrome && s.chatColumnElectron,
-              )}
-              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
-            >
-              <MarketDynamicsPage
-                electronChrome={electronChrome}
-                chromeToolbarReserve={chromeToolbarReserve}
-                isMobile={isMobile}
-                sidebarDrawerOpen={drawerOpen}
-                onOpenSidebar={toggleVisible}
-              />
-            </div>
           </div>
         )}
 
@@ -2924,30 +2982,42 @@ export default function ChatApp() {
             )}
             aria-hidden={!isCommunity}
           >
-            {isMobile && isCommunity && (
-              <SessionSidebar
-                mode="drawer"
-                width={sidebarWidth}
-                drawerOpen={drawerOpen}
-                onClose={closeDrawer}
-                {...sidebarProps}
-              />
+            {isMobile ? (
+              <div className={s.mobileSlideTrack} style={mobileSlideTrackStyle}>
+                {isCommunity ? (
+                  <SessionSidebar
+                    mode="drawer"
+                    width={sidebarWidth}
+                    drawerOpen={drawerOpen}
+                    onClose={closeDrawer}
+                    {...sidebarProps}
+                  />
+                ) : null}
+                <div
+                  className={mergeClasses(s.chatColumn, s.mobileSlideMain)}
+                  style={mobileSlideMainStyle}
+                  onClick={drawerOpen ? closeDrawer : undefined}
+                >
+                  <CommunityFeedPage
+                    electronChrome={electronChrome}
+                    chromeToolbarReserve={chromeToolbarReserve}
+                    isMobile={isMobile}
+                    sidebarDrawerOpen={drawerOpen}
+                    onOpenSidebar={toggleVisible}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
+                <CommunityFeedPage
+                  electronChrome={electronChrome}
+                  chromeToolbarReserve={chromeToolbarReserve}
+                  isMobile={isMobile}
+                  sidebarDrawerOpen={drawerOpen}
+                  onOpenSidebar={toggleVisible}
+                />
+              </div>
             )}
-            <div
-              className={mergeClasses(
-                s.chatColumn,
-                electronChrome && s.chatColumnElectron,
-              )}
-              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
-            >
-              <CommunityFeedPage
-                electronChrome={electronChrome}
-                chromeToolbarReserve={chromeToolbarReserve}
-                isMobile={isMobile}
-                sidebarDrawerOpen={drawerOpen}
-                onOpenSidebar={toggleVisible}
-              />
-            </div>
           </div>
         )}
 
@@ -2962,32 +3032,46 @@ export default function ChatApp() {
             )}
             aria-hidden={!isExperts}
           >
-            {isMobile && isExperts && (
-              <SessionSidebar
-                mode="drawer"
-                width={sidebarWidth}
-                drawerOpen={drawerOpen}
-                onClose={closeDrawer}
-                {...sidebarProps}
-              />
+            {isMobile ? (
+              <div className={s.mobileSlideTrack} style={mobileSlideTrackStyle}>
+                {isExperts ? (
+                  <SessionSidebar
+                    mode="drawer"
+                    width={sidebarWidth}
+                    drawerOpen={drawerOpen}
+                    onClose={closeDrawer}
+                    {...sidebarProps}
+                  />
+                ) : null}
+                <div
+                  className={mergeClasses(s.chatColumn, s.mobileSlideMain)}
+                  style={mobileSlideMainStyle}
+                  onClick={drawerOpen ? closeDrawer : undefined}
+                >
+                  <ExpertMarketPage
+                    electronChrome={electronChrome}
+                    chromeToolbarReserve={chromeToolbarReserve}
+                    isMobile={isMobile}
+                    sidebarDrawerOpen={drawerOpen}
+                    onOpenSidebar={toggleVisible}
+                    onSelectExpert={handleSelectExpert}
+                    onExpertSaved={() => setExpertRefreshKey(k => k + 1)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className={mergeClasses(s.chatColumn, electronChrome && s.chatColumnElectron)}>
+                <ExpertMarketPage
+                  electronChrome={electronChrome}
+                  chromeToolbarReserve={chromeToolbarReserve}
+                  isMobile={isMobile}
+                  sidebarDrawerOpen={drawerOpen}
+                  onOpenSidebar={toggleVisible}
+                  onSelectExpert={handleSelectExpert}
+                  onExpertSaved={() => setExpertRefreshKey(k => k + 1)}
+                />
+              </div>
             )}
-            <div
-              className={mergeClasses(
-                s.chatColumn,
-                electronChrome && s.chatColumnElectron,
-              )}
-              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
-            >
-              <ExpertMarketPage
-                electronChrome={electronChrome}
-                chromeToolbarReserve={chromeToolbarReserve}
-                isMobile={isMobile}
-                sidebarDrawerOpen={drawerOpen}
-                onOpenSidebar={toggleVisible}
-                onSelectExpert={handleSelectExpert}
-                onExpertSaved={() => setExpertRefreshKey(k => k + 1)}
-              />
-            </div>
           </div>
         )}
 
@@ -3002,177 +3086,250 @@ export default function ChatApp() {
           )}
           aria-hidden={isSettings || isStandaloneView}
         >
-          {isMobile && !isStandaloneView && !isSettings && (
-            <SessionSidebar
-              mode="drawer"
-              width={sidebarWidth}
-              drawerOpen={drawerOpen}
-              onClose={closeDrawer}
-              {...sidebarProps}
-            />
-          )}
-
-          {(isMobile || chatVisible) && (
-            <div
-              className={mergeClasses(
-                s.chatColumn,
-                electronChrome && s.chatColumnElectron,
-                isDragging && s.chatColumnDragging,
-              )}
-              onClick={isMobile && drawerOpen ? closeDrawer : undefined}
-              style={!isMobile ? (
-                isDragging && showSplitter
-                  ? {
-                      flex: '0 0 auto',
-                      width: chatWidth,
-                      minWidth: chatWidth,
-                    }
-                  : {
-                      // Stay flexible while the right panel width animates so the panel
-                      // grows/shrinks from the window's right edge (not into a pre-reserved gap).
-                      flex: 1,
-                      width: undefined,
-                      minWidth: showSplitter ? WORKSPACE_CHAT_MIN_WIDTH : 0,
-                    }
-              ) : undefined}
-            >
-              {electronChrome && (
-                <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
-              )}
-              <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
-                <ChatView
-                  title={activeSession?.title ?? '新对话'}
-                  titleSlot={electronChrome ? undefined : chatTitleSlot}
-                  overlaySlot={rolePersonaDrawer}
-                  contextHint={contextHintBanner}
-                  sessionId={activeId}
-                  expertId={activeSession?.expertId ?? null}
-                  expertRefreshKey={expertRefreshKey}
-                  welcomeEpoch={welcomeEpoch}
-                  chatScrollEpoch={chatScrollEpoch}
-                  messages={collaborationViewTab === 'main' ? messages : collaborationChildMessages}
-                  contextRef={collaborationViewTab === 'main' ? contextRef : null}
-                  composerDraft={composerDraft}
-                  loading={collaborationViewTab === 'main' ? loading : false}
-                  wakeWaiting={collaborationViewTab === 'main' ? wakeWaiting : false}
-                  streamUiRef={streamUiRef}
-                  error={collaborationViewTab === 'main' ? error : ''}
-                  availableModels={availableModels}
-                  sessionModel={resolvedSessionModel}
-                  sessionLlmParams={sessionLlmParams}
-                  contextUsage={contextUsage}
-                  isMobile={isMobile}
-                  sidebarVisible={sidebarVisible}
-                  sidebarDrawerOpen={drawerOpen}
-                  llmLabel={llmLabel}
-                  backendOk={backendOk}
-                  onSubmit={handleSubmit}
-                  ensureSession={ensureSession}
-                  onStop={handleStop}
-                  promptQueue={promptQueue}
-                  onPromptQueueRemove={handlePromptQueueRemove}
-                  onPromptQueueRunNow={handlePromptQueueRunNow}
-                  backgroundJobs={sessionBackgroundJobs}
-                  onCancelBackgroundJob={handleCancelBackgroundJob}
-                  collaborationTasks={sessionCollaborationTasks}
-                  onCancelCollaborationTask={handleCancelCollaborationTask}
-                  onDismissCollaborationTask={handleDismissCollaborationTask}
-                  onSelectCollaborationRun={handleSelectCollaborationRun}
-                  collaborationViewTab={collaborationViewTab}
-                  onCollaborationViewTabChange={handleCollaborationViewTabChange}
-                  collaborationChildLoading={collaborationChildLoading}
-                  collaborationChildError={collaborationChildError}
-                  collaborationChildLiveTrace={collaborationChildLiveTrace}
-                  collaborationChildStreaming={collaborationChildStreaming}
-                  onReloadCollaborationChild={handleReloadCollaborationChild}
-                  onForkMessage={handleForkFromMessage}
-                  onEditResend={handleEditResend}
-                  onQuoteSelection={activeId && collaborationViewTab === 'main' ? handleQuoteSelection : undefined}
-                  onEphemeralAsk={activeId && collaborationViewTab === 'main' ? handleEphemeralAsk : undefined}
-                  onClearContextRef={contextRef && collaborationViewTab === 'main' ? handleClearContextRef : undefined}
-                  onModelChange={availableModels.length ? handleModelChange : undefined}
-                  onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
-                  onOpenSidebar={toggleVisible}
-                  onNewChat={handleNew}
-                  onOpenSettings={openSystemSettings}
-                  onToggleSidebar={!isMobile ? handleToggleSidebar : undefined}
-                  rightPanelOpen={isMobile ? mobileRightSheet === 'market' : rightPanelVisible}
-                  chatColumnVisible={chatVisible}
-                  onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
-                  onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
-                  onOpenFilePreview={handleOpenFilePreview}
-                  onStreamError={handleStreamError}
-                  resolveStreamSnapshot={resolveStreamSnapshot}
-                  onClearPendingUserPrompt={clearPendingUserPrompt}
-                  sessionFilesPreviewOpen={isMobile ? mobileRightSheet === 'preview' : mode === 'preview'}
-                  onToggleSessionFilesPreview={handleToggleSessionFilesPreview}
-                  onOpenMobileMarketPanel={isMobile ? handleOpenMobileMarketPanel : undefined}
-                  onOpenMobileFilesPanel={isMobile ? handleOpenMobileFilesPanel : undefined}
+          {isMobile ? (
+            <div className={s.mobileSlideTrack} style={mobileSlideTrackStyle}>
+              {!isStandaloneView && !isSettings ? (
+                <SessionSidebar
+                  mode="drawer"
+                  width={sidebarWidth}
+                  drawerOpen={drawerOpen}
+                  onClose={closeDrawer}
+                  {...sidebarProps}
                 />
+              ) : null}
+
+              <div
+                className={mergeClasses(s.chatColumn, s.mobileSlideMain)}
+                style={mobileSlideMainStyle}
+                onClick={drawerOpen ? closeDrawer : undefined}
+              >
+                <div className={s.chatPanel}>
+                  <ChatView
+                    title={activeSession?.title ?? '新对话'}
+                    titleSlot={electronChrome ? undefined : chatTitleSlot}
+                    overlaySlot={rolePersonaDrawer}
+                    contextHint={contextHintBanner}
+                    sessionId={activeId}
+                    expertId={activeSession?.expertId ?? null}
+                    expertRefreshKey={expertRefreshKey}
+                    welcomeEpoch={welcomeEpoch}
+                    chatScrollEpoch={chatScrollEpoch}
+                    messages={collaborationViewTab === 'main' ? messages : collaborationChildMessages}
+                    contextRef={collaborationViewTab === 'main' ? contextRef : null}
+                    composerDraft={composerDraft}
+                    loading={collaborationViewTab === 'main' ? loading : false}
+                    wakeWaiting={collaborationViewTab === 'main' ? wakeWaiting : false}
+                    streamUiRef={streamUiRef}
+                    error={collaborationViewTab === 'main' ? error : ''}
+                    availableModels={availableModels}
+                    sessionModel={resolvedSessionModel}
+                    sessionLlmParams={sessionLlmParams}
+                    contextUsage={contextUsage}
+                    isMobile={isMobile}
+                    sidebarVisible={sidebarVisible}
+                    sidebarDrawerOpen={drawerOpen}
+                    llmLabel={llmLabel}
+                    backendOk={backendOk}
+                    onSubmit={handleSubmit}
+                    ensureSession={ensureSession}
+                    onStop={handleStop}
+                    promptQueue={promptQueue}
+                    onPromptQueueRemove={handlePromptQueueRemove}
+                    onPromptQueueRunNow={handlePromptQueueRunNow}
+                    backgroundJobs={sessionBackgroundJobs}
+                    onCancelBackgroundJob={handleCancelBackgroundJob}
+                    collaborationTasks={sessionCollaborationTasks}
+                    onCancelCollaborationTask={handleCancelCollaborationTask}
+                    onDismissCollaborationTask={handleDismissCollaborationTask}
+                    onSelectCollaborationRun={handleSelectCollaborationRun}
+                    collaborationViewTab={collaborationViewTab}
+                    onCollaborationViewTabChange={handleCollaborationViewTabChange}
+                    collaborationChildLoading={collaborationChildLoading}
+                    collaborationChildError={collaborationChildError}
+                    collaborationChildLiveTrace={collaborationChildLiveTrace}
+                    collaborationChildStreaming={collaborationChildStreaming}
+                    onReloadCollaborationChild={handleReloadCollaborationChild}
+                    onForkMessage={handleForkFromMessage}
+                    onEditResend={handleEditResend}
+                    onQuoteSelection={activeId && collaborationViewTab === 'main' ? handleQuoteSelection : undefined}
+                    onEphemeralAsk={activeId && collaborationViewTab === 'main' ? handleEphemeralAsk : undefined}
+                    onClearContextRef={contextRef && collaborationViewTab === 'main' ? handleClearContextRef : undefined}
+                    onModelChange={availableModels.length ? handleModelChange : undefined}
+                    onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
+                    onOpenSidebar={handleToggleSidebar}
+                    onNewChat={handleNew}
+                    onOpenSettings={openSystemSettings}
+                    onToggleSidebar={undefined}
+                    rightPanelOpen={mobileRightSheet === 'market'}
+                    chatColumnVisible={chatVisible}
+                    onToggleRightPanel={undefined}
+                    onToggleChatColumn={undefined}
+                    onOpenFilePreview={handleOpenFilePreview}
+                    onStreamError={handleStreamError}
+                    resolveStreamSnapshot={resolveStreamSnapshot}
+                    onClearPendingUserPrompt={clearPendingUserPrompt}
+                    sessionFilesPreviewOpen={mobileRightSheet === 'preview'}
+                    onToggleSessionFilesPreview={handleToggleSessionFilesPreview}
+                    onOpenMobileMarketPanel={handleOpenMobileMarketPanel}
+                    onOpenMobileFilesPanel={handleOpenMobileFilesPanel}
+                  />
+                </div>
+              </div>
+
+              <div
+                className={s.mobileRightSheet}
+                style={mobileRightSheetStyle}
+                role="dialog"
+                aria-modal={mobileSheetOpen}
+                aria-label={mobileRightSheet === 'preview' ? '文件预览' : '关注与持仓'}
+                aria-hidden={!mobileSheetOpen}
+              >
+                <div className={s.mobileRightSheetInner}>
+                  <RightPanel
+                    visible
+                    fullWidth
+                    transitionEnabled={false}
+                    focusStockCode={focusStockCode}
+                    onFocusStockConsumed={handleFocusStockConsumed}
+                    onToggleRightPanel={mobileSheetOpen ? closeMobileRightSheet : undefined}
+                    onDiscussInChat={mobileSheetOpen ? handleStockDiscuss : undefined}
+                    previewMode={mobileRightSheet === 'preview'}
+                    preview={preview}
+                    previewSessionId={activeId}
+                    onSelectAttachment={handleSelectPreviewAttachment}
+                    onClosePreview={closeMobileRightSheet}
+                  />
+                </div>
               </div>
             </div>
-          )}
-
-          {!isMobile && showSplitter && (
-            <WorkspaceSplitDivider
-              electronChrome={electronChrome}
-              extendIntoSecondaryChrome={electronChrome}
-              isDragging={isDragging}
-              onBeginDrag={beginDrag}
-            />
-          )}
-
-          {!isMobile && (
-            <RightPanel
-              visible={rightPanelVisible}
-              width={rightPanelWidth}
-              fullWidth={!chatVisible}
-              transitionEnabled={!isDragging}
-              electronChrome={electronChrome}
-              chatColumnVisible={chatVisible}
-              chromeToolbarReserve={chromeToolbarReserve}
-              focusStockCode={focusStockCode}
-              onFocusStockConsumed={handleFocusStockConsumed}
-              onToggleRightPanel={handleToggleRightPanel}
-              onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
-              onDiscussInChat={handleStockDiscuss}
-              previewMode={mode === 'preview'}
-              preview={preview}
-              previewSessionId={activeId}
-              onSelectAttachment={handleSelectPreviewAttachment}
-              onClosePreview={handleClosePreview}
-              onSlideTransitionEnd={handlePeerSlideTransitionEnd}
-            />
-          )}
-
-          {mobileSheetMounted && mobileRightSheet != null && (
-            <div
-              className={mergeClasses(
-                s.mobileRightSheet,
-                mobileSheetPresented && s.mobileRightSheetOpen,
+          ) : (
+            <>
+              {chatVisible && (
+                <div
+                  className={mergeClasses(
+                    s.chatColumn,
+                    electronChrome && s.chatColumnElectron,
+                    isDragging && s.chatColumnDragging,
+                  )}
+                  style={
+                    isDragging && showSplitter
+                      ? {
+                          flex: '0 0 auto',
+                          width: chatWidth,
+                          minWidth: chatWidth,
+                        }
+                      : {
+                          flex: 1,
+                          width: undefined,
+                          minWidth: showSplitter ? WORKSPACE_CHAT_MIN_WIDTH : 0,
+                        }
+                  }
+                >
+                  {electronChrome && (
+                    <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
+                  )}
+                  <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
+                    <ChatView
+                      title={activeSession?.title ?? '新对话'}
+                      titleSlot={electronChrome ? undefined : chatTitleSlot}
+                      overlaySlot={rolePersonaDrawer}
+                      contextHint={contextHintBanner}
+                      sessionId={activeId}
+                      expertId={activeSession?.expertId ?? null}
+                      expertRefreshKey={expertRefreshKey}
+                      welcomeEpoch={welcomeEpoch}
+                      chatScrollEpoch={chatScrollEpoch}
+                      messages={collaborationViewTab === 'main' ? messages : collaborationChildMessages}
+                      contextRef={collaborationViewTab === 'main' ? contextRef : null}
+                      composerDraft={composerDraft}
+                      loading={collaborationViewTab === 'main' ? loading : false}
+                      wakeWaiting={collaborationViewTab === 'main' ? wakeWaiting : false}
+                      streamUiRef={streamUiRef}
+                      error={collaborationViewTab === 'main' ? error : ''}
+                      availableModels={availableModels}
+                      sessionModel={resolvedSessionModel}
+                      sessionLlmParams={sessionLlmParams}
+                      contextUsage={contextUsage}
+                      isMobile={isMobile}
+                      sidebarVisible={sidebarVisible}
+                      sidebarDrawerOpen={drawerOpen}
+                      llmLabel={llmLabel}
+                      backendOk={backendOk}
+                      onSubmit={handleSubmit}
+                      ensureSession={ensureSession}
+                      onStop={handleStop}
+                      promptQueue={promptQueue}
+                      onPromptQueueRemove={handlePromptQueueRemove}
+                      onPromptQueueRunNow={handlePromptQueueRunNow}
+                      backgroundJobs={sessionBackgroundJobs}
+                      onCancelBackgroundJob={handleCancelBackgroundJob}
+                      collaborationTasks={sessionCollaborationTasks}
+                      onCancelCollaborationTask={handleCancelCollaborationTask}
+                      onDismissCollaborationTask={handleDismissCollaborationTask}
+                      onSelectCollaborationRun={handleSelectCollaborationRun}
+                      collaborationViewTab={collaborationViewTab}
+                      onCollaborationViewTabChange={handleCollaborationViewTabChange}
+                      collaborationChildLoading={collaborationChildLoading}
+                      collaborationChildError={collaborationChildError}
+                      collaborationChildLiveTrace={collaborationChildLiveTrace}
+                      collaborationChildStreaming={collaborationChildStreaming}
+                      onReloadCollaborationChild={handleReloadCollaborationChild}
+                      onForkMessage={handleForkFromMessage}
+                      onEditResend={handleEditResend}
+                      onQuoteSelection={activeId && collaborationViewTab === 'main' ? handleQuoteSelection : undefined}
+                      onEphemeralAsk={activeId && collaborationViewTab === 'main' ? handleEphemeralAsk : undefined}
+                      onClearContextRef={contextRef && collaborationViewTab === 'main' ? handleClearContextRef : undefined}
+                      onModelChange={availableModels.length ? handleModelChange : undefined}
+                      onLlmParamsChange={availableModels.length ? handleLlmParamsChange : undefined}
+                      onOpenSidebar={toggleVisible}
+                      onNewChat={handleNew}
+                      onOpenSettings={openSystemSettings}
+                      onToggleSidebar={handleToggleSidebar}
+                      rightPanelOpen={rightPanelVisible}
+                      chatColumnVisible={chatVisible}
+                      onToggleRightPanel={handleToggleRightPanel}
+                      onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
+                      onOpenFilePreview={handleOpenFilePreview}
+                      onStreamError={handleStreamError}
+                      resolveStreamSnapshot={resolveStreamSnapshot}
+                      onClearPendingUserPrompt={clearPendingUserPrompt}
+                      sessionFilesPreviewOpen={mode === 'preview'}
+                      onToggleSessionFilesPreview={handleToggleSessionFilesPreview}
+                    />
+                  </div>
+                </div>
               )}
-              role="dialog"
-              aria-modal="true"
-              aria-label={mobileRightSheet === 'preview' ? '文件预览' : '关注与持仓'}
-              aria-hidden={!mobileSheetPresented}
-            >
-              <div className={s.mobileRightSheetInner}>
-                <RightPanel
-                  visible
-                  fullWidth
-                  transitionEnabled={false}
-                  focusStockCode={focusStockCode}
-                  onFocusStockConsumed={handleFocusStockConsumed}
-                  onToggleRightPanel={closeMobileRightSheet}
-                  onDiscussInChat={handleStockDiscuss}
-                  previewMode={mobileRightSheet === 'preview'}
-                  preview={preview}
-                  previewSessionId={activeId}
-                  onSelectAttachment={handleSelectPreviewAttachment}
-                  onClosePreview={closeMobileRightSheet}
+
+              {showSplitter && (
+                <WorkspaceSplitDivider
+                  electronChrome={electronChrome}
+                  extendIntoSecondaryChrome={electronChrome}
+                  isDragging={isDragging}
+                  onBeginDrag={beginDrag}
                 />
-              </div>
-            </div>
+              )}
+
+              <RightPanel
+                visible={rightPanelVisible}
+                width={rightPanelWidth}
+                fullWidth={!chatVisible}
+                transitionEnabled={!isDragging}
+                electronChrome={electronChrome}
+                chatColumnVisible={chatVisible}
+                chromeToolbarReserve={chromeToolbarReserve}
+                focusStockCode={focusStockCode}
+                onFocusStockConsumed={handleFocusStockConsumed}
+                onToggleRightPanel={handleToggleRightPanel}
+                onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
+                onDiscussInChat={handleStockDiscuss}
+                previewMode={mode === 'preview'}
+                preview={preview}
+                previewSessionId={activeId}
+                onSelectAttachment={handleSelectPreviewAttachment}
+                onClosePreview={handleClosePreview}
+                onSlideTransitionEnd={handlePeerSlideTransitionEnd}
+              />
+            </>
           )}
         </div>
 

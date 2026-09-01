@@ -136,6 +136,9 @@ const useStyles = makeStyles({
     paddingLeft: '12px',
     paddingRight: '12px',
   },
+  contentHeaderMobile: {
+    paddingTop: '12px',
+  },
   contentHeaderFlush: {
     /** 无次级 title band 时略增顶距，避免贴窗沿 */
     paddingTop: '28px',
@@ -152,6 +155,10 @@ const useStyles = makeStyles({
   contentBack: {
     marginBottom: '12px',
     marginLeft: '-2px',
+  },
+  contentBackMobile: {
+    marginBottom: 0,
+    marginLeft: 0,
   },
   pageTitle: {
     fontSize: '17px',
@@ -857,9 +864,17 @@ function SettingsPageView({
             contentFlush && s.contentColumnFlush,
             isMobile && s.contentColumnMobile,
           )}>
-            <header className={mergeClasses(s.contentHeader, contentFlush && s.contentHeaderFlush)}>
+            <header className={mergeClasses(
+              s.contentHeader,
+              contentFlush && s.contentHeaderFlush,
+              isMobile && s.contentHeaderMobile,
+            )}>
               {sidebarOverlayMode && !sidebarVisible && (
-                <SettingsBackRow className={s.contentBack} onClick={onBack} />
+                <SettingsBackRow
+                  className={mergeClasses(s.contentBack, isMobile && s.contentBackMobile)}
+                  onClick={onBack}
+                  mobile={isMobile}
+                />
               )}
               <Text className={s.pageTitle} block>{sectionTitle}</Text>
               <Text

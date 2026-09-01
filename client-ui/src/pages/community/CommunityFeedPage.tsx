@@ -18,6 +18,12 @@ import {
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
 } from '../../desktop/constants'
 import { ghostInteractive } from '../../theme/mixins'
+import {
+  MOBILE_HEADER_ICON_SIZE,
+  mobileHeaderBar,
+  mobileHeaderIconBtn,
+  mobileHeaderTitle,
+} from '../../theme/mobileChrome'
 import { openExternalUrl } from '../../platform/openUrl'
 import { OPPTRIX_COMMUNITY, OPPTRIX_COMMUNITY_INVITE_CODE } from '../settings/aboutLinks'
 import type { CommunityFeedKind, CommunityTopic } from '../../types/schemas'
@@ -51,16 +57,21 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webHeadMobile: {
-    gap: '4px',
-    padding: '6px 8px',
-    paddingTop: 'max(6px, env(safe-area-inset-top))',
-    minHeight: '44px',
+    ...mobileHeaderBar,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     flex: 1,
+  },
+  webTitleMobile: mobileHeaderTitle,
+  mobileActionBtn: {
+    ...ghostInteractive,
+    ...mobileHeaderIconBtn,
+    color: opptrixCssVars.textSecondary,
   },
   toolbarMeta: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -363,21 +374,43 @@ function CommunityFeedContent({
 
   const toolbar = (
     <>
-      {statusLabel ? <span className={s.toolbarMeta}>{statusLabel}</span> : null}
+      {!isMobile && statusLabel ? <span className={s.toolbarMeta}>{statusLabel}</span> : null}
       <div className={s.toolbarActions}>
-        <ChromeToolButton
-          label="刷新"
-          disabled={refreshing}
-          onClick={refresh}
-        >
-          <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-        </ChromeToolButton>
-        <ChromeToolButton
-          label="访问社区"
-          onClick={handleOpenCommunity}
-        >
-          <OpenRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-        </ChromeToolButton>
+        {isMobile ? (
+          <>
+            <OpptrixButton
+              className={s.mobileActionBtn}
+              variant="ghost"
+              icon={<ArrowSyncRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+              disabled={refreshing}
+              onClick={refresh}
+              aria-label={refreshing ? '正在刷新' : '刷新'}
+            />
+            <OpptrixButton
+              className={s.mobileActionBtn}
+              variant="ghost"
+              icon={<OpenRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+              onClick={handleOpenCommunity}
+              aria-label="访问社区"
+            />
+          </>
+        ) : (
+          <>
+            <ChromeToolButton
+              label="刷新"
+              disabled={refreshing}
+              onClick={refresh}
+            >
+              <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            </ChromeToolButton>
+            <ChromeToolButton
+              label="访问社区"
+              onClick={handleOpenCommunity}
+            >
+              <OpenRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            </ChromeToolButton>
+          </>
+        )}
       </div>
     </>
   )
@@ -410,11 +443,11 @@ function CommunityFeedContent({
           )}
         />
       ) : (
-        <div className={mergeClasses(s.webHead, isMobile && s.webHeadMobile)}>
+        <div className={isMobile ? s.webHeadMobile : s.webHead}>
           {isMobile && onOpenSidebar ? (
             <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
           ) : null}
-          <Text className={s.webTitle}>社区讨论</Text>
+          <Text className={mergeClasses(s.webTitle, isMobile && s.webTitleMobile)}>社区讨论</Text>
           {toolbar}
         </div>
       )}

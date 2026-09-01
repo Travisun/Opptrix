@@ -5,6 +5,13 @@ import MobileNavMenuButton from '../../components/MobileNavMenuButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import { opptrixCssVars } from '../../theme/tokens'
+import { ghostInteractive } from '../../theme/mixins'
+import {
+  MOBILE_HEADER_ICON_SIZE,
+  mobileHeaderBar,
+  mobileHeaderIconBtn,
+  mobileHeaderTitle,
+} from '../../theme/mobileChrome'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -50,16 +57,21 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webHeadMobile: {
-    gap: '4px',
-    padding: '6px 8px',
-    paddingTop: 'max(6px, env(safe-area-inset-top))',
-    minHeight: '44px',
+    ...mobileHeaderBar,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separatorHairline}`,
   },
   webTitle: {
     fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     flex: 1,
+  },
+  webTitleMobile: mobileHeaderTitle,
+  mobileActionBtn: {
+    ...ghostInteractive,
+    ...mobileHeaderIconBtn,
+    color: opptrixCssVars.textSecondary,
   },
   body: {
     flex: 1,
@@ -197,26 +209,50 @@ function NewsCenterContent({
   ) : null
 
   const webHead = !electronChrome ? (
-    <div className={mergeClasses(s.webHead, isMobile && s.webHeadMobile)}>
+    <div className={isMobile ? s.webHeadMobile : s.webHead}>
       {isMobile && onOpenSidebar ? (
             <MobileNavMenuButton open={sidebarDrawerOpen} onClick={onOpenSidebar} />
           ) : null}
-      <Text className={s.webTitle} block>新闻中心</Text>
-      {updatedLabel && <Text className={s.toolbarMeta}>更新 {updatedLabel}</Text>}
+      <Text className={mergeClasses(s.webTitle, isMobile && s.webTitleMobile)} block>新闻中心</Text>
+      {!isMobile && updatedLabel ? <Text className={s.toolbarMeta}>更新 {updatedLabel}</Text> : null}
       <div className={s.toolbarActions}>
-        {onOpenSettings && (
-          <OpptrixButton variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
-            订阅设置
-          </OpptrixButton>
+        {isMobile ? (
+          <>
+            {onOpenSettings ? (
+              <OpptrixButton
+                className={s.mobileActionBtn}
+                variant="ghost"
+                icon={<SettingsRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+                onClick={onOpenSettings}
+                aria-label="订阅设置"
+              />
+            ) : null}
+            <OpptrixButton
+              className={s.mobileActionBtn}
+              variant="ghost"
+              icon={<ArrowSyncRegular fontSize={MOBILE_HEADER_ICON_SIZE} />}
+              disabled={refreshing}
+              onClick={() => { void refresh() }}
+              aria-label={refreshing ? '正在刷新' : '刷新列表'}
+            />
+          </>
+        ) : (
+          <>
+            {onOpenSettings && (
+              <OpptrixButton variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
+                订阅设置
+              </OpptrixButton>
+            )}
+            <OpptrixButton
+              variant="secondary"
+              icon={<ArrowSyncRegular />}
+              disabled={refreshing}
+              onClick={() => { void refresh() }}
+            >
+              {refreshing ? '刷新中…' : '刷新列表'}
+            </OpptrixButton>
+          </>
         )}
-        <OpptrixButton
-          variant="secondary"
-          icon={<ArrowSyncRegular />}
-          disabled={refreshing}
-          onClick={() => { void refresh() }}
-        >
-          {refreshing ? '刷新中…' : '刷新列表'}
-        </OpptrixButton>
       </div>
     </div>
   ) : null
