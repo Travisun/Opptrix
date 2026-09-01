@@ -6,12 +6,15 @@ import { desktopFrameTitlebarHeight } from '../desktop/layout'
 import MacTrafficLights from '../desktop/MacTrafficLights'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { electronPlatform, isElectron } from '../platform/detect'
-import { opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { OnboardingAtmosphere } from './OnboardingAtmosphere'
 import { type OnboardingNavStep } from './onboardingTheme'
 
 /** Shared horizontal inset: tight on mobile, expands on wide screens. */
 const SHELL_PAD_X = 'clamp(16px, 4vw, 72px)'
+/** Matches `footerDock` height — scroll pad must clear this + safe-area. */
+const FOOTER_DOCK_HEIGHT_PX = 135
+const SCROLL_FOOTER_GAP_PX = 16
 
 export const useOnboardingShellStyles = makeStyles({
   root: {
@@ -92,8 +95,8 @@ export const useOnboardingShellStyles = makeStyles({
     flexDirection: 'column',
     alignItems: 'center',
     padding: `clamp(16px, 3vh, 28px) ${SHELL_PAD_X}`,
-    /** Clears fixed footer dock (~135px) on config/workflow steps */
-    paddingBottom: '150px',
+    /** Clears footer dock height + safe-area + gap so last list rows stay visible */
+    paddingBottom: `calc(${FOOTER_DOCK_HEIGHT_PX + SCROLL_FOOTER_GAP_PX}px + env(safe-area-inset-bottom, 0px))`,
   },
   scrollInnerFlush: {
     justifyContent: 'flex-start',
@@ -110,6 +113,14 @@ export const useOnboardingShellStyles = makeStyles({
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
+  },
+  /** Workflow steps: opaque white panel so Atmosphere grid does not show through */
+  contentPanel: {
+    padding: 'clamp(16px, 2.5vh, 22px) clamp(16px, 3vw, 22px)',
+    borderRadius: opptrixTokens.radiusLg,
+    border: `1px solid ${opptrixCssVars.border}`,
+    backgroundColor: '#FFFFFF',
+    boxSizing: 'border-box',
   },
   contentDisplay: {
     maxWidth: '640px',
@@ -310,8 +321,8 @@ export const useOnboardingShellStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     backgroundColor: 'transparent',
-    minHeight: '135px',
-    height: '135px',
+    minHeight: `${FOOTER_DOCK_HEIGHT_PX}px`,
+    height: `${FOOTER_DOCK_HEIGHT_PX}px`,
     paddingTop: 0,
     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     paddingLeft: SHELL_PAD_X,
@@ -509,6 +520,7 @@ export function OnboardingShell({
             <div
               className={mergeClasses(
                 s.content,
+                !isDisplay && s.contentPanel,
                 isDisplay && s.contentDisplay,
                 contentWide && s.contentWide,
                 contentAlignStart && s.contentAlignStart,
