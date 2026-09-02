@@ -16,8 +16,7 @@ function enabledJobCount(jobs: ScheduledJob[]): number {
 }
 
 /**
- * 进程内调度健康摘要。OS 级 tick 已废除；关闭到托盘仍执行，完全退出则不执行。
- * `run_when_closed` 字段保留兼容，但不影响注册（永远不注册 OS tick）。
+ * 服务端进程内调度健康摘要。自托管/Docker 下服务常驻即按计划执行。
  */
 export function computeOsHealth(
   settings: ScheduleSettings,
@@ -34,9 +33,7 @@ export function computeOsHealth(
 
   return {
     status: 'n/a',
-    message: settings.autostart
-      ? '登录后可在托盘常驻并按计划执行；完全退出应用后不会执行'
-      : '应用运行或驻留托盘时按计划执行；完全退出后不会执行',
+    message: '服务运行中即按计划执行',
     error: null,
     autostart: settings.autostart,
   }

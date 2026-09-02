@@ -19,7 +19,8 @@ import {
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { listRowKey } from '../../utils/listRowKey'
-import { isElectron } from '../../platform/detect'
+import ScheduleNotifySettingsPanel from './ScheduleNotifySettingsPanel'
+import ScheduleJobNotifyDialog from './ScheduleJobNotifyDialog'
 
 const useStyles = makeStyles({
   root: {
@@ -42,6 +43,11 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '6px',
     minWidth: 0,
+  },
+  jobActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
   },
 })
 
@@ -72,12 +78,20 @@ function lastStatusLabel(status: string | null): string {
   }
 }
 
+function notifyModeLabel(job: ScheduledJob): string {
+  const mode = job.notify_override?.notify_mode ?? 'inherit'
+  if (mode === 'off') return '通知：关闭'
+  if (mode === 'custom') return '通知：自定义'
+  return '通知：继承全局'
+}
+
 export default function ScheduleSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState<ScheduleSettings | null>(null)
   const [jobs, setJobs] = useState<ScheduledJob[]>([])
+  const [notifyJob, setNotifyJob] = useState<ScheduledJob | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -101,13 +115,6 @@ export default function ScheduleSettingsSection() {
     try {
       const resp = await scheduleApi.patchSettings(patch)
       setSettings(resp.settings)
-      const needsReconcile = (
-        patch.master_enabled !== undefined
-        || patch.autostart !== undefined
-      )
-      if (needsReconcile) {
-        void window.electronAPI?.scheduleOsReconcile?.().catch(() => {})
-      }
       toast.showSuccess('设置已保存')
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '保存失败，请稍后重试')
@@ -146,6 +153,9 @@ export default function ScheduleSettingsSection() {
     <div className={s.root}>
       <div className={s.sectionBlock}>
         <SettingsSectionLabel>执行</SettingsSectionLabel>
+        <Text className={s.emptyHint} block>
+          服务运行期间将按计划自动执行；无需托盘或系统定时任务。
+        </Text>
         <SettingsGroup>
           <SettingsRow
             title="启用计划任务"
@@ -173,26 +183,10 @@ export default function ScheduleSettingsSection() {
         </SettingsGroup>
       </div>
 
-      {isElectron() && (
-        <div className={s.sectionBlock}>
-          <SettingsSectionLabel>开机启动</SettingsSectionLabel>
-          <SettingsGroup>
-            <SettingsRow
-              title="登录时在托盘启动"
-              desc="默认开启；登录后在托盘运行，便于按时执行任务"
-              control={(
-                <Switch
-                  checked={settings.autostart}
-                  disabled={!settings.master_enabled}
-                  onChange={(_, data) => { void patchSettings({ autostart: Boolean(data.checked) }) }}
-                  aria-label="登录时在托盘启动"
-                />
-              )}
-              last
-            />
-          </SettingsGroup>
-        </div>
-      )}
+      <ScheduleNotifySettingsPanel
+        settings={settings}
+        onSaved={setSettings}
+      />
 
       <div className={s.sectionBlock}>
         <SettingsSectionLabel>任务列表</SettingsSectionLabel>
@@ -216,20 +210,42 @@ export default function ScheduleSettingsSection() {
                   </span>
                 )}
                 titleTitle={job.title}
-                meta={`${jobKindLabel(job.kind)} · 下次 ${formatNextRun(job.next_run_at)} · ${lastStatusLabel(job.last_status)}`}
+                meta={`${jobKindLabel(job.kind)} · 下次 ${formatNextRun(job.next_run_at)} · ${lastStatusLabel(job.last_status)} · ${notifyModeLabel(job)}`}
                 trailing={(
-                  <Switch
-                    checked={job.enabled}
-                    disabled={!settings.master_enabled}
-                    onChange={(_, data) => { void toggleJob(job, Boolean(data.checked)) }}
-                    aria-label={`${job.title} 启用开关`}
-                  />
+                  <div className={s.jobActions}>
+                    <OpptrixButton
+                      variant="secondary"
+                      size="small"
+                      onClick={() => setNotifyJob(job)}
+                    >
+                      通知
+                    </OpptrixButton>
+                    <Switch
+                      checked={job.enabled}
+                      disabled={!settings.master_enabled}
+                      onChange={(_, data) => { void toggleJob(job, Boolean(data.checked)) }}
+                      aria-label={`${job.title} 启用开关`}
+                    />
+                  </div>
                 )}
               />
             ))}
           </SettingsListPanel>
         )}
       </div>
+
+      {notifyJob && settings && (
+        <ScheduleJobNotifyDialog
+          open={Boolean(notifyJob)}
+          job={notifyJob}
+          globalNotify={settings.notify}
+          onClose={() => setNotifyJob(null)}
+          onSaved={(job) => {
+            setJobs(prev => prev.map(j => (j.id === job.id ? job : j)))
+            setNotifyJob(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -14,6 +14,7 @@ export type SettingsSection =
   | 'doc_library'
   | 'multimodal'
   | 'portfolio_fees'
+  | 'system_update'
   | 'about'
 
 const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
@@ -32,6 +33,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'sandbox',
   'schedule',
   'python',
+  'system_update',
   'about',
 ]
 

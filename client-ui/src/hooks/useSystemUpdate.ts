@@ -16,6 +16,7 @@ import {
   importSystemUpdatePackage,
   rollbackSystemUpdate,
   SYSTEM_UPDATE_DISABLED,
+  ApiHttpError,
   type SystemUpdatePhase,
   type SystemUpdateStatus,
 } from '../api/client'
@@ -308,9 +309,10 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
         setConfirmOpen(true)
       }
       return true
-    } catch {
+    } catch (err) {
       const next = await safeFetchStatus()
       setStatus(next)
+      if (err instanceof ApiHttpError) throw err
       return false
     } finally {
       setImporting(false)

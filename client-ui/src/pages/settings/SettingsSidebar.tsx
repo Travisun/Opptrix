@@ -41,7 +41,15 @@ import WechatCommunityDialog from './WechatCommunityDialog'
 export type { SettingsSection } from './settingsTypes'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
-const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
+type NavItem = {
+  id: SettingsSection
+  label: string
+  icon: typeof SettingsRegular
+  webOnly?: boolean
+  electronOnly?: boolean
+}
+
+const NAV: NavItem[] = [
   // 基础与持仓
   { id: 'general', label: '常规', icon: SettingsRegular },
   { id: 'account_security', label: '账户与安全', icon: LockClosedRegular },
@@ -61,6 +69,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'sandbox', label: '工作区隔离', icon: ShieldRegular },
   { id: 'schedule', label: '计划任务', icon: CalendarClockRegular },
   { id: 'python', label: 'Python', icon: CodeRegular },
+  { id: 'system_update', label: '系统更新', icon: ArrowSyncRegular },
   // 关于
   { id: 'about', label: '关于', icon: InfoRegular },
 ]
@@ -285,9 +294,14 @@ export default function SettingsSidebar({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return NAV
+    const platformNav = NAV.filter(item => {
+      if (item.webOnly && isElectron()) return false
+      if (item.electronOnly && !isElectron()) return false
+      return true
+    })
+    if (!q) return platformNav
     const matched = new Set(searchHits.map(hit => hit.section))
-    return NAV.filter(item => matched.has(item.id))
+    return platformNav.filter(item => matched.has(item.id))
   }, [search, searchHits])
 
   const pickSection = (section: SettingsSection) => {
@@ -486,6 +500,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '管理定时智能体任务与受控脚本'
     case 'python':
       return '查看 Python 状态、配置镜像源与安装选项'
+    case 'system_update':
+      return '检查、导入与回退系统版本'
     case 'portfolio_fees':
       return '持仓默认佣金、印花税与申赎费'
     case 'about':

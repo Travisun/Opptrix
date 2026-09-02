@@ -81,7 +81,7 @@ import {
 import { maybeBootstrapTranslationModel, llamaRuntime } from '@opptrix/local-inference'
 import { startEnrichmentScheduler, stopEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
-import { createJobExecutor, getScheduleService, type ScheduleJobNotificationEvent } from '@opptrix/schedule'
+import { createJobExecutor, getScheduleService, createScheduleNotificationDispatcher } from '@opptrix/schedule'
 import {
   removeNewsSearchIndex,
   removeSessionSearchIndex,
@@ -321,14 +321,14 @@ scheduleService.setExecutor(createJobExecutor({
       payload: { ...(job.payload as { prompt: string; session_id?: string }), session_id: sessionId },
     })
   },
-  // 桌面通知由 Electron 主进程处理；server 侧留 hook 供后续 IPC 桥接
-  onComplete: (event: ScheduleJobNotificationEvent) => {
-    app.log.info({
-      scheduleJobId: event.job.id,
-      scheduleJobTitle: event.job.title,
-      status: event.status,
-    }, 'schedule job finished')
-  },
+  onComplete: createScheduleNotificationDispatcher({
+    getSettings: () => scheduleService.getSettings(),
+    getJob: id => scheduleService.getJob(id),
+    log: (msg, err) => {
+      if (err) app.log.warn({ err }, msg)
+      else app.log.info(msg)
+    },
+  }),
 }))
 
 app.post<{ Params: { code: string }; Body: { force?: boolean } }>('/api/stock/:code/prep', async (req) => {

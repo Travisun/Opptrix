@@ -887,14 +887,17 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 ### 计划任务 / Schedule
 
-定时执行智能体提示词或受控脚本。持久化于用户 SQLite（`packages/user-store` 的 `schedule` 命名空间）；调度引擎为 `@opptrix/schedule` 的 `ScheduleService`。Sidecar 启动时注册 `registerScheduleRoutes` 并调用 `scheduleService.start()`（进程内每 **20s** 扫描到期任务，`trigger: 'timer'`）。
+定时执行智能体提示词或受控脚本。持久化于用户 SQLite；调度引擎为 `@opptrix/schedule` 的 `ScheduleService`。服务启动时调用 `scheduleService.start()`（进程内每 **20s** 扫描到期任务，`trigger: 'timer'`）。
 
-计划任务仅在 **应用运行或托盘常驻** 时由进程内 timer 执行；完全退出后不执行。桌面 `reconcile` **只**注销遗留 OS 注册（LaunchAgent / schtasks / systemd），**不再**注册系统级 tick。`POST /api/schedule/tick`（`trigger: 'os'`）仅兼容旧 runner；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。tick / claim 前会释放超时 `running` lease（默认 45 分钟标为 `interrupted`），每个 job 的 `scheduled_job_runs` 硬顶保留最近 100 条。
+**自托管 / Docker**：服务常驻即按计划执行。Webhook 派发默认 **5 次**尝试、**指数退避**（1s 起、单次等待上限 **24 小时**、±20% 抖动）；遇 `429`/`5xx`/网络错误重试，`4xx`（除 408/429）不重试；尊重 `Retry-After`。环境变量：`OPPTRIX_SCHEDULE_WEBHOOK_MAX_ATTEMPTS`、`OPPTRIX_SCHEDULE_WEBHOOK_BASE_DELAY_MS`、`OPPTRIX_SCHEDULE_WEBHOOK_MAX_DELAY_MS`、`OPPTRIX_SCHEDULE_WEBHOOK_TIMEOUT_MS`。
+
+tick / claim 前会释放超时 `running` lease（默认 45 分钟标为 `interrupted`），每个 job 的 `scheduled_job_runs` 硬顶保留最近 100 条。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/schedule/settings` | 读取全局设置 |
-| PATCH | `/api/schedule/settings` | 更新设置；可选 `resync_os: true` 清理遗留 OS 状态字段 |
+| GET | `/api/schedule/settings` | 读取全局设置（含 `notify`；SMTP/Webhook 密钥脱敏） |
+| PATCH | `/api/schedule/settings` | 更新设置；`notify` 含 Webhook、SMTP、是否允许 HTTP |
+| POST | `/api/schedule/notify/test` | 发送测试 Webhook/邮件（body: `{ channel, webhook_id? }`） |
 | GET | `/api/schedule/jobs` | 列出全部任务 |
 | GET | `/api/schedule/jobs/:id` | 单条任务详情 |
 | POST | `/api/schedule/jobs` | 创建任务 |
@@ -913,7 +916,8 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | `run_when_closed` | boolean | `false` | **兼容字段**：始终 `false`；PATCH 忽略写入；不再注册系统 crontab |
 | `autostart` | boolean | `true` | 桌面：登录项 / Linux XDG Autostart，以 `--background` 托盘常驻 |
 | `allow_shell_scripts` | boolean | `true` | 为 `false` 时禁止创建/改为 `shell_script` 任务 |
-| `os_tick_status` | `'synced' \| 'pending' \| 'error' \| 'n/a'` | `'n/a'` | 遗留字段；新版本通常为 `n/a` |
+| `notify` | object | 见下 | 全局通知：Webhook、SMTP、触发条件、`allow_http_webhooks` |
+| `os_tick_status` | `'synced' \| 'pending' \| 'error' \| 'n/a'` | `'n/a'` | 遗留字段 |
 | `os_tick_error` | string \| null | `null` | 遗留 OS 注销失败原因（少见） |
 
 PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，可将 `os_tick_status` 置为 `pending` 以提示桌面 reconcile（强制 remove）。`resync_os: true` 时清理任务级 `os_*` 字段并返回健康摘要。计划任务仅在 **应用运行或托盘常驻** 时由进程内 timer 执行；完全退出后不执行。

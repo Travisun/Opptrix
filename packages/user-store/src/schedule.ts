@@ -49,16 +49,69 @@ export interface ShellScriptPayload {
 
 export type SchedulePayload = AgentPromptPayload | ShellScriptPayload
 
+export type ScheduleNotifyOn = 'always' | 'success' | 'failure'
+export type ScheduleJobNotifyMode = 'inherit' | 'custom' | 'off'
+export type ScheduleEmailFormat = 'text' | 'html' | 'both'
+
+export interface ScheduleWebhookTarget {
+  id: string
+  url: string
+  secret?: string
+  enabled: boolean
+}
+
+export interface ScheduleSmtpConfig {
+  host: string
+  port: number
+  secure: boolean
+  user: string
+  password: string
+  from: string
+  email_format: ScheduleEmailFormat
+}
+
+export interface ScheduleNotifySettings {
+  enabled: boolean
+  notify_on: ScheduleNotifyOn
+  /** 允许 http:// Webhook（默认仅 https） */
+  allow_http_webhooks: boolean
+  webhooks: ScheduleWebhookTarget[]
+  email_enabled: boolean
+  email_to: string[]
+  smtp: ScheduleSmtpConfig | null
+}
+
+export interface ScheduleJobNotifyOverride {
+  notify_mode: ScheduleJobNotifyMode
+  notify_on?: ScheduleNotifyOn
+  webhooks?: ScheduleWebhookTarget[]
+  email_enabled?: boolean
+  email_to?: string[]
+}
+
+export const SCHEDULE_MAX_WEBHOOKS = 5
+
+export const DEFAULT_SCHEDULE_NOTIFY: ScheduleNotifySettings = {
+  enabled: false,
+  notify_on: 'failure',
+  allow_http_webhooks: false,
+  webhooks: [],
+  email_enabled: false,
+  email_to: [],
+  smtp: null,
+}
+
 export interface ScheduleSettings {
   master_enabled: boolean
   /**
    * 兼容旧版「关闭后仍注册 OS tick」开关；产品已废除系统 crontab，
-   * 默认 false，API 忽略写入，仅进程内（托盘/前台）执行。
+   * 默认 false，API 忽略写入。
    */
   run_when_closed: boolean
-  /** 登录项以 `--background` 托盘常驻（与 OS tick 无关） */
+  /** 登录项（桌面遗留；自托管忽略） */
   autostart: boolean
   allow_shell_scripts: boolean
+  notify: ScheduleNotifySettings
   os_tick_status?: ScheduleOsStatus
   os_tick_error?: string | null
 }
@@ -68,6 +121,7 @@ export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
   run_when_closed: false,
   autostart: true,
   allow_shell_scripts: true,
+  notify: DEFAULT_SCHEDULE_NOTIFY,
   os_tick_status: 'n/a',
   os_tick_error: null,
 }
@@ -91,6 +145,7 @@ export interface ScheduledJob {
   next_run_at: string | null
   last_run_at: string | null
   last_status: string | null
+  notify_override: ScheduleJobNotifyOverride | null
   created_at: string
   updated_at: string
 }
@@ -116,6 +171,7 @@ export interface CreateScheduledJobInput {
   payload: SchedulePayload
   os_registration_id?: string | null
   os_status?: ScheduleOsStatus
+  notify_override?: ScheduleJobNotifyOverride | null
 }
 
 export interface UpdateScheduledJobInput {
@@ -130,6 +186,7 @@ export interface UpdateScheduledJobInput {
   next_run_at?: string | null
   last_run_at?: string | null
   last_status?: string | null
+  notify_override?: ScheduleJobNotifyOverride | null
 }
 
 interface JobRow {
@@ -145,6 +202,7 @@ interface JobRow {
   next_run_at: string | null
   last_run_at: string | null
   last_status: string | null
+  notify_json: string | null
   created_at: string
   updated_at: string
 }
@@ -169,6 +227,95 @@ function parseJson<T>(raw: string, fallback: T): T {
   }
 }
 
+export function normalizeScheduleNotifySettings(
+  raw: Partial<ScheduleNotifySettings> | null | undefined,
+): ScheduleNotifySettings {
+  const base = { ...DEFAULT_SCHEDULE_NOTIFY, ...raw }
+  const notifyOn = base.notify_on
+  const notify_on: ScheduleNotifyOn = (
+    notifyOn === 'always' || notifyOn === 'success' || notifyOn === 'failure'
+  ) ? notifyOn : 'failure'
+  const webhooks = Array.isArray(base.webhooks)
+    ? base.webhooks
+      .filter(w => w && typeof w.url === 'string' && w.url.trim())
+      .slice(0, SCHEDULE_MAX_WEBHOOKS)
+      .map(w => ({
+        id: typeof w.id === 'string' && w.id.trim() ? w.id.trim() : randomUUID(),
+        url: w.url.trim(),
+        secret: typeof w.secret === 'string' && w.secret.trim() ? w.secret.trim() : undefined,
+        enabled: w.enabled !== false,
+      }))
+    : []
+  const email_to = Array.isArray(base.email_to)
+    ? base.email_to.map(e => String(e).trim()).filter(Boolean)
+    : []
+  let smtp: ScheduleSmtpConfig | null = null
+  if (base.smtp && typeof base.smtp === 'object') {
+    const s = base.smtp
+    const host = typeof s.host === 'string' ? s.host.trim() : ''
+    if (host) {
+      const fmt = s.email_format
+      const email_format: ScheduleEmailFormat = (
+        fmt === 'text' || fmt === 'html' || fmt === 'both'
+      ) ? fmt : 'both'
+      smtp = {
+        host,
+        port: Number.isFinite(Number(s.port)) ? Math.max(1, Math.floor(Number(s.port))) : 587,
+        secure: s.secure === true,
+        user: typeof s.user === 'string' ? s.user.trim() : '',
+        password: typeof s.password === 'string' ? s.password : '',
+        from: typeof s.from === 'string' ? s.from.trim() : '',
+        email_format,
+      }
+    }
+  }
+  return {
+    enabled: base.enabled === true,
+    notify_on,
+    allow_http_webhooks: base.allow_http_webhooks === true,
+    webhooks,
+    email_enabled: base.email_enabled === true,
+    email_to,
+    smtp,
+  }
+}
+
+export function normalizeJobNotifyOverride(
+  raw: ScheduleJobNotifyOverride | null | undefined,
+): ScheduleJobNotifyOverride | null {
+  if (!raw || typeof raw !== 'object') return null
+  const mode = raw.notify_mode
+  const notify_mode: ScheduleJobNotifyMode = (
+    mode === 'inherit' || mode === 'custom' || mode === 'off'
+  ) ? mode : 'inherit'
+  if (notify_mode === 'inherit') {
+    return { notify_mode: 'inherit' }
+  }
+  if (notify_mode === 'off') {
+    return { notify_mode: 'off' }
+  }
+  const out: ScheduleJobNotifyOverride = { notify_mode: 'custom' }
+  if (raw.notify_on === 'always' || raw.notify_on === 'success' || raw.notify_on === 'failure') {
+    out.notify_on = raw.notify_on
+  }
+  if (Array.isArray(raw.webhooks)) {
+    out.webhooks = raw.webhooks
+      .filter(w => w && typeof w.url === 'string' && w.url.trim())
+      .slice(0, SCHEDULE_MAX_WEBHOOKS)
+      .map(w => ({
+        id: typeof w.id === 'string' && w.id.trim() ? w.id.trim() : randomUUID(),
+        url: w.url.trim(),
+        secret: typeof w.secret === 'string' && w.secret.trim() ? w.secret.trim() : undefined,
+        enabled: w.enabled !== false,
+      }))
+  }
+  if (raw.email_enabled !== undefined) out.email_enabled = raw.email_enabled === true
+  if (Array.isArray(raw.email_to)) {
+    out.email_to = raw.email_to.map(e => String(e).trim()).filter(Boolean)
+  }
+  return out
+}
+
 function rowToJob(row: JobRow): ScheduledJob {
   return {
     id: row.id,
@@ -183,6 +330,9 @@ function rowToJob(row: JobRow): ScheduledJob {
     next_run_at: row.next_run_at,
     last_run_at: row.last_run_at,
     last_status: row.last_status,
+    notify_override: row.notify_json
+      ? normalizeJobNotifyOverride(parseJson<ScheduleJobNotifyOverride>(row.notify_json, { notify_mode: 'inherit' }))
+      : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -243,6 +393,11 @@ export function initScheduleSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_active
       ON scheduled_job_runs(job_id, status, finished_at);
   `)
+
+  const cols = db.prepare('PRAGMA table_info(scheduled_jobs)').all() as Array<{ name: string }>
+  if (!cols.some(c => c.name === 'notify_json')) {
+    db.exec('ALTER TABLE scheduled_jobs ADD COLUMN notify_json TEXT')
+  }
 }
 
 type DocGetter = <T>(namespace: string, id: string) => T | null
@@ -262,17 +417,21 @@ export class ScheduleRepository {
     return {
       ...DEFAULT_SCHEDULE_SETTINGS,
       ...raw,
-      // OS tick 已废除：始终 false（兼容旧库中 true）
       run_when_closed: false,
       os_tick_error: raw?.os_tick_error ?? null,
+      notify: normalizeScheduleNotifySettings(raw?.notify),
     }
   }
 
   patchSettings(patch: Partial<ScheduleSettings>): ScheduleSettings {
+    const current = this.getSettings()
     const next: ScheduleSettings = {
-      ...this.getSettings(),
+      ...current,
       ...patch,
       run_when_closed: false,
+      notify: patch.notify !== undefined
+        ? normalizeScheduleNotifySettings(patch.notify)
+        : current.notify,
     }
     this.setDocument(SETTINGS_NS, SETTINGS_ID, next)
     return next
@@ -298,8 +457,8 @@ export class ScheduleRepository {
       INSERT INTO scheduled_jobs (
         id, title, enabled, kind, schedule_kind, schedule_json, payload_json,
         os_registration_id, os_status, next_run_at, last_run_at, last_status,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+        notify_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
     `).run(
       id,
       input.title.trim(),
@@ -311,6 +470,9 @@ export class ScheduleRepository {
       input.os_registration_id ?? null,
       input.os_status ?? 'n/a',
       nextRunAt,
+      input.notify_override != null
+        ? JSON.stringify(normalizeJobNotifyOverride(input.notify_override))
+        : null,
       now,
       now,
     )
@@ -338,13 +500,18 @@ export class ScheduleRepository {
       next_run_at: patch.next_run_at !== undefined ? patch.next_run_at : current.next_run_at,
       last_run_at: patch.last_run_at !== undefined ? patch.last_run_at : current.last_run_at,
       last_status: patch.last_status !== undefined ? patch.last_status : current.last_status,
+      notify_override: patch.notify_override !== undefined
+        ? (patch.notify_override == null
+          ? null
+          : normalizeJobNotifyOverride(patch.notify_override))
+        : current.notify_override,
       updated_at: updatedAt,
     }
     this.db.prepare(`
       UPDATE scheduled_jobs SET
         title = ?, enabled = ?, kind = ?, schedule_kind = ?, schedule_json = ?,
         payload_json = ?, os_registration_id = ?, os_status = ?,
-        next_run_at = ?, last_run_at = ?, last_status = ?, updated_at = ?
+        next_run_at = ?, last_run_at = ?, last_status = ?, notify_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       next.title,
@@ -358,6 +525,7 @@ export class ScheduleRepository {
       next.next_run_at,
       next.last_run_at,
       next.last_status,
+      next.notify_override ? JSON.stringify(next.notify_override) : null,
       next.updated_at,
       id,
     )

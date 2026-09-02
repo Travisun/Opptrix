@@ -93,6 +93,12 @@ import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
 import { useSettingsSidebarWidth } from '../hooks/useSettingsSidebarWidth'
 import { useAppNavigation } from '../hooks/useAppNavigation'
+import {
+  clearSettingsDeepLink,
+  readSettingsDeepLink,
+  resolveSettingsNavigationTarget,
+  writeSettingsDeepLink,
+} from '../utils/settingsDeepLink'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
@@ -348,7 +354,7 @@ export default function ChatApp() {
     navigate,
     goBack,
     goForward,
-  } = useAppNavigation('chat')
+  } = useAppNavigation(readSettingsDeepLink() ? 'settings' : 'chat')
 
   const splitEnabled = !isMobile && view === 'chat'
 
@@ -472,7 +478,9 @@ export default function ChatApp() {
     if (typeof window === 'undefined') return false
     return window.innerWidth >= sidebarExpandThreshold(SIDEBAR_DEFAULT_WIDTH)
   })
-  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection | undefined>()
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection | undefined>(
+    () => readSettingsDeepLink() ?? undefined,
+  )
   const overlayWidthForMode = view === 'settings' ? settingsSidebarWidth : sidebarWidth
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, overlayWidthForMode)
   const sidebarInlineVisible = sidebarVisible && !sidebarOverlayMode
@@ -1707,11 +1715,21 @@ export default function ChatApp() {
     if (view === 'experts') setExpertMarketMounted(true)
   }, [view])
 
-  const openSystemSettings = useCallback((section?: SettingsSection) => {
+  const openSystemSettings = useCallback((section?: SettingsSection | 'software_update' | 'offline_update') => {
+    const target = resolveSettingsNavigationTarget(section)
     closeDrawer()
-    setSettingsInitialSection(normalizeSettingsSection(section))
+    setSettingsInitialSection(target.section)
+    writeSettingsDeepLink(
+      target.section,
+      view === 'settings' ? 'replace' : 'push',
+      target.systemUpdateTab ? { systemUpdateTab: target.systemUpdateTab } : undefined,
+    )
     navigate('settings')
-  }, [closeDrawer, navigate])
+  }, [closeDrawer, navigate, view])
+
+  const syncSettingsDeepLink = useCallback((section: SettingsSection) => {
+    writeSettingsDeepLink(section, 'replace')
+  }, [])
 
   const openExpertCenter = useCallback(() => {
     closeDrawer()
@@ -1738,6 +1756,7 @@ export default function ChatApp() {
   }, [openSystemSettings])
 
   const handleExitSettings = useCallback(() => {
+    clearSettingsDeepLink()
     navigate('chat')
     // 设置页可能改过提供商/模型；退出时刷新，确保聊天下拉立刻可用
     refreshHealth().catch(() => {})
@@ -2114,6 +2133,24 @@ export default function ChatApp() {
   const sessionModelRef = useRef(resolvedSessionModel)
   activeIdRef.current = activeId
   viewRef.current = view
+
+  useEffect(() => {
+    const onPopState = () => {
+      const linked = readSettingsDeepLink()
+      if (linked) {
+        setSettingsInitialSection(linked)
+        if (viewRef.current !== 'settings') {
+          navigate('settings')
+        }
+        return
+      }
+      if (viewRef.current === 'settings') {
+        navigate('chat')
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [navigate])
   sessionsRef.current = sessions
   activeSessionMetaRef.current = activeSessionMeta
   loadingRef.current = loading
@@ -2894,6 +2931,7 @@ export default function ChatApp() {
               onSidebarClose={() => setSettingsSidebarVisible(false)}
               onBack={handleExitSettings}
               initialSection={settingsInitialSection}
+              onSectionChange={syncSettingsDeepLink}
               chromeToolbarReserve={electronChrome ? desktopChromeToolbarReserve(macFullscreen) : 0}
               sidebarWidth={settingsSidebarWidth}
               sidebarDragging={settingsSidebarDragging}

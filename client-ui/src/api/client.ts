@@ -3399,12 +3399,52 @@ export const sandboxSettings = {
 
 export type ScheduleOsStatus = 'synced' | 'pending' | 'error' | 'n/a'
 
+export type ScheduleNotifyOn = 'always' | 'success' | 'failure'
+export type ScheduleJobNotifyMode = 'inherit' | 'custom' | 'off'
+export type ScheduleEmailFormat = 'text' | 'html' | 'both'
+
+export interface ScheduleWebhookTarget {
+  id: string
+  url: string
+  secret?: string
+  enabled: boolean
+}
+
+export interface ScheduleSmtpConfig {
+  host: string
+  port: number
+  secure: boolean
+  user: string
+  password: string
+  from: string
+  email_format: ScheduleEmailFormat
+}
+
+export interface ScheduleNotifySettings {
+  enabled: boolean
+  notify_on: ScheduleNotifyOn
+  allow_http_webhooks: boolean
+  webhooks: ScheduleWebhookTarget[]
+  email_enabled: boolean
+  email_to: string[]
+  smtp: ScheduleSmtpConfig | null
+}
+
+export interface ScheduleJobNotifyOverride {
+  notify_mode: ScheduleJobNotifyMode
+  notify_on?: ScheduleNotifyOn
+  webhooks?: ScheduleWebhookTarget[]
+  email_enabled?: boolean
+  email_to?: string[]
+}
+
 export interface ScheduleSettings {
   master_enabled: boolean
   /** 兼容字段：始终 false，不再注册系统定时 */
   run_when_closed: boolean
   autostart: boolean
   allow_shell_scripts: boolean
+  notify: ScheduleNotifySettings
   os_tick_status?: ScheduleOsStatus
   os_tick_error?: string | null
 }
@@ -3436,6 +3476,7 @@ export interface ScheduledJob {
   next_run_at: string | null
   last_run_at: string | null
   last_status: string | null
+  notify_override: ScheduleJobNotifyOverride | null
   created_at: string
   updated_at: string
 }
@@ -3484,6 +3525,23 @@ export const scheduleApi = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: false }),
+    }),
+
+  updateJob: (id: string, patch: Partial<{
+    enabled: boolean
+    notify_override: ScheduleJobNotifyOverride | null
+  }>) =>
+    jsonFetch<{ job: ScheduledJob }>(`/schedule/jobs/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+
+  testNotify: (body: { channel: 'webhook' | 'email'; webhook_id?: string }) =>
+    jsonFetch<{ ok: boolean }>('/schedule/notify/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     }),
 }
 

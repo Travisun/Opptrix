@@ -47,9 +47,12 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'sandbox', title: '工作区隔离', desc: '查看命令保护与网络访问规则', keywords: ['沙盒', '沙盒环境', '命令隔离', '工作区隔离'] },
   { section: 'schedule', title: '计划任务', desc: '管理定时任务', keywords: ['定时', '自动执行'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
-  { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
-  { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
-  { section: 'about', title: '检查更新', keywords: ['更新', 'upgrade'] },
+  { section: 'system_update', title: '系统更新', desc: '在线检查、离线导入与版本回退', keywords: ['版本', '升级', '热更新', '检查更新', '离线', '导入'] },
+  { section: 'system_update', title: '在线更新', desc: '检查并应用在线更新，必要时回退上一版本', keywords: ['在线', 'upgrade'] },
+  { section: 'system_update', title: '离线更新', desc: '导入官方更新包与校验文件，无网络也可升级', keywords: ['离线', '导入', '更新包', 'sha256', '校验'] },
+  { section: 'system_update', title: '检查更新', keywords: ['更新'] },
+  { section: 'system_update', title: '恢复上一版本', desc: '回退到上一可用版本', keywords: ['回退', 'rollback'] },
+  { section: 'about', title: '关于', desc: '产品说明、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
   { section: 'about', title: '对话调试日志', desc: '将对话过程写入本机日志，便于排查无回复或中断', keywords: ['调试', '日志', '无回复', '中断'] },
   { section: 'about', title: '官方网站', desc: 'Opptrix 官网', keywords: ['官网', 'opptrix.org', '网站'] },
   { section: 'about', title: '用户协议', keywords: ['条款', 'legal', 'agreement'] },
@@ -208,6 +211,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   schedule: '计划任务',
   python: 'Python',
   portfolio_fees: '组合费率',
+  system_update: '系统更新',
   about: '关于',
 }
 
