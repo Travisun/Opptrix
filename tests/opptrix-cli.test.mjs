@@ -3,6 +3,8 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -114,8 +116,28 @@ test('opptrix help exits 0 and lists commands', () => {
   assert.match(r.stdout, /--mirror/)
   assert.match(r.stdout, /\btags\b/)
   assert.match(r.stdout, /\buse\b/)
+  assert.match(r.stdout, /\benv\b/)
   assert.match(r.stdout, /opptrix-selfhost-v/)
   assert.match(r.stdout, /--ref/)
+})
+
+test('opptrix env set --no-restart writes compose.env in deploy dir', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-cli-env-'))
+  const r = spawnSync(process.execPath, [
+    CLI,
+    'env',
+    'set',
+    'OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=6',
+    '--no-restart',
+  ], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, OPPTRIX_DEPLOY_DIR: dir },
+  })
+  assert.equal(r.status, 0, r.stderr || r.stdout)
+  assert.match(r.stdout, /compose\.env 已更新/)
+  const envText = fs.readFileSync(path.join(dir, 'compose.env'), 'utf8')
+  assert.match(envText, /OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=6/)
 })
 
 test('opptrix doctor reports platform without requiring healthy docker', () => {

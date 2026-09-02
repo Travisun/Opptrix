@@ -20,6 +20,16 @@ import {
 } from '../src/app-refs.mjs'
 import { detectDocker, gitPull, npmLinkCli, npmUnlinkCli, probeHealth, runCompose } from '../src/compose.mjs'
 import {
+  knownEnvKeysForRoot,
+  maskEnvValue,
+  parseEnvSetTokens,
+  readComposeEnvMap,
+  resolveComposeEnvFile,
+  warnPathEnvKey,
+  warnUnknownEnvKey,
+  writeComposeEnvPatch,
+} from '../src/compose-env.mjs'
+import {
   buildReleaseEnv,
   ensureBuildContext,
   ensureThinDeploy,
@@ -75,6 +85,7 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   start             启动已有容器（不重建）
   stop              停止容器
   restart           重启容器
+  env               管理 compose.env 运行时变量（set / get / list / unset）
   down              停止并移除容器（默认保留数据卷；加 --volumes 才会删卷）
   build             仅本地构建镜像
   update            升级运行环境/镜像/Node 底座：拉新预构建并重建容器；
@@ -100,6 +111,8 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   --volumes             down 时删除数据/模型/系统槽位卷（危险，不可恢复）
   -f, --follow          logs 跟踪输出
   --tail <n>            logs 尾部行数（默认 200）
+  --no-restart          env set/unset 后只写 compose.env，不重建容器
+  --force-recreate      env set/unset 后 docker compose up -d --force-recreate
 
 环境变量:
   OPPTRIX_DEPLOY_DIR    Compose / 部署目录（默认：当前 monorepo 或 ~/.opptrix/instances/default）
@@ -120,8 +133,167 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   opptrix up --build
   opptrix up --ref ${meta.preferredAppTag}
   opptrix up --skip-models
+  opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=6
+  opptrix env list
   opptrix logs -f
 `)
+}
+
+function printEnvHelp() {
+  console.log(`Opptrix compose.env 管理
+
+用法:
+  opptrix env set KEY=VALUE [KEY2=VALUE2 …]
+  opptrix env get KEY
+  opptrix env list
+  opptrix env unset KEY [KEY2 …]
+
+说明:
+  写入部署目录下的 compose.env（与 opptrix init 相同位置）。
+  默认在修改后执行 docker compose up -d，使新环境变量注入容器
+  （restart 不会重载 env_file，请勿用手动 restart 代替）。
+
+选项:
+  --no-restart        只更新 compose.env，不启动/重建容器
+  --force-recreate    修改后强制重建容器（路径类变量变更时推荐）
+
+示例:
+  opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=12
+  opptrix env set LLM_API_KEY=sk-xxx LLM_PROVIDER=DeepSeek
+  opptrix env unset LLM_API_KEY
+  opptrix env list
+`)
+}
+
+/**
+ * @param {import('../src/parse.mjs').ParsedArgv} parsed
+ * @param {{ set?: Record<string, string>, unset?: string[] }} patch
+ */
+async function applyComposeEnvChange(parsed, patch) {
+  const root = resolveDeployRoot()
+  fs.mkdirSync(root, { recursive: true })
+  ensureThinDeploy(root)
+  const envFile = resolveComposeEnvFile(root)
+  const known = knownEnvKeysForRoot(root)
+
+  for (const key of [...Object.keys(patch.set ?? {}), ...(patch.unset ?? [])]) {
+    const unk = warnUnknownEnvKey(key, known)
+    if (unk) console.warn(unk)
+    const pathWarn = warnPathEnvKey(key)
+    if (pathWarn) console.warn(pathWarn)
+  }
+
+  const result = writeComposeEnvPatch(envFile, patch)
+  console.log(`[opptrix] compose.env 已更新 → ${result.path}`)
+
+  if (patch.set) {
+    for (const [key, value] of Object.entries(patch.set)) {
+      console.log(`[opptrix]   set ${key}=${maskEnvValue(key, value)}`)
+    }
+  }
+  if (patch.unset?.length) {
+    for (const key of patch.unset) {
+      console.log(`[opptrix]   unset ${key}`)
+    }
+  }
+
+  if (flagTrue(parsed.flags, 'no-restart')) {
+    console.log('[opptrix] 已跳过容器重建；请稍后执行 opptrix up 或 docker compose up -d 使配置生效')
+    return 0
+  }
+
+  const docker = detectDocker()
+  if (!docker.ok) {
+    console.warn(`[opptrix] WARN: ${docker.message}`)
+    console.warn('[opptrix] compose.env 已保存；Docker 就绪后请执行 opptrix up')
+    return 0
+  }
+
+  const { root: deployRoot, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
+  const args = ['up', '-d']
+  if (flagTrue(parsed.flags, 'force-recreate')) args.push('--force-recreate')
+  console.log('[opptrix] 正在重建容器以注入新环境变量…')
+  return runCompose(args, { root: deployRoot, mirror, releaseEnv })
+}
+
+async function cmdEnv(parsed) {
+  const sub = (parsed.args[0] || '').trim()
+  const rest = parsed.args.slice(1)
+
+  if (!sub || sub === 'help' || sub === '-h' || sub === '--help') {
+    printEnvHelp()
+    return 0
+  }
+
+  const root = resolveDeployRoot()
+  ensureThinDeploy(root)
+  const envFile = resolveComposeEnvFile(root)
+
+  if (sub === 'list') {
+    const text = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : ''
+    const map = readComposeEnvMap(text)
+    if (!map.size) {
+      console.log(`[opptrix] compose.env 暂无有效变量 → ${envFile}`)
+      return 0
+    }
+    console.log(`[opptrix] compose.env → ${envFile}`)
+    for (const [key, value] of [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      console.log(`${key}=${maskEnvValue(key, value)}`)
+    }
+    return 0
+  }
+
+  if (sub === 'get') {
+    const key = (rest[0] || '').trim()
+    if (!key) {
+      console.error('[opptrix] 用法: opptrix env get KEY')
+      return 2
+    }
+    const text = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : ''
+    const map = readComposeEnvMap(text)
+    if (!map.has(key)) {
+      console.error(`[opptrix] compose.env 中未找到 ${key}`)
+      return 1
+    }
+    console.log(maskEnvValue(key, map.get(key) ?? ''))
+    return 0
+  }
+
+  if (sub === 'set') {
+    if (!rest.length) {
+      console.error('[opptrix] 用法: opptrix env set KEY=VALUE [KEY2=VALUE2 …]')
+      return 2
+    }
+    const { entries, errors } = parseEnvSetTokens(rest)
+    if (errors.length) {
+      for (const err of errors) console.error(`[opptrix] ${err}`)
+      return 2
+    }
+    if (!Object.keys(entries).length) {
+      console.error('[opptrix] 未解析到任何 KEY=VALUE')
+      return 2
+    }
+    return applyComposeEnvChange(parsed, { set: entries })
+  }
+
+  if (sub === 'unset') {
+    if (!rest.length) {
+      console.error('[opptrix] 用法: opptrix env unset KEY [KEY2 …]')
+      return 2
+    }
+    const keys = rest.map(k => k.trim()).filter(Boolean)
+    for (const key of keys) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        console.error(`[opptrix] 无效键名 "${key}"`)
+        return 2
+      }
+    }
+    return applyComposeEnvChange(parsed, { unset: keys })
+  }
+
+  console.error(`[opptrix] 未知 env 子命令: ${sub}`)
+  printEnvHelp()
+  return 2
 }
 
 /**
@@ -668,6 +840,8 @@ async function main() {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
         return runCompose(['restart'], { root, mirror, releaseEnv })
       }
+      case 'env':
+        return await cmdEnv(parsed)
       case 'down': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
         const args = ['down']
