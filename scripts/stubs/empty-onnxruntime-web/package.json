@@ -1,0 +1,11 @@
+{
+  "name": "onnxruntime-web",
+  "version": "0.0.0-opptrix-stub",
+  "description": "Opptrix stub — Docker/Node uses onnxruntime-node only; browser ORT must not ship.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "license": "UNLICENSED"
+}

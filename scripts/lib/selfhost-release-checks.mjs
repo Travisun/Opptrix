@@ -45,6 +45,9 @@ export function verifyDockerBuildContext(repoRoot) {
   if (!df.includes('rm -rf /app/node_modules/ffmpeg-static')) {
     throw new Error('Dockerfile must strip ffmpeg-static from runtime tree after COPY')
   }
+  if (!df.includes('onnxruntime-web')) {
+    throw new Error('Dockerfile must strip onnxruntime-web (Node uses onnxruntime-node only)')
+  }
   if (!df.includes('PLAYWRIGHT_BROWSERS_PATH=/opt/opptrix/playwright-browsers')) {
     throw new Error('Dockerfile must set PLAYWRIGHT_BROWSERS_PATH for preinstalled Chromium')
   }

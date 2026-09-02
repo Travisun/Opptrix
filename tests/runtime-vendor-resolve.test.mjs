@@ -6,12 +6,17 @@ import path from 'node:path'
 import test from 'node:test'
 import {
   ABI_PINNED_PACKAGE_NAMES,
+  HOT_PACK_FORBIDDEN_PACKAGE_NAMES,
   assertNoAbiPinnedInTree,
   ensureVendorModuleLinks,
   findAbiPinnedInTree,
+  findHotPackForbiddenInTree,
   isAbiPinnedPackageName,
+  isHotPackExcludedPackageName,
+  isHotPackForbiddenPackageName,
   isLinkToVendor,
   resolveVendorNodeModules,
+  scrubHotPackForbiddenFromTree,
 } from '../scripts/lib/runtime-vendor.mjs'
 
 /**
@@ -75,8 +80,39 @@ test('ABI pin list covers core native deps', () => {
   assert.equal(isAbiPinnedPackageName('better-sqlite3'), true)
   assert.equal(isAbiPinnedPackageName('@duckdb/node-api'), true)
   assert.equal(isAbiPinnedPackageName('@img/sharp-linux-x64'), true)
+  assert.equal(isAbiPinnedPackageName('@lancedb/lancedb-linux-x64-gnu'), true)
   assert.equal(isAbiPinnedPackageName('lodash'), false)
   assert.ok(ABI_PINNED_PACKAGE_NAMES.includes('node-llama-cpp'))
+  assert.ok(ABI_PINNED_PACKAGE_NAMES.includes('onnxruntime-node'))
+})
+
+test('hot-pack forbidden covers browser ORT and ffmpeg-static', () => {
+  assert.equal(isHotPackForbiddenPackageName('onnxruntime-web'), true)
+  assert.equal(isHotPackForbiddenPackageName('ffmpeg-static'), true)
+  assert.equal(isHotPackForbiddenPackageName('onnxruntime-node'), false)
+  assert.equal(isHotPackExcludedPackageName('onnxruntime-web'), true)
+  assert.equal(isHotPackExcludedPackageName('onnxruntime-node'), true)
+  assert.ok(HOT_PACK_FORBIDDEN_PACKAGE_NAMES.includes('onnxruntime-web'))
+})
+
+test('scrubHotPackForbiddenFromTree removes onnxruntime-web including nested', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opx-forbid-'))
+  writeEsmPackage(path.join(root, 'node_modules'), 'onnxruntime-web', 'web-root')
+  writeEsmPackage(
+    path.join(root, 'packages', 'doc-library', 'node_modules'),
+    'onnxruntime-web',
+    'web-nested',
+  )
+  writeEsmPackage(path.join(root, 'node_modules'), 'left-pad-fake', 'keep')
+  const scrubbed = scrubHotPackForbiddenFromTree(root)
+  assert.ok(scrubbed.includes('onnxruntime-web'))
+  assert.equal(fs.existsSync(path.join(root, 'node_modules', 'onnxruntime-web')), false)
+  assert.equal(
+    fs.existsSync(path.join(root, 'packages', 'doc-library', 'node_modules', 'onnxruntime-web')),
+    false,
+  )
+  assert.ok(fs.existsSync(path.join(root, 'node_modules', 'left-pad-fake')))
+  assert.deepEqual(findHotPackForbiddenInTree(root), [])
 })
 
 test('resolveVendorNodeModules honors env override', () => {
@@ -261,7 +297,12 @@ test('assertNoAbiPinnedInTree fails when pack contains ABI deps', () => {
 
   writeEsmPackage(path.join(root, 'node_modules'), 'duckdb', 'bad')
   assert.ok(findAbiPinnedInTree(root).includes('duckdb'))
-  assert.throws(() => assertNoAbiPinnedInTree(root), /ABI-pinned/)
+  assert.throws(() => assertNoAbiPinnedInTree(root), /Hot-update packs must not ship|ABI-pinned/)
+
+  const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'opx-pack-forbid-'))
+  writeEsmPackage(path.join(root2, 'node_modules'), 'onnxruntime-web', 'bad-web')
+  assert.ok(findHotPackForbiddenInTree(root2).includes('onnxruntime-web'))
+  assert.throws(() => assertNoAbiPinnedInTree(root2), /hot-pack-forbidden|onnxruntime-web/)
 })
 
 test('NODE_PATH alone does not satisfy ESM (documents why we fuse into slot)', () => {

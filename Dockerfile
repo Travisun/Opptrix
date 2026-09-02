@@ -201,7 +201,10 @@ RUN groupadd --gid 10001 opptrix-agent \
 COPY --from=build /app /app
 
 # Self-host: system ffmpeg via apt (see FFMPEG_PATH). Drop npm static binary (~40MB+).
-RUN rm -rf /app/node_modules/ffmpeg-static
+RUN rm -rf /app/node_modules/ffmpeg-static /app/node_modules/onnxruntime-web \
+  && find /app -type d -path '*/node_modules/onnxruntime-web' -prune -exec rm -rf {} + 2>/dev/null || true \
+  && find /app -type d -path '*/node_modules/ffmpeg-static' -prune -exec rm -rf {} + 2>/dev/null || true \
+  && node /app/scripts/scrub-install-deps.mjs
 
 # ABI / heavy natives → vendor layer; /app seed stays slim for hot-update shape.
 # Lifecycle (seed/extract/activate/rollback) copies ABI from vendor into the
@@ -231,6 +234,7 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh \
   && chmod +x /app/scripts/docker-select-mirrors.mjs \
   && chmod +x /app/scripts/runtime-update-cli.mjs \
   && chmod +x /app/scripts/materialize-vendor.mjs \
+  && chmod +x /app/scripts/scrub-install-deps.mjs \
   && chmod +x /app/scripts/bootstrap-cdn-runtime.mjs
 
 ENV NODE_ENV=production \

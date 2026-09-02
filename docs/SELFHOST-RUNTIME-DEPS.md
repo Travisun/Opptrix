@@ -18,6 +18,7 @@
 |----------|--------|----------------------------------------|
 | **ABI 钉死**（原生） | CI/pack **禁止**携带；若误带 | **强制**从 vendor **拷贝**进 slot（替换实目录 / 旧 symlink；**不用 symlink**） |
 | **嵌套** `packages/*/node_modules/<ABI>` | 旧包残留 | **scrub 删除**，解析上溯到 slot 根 vendor **拷贝** |
+| **热更禁带**（`onnxruntime-web`、`ffmpeg-static`） | CI/pack **禁止**；**不进 vendor** | **全树删除**（Node 用 `onnxruntime-node`；ffmpeg 用 apt） |
 | **普通/新 JS 依赖** | 可打进 slot `node_modules` | **不动**（热更自带优先） |
 
 ### 接线点（不改业务代码）
@@ -43,7 +44,8 @@
 Seed：`copySeedTree` 在 `cpSync` 后对外部 workspace 符号链接做 `materializeExternalSymlinks`，再 fuse slot。  
 热更解压：`extractUpdateArchive` 在 fuse 前同样 `materializeExternalSymlinks`（防绝对链指回 `/app`）。  
 启动：`bootstrap-cdn-runtime.mjs`（可关 `OPPTRIX_BOOT_CDN_CHECK=0`）→ extract/seed → `system-boot ensure/activate` → vendor 融合。  
-发版 pack：CI 先 materialize 再 `--assert-no-abi`。
+发版 pack：CI 先 materialize 再 `--assert-no-abi`（含禁带包）。  
+本地/镜像：`postinstall` → `scripts/scrub-install-deps.mjs` 删除 `onnxruntime-web` / `ffmpeg-static`，并去掉嵌套旧版 `@huggingface/transformers` + `onnxruntime-node`（LanceDB optional 不会被 npm overrides 可靠替换）。
 
 ---
 
@@ -108,8 +110,11 @@ Seed：`copySeedTree` 在 `cpSync` 后对外部 workspace 符号链接做 `mater
 | **better-sqlite3** | 用户库 / 会话 / 配置 SQLite | `user-store`、`market-data`、`doc-library` | **启动失败** |
 | **duckdb** | 行情衍生 / 分析 | `market-data` | 相关查询失败 |
 | **sharp** | 图像预处理 | `doc-library`、transformers 链 | RAG / OCR 管线失败 |
-| **onnxruntime-node** | 向量 / 推理 | `doc-library`（经 @lancedb / embedding） | 语义检索降级 FTS |
-| **@lancedb/lancedb** | 向量索引 | `doc-library` | Hybrid RAG 降级 |
+| **onnxruntime-node** | 向量 / OCR 推理（**Linux Docker 需要**） | `doc-library` embedding（`@huggingface/transformers`）+ RapidOCR（`@gutenye/ocr-node` / `ocr-l2`） | 语义检索降级 FTS；扫描件 OCR 不可用 |
+| **onnxruntime-web** | ❌ **不需要**（浏览器后端） | transformers.js 声明依赖；Node 路径不用 | 用 stub override + pack/materialize **scrub**；**不进 vendor** |
+| **@lancedb/lancedb**（含 `@lancedb/lancedb-*` 平台包） | 向量索引；peer **`apache-arrow@18.x`（≤18.1.0）** | `doc-library` | Hybrid RAG 降级 |
+
+> **Arrow 对齐**：根依赖钉 `apache-arrow@18.1.0`（与 LanceDB peer 一致）。勿升到 19+，否则 npm 会在 `packages/doc-library/node_modules` 再嵌一套 arrow/Lance。market-data dump 解析仅用 `tableFromIPC`，18.x 足够。
 | **node-llama-cpp** | 本地 GGUF（HY-MT 等） | `local-inference`、server optional | 离线翻译不可用，在线 LLM 仍可用 |
 | **@gutenye/ocr-node** | RapidOCR | `doc-library` optional | OCR 降级 |
 

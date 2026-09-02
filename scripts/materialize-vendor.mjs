@@ -15,10 +15,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   ABI_PINNED_PACKAGE_NAMES,
+  HOT_PACK_FORBIDDEN_PACKAGE_NAMES,
   findAbiPinnedInTree,
+  findHotPackForbiddenInTree,
   isAbiPinnedPackageName,
   listInstalledPackageNames,
   packageInstallPath,
+  scrubHotPackForbiddenFromTree,
   scrubNestedAbiPinnedCopies,
 } from './lib/runtime-vendor.mjs'
 
@@ -89,16 +92,39 @@ function main() {
   }
 
   const scrubbed = scrubNestedAbiPinnedCopies(opts.app, appNm, { dryRun: opts.dryRun })
+  const forbiddenScrubbed = scrubHotPackForbiddenFromTree(opts.app, { dryRun: opts.dryRun })
+  /** @type {string[]} */
+  const vendorForbidden = []
+  for (const name of HOT_PACK_FORBIDDEN_PACKAGE_NAMES) {
+    const dest = packageInstallPath(opts.vendor, name)
+    if (!fs.existsSync(dest)) continue
+    if (!opts.dryRun) fs.rmSync(dest, { recursive: true, force: true })
+    vendorForbidden.push(name)
+  }
   const remaining = findAbiPinnedInTree(opts.app)
+  const remainingForbidden = findHotPackForbiddenInTree(opts.app)
 
   console.log(
     `[materialize-vendor] app=${opts.app} vendor=${opts.vendor}`
-      + ` moved=${moved.length} scrubbed=${scrubbed.length} remaining=${remaining.length}`
+      + ` moved=${moved.length} scrubbed=${scrubbed.length}`
+      + ` forbidden=${forbiddenScrubbed.length + vendorForbidden.length}`
+      + ` remaining=${remaining.length}`
       + (opts.dryRun ? ' (dry-run)' : ''),
   )
   if (moved.length) console.log(`[materialize-vendor] moved: ${moved.join(', ')}`)
-  if (remaining.length) {
-    console.warn(`[materialize-vendor] WARNING still present: ${remaining.join(', ')}`)
+  if (forbiddenScrubbed.length || vendorForbidden.length) {
+    console.log(
+      `[materialize-vendor] scrubbed forbidden: ${
+        [...new Set([...forbiddenScrubbed, ...vendorForbidden])].join(', ')
+      }`,
+    )
+  }
+  if (remaining.length || remainingForbidden.length) {
+    console.warn(
+      `[materialize-vendor] WARNING still present:`
+        + (remaining.length ? ` ABI=${remaining.join(',')}` : '')
+        + (remainingForbidden.length ? ` forbidden=${remainingForbidden.join(',')}` : ''),
+    )
     process.exitCode = 2
   }
 }

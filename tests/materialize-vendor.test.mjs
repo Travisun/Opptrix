@@ -25,6 +25,7 @@ test('materialize-vendor moves ABI packages out of app tree', () => {
   const vendor = path.join(root, 'vendor', 'node_modules')
   writePkg(path.join(app, 'node_modules'), 'better-sqlite3', 'abi')
   writePkg(path.join(app, 'node_modules'), 'left-pad-fake', 'js')
+  writePkg(path.join(app, 'node_modules'), 'onnxruntime-web', 'web')
   writePkg(path.join(app, 'packages', 'x', 'node_modules'), 'duckdb', 'nested')
 
   const r = spawnSync(process.execPath, [SCRIPT, '--app', app, '--vendor', vendor], {
@@ -35,4 +36,6 @@ test('materialize-vendor moves ABI packages out of app tree', () => {
   assert.equal(fs.existsSync(path.join(app, 'node_modules', 'better-sqlite3')), false)
   assert.ok(fs.existsSync(path.join(app, 'node_modules', 'left-pad-fake')))
   assert.equal(fs.existsSync(path.join(app, 'packages', 'x', 'node_modules', 'duckdb')), false)
+  assert.equal(fs.existsSync(path.join(app, 'node_modules', 'onnxruntime-web')), false)
+  assert.equal(fs.existsSync(path.join(vendor, 'onnxruntime-web')), false)
 })

@@ -557,7 +557,7 @@ export class LanceVectorStore implements VectorStore {
         opts?.cleanupOlderThanMs,
         opts?.env ?? process.env,
       )
-      // cleanupOlderThan: 默认立刻可回收已提交旧版本（官方 0.33 API）
+      // cleanupOlderThan: 默认立刻可回收已提交旧版本（LanceDB optimize API）
       const cleanupOlderThan = new Date(Date.now() - olderMs)
       await table.optimize({ cleanupOlderThan, deleteUnverified: false })
       this.writesSinceOptimize = 0

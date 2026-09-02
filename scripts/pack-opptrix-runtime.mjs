@@ -29,7 +29,7 @@ import {
   runtimeArchBinFilename,
   runtimeArchBinSha256Filename,
 } from './lib/hot-cdn.mjs'
-import { abiPinnedTarExcludeArgs, isAbiPinnedPackageName } from './lib/runtime-vendor.mjs'
+import { abiPinnedTarExcludeArgs, isHotPackExcludedPackageName, scrubHotPackForbiddenFromTree } from './lib/runtime-vendor.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '..')
@@ -355,11 +355,11 @@ function assertArchiveHasNoAbiPinned(archivePath) {
     const m = /(?:^|\/)node_modules\/(@[^/]+\/[^/]+|[^/]+)/.exec(norm)
     if (!m) continue
     const name = m[1]
-    if (name && isAbiPinnedPackageName(name)) hits.push(norm)
+    if (name && isHotPackExcludedPackageName(name)) hits.push(norm)
   }
   if (hits.length) {
     throw new Error(
-      `archive still contains ABI-pinned paths (first ${Math.min(8, hits.length)}): `
+      `archive still contains ABI/forbidden paths (first ${Math.min(8, hits.length)}): `
         + hits.slice(0, 8).join(', '),
     )
   }
@@ -433,6 +433,27 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true })
   writeRuntimeMarker(root, version, opts.platformKey)
   console.log(`[pack-opptrix-runtime] wrote ${path.join(root, 'opptrix-runtime.json')}`)
+
+  // Drop browser-only / OS-replaced packages and nested ORT/transformers duplicates.
+  const scrub = spawnSync(process.execPath, [path.join(root, 'scripts/scrub-install-deps.mjs')], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env },
+  })
+  if (scrub.status !== 0) {
+    console.warn(`[pack-opptrix-runtime] scrub-install-deps: ${scrub.stderr || scrub.stdout}`)
+  } else if (scrub.stdout?.trim()) {
+    console.log(scrub.stdout.trim())
+  }
+  // Pack must not ship even the tiny onnxruntime-web stub.
+  const forbiddenScrubbed = scrubHotPackForbiddenFromTree(root)
+  if (forbiddenScrubbed.length) {
+    console.log(
+      `[pack-opptrix-runtime] scrubbed forbidden (incl. stub): ${
+        [...new Set(forbiddenScrubbed)].join(', ')
+      }`,
+    )
+  }
 
   if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath)
   runTar(root, archivePath, outDir)
