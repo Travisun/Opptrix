@@ -6,6 +6,8 @@
  * Requires GITEE_TOKEN (private token with projects write).
  * If token is absent, prints mirror steps and exits 0 (no-op) unless --require-token.
  *
+ * Creates the Gitee Release when the git tag exists but no release row yet.
+ *
  * Usage:
  *   GITEE_TOKEN=… node scripts/upload-runtime-gitee.mjs \
  *     --version 1.4.0 --dir dist-runtime
@@ -13,6 +15,7 @@
  *
  * Gitee OpenAPI:
  *   GET  /api/v5/repos/{owner}/{repo}/releases/tags/{tag}
+ *   POST /api/v5/repos/{owner}/{repo}/releases
  *   POST /api/v5/repos/{owner}/{repo}/releases/{id}/attach_files  (multipart)
  */
 import fs from 'node:fs'
@@ -122,26 +125,103 @@ function printManualMirror(tag, files) {
 }
 
 /**
+ * @param {unknown} json
+ * @returns {number | null}
+ */
+export function parseGiteeReleaseId(json) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null
+  const id = /** @type {{ id?: unknown }} */ (json).id
+  return typeof id === 'number' && Number.isFinite(id) ? id : null
+}
+
+/**
+ * @param {string} repo
+ * @returns {{ owner: string, name: string }}
+ */
+function splitRepo(repo) {
+  const [owner, name] = repo.split('/').filter(Boolean)
+  if (!owner || !name) throw new Error(`invalid repo: ${repo}`)
+  return { owner, name }
+}
+
+/**
  * @param {string} repo
  * @param {string} tag
  * @param {string} token
  */
-async function fetchReleaseId(repo, tag, token) {
-  const [owner, name] = repo.split('/').filter(Boolean)
-  if (!owner || !name) throw new Error(`invalid repo: ${repo}`)
+async function createRelease(repo, tag, token) {
+  const { owner, name } = splitRepo(repo)
+  const url = `https://gitee.com/api/v5/repos/${owner}/${name}/releases`
+  const body = new URLSearchParams()
+  body.set('access_token', token)
+  body.set('tag_name', tag)
+  body.set('name', tag)
+  body.set('body', `Opptrix runtime hot-update assets for ${tag}`)
+  body.set('prerelease', 'false')
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'Opptrix-runtime-upload',
+    },
+    body,
+  })
+  const text = await res.text().catch(() => '')
+  let json = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch {
+    json = null
+  }
+  const id = parseGiteeReleaseId(json)
+  if (!res.ok || id == null) {
+    throw new Error(
+      `Gitee release create failed (${res.status}): ${(text || '').slice(0, 300)}`,
+    )
+  }
+  console.log(`[upload-runtime-gitee] created Gitee release id=${id} for ${tag}`)
+  return { owner, name, id }
+}
+
+/**
+ * Lookup release by tag; create when missing (404 / empty id).
+ * @param {string} repo
+ * @param {string} tag
+ * @param {string} token
+ */
+async function ensureRelease(repo, tag, token) {
+  const { owner, name } = splitRepo(repo)
   const url =
     `https://gitee.com/api/v5/repos/${owner}/${name}/releases/tags/${encodeURIComponent(tag)}`
     + `?access_token=${encodeURIComponent(token)}`
   const res = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'Opptrix-runtime-upload' },
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Gitee release lookup failed (${res.status}): ${body.slice(0, 200)}`)
+  const text = await res.text().catch(() => '')
+  let json = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch {
+    json = null
   }
-  const json = await res.json()
-  const id = typeof json.id === 'number' ? json.id : null
-  if (id == null) throw new Error('Gitee release payload missing id')
+
+  if (res.status === 404) {
+    return createRelease(repo, tag, token)
+  }
+
+  if (!res.ok) {
+    throw new Error(`Gitee release lookup failed (${res.status}): ${text.slice(0, 200)}`)
+  }
+
+  const id = parseGiteeReleaseId(json)
+  if (id == null) {
+    // Tag may exist without a Release row; some Gitee responses are empty/null.
+    console.warn(
+      `[upload-runtime-gitee] release lookup returned no id; creating release for ${tag}`,
+    )
+    return createRelease(repo, tag, token)
+  }
   return { owner, name, id }
 }
 
@@ -215,7 +295,7 @@ async function main() {
     process.exit(0)
   }
 
-  const release = await fetchReleaseId(opts.repo, tag, token)
+  const release = await ensureRelease(opts.repo, tag, token)
   for (const f of files) {
     console.log(`[upload-runtime-gitee] uploading ${path.basename(f)} …`)
     await uploadAttach(release, f, token)
@@ -223,7 +303,12 @@ async function main() {
   console.log('[upload-runtime-gitee] done')
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.message : String(err))
-  process.exit(1)
-})
+const isDirectRun = process.argv[1]
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : String(err))
+    process.exit(1)
+  })
+}

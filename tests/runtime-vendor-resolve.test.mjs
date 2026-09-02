@@ -7,14 +7,18 @@ import test from 'node:test'
 import {
   ABI_PINNED_PACKAGE_NAMES,
   HOT_PACK_FORBIDDEN_PACKAGE_NAMES,
+  VENDOR_HEAVY_PACKAGE_NAMES,
   assertNoAbiPinnedInTree,
   ensureVendorModuleLinks,
   findAbiPinnedInTree,
   findHotPackForbiddenInTree,
+  findVendorHeavyInTree,
   isAbiPinnedPackageName,
   isHotPackExcludedPackageName,
   isHotPackForbiddenPackageName,
   isLinkToVendor,
+  isVendorHeavyPackageName,
+  isVendorPinnedPackageName,
   resolveVendorNodeModules,
   scrubHotPackForbiddenFromTree,
 } from '../scripts/lib/runtime-vendor.mjs'
@@ -81,9 +85,22 @@ test('ABI pin list covers core native deps', () => {
   assert.equal(isAbiPinnedPackageName('@duckdb/node-api'), true)
   assert.equal(isAbiPinnedPackageName('@img/sharp-linux-x64'), true)
   assert.equal(isAbiPinnedPackageName('@lancedb/lancedb-linux-x64-gnu'), true)
+  assert.equal(isAbiPinnedPackageName('@duckdb/node-bindings-linux-x64'), true)
   assert.equal(isAbiPinnedPackageName('lodash'), false)
   assert.ok(ABI_PINNED_PACKAGE_NAMES.includes('node-llama-cpp'))
   assert.ok(ABI_PINNED_PACKAGE_NAMES.includes('onnxruntime-node'))
+})
+
+test('vendor-heavy list covers priority and secondary Docker deps', () => {
+  assert.equal(isVendorHeavyPackageName('echarts'), true)
+  assert.equal(isVendorHeavyPackageName('@fluentui/react-icons'), true)
+  assert.equal(isVendorHeavyPackageName('@huggingface/transformers'), true)
+  assert.equal(isVendorHeavyPackageName('lodash'), false)
+  assert.equal(isVendorPinnedPackageName('apache-arrow'), true)
+  assert.equal(isVendorPinnedPackageName('better-sqlite3'), true)
+  assert.equal(isHotPackExcludedPackageName('mermaid'), true)
+  assert.ok(VENDOR_HEAVY_PACKAGE_NAMES.includes('cytoscape-fcose'))
+  assert.ok(VENDOR_HEAVY_PACKAGE_NAMES.includes('pdfjs-dist'))
 })
 
 test('hot-pack forbidden covers browser ORT and ffmpeg-static', () => {
@@ -303,6 +320,11 @@ test('assertNoAbiPinnedInTree fails when pack contains ABI deps', () => {
   writeEsmPackage(path.join(root2, 'node_modules'), 'onnxruntime-web', 'bad-web')
   assert.ok(findHotPackForbiddenInTree(root2).includes('onnxruntime-web'))
   assert.throws(() => assertNoAbiPinnedInTree(root2), /hot-pack-forbidden|onnxruntime-web/)
+
+  const root3 = fs.mkdtempSync(path.join(os.tmpdir(), 'opx-pack-heavy-'))
+  writeEsmPackage(path.join(root3, 'node_modules'), 'echarts', 'chart')
+  assert.ok(findVendorHeavyInTree(root3).includes('echarts'))
+  assert.throws(() => assertNoAbiPinnedInTree(root3), /vendor-heavy|echarts/)
 })
 
 test('NODE_PATH alone does not satisfy ESM (documents why we fuse into slot)', () => {

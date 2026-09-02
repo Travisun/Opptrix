@@ -19,9 +19,13 @@
  * | Package kind | In hot-update slot | Boot / activate behavior |
  * |--------------|--------------------|---------------------------|
  * | **ABI-pinned** (native) | Must not ship (CI); if present, **replaced** | Always **copy** from vendor (force; migrates old symlinks) |
- * | **Nested ABI** under nested node_modules trees | Stray copies from old packs | **Scrubbed** so root vendor **copy** wins |
+ * | **Vendor-heavy** (large JS / assets) | Must not ship (CI); if present, **replaced** | Same fuse as ABI — list in `VENDOR_HEAVY_PACKAGE_NAMES` |
+ * | **Nested vendor-pinned** under nested node_modules | Stray copies from old packs | **Scrubbed** so root vendor **copy** wins |
  * | **Hot-pack forbidden** (e.g. onnxruntime-web) | Must not ship; never vendor | **Deleted** from every node_modules |
- * | **Non-ABI / new deps** | May ship in slot node_modules | Left untouched (slot wins) |
+ * | **Other JS deps** | May ship in slot node_modules | Left untouched (slot wins) |
+ *
+ * Inventory + upgrade checklist: `docs/SELFHOST-RUNTIME-DEPS.md` §0 / §vendor-inventory.
+ * Single source of truth for names: this file (`ABI_PINNED_*` + `VENDOR_HEAVY_*`).
  */
 
 import fs from 'node:fs'
@@ -57,6 +61,39 @@ export const ABI_PINNED_NAME_PREFIXES: readonly string[] = Object.freeze([
   '@napi-rs/canvas-',
   '@node-llama-cpp/',
   '@lancedb/lancedb-',
+  '@duckdb/node-bindings-',
+])
+
+/**
+ * Large pure-JS / asset packages shipped only via Docker vendor (not hot packs).
+ * Keep in sync with `docs/SELFHOST-RUNTIME-DEPS.md` §vendor-inventory.
+ * Bumping these versions → rebuild base image + raise `minBaseImage` / preferredAppTag.
+ */
+export const VENDOR_HEAVY_PACKAGE_NAMES: readonly string[] = Object.freeze([
+  // Priority — ML / OCR assets / PDF / wasm / Lance peer
+  '@huggingface/transformers',
+  '@gutenye/ocr-models',
+  'pdfjs-dist',
+  'jspdf',
+  'pdf-parse',
+  'parquet-wasm',
+  '@techstark/opencv-js',
+  '@hyzyla/pdfium',
+  'apache-arrow',
+  // Secondary — UI icons / diagrams / charts
+  '@fluentui/react-icons',
+  'mermaid',
+  '@mermaid-js/parser',
+  'echarts',
+  'zrender',
+  'cytoscape',
+  'cytoscape-fcose',
+])
+
+/** Exact package names expected in vendor (ABI + heavy). Prefix-only ABI platform pkgs are separate. */
+export const VENDOR_PINNED_PACKAGE_NAMES: readonly string[] = Object.freeze([
+  ...ABI_PINNED_PACKAGE_NAMES,
+  ...VENDOR_HEAVY_PACKAGE_NAMES,
 ])
 
 /**
@@ -95,15 +132,26 @@ export function isAbiPinnedPackageName(name: string): boolean {
   return ABI_PINNED_NAME_PREFIXES.some((p) => n.startsWith(p))
 }
 
+export function isVendorHeavyPackageName(name: string): boolean {
+  const n = String(name ?? '').trim()
+  if (!n) return false
+  return VENDOR_HEAVY_PACKAGE_NAMES.includes(n)
+}
+
+/** ABI natives + heavy JS — materialize to vendor, fuse into slots, exclude from hot packs. */
+export function isVendorPinnedPackageName(name: string): boolean {
+  return isAbiPinnedPackageName(name) || isVendorHeavyPackageName(name)
+}
+
 export function isHotPackForbiddenPackageName(name: string): boolean {
   const n = String(name ?? '').trim()
   if (!n) return false
   return HOT_PACK_FORBIDDEN_PACKAGE_NAMES.includes(n)
 }
 
-/** ABI vendor packages + forbidden bloat — must not appear in hot-update archives. */
+/** Vendor-pinned + forbidden bloat — must not appear in hot-update archives. */
 export function isHotPackExcludedPackageName(name: string): boolean {
-  return isAbiPinnedPackageName(name) || isHotPackForbiddenPackageName(name)
+  return isVendorPinnedPackageName(name) || isHotPackForbiddenPackageName(name)
 }
 
 export function resolveVendorNodeModules(
@@ -177,7 +225,7 @@ export function isLinkToVendor(slotPkgPath: string, vendorPath: string): boolean
 }
 
 /**
- * Remove ABI-pinned packages from nested node_modules (not the slot root),
+ * Remove vendor-pinned packages from nested node_modules (not the slot root),
  * so resolution walks up to the root vendor **copy**.
  */
 export function scrubNestedAbiPinnedCopies(
@@ -207,14 +255,14 @@ export function scrubNestedAbiPinnedCopies(
           continue
         }
         for (const name of listInstalledPackageNames(full)) {
-          if (!isAbiPinnedPackageName(name)) continue
+          if (!isVendorPinnedPackageName(name)) continue
           const pkgPath = packageInstallPath(full, name)
           if (!pathExists(pkgPath)) continue
           if (!opts.dryRun) removePath(pkgPath)
           scrubbed.push(name)
         }
         for (const name of listInstalledPackageNames(full)) {
-          if (isAbiPinnedPackageName(name)) continue
+          if (isVendorPinnedPackageName(name)) continue
           const pkgPath = packageInstallPath(full, name)
           try {
             if (fs.statSync(pkgPath).isDirectory()) walk(pkgPath, depth + 1)
@@ -282,7 +330,8 @@ export function scrubHotPackForbiddenFromTree(
 }
 
 /**
- * Fuse vendor ABI packages into the slot without touching non-ABI hot-update deps.
+ * Fuse vendor-pinned packages (ABI + heavy JS) into the slot without touching
+ * other hot-update deps.
  *
  * Always replaces with a fresh recursive copy (force semantics). Legacy
  * vendor symlinks are removed and copied — never treated as "already done".
@@ -309,13 +358,13 @@ export function ensureVendorModuleLinks(
       replaced,
       alreadyLinked,
       scrubbed: forbiddenScrubbed,
-      missingInVendor: [...ABI_PINNED_PACKAGE_NAMES],
+      missingInVendor: [...VENDOR_PINNED_PACKAGE_NAMES],
       vendorRoot: vendorNm,
     }
   }
 
   const vendorPackages = listInstalledPackageNames(vendorNm).filter((n) =>
-    isAbiPinnedPackageName(n),
+    isVendorPinnedPackageName(n),
   )
 
   if (!opts.dryRun) {
@@ -341,7 +390,7 @@ export function ensureVendorModuleLinks(
     else linked.push(name)
   }
 
-  for (const name of ABI_PINNED_PACKAGE_NAMES) {
+  for (const name of VENDOR_PINNED_PACKAGE_NAMES) {
     if (!fs.existsSync(packageInstallPath(vendorNm, name))) {
       if (!missingInVendor.includes(name)) missingInVendor.push(name)
     }
@@ -378,6 +427,16 @@ export function fuseVendorAbiIntoSlot(
  */
 export function findAbiPinnedInTree(root: string): string[] {
   return findNamedPackagesInTree(root, isAbiPinnedPackageName)
+}
+
+/** Collect vendor-heavy package names present under any node_modules. */
+export function findVendorHeavyInTree(root: string): string[] {
+  return findNamedPackagesInTree(root, isVendorHeavyPackageName)
+}
+
+/** Collect all vendor-pinned (ABI + heavy) package names under any node_modules. */
+export function findVendorPinnedInTree(root: string): string[] {
+  return findNamedPackagesInTree(root, isVendorPinnedPackageName)
 }
 
 /** Collect hot-pack-forbidden package names present under any node_modules. */
@@ -425,16 +484,23 @@ function findNamedPackagesInTree(
   return [...found].sort()
 }
 
-/** @throws when ABI-pinned or hot-pack-forbidden packages are present */
+/** @throws when vendor-pinned or hot-pack-forbidden packages are present */
 export function assertNoAbiPinnedInTree(root: string): true {
   const abi = findAbiPinnedInTree(root)
+  const heavy = findVendorHeavyInTree(root)
   const forbidden = findHotPackForbiddenInTree(root)
-  if (abi.length || forbidden.length) {
+  if (abi.length || heavy.length || forbidden.length) {
     const parts: string[] = []
     if (abi.length) {
       parts.push(
         `ABI-pinned (found: ${abi.join(', ')}) — provide via Docker vendor `
           + '($OPPTRIX_VENDOR_NODE_MODULES) and raise minBaseImage',
+      )
+    }
+    if (heavy.length) {
+      parts.push(
+        `vendor-heavy (found: ${heavy.join(', ')}) — provide via Docker vendor `
+          + '(see VENDOR_HEAVY_PACKAGE_NAMES / docs/SELFHOST-RUNTIME-DEPS.md) and raise minBaseImage',
       )
     }
     if (forbidden.length) {
@@ -449,11 +515,15 @@ export function assertNoAbiPinnedInTree(root: string): true {
 }
 
 /**
- * Tar --exclude args for ABI-pinned + forbidden package dirs (best-effort; CI also asserts).
+ * Tar --exclude args for vendor-pinned + forbidden package dirs (best-effort; CI also asserts).
  */
 export function abiPinnedTarExcludeArgs(): string[] {
   const args: string[] = []
-  for (const name of [...ABI_PINNED_PACKAGE_NAMES, ...HOT_PACK_FORBIDDEN_PACKAGE_NAMES]) {
+  for (const name of [
+    ...ABI_PINNED_PACKAGE_NAMES,
+    ...VENDOR_HEAVY_PACKAGE_NAMES,
+    ...HOT_PACK_FORBIDDEN_PACKAGE_NAMES,
+  ]) {
     args.push(`--exclude=**/node_modules/${name}`)
     args.push(`--exclude=node_modules/${name}`)
   }
@@ -461,5 +531,6 @@ export function abiPinnedTarExcludeArgs(): string[] {
   args.push('--exclude=**/node_modules/@napi-rs/canvas-*')
   args.push('--exclude=**/node_modules/@node-llama-cpp')
   args.push('--exclude=**/node_modules/@lancedb/lancedb-*')
+  args.push('--exclude=**/node_modules/@duckdb/node-bindings-*')
   return args
 }

@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /**
- * Move ABI-pinned packages from an app tree's node_modules into the Docker
- * vendor directory, then remove them from the app tree (incl. nested copies).
+ * Move vendor-pinned packages (ABI natives + heavy JS) from an app tree's
+ * node_modules into the Docker vendor directory, then remove them from the app
+ * tree (incl. nested copies).
  *
  * Used at image build time so /app (bundled seed / hot-update shape) stays slim
- * while `/opt/opptrix/vendor/node_modules` holds natives.
+ * while `/opt/opptrix/vendor/node_modules` holds natives and heavy assets.
+ *
+ * Inventory: `VENDOR_*` in `@opptrix/system-update` vendor-fuse + docs/SELFHOST-RUNTIME-DEPS.md
  *
  * Usage:
  *   node scripts/materialize-vendor.mjs --app /app --vendor /opt/opptrix/vendor/node_modules
@@ -14,11 +17,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  ABI_PINNED_PACKAGE_NAMES,
   HOT_PACK_FORBIDDEN_PACKAGE_NAMES,
-  findAbiPinnedInTree,
+  VENDOR_PINNED_PACKAGE_NAMES,
   findHotPackForbiddenInTree,
-  isAbiPinnedPackageName,
+  findVendorPinnedInTree,
+  isVendorPinnedPackageName,
   listInstalledPackageNames,
   packageInstallPath,
   scrubHotPackForbiddenFromTree,
@@ -81,10 +84,9 @@ function main() {
 
   /** @type {string[]} */
   const moved = []
-  const topNames = listInstalledPackageNames(appNm).filter((n) => isAbiPinnedPackageName(n))
-  // Also pick prefix matches that listInstalled already returns (@img/sharp-*)
-  for (const name of new Set([...ABI_PINNED_PACKAGE_NAMES, ...topNames])) {
-    if (!isAbiPinnedPackageName(name)) continue
+  const topNames = listInstalledPackageNames(appNm).filter((n) => isVendorPinnedPackageName(n))
+  for (const name of new Set([...VENDOR_PINNED_PACKAGE_NAMES, ...topNames])) {
+    if (!isVendorPinnedPackageName(name)) continue
     const src = packageInstallPath(appNm, name)
     const dest = packageInstallPath(opts.vendor, name)
     if (!fs.existsSync(src)) continue
@@ -101,7 +103,7 @@ function main() {
     if (!opts.dryRun) fs.rmSync(dest, { recursive: true, force: true })
     vendorForbidden.push(name)
   }
-  const remaining = findAbiPinnedInTree(opts.app)
+  const remaining = findVendorPinnedInTree(opts.app)
   const remainingForbidden = findHotPackForbiddenInTree(opts.app)
 
   console.log(
@@ -122,7 +124,7 @@ function main() {
   if (remaining.length || remainingForbidden.length) {
     console.warn(
       `[materialize-vendor] WARNING still present:`
-        + (remaining.length ? ` ABI=${remaining.join(',')}` : '')
+        + (remaining.length ? ` vendor-pinned=${remaining.join(',')}` : '')
         + (remainingForbidden.length ? ` forbidden=${remainingForbidden.join(',')}` : ''),
     )
     process.exitCode = 2

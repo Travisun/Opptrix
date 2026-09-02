@@ -4,9 +4,9 @@
 #
 # Native modules (better-sqlite3, duckdb, sharp, onnxruntime-node, @lancedb/lancedb,
 # node-llama-cpp) are compiled in the build stage, then moved to
-# /opt/opptrix/vendor/node_modules (ABI vendor). /app seed is slim; seed/extract/
-# activate/rollback recursively copy ABI from vendor into $SLOT/node_modules
-# (not symlinks). Hot-update packs must not ship ABI packages.
+# /opt/opptrix/vendor/node_modules (ABI + vendor-heavy JS). /app seed is slim; seed/extract/
+# activate/rollback recursively copy vendor-pinned pkgs into $SLOT/node_modules
+# (not symlinks). Hot-update packs must not ship ABI / VENDOR_HEAVY packages.
 #
 # Runtime toolchain (pin defaults: scripts/lib/ci-pins.env):
 #   - Default PATH Node: official node:${NODE_VERSION}-bookworm-slim
@@ -206,11 +206,11 @@ RUN rm -rf /app/node_modules/ffmpeg-static /app/node_modules/onnxruntime-web \
   && find /app -type d -path '*/node_modules/ffmpeg-static' -prune -exec rm -rf {} + 2>/dev/null || true \
   && node /app/scripts/scrub-install-deps.mjs
 
-# ABI / heavy natives → vendor layer; /app seed stays slim for hot-update shape.
-# Lifecycle (seed/extract/activate/rollback) copies ABI from vendor into the
-# target slot's node_modules (ESM-safe recursive copy; not symlinks).
-# After materialize, fuse ABI copies back into /app so residual /app-based
-# resolution (workspace symlinks) and seed cpSync still see better-sqlite3 etc.
+# Vendor-pinned (ABI + heavy JS) → vendor layer; /app seed stays slim for hot-update.
+# Lifecycle (seed/extract/activate/rollback) copies into the target slot's
+# node_modules (ESM-safe recursive copy; not symlinks).
+# After materialize, fuse copies back into /app so residual /app-based
+# resolution (workspace symlinks) and seed cpSync still see pinned deps.
 RUN mkdir -p /opt/opptrix/vendor/node_modules \
   && node /app/scripts/materialize-vendor.mjs --app /app --vendor /opt/opptrix/vendor/node_modules \
   && test -d /opt/opptrix/vendor/node_modules/better-sqlite3 \

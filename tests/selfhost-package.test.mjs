@@ -26,7 +26,7 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.publishConfig?.access, 'public')
   assert.equal(pkg.version, '0.1.7')
   assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.3')
+  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.4')
   assert.equal(pkg.opptrixSelfhost?.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
@@ -129,7 +129,7 @@ test('readPackageMeta exposes imageRepository', async () => {
   const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
   const meta = readPackageMeta()
   assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.3')
+  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.4')
   assert.equal(meta.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 

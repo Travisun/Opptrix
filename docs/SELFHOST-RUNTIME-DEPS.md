@@ -17,9 +17,41 @@
 | 依赖类型 | 热更包 | 生命周期融合（`fuseVendorAbiIntoSlot` / `ensureVendorModuleLinks`） |
 |----------|--------|----------------------------------------|
 | **ABI 钉死**（原生） | CI/pack **禁止**携带；若误带 | **强制**从 vendor **拷贝**进 slot（替换实目录 / 旧 symlink；**不用 symlink**） |
-| **嵌套** `packages/*/node_modules/<ABI>` | 旧包残留 | **scrub 删除**，解析上溯到 slot 根 vendor **拷贝** |
+| **Vendor-heavy**（大体积 JS） | CI/pack **禁止**；见下表 | 与 ABI **同一 fuse**（`VENDOR_HEAVY_PACKAGE_NAMES`） |
+| **嵌套** `packages/*/node_modules/<pinned>` | 旧包残留 | **scrub 删除**，解析上溯到 slot 根 vendor **拷贝** |
 | **热更禁带**（`onnxruntime-web`、`ffmpeg-static`） | CI/pack **禁止**；**不进 vendor** | **全树删除**（Node 用 `onnxruntime-node`；ffmpeg 用 apt） |
 | **普通/新 JS 依赖** | 可打进 slot `node_modules` | **不动**（热更自带优先） |
+
+### Vendor 清单（唯一源码真相）
+
+| 清单常量 | 文件 | 说明 |
+|----------|------|------|
+| `ABI_PINNED_PACKAGE_NAMES` + `ABI_PINNED_NAME_PREFIXES` | `packages/system-update/src/vendor-fuse.ts` | 原生 / 平台包 |
+| `VENDOR_HEAVY_PACKAGE_NAMES` | 同上 | 大体积纯 JS（优先+次优先） |
+| `VENDOR_PINNED_PACKAGE_NAMES` | 同上 = ABI 精确名 ∪ heavy | materialize / missingInVendor |
+| `HOT_PACK_FORBIDDEN_PACKAGE_NAMES` | 同上 | 禁带且不进 vendor |
+
+**升级这些包时必做**：
+
+1. 改 `package.json` / lock 后跑 `npm ci`  
+2. **重建并发布**自托管 Docker 镜像（`opptrix-selfhost-v*`）  
+3. 热更包打 `runtime-v*` 时抬高 `requires.minBaseImage`（或 `preferredAppTag`）  
+4. 若新增大包进 Docker：先写入 `VENDOR_HEAVY_PACKAGE_NAMES`，再改本表，再发镜像  
+
+#### Vendor-heavy 包（当前）
+
+| 优先级 | 包 | 用途 |
+|--------|-----|------|
+| 优先 | `@huggingface/transformers` | 语义向量（绑 ORT） |
+| 优先 | `@gutenye/ocr-models` | OCR 模型资产 |
+| 优先 | `pdfjs-dist` / `jspdf` / `pdf-parse` | PDF 管线 |
+| 优先 | `parquet-wasm` | Parquet wasm |
+| 优先 | `@techstark/opencv-js` / `@hyzyla/pdfium` | 图像 / PDF 引擎 |
+| 优先 | `apache-arrow` | Lance peer（≤18.1） |
+| 次优先 | `@fluentui/react-icons` | UI 图标集 |
+| 次优先 | `mermaid` / `@mermaid-js/parser` | 图示 |
+| 次优先 | `echarts` / `zrender` | 图表 |
+| 次优先 | `cytoscape` / `cytoscape-fcose` | 关系图 |
 
 ### 接线点（不改业务代码）
 
@@ -136,8 +168,11 @@ Seed：`copySeedTree` 在 `cpSync` 后对外部 workspace 符号链接做 `mater
 | 能力 | 当前 | 抽离方向 | 影响面 |
 |------|------|----------|--------|
 | **Playwright Chromium** | 桌面 `runtime-stage/playwright-browsers` | **`/opt/opptrix/playwright-browsers`**（`playwright install-deps` + `install chromium`） | `@opptrix/agent-browser`、网页预览导出、Agent 浏览器工具 |
-| **node-llama-cpp** | npm optional | **build stage 硬依赖**（`cmake` + `libgomp`） | 离线 GGUF 翻译（HY-MT） |
+| **node-llama-cpp** | 已在 ABI vendor | 保持 build stage 硬依赖 | 离线 GGUF 翻译（HY-MT） |
 | **ffmpeg-static（开发机）** | 已 optional / 可移除 | 开发机 `brew/apt install ffmpeg` 或 `FFMPEG_PATH` | 仅本地非 Docker 开发 |
+
+> 大体积 JS（Fluent icons / mermaid / echarts / transformers / PDF…）已列入 **`VENDOR_HEAVY_PACKAGE_NAMES`**（见 §0），随 Docker vendor 交付，不再作为「候选」。
+
 
 ### 3.5 已移除（Electron 桌面）
 
