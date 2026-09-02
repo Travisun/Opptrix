@@ -13,14 +13,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  assertObjectPresent,
-  createR2Client,
-  explainR2Error,
-  putObjectFile,
-  requireR2Env,
-  verifyR2Credentials,
-} from '../apps/desktop/scripts/lib/r2-client.mjs'
-import {
   HOT_CHECK_UPDATE_KEY,
   HOT_RELEASES_KEY,
   contentTypeForHotObjectKey,
@@ -150,6 +142,15 @@ async function main() {
     process.exit(0)
   }
 
+  const {
+    assertObjectPresent,
+    createR2Client,
+    explainR2Error,
+    putObjectFile,
+    requireR2Env,
+    verifyR2Credentials,
+  } = await import('../apps/desktop/scripts/lib/r2-client.mjs')
+
   const r2Env = requireR2Env()
   const client = createR2Client(r2Env)
 
@@ -218,7 +219,14 @@ async function main() {
   console.log('[r2:hot] sync complete')
 }
 
-main().catch((err) => {
-  console.error('[r2:hot] sync failed:', explainR2Error(err))
+main().catch(async (err) => {
+  let message = err instanceof Error ? err.message : String(err)
+  try {
+    const { explainR2Error } = await import('../apps/desktop/scripts/lib/r2-client.mjs')
+    message = explainR2Error(err)
+  } catch {
+    // r2 helper may be unavailable after npm prune — keep raw message
+  }
+  console.error('[r2:hot] sync failed:', message)
   process.exit(1)
 })
