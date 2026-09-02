@@ -38,6 +38,7 @@ import {
   type ChannelEnv,
   type HotLatestRelease,
 } from './system-update-channel.js'
+import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
 import { downloadToFile } from './system-update-download.js'
 import {
   buildSystemUpdateStatus,
@@ -48,8 +49,8 @@ import {
   userFacingUpdateError,
   type SystemUpdateStatusDto,
 } from './system-update-service.js'
+import { resolveUpdateCheckIntervalMs } from './system-update-check-schedule.js'
 
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 const CHECK_TIMEOUT_MS = 30_000
 const DOWNLOAD_TIMEOUT_MS = 180_000
 
@@ -77,11 +78,13 @@ export async function runUpdateCheck(opts?: {
 
     const env = readChannelEnv()
     const current = state.currentVersion ?? resolveOpptrixAppVersion()
+    const userAgent = buildSystemUpdateUserAgent(current)
     let latest: HotLatestRelease | null
     try {
       latest = await fetchHotLatest(env, {
         timeoutMs: CHECK_TIMEOUT_MS,
         signal: opts?.signal,
+        userAgent,
       })
     } catch (err) {
       patchState({
@@ -132,7 +135,8 @@ async function startSilentDownload(
   })
 
   try {
-    const headers: Record<string, string> = { 'User-Agent': 'Opptrix-system-update' }
+    const userAgent = buildSystemUpdateUserAgent(version)
+    const headers: Record<string, string> = { 'User-Agent': userAgent }
 
     await downloadToFile(latest.binUrl, archivePath, {
       headers,
@@ -295,7 +299,7 @@ export function startSystemUpdateBackground(opts?: {
     }, 2_000).unref?.()
   }
 
-  const ms = opts?.intervalMs ?? CHECK_INTERVAL_MS
+  const ms = opts?.intervalMs ?? resolveUpdateCheckIntervalMs()
   intervalHandle = setInterval(() => {
     void runUpdateCheck().catch(() => {})
   }, ms)

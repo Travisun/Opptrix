@@ -249,7 +249,11 @@ Docker：`scripts/docker-entrypoint.sh` + tini。
 | `OPPTRIX_UPDATE_CHANNEL` | 默认 `selfhost` |
 | `OPPTRIX_UPDATE_CDN_BASE` | CDN 根，默认 `https://update.opptrix.org` |
 | `OPPTRIX_UPDATE_ENABLED` | `1`/`0` 强制开/关 |
+| `OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS` | 后台定期检查间隔（小时），默认 `24` |
+| `OPPTRIX_UPDATE_CHECK_INTERVAL_MS` | 同上，毫秒粒度（优先于 `…_HOURS`） |
 | `OPPTRIX_DESKTOP=1` | 桌面端默认关热更新 |
+
+长运行服务（Docker / 自托管）在进程启动约 2s 后会检查一次远程 `check-update`，之后按上述间隔定时复查；请求 CDN 时 `User-Agent` 为 `Opptrix-system-update/{currentVersion}`，便于统计各版本实例。
 
 API 细节见 `docs/API.md`。
 

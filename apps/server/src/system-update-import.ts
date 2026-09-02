@@ -22,6 +22,7 @@ import {
   parseSemver,
   readChannelEnv,
 } from './system-update-channel.js'
+import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
 import {
   buildSystemUpdateStatus,
   type SystemUpdateStatusDto,
@@ -127,7 +128,7 @@ async function crossCheckCdnSha256WhenOnline(
       method: 'GET',
       headers: {
         Accept: 'text/plain,*/*',
-        'User-Agent': 'Opptrix-system-update',
+        'User-Agent': buildSystemUpdateUserAgent(version),
       },
       signal: ac.signal,
     })

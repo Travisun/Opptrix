@@ -2,6 +2,8 @@
  * CDN hot-update channel for selfhost runtime packages.
  * Default base: https://update.opptrix.org
  */
+import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
+
 export const DEFAULT_UPDATE_CDN_BASE = 'https://update.opptrix.org'
 
 export const SELFHOST_TAG_PREFIX = 'opptrix-selfhost-v'
@@ -153,6 +155,7 @@ async function fetchCheckUpdateJson(
   url: string,
   timeoutMs: number,
   signal?: AbortSignal,
+  userAgent?: string,
 ): Promise<unknown> {
   const ac = new AbortController()
   const onAbort = () => ac.abort()
@@ -166,7 +169,7 @@ async function fetchCheckUpdateJson(
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'Opptrix-system-update',
+        'User-Agent': userAgent ?? buildSystemUpdateUserAgent(),
       },
       signal: ac.signal,
     })
@@ -183,10 +186,10 @@ async function fetchCheckUpdateJson(
 /** Fetch latest hot-update descriptor from CDN check-update endpoint. */
 export async function fetchHotLatest(
   env: ChannelEnv = readChannelEnv(),
-  opts?: { timeoutMs?: number; signal?: AbortSignal },
+  opts?: { timeoutMs?: number; signal?: AbortSignal; userAgent?: string },
 ): Promise<HotLatestRelease | null> {
   const timeoutMs = opts?.timeoutMs ?? 25_000
   const url = hotCheckUpdateUrl(env.cdnBase)
-  const raw = await fetchCheckUpdateJson(url, timeoutMs, opts?.signal)
+  const raw = await fetchCheckUpdateJson(url, timeoutMs, opts?.signal, opts?.userAgent)
   return parseHotLatestPayload(raw, env.cdnBase)
 }
