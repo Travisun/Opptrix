@@ -148,9 +148,13 @@ export function assertCheckUpdateSmokeShape(payload, version, requiredPlatforms)
     }
     const m = /** @type {Record<string, unknown>} */ (mirrors)
     const gh = m.github
-    const ge = m.gitee
-    if (typeof gh !== 'object' || gh === null || typeof ge !== 'object' || ge === null) {
-      throw new Error(`latest.packages.${key}.mirrors.github/gitee missing`)
+    // Gitee mirror removed from client download path; only GitHub release mirrors required.
+    if (typeof gh !== 'object' || gh === null) {
+      throw new Error(`latest.packages.${key}.mirrors.github missing`)
+    }
+    const ghRow = /** @type {Record<string, unknown>} */ (gh)
+    if (typeof ghRow.bin !== 'string' || !ghRow.bin.trim() || typeof ghRow.sha256 !== 'string' || !ghRow.sha256.trim()) {
+      throw new Error(`latest.packages.${key}.mirrors.github.bin/sha256 missing`)
     }
   }
   if (platforms.includes('linux-x64')) {
