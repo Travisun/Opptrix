@@ -22,6 +22,7 @@ test('Dockerfile declares NODE_IMAGE_PREFIX / NPM_REGISTRY / APT_MIRROR / MIRROR
   assert.match(df, /ARG NPM_REGISTRY=/)
   assert.match(df, /npm config set registry/)
   assert.match(df, /ARG APT_MIRROR=/)
+  assert.match(df, /COPY tsconfig\.base\.json/)
   assert.match(df, /ARG MIRROR_AUTO=/)
   assert.match(df, /ARG OPPTRIX_BASE_VERSION=/)
   assert.match(df, /docker-select-mirrors\.mjs/)

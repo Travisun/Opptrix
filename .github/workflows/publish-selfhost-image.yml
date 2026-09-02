@@ -91,6 +91,10 @@ jobs:
           if ! grep -q 'OPPTRIX_HOME\|OPPTRIX_MODELS_DIR\|/opptrix\|/models' scripts/docker-entrypoint.sh; then
             echo "::warning::entrypoint may not reference persistence paths — confirm volume detection still works"
           fi
+          if ! grep -q 'tsconfig.base.json' Dockerfile; then
+            echo "::error::Dockerfile must COPY tsconfig.base.json (packages extend it for tsc)"
+            exit 1
+          fi
           if ! grep -q 'opptrix-agent' Dockerfile; then
             echo "::error::Dockerfile missing opptrix-agent user (dual-user DAC)"
             exit 1

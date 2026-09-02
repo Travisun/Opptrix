@@ -173,6 +173,10 @@ jobs:
             --repo "${{ github.repository }}" \
             --clobber
 
+      - name: Install R2 upload client
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_r2) && env.HAS_R2_CREDS == 'true' }}
+        run: npm install @aws-sdk/client-s3@^3.888.0 --no-save --no-fund --no-audit
+
       - name: Sync hot assets to R2 (CDN)
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_r2) && env.HAS_R2_CREDS == 'true' }}
         env:

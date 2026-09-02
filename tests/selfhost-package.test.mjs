@@ -26,7 +26,7 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.publishConfig?.access, 'public')
   assert.equal(pkg.version, '0.1.7')
   assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.0')
+  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.1')
   assert.equal(pkg.opptrixSelfhost?.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
@@ -71,7 +71,7 @@ test('opptrix help mentions prebuilt pull and --build', () => {
   assert.match(r.stdout, /@opptrix\/selfhost/)
   assert.match(r.stdout, /install-cli/)
   assert.match(r.stdout, /\btags\b/)
-  assert.match(r.stdout, /opptrix-selfhost-v1\.3\.6/)
+  assert.match(r.stdout, /opptrix-selfhost-v1\.4\.[01]/)
   assert.match(r.stdout, /预构建/)
   assert.match(r.stdout, /--build/)
   assert.match(r.stdout, /ghcr\.io\/travisun\/opptrix/)
@@ -92,7 +92,7 @@ test('readPackageMeta exposes imageRepository', async () => {
   const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
   const meta = readPackageMeta()
   assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.0')
+  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.1')
   assert.equal(meta.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 

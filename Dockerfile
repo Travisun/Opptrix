@@ -71,6 +71,7 @@ RUN set -eu; \
 
 # Copy lockfile + manifests first for better layer reuse when possible.
 COPY package.json package-lock.json ./
+COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps ./apps
 COPY client-ui ./client-ui
