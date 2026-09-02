@@ -13,90 +13,40 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Keep in sync with scripts/lib/ci-pins.env
+  CI_UBUNTU_RUNNER: ubuntu-24.04
+
 jobs:
   build-and-test:
-    name: Build & test
-    runs-on: ubuntu-latest
+    name: Build & test (server / selfhost)
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Load CI pin config
+        run: grep -v '^#' scripts/lib/ci-pins.env | grep -v '^$' >> "$GITHUB_ENV"
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version: ${{ env.OPPTRIX_NODE_PATCH_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      # Cache staged models (single CI job; foreign-first mirrors on GitHub-hosted runners).
-      - name: Cache staged LLM / SenseVoice assets
-        uses: actions/cache@v4
-        with:
-          path: |
-            apps/desktop/resources/llms/rapidocr-ppocrv4-mobile
-            apps/desktop/resources/llms/multilingual-e5-small
-            apps/desktop/resources/sensevoice
-          key: desktop-shared-models-v1
-          restore-keys: |
-            desktop-shared-models-v1
-
-      # Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST (Node OCR; no Python wheels).
-      - name: Stage bundled SenseVoice models
-        env:
-          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
-          OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX: ${{ secrets.OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX }}
-        run: node apps/desktop/scripts/stage-sensevoice.mjs
-
-      - name: Stage bundled e5 embedding model
-        env:
-          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
-        run: node apps/desktop/scripts/stage-e5.mjs
-
-      - name: Stage bundled RapidOCR models
-        env:
-          OPPTRIX_MODEL_SOURCE_ORDER: huggingface,modelscope
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
-          OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX: ${{ secrets.OPPTRIX_RAPIDOCR_DIRECT_URL_PREFIX }}
-        run: node apps/desktop/scripts/stage-rapidocr.mjs
-
-      # Writes resources/engines/<plat-arch>/MANIFEST.json for audit / prebuild compat (no pip download).
-      - name: Stage RAG engines MANIFEST (Node OCR)
-        run: node apps/desktop/scripts/stage-rag-engines.mjs
-
-      # Stages build/icons including tray/* (audit requires full tray set; not produced by RAG stage scripts).
-      - name: Stage desktop icons / tray
-        run: node apps/desktop/scripts/prepare-icons.mjs
-
-      # stage-python imports packages/agent-workspace/dist — build packages before staging.
       - name: Build packages
         run: npm run build:packages
 
-      - name: Stage bundled Python runtime
-        run: node apps/desktop/scripts/stage-python.mjs
-
-      - name: Audit desktop packaging preflight
-        env:
-          OPPTRIX_AUDIT_STAGE_UPDATER: '1'
-          OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON: '1'
-        run: node apps/desktop/scripts/audit-desktop-pack.mjs
-
-      # packages already built above; fonts prepared earlier — build client UI only.
       - name: Build client UI
         run: npm run build -w opptrix-client
 
-      # run-tests.mjs runs all tests/*.test.mjs — includes document-library, e5-bundled-paths,
-      # rapidocr-bundled-paths, rag-engines-bundled, parse-router, mcp-tool-route-accuracy.
-      # Do not add a second node --test step for those (duplicate wall time).
       - name: Run smoke and integration tests
         run: npm run test:ci
         env:
           CI: true
+          OPPTRIX_CI_SKIP_DESKTOP_TESTS: '1'

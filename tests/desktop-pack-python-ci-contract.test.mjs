@@ -26,14 +26,11 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON'))
   })
 
-  it('audit requires stage-python in prebuild order and workflows', () => {
+  it('audit no longer requires desktop pack steps in main ci.yml', () => {
     const src = read('apps/desktop/scripts/audit-desktop-pack.mjs')
-    assert.ok(src.includes("'stage-python.mjs'"))
-    assert.ok(src.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON'))
-    assert.ok(src.includes('stage-python.mjs'))
-    const orderNeedle = "['stage-sensevoice.mjs'"
-    assert.ok(src.includes(orderNeedle) || src.includes('stage-python.mjs'))
-    assert.ok(src.includes('ci.yml must run stage-python') || src.includes('stage-python.mjs'))
+    assert.ok(src.includes('ci.yml must not run desktop pack staging/audit'))
+    assert.ok(src.includes('ci.yml builds packages'))
+    assert.ok(src.includes('ci.yml runs test suite'))
   })
 
   it('verify-packaged-runtime asserts python bundle + ffmpeg X_OK / -version', () => {
@@ -45,17 +42,12 @@ describe('desktop pack python / ffmpeg CI contract', () => {
     assert.ok(src.includes('hostMatchesTarget'))
   })
 
-  it('ci.yml: build:packages → stage-python → REQUIRE_STAGED_PYTHON audit', () => {
+  it('ci.yml: server/docker CI — build packages + test (no desktop staging)', () => {
     const wf = read('.github/workflows/ci.yml')
-    const packages = wf.indexOf('build:packages')
-    const stagePy = wf.indexOf('stage-python.mjs')
-    const audit = wf.indexOf('audit-desktop-pack.mjs')
-    assert.ok(packages >= 0)
-    assert.ok(stagePy >= 0)
-    assert.ok(audit >= 0)
-    assert.ok(packages < stagePy, 'build:packages before stage-python')
-    assert.ok(stagePy < audit, 'stage-python before audit')
-    assert.ok(wf.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON'))
+    assert.ok(wf.includes('build:packages'))
+    assert.ok(wf.includes('test:ci'))
+    assert.ok(wf.includes('OPPTRIX_CI_SKIP_DESKTOP_TESTS'))
+    assert.equal(/stage-sensevoice|audit-desktop-pack|stage-python\.mjs/.test(wf), false)
   })
 
   it('release-desktop.yml: packages + stage-python + REQUIRE before audit', () => {

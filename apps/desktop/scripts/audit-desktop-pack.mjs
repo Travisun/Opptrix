@@ -699,18 +699,15 @@ console.log('audit-desktop-pack: start')
   } else ok('release-desktop.yml does not gh release upload')
 
   const ciWf = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf8')
-  if (!ciWf.includes('audit-desktop-pack.mjs')) {
-    fail('ci.yml must run audit-desktop-pack.mjs before build/test')
-  } else ok('ci.yml runs audit-desktop-pack')
-  if (!ciWf.includes('stage-python.mjs')) {
-    fail('ci.yml must run stage-python.mjs before audit (after build:packages)')
-  } else ok('ci.yml runs stage-python')
-  if (!ciWf.includes('OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON')) {
-    fail('ci.yml must set OPPTRIX_AUDIT_REQUIRE_STAGED_PYTHON=1 for audit')
-  } else ok('ci.yml requires staged python for audit')
+  if (/stage-sensevoice|audit-desktop-pack|stage-python\.mjs|desktop-shared-models-v1/.test(ciWf)) {
+    fail('ci.yml must not run desktop pack staging/audit (server/docker CI; use release-desktop.yml)')
+  } else ok('ci.yml does not duplicate desktop pack pipeline')
   if (!ciWf.includes('build:packages')) {
-    fail('ci.yml must run build:packages before stage-python')
-  } else ok('ci.yml builds packages before stage-python')
+    fail('ci.yml must run build:packages')
+  } else ok('ci.yml builds packages')
+  if (!ciWf.includes('test:ci')) {
+    fail('ci.yml must run test:ci')
+  } else ok('ci.yml runs test suite')
   if (!releaseWf.includes('build:packages')) {
     fail('release-desktop.yml must run build:packages before stage-python / audit')
   } else ok('release-desktop.yml builds packages before stage-python')
@@ -721,7 +718,6 @@ console.log('audit-desktop-pack: start')
     fail('release-desktop.yml matrix must set OPPTRIX_SKIP_SHARED_MODEL_STAGE')
   } else ok('release-desktop.yml skips shared model re-stage in matrix')
   for (const [label, wf] of [
-    ['ci.yml', ciWf],
     ['release-desktop.yml', releaseWf],
   ]) {
     if (/RAG engine wheels/i.test(wf)) {
