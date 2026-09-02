@@ -9,6 +9,7 @@ import {
 } from './layout.js'
 import { resolveSystemDir, slotPath } from './paths.js'
 import { patchState, readState } from './state.js'
+import { fuseVendorAbiIntoSlot } from './vendor-fuse.js'
 import { verifySlotVersion } from './verify.js'
 
 export interface SchemaCompatCheckArgs {
@@ -72,6 +73,7 @@ export async function rollbackToBackup(
   }
 
   pointBootToVersion(root, backupVersion)
+  fuseVendorAbiIntoSlot(backupSlot)
 
   patchState(
     {

@@ -169,3 +169,21 @@ export {
   snapshotMainDatabase,
 } from './db-snapshot.js'
 export type { DbSnapshotManifest } from './db-snapshot.js'
+
+export {
+  ABI_PINNED_NAME_PREFIXES,
+  ABI_PINNED_PACKAGE_NAMES,
+  DEFAULT_VENDOR_NODE_MODULES,
+  abiPinnedTarExcludeArgs,
+  assertNoAbiPinnedInTree,
+  ensureVendorModuleLinks,
+  findAbiPinnedInTree,
+  fuseVendorAbiIntoSlot,
+  isAbiPinnedPackageName,
+  isLinkToVendor,
+  listInstalledPackageNames,
+  packageInstallPath,
+  resolveVendorNodeModules,
+  scrubNestedAbiPinnedCopies,
+} from './vendor-fuse.js'
+export type { VendorFuseOptions, VendorFuseResult } from './vendor-fuse.js'

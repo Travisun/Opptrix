@@ -4,7 +4,7 @@
 >
 > 版本 pin 单一来源：`scripts/lib/ci-pins.env`  
 > 镜像定义：`Dockerfile` · 用户部署：`docs/SELF-HOSTING.md`  
-> Vendor 契约：`scripts/lib/runtime-vendor.mjs`（ABI 钉死集 + boot 符号链接）
+> Vendor 契约：`@opptrix/system-update` `vendor-fuse`（ABI 钉死集 + **递归拷贝**进 slot；`scripts/lib/runtime-vendor.mjs` 为薄 re-export）
 
 ---
 
@@ -12,24 +12,35 @@
 
 应用包均为 **ESM**。Node 的 `NODE_PATH` **不会**参与 `import 'better-sqlite3'` 解析。
 
-### 融合规则（避免 symlink 与热更打架）
+### 融合规则（避免 vendor 隔离树与热更打架）
 
-| 依赖类型 | 热更包 | 启动融合（`ensureVendorModuleLinks`） |
+| 依赖类型 | 热更包 | 生命周期融合（`fuseVendorAbiIntoSlot` / `ensureVendorModuleLinks`） |
 |----------|--------|----------------------------------------|
-| **ABI 钉死**（原生） | CI/pack **禁止**携带；若误带 | **强制**改成指向 vendor 的 symlink（替换实目录） |
-| **嵌套** `packages/*/node_modules/<ABI>` | 旧包残留 | **scrub 删除**，解析上溯到 slot 根 symlink |
+| **ABI 钉死**（原生） | CI/pack **禁止**携带；若误带 | **强制**从 vendor **拷贝**进 slot（替换实目录 / 旧 symlink；**不用 symlink**） |
+| **嵌套** `packages/*/node_modules/<ABI>` | 旧包残留 | **scrub 删除**，解析上溯到 slot 根 vendor **拷贝** |
 | **普通/新 JS 依赖** | 可打进 slot `node_modules` | **不动**（热更自带优先） |
 
 ### 接线点（不改业务代码）
 
-1. `docker-entrypoint` 导出 `OPPTRIX_VENDOR_NODE_MODULES`（默认 `/opt/opptrix/vendor/node_modules`）
-2. `system-boot ensure` / `activate-pending` 在 boot 槽位就绪后调用融合
-3. 热更新解压出**新 slot** → `activate` → **再次融合**（新树无旧 symlink，按表重建 ABI 链接；保留热更自带的非 ABI 包）
+融合发生在 **seed / extract / activate / rollback**（以及 `system-boot` 对 boot/pending 的防御性再拷贝）：
 
-测试见 `tests/runtime-vendor-resolve.test.mjs`、`tests/materialize-vendor.test.mjs`。
+| 路径 | API / 入口 | 目标 slot |
+|------|------------|-----------|
+| 冷启动 seed | `seedCurrentSlot` | 新 current slot |
+| 镜像升底座 | `stageSeedVersionAsPending` | pending slot（seed 或 reuse 后） |
+| CDN / CLI / server 解压 | `extractUpdateArchive` | 解压后的 pending slot |
+| 热激活 | `activatePending` | 新 current slot |
+| 回滚 | `rollbackToBackup` | backup → current slot |
+| entrypoint / supervisor | `system-boot ensure` / `activate-pending` | boot（+ pending 可选）；`needsBaseRefresh` 跳过激活时仍 fuse **current** boot |
+
+1. `docker-entrypoint` 导出 `OPPTRIX_VENDOR_NODE_MODULES`（默认 `/opt/opptrix/vendor/node_modules`）
+2. Vendor 缺失（裸 Node / 非 Docker）时 **软跳过**（不抛错，返回 `missingInVendor`）
+3. 热更新解压出**新 slot** → extract 已融合 → `activate` **再次融合**（按表重建 ABI **拷贝**；保留热更自带的非 ABI 包）
+
+测试见 `tests/runtime-vendor-resolve.test.mjs`、`tests/vendor-fuse-lifecycle.test.mjs`、`tests/materialize-vendor.test.mjs`。
 
 镜像构建：`scripts/materialize-vendor.mjs` 把 ABI 从 `/app` 挪到 vendor。  
-启动：`bootstrap-cdn-runtime.mjs`（可关 `OPPTRIX_BOOT_CDN_CHECK=0`）→ `system-boot ensure/activate` → vendor 融合。  
+启动：`bootstrap-cdn-runtime.mjs`（可关 `OPPTRIX_BOOT_CDN_CHECK=0`）→ extract/seed → `system-boot ensure/activate` → vendor 融合。  
 发版 pack：CI 先 materialize 再 `--assert-no-abi`。
 
 ---

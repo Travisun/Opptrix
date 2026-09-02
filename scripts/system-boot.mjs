@@ -10,7 +10,9 @@
  * Exit codes: 0 ok; 1 usage/error. Never touches OPPTRIX_DATA_DIR (user private data).
  *
  * ensure: first boot seeds slots/<ver>; when image seed > boot, flushes old hot pending
- * and stages image seed as pending. activate-pending skips if needsBaseRefresh.
+ * and stages image seed as pending. activate-pending skips if needsBaseRefresh
+ * (still fuses current boot). Lifecycle APIs also fuse ABI via recursive copy;
+ * linkVendorIntoBoot remains defense-in-depth (idempotent re-copy).
  * Usage:
  *   node scripts/system-boot.mjs ensure [--version X]
  *   node scripts/system-boot.mjs activate-pending
@@ -107,7 +109,46 @@ function usage() {
 }
 
 /**
- * Symlink ABI vendor packages into the active boot slot (ESM-safe; no app import changes).
+ * Fuse ABI vendor packages into a slot (prefer system-update API; fallback re-export).
+ * @param {Awaited<ReturnType<typeof loadSystemUpdate>>} su
+ * @param {string} slotRoot
+ * @param {string} [label]
+ */
+function fuseVendorIntoSlot(su, slotRoot, label = 'slot') {
+  if (!slotRoot || !fs.existsSync(slotRoot)) {
+    process.stderr.write(`[system-boot] vendor-fuse: skip (${label}; missing ${slotRoot || 'path'})\n`)
+    return
+  }
+  /** @type {{ linked: string[], replaced: string[], alreadyLinked: string[], scrubbed: string[], missingInVendor: string[], vendorRoot: string }} */
+  let result
+  if (typeof su.fuseVendorAbiIntoSlot === 'function') {
+    result = su.fuseVendorAbiIntoSlot(slotRoot)
+  } else if (typeof su.ensureVendorModuleLinks === 'function') {
+    const vendorNm = typeof su.resolveVendorNodeModules === 'function'
+      ? su.resolveVendorNodeModules()
+      : resolveVendorNodeModules()
+    result = su.ensureVendorModuleLinks(slotRoot, vendorNm)
+  } else {
+    result = ensureVendorModuleLinks(slotRoot, resolveVendorNodeModules())
+  }
+  process.stderr.write(
+    `[system-boot] vendor-fuse: ${label}=${slotRoot} vendor=${result.vendorRoot}`
+      + ` linked=${result.linked.length} replaced=${result.replaced.length}`
+      + ` keptLink=${result.alreadyLinked.length} scrubbed=${result.scrubbed.length}`
+      + ` missingVendor=${result.missingInVendor.length}\n`,
+  )
+  if (result.linked.length || result.replaced.length) {
+    const shown = [...result.linked, ...result.replaced].slice(0, 12)
+    process.stderr.write(
+      `[system-boot] vendor-fuse: ABI ← vendor ${shown.join(', ')}`
+        + ([...result.linked, ...result.replaced].length > 12 ? '…' : '')
+        + '\n',
+    )
+  }
+}
+
+/**
+ * Defense-in-depth: re-fuse the active boot slot (idempotent re-copy OK).
  * @param {Awaited<ReturnType<typeof loadSystemUpdate>>} su
  */
 function linkVendorIntoBoot(su) {
@@ -121,25 +162,10 @@ function linkVendorIntoBoot(su) {
     }
   }
   if (!boot || !fs.existsSync(boot)) {
-    process.stderr.write('[system-boot] vendor-link: skip (no boot slot yet)\n')
+    process.stderr.write('[system-boot] vendor-fuse: skip (no boot slot yet)\n')
     return
   }
-  const vendorNm = resolveVendorNodeModules()
-  const result = ensureVendorModuleLinks(boot, vendorNm)
-  process.stderr.write(
-    `[system-boot] vendor-link: boot=${boot} vendor=${result.vendorRoot}`
-      + ` linked=${result.linked.length} replaced=${result.replaced.length}`
-      + ` keptLink=${result.alreadyLinked.length} scrubbed=${result.scrubbed.length}`
-      + ` missingVendor=${result.missingInVendor.length}\n`,
-  )
-  if (result.linked.length || result.replaced.length) {
-    const shown = [...result.linked, ...result.replaced].slice(0, 12)
-    process.stderr.write(
-      `[system-boot] vendor-link: ABI ← vendor ${shown.join(', ')}`
-        + ([...result.linked, ...result.replaced].length > 12 ? '…' : '')
-        + '\n',
-    )
-  }
+  fuseVendorIntoSlot(su, boot, 'boot')
 }
 
 /**
@@ -193,6 +219,7 @@ function cmdEnsure(su, versionFlag) {
       + ` (${promote.reason})${flushNote} slot=${promote.slotPath}\n`,
   )
   linkVendorIntoBoot(su)
+  if (promote.slotPath) fuseVendorIntoSlot(su, promote.slotPath, 'pending')
 }
 
 /**
@@ -227,6 +254,10 @@ function cmdActivatePending(su) {
       `[system-boot] activate-pending: skip ${state.pendingVersion}`
         + ` (needsBaseRefresh: ${(check.reasons || []).join('; ') || 'host base incompatible'})\n`,
     )
+    // Still fuse current boot (do not leave ABI stale when skipping activate).
+    linkVendorIntoBoot(su)
+    const pendingSlot = su.slotPath(root, state.pendingVersion)
+    fuseVendorIntoSlot(su, pendingSlot, 'pending')
     return
   }
   process.stderr.write(

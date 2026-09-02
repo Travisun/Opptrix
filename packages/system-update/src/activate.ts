@@ -4,6 +4,7 @@
 import { ensureLayout, pointBackupToVersion, pointBootToVersion } from './layout.js'
 import { assertSafeVersion, resolveSystemDir, slotPath } from './paths.js'
 import { patchState, readState } from './state.js'
+import { fuseVendorAbiIntoSlot } from './vendor-fuse.js'
 import { verifySlotVersion } from './verify.js'
 
 export interface ActivateOptions {
@@ -64,6 +65,9 @@ export function activatePending(opts: ActivateOptions = {}): ActivateResult {
 
   pointBootToVersion(root, version)
 
+  const destSlot = slotPath(root, version)
+  fuseVendorAbiIntoSlot(destSlot)
+
   patchState(
     {
       currentVersion: version,
@@ -83,7 +87,7 @@ export function activatePending(opts: ActivateOptions = {}): ActivateResult {
   return {
     previousVersion: previous && previous !== version ? previous : null,
     currentVersion: version,
-    slotPath: slotPath(root, version),
+    slotPath: destSlot,
   }
 }
 

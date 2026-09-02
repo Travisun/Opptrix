@@ -59,8 +59,8 @@ export OPPTRIX_DATA_DIR="$DATA_DIR"
 export OPPTRIX_SYSTEM_DIR="$SYSTEM_DIR"
 export OPPTRIX_SEED_ROOT="$SEED_ROOT"
 export OPPTRIX_DOCKER="${OPPTRIX_DOCKER:-1}"
-# ESM apps resolve bare imports from $BOOT/node_modules; system-boot symlinks
-# ABI vendor packages from here when missing (see scripts/lib/runtime-vendor.mjs).
+# ESM apps resolve bare imports from $BOOT/node_modules; system-boot copies
+# ABI packages from vendor into $BOOT/node_modules (see scripts/lib/runtime-vendor.mjs).
 export OPPTRIX_VENDOR_NODE_MODULES="${OPPTRIX_VENDOR_NODE_MODULES:-/opt/opptrix/vendor/node_modules}"
 export OPPTRIX_AGENT_WORKSPACE_DIR="$WORKSPACE_DIR"
 export OPPTRIX_MOUNTS_DIR="$MOUNTS_DIR"

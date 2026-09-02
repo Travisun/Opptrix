@@ -243,6 +243,21 @@ function assertMarker(name) {
   }
 }
 
+/**
+ * Dump recent container logs before teardown (health timeout / failure diagnosis).
+ * @param {string} name
+ */
+function dumpContainerLogs(name) {
+  log('logs', `docker logs --tail 200 ${name}`)
+  const r = docker(['logs', '--tail', '200', name], { allowFail: true })
+  const out = `${r.stdout || ''}${r.stderr || ''}`.trimEnd()
+  if (out) {
+    console.error(out)
+  } else {
+    console.error('[lifecycle:logs] (empty or container missing)')
+  }
+}
+
 function cleanup(name, volume, keep) {
   if (keep) {
     log('cleanup', `keeping --keep container=${name} volume=${volume}`)
@@ -343,6 +358,13 @@ export async function main() {
     ok = true
     log('done', 'all phases passed')
   } finally {
+    if (!ok) {
+      try {
+        dumpContainerLogs(name)
+      } catch {
+        /* ignore log dump failures */
+      }
+    }
     cleanup(name, volume, keep && ok)
   }
 }
@@ -353,6 +375,11 @@ if (isMain) {
   main().catch((err) => {
     console.error(`[lifecycle] FAIL: ${err instanceof Error ? err.message : String(err)}`)
     const { container, volume } = resourceNames()
+    try {
+      dumpContainerLogs(container)
+    } catch {
+      /* ignore */
+    }
     if (!process.argv.includes('--keep')) {
       docker(['rm', '-f', container], { allowFail: true })
       docker(['volume', 'rm', '-f', volume], { allowFail: true })

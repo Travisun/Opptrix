@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./vendor-fuse": {
+      "types": "./dist/vendor-fuse.d.ts",
+      "import": "./dist/vendor-fuse.js"
     }
   },
   "scripts": {

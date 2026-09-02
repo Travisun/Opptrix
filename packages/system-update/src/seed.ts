@@ -20,6 +20,7 @@ import {
 } from './runtime-marker.js'
 import { compareSemver } from './semver.js'
 import { patchState, readState } from './state.js'
+import { fuseVendorAbiIntoSlot } from './vendor-fuse.js'
 import { verifySlotDirectory } from './verify.js'
 
 export { writeRuntimeMarker } from './runtime-marker.js'
@@ -164,6 +165,7 @@ export function seedCurrentSlot(opts: SeedOptions): SeedResult {
   }
 
   copySeedTree(seedRoot, dest, opts.version)
+  fuseVendorAbiIntoSlot(dest)
 
   pointBootToVersion(systemDir, opts.version)
   const prev = readState(systemDir)
@@ -243,6 +245,7 @@ export function stageSeedVersionAsPending(
   } else {
     ensureRuntimeMarkerForSeed(dest, opts.version)
   }
+  fuseVendorAbiIntoSlot(dest)
 
   setPendingVersion(opts.version, systemDir)
   return {

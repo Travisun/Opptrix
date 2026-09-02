@@ -4,8 +4,9 @@
 #
 # Native modules (better-sqlite3, duckdb, sharp, onnxruntime-node, @lancedb/lancedb,
 # node-llama-cpp) are compiled in the build stage, then moved to
-# /opt/opptrix/vendor/node_modules (ABI vendor). /app seed is slim; boot symlinks
-# vendor into $BOOT/node_modules. Hot-update packs must not ship ABI packages.
+# /opt/opptrix/vendor/node_modules (ABI vendor). /app seed is slim; seed/extract/
+# activate/rollback recursively copy ABI from vendor into $SLOT/node_modules
+# (not symlinks). Hot-update packs must not ship ABI packages.
 #
 # Runtime toolchain (pin defaults: scripts/lib/ci-pins.env):
 #   - Default PATH Node: official node:${NODE_VERSION}-bookworm-slim
@@ -203,7 +204,8 @@ COPY --from=build /app /app
 RUN rm -rf /app/node_modules/ffmpeg-static
 
 # ABI / heavy natives → vendor layer; /app seed stays slim for hot-update shape.
-# Boot symlinks missing ABI packages from vendor into $BOOT/node_modules (ESM-safe).
+# Lifecycle (seed/extract/activate/rollback) copies ABI from vendor into the
+# target slot's node_modules (ESM-safe recursive copy; not symlinks).
 RUN mkdir -p /opt/opptrix/vendor/node_modules \
   && node /app/scripts/materialize-vendor.mjs --app /app --vendor /opt/opptrix/vendor/node_modules \
   && test -d /opt/opptrix/vendor/node_modules/better-sqlite3

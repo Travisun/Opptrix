@@ -14,6 +14,7 @@ import {
   resolveSystemPaths,
   slotPath,
 } from './paths.js'
+import { fuseVendorAbiIntoSlot } from './vendor-fuse.js'
 import { verifySlotDirectory } from './verify.js'
 
 export interface ExtractOptions {
@@ -162,6 +163,7 @@ export function extractUpdateArchive(opts: ExtractOptions): ExtractResult {
   fs.mkdirSync(slotsDir, { recursive: true })
   if (fs.existsSync(destSlot)) fs.rmSync(destSlot, { recursive: true, force: true })
   fs.renameSync(ready, destSlot)
+  fuseVendorAbiIntoSlot(destSlot)
 
   if (fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true })
 
