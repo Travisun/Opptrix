@@ -194,7 +194,6 @@ export function compareHotSemver(a, b) {
  *   publishedAt?: string
  *   nodeRange?: string
  *   minBaseImage?: string
- *   minBaseImage?: string
  *   description?: { features?: string[], fixes?: string[] }
  *   mirrorOpts?: { githubRepo?: string, giteeRepo?: string, tag?: string }
  * }} input
