@@ -71,7 +71,7 @@ test('opptrix help mentions prebuilt pull and --build', () => {
   assert.match(r.stdout, /@opptrix\/selfhost/)
   assert.match(r.stdout, /install-cli/)
   assert.match(r.stdout, /\btags\b/)
-  assert.match(r.stdout, /opptrix-selfhost-v1\.4\.[01]/)
+  assert.match(r.stdout, /opptrix-selfhost-v1\.4\.\d+/)
   assert.match(r.stdout, /预构建/)
   assert.match(r.stdout, /--build/)
   assert.match(r.stdout, /ghcr\.io\/travisun\/opptrix/)
