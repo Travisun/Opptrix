@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Upload runtime tarball + .sha256 sidecar to a Gitee release for tag
- * `opptrix-selfhost-v{VER}` (or explicit --tag).
+ * `runtime-v{VER}` (or explicit --tag).
  *
  * Requires GITEE_TOKEN (private token with projects write).
  * If token is absent, prints mirror steps and exits 0 (no-op) unless --require-token.
@@ -27,7 +27,7 @@ const HELP = `Usage: node scripts/upload-runtime-gitee.mjs [options]
 Upload opptrix-runtime assets to a Gitee Release.
 
 Options:
-  --version <semver>   Version → tag opptrix-selfhost-v{VER}
+  --version <semver>   Version → tag runtime-v{VER}
   --tag <tag>          Explicit release tag (overrides --version)
   --dir <dir>          Directory containing archives (default: dist-runtime)
   --repo <owner/repo>  Default: OPPTRIX_UPDATE_GITEE_REPO or Travisun/Opptrix
@@ -79,7 +79,7 @@ function parseArgs(argv) {
  */
 function tagForVersion(version) {
   const v = version.trim().replace(/^v/, '')
-  return `opptrix-selfhost-v${v}`
+  return `runtime-v${v}`
 }
 
 /**
@@ -189,7 +189,7 @@ async function main() {
     process.exit(2)
   }
 
-  const verForFiles = version || tag.replace(/^opptrix-selfhost-v/, '')
+  const verForFiles = version || tag.replace(/^(?:opptrix-selfhost-v|runtime-v)/, '')
   const files = collectAssets(opts.dir, verForFiles)
   if (files.length === 0) {
     console.error(`No runtime assets found in ${opts.dir}`)

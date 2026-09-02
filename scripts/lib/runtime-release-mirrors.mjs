@@ -3,6 +3,7 @@
  * CDN (update.opptrix.org) remains authoritative manifest + fallback payload.
  */
 const SELFHOST_TAG_PREFIX = 'opptrix-selfhost-v'
+const RUNTIME_TAG_PREFIX = 'runtime-v'
 
 /** @type {readonly ['linux-x64', 'linux-arm64']} */
 const RUNTIME_LINUX_ARCH_KEYS = ['linux-x64', 'linux-arm64']
@@ -19,10 +20,19 @@ function normalizeHotVersion(version) {
 }
 
 /**
+ * Docker / app snapshot tag (`opptrix-selfhost-v*`) — used for minBaseImage, not asset mirrors.
  * @param {string} version
  */
 export function selfhostTagForVersion(version) {
   return `${SELFHOST_TAG_PREFIX}${normalizeHotVersion(version)}`
+}
+
+/**
+ * Runtime hot-update GitHub/Gitee release tag (`runtime-v*`).
+ * @param {string} version
+ */
+export function runtimeReleaseTagForVersion(version) {
+  return `${RUNTIME_TAG_PREFIX}${normalizeHotVersion(version)}`
 }
 
 /**
@@ -77,7 +87,7 @@ export function normalizeReleaseVersion(version) {
  * @param {string} version
  */
 export function releaseTagForVersion(version) {
-  return selfhostTagForVersion(normalizeReleaseVersion(version))
+  return runtimeReleaseTagForVersion(normalizeReleaseVersion(version))
 }
 
 /**

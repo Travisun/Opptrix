@@ -165,7 +165,7 @@ opptrix down          # 删容器但默认保留数据卷
 
 ## 场景三：升级 Opptrix 实例与 CLI
 
-版本分轨：`opptrix-selfhost-v*` 是**底座**（Docker 镜像）；runtime semver 是**卷内热更新**；`selfhost-v*` 只发布 CLI 包。
+版本分轨：`opptrix-selfhost-v*` 是**底座**（Docker 镜像，手动 `workflow_dispatch`）；`runtime-v*` 是**卷内热更新**（打 tag 自动发 CDN）；`selfhost-v*` 只发布 CLI 包。底座与 runtime semver 可错开；热更新包内 `minBaseImage` 仍声明所需最低底座。
 
 ```bash
 # 底座
@@ -379,7 +379,7 @@ npm run build -w @opptrix/selfhost
 npm link -w @opptrix/selfhost
 ```
 
-发版 CLI：`npm run release:selfhost`，推送 `main` 与 tag `selfhost-v*`（仅 CLI npm；应用快照 `opptrix-selfhost-v*` 另行打 tag）。
+发版 CLI：`npm run release:selfhost`，推送 `main` 与 tag `selfhost-v*`（仅 CLI npm）。底座 `opptrix-selfhost-v*` 与热更新 `runtime-v*` 另行打 tag；Docker 镜像需手动 `workflow_dispatch`。
 
 ---
 

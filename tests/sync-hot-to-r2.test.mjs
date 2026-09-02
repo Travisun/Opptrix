@@ -119,8 +119,10 @@ test('buildCheckUpdatePayload shape matches client parser expectations', () => {
   assert.equal(typeof payload.latest.mirrors, 'object')
   assert.match(payload.latest.mirrors.github.bin, /github\.com/)
   assert.match(payload.latest.mirrors.gitee.bin, /gitee\.com/)
+  assert.match(payload.latest.mirrors.github.bin, /\/runtime-v1\.4\.0\//)
   assert.equal(typeof payload.latest.packages['linux-x64'].mirrors, 'object')
   assert.match(payload.latest.packages['linux-arm64'].mirrors.gitee.bin, /linux-arm64/)
+  assert.match(payload.latest.packages['linux-arm64'].mirrors.github.bin, /\/runtime-v1\.4\.0\//)
 })
 
 test('buildCheckUpdatePayload accepts legacy single binSize as linux-x64', () => {

@@ -1,5 +1,6 @@
 # Publish Opptrix runtime hot-update assets to CDN (R2), GitHub Release, and Gitee
-# Triggers: push tag opptrix-selfhost-v*  or  workflow_dispatch
+# Triggers: push tag runtime-v*  or  workflow_dispatch
+# Docker base images: publish-selfhost-image.yml (manual only).
 #
 # Assets (per linux-x64 / linux-arm64 native build):
 #   opptrix-runtime-linux-{x64|arm64}-vX.Y.Z.bin + .sha256   (CDN primary per arch)
@@ -7,19 +8,28 @@
 #   opptrix-runtime-vX.Y.Z.tar.gz (+ .sha256)
 #   opptrix-runtime-linux-{x64|arm64}-vX.Y.Z.tar.gz (+ .sha256)
 #
+# Runtime semver (from runtime-v*) may differ from base (opptrix-selfhost-v*).
+# Pack minBaseImage still comes from OPPTRIX_RELEASE_TAG / OPPTRIX_MIN_BASE_IMAGE
+# (default: packages/selfhost preferredAppTag).
+#
 # Matrix: pinned ubuntu-24.04 (x64) + QEMU arm64 pack (see ci-selfhost-release.yml).
 name: Publish runtime assets
 
 on:
   push:
     tags:
-      - 'opptrix-selfhost-v*'
+      - 'runtime-v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'App tag or version (e.g. opptrix-selfhost-v1.4.0 or 1.4.0)'
+        description: 'Runtime tag or version (e.g. runtime-v1.4.0 or 1.4.0)'
         required: true
         type: string
+      min_base_image:
+        description: 'Required Docker base (opptrix-selfhost-vX.Y.Z); empty = preferredAppTag after checkout'
+        required: false
+        type: string
+        default: ''
       skip_gitee:
         description: 'Skip Gitee upload attempt'
         type: boolean
@@ -47,8 +57,10 @@ jobs:
     name: Resolve version
     runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     outputs:
-      full_tag: ${{ steps.meta.outputs.full_tag }}
+      git_ref: ${{ steps.meta.outputs.git_ref }}
       version: ${{ steps.meta.outputs.version }}
+      runtime_release_tag: ${{ steps.meta.outputs.runtime_release_tag }}
+      min_base_image_input: ${{ steps.meta.outputs.min_base_image_input }}
     steps:
       - name: Resolve version tags
         id: meta
@@ -57,27 +69,63 @@ jobs:
           set -euo pipefail
           RAW="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
           RAW="${RAW#refs/tags/}"
-          if [[ "$RAW" == opptrix-selfhost-v* ]]; then
-            FULL_TAG="$RAW"
-            VERSION="${RAW#opptrix-selfhost-v}"
+          MIN_IN="${{ github.event_name == 'workflow_dispatch' && inputs.min_base_image || '' }}"
+          if [[ "$RAW" == runtime-v* ]]; then
+            VERSION="${RAW#runtime-v}"
+            GIT_REF="runtime-v${VERSION}"
           elif [[ "$RAW" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
             VERSION="$RAW"
-            FULL_TAG="opptrix-selfhost-v${VERSION}"
+            GIT_REF="runtime-v${VERSION}"
           else
-            echo "::error::Invalid tag '${RAW}'. Expect opptrix-selfhost-vX.Y.Z or X.Y.Z"
+            echo "::error::Invalid tag '${RAW}'. Expect runtime-vX.Y.Z or X.Y.Z"
             exit 1
           fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
-            echo "::error::Invalid semver in '${FULL_TAG}'"
+            echo "::error::Invalid semver in '${GIT_REF}'"
             exit 1
           fi
-          echo "full_tag=${FULL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "git_ref=${GIT_REF}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Resolved FULL_TAG=${FULL_TAG} VERSION=${VERSION}"
+          echo "runtime_release_tag=${GIT_REF}" >> "$GITHUB_OUTPUT"
+          echo "min_base_image_input=${MIN_IN}" >> "$GITHUB_OUTPUT"
+          echo "Resolved GIT_REF=${GIT_REF} VERSION=${VERSION} min_base_input=${MIN_IN:-"(preferredAppTag)"}"
+
+  resolve-base:
+    name: Resolve minBaseImage
+    needs: resolve-meta
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
+    outputs:
+      min_base_image: ${{ steps.base.outputs.min_base_image }}
+    steps:
+      - name: Checkout runtime tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve-meta.outputs.git_ref }}
+          fetch-depth: 1
+
+      - name: Resolve required Docker base
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          MIN="${{ needs.resolve-meta.outputs.min_base_image_input }}"
+          if [[ -z "${MIN}" ]]; then
+            MIN="$(node -e "const p=require('./packages/selfhost/package.json'); const t=p.opptrixSelfhost&&p.opptrixSelfhost.preferredAppTag; if(!t) process.exit(2); process.stdout.write(String(t).trim())")"
+          fi
+          if [[ "$MIN" != opptrix-selfhost-v* ]]; then
+            if [[ "$MIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+              MIN="opptrix-selfhost-v${MIN}"
+            else
+              echo "::error::min_base_image must be opptrix-selfhost-vX.Y.Z (got ${MIN})"
+              exit 1
+            fi
+          fi
+          echo "min_base_image=${MIN}" >> "$GITHUB_OUTPUT"
+          echo "Using minBaseImage=${MIN} for runtime ${{ needs.resolve-meta.outputs.version }}"
 
   pack:
     name: Pack runtime (${{ matrix.platform_key }})
-    needs: resolve-meta
+    needs: [resolve-meta, resolve-base]
     runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: ${{ matrix.platform_key == 'linux-arm64' && 120 || 90 }}
     strategy:
@@ -88,7 +136,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.resolve-meta.outputs.full_tag }}
+          ref: ${{ needs.resolve-meta.outputs.git_ref }}
           fetch-depth: 1
 
       - name: Load CI pin config
@@ -129,21 +177,27 @@ jobs:
         if: matrix.platform_key == 'linux-x64'
         env:
           OPPTRIX_APP_VERSION: ${{ needs.resolve-meta.outputs.version }}
-          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-meta.outputs.full_tag }}
+          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_MIN_BASE_IMAGE: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_PACK_ASSERT_NO_ABI: '1'
         run: |
           set -euo pipefail
+          node scripts/materialize-vendor.mjs --app "$PWD" --vendor /tmp/opptrix-pack-vendor/node_modules
           node scripts/pack-opptrix-runtime.mjs \
             --version "${{ needs.resolve-meta.outputs.version }}" \
             --platform-key linux-x64 \
             --out-dir dist-runtime \
-            --also-platform-name
+            --also-platform-name \
+            --assert-no-abi
           ls -lah dist-runtime/
 
       - name: Pack runtime tarball (linux-arm64 via QEMU)
         if: matrix.platform_key == 'linux-arm64'
         env:
           RUNTIME_CI_VERSION: ${{ needs.resolve-meta.outputs.version }}
-          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-meta.outputs.full_tag }}
+          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_MIN_BASE_IMAGE: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_PACK_ASSERT_NO_ABI: '1'
           OPPTRIX_CI_ARM64_IMAGE: ${{ env.CI_NODE_BOOKWORM_IMAGE }}
           OPPTRIX_CI_ARM64_MODE: publish
         run: |
@@ -160,7 +214,7 @@ jobs:
 
   publish:
     name: Publish runtime & upload release assets
-    needs: [resolve-meta, pack]
+    needs: [resolve-meta, resolve-base, pack]
     runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 30
     env:
@@ -193,7 +247,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.resolve-meta.outputs.full_tag }}
+          ref: ${{ needs.resolve-meta.outputs.git_ref }}
           fetch-depth: 1
 
       - name: Download pack artifacts
@@ -215,14 +269,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${{ needs.resolve-meta.outputs.full_tag }}"
+          TAG="${{ needs.resolve-meta.outputs.runtime_release_tag }}"
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release $TAG already exists"
           else
             gh release create "$TAG" \
               --repo "${{ github.repository }}" \
               --title "$TAG" \
-              --notes "Opptrix self-host runtime assets for ${{ needs.resolve-meta.outputs.version }} (linux-x64 + linux-arm64)." \
+              --notes "Opptrix runtime hot-update ${{ needs.resolve-meta.outputs.version }} (linux-x64 + linux-arm64). Requires base ${{ needs.resolve-base.outputs.min_base_image }}." \
               --verify-tag
           fi
 
@@ -231,7 +285,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${{ needs.resolve-meta.outputs.full_tag }}"
+          TAG="${{ needs.resolve-meta.outputs.runtime_release_tag }}"
           shopt -s nullglob
           files=(dist-runtime/*)
           if [[ ${#files[@]} -eq 0 ]]; then
@@ -254,8 +308,9 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           OPPTRIX_UPDATE_CDN_BASE: ${{ env.OPPTRIX_UPDATE_CDN_BASE }}
-          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-meta.outputs.full_tag }}
-          OPPTRIX_MIN_BASE_IMAGE: ${{ needs.resolve-meta.outputs.full_tag }}
+          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_MIN_BASE_IMAGE: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_RUNTIME_RELEASE_TAG: ${{ needs.resolve-meta.outputs.runtime_release_tag }}
         run: |
           set -euo pipefail
           node scripts/sync-hot-to-r2.mjs \
@@ -291,7 +346,7 @@ jobs:
           node scripts/upload-runtime-gitee.mjs \
             --version "${{ needs.resolve-meta.outputs.version }}" \
             --dir dist-runtime \
-            --tag "${{ needs.resolve-meta.outputs.full_tag }}" \
+            --tag "${{ needs.resolve-meta.outputs.runtime_release_tag }}" \
             $EXTRA
 
       - name: Smoke verify CDN check-update
@@ -347,11 +402,13 @@ jobs:
         shell: bash
         run: |
           VER="${{ needs.resolve-meta.outputs.version }}"
-          TAG="${{ needs.resolve-meta.outputs.full_tag }}"
+          TAG="${{ needs.resolve-meta.outputs.runtime_release_tag }}"
+          BASE_IMG="${{ needs.resolve-base.outputs.min_base_image }}"
           BASE="${OPPTRIX_UPDATE_CDN_BASE}"
           {
             echo "### Runtime assets"
-            echo "- Tag: \`${TAG}\`"
+            echo "- Runtime tag: \`${TAG}\`"
+            echo "- minBaseImage: \`${BASE_IMG}\`"
             echo "- CDN: \`${BASE}/hot/check-update\` → \`linux-x64\` + \`linux-arm64\` packages"
             echo "- GitHub Release: per-arch \`.bin\`, legacy x64 alias, \`.tar.gz\`"
             echo "- Gitee mirror: same set when \`GITEE_TOKEN\` configured"

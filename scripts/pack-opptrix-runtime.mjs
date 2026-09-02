@@ -29,6 +29,7 @@ import {
   runtimeArchBinFilename,
   runtimeArchBinSha256Filename,
 } from './lib/hot-cdn.mjs'
+import { abiPinnedTarExcludeArgs, isAbiPinnedPackageName } from './lib/runtime-vendor.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '..')
@@ -49,6 +50,8 @@ Options:
   --out-dir <dir>      Output directory (default: <root>/dist-runtime)
   --platform-key <key> linux-x64 | linux-arm64 (default: from process.arch)
   --also-platform-name Also write opptrix-runtime-{platform}-{arch}-v{VER}.tar.gz
+  --assert-no-abi      Fail if archive listing still contains ABI-pinned paths
+  --no-assert-no-abi   Skip ABI archive listing check (default)
   --dry-run            Print plan / excludes; do not write archives
   --skip-built-check   Do not require apps/server/dist/index.js
   --help, -h           Show this help
@@ -57,6 +60,7 @@ Env:
   OPPTRIX_APP_VERSION  Same as --version
   OPPTRIX_PACK_ROOT    Same as --root
   OPPTRIX_PACK_OUT     Same as --out-dir
+  OPPTRIX_PACK_ASSERT_NO_ABI=1  Enable ABI archive listing check (CI)
 
 Preferred CI flow (matrix ubuntu-latest + ubuntu-24.04-arm64):
   npm ci && npm run build && npm prune --omit=dev
@@ -106,6 +110,8 @@ const EXCLUDE_ARGS = [
   '--exclude=opptrix-runtime-v*.sha256',
   '--exclude=opptrix-runtime-*-v*.tar.gz',
   '--exclude=opptrix-runtime-*-v*.tar.gz.sha256',
+  // ABI-pinned natives belong in Docker vendor — not hot-update packs
+  ...abiPinnedTarExcludeArgs(),
 ]
 
 /**
@@ -122,7 +128,7 @@ function resolvePlatformKey(raw) {
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-  /** @type {{ version: string | null, root: string, outDir: string | null, platformKey: 'linux-x64' | 'linux-arm64', alsoPlatform: boolean, dryRun: boolean, skipBuiltCheck: boolean, help: boolean }} */
+  /** @type {{ version: string | null, root: string, outDir: string | null, platformKey: 'linux-x64' | 'linux-arm64', alsoPlatform: boolean, dryRun: boolean, skipBuiltCheck: boolean, assertNoAbi: boolean, help: boolean }} */
   const opts = {
     version: process.env.OPPTRIX_APP_VERSION?.trim() || null,
     root: process.env.OPPTRIX_PACK_ROOT?.trim() || DEFAULT_ROOT,
@@ -131,6 +137,7 @@ function parseArgs(argv) {
     alsoPlatform: false,
     dryRun: false,
     skipBuiltCheck: false,
+    assertNoAbi: process.env.OPPTRIX_PACK_ASSERT_NO_ABI?.trim() === '1',
     help: false,
   }
   for (let i = 0; i < argv.length; i++) {
@@ -139,6 +146,8 @@ function parseArgs(argv) {
     else if (a === '--dry-run') opts.dryRun = true
     else if (a === '--also-platform-name') opts.alsoPlatform = true
     else if (a === '--skip-built-check') opts.skipBuiltCheck = true
+    else if (a === '--assert-no-abi') opts.assertNoAbi = true
+    else if (a === '--no-assert-no-abi') opts.assertNoAbi = false
     else if (a === '--version') {
       opts.version = String(argv[++i] ?? '').trim() || null
     } else if (a === '--root') {
@@ -329,6 +338,33 @@ function runTar(root, archivePath, outDir) {
   }
 }
 
+/**
+ * Fail if packed archive still lists ABI-pinned node_modules paths.
+ * @param {string} archivePath
+ */
+function assertArchiveHasNoAbiPinned(archivePath) {
+  const r = spawnSync('tar', ['-tzf', archivePath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  if (r.status !== 0) {
+    throw new Error(`tar -tzf failed: ${r.stderr || r.stdout || `exit ${r.status}`}`)
+  }
+  const lines = (r.stdout || '').split('\n').filter(Boolean)
+  /** @type {string[]} */
+  const hits = []
+  for (const line of lines) {
+    const norm = line.replace(/^\.\//, '')
+    const m = /(?:^|\/)node_modules\/(@[^/]+\/[^/]+|[^/]+)/.exec(norm)
+    if (!m) continue
+    const name = m[1]
+    if (name && isAbiPinnedPackageName(name)) hits.push(norm)
+  }
+  if (hits.length) {
+    throw new Error(
+      `archive still contains ABI-pinned paths (first ${Math.min(8, hits.length)}): `
+        + hits.slice(0, 8).join(', '),
+    )
+  }
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2))
   if (opts.help) {
@@ -400,6 +436,10 @@ function main() {
 
   if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath)
   runTar(root, archivePath, outDir)
+  if (opts.assertNoAbi) {
+    assertArchiveHasNoAbiPinned(archivePath)
+    console.log('[pack-opptrix-runtime] ABI archive check OK')
+  }
   const hex = sha256File(archivePath)
   const sidecar = writeSha256Sidecar(archivePath, hex)
   const size = fs.statSync(archivePath).size

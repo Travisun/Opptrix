@@ -31,12 +31,12 @@ test('release mirror URLs follow GitHub/Gitee release download layout', () => {
 
 test('buildArchPackageMirrors and legacy mirrors include github + gitee pairs', () => {
   const arch = buildArchPackageMirrors('2.0.0', 'linux-arm64')
-  assert.match(arch.github.bin, /github\.com.*linux-arm64-v2\.0\.0\.bin/)
-  assert.match(arch.gitee.sha256, /gitee\.com.*linux-arm64-v2\.0\.0\.sha256/)
+  assert.match(arch.github.bin, /github\.com.*\/runtime-v2\.0\.0\/.*linux-arm64-v2\.0\.0\.bin/)
+  assert.match(arch.gitee.sha256, /gitee\.com.*\/runtime-v2\.0\.0\/.*linux-arm64-v2\.0\.0\.sha256/)
 
   const legacy = buildLegacyPackageMirrors('2.0.0')
-  assert.match(legacy.github.bin, /opptrix-runtime-v2\.0\.0\.bin/)
-  assert.match(legacy.gitee.sha256, /opptrix-runtime-v2\.0\.0\.sha256/)
+  assert.match(legacy.github.bin, /\/runtime-v2\.0\.0\/opptrix-runtime-v2\.0\.0\.bin/)
+  assert.match(legacy.gitee.sha256, /\/runtime-v2\.0\.0\/opptrix-runtime-v2\.0\.0\.sha256/)
 })
 
 test('buildRuntimeDownloadCandidates orders cn vs foreign', () => {

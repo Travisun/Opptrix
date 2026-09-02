@@ -112,6 +112,11 @@ async function main() {
     description,
     nodeRange: process.env.OPPTRIX_RUNTIME_NODE_RANGE?.trim(),
     minBaseImage: process.env.OPPTRIX_MIN_BASE_IMAGE?.trim(),
+    mirrorOpts: {
+      tag: process.env.OPPTRIX_RUNTIME_RELEASE_TAG?.trim()
+        || process.env.OPPTRIX_HOT_MIRROR_TAG?.trim()
+        || undefined,
+    },
   })
   const checkUpdateJson = `${JSON.stringify(payload, null, 2)}\n`
   const releasesJson = `${JSON.stringify(releasesManifest, null, 2)}\n`

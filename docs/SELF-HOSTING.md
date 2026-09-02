@@ -39,10 +39,11 @@ opptrix up            # 优先拉取 GHCR 预构建镜像并启动
 
 | 轨道 | 用途 |
 |------|------|
-| `opptrix-selfhost-vX.Y.Z` | **自托管应用**可安装快照（GHCR 镜像 tag / clone / 升级 / 回退） |
+| `opptrix-selfhost-vX.Y.Z` | **自托管应用底座**（GHCR 镜像 tag / clone / 升级 / 回退）；镜像由 **手动** `publish-selfhost-image` 发布 |
+| `runtime-v*` | **运行时热更新**包（CDN / GitHub·Gitee Release）；打 tag 即触发 `publish-runtime-assets` |
 | `selfhost-v*` | **仅** `@opptrix/selfhost` CLI 的 npm 发版触发，**不是**应用源码 |
 
-预构建镜像（打 `opptrix-selfhost-v*` 后由 CI 推送）：
+预构建镜像（维护者 `workflow_dispatch` 推送；底座与 runtime 版本可错开）：
 
 | 项 | 值 |
 |----|-----|
@@ -144,7 +145,9 @@ git push origin selfhost-vX.Y.Z && git push gitee selfhost-vX.Y.Z
 
 打 tag `selfhost-v*` 会触发 `.github/workflows/publish-selfhost.yml`；流水线会在 `npm publish` 后向 `registry.npmjs.org` 回查，不可见则失败。也可在 Actions 里手动 `workflow_dispatch`。
 
-应用快照 `opptrix-selfhost-v*` 由维护者另行打 tag，**不会**由 `release:selfhost`（CLI）自动创建。打该 tag 会触发 `.github/workflows/publish-selfhost-image.yml`，将多架构镜像推送到 `ghcr.io/<owner>/opptrix`（标签含完整 tag、semver、`selfhost`）。**首个 tag 推送完成前**，用户 `opptrix up` 的 pull 会失败并自动回退本地编译。
+应用底座 `opptrix-selfhost-v*` 由维护者另行打 tag（源码快照），**不会**自动推 GHCR：在 Actions 手动 `workflow_dispatch` 运行 `.github/workflows/publish-selfhost-image.yml`，将多架构镜像推送到 `ghcr.io/<owner>/opptrix`（标签含完整 tag、semver、`selfhost`）。**镜像未发布前**，用户 `opptrix up` 的 pull 会失败并自动回退本地编译。
+
+运行时热更新打 tag `runtime-v*`（可与底座 semver 错开）触发 `.github/workflows/publish-runtime-assets.yml`；包内 `minBaseImage` 仍指向所需最低 `opptrix-selfhost-v*`。
 
 ### 不用 CLI 时的 Compose 原语
 

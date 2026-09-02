@@ -26,7 +26,7 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.publishConfig?.access, 'public')
   assert.equal(pkg.version, '0.1.7')
   assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.1')
+  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.2')
   assert.equal(pkg.opptrixSelfhost?.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
@@ -77,7 +77,7 @@ test('opptrix help mentions prebuilt pull and --build', () => {
   assert.match(r.stdout, /ghcr\.io\/travisun\/opptrix/)
 })
 
-test('publish-selfhost-image workflow exists', async () => {
+test('publish-selfhost-image workflow is manual-only', async () => {
   const wf = await fs.promises.readFile(
     path.join(ROOT, '.github/workflows/publish-selfhost-image.yml'),
     'utf8',
@@ -86,13 +86,47 @@ test('publish-selfhost-image workflow exists', async () => {
   assert.match(wf, /ghcr\.io/)
   assert.match(wf, /packages:\s*write/)
   assert.match(wf, /linux\/amd64/)
+  assert.match(wf, /workflow_dispatch/)
+  assert.doesNotMatch(wf, /^\s*push:\s*$/m)
+  assert.doesNotMatch(wf, /tags:\s*\n\s*-\s*'opptrix-selfhost-v\*'/)
+})
+
+test('publish-runtime-assets workflow triggers on runtime-v*', async () => {
+  const wf = await fs.promises.readFile(
+    path.join(ROOT, '.github/workflows/publish-runtime-assets.yml'),
+    'utf8',
+  )
+  assert.match(wf, /runtime-v\*/)
+  assert.match(wf, /OPPTRIX_MIN_BASE_IMAGE/)
+  assert.match(wf, /OPPTRIX_RUNTIME_RELEASE_TAG/)
+  assert.match(wf, /preferredAppTag/)
+  assert.match(wf, /materialize-vendor/)
+  assert.match(wf, /OPPTRIX_PACK_ASSERT_NO_ABI/)
+  assert.doesNotMatch(wf, /tags:\s*\n\s*-\s*'opptrix-selfhost-v\*'/)
+})
+
+test('Dockerfile materializes ABI vendor and enables boot CDN check', async () => {
+  const df = await fs.promises.readFile(path.join(ROOT, 'Dockerfile'), 'utf8')
+  assert.match(df, /materialize-vendor\.mjs/)
+  assert.match(df, /OPPTRIX_VENDOR_NODE_MODULES=\/opt\/opptrix\/vendor\/node_modules/)
+  assert.match(df, /OPPTRIX_BOOT_CDN_CHECK=1/)
+  assert.match(df, /bootstrap-cdn-runtime\.mjs/)
+})
+
+test('entrypoint runs CDN bootstrap before system-boot ensure', async () => {
+  const sh = await fs.promises.readFile(path.join(ROOT, 'scripts/docker-entrypoint.sh'), 'utf8')
+  assert.match(sh, /bootstrap-cdn-runtime\.mjs/)
+  assert.match(sh, /OPPTRIX_VENDOR_NODE_MODULES/)
+  const bootIdx = sh.indexOf('BOOTSTRAP_CDN')
+  const ensureIdx = sh.indexOf('"$SYSTEM_BOOT" ensure')
+  assert.ok(bootIdx >= 0 && ensureIdx > bootIdx)
 })
 
 test('readPackageMeta exposes imageRepository', async () => {
   const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
   const meta = readPackageMeta()
   assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.1')
+  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.2')
   assert.equal(meta.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 

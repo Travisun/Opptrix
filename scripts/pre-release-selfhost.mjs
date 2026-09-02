@@ -3,8 +3,9 @@
  * One-shot self-host pre-release: bump CLI npm, sync app preferred tag, build bundle.
  *
  * After commit, create and push tags:
- *   selfhost-v{cli}           → publish-selfhost.yml (npm)
- *   opptrix-selfhost-v{app}   → publish-selfhost-image + publish-runtime-assets
+ *   selfhost-v{cli}             → publish-selfhost.yml (npm)
+ *   opptrix-selfhost-v{app}     → base snapshot only (Docker image: manual workflow_dispatch)
+ *   runtime-v{app}              → publish-runtime-assets.yml (CDN / Release assets)
  *
  * Usage:
  *   node scripts/pre-release-selfhost.mjs --cli 0.1.7 --app 1.4.0
@@ -88,13 +89,16 @@ function main() {
   run('npm', ['run', 'build', '-w', '@opptrix/selfhost'])
 
   const cliTag = `selfhost-v${cliVer}`
+  const runtimeTag = `runtime-v${opts.app}`
   console.log('\n[pre-release-selfhost] Next:')
   console.log('  git add -A && git commit -m "chore(selfhost): pre-release …"')
   console.log(`  git tag -a ${cliTag} -m "Release @opptrix/selfhost ${cliVer}"`)
   console.log(`  git tag -a ${appTag} -m "Release ${appTag}"`)
+  console.log(`  git tag -a ${runtimeTag} -m "Release ${runtimeTag}"`)
   console.log('  git push origin main && git push gitee main')
-  console.log(`  git push origin ${cliTag} ${appTag} && git push gitee ${cliTag} ${appTag}`)
-  console.log('\nCI: npm publish + GHCR image + runtime CDN pack')
+  console.log(`  git push origin ${cliTag} ${appTag} ${runtimeTag} && git push gitee ${cliTag} ${appTag} ${runtimeTag}`)
+  console.log('\nCI: npm publish (selfhost-v*) + runtime CDN (runtime-v*)')
+  console.log(`Docker image: Actions → Publish selfhost image (workflow_dispatch, tag=${appTag})`)
 }
 
 main()

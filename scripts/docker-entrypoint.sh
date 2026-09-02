@@ -59,6 +59,9 @@ export OPPTRIX_DATA_DIR="$DATA_DIR"
 export OPPTRIX_SYSTEM_DIR="$SYSTEM_DIR"
 export OPPTRIX_SEED_ROOT="$SEED_ROOT"
 export OPPTRIX_DOCKER="${OPPTRIX_DOCKER:-1}"
+# ESM apps resolve bare imports from $BOOT/node_modules; system-boot symlinks
+# ABI vendor packages from here when missing (see scripts/lib/runtime-vendor.mjs).
+export OPPTRIX_VENDOR_NODE_MODULES="${OPPTRIX_VENDOR_NODE_MODULES:-/opt/opptrix/vendor/node_modules}"
 export OPPTRIX_AGENT_WORKSPACE_DIR="$WORKSPACE_DIR"
 export OPPTRIX_MOUNTS_DIR="$MOUNTS_DIR"
 export OPPTRIX_LLM_DIR="${OPPTRIX_LLM_DIR:-$MODELS_DIR/llms}"
@@ -192,11 +195,17 @@ export STOCK_RESEARCH_HOST="${STOCK_RESEARCH_HOST:-0.0.0.0}"
 export STOCK_RESEARCH_PORT="${STOCK_RESEARCH_PORT:-8711}"
 export SERVE_UI="${SERVE_UI:-1}"
 
-# ── System slot: seed from /app if needed, activate pending, resolve boot ──
+# ── System slot: optional CDN promote, seed from /app, activate, resolve boot ──
 SYSTEM_BOOT="/app/scripts/system-boot.mjs"
+BOOTSTRAP_CDN="/app/scripts/bootstrap-cdn-runtime.mjs"
 if [ ! -f "$SYSTEM_BOOT" ]; then
   echo "[opptrix] ERROR: missing $SYSTEM_BOOT"
   exit 1
+fi
+
+# A′: probe CDN for newer runtime (soft-fail). Bundled /app remains offline fallback.
+if [ -f "$BOOTSTRAP_CDN" ]; then
+  node "$BOOTSTRAP_CDN" || echo "[opptrix] WARN: bootstrap-cdn exited $?"
 fi
 
 node "$SYSTEM_BOOT" ensure

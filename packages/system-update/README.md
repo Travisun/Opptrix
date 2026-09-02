@@ -10,7 +10,7 @@ Provides extract / verify / activate / rollback APIs. Download of GitHub/Gitee r
 |---------|--------|
 | HTTP channel + `hotPackageUrls` | `apps/server` (`system-update-channel.ts`, `/api/system-update/*`) |
 | Pack tarball + `.sha256` | `scripts/pack-opptrix-runtime.mjs` |
-| CI upload (tag `opptrix-selfhost-v*`) | `.github/workflows/publish-runtime-assets.yml` |
+| CI upload (tag `runtime-v*`) | `.github/workflows/publish-runtime-assets.yml` |
 | Gitee mirror helper | `scripts/upload-runtime-gitee.mjs` |
 
 ## Layout

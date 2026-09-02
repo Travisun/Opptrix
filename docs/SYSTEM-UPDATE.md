@@ -13,7 +13,7 @@
 | 打包脚本 | `scripts/pack-opptrix-runtime.mjs` |
 | Gitee 镜像上传 | `scripts/upload-runtime-gitee.mjs` |
 | CDN (R2) 同步 | `scripts/sync-hot-to-r2.mjs` |
-| CI | `.github/workflows/publish-runtime-assets.yml`（tag `opptrix-selfhost-v*`） |
+| CI | `.github/workflows/publish-runtime-assets.yml`（tag `runtime-v*`；底座镜像另走手动 `publish-selfhost-image`） |
 
 ---
 
@@ -143,17 +143,19 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 
 ## CI 与发布
 
-打 tag `opptrix-selfhost-v*`（或手动触发 workflow）后，`.github/workflows/publish-runtime-assets.yml` 会：
+打 tag `runtime-v*`（或手动 `workflow_dispatch`）后，`.github/workflows/publish-runtime-assets.yml` 会：
 
-1. **打包（矩阵）**：`ubuntu-latest` + `ubuntu-24.04-arm64` 上各执行 `pack-opptrix-runtime.mjs --platform-key … --also-platform-name`，合并产出 per-arch `.bin` / `.sha256`、遗留 x64 别名与 `.tar.gz`。
+1. **打包（矩阵）**：`ubuntu-24.04`（x64）+ QEMU arm64 各执行 `pack-opptrix-runtime.mjs`，写入 `requires.minBaseImage`（默认仓库 `preferredAppTag`，可用 dispatch `min_base_image` / `OPPTRIX_MIN_BASE_IMAGE` 覆盖；与 runtime semver **可错开**）。合并产出 per-arch `.bin` / `.sha256`、遗留 x64 别名与 `.tar.gz`。
 2. **CDN（主通道）**：`scripts/sync-hot-to-r2.mjs` 上传至 Cloudflare R2：
    - `hot/packages/opptrix-runtime-linux-{x64,arm64}-vX.Y.Z.bin` + `.sha256`
    - `hot/packages/opptrix-runtime-vX.Y.Z.bin` + `.sha256`（x64 遗留别名）
-   - `hot/check-update`（`application/json`，含 `latest`、`releases[]`、`latest.description` 与 CDN URL）
+   - `hot/check-update`（`application/json`，含 `latest`、`releases[]`、`latest.description` 与 CDN URL；镜像 URL 指向 `runtime-v*` Release）
    - `hot/releases`（同上 `releases[]`，供 CLI `opptrix runtime list` / `use <版本>` 选用历史版）
-3. **GitHub Release**：附件含上述全部架构产物供归档/镜像 workflow。
-4. **Gitee Release**：`scripts/upload-runtime-gitee.mjs` 上传相同附件集（需 `GITEE_TOKEN`）。
+3. **GitHub Release**：在 tag `runtime-vX.Y.Z` 上挂载上述全部架构产物。
+4. **Gitee Release**：`scripts/upload-runtime-gitee.mjs` 上传相同附件集（需 `GITEE_TOKEN`；默认 tag 同为 `runtime-v*`）。
 5. **可选**：配置 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` 时 purge `/hot/*` 相关 URL；CI 末尾 smoke `GET …/hot/check-update`。
+
+**底座 Docker 镜像**不随 `runtime-v*` 自动构建：在 Actions 手动运行 `publish-selfhost-image.yml`（`workflow_dispatch`，输入 `opptrix-selfhost-vX.Y.Z`）。
 
 发版时 `sync-hot-to-r2.mjs` 会从 `docs/releases/{version}.md` 的「## 新功能 / ## 修复」提取 `description`，合并 CDN 上已有清单并截断为最近 8 版。
 

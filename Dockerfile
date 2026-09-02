@@ -3,7 +3,9 @@
 # Prefer correctness over minimal size for v1 — glibc (bookworm), NOT alpine.
 #
 # Native modules (better-sqlite3, duckdb, sharp, onnxruntime-node, @lancedb/lancedb,
-# node-llama-cpp) are compiled/installed against linux glibc Node 24 in the build stage.
+# node-llama-cpp) are compiled in the build stage, then moved to
+# /opt/opptrix/vendor/node_modules (ABI vendor). /app seed is slim; boot symlinks
+# vendor into $BOOT/node_modules. Hot-update packs must not ship ABI packages.
 #
 # Runtime toolchain (pin defaults: scripts/lib/ci-pins.env):
 #   - Default PATH Node: official node:${NODE_VERSION}-bookworm-slim
@@ -11,7 +13,8 @@
 #   - Python: bookworm python3 (3.11) + pip + venv + dev headers
 #   - ffmpeg: Debian apt (FFMPEG_PATH=/usr/bin/ffmpeg); npm ffmpeg-static stripped from image
 #   - Playwright Chromium: preinstalled under /opt/opptrix/playwright-browsers
-#   - node-llama-cpp: compiled in build stage (cmake + libgomp)
+#   - Vendor natives: /opt/opptrix/vendor/node_modules (see scripts/materialize-vendor.mjs)
+#   - Boot CDN check: scripts/bootstrap-cdn-runtime.mjs (OPPTRIX_BOOT_CDN_CHECK)
 #
 # Build mirrors (CN / foreign) — pass via --build-arg or Compose:
 #   NODE_IMAGE_PREFIX  e.g. docker.1ms.run/library/  (must end with /)
@@ -199,6 +202,12 @@ COPY --from=build /app /app
 # Self-host: system ffmpeg via apt (see FFMPEG_PATH). Drop npm static binary (~40MB+).
 RUN rm -rf /app/node_modules/ffmpeg-static
 
+# ABI / heavy natives → vendor layer; /app seed stays slim for hot-update shape.
+# Boot symlinks missing ABI packages from vendor into $BOOT/node_modules (ESM-safe).
+RUN mkdir -p /opt/opptrix/vendor/node_modules \
+  && node /app/scripts/materialize-vendor.mjs --app /app --vendor /opt/opptrix/vendor/node_modules \
+  && test -d /opt/opptrix/vendor/node_modules/better-sqlite3
+
 # Playwright Chromium + OS deps (server browser tools / web preview export).
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/opptrix/playwright-browsers
 RUN set -eu; \
@@ -214,7 +223,9 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh \
   && chmod +x /app/scripts/system-boot.mjs \
   && chmod +x /app/scripts/opptrix-node-supervisor.mjs \
   && chmod +x /app/scripts/docker-select-mirrors.mjs \
-  && chmod +x /app/scripts/runtime-update-cli.mjs
+  && chmod +x /app/scripts/runtime-update-cli.mjs \
+  && chmod +x /app/scripts/materialize-vendor.mjs \
+  && chmod +x /app/scripts/bootstrap-cdn-runtime.mjs
 
 ENV NODE_ENV=production \
   STOCK_RESEARCH_HOST=0.0.0.0 \
@@ -232,6 +243,9 @@ ENV NODE_ENV=production \
   OPPTRIX_AGENT_UID=10001 \
   OPPTRIX_AGENT_GID=10001 \
   OPPTRIX_SEED_ROOT=/app \
+  OPPTRIX_VENDOR_NODE_MODULES=/opt/opptrix/vendor/node_modules \
+  OPPTRIX_BOOT_CDN_CHECK=1 \
+  OPPTRIX_BOOT_CDN_TIMEOUT_MS=12000 \
   UI_DIST_PATH=/app/client-ui/dist \
   OPPTRIX_LLM_DIR=/opptrix/models/llms \
   OPPTRIX_E5_BUNDLED_DIR=/opptrix/models/llms/multilingual-e5-small \

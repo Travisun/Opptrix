@@ -14,6 +14,8 @@ export const DEFAULT_RUNTIME_NODE_RANGE = '>=24 <25'
 
 export const SELFHOST_TAG_PREFIX = 'opptrix-selfhost-v'
 
+export const RUNTIME_TAG_PREFIX = 'runtime-v'
+
 export const HOT_PACKAGES_PREFIX = 'hot/packages'
 
 export const HOT_CHECK_UPDATE_KEY = 'hot/check-update'
@@ -86,10 +88,19 @@ export function runtimeArchBinSha256Filename(version, archKey) {
 }
 
 /**
+ * Docker / app snapshot tag — default `requires.minBaseImage` when unset.
  * @param {string} version
  */
 export function selfhostTagForVersion(version) {
   return `${SELFHOST_TAG_PREFIX}${normalizeHotVersion(version)}`
+}
+
+/**
+ * Runtime release tag for GitHub/Gitee asset mirrors.
+ * @param {string} version
+ */
+export function runtimeReleaseTagForVersion(version) {
+  return `${RUNTIME_TAG_PREFIX}${normalizeHotVersion(version)}`
 }
 
 /**
@@ -206,7 +217,7 @@ export function buildReleaseEntry(input) {
   const nodeRange = input.nodeRange?.trim() || DEFAULT_RUNTIME_NODE_RANGE
   const mirrorOpts = {
     ...(input.mirrorOpts ?? {}),
-    tag: input.mirrorOpts?.tag ?? selfhostTagForVersion(version),
+    tag: input.mirrorOpts?.tag?.trim() || runtimeReleaseTagForVersion(version),
   }
 
   /** @type {Record<string, { bin: string, sha256: string, size: number, mirrors: ReturnType<typeof buildArchPackageMirrors> }>} */
@@ -328,6 +339,7 @@ export function contentTypeForHotObjectKey(objectKey) {
  *   channel?: string
  *   description?: { features?: string[], fixes?: string[] }
  *   releases?: Array<Record<string, unknown>>
+ *   mirrorOpts?: { githubRepo?: string, giteeRepo?: string, tag?: string }
  * }} input
  */
 export function buildCheckUpdatePayload(input) {
@@ -354,11 +366,13 @@ export function buildCheckUpdatePayload(input) {
     nodeRange: input.nodeRange,
     minBaseImage: input.minBaseImage,
     description: input.description,
+    mirrorOpts: input.mirrorOpts,
   })
 
   const legacyUrls = hotPackageUrls(version, cdnBase)
   const x64 = releaseEntry.packages['linux-x64']
   const legacySize = x64?.size ?? releaseEntry.packages[Object.keys(releaseEntry.packages)[0]].size
+  const mirrorTag = input.mirrorOpts?.tag?.trim() || runtimeReleaseTagForVersion(version)
 
   const latest = {
     ...releaseEntry,
@@ -366,7 +380,8 @@ export function buildCheckUpdatePayload(input) {
     sha256: legacyUrls.sha256Url,
     size: legacySize,
     mirrors: buildLegacyPackageMirrors(version, {
-      tag: selfhostTagForVersion(version),
+      ...(input.mirrorOpts ?? {}),
+      tag: mirrorTag,
     }),
   }
 
@@ -393,6 +408,7 @@ export function buildCheckUpdatePayload(input) {
  *   nodeRange?: string
  *   minBaseImage?: string
  *   channel?: string
+ *   mirrorOpts?: { githubRepo?: string, giteeRepo?: string, tag?: string }
  * }} input
  */
 export async function prepareHotReleaseSync(input) {
@@ -405,6 +421,7 @@ export async function prepareHotReleaseSync(input) {
     nodeRange: input.nodeRange,
     minBaseImage: input.minBaseImage,
     description: input.description,
+    mirrorOpts: input.mirrorOpts,
   })
   const existing = (await fetchHotReleasesManifest(cdnBase).catch(() => null)) ?? []
   const merged = mergeReleaseHistory(existing, newEntry)
@@ -420,6 +437,7 @@ export async function prepareHotReleaseSync(input) {
     channel,
     description: input.description,
     releases: merged,
+    mirrorOpts: input.mirrorOpts,
   })
   return { newEntry, merged, releasesManifest, checkUpdate }
 }

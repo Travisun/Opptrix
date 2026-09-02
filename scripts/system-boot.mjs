@@ -19,6 +19,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import {
+  ensureVendorModuleLinks,
+  resolveVendorNodeModules,
+} from './lib/runtime-vendor.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..')
@@ -103,6 +107,42 @@ function usage() {
 }
 
 /**
+ * Symlink ABI vendor packages into the active boot slot (ESM-safe; no app import changes).
+ * @param {Awaited<ReturnType<typeof loadSystemUpdate>>} su
+ */
+function linkVendorIntoBoot(su) {
+  const paths = su.resolveSystemPaths()
+  let boot = su.readDirectoryPointer(paths.bootLink)
+  if (!boot) {
+    const state = su.readState(paths.systemDir)
+    if (state.currentVersion) {
+      const slot = su.slotPath(paths.systemDir, state.currentVersion)
+      if (fs.existsSync(slot)) boot = slot
+    }
+  }
+  if (!boot || !fs.existsSync(boot)) {
+    process.stderr.write('[system-boot] vendor-link: skip (no boot slot yet)\n')
+    return
+  }
+  const vendorNm = resolveVendorNodeModules()
+  const result = ensureVendorModuleLinks(boot, vendorNm)
+  process.stderr.write(
+    `[system-boot] vendor-link: boot=${boot} vendor=${result.vendorRoot}`
+      + ` linked=${result.linked.length} replaced=${result.replaced.length}`
+      + ` keptLink=${result.alreadyLinked.length} scrubbed=${result.scrubbed.length}`
+      + ` missingVendor=${result.missingInVendor.length}\n`,
+  )
+  if (result.linked.length || result.replaced.length) {
+    const shown = [...result.linked, ...result.replaced].slice(0, 12)
+    process.stderr.write(
+      `[system-boot] vendor-link: ABI ← vendor ${shown.join(', ')}`
+        + ([...result.linked, ...result.replaced].length > 12 ? '…' : '')
+        + '\n',
+    )
+  }
+}
+
+/**
  * @param {Awaited<ReturnType<typeof loadSystemUpdate>>} su
  * @param {string | undefined} versionFlag
  */
@@ -124,6 +164,7 @@ function cmdEnsure(su, versionFlag) {
     process.stderr.write(
       `[system-boot] ensure: ${result.seeded ? 'seeded' : 'skipped'} slot=${result.slotPath}\n`,
     )
+    linkVendorIntoBoot(su)
     return
   }
 
@@ -141,6 +182,7 @@ function cmdEnsure(su, versionFlag) {
     process.stderr.write(
       `[system-boot] ensure: promote skipped (${promote.reason}) image=${version}\n`,
     )
+    linkVendorIntoBoot(su)
     return
   }
   const flushNote = promote.flushedPending
@@ -150,6 +192,7 @@ function cmdEnsure(su, versionFlag) {
     `[system-boot] ensure: image ${version} > boot ${bootVer} → pending`
       + ` (${promote.reason})${flushNote} slot=${promote.slotPath}\n`,
   )
+  linkVendorIntoBoot(su)
 }
 
 /**
@@ -175,6 +218,7 @@ function cmdActivatePending(su) {
   const state = su.readState(root)
   if (!state.pendingVersion) {
     process.stderr.write('[system-boot] activate-pending: no pendingVersion — noop\n')
+    linkVendorIntoBoot(su)
     return
   }
   const check = pendingNeedsBaseRefresh(su, state.pendingVersion)
@@ -192,6 +236,7 @@ function cmdActivatePending(su) {
   process.stderr.write(
     `[system-boot] activated → ${result.currentVersion} path=${result.slotPath}\n`,
   )
+  linkVendorIntoBoot(su)
 }
 
 /**

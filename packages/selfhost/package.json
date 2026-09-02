@@ -47,7 +47,7 @@
   },
   "opptrixSelfhost": {
     "minAppTag": "opptrix-selfhost-v1.3.6",
-    "preferredAppTag": "opptrix-selfhost-v1.4.1",
+    "preferredAppTag": "opptrix-selfhost-v1.4.2",
     "imageRepository": "ghcr.io/travisun/opptrix"
   },
   "engines": {

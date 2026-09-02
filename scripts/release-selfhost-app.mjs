@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * Tag opptrix-selfhost-v{version} for app snapshot release.
+ * Tag opptrix-selfhost-v{version} for Docker / app snapshot (base image).
  *
- * Triggers CI on push:
- *   publish-selfhost-image.yml  — multi-arch GHCR image
- *   publish-runtime-assets.yml  — runtime .bin / CDN hot-update
+ * Does NOT auto-publish: GHCR image workflow is workflow_dispatch only.
+ * Runtime hot-update uses a separate tag: runtime-v{version} → publish-runtime-assets.yml
  *
  * Does NOT publish @opptrix/selfhost npm (use release-selfhost.mjs → selfhost-v*).
  *
@@ -72,8 +71,9 @@ function main() {
     console.log(`[release-selfhost-app] preferredAppTag → ${tag}`)
   }
 
-  console.log(`[release-selfhost-app] app snapshot tag ${tag}`)
-  console.log('[release-selfhost-app] CI: publish-selfhost-image + publish-runtime-assets')
+  console.log(`[release-selfhost-app] base/app snapshot tag ${tag}`)
+  console.log('[release-selfhost-app] Docker image: Actions → Publish selfhost image (workflow_dispatch)')
+  console.log(`[release-selfhost-app] Runtime CDN: tag runtime-v${version} → publish-runtime-assets.yml`)
 
   const status = run('git', ['status', '--porcelain'], { stdio: 'pipe' })
   const dirty = (status.stdout || '').trim()
@@ -83,6 +83,8 @@ function main() {
     console.log(`\nThen:\n  git tag -a ${tag} -m "Release ${tag}"`)
     console.log(`  git push origin main && git push gitee main`)
     console.log(`  git push origin ${tag} && git push gitee ${tag}`)
+    console.log(`  # Manual: workflow_dispatch publish-selfhost-image with tag=${tag}`)
+    console.log(`  # Runtime: git tag -a runtime-v${version} && push both remotes`)
     return
   }
 
@@ -99,6 +101,8 @@ function main() {
   console.log(`[release-selfhost-app] created ${tag}`)
   console.log(`Push:\n  git push origin main && git push gitee main`)
   console.log(`  git push origin ${tag} && git push gitee ${tag}`)
+  console.log(`Then: workflow_dispatch publish-selfhost-image (tag=${tag})`)
+  console.log(`Runtime pack: git tag -a runtime-v${version} -m "Release runtime-v${version}" && push both remotes`)
 }
 
 main()
