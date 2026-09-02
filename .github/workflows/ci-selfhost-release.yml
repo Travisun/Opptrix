@@ -167,7 +167,7 @@ jobs:
       - name: Smoke inspect image
         run: |
           docker image inspect opptrix:ci-smoke --format '{{.Os}}/{{.Architecture}} {{.Id}}'
-          docker run --rm opptrix:ci-smoke node -e "console.log(process.version)"
+          docker run --rm -e OPPTRIX_ONCE=1 opptrix:ci-smoke node -e "console.log(process.version)"
 
   merge-runtime-artifacts:
     name: Merge runtime packs + verify dual-arch manifest
