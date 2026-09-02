@@ -357,13 +357,29 @@ jobs:
           OPPTRIX_APP_VERSION: ${{ needs.resolve-meta.outputs.version }}
         run: node scripts/purge-hot-cdn-cache.mjs --version "${{ needs.resolve-meta.outputs.version }}"
 
+      # Prefer uploader from the workflow SHA so workflow_dispatch from main can
+      # re-mirror an older runtime-v* tag without retagging (pack still uses tag tree).
+      - name: Refresh Gitee uploader from workflow SHA
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_gitee) }}
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            scripts/upload-runtime-gitee.mjs
+          sparse-checkout-cone-mode: false
+          path: _gitee-uploader
+
       - name: Mirror to Gitee (optional)
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_gitee) }}
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           OPPTRIX_UPDATE_GITEE_REPO: Travisun/Opptrix
+          OPPTRIX_UPDATE_GITEE_TARGET: main
         run: |
           set -euo pipefail
+          if [[ -f _gitee-uploader/scripts/upload-runtime-gitee.mjs ]]; then
+            cp -f _gitee-uploader/scripts/upload-runtime-gitee.mjs scripts/upload-runtime-gitee.mjs
+          fi
           EXTRA=""
           if [[ -n "${GITEE_TOKEN:-}" ]]; then
             EXTRA="--require-token"

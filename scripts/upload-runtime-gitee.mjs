@@ -41,6 +41,7 @@ Options:
 Env:
   GITEE_TOKEN / OPPTRIX_UPDATE_GITEE_TOKEN
   OPPTRIX_UPDATE_GITEE_REPO
+  OPPTRIX_UPDATE_GITEE_TARGET  Branch/SHA for create-release (default: main)
   OPPTRIX_APP_VERSION
 `
 
@@ -145,6 +146,26 @@ function splitRepo(repo) {
 }
 
 /**
+ * @param {string} tag
+ * @param {{ token: string, targetCommitish?: string, body?: string }} opts
+ * @returns {URLSearchParams}
+ */
+export function buildGiteeCreateReleaseForm(tag, opts) {
+  const target =
+    (opts.targetCommitish ?? process.env.OPPTRIX_UPDATE_GITEE_TARGET ?? 'main').trim()
+    || 'main'
+  const body = new URLSearchParams()
+  body.set('access_token', opts.token)
+  body.set('tag_name', tag)
+  body.set('name', tag)
+  body.set('body', opts.body ?? `Opptrix runtime hot-update assets for ${tag}`)
+  body.set('prerelease', 'false')
+  // Gitee OpenAPI requires target_commitish (branch or commit SHA).
+  body.set('target_commitish', target)
+  return body
+}
+
+/**
  * @param {string} repo
  * @param {string} tag
  * @param {string} token
@@ -152,12 +173,7 @@ function splitRepo(repo) {
 async function createRelease(repo, tag, token) {
   const { owner, name } = splitRepo(repo)
   const url = `https://gitee.com/api/v5/repos/${owner}/${name}/releases`
-  const body = new URLSearchParams()
-  body.set('access_token', token)
-  body.set('tag_name', tag)
-  body.set('name', tag)
-  body.set('body', `Opptrix runtime hot-update assets for ${tag}`)
-  body.set('prerelease', 'false')
+  const body = buildGiteeCreateReleaseForm(tag, { token })
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -176,21 +192,29 @@ async function createRelease(repo, tag, token) {
   }
   const id = parseGiteeReleaseId(json)
   if (!res.ok || id == null) {
+    // Race / already created: re-lookup by tag before failing hard.
+    if (res.status === 400 || res.status === 422) {
+      const again = await fetchReleaseByTag(repo, tag, token)
+      if (again) return again
+    }
     throw new Error(
       `Gitee release create failed (${res.status}): ${(text || '').slice(0, 300)}`,
     )
   }
-  console.log(`[upload-runtime-gitee] created Gitee release id=${id} for ${tag}`)
+  console.log(
+    `[upload-runtime-gitee] created Gitee release id=${id} for ${tag}`
+      + ` (target_commitish=${body.get('target_commitish')})`,
+  )
   return { owner, name, id }
 }
 
 /**
- * Lookup release by tag; create when missing (404 / empty id).
  * @param {string} repo
  * @param {string} tag
  * @param {string} token
+ * @returns {Promise<{ owner: string, name: string, id: number } | null>}
  */
-async function ensureRelease(repo, tag, token) {
+async function fetchReleaseByTag(repo, tag, token) {
   const { owner, name } = splitRepo(repo)
   const url =
     `https://gitee.com/api/v5/repos/${owner}/${name}/releases/tags/${encodeURIComponent(tag)}`
@@ -205,24 +229,26 @@ async function ensureRelease(repo, tag, token) {
   } catch {
     json = null
   }
-
-  if (res.status === 404) {
-    return createRelease(repo, tag, token)
-  }
-
-  if (!res.ok) {
-    throw new Error(`Gitee release lookup failed (${res.status}): ${text.slice(0, 200)}`)
-  }
-
+  if (!res.ok) return null
   const id = parseGiteeReleaseId(json)
-  if (id == null) {
-    // Tag may exist without a Release row; some Gitee responses are empty/null.
-    console.warn(
-      `[upload-runtime-gitee] release lookup returned no id; creating release for ${tag}`,
-    )
-    return createRelease(repo, tag, token)
-  }
+  if (id == null) return null
   return { owner, name, id }
+}
+
+/**
+ * Lookup release by tag; create when missing (404 / empty id).
+ * @param {string} repo
+ * @param {string} tag
+ * @param {string} token
+ */
+async function ensureRelease(repo, tag, token) {
+  const existing = await fetchReleaseByTag(repo, tag, token)
+  if (existing) return existing
+
+  console.warn(
+    `[upload-runtime-gitee] no Gitee release for ${tag}; creating…`,
+  )
+  return createRelease(repo, tag, token)
 }
 
 /**
