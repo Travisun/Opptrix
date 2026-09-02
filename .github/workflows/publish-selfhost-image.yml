@@ -30,13 +30,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Empty = official Docker Hub / npm / Debian (CI foreign default)
-  OPPTRIX_NODE_VERSION: '24'
+  # Keep in sync with scripts/lib/ci-pins.env
+  CI_UBUNTU_RUNNER: ubuntu-24.04
+  OPPTRIX_NODE_PATCH_VERSION: '24.11.1'
 
 jobs:
   build-and-push:
     name: Build & push GHCR image
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 120
     steps:
       - name: Resolve version tags
@@ -148,7 +149,7 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           # Official registries (empty prefixes) — Node 24
           build-args: |
-            NODE_VERSION=24
+            NODE_VERSION=${{ env.OPPTRIX_NODE_PATCH_VERSION }}
             NODE_IMAGE_PREFIX=
             NPM_REGISTRY=
             APT_MIRROR=

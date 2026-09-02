@@ -25,14 +25,23 @@ test('bootstrap/linux.sh exists and is executable-ish', () => {
   assert.match(src, /gitee\.com\/Travisun\/Opptrix/)
 })
 
-test('ci-node-image.env matches bootstrap Node pin', () => {
-  const envFile = path.join(ROOT, 'scripts/lib/ci-node-image.env')
+test('ci-pins.env matches bootstrap Node pin and ubuntu LTS runner', () => {
+  const pinsFile = path.join(ROOT, 'scripts/lib/ci-pins.env')
   const bootstrap = fs.readFileSync(SCRIPT, 'utf8')
-  const ciEnv = fs.readFileSync(envFile, 'utf8')
+  const ciPins = fs.readFileSync(pinsFile, 'utf8')
+  const selfhostCi = fs.readFileSync(
+    path.join(ROOT, '.github/workflows/ci-selfhost-release.yml'),
+    'utf8',
+  )
   const pin = bootstrap.match(/OPPTRIX_NODE_VERSION="\$\{OPPTRIX_NODE_VERSION:-([^}]+)\}"/)?.[1]
   assert.ok(pin, 'bootstrap default OPPTRIX_NODE_VERSION')
-  assert.match(ciEnv, new RegExp(`OPPTRIX_NODE_PATCH_VERSION=${pin.replace(/\./g, '\\.')}`))
-  assert.match(ciEnv, new RegExp(`CI_NODE_BOOKWORM_IMAGE=node:${pin.replace(/\./g, '\\.')}-bookworm`))
+  assert.match(ciPins, new RegExp(`OPPTRIX_NODE_PATCH_VERSION=${pin.replace(/\./g, '\\.')}`))
+  assert.match(ciPins, new RegExp(`CI_NODE_BOOKWORM_IMAGE=node:${pin.replace(/\./g, '\\.')}-bookworm`))
+  const ubuntuRunner = ciPins.match(/^CI_UBUNTU_RUNNER=(.+)$/m)?.[1]
+  assert.ok(ubuntuRunner, 'CI_UBUNTU_RUNNER')
+  assert.match(ubuntuRunner, /^ubuntu-24\.04$/)
+  assert.match(selfhostCi, new RegExp(`CI_UBUNTU_RUNNER: ${ubuntuRunner}`))
+  assert.match(selfhostCi, /runs-on: \$\{\{ env\.CI_UBUNTU_RUNNER \}\}/)
 })
 
 test('bootstrap/linux.sh bash -n passes', () => {

@@ -7,8 +7,7 @@
 #   opptrix-runtime-vX.Y.Z.tar.gz (+ .sha256)
 #   opptrix-runtime-linux-{x64|arm64}-vX.Y.Z.tar.gz (+ .sha256)
 #
-# Matrix builds on ubuntu-latest (x64) + ubuntu-24.04-arm64 so native modules match
-# Docker linux/amd64 and linux/arm64 images. Clients fetch from CDN check-update.
+# Matrix: pinned ubuntu-24.04 (x64) + QEMU arm64 pack (see ci-selfhost-release.yml).
 name: Publish runtime assets
 
 on:
@@ -38,13 +37,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: '24'
+  # Keep in sync with scripts/lib/ci-pins.env
+  CI_UBUNTU_RUNNER: ubuntu-24.04
+  OPPTRIX_NODE_PATCH_VERSION: '24.11.1'
   OPPTRIX_UPDATE_CDN_BASE: 'https://update.opptrix.org'
 
 jobs:
   resolve-meta:
     name: Resolve version
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     outputs:
       full_tag: ${{ steps.meta.outputs.full_tag }}
       version: ${{ steps.meta.outputs.version }}
@@ -77,16 +78,12 @@ jobs:
   pack:
     name: Pack runtime (${{ matrix.platform_key }})
     needs: resolve-meta
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    timeout-minutes: ${{ matrix.platform_key == 'linux-arm64' && 120 || 90 }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-latest
-            platform_key: linux-x64
-          - runner: ubuntu-24.04-arm64
-            platform_key: linux-arm64
+        platform_key: [linux-x64, linux-arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -94,13 +91,21 @@ jobs:
           ref: ${{ needs.resolve-meta.outputs.full_tag }}
           fetch-depth: 1
 
+      - name: Load CI pin config
+        run: grep -v '^#' scripts/lib/ci-pins.env | grep -v '^$' >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.platform_key == 'linux-arm64'
+
       - name: Setup Node.js
+        if: matrix.platform_key == 'linux-x64'
         uses: actions/setup-node@v5
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ env.OPPTRIX_NODE_PATCH_VERSION }}
           cache: npm
 
       - name: Install build tools (native modules)
+        if: matrix.platform_key == 'linux-x64'
         shell: bash
         run: |
           set -euo pipefail
@@ -109,15 +114,19 @@ jobs:
             python3 make g++ build-essential pkg-config
 
       - name: Install dependencies
+        if: matrix.platform_key == 'linux-x64'
         run: npm ci
 
       - name: Build monorepo
+        if: matrix.platform_key == 'linux-x64'
         run: npm run build
 
       - name: Prune devDependencies
+        if: matrix.platform_key == 'linux-x64'
         run: npm prune --omit=dev
 
-      - name: Pack runtime tarball
+      - name: Pack runtime tarball (linux-x64)
+        if: matrix.platform_key == 'linux-x64'
         env:
           OPPTRIX_APP_VERSION: ${{ needs.resolve-meta.outputs.version }}
           OPPTRIX_RELEASE_TAG: ${{ needs.resolve-meta.outputs.full_tag }}
@@ -125,9 +134,21 @@ jobs:
           set -euo pipefail
           node scripts/pack-opptrix-runtime.mjs \
             --version "${{ needs.resolve-meta.outputs.version }}" \
-            --platform-key "${{ matrix.platform_key }}" \
+            --platform-key linux-x64 \
             --out-dir dist-runtime \
             --also-platform-name
+          ls -lah dist-runtime/
+
+      - name: Pack runtime tarball (linux-arm64 via QEMU)
+        if: matrix.platform_key == 'linux-arm64'
+        env:
+          RUNTIME_CI_VERSION: ${{ needs.resolve-meta.outputs.version }}
+          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-meta.outputs.full_tag }}
+          OPPTRIX_CI_ARM64_IMAGE: ${{ env.CI_NODE_BOOKWORM_IMAGE }}
+          OPPTRIX_CI_ARM64_MODE: publish
+        run: |
+          set -euo pipefail
+          bash scripts/ci-runtime-pack-arm64-docker.sh
           ls -lah dist-runtime/
 
       - name: Upload pack artifact
@@ -140,7 +161,7 @@ jobs:
   publish:
     name: Publish runtime & upload release assets
     needs: [resolve-meta, pack]
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 30
     env:
       HAS_R2_CREDS: ${{ secrets.R2_ACCESS_KEY_ID != '' }}

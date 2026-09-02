@@ -13,7 +13,7 @@ on:
       - 'scripts/runtime-update-cli.mjs'
       - 'scripts/audit-selfhost-release.mjs'
       - 'scripts/ci-runtime-pack-arm64-docker.sh'
-      - 'scripts/lib/ci-node-image.env'
+      - 'scripts/lib/ci-pins.env'
       - 'scripts/lib/hot-cdn.mjs'
       - 'scripts/lib/release-notes.mjs'
       - 'scripts/lib/selfhost-release-checks.mjs'
@@ -35,7 +35,7 @@ on:
       - 'scripts/runtime-update-cli.mjs'
       - 'scripts/audit-selfhost-release.mjs'
       - 'scripts/ci-runtime-pack-arm64-docker.sh'
-      - 'scripts/lib/ci-node-image.env'
+      - 'scripts/lib/ci-pins.env'
       - 'scripts/lib/hot-cdn.mjs'
       - 'scripts/lib/release-notes.mjs'
       - 'scripts/lib/selfhost-release-checks.mjs'
@@ -61,17 +61,19 @@ concurrency:
 
 env:
   RUNTIME_CI_VERSION: '9.9.9-ci'
+  # Keep in sync with scripts/lib/ci-pins.env
+  CI_UBUNTU_RUNNER: ubuntu-24.04
 
 jobs:
   selfhost-npm-pack:
     name: npm pack (@opptrix/selfhost)
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
-      - name: Load pinned Node image config
-        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+      - name: Load CI pin config
+        run: grep -v '^#' scripts/lib/ci-pins.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v5
         with:
@@ -86,7 +88,7 @@ jobs:
 
   runtime-pack:
     name: Runtime pack (${{ matrix.platform_key }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: ${{ matrix.platform_key == 'linux-arm64' && 120 || 45 }}
     strategy:
       fail-fast: false
@@ -95,8 +97,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Load pinned Node image config
-        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+      - name: Load CI pin config
+        run: grep -v '^#' scripts/lib/ci-pins.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - uses: docker/setup-qemu-action@v3
         if: matrix.platform_key == 'linux-arm64'
@@ -148,7 +150,7 @@ jobs:
 
   docker-build-smoke:
     name: Docker build smoke (linux/amd64)
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 90
     if: >-
       github.event_name == 'push'
@@ -156,8 +158,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Load pinned Node image config
-        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+      - name: Load CI pin config
+        run: grep -v '^#' scripts/lib/ci-pins.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - name: Verify Docker build context
         run: node -e "import { verifyDockerBuildContext } from './scripts/lib/selfhost-release-checks.mjs'; verifyDockerBuildContext('.'); console.log('context OK');"
@@ -194,13 +196,13 @@ jobs:
   merge-runtime-artifacts:
     name: Merge runtime packs + verify dual-arch manifest
     needs: runtime-pack
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
-      - name: Load pinned Node image config
-        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+      - name: Load CI pin config
+        run: grep -v '^#' scripts/lib/ci-pins.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v5
         with:

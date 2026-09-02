@@ -12,7 +12,7 @@
 #   OPPTRIX_GIT_URL=…                      国外默认 GitHub（可覆盖）
 #   OPPTRIX_GIT_URL_CN=…                   国内默认 Gitee（可覆盖）
 #   OPPTRIX_GIT_URL_OVERRIDE=…             强制单一 clone URL（不分国内/国外）
-#   OPPTRIX_NODE_VERSION=24.11.1           managed Node pin (see scripts/lib/ci-node-image.env)
+#   OPPTRIX_NODE_VERSION=24.11.1           managed Node pin (see scripts/lib/ci-pins.env)
 #   OPPTRIX_SKIP_DOCKER=1                  do not install Docker
 #   OPPTRIX_SKIP_NODE=1                    do not install managed Node
 #   OPPTRIX_SKIP_CLI=1                     do not link CLI

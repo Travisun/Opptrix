@@ -21,10 +21,14 @@ on:
 permissions:
   contents: read
 
+env:
+  # Keep in sync with scripts/lib/ci-pins.env
+  CI_UBUNTU_RUNNER: ubuntu-24.04
+
 jobs:
   publish:
     name: Build & publish @opptrix/selfhost
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
     timeout-minutes: 15
     defaults:
       run:
