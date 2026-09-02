@@ -18,6 +18,7 @@
  *   POST /api/v5/repos/{owner}/{repo}/releases
  *   POST /api/v5/repos/{owner}/{repo}/releases/{id}/attach_files  (multipart)
  */
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +43,8 @@ Env:
   GITEE_TOKEN / OPPTRIX_UPDATE_GITEE_TOKEN
   OPPTRIX_UPDATE_GITEE_REPO
   OPPTRIX_UPDATE_GITEE_TARGET  Branch/SHA for create-release (default: main)
+  OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS  Per-file upload timeout (default: 900000)
+  OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES     Attempts per file (default: 5)
   OPPTRIX_APP_VERSION
 `
 
@@ -252,29 +255,179 @@ async function ensureRelease(repo, tag, token) {
 }
 
 /**
+ * @param {number} ms
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * @param {{ owner: string, name: string, id: number }} release
+ * @param {string} token
+ * @returns {Promise<Set<string>>}
+ */
+async function listAttachedNames(release, token) {
+  const url =
+    `https://gitee.com/api/v5/repos/${release.owner}/${release.name}/releases/`
+    + `${release.id}/attach_files?access_token=${encodeURIComponent(token)}`
+    + `&page=1&per_page=100`
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json', 'User-Agent': 'Opptrix-runtime-upload' },
+  })
+  if (!res.ok) return new Set()
+  const json = await res.json().catch(() => null)
+  /** @type {Set<string>} */
+  const names = new Set()
+  if (!Array.isArray(json)) return names
+  for (const row of json) {
+    if (!row || typeof row !== 'object') continue
+    const n = /** @type {{ name?: unknown, file_name?: unknown }} */ (row)
+    const name =
+      (typeof n.name === 'string' && n.name)
+      || (typeof n.file_name === 'string' && n.file_name)
+      || ''
+    if (name) names.add(name)
+  }
+  return names
+}
+
+/**
+ * @returns {{ timeoutMs: number, retries: number }}
+ */
+export function resolveGiteeUploadPolicy() {
+  const timeoutRaw = Number(process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS ?? '')
+  const retriesRaw = Number(process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES ?? '')
+  return {
+    timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : 900_000,
+    retries: Number.isFinite(retriesRaw) && retriesRaw > 0 ? Math.floor(retriesRaw) : 5,
+  }
+}
+
+/**
+ * @param {{ owner: string, name: string, id: number }} release
+ * @param {string} filePath
+ * @param {string} token
+ * @param {number} timeoutMs
+ */
+async function uploadAttachViaCurl(release, filePath, token, timeoutMs) {
+  const url =
+    `https://gitee.com/api/v5/repos/${release.owner}/${release.name}/releases/`
+    + `${release.id}/attach_files?access_token=${encodeURIComponent(token)}`
+  const name = path.basename(filePath)
+  const timeoutSec = Math.max(60, Math.ceil(timeoutMs / 1000))
+  const r = spawnSync(
+    'curl',
+    [
+      '-sS',
+      '-f',
+      '-X', 'POST',
+      '-H', 'User-Agent: Opptrix-runtime-upload',
+      '-F', `file=@${filePath};filename=${name}`,
+      '--connect-timeout', '30',
+      '--max-time', String(timeoutSec),
+      '--retry', '2',
+      '--retry-delay', '5',
+      url,
+    ],
+    { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
+  )
+  if (r.error) throw r.error
+  if (r.status !== 0) {
+    const errText = (r.stderr || r.stdout || `curl exit ${r.status}`).slice(0, 300)
+    throw new Error(`Gitee attach via curl failed for ${name}: ${errText}`)
+  }
+}
+
+/**
+ * @param {{ owner: string, name: string, id: number }} release
+ * @param {string} filePath
+ * @param {string} token
+ * @param {number} timeoutMs
+ */
+async function uploadAttachOnce(release, filePath, token, timeoutMs) {
+  const size = fs.statSync(filePath).size
+  // Large binaries: curl is more resilient than undici on GH Actions → Gitee.
+  if (size >= 1_000_000) {
+    await uploadAttachViaCurl(release, filePath, token, timeoutMs)
+    return
+  }
+  const url =
+    `https://gitee.com/api/v5/repos/${release.owner}/${release.name}/releases/`
+    + `${release.id}/attach_files?access_token=${encodeURIComponent(token)}`
+  const name = path.basename(filePath)
+  const blob =
+    typeof fs.openAsBlob === 'function'
+      ? await fs.openAsBlob(filePath)
+      : new Blob([fs.readFileSync(filePath)])
+  const form = new FormData()
+  form.append('file', blob, name)
+  const ac = new AbortController()
+  const timer = setTimeout(() => ac.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'User-Agent': 'Opptrix-runtime-upload' },
+      body: form,
+      signal: ac.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      if (res.status === 400 || res.status === 422) {
+        if (/already|exist|重复|已存在/i.test(body)) return
+      }
+      throw new Error(
+        `Gitee attach failed for ${name} (${res.status}): ${body.slice(0, 300)}`,
+      )
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * @param {{ owner: string, name: string, id: number }} release
  * @param {string} filePath
  * @param {string} token
  */
 async function uploadAttach(release, filePath, token) {
-  const url =
-    `https://gitee.com/api/v5/repos/${release.owner}/${release.name}/releases/`
-    + `${release.id}/attach_files?access_token=${encodeURIComponent(token)}`
-  const buf = fs.readFileSync(filePath)
-  const blob = new Blob([buf])
-  const form = new FormData()
-  form.append('file', blob, path.basename(filePath))
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'User-Agent': 'Opptrix-runtime-upload' },
-    body: form,
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(
-      `Gitee attach failed for ${path.basename(filePath)} (${res.status}): ${body.slice(0, 300)}`,
-    )
+  const { timeoutMs, retries } = resolveGiteeUploadPolicy()
+  const name = path.basename(filePath)
+  const size = fs.statSync(filePath).size
+  let lastErr = /** @type {unknown} */ (null)
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(
+        `[upload-runtime-gitee] uploading ${name} (${size} bytes)`
+          + ` attempt ${attempt}/${retries} timeout=${timeoutMs}ms …`,
+      )
+      await uploadAttachOnce(release, filePath, token, timeoutMs)
+      return
+    } catch (err) {
+      lastErr = err
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[upload-runtime-gitee] ${name} attempt ${attempt} failed: ${msg}`)
+      if (attempt < retries) {
+        const backoff = Math.min(60_000, 3_000 * 2 ** (attempt - 1))
+        await sleep(backoff)
+      }
+    }
   }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`Gitee attach failed for ${name}: ${String(lastErr)}`)
+}
+
+/**
+ * Prefer tiny sidecars first; large .bin last (fail late, keep release useful).
+ * @param {string[]} files
+ */
+export function orderAssetsForUpload(files) {
+  return [...files].sort((a, b) => {
+    const sa = fs.statSync(a).size
+    const sb = fs.statSync(b).size
+    if (sa !== sb) return sa - sb
+    return path.basename(a).localeCompare(path.basename(b))
+  })
 }
 
 async function main() {
@@ -322,9 +475,16 @@ async function main() {
   }
 
   const release = await ensureRelease(opts.repo, tag, token)
-  for (const f of files) {
-    console.log(`[upload-runtime-gitee] uploading ${path.basename(f)} …`)
+  const already = await listAttachedNames(release, token)
+  const ordered = orderAssetsForUpload(files)
+  for (const f of ordered) {
+    const base = path.basename(f)
+    if (already.has(base)) {
+      console.log(`[upload-runtime-gitee] skip (already attached): ${base}`)
+      continue
+    }
     await uploadAttach(release, f, token)
+    already.add(base)
   }
   console.log('[upload-runtime-gitee] done')
 }

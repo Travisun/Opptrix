@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
 import {
   buildGiteeCreateReleaseForm,
+  orderAssetsForUpload,
   parseGiteeReleaseId,
+  resolveGiteeUploadPolicy,
 } from '../scripts/upload-runtime-gitee.mjs'
 
 test('parseGiteeReleaseId tolerates null / empty payloads', () => {
@@ -36,5 +41,37 @@ test('buildGiteeCreateReleaseForm defaults target_commitish to main', () => {
   } finally {
     if (prev === undefined) delete process.env.OPPTRIX_UPDATE_GITEE_TARGET
     else process.env.OPPTRIX_UPDATE_GITEE_TARGET = prev
+  }
+})
+
+test('resolveGiteeUploadPolicy defaults and env overrides', () => {
+  const prevT = process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS
+  const prevR = process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES
+  delete process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS
+  delete process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES
+  try {
+    assert.deepEqual(resolveGiteeUploadPolicy(), { timeoutMs: 900_000, retries: 5 })
+    process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS = '120000'
+    process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES = '3'
+    assert.deepEqual(resolveGiteeUploadPolicy(), { timeoutMs: 120_000, retries: 3 })
+  } finally {
+    if (prevT === undefined) delete process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS
+    else process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_TIMEOUT_MS = prevT
+    if (prevR === undefined) delete process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES
+    else process.env.OPPTRIX_UPDATE_GITEE_UPLOAD_RETRIES = prevR
+  }
+})
+
+test('orderAssetsForUpload sorts by ascending size', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gitee-upload-order-'))
+  try {
+    const small = path.join(dir, 'a.sha256')
+    const big = path.join(dir, 'b.bin')
+    fs.writeFileSync(small, 'x')
+    fs.writeFileSync(big, 'y'.repeat(4096))
+    const ordered = orderAssetsForUpload([big, small])
+    assert.deepEqual(ordered.map((p) => path.basename(p)), ['a.sha256', 'b.bin'])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
   }
 })
