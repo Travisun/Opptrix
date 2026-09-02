@@ -12,6 +12,8 @@ on:
       - 'scripts/sync-hot-to-r2.mjs'
       - 'scripts/runtime-update-cli.mjs'
       - 'scripts/audit-selfhost-release.mjs'
+      - 'scripts/ci-runtime-pack-arm64-docker.sh'
+      - 'scripts/lib/ci-node-image.env'
       - 'scripts/lib/hot-cdn.mjs'
       - 'scripts/lib/release-notes.mjs'
       - 'scripts/lib/selfhost-release-checks.mjs'
@@ -32,6 +34,8 @@ on:
       - 'scripts/sync-hot-to-r2.mjs'
       - 'scripts/runtime-update-cli.mjs'
       - 'scripts/audit-selfhost-release.mjs'
+      - 'scripts/ci-runtime-pack-arm64-docker.sh'
+      - 'scripts/lib/ci-node-image.env'
       - 'scripts/lib/hot-cdn.mjs'
       - 'scripts/lib/release-notes.mjs'
       - 'scripts/lib/selfhost-release-checks.mjs'
@@ -56,7 +60,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '24'
   RUNTIME_CI_VERSION: '9.9.9-ci'
 
 jobs:
@@ -67,9 +70,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Load pinned Node image config
+        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+
       - uses: actions/setup-node@v5
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ env.OPPTRIX_NODE_PATCH_VERSION }}
           cache: npm
 
       - name: Install dependencies
@@ -89,13 +95,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Load pinned Node image config
+        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+
       - uses: docker/setup-qemu-action@v3
         if: matrix.platform_key == 'linux-arm64'
 
       - uses: actions/setup-node@v5
         if: matrix.platform_key == 'linux-x64'
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ env.OPPTRIX_NODE_PATCH_VERSION }}
           cache: npm
 
       - name: Install build tools (native modules)
@@ -127,6 +136,7 @@ jobs:
         if: matrix.platform_key == 'linux-arm64'
         env:
           RUNTIME_CI_VERSION: ${{ env.RUNTIME_CI_VERSION }}
+          OPPTRIX_CI_ARM64_IMAGE: ${{ env.CI_NODE_BOOKWORM_IMAGE }}
         run: bash scripts/ci-runtime-pack-arm64-docker.sh
 
       - name: Upload runtime pack artifact
@@ -146,6 +156,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Load pinned Node image config
+        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+
       - name: Verify Docker build context
         run: node -e "import { verifyDockerBuildContext } from './scripts/lib/selfhost-release-checks.mjs'; verifyDockerBuildContext('.'); console.log('context OK');"
 
@@ -163,7 +176,7 @@ jobs:
           load: true
           tags: opptrix:ci-smoke
           build-args: |
-            NODE_VERSION=24
+            NODE_VERSION=${{ env.OPPTRIX_NODE_PATCH_VERSION }}
             NODE_IMAGE_PREFIX=
             NPM_REGISTRY=
             APT_MIRROR=
@@ -186,9 +199,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Load pinned Node image config
+        run: grep -v '^#' scripts/lib/ci-node-image.env | grep -v '^$' >> "$GITHUB_ENV"
+
       - uses: actions/setup-node@v5
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ env.OPPTRIX_NODE_PATCH_VERSION }}
           cache: npm
 
       - name: Download runtime artifacts

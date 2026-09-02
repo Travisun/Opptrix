@@ -3,11 +3,15 @@
 # Avoids queueing on ubuntu-24.04-arm64 hosted runners while keeping native arm64 binaries.
 set -euo pipefail
 
-ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "$0")/.." && pwd)}"
-VERSION="${RUNTIME_CI_VERSION:?RUNTIME_CI_VERSION required}"
-IMAGE="${OPPTRIX_CI_ARM64_IMAGE:-node:24-bookworm}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/ci-node-image.env"
 
-echo "[ci:arm64-pack] image=$IMAGE version=$VERSION"
+ROOT="${GITHUB_WORKSPACE:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+VERSION="${RUNTIME_CI_VERSION:?RUNTIME_CI_VERSION required}"
+IMAGE="${OPPTRIX_CI_ARM64_IMAGE:-${CI_NODE_BOOKWORM_IMAGE}}"
+
+echo "[ci:arm64-pack] image=$IMAGE version=$VERSION node_patch=${OPPTRIX_NODE_PATCH_VERSION}"
 
 docker run --rm --platform linux/arm64 \
   -v "${ROOT}:/workspace" \

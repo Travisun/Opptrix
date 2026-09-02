@@ -25,6 +25,16 @@ test('bootstrap/linux.sh exists and is executable-ish', () => {
   assert.match(src, /gitee\.com\/Travisun\/Opptrix/)
 })
 
+test('ci-node-image.env matches bootstrap Node pin', () => {
+  const envFile = path.join(ROOT, 'scripts/lib/ci-node-image.env')
+  const bootstrap = fs.readFileSync(SCRIPT, 'utf8')
+  const ciEnv = fs.readFileSync(envFile, 'utf8')
+  const pin = bootstrap.match(/OPPTRIX_NODE_VERSION="\$\{OPPTRIX_NODE_VERSION:-([^}]+)\}"/)?.[1]
+  assert.ok(pin, 'bootstrap default OPPTRIX_NODE_VERSION')
+  assert.match(ciEnv, new RegExp(`OPPTRIX_NODE_PATCH_VERSION=${pin.replace(/\./g, '\\.')}`))
+  assert.match(ciEnv, new RegExp(`CI_NODE_BOOKWORM_IMAGE=node:${pin.replace(/\./g, '\\.')}-bookworm`))
+})
+
 test('bootstrap/linux.sh bash -n passes', () => {
   const r = spawnSync('bash', ['-n', SCRIPT], { encoding: 'utf8' })
   assert.equal(r.status, 0, r.stderr || r.stdout)
