@@ -15,6 +15,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { parsePackageMirrors } from './lib/runtime-release-mirrors.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..')
@@ -115,6 +116,7 @@ function parseReleasePackage(row, cdnBase) {
       const bin = typeof p.bin === 'string' ? p.bin.trim() : ''
       const sha = typeof p.sha256 === 'string' ? p.sha256.trim() : ''
       if (bin && sha) {
+        const mirrors = parsePackageMirrors(p)
         return {
           version,
           binUrl: resolveUrl(cdnBase, bin),
@@ -124,6 +126,7 @@ function parseReleasePackage(row, cdnBase) {
           requires: row.requires ?? {},
           publishedAt: typeof row.publishedAt === 'string' ? row.publishedAt : null,
           description: parseReleaseDescription(row.description),
+          mirrors: mirrors.github || mirrors.gitee ? mirrors : undefined,
         }
       }
     }
@@ -133,6 +136,7 @@ function parseReleasePackage(row, cdnBase) {
   const shaRef = typeof row.sha256 === 'string' ? row.sha256.trim() : ''
   if (archKey !== 'linux-x64') return null
   if (!binRef || !shaRef) return null
+  const mirrors = parsePackageMirrors(row)
   return {
     version,
     binUrl: resolveUrl(cdnBase, binRef),
@@ -142,6 +146,7 @@ function parseReleasePackage(row, cdnBase) {
     requires: row.requires ?? {},
     publishedAt: typeof row.publishedAt === 'string' ? row.publishedAt : null,
     description: parseReleaseDescription(row.description),
+    mirrors: mirrors.github || mirrors.gitee ? mirrors : undefined,
   }
 }
 
@@ -184,26 +189,6 @@ function resolveUrl(base, ref) {
   const b = base.replace(/\/+$/, '')
   if (trimmed.startsWith('/')) return `${b}${trimmed}`
   return `${b}/${trimmed}`
-}
-
-/**
- * @param {string} url
- * @param {string} dest
- * @param {Record<string, string>} headers
- */
-async function downloadFile(url, dest, headers) {
-  const ac = new AbortController()
-  const timer = setTimeout(() => ac.abort(), 180_000)
-  try {
-    const res = await fetch(url, { headers, signal: ac.signal })
-    if (!res.ok) throw new Error(`download failed (${res.status})`)
-    const buf = Buffer.from(await res.arrayBuffer())
-    fs.mkdirSync(path.dirname(dest), { recursive: true })
-    fs.writeFileSync(dest, buf)
-    return buf.length
-  } finally {
-    clearTimeout(timer)
-  }
 }
 
 /**
@@ -312,8 +297,20 @@ async function stageReleasePackage(su, pkg, source, current) {
   const shaSidecar = archivePath.replace(/\.bin$/, '.sha256')
 
   const headers = { 'User-Agent': buildUserAgent(pkg.version) }
-  await downloadFile(pkg.binUrl, archivePath, headers)
-  await downloadFile(pkg.sha256Url, shaSidecar, headers)
+  const { source: mirrorSource } = await su.downloadRuntimeAssetPair(
+    {
+      binUrl: pkg.binUrl,
+      sha256Url: pkg.sha256Url,
+      mirrors: pkg.mirrors,
+    },
+    {
+      binDest: archivePath,
+      shaDest: shaSidecar,
+      headers,
+      timeoutMs: 180_000,
+      probeNetwork: true,
+    },
+  )
 
   const extracted = su.extractUpdateArchive({
     archivePath,
@@ -330,7 +327,7 @@ async function stageReleasePackage(su, pkg, source, current) {
   return {
     command: 'use',
     version: pkg.version,
-    source,
+    source: `${source}:${mirrorSource}`,
     slotPath: extracted.slotPath,
     needsApply: true,
     needsBaseRefresh: requiresCheck.needsBaseRefresh,

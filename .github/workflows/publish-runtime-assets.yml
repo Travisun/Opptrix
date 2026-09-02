@@ -306,7 +306,20 @@ jobs:
               console.error('latest.bin legacy x64 URL unexpected');
               process.exit(1);
             }
-            console.log('CDN check-update OK for', v, '(linux-x64 + linux-arm64)');
+            if (!j.retention || j.retention.max !== 8) {
+              console.error('retention.max missing or not 8');
+              process.exit(1);
+            }
+            if (!Array.isArray(j.releases) || j.releases.length < 1) {
+              console.error('releases[] missing or empty');
+              process.exit(1);
+            }
+            const first = j.releases[0];
+            if (!first.description || !Array.isArray(first.description.features)) {
+              console.error('releases[0].description missing');
+              process.exit(1);
+            }
+            console.log('CDN check-update OK for', v, '(linux-x64 + linux-arm64 + releases)');
           " "$VER"
 
       - name: Summarize

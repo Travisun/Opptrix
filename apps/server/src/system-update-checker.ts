@@ -1,7 +1,6 @@
 /**
  * Background update check, silent download, first-boot migration hooks.
  */
-import fs from 'node:fs'
 import path from 'node:path'
 import {
   OPPTRIX_EXIT_RESTART_POST_HOOK,
@@ -11,6 +10,7 @@ import {
   collectSqliteDataFiles,
   dbSnapshotDir,
   deleteDbSnapshotDir,
+  downloadRuntimeAssetPair,
   ensureLayout,
   evaluateRuntimeRequires,
   extractUpdateArchive,
@@ -40,7 +40,6 @@ import {
 } from './system-update-channel.js'
 import { setAvailableReleaseDescription } from './system-update-release-cache.js'
 import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
-import { downloadToFile } from './system-update-download.js'
 import {
   buildSystemUpdateStatus,
   clearBlockedPending,
@@ -142,26 +141,33 @@ async function startSilentDownload(
     const userAgent = buildSystemUpdateUserAgent(version)
     const headers: Record<string, string> = { 'User-Agent': userAgent }
 
-    await downloadToFile(latest.binUrl, archivePath, {
-      headers,
-      timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      onProgress: (received, total) => {
-        patchState({
-          downloadJob: {
-            id: `dl-${version}`,
-            version,
-            status: 'running',
-            bytesReceived: received,
-            bytesTotal: total ?? latest.size,
-            error: null,
-          },
-        })
+    const { bytes } = await downloadRuntimeAssetPair(
+      {
+        binUrl: latest.binUrl,
+        sha256Url: latest.sha256Url,
+        mirrors: latest.mirrors,
       },
-    })
-    await downloadToFile(latest.sha256Url, shaPath, {
-      headers,
-      timeoutMs: CHECK_TIMEOUT_MS,
-    })
+      {
+        binDest: archivePath,
+        shaDest: shaPath,
+        headers,
+        timeoutMs: DOWNLOAD_TIMEOUT_MS,
+        shaTimeoutMs: CHECK_TIMEOUT_MS,
+        onProgress: (received, total) => {
+          patchState({
+            downloadJob: {
+              id: `dl-${version}`,
+              version,
+              status: 'running',
+              bytesReceived: received,
+              bytesTotal: total ?? latest.size,
+              error: null,
+            },
+          })
+        },
+        probeNetwork: true,
+      },
+    )
 
     const extracted = extractUpdateArchive({
       archivePath,
@@ -180,7 +186,7 @@ async function startSilentDownload(
         id: `dl-${version}`,
         version,
         status: 'done',
-        bytesReceived: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0,
+        bytesReceived: bytes,
         bytesTotal: latest.size,
         error: null,
       },

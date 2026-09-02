@@ -1,0 +1,250 @@
+/**
+ * GitHub / Gitee release download URLs for runtime hot-update packages.
+ * CDN (update.opptrix.org) remains authoritative manifest + fallback payload.
+ */
+const SELFHOST_TAG_PREFIX = 'opptrix-selfhost-v'
+
+/** @type {readonly ['linux-x64', 'linux-arm64']} */
+const RUNTIME_LINUX_ARCH_KEYS = ['linux-x64', 'linux-arm64']
+
+/**
+ * @param {string} version
+ */
+function normalizeHotVersion(version) {
+  const v = String(version ?? '').trim().replace(/^v/, '')
+  if (!/^\d+\.\d+\.\d+(?:[-+].*)?$/.test(v)) {
+    throw new Error(`invalid version "${version}" (expect X.Y.Z)`)
+  }
+  return v
+}
+
+/**
+ * @param {string} version
+ */
+export function selfhostTagForVersion(version) {
+  return `${SELFHOST_TAG_PREFIX}${normalizeHotVersion(version)}`
+}
+
+/**
+ * @param {string} version
+ */
+export function runtimeBinFilename(version) {
+  return `opptrix-runtime-v${normalizeHotVersion(version)}.bin`
+}
+
+/**
+ * @param {string} version
+ */
+export function runtimeBinSha256Filename(version) {
+  return `opptrix-runtime-v${normalizeHotVersion(version)}.sha256`
+}
+
+/**
+ * @param {string} version
+ * @param {'linux-x64' | 'linux-arm64'} archKey
+ */
+export function runtimeArchBinFilename(version, archKey) {
+  const v = normalizeHotVersion(version)
+  if (!RUNTIME_LINUX_ARCH_KEYS.includes(archKey)) {
+    throw new Error(`unsupported runtime arch key "${archKey}"`)
+  }
+  return `opptrix-runtime-${archKey}-v${v}.bin`
+}
+
+/**
+ * @param {string} version
+ * @param {'linux-x64' | 'linux-arm64'} archKey
+ */
+export function runtimeArchBinSha256Filename(version, archKey) {
+  const v = normalizeHotVersion(version)
+  if (!RUNTIME_LINUX_ARCH_KEYS.includes(archKey)) {
+    throw new Error(`unsupported runtime arch key "${archKey}"`)
+  }
+  return `opptrix-runtime-${archKey}-v${v}.sha256`
+}
+
+export const DEFAULT_GITHUB_REPO = 'Travisun/Opptrix'
+export const DEFAULT_GITEE_REPO = 'Travisun/Opptrix'
+
+/**
+ * @param {string} version
+ */
+export function normalizeReleaseVersion(version) {
+  return String(version ?? '').trim().replace(/^v/i, '')
+}
+
+/**
+ * @param {string} version
+ */
+export function releaseTagForVersion(version) {
+  return selfhostTagForVersion(normalizeReleaseVersion(version))
+}
+
+/**
+ * @param {string} repo  owner/name
+ * @param {string} tag
+ * @param {string} filename
+ */
+export function githubReleaseAssetUrl(repo, tag, filename) {
+  const [owner, name] = String(repo).split('/').filter(Boolean)
+  if (!owner || !name) throw new Error(`invalid github repo: ${repo}`)
+  return `https://github.com/${owner}/${name}/releases/download/${tag}/${filename}`
+}
+
+/**
+ * @param {string} repo  owner/name
+ * @param {string} tag
+ * @param {string} filename
+ */
+export function giteeReleaseAssetUrl(repo, tag, filename) {
+  const [owner, name] = String(repo).split('/').filter(Boolean)
+  if (!owner || !name) throw new Error(`invalid gitee repo: ${repo}`)
+  return `https://gitee.com/${owner}/${name}/releases/download/${tag}/${filename}`
+}
+
+/**
+ * @param {string} version
+ * @param {string} filename
+ * @param {{
+ *   githubRepo?: string,
+ *   giteeRepo?: string,
+ *   tag?: string,
+ * }} [opts]
+ */
+export function buildReleaseAssetMirrorPair(version, filename, opts = {}) {
+  const tag = opts.tag ?? releaseTagForVersion(version)
+  const githubRepo = opts.githubRepo ?? DEFAULT_GITHUB_REPO
+  const giteeRepo = opts.giteeRepo ?? DEFAULT_GITEE_REPO
+  return {
+    github: githubReleaseAssetUrl(githubRepo, tag, filename),
+    gitee: giteeReleaseAssetUrl(giteeRepo, tag, filename),
+  }
+}
+
+/**
+ * @param {string} version
+ * @param {'linux-x64' | 'linux-arm64'} archKey
+ * @param {{ githubRepo?: string, giteeRepo?: string, tag?: string }} [opts]
+ */
+export function buildArchPackageMirrors(version, archKey, opts = {}) {
+  const v = normalizeReleaseVersion(version)
+  const binName = runtimeArchBinFilename(v, archKey)
+  const shaName = runtimeArchBinSha256Filename(v, archKey)
+  const bin = buildReleaseAssetMirrorPair(v, binName, opts)
+  const sha = buildReleaseAssetMirrorPair(v, shaName, opts)
+  return {
+    github: { bin: bin.github, sha256: sha.github },
+    gitee: { bin: bin.gitee, sha256: sha.gitee },
+  }
+}
+
+/**
+ * Legacy x64 alias mirrors (latest.bin / latest.sha256).
+ * @param {string} version
+ * @param {{ githubRepo?: string, giteeRepo?: string, tag?: string }} [opts]
+ */
+export function buildLegacyPackageMirrors(version, opts = {}) {
+  const v = normalizeReleaseVersion(version)
+  const binName = runtimeBinFilename(v)
+  const shaName = runtimeBinSha256Filename(v)
+  const bin = buildReleaseAssetMirrorPair(v, binName, opts)
+  const sha = buildReleaseAssetMirrorPair(v, shaName, opts)
+  return {
+    github: { bin: bin.github, sha256: sha.github },
+    gitee: { bin: bin.gitee, sha256: sha.gitee },
+  }
+}
+
+/**
+ * @param {unknown} raw
+ */
+export function parsePackageMirrors(raw) {
+  if (typeof raw !== 'object' || raw === null) {
+    return { github: undefined, gitee: undefined }
+  }
+  const row = /** @type {Record<string, unknown>} */ (raw)
+  /**
+   * @param {unknown} block
+   */
+  function pick(block) {
+    if (typeof block !== 'object' || block === null) return undefined
+    const b = /** @type {Record<string, unknown>} */ (block)
+    const bin = typeof b.bin === 'string' && b.bin.trim() ? b.bin.trim() : undefined
+    const sha256 = typeof b.sha256 === 'string' && b.sha256.trim() ? b.sha256.trim() : undefined
+    if (!bin && !sha256) return undefined
+    return { bin, sha256 }
+  }
+  const mirrors = row.mirrors
+  if (typeof mirrors !== 'object' || mirrors === null) {
+    return { github: undefined, gitee: undefined }
+  }
+  const m = /** @type {Record<string, unknown>} */ (mirrors)
+  return {
+    github: pick(m.github),
+    gitee: pick(m.gitee),
+  }
+}
+
+/**
+ * @typedef {'cn' | 'foreign'} UpdateMirrorProfile
+ * @typedef {'gitee' | 'github' | 'cdn'} RuntimeDownloadSource
+ */
+
+/**
+ * @param {UpdateMirrorProfile} profile
+ * @returns {RuntimeDownloadSource[]}
+ */
+export function mirrorSourceOrder(profile) {
+  return profile === 'cn'
+    ? ['gitee', 'github', 'cdn']
+    : ['github', 'gitee', 'cdn']
+}
+
+/**
+ * @param {{
+ *   binUrl: string,
+ *   sha256Url: string,
+ *   mirrors?: ReturnType<typeof parsePackageMirrors>,
+ * }} refs
+ * @param {UpdateMirrorProfile} profile
+ * @returns {Array<{ binUrl: string, sha256Url: string, source: RuntimeDownloadSource }>}
+ */
+export function buildRuntimeDownloadCandidates(refs, profile) {
+  const cdnBin = String(refs.binUrl ?? '').trim()
+  const cdnSha = String(refs.sha256Url ?? '').trim()
+  if (!cdnBin || !cdnSha) throw new Error('buildRuntimeDownloadCandidates: missing CDN refs')
+
+  /** @type {Array<{ binUrl: string, sha256Url: string, source: RuntimeDownloadSource }>} */
+  const out = []
+  const seen = new Set()
+
+  /**
+   * @param {RuntimeDownloadSource} source
+   * @param {string | undefined} bin
+   * @param {string | undefined} sha
+   */
+  function push(source, bin, sha) {
+    const b = String(bin ?? '').trim()
+    const s = String(sha ?? '').trim()
+    if (!b || !s) return
+    const key = `${source}:${b}:${s}`
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ binUrl: b, sha256Url: s, source })
+  }
+
+  const mirrors = refs.mirrors ?? {}
+  for (const source of mirrorSourceOrder(profile)) {
+    if (source === 'cdn') {
+      push('cdn', cdnBin, cdnSha)
+      continue
+    }
+    const block = mirrors[source]
+    push(source, block?.bin, block?.sha256)
+  }
+
+  if (out.length === 0) {
+    out.push({ binUrl: cdnBin, sha256Url: cdnSha, source: 'cdn' })
+  }
+  return out
+}

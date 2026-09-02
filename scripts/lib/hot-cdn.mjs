@@ -3,6 +3,10 @@
  * Shared by scripts/sync-hot-to-r2.mjs and tests.
  */
 import fs from 'node:fs'
+import {
+  buildArchPackageMirrors,
+  buildLegacyPackageMirrors,
+} from './runtime-release-mirrors.mjs'
 
 export const DEFAULT_HOT_CDN_BASE = 'https://update.opptrix.org'
 
@@ -190,7 +194,9 @@ export function compareHotSemver(a, b) {
  *   publishedAt?: string
  *   nodeRange?: string
  *   minBaseImage?: string
+ *   minBaseImage?: string
  *   description?: { features?: string[], fixes?: string[] }
+ *   mirrorOpts?: { githubRepo?: string, giteeRepo?: string, tag?: string }
  * }} input
  */
 export function buildReleaseEntry(input) {
@@ -199,8 +205,12 @@ export function buildReleaseEntry(input) {
   const publishedAt = input.publishedAt?.trim() || new Date().toISOString()
   const minBaseImage = input.minBaseImage?.trim() || selfhostTagForVersion(version)
   const nodeRange = input.nodeRange?.trim() || DEFAULT_RUNTIME_NODE_RANGE
+  const mirrorOpts = {
+    ...(input.mirrorOpts ?? {}),
+    tag: input.mirrorOpts?.tag ?? selfhostTagForVersion(version),
+  }
 
-  /** @type {Record<string, { bin: string, sha256: string, size: number }>} */
+  /** @type {Record<string, { bin: string, sha256: string, size: number, mirrors: ReturnType<typeof buildArchPackageMirrors> }>} */
   const packages = {}
   for (const archKey of RUNTIME_LINUX_ARCH_KEYS) {
     const entry = input.packages[archKey]
@@ -214,6 +224,7 @@ export function buildReleaseEntry(input) {
       bin: urls.binUrl,
       sha256: urls.sha256Url,
       size: binSize,
+      mirrors: buildArchPackageMirrors(version, archKey, mirrorOpts),
     }
   }
   if (Object.keys(packages).length === 0) {
@@ -355,6 +366,9 @@ export function buildCheckUpdatePayload(input) {
     bin: legacyUrls.binUrl,
     sha256: legacyUrls.sha256Url,
     size: legacySize,
+    mirrors: buildLegacyPackageMirrors(version, {
+      tag: selfhostTagForVersion(version),
+    }),
   }
 
   const releases = Array.isArray(input.releases) && input.releases.length > 0

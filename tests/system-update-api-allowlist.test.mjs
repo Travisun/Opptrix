@@ -144,6 +144,35 @@ describe('channel tag + CDN helpers', () => {
     assert.ok(withNotes)
     assert.deepEqual(withNotes.description, { features: ['新功能 A'], fixes: ['修复 B'] })
 
+    const withMirrors = channel.parseHotLatestPayload(
+      {
+        latest: {
+          version: '1.4.0',
+          packages: {
+            'linux-x64': {
+              bin: '/hot/packages/opptrix-runtime-linux-x64-v1.4.0.bin',
+              sha256: '/hot/packages/opptrix-runtime-linux-x64-v1.4.0.sha256',
+              size: 123,
+              mirrors: {
+                github: {
+                  bin: 'https://github.com/Travisun/Opptrix/releases/download/opptrix-selfhost-v1.4.0/opptrix-runtime-linux-x64-v1.4.0.bin',
+                  sha256: 'https://github.com/Travisun/Opptrix/releases/download/opptrix-selfhost-v1.4.0/opptrix-runtime-linux-x64-v1.4.0.sha256',
+                },
+                gitee: {
+                  bin: 'https://gitee.com/Travisun/Opptrix/releases/download/opptrix-selfhost-v1.4.0/opptrix-runtime-linux-x64-v1.4.0.bin',
+                  sha256: 'https://gitee.com/Travisun/Opptrix/releases/download/opptrix-selfhost-v1.4.0/opptrix-runtime-linux-x64-v1.4.0.sha256',
+                },
+              },
+            },
+          },
+        },
+      },
+      base,
+      { archKey: 'linux-x64' },
+    )
+    assert.ok(withMirrors?.mirrors?.github?.bin?.includes('github.com'))
+    assert.ok(withMirrors?.mirrors?.gitee?.bin?.includes('gitee.com'))
+
     const arm64 = channel.parseHotLatestPayload(
       {
         latest: {

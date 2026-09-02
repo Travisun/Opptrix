@@ -139,6 +139,21 @@ export type { RuntimeReleaseManifest } from './manifest.js'
 export { compareSemver, parseSemver } from './semver.js'
 
 export {
+  buildRuntimeDownloadCandidates,
+  downloadRuntimeAssetPair,
+  downloadToFile,
+  resolveUpdateMirrorProfile,
+} from './runtime-download.js'
+export type {
+  DownloadRuntimePairResult,
+  RuntimeDownloadRefs,
+  RuntimeDownloadSource,
+  RuntimePackageMirrors,
+  UpdateMirrorProfile,
+} from './runtime-download.js'
+export { probeDockerHubAuth } from './download-mirror-profile.js'
+
+export {
   blockVersion,
   clearBlockedUpTo,
   isVersionBlocked,

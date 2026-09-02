@@ -159,6 +159,15 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 
 **自托管实例默认从 CDN 拉热更新**（`OPPTRIX_UPDATE_CDN_BASE`，默认 `https://update.opptrix.org`），不再依赖 Release 附件列表。
 
+**自适应下载线路**（检测仍只走 CDN 小清单 `hot/check-update` / `hot/releases`；大包按线路 failover）：
+
+| 区域 | 优先顺序 |
+|------|----------|
+| 国内 (`cn`) | Gitee Release → GitHub Release → CDN |
+| 海外 (`foreign`) | GitHub Release → Gitee Release → CDN |
+
+清单 `latest.packages[arch].mirrors` 与 `latest.mirrors` 携带 GitHub/Gitee 成对 URL；服务端静默下载与容器内 `opptrix runtime use` 共用 `@opptrix/system-update` 的 `downloadRuntimeAssetPair`，按 `OPPTRIX_UPDATE_MIRROR` / `OPPTRIX_MIRROR`（或 locale + Docker Hub 探测）选序，失败自动换下一源。`.sha256` sidecar 校验不变。
+
 ### GitHub Secrets（CI）
 
 | Secret | 用途 |
@@ -176,10 +185,17 @@ tag push **必须**配置 R2 四件套，否则 workflow 失败以便及时发�
 本地演练：
 
 ```bash
+# 发版前统一预检（npm pack + runtime pack + Docker 上下文；加 --docker 可本机构建镜像）
+npm run audit:selfhost-release
+npm run audit:selfhost-npm
+npm run audit:selfhost-runtime
+
 node scripts/pack-opptrix-runtime.mjs --version 1.4.0 --also-platform-name
 node scripts/sync-hot-to-r2.mjs --dir dist-runtime --version 1.4.0 --dry-run
 node scripts/purge-hot-cdn-cache.mjs --version 1.4.0   # 需 CF token
 ```
+
+CI：`.github/workflows/ci-selfhost-release.yml` 在相关路径变更时并行跑 npm pack、双架构 runtime pack、Docker build smoke（`main` push / 手动 dispatch）。
 
 ---
 
@@ -257,6 +273,8 @@ Docker：`scripts/docker-entrypoint.sh` + tini。
 | `OPPTRIX_DOCKER=1` | 强制 Docker 路径默认值 |
 | `OPPTRIX_UPDATE_CHANNEL` | 默认 `selfhost` |
 | `OPPTRIX_UPDATE_CDN_BASE` | CDN 根，默认 `https://update.opptrix.org` |
+| `OPPTRIX_UPDATE_MIRROR` | 热更新包下载线路：`auto`（默认）、`cn`、`foreign`；与 `OPPTRIX_MIRROR` 同义，未设时按 locale/TZ 与 Docker Hub 探测自动选择 |
+| `OPPTRIX_FORCE_CN` / `OPPTRIX_FORCE_FOREIGN` | 强制国内/海外下载线路（调试用） |
 | `OPPTRIX_UPDATE_ENABLED` | `1`/`0` 强制开/关 |
 | `OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS` | 后台定期检查间隔（小时），默认 `24` |
 | `OPPTRIX_UPDATE_CHECK_INTERVAL_MS` | 同上，毫秒粒度（优先于 `…_HOURS`） |

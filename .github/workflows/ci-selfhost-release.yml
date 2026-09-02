@@ -1,0 +1,219 @@
+name: CI selfhost release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/selfhost/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'compose.env.example'
+      - 'scripts/pack-opptrix-runtime.mjs'
+      - 'scripts/sync-hot-to-r2.mjs'
+      - 'scripts/runtime-update-cli.mjs'
+      - 'scripts/audit-selfhost-release.mjs'
+      - 'scripts/lib/hot-cdn.mjs'
+      - 'scripts/lib/release-notes.mjs'
+      - 'scripts/lib/selfhost-release-checks.mjs'
+      - 'scripts/docker-entrypoint.sh'
+      - 'scripts/system-boot.mjs'
+      - '.github/workflows/publish-selfhost.yml'
+      - '.github/workflows/publish-selfhost-image.yml'
+      - '.github/workflows/publish-runtime-assets.yml'
+      - '.github/workflows/ci-selfhost-release.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/selfhost/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'compose.env.example'
+      - 'scripts/pack-opptrix-runtime.mjs'
+      - 'scripts/sync-hot-to-r2.mjs'
+      - 'scripts/runtime-update-cli.mjs'
+      - 'scripts/audit-selfhost-release.mjs'
+      - 'scripts/lib/hot-cdn.mjs'
+      - 'scripts/lib/release-notes.mjs'
+      - 'scripts/lib/selfhost-release-checks.mjs'
+      - 'scripts/docker-entrypoint.sh'
+      - 'scripts/system-boot.mjs'
+      - '.github/workflows/publish-selfhost.yml'
+      - '.github/workflows/publish-selfhost-image.yml'
+      - '.github/workflows/publish-runtime-assets.yml'
+      - '.github/workflows/ci-selfhost-release.yml'
+  workflow_dispatch:
+    inputs:
+      run_docker_build:
+        description: 'Build linux/amd64 Docker image (slow)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-selfhost-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  RUNTIME_CI_VERSION: '9.9.9-ci'
+
+jobs:
+  selfhost-npm-pack:
+    name: npm pack (@opptrix/selfhost)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit npm pack
+        run: node scripts/audit-selfhost-release.mjs --npm
+
+  runtime-pack:
+    name: Runtime pack (${{ matrix.platform_key }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform_key: linux-x64
+          - runner: ubuntu-24.04-arm64
+            platform_key: linux-arm64
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install build tools (native modules)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 make g++ build-essential pkg-config
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pack runtime + CDN dry-run
+        env:
+          OPPTRIX_APP_VERSION: ${{ env.RUNTIME_CI_VERSION }}
+          OPPTRIX_RELEASE_TAG: opptrix-selfhost-v${{ env.RUNTIME_CI_VERSION }}
+        run: |
+          set -euo pipefail
+          node scripts/audit-selfhost-release.mjs \
+            --runtime \
+            --version "${RUNTIME_CI_VERSION}" \
+            --platform-key "${{ matrix.platform_key }}"
+
+      - name: Upload runtime pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-pack-${{ matrix.platform_key }}
+          path: dist-runtime/
+          if-no-files-found: error
+
+  docker-build-smoke:
+    name: Docker build smoke (linux/amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    if: >-
+      github.event_name == 'push'
+      || (github.event_name == 'workflow_dispatch' && inputs.run_docker_build)
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify Docker build context
+        run: node -e "import { verifyDockerBuildContext } from './scripts/lib/selfhost-release-checks.mjs'; verifyDockerBuildContext('.'); console.log('context OK');"
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load only)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: opptrix:ci-smoke
+          build-args: |
+            NODE_VERSION=24
+            NODE_IMAGE_PREFIX=
+            NPM_REGISTRY=
+            APT_MIRROR=
+            OPPTRIX_BASE_VERSION=opptrix-selfhost-v${{ env.RUNTIME_CI_VERSION }}
+            OPPTRIX_RELEASE_TAG=opptrix-selfhost-v${{ env.RUNTIME_CI_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Smoke inspect image
+        run: |
+          docker image inspect opptrix:ci-smoke --format '{{.Os}}/{{.Architecture}} {{.Id}}'
+          docker run --rm opptrix:ci-smoke node -e "console.log(process.version)"
+
+  merge-runtime-artifacts:
+    name: Merge runtime packs + verify dual-arch manifest
+    needs: runtime-pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge dist-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist-runtime
+          cp -v artifacts/runtime-pack-linux-x64/* dist-runtime/
+          cp -v artifacts/runtime-pack-linux-arm64/* dist-runtime/
+          ls -lah dist-runtime/
+
+      - name: Verify dual-arch CDN manifest shape
+        env:
+          RUNTIME_CI_VERSION: ${{ env.RUNTIME_CI_VERSION }}
+        run: |
+          node -e "
+          import { verifyRuntimePackLayout, assertCheckUpdateSmokeShape } from './scripts/lib/selfhost-release-checks.mjs';
+          const v = process.env.RUNTIME_CI_VERSION;
+          const { plan, payload } = verifyRuntimePackLayout('dist-runtime', v);
+          assertCheckUpdateSmokeShape(payload, v, Object.keys(plan.packages));
+          if (Object.keys(plan.packages).length < 2) throw new Error('expected linux-x64 + linux-arm64');
+          console.log('dual-arch manifest OK', Object.keys(plan.packages));
+          "
+
+      - name: sync-hot-to-r2 dry-run (merged)
+        env:
+          RUNTIME_CI_VERSION: ${{ env.RUNTIME_CI_VERSION }}
+        run: |
+          node scripts/sync-hot-to-r2.mjs \
+            --dir dist-runtime \
+            --version "${RUNTIME_CI_VERSION}" \
+            --dry-run

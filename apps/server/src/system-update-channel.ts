@@ -2,6 +2,7 @@
  * CDN hot-update channel for selfhost runtime packages.
  * Default base: https://update.opptrix.org
  */
+import type { RuntimePackageMirrors } from '@opptrix/system-update'
 import {
   resolveLinuxRuntimeArchKey,
   runtimeArchBinBasename,
@@ -34,6 +35,7 @@ export interface HotLatestRelease {
   publishedAt: string | null
   archKey: LinuxRuntimeArchKey
   description: HotReleaseDescription
+  mirrors?: RuntimePackageMirrors
 }
 
 export interface HotReleaseCatalogEntry extends HotLatestRelease {
@@ -143,10 +145,38 @@ function resolveCdnUrl(cdnBase: string, ref: string): string {
 
 type JsonRecord = Record<string, unknown>
 
+function parseMirrorBlock(raw: unknown): { bin?: string; sha256?: string } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const row = raw as JsonRecord
+  const bin = typeof row.bin === 'string' && row.bin.trim() ? row.bin.trim() : undefined
+  const sha256 =
+    (typeof row.sha256 === 'string' && row.sha256.trim() ? row.sha256.trim() : undefined)
+    ?? (typeof row.sha === 'string' && row.sha.trim() ? row.sha.trim() : undefined)
+  if (!bin && !sha256) return undefined
+  return { bin, sha256 }
+}
+
+function parsePackageMirrors(raw: unknown): RuntimePackageMirrors | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const row = raw as JsonRecord
+  const mirrorsRaw = row.mirrors
+  if (typeof mirrorsRaw !== 'object' || mirrorsRaw === null) return undefined
+  const mirrors = mirrorsRaw as JsonRecord
+  const github = parseMirrorBlock(mirrors.github)
+  const gitee = parseMirrorBlock(mirrors.gitee)
+  if (!github && !gitee) return undefined
+  return { github, gitee }
+}
+
 function parsePackageEntry(
   pkg: unknown,
   cdnBase: string,
-): { binUrl: string; sha256Url: string; size: number | null } | null {
+): {
+  binUrl: string
+  sha256Url: string
+  size: number | null
+  mirrors?: RuntimePackageMirrors
+} | null {
   if (typeof pkg !== 'object' || pkg === null) return null
   const row = pkg as JsonRecord
   const binRef = typeof row.bin === 'string' && row.bin.trim() ? row.bin.trim() : null
@@ -162,6 +192,7 @@ function parsePackageEntry(
     binUrl: resolveCdnUrl(cdnBase, binRef),
     sha256Url: resolveCdnUrl(cdnBase, shaRef),
     size,
+    mirrors: parsePackageMirrors(row),
   }
 }
 
@@ -198,6 +229,7 @@ function parseReleaseRowPackage(
             : null,
         archKey,
         description: parseHotReleaseDescription(row.description),
+        mirrors: selected.mirrors,
       }
     }
   }
@@ -232,6 +264,7 @@ function parseReleaseRowPackage(
     publishedAt,
     archKey,
     description: parseHotReleaseDescription(row.description),
+    mirrors: parsePackageMirrors(row),
   }
 }
 

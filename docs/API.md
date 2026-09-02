@@ -173,7 +173,7 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 | `OPPTRIX_BASE_VERSION` | Docker/自托管底座身份（如 `opptrix-selfhost-v1.4.0`）；热更新对照 `requires.minBaseImage` |
 | `OPPTRIX_RELEASE_TAG` | 发版标签；未设 `OPPTRIX_BASE_VERSION` 时可作为底座回退 |
 
-检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（返回 `latest` + 最近 **8** 版 `releases[]`，每版含 `description.features` / `description.fixes` 与 `packages.linux-x64` / `packages.linux-arm64`）；历史版本清单亦可通过 `GET …/hot/releases`。CLI `opptrix runtime list` 展示说明并支持 `use <版本>` 选用保留版本。客户端按本机架构下载对应 `{base}/hot/packages/opptrix-runtime-linux-{x64|arm64}-vX.Y.Z.bin` + `.sha256`（x64 可回退遗留 `opptrix-runtime-vX.Y.Z.bin`）。请求头 `User-Agent` 为 `Opptrix-system-update/{currentVersion} ({linux-x64|linux-arm64})`。后台默认每 24 小时自动检查一次（另在进程启动约 2s 后检查）；`GET /api/system-update/status` 在发现新版本时附带 `availableDescription`（来自 CDN）。打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
+检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（返回 `latest` + 最近 **8** 版 `releases[]`，每版含 `description.features` / `description.fixes`、`packages.linux-x64` / `packages.linux-arm64` 及 `mirrors.github` / `mirrors.gitee` 成对 URL）；历史版本清单亦可通过 `GET …/hot/releases`。检测始终走 CDN 小清单；**大包下载**按 `OPPTRIX_UPDATE_MIRROR`（`auto`/`cn`/`foreign`）自适应：国内 Gitee → GitHub → CDN，海外 GitHub → Gitee → CDN（服务端静默下载与容器内 `opptrix runtime use` 共用同一路径）。CLI `opptrix runtime list` 展示说明并支持 `use <版本>` 选用保留版本。客户端按本机架构下载对应包 + `.sha256` sidecar（x64 可回退遗留 `opptrix-runtime-vX.Y.Z.bin`）。请求头 `User-Agent` 为 `Opptrix-system-update/{currentVersion} ({linux-x64|linux-arm64})`。后台默认每 24 小时自动检查一次（另在进程启动约 2s 后检查）；`GET /api/system-update/status` 在发现新版本时附带 `availableDescription`（来自 CDN）。打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
 
 ### 端点
 
