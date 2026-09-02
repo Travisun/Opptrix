@@ -74,6 +74,7 @@ RUN set -eu; \
     pkg-config \
     cmake \
     ca-certificates \
+    openssl \
     curl \
   && rm -rf /var/lib/apt/lists/*
 
@@ -147,6 +148,7 @@ RUN set -eu; \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
+    openssl \
     curl \
     git \
     python3 \

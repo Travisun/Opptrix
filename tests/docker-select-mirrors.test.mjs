@@ -70,10 +70,19 @@ test('mirrorsForProfile returns empty foreign mirrors', () => {
   assert.equal(foreign.aptMirror, '')
 })
 
-test('CN_NPM_REGISTRY_CANDIDATES lists Huawei then official empty', () => {
-  assert.ok(CN_NPM_REGISTRY_CANDIDATES.length >= 2)
-  assert.match(CN_NPM_REGISTRY_CANDIDATES[0], /huaweicloud\.com\/repository\/npm/)
-  assert.equal(CN_NPM_REGISTRY_CANDIDATES[CN_NPM_REGISTRY_CANDIDATES.length - 1], '')
+test('CN_NPM_REGISTRY_CANDIDATES lists Huawei → Tencent → official empty', () => {
+  assert.deepEqual([...CN_NPM_REGISTRY_CANDIDATES], [
+    'https://mirrors.huaweicloud.com/repository/npm/',
+    'https://mirrors.cloud.tencent.com/npm/',
+    '',
+  ])
+})
+
+test('CN_NPM_REGISTRY_CANDIDATES stays in sync with selfhost mirrors.mjs', async () => {
+  const { CN_NPM_REGISTRY_CANDIDATES: fromSelfhost } = await import(
+    '../packages/selfhost/src/mirrors.mjs'
+  )
+  assert.deepEqual([...CN_NPM_REGISTRY_CANDIDATES], [...fromSelfhost])
 })
 
 test('pickCnNpmRegistry skips unreachable and falls back to official', () => {

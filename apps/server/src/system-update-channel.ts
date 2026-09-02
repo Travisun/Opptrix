@@ -1,8 +1,15 @@
 /**
  * CDN hot-update channel for selfhost runtime packages.
- * Default base: https://update.opptrix.org
+ * Default / authoritative base: https://update.opptrix.org
+ * CN clients try https://update.opptrix.evzs.com first for check-update / releases.
  */
-import type { RuntimePackageMirrors } from '@opptrix/system-update'
+import {
+  AUTHORITATIVE_UPDATE_CDN_BASE,
+  CN_UPDATE_CDN_BASES,
+  resolveUpdateMirrorProfile,
+  type RuntimePackageMirrors,
+  type UpdateMirrorProfile,
+} from '@opptrix/system-update'
 import {
   resolveLinuxRuntimeArchKey,
   runtimeArchBinBasename,
@@ -11,7 +18,9 @@ import {
 } from './system-update-arch.js'
 import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
 
-export const DEFAULT_UPDATE_CDN_BASE = 'https://update.opptrix.org'
+export const DEFAULT_UPDATE_CDN_BASE = AUTHORITATIVE_UPDATE_CDN_BASE
+
+export { AUTHORITATIVE_UPDATE_CDN_BASE, CN_UPDATE_CDN_BASES }
 
 export const SELFHOST_TAG_PREFIX = 'opptrix-selfhost-v'
 
@@ -163,9 +172,9 @@ function parsePackageMirrors(raw: unknown): RuntimePackageMirrors | undefined {
   if (typeof mirrorsRaw !== 'object' || mirrorsRaw === null) return undefined
   const mirrors = mirrorsRaw as JsonRecord
   const github = parseMirrorBlock(mirrors.github)
-  const gitee = parseMirrorBlock(mirrors.gitee)
-  if (!github && !gitee) return undefined
-  return { github, gitee }
+  // Old manifests may still carry mirrors.gitee — ignore safely.
+  if (!github) return undefined
+  return { github }
 }
 
 function parsePackageEntry(
@@ -382,15 +391,77 @@ async function fetchCheckUpdateJson(
   }
 }
 
+/**
+ * CDN bases to try for check-update / releases list.
+ * CN: evzs → update.opptrix.org; foreign: configured / authoritative base.
+ */
+export function resolveCheckUpdateCdnBases(
+  env: ChannelEnv = readChannelEnv(),
+  opts?: { profile?: UpdateMirrorProfile; processEnv?: NodeJS.ProcessEnv },
+): string[] {
+  const profile = opts?.profile
+    ?? resolveUpdateMirrorProfile(opts?.processEnv).profile
+  if (profile === 'cn') {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const raw of CN_UPDATE_CDN_BASES) {
+      const base = normalizeCdnBase(raw)
+      if (seen.has(base)) continue
+      seen.add(base)
+      out.push(base)
+    }
+    return out
+  }
+  return [normalizeCdnBase(env.cdnBase)]
+}
+
+async function fetchChannelJsonWithFailover(
+  buildUrl: (cdnBase: string) => string,
+  env: ChannelEnv,
+  opts?: {
+    timeoutMs?: number
+    signal?: AbortSignal
+    userAgent?: string
+    profile?: UpdateMirrorProfile
+    processEnv?: NodeJS.ProcessEnv
+  },
+): Promise<{ raw: unknown; cdnBase: string }> {
+  const timeoutMs = opts?.timeoutMs ?? 25_000
+  const bases = resolveCheckUpdateCdnBases(env, {
+    profile: opts?.profile,
+    processEnv: opts?.processEnv,
+  })
+  let lastErr: unknown = null
+  for (const cdnBase of bases) {
+    try {
+      const raw = await fetchCheckUpdateJson(
+        buildUrl(cdnBase),
+        timeoutMs,
+        opts?.signal,
+        opts?.userAgent,
+      )
+      return { raw, cdnBase }
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  const message = lastErr instanceof Error ? lastErr.message : String(lastErr ?? 'fetch failed')
+  throw new Error(message)
+}
+
 /** Fetch latest hot-update descriptor from CDN check-update endpoint. */
 export async function fetchHotLatest(
   env: ChannelEnv = readChannelEnv(),
-  opts?: { timeoutMs?: number; signal?: AbortSignal; userAgent?: string },
+  opts?: {
+    timeoutMs?: number
+    signal?: AbortSignal
+    userAgent?: string
+    profile?: UpdateMirrorProfile
+    processEnv?: NodeJS.ProcessEnv
+  },
 ): Promise<HotLatestRelease | null> {
-  const timeoutMs = opts?.timeoutMs ?? 25_000
-  const url = hotCheckUpdateUrl(env.cdnBase)
-  const raw = await fetchCheckUpdateJson(url, timeoutMs, opts?.signal, opts?.userAgent)
-  return parseHotLatestPayload(raw, env.cdnBase, {
+  const { raw, cdnBase } = await fetchChannelJsonWithFailover(hotCheckUpdateUrl, env, opts)
+  return parseHotLatestPayload(raw, cdnBase, {
     archKey: resolveLinuxRuntimeArchKey(),
   })
 }
@@ -398,12 +469,16 @@ export async function fetchHotLatest(
 /** Fetch retained release catalog from CDN hot/releases. */
 export async function fetchHotReleases(
   env: ChannelEnv = readChannelEnv(),
-  opts?: { timeoutMs?: number; signal?: AbortSignal; userAgent?: string },
+  opts?: {
+    timeoutMs?: number
+    signal?: AbortSignal
+    userAgent?: string
+    profile?: UpdateMirrorProfile
+    processEnv?: NodeJS.ProcessEnv
+  },
 ): Promise<HotReleaseCatalogEntry[]> {
-  const timeoutMs = opts?.timeoutMs ?? 25_000
-  const url = hotReleasesUrl(env.cdnBase)
-  const raw = await fetchCheckUpdateJson(url, timeoutMs, opts?.signal, opts?.userAgent)
-  return parseHotReleasesPayload(raw, env.cdnBase, {
+  const { raw, cdnBase } = await fetchChannelJsonWithFailover(hotReleasesUrl, env, opts)
+  return parseHotReleasesPayload(raw, cdnBase, {
     archKey: resolveLinuxRuntimeArchKey(),
   })
 }

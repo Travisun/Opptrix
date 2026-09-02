@@ -5,6 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -26,7 +27,7 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.publishConfig?.access, 'public')
   assert.equal(pkg.version, '0.1.7')
   assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.4')
+  assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.5')
   assert.equal(pkg.opptrixSelfhost?.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
@@ -75,6 +76,80 @@ test('opptrix help mentions prebuilt pull and --build', () => {
   assert.match(r.stdout, /预构建/)
   assert.match(r.stdout, /--build/)
   assert.match(r.stdout, /ghcr\.io\/travisun\/opptrix/)
+  assert.match(r.stdout, /\bsetup\b/)
+  assert.match(r.stdout, /\bdata\b/)
+})
+
+test('opptrix setup --help lists options', () => {
+  const r = spawnSync(process.execPath, [CLI, 'setup', '--help'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /opptrix setup/)
+  assert.match(r.stdout, /--mirror/)
+  assert.match(r.stdout, /--data/)
+  assert.match(r.stdout, /Docker/)
+})
+
+test('opptrix data help lists migrate', () => {
+  const r = spawnSync(process.execPath, [CLI, 'data', 'help'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /data path/)
+  assert.match(r.stdout, /migrate/)
+  assert.match(r.stdout, /--dry-run/)
+})
+
+test('opptrix setup non-TTY writes defaults under OPPTRIX_DEPLOY_DIR', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-cli-setup-'))
+  try {
+    const r = spawnSync(process.execPath, [CLI, 'setup'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, OPPTRIX_DEPLOY_DIR: dir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    assert.equal(r.status, 0, r.stderr || r.stdout)
+    assert.match(r.stdout, /默认部署设置|部署设置已写入|非 TTY/)
+    assert.ok(fs.existsSync(path.join(dir, '.opptrix.json')))
+    const cfg = JSON.parse(fs.readFileSync(path.join(dir, '.opptrix.json'), 'utf8'))
+    assert.equal(cfg.setupCompleted, true)
+    assert.equal(cfg.dataStorage, 'volume')
+    assert.ok(fs.existsSync(path.join(dir, 'compose.env')))
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('opptrix data migrate --dry-run plans without Docker copy', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-cli-data-'))
+  try {
+    // seed host config as named volume
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, '.opptrix.json'),
+      JSON.stringify({ setupCompleted: true, dataStorage: 'volume' }, null, 2),
+    )
+    // minimal compose so ensureThinDeploy / resolve may work — overlay from bundle via setup not required if we only dry-run
+    const r = spawnSync(
+      process.execPath,
+      [CLI, 'data', 'migrate', '--to', path.join(dir, 'home'), '--dry-run'],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, OPPTRIX_DEPLOY_DIR: dir },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    )
+    assert.equal(r.status, 0, r.stderr || r.stdout)
+    assert.match(r.stdout, /dry-run/)
+    assert.match(r.stdout, /迁移计划|volume/)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('publish-selfhost-image workflow is manual-only', async () => {
@@ -129,7 +204,7 @@ test('readPackageMeta exposes imageRepository', async () => {
   const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
   const meta = readPackageMeta()
   assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.4')
+  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.5')
   assert.equal(meta.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
@@ -137,4 +212,12 @@ test('docker-compose supports OPPTRIX_IMAGE override', async () => {
   const yml = await fs.promises.readFile(path.join(ROOT, 'docker-compose.yml'), 'utf8')
   assert.match(yml, /\$\{OPPTRIX_IMAGE:-opptrix:local\}/)
   assert.match(yml, /build:/)
+})
+
+test('docker-compose publishes http 8711 and https 8712', async () => {
+  const yml = await fs.promises.readFile(path.join(ROOT, 'docker-compose.yml'), 'utf8')
+  assert.match(yml, /OPPTRIX_HOST_HTTP_PORT:-8711/)
+  assert.match(yml, /OPPTRIX_HOST_HTTPS_PORT:-8712/)
+  assert.match(yml, /OPPTRIX_HTTPS_PORT/)
+  assert.doesNotMatch(yml, /127\.0\.0\.1:8711:8711/)
 })

@@ -1,7 +1,17 @@
 /**
- * GitHub / Gitee release download URLs for runtime hot-update packages.
- * CDN (update.opptrix.org) remains authoritative manifest + fallback payload.
+ * GitHub release download URLs for runtime hot-update packages.
+ * CDN (update.opptrix.org) remains authoritative; CN also tries update.opptrix.evzs.com.
+ * Gitee is not used for runtime package download failover.
  */
+
+/** Authoritative check-update / publish target. */
+export const AUTHORITATIVE_UPDATE_CDN_BASE = 'https://update.opptrix.org'
+
+/** CN check-update + package CDN bases (first wins). */
+export const CN_UPDATE_CDN_BASES = [
+  'https://update.opptrix.evzs.com',
+  AUTHORITATIVE_UPDATE_CDN_BASE,
+]
 const SELFHOST_TAG_PREFIX = 'opptrix-selfhost-v'
 const RUNTIME_TAG_PREFIX = 'runtime-v'
 
@@ -28,7 +38,7 @@ export function selfhostTagForVersion(version) {
 }
 
 /**
- * Runtime hot-update GitHub/Gitee release tag (`runtime-v*`).
+ * Runtime hot-update GitHub release tag (`runtime-v*`).
  * @param {string} version
  */
 export function runtimeReleaseTagForVersion(version) {
@@ -124,10 +134,10 @@ export function giteeReleaseAssetUrl(repo, tag, filename) {
 export function buildReleaseAssetMirrorPair(version, filename, opts = {}) {
   const tag = opts.tag ?? releaseTagForVersion(version)
   const githubRepo = opts.githubRepo ?? DEFAULT_GITHUB_REPO
-  const giteeRepo = opts.giteeRepo ?? DEFAULT_GITEE_REPO
+  // giteeRepo retained in opts for API compat; new manifests no longer emit gitee URLs.
+  void opts.giteeRepo
   return {
     github: githubReleaseAssetUrl(githubRepo, tag, filename),
-    gitee: giteeReleaseAssetUrl(giteeRepo, tag, filename),
   }
 }
 
@@ -144,7 +154,6 @@ export function buildArchPackageMirrors(version, archKey, opts = {}) {
   const sha = buildReleaseAssetMirrorPair(v, shaName, opts)
   return {
     github: { bin: bin.github, sha256: sha.github },
-    gitee: { bin: bin.gitee, sha256: sha.gitee },
   }
 }
 
@@ -161,7 +170,6 @@ export function buildLegacyPackageMirrors(version, opts = {}) {
   const sha = buildReleaseAssetMirrorPair(v, shaName, opts)
   return {
     github: { bin: bin.github, sha256: sha.github },
-    gitee: { bin: bin.gitee, sha256: sha.gitee },
   }
 }
 
@@ -170,7 +178,7 @@ export function buildLegacyPackageMirrors(version, opts = {}) {
  */
 export function parsePackageMirrors(raw) {
   if (typeof raw !== 'object' || raw === null) {
-    return { github: undefined, gitee: undefined }
+    return { github: undefined }
   }
   const row = /** @type {Record<string, unknown>} */ (raw)
   /**
@@ -186,19 +194,42 @@ export function parsePackageMirrors(raw) {
   }
   const mirrors = row.mirrors
   if (typeof mirrors !== 'object' || mirrors === null) {
-    return { github: undefined, gitee: undefined }
+    return { github: undefined }
   }
   const m = /** @type {Record<string, unknown>} */ (mirrors)
+  // Old manifests may still carry mirrors.gitee — ignore safely.
   return {
     github: pick(m.github),
-    gitee: pick(m.gitee),
   }
 }
 
 /**
  * @typedef {'cn' | 'foreign'} UpdateMirrorProfile
- * @typedef {'gitee' | 'github' | 'cdn'} RuntimeDownloadSource
+ * @typedef {'cdn_cn' | 'cdn' | 'github'} RuntimeDownloadSource
  */
+
+/**
+ * @param {string} base
+ */
+function normalizeCdnBase(base) {
+  return String(base ?? '').trim().replace(/\/+$/, '') || AUTHORITATIVE_UPDATE_CDN_BASE
+}
+
+/**
+ * Same path/query/hash under a different CDN host.
+ * @param {string} url
+ * @param {string} newBase
+ */
+export function rewriteCdnBase(url, newBase) {
+  const base = normalizeCdnBase(newBase)
+  try {
+    const parsed = new URL(url)
+    const next = new URL(base)
+    return `${next.origin}${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return url
+  }
+}
 
 /**
  * @param {UpdateMirrorProfile} profile
@@ -206,8 +237,8 @@ export function parsePackageMirrors(raw) {
  */
 export function mirrorSourceOrder(profile) {
   return profile === 'cn'
-    ? ['gitee', 'github', 'cdn']
-    : ['github', 'gitee', 'cdn']
+    ? ['cdn_cn', 'cdn', 'github']
+    : ['cdn', 'github']
 }
 
 /**
@@ -237,20 +268,24 @@ export function buildRuntimeDownloadCandidates(refs, profile) {
     const b = String(bin ?? '').trim()
     const s = String(sha ?? '').trim()
     if (!b || !s) return
-    const key = `${source}:${b}:${s}`
+    const key = `${b}:${s}`
     if (seen.has(key)) return
     seen.add(key)
     out.push({ binUrl: b, sha256Url: s, source })
   }
 
   const mirrors = refs.mirrors ?? {}
-  for (const source of mirrorSourceOrder(profile)) {
-    if (source === 'cdn') {
-      push('cdn', cdnBin, cdnSha)
-      continue
+
+  if (profile === 'cn') {
+    for (let i = 0; i < CN_UPDATE_CDN_BASES.length; i++) {
+      const base = CN_UPDATE_CDN_BASES[i]
+      const source = /** @type {RuntimeDownloadSource} */ (i === 0 ? 'cdn_cn' : 'cdn')
+      push(source, rewriteCdnBase(cdnBin, base), rewriteCdnBase(cdnSha, base))
     }
-    const block = mirrors[source]
-    push(source, block?.bin, block?.sha256)
+    push('github', mirrors.github?.bin, mirrors.github?.sha256)
+  } else {
+    push('cdn', cdnBin, cdnSha)
+    push('github', mirrors.github?.bin, mirrors.github?.sha256)
   }
 
   if (out.length === 0) {

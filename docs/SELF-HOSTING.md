@@ -11,9 +11,10 @@
 ```bash
 npm i -g @opptrix/selfhost
 # 国内 registry 可选: npm i -g @opptrix/selfhost --registry https://registry.npmmirror.com
-opptrix init          # 默认自动检测国内/海外镜像与 clone 源
-opptrix up            # 优先拉取 GHCR 预构建镜像并启动
-# 强制本地编译: opptrix up --build
+opptrix setup         # 交互：镜像源 / 数据目录 / 端口 / Docker 开机自启（或 setup --yes）
+opptrix up            # 无 .opptrix.json 时会先 setup；再拉 GHCR 预构建镜像并启动
+# 静默初始化: opptrix init
+# 强制本地编译: OPPTRIX_DEV_ALLOW_BUILD=1 opptrix up --build
 # 强制指定源: opptrix up --mirror cn   或  --mirror foreign
 ```
 
@@ -97,7 +98,7 @@ opptrix up --mirror cn
 
 可选环境变量见脚本头注释（`OPPTRIX_REPO_DIR`、`OPPTRIX_NODE_VERSION`、`OPPTRIX_BOOTSTRAP_UP=1` 等）。
 
-浏览器打开 [http://127.0.0.1:8711](http://127.0.0.1:8711)（Compose 默认只绑定本机回环）。
+浏览器打开 [https://127.0.0.1:8712](https://127.0.0.1:8712)（自签名 HTTPS；公网则为 `https://<公网IP>:8712`）。HTTP `8711` 供反代与 health，不作默认产品入口。
 
 ### macOS / Windows（自备 Docker + Node）
 
@@ -199,6 +200,17 @@ curl -fsS http://127.0.0.1:8711/api/health
 旧版三卷（`/data`、`/models`、`/system`）仍可用独立清单 `docker-compose.legacy-volumes.yml`；entrypoint 会对 `/data/agent-workspace` 与 `/data/mounts` 做同样的 agent 属主引导。
 
 **升级镜像不会清空卷。** 换镜像 / `docker compose pull` 后仍沿用原卷。
+
+### 用 CLI 改数据落盘路径
+
+默认使用 Compose 命名卷 `opptrix-home`。若希望数据落在宿主机目录：
+
+```bash
+opptrix data path /var/lib/opptrix --yes
+# 等价: opptrix data migrate --to /var/lib/opptrix --yes
+```
+
+CLI 会：`compose down`（不加 `-v`）→ `rsync`/`cp` 复制 → 写入托管的 `docker-compose.override.yml`（将 `opptrix-home` 用 `driver_opts` 绑到该目录）→ `up -d` → 等待 `/api/health`。迁回命名卷：`opptrix data migrate --to volume --yes`。先看计划：`--dry-run`。
 
 镜像内 `/app` 仍是**种子树**；容器启动时 `system-boot ensure`：无 boot 则从 `/app` 种子到 `slots/<version>`；若镜像版本高于当前 boot，则**冲掉**旧热更新 pending，以镜像种子设 pending，再由 `activate-pending`（底座满足 `minBaseImage` 时）切入并走 first-boot。服务进程 exit **42** 时 supervisor 会 `activatePending`（若有 `pendingVersion` 且非 needsBaseRefresh）再重启；**43/44** 为软重启不切换槽位。
 
@@ -332,17 +344,26 @@ Docker 自托管默认 **`OPPTRIX_AGENT_SANDBOX=off`**：`opptrix_run` **不**�
 **密钥勿放进工作区目录**（含 mounts 与会话工作区）：明文密钥应走应用内保险箱。
 
 仍须假设：容器逃逸、Agent 对**已授权**工作区内容的外传、服务进程自身泄露——不在本模型保证范围内。
-## TLS 与反向代理
+## TLS 与端口
 
-容器内默认明文 HTTP（`8711`）。生产请在前面加 Nginx / Caddy / Traefik 终止 TLS，并配置：
+默认双端口（容器与宿主机同号映射，监听 `0.0.0.0`，可用公网 IP 访问）：
+
+| 端口 | 协议 | 用途 |
+|------|------|------|
+| **8712** | HTTPS（自签名） | **浏览器默认入口**：`https://<公网IP>:8712` |
+| **8711** | HTTP | 健康检查、宿主机 Nginx 等反代 upstream |
+
+自签名证书首次启动写入卷内 `/opptrix/system/tls/`（`key.pem` / `cert.pem`）。浏览器会提示「不安全」——属预期，信任后即可使用。产品**不内置** Let’s Encrypt（国内多数无备案域名）；需要正规证书时在宿主机用 Nginx/Caddy 终结 TLS，upstream 指 `http://127.0.0.1:8711`。
 
 | 变量 | 说明 |
 |------|------|
-| `OPPTRIX_TRUSTED_PROXIES` | 反向代理的 IP/CIDR 列表；**为空时不信任** `X-Forwarded-For` 等头 |
-| `OPPTRIX_AUTH_COOKIE_SECURE` | HTTPS 时设为 `1`，Cookie 带 Secure |
+| `OPPTRIX_HTTPS_PORT` | 容器内 HTTPS 端口（默认 `8712`；`0` 关闭） |
+| `OPPTRIX_HOST_HTTP_PORT` / `OPPTRIX_HOST_HTTPS_PORT` | 宿主机映射端口（改后需 recreate） |
+| `OPPTRIX_AUTH_COOKIE_SECURE` | 默认 `1`（HTTPS 自签入口）；仅明文调试时可改 |
+| `OPPTRIX_TRUSTED_PROXIES` | 反代 IP/CIDR；**为空时不信任** `X-Forwarded-*` |
 | `OPPTRIX_TRUSTED_LOCAL_CIDRS` | 额外视为「本地」的网段（可选） |
 
-示例（代理在 Docker 网桥）：
+示例（宿主机 Nginx 终结 TLS）：
 
 ```yaml
 environment:

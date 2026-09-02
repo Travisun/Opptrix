@@ -139,10 +139,13 @@ export type { RuntimeReleaseManifest } from './manifest.js'
 export { compareSemver, parseSemver } from './semver.js'
 
 export {
+  AUTHORITATIVE_UPDATE_CDN_BASE,
+  CN_UPDATE_CDN_BASES,
   buildRuntimeDownloadCandidates,
   downloadRuntimeAssetPair,
   downloadToFile,
   resolveUpdateMirrorProfile,
+  rewriteCdnBase,
 } from './runtime-download.js'
 export type {
   DownloadRuntimePairResult,

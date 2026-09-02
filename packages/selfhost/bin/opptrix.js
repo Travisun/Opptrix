@@ -45,7 +45,9 @@ import {
 } from '../src/mirrors.mjs'
 import { flagString, flagTrue, parseArgv } from '../src/parse.mjs'
 import { handleBaseCommand } from '../src/base-commands.mjs'
+import { cmdData } from '../src/data-migrate.mjs'
 import { handleRuntimeCommand } from '../src/runtime-commands.mjs'
+import { cmdSetup, ensureSetupBeforeUp } from '../src/setup-wizard.mjs'
 import { handleUpdateCommand } from '../src/update-commands.mjs'
 import {
   ensureComposeEnv,
@@ -77,27 +79,29 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   selfhost-v*             仅 CLI npm 发版标签，不是应用源码
 
 默认安装 ${meta.preferredAppTag}（最低 ${meta.minAppTag}）；不会自动回退 main。
-预构建镜像仓库: ${meta.imageRepository}（国内经 ghcr.nju.edu.cn / ghcr.1ms.run 测速；海外 ghcr.io）
+预构建镜像仓库: ${meta.imageRepository}（国内经 ghcr.nju.edu.cn / ghcr.milu.moe / ghcr.linkos.org 测速，最后回退 ghcr.io；海外 ghcr.io）
 
 命令:
   init              生成 compose.env，保存默认镜像偏好
-  doctor            检查 Docker / Compose / 构建上下文
+  setup             交互式部署设置（镜像源 / 数据目录 / 端口 / Docker 开机自启）
+  doctor            检查 Docker / Compose / 部署上下文
   base              底座（Docker 镜像）list / status / use / apply
   runtime           运行时热更新 list / status / use / apply / rollback
   update            联合 status / audit / all（legacy: 等同 base apply）
   tags              [别名] opptrix base list
   use <tag|main>    [别名] opptrix base use
-  up                优先拉取预构建镜像并启动（失败或 --build 再本地编译）
+  up                拉取预构建镜像并启动（无主机配置时先 setup；用户路径仅 pull）
   start             启动已有容器（不重建）
   stop              停止容器
   restart           重启容器
   env               管理 compose.env 运行时变量（set / get / list / unset）
+  data              数据路径迁移：path / migrate（命名卷 ↔ 宿主机目录）
   down              停止并移除容器（默认保留数据卷；加 --volumes 才会删卷）
-  build             仅本地构建镜像
+  build             仅本地构建镜像（需 OPPTRIX_DEV_ALLOW_BUILD=1）
   update            [legacy] 等同 opptrix base apply（拉预构建镜像并重建容器）
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
-  health            探测 http://127.0.0.1:8711/api/health
+  health            探测 http://127.0.0.1:8711/api/health（浏览器请用 https://IP:8712）
   compose           透传 docker compose：opptrix compose -- <args…>
   install-cli       本机 npm link 本包
   uninstall-cli     npm unlink -g @opptrix/selfhost
@@ -110,10 +114,14 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   --ref <tag|main>      本次使用的应用版本（写入前可用 use 固定偏好）
   --apply               use 后直接 ensure + 启动
   --allow-downgrade     允许底座降到更低 opptrix-selfhost-v*
-  --yes, -y             runtime apply/rollback/update all 跳过确认
+  --yes, -y             setup / data migrate / runtime apply 等跳过确认
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
-  --build               强制本地编译镜像（不优先 pull 预构建）
-  --no-build            本地路径下 up 时不加 --build（已有镜像时）
+  --data volume|<路径>  setup 数据存储（命名卷或宿主机目录）
+  --http-port / --https-port  setup 宿主机端口（默认 8711/8712）
+  --to <路径|volume>    data migrate 目标
+  --dry-run             data 只打印迁移计划
+  --build               开发者本地编译（需 OPPTRIX_DEV_ALLOW_BUILD=1）
+  --no-build            开发者本地路径下 up 时不加 --build（已有镜像时）
   --volumes             down 时删除数据/模型/系统槽位卷（危险，不可恢复）
   -f, --follow          logs 跟踪输出
   --tail <n>            logs 尾部行数（默认 200）
@@ -126,22 +134,27 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   OPPTRIX_APP_REF       同 OPPTRIX_GIT_REF（备选名）
   OPPTRIX_IMAGE         完整镜像引用（手动覆盖时跳过镜像站测速）
   OPPTRIX_IMAGE_REPO    镜像仓库路径（默认 ${meta.imageRepository}；仍会按区域改写 registry 主机）
-  OPPTRIX_GHCR_MIRROR   强制 GHCR 镜像站主机（如 ghcr.nju.edu.cn 或 ghcr.1ms.run）
-  OPPTRIX_FORCE_BUILD=1 同 --build，强制本地编译
+  OPPTRIX_GHCR_MIRROR   强制 GHCR 镜像站主机（如 ghcr.nju.edu.cn）
+  OPPTRIX_DEV_ALLOW_BUILD=1  允许开发者本地 Docker 构建（配合 --build / build / OPPTRIX_FORCE_BUILD）
+  OPPTRIX_FORCE_BUILD=1 同 --build（仍需 OPPTRIX_DEV_ALLOW_BUILD=1）
   OPPTRIX_BUILD_MIRROR  cn|foreign|auto（与 --mirror 相同）
   OPPTRIX_FORCE_CN=1    强制国内源（检测时）
 
 示例:
+  opptrix setup
+  opptrix setup --yes --mirror cn --data /var/lib/opptrix
   opptrix init
   opptrix base list
   opptrix base use 1.4.1 --apply
+  opptrix base use latest --apply
   opptrix runtime list
   opptrix runtime use latest --apply --yes
   opptrix update status
   opptrix up
-  opptrix up --build
   opptrix up --ref ${meta.preferredAppTag}
   opptrix up --skip-models
+  opptrix data path /var/lib/opptrix --yes
+  opptrix data migrate --to volume --dry-run
   opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=6
   opptrix env list
   opptrix logs -f
@@ -334,15 +347,38 @@ function resolveMirror(parsed) {
 }
 
 /**
- * Force local Docker build (skip prebuilt pull).
- * @param {import('../src/parse.mjs').ParsedArgv} parsed
- * @param {string} ref
+ * Developer-only gate for local Docker image builds.
+ * @param {NodeJS.ProcessEnv} [env]
  */
-function wantsLocalBuild(parsed, ref) {
+function devAllowBuild(env = process.env) {
+  const v = String(env.OPPTRIX_DEV_ALLOW_BUILD ?? '').trim().toLowerCase()
+  return v === '1' || v === 'true'
+}
+
+/**
+ * Force local Docker build (skip prebuilt pull). Requires OPPTRIX_DEV_ALLOW_BUILD.
+ * Non-app-tag refs alone do NOT trigger local build — users must pull a prebuilt tag.
+ * @param {import('../src/parse.mjs').ParsedArgv} parsed
+ */
+function wantsLocalBuild(parsed) {
+  if (!devAllowBuild()) return false
   if (flagTrue(parsed.flags, 'build')) return true
   if (process.env.OPPTRIX_FORCE_BUILD === '1') return true
-  if (!parseAppTag(ref)) return true
   return false
+}
+
+/**
+ * User-facing refusal when local build was requested without the dev gate.
+ * @param {import('../src/parse.mjs').ParsedArgv} parsed
+ */
+function refuseLocalBuildUnlessDev(parsed) {
+  const asked = flagTrue(parsed.flags, 'build') || process.env.OPPTRIX_FORCE_BUILD === '1'
+  if (!asked || devAllowBuild()) return null
+  console.error(
+    '[opptrix] 本地 Docker 构建仅供开发者使用。请执行 opptrix up 拉取预构建镜像；'
+      + '若必须本机编译，请设置 OPPTRIX_DEV_ALLOW_BUILD=1 后再加 --build。',
+  )
+  return 2
 }
 
 /**
@@ -431,19 +467,24 @@ async function upWithLocalBuild(ctx) {
 }
 
 /**
- * Prefer GHCR pull; on failure fall back to clone + local build.
+ * Prefer GHCR pull only. Local build requires OPPTRIX_DEV_ALLOW_BUILD + --build / FORCE_BUILD.
+ * Pull failures never silently fall back to clone+build.
  * @param {import('../src/parse.mjs').ParsedArgv} parsed
  * @param {{ update?: boolean }} [opts]
  */
 async function cmdUpOrUpdate(parsed, opts = {}) {
+  const blocked = refuseLocalBuildUnlessDev(parsed)
+  if (blocked != null) return blocked
+
   const mirror = resolveMirror(parsed)
   let root = resolveDeployRoot()
   const refFlag = flagString(parsed.flags, 'ref')
   const resolved = resolveEnsureAppRef({ root, ref: refFlag })
   const skipModels = flagTrue(parsed.flags, 'skip-models')
     || readHostConfig(root).skipModels === true
-  const forceBuild = wantsLocalBuild(parsed, resolved.ref)
+  const forceBuild = wantsLocalBuild(parsed)
   const noBuild = flagTrue(parsed.flags, 'no-build')
+  const meta = readPackageMeta()
 
   if (opts.update) {
     console.log(
@@ -453,7 +494,7 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
       '[opptrix] 升级保留: compose.env / .opptrix.json / docker-compose.override.yml，以及 Docker 卷 opptrix-home（或旧版 opptrix-data / opptrix-models / opptrix-system）',
     )
     console.log(
-      '[opptrix] 优先拉取预构建镜像；已有核心模型不会重下（强制重下请在 compose.env 设 OPPTRIX_FORCE_MODEL_FETCH=1）',
+      '[opptrix] 拉取预构建镜像；已有核心模型不会重下（强制重下请在 compose.env 设 OPPTRIX_FORCE_MODEL_FETCH=1）',
     )
     console.log(
       '[opptrix] 说明: 本命令升级 Docker 底座/镜像；启动时冲掉旧热更新 pending，以镜像内运行时晋升/激活并走库迁移与钩子（非应用内热更新下载）',
@@ -464,11 +505,7 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
   }
 
   if (forceBuild) {
-    console.log(
-      forceBuild && !parseAppTag(resolved.ref)
-        ? `[opptrix] ref=${resolved.ref} 需本地编译（非应用快照 tag）`
-        : '[opptrix] 强制本地编译（--build / OPPTRIX_FORCE_BUILD）',
-    )
+    console.log('[opptrix] 开发者本地编译（OPPTRIX_DEV_ALLOW_BUILD + --build / OPPTRIX_FORCE_BUILD）')
     root = ensureBuildContext(root, { mirror, ref: refFlag })
     ensureComposeEnv(root)
     writeHostConfig(root, { mirror, skipModels })
@@ -493,7 +530,17 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
     })
   }
 
-  // Prebuilt path: thin deploy + pull
+  if (!parseAppTag(resolved.ref) && !process.env.OPPTRIX_IMAGE?.trim()) {
+    console.error(
+      `[opptrix] ref=${resolved.ref} 不是可拉取的应用快照 tag（opptrix-selfhost-v*）。`
+        + `请执行 opptrix base use ${meta.preferredAppTag}（或 opptrix base use latest）后 opptrix up，`
+        + '或设置 OPPTRIX_IMAGE 指向已发布的预构建镜像。'
+        + '本地编译仅开发者可用：OPPTRIX_DEV_ALLOW_BUILD=1 opptrix up --build',
+    )
+    return 1
+  }
+
+  // Prebuilt path: thin deploy + pull (never fall back to local build)
   root = ensureThinDeploy(root)
   ensureComposeEnv(root)
   writeHostConfig(root, { mirror, skipModels })
@@ -502,72 +549,62 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
     releaseRef = 'main'
   }
   const releaseEnv = buildReleaseEnv(root, releaseRef)
+
+  const failPull = (detail) => {
+    console.error(`[opptrix] 拉取预构建镜像失败。${detail}`)
+    console.error(
+      '[opptrix] 请检查：1) 该 tag 是否已发布到 GHCR；2) 网络 / 防火墙；'
+        + '3) 国内可试 --mirror cn 或 OPPTRIX_GHCR_MIRROR；4) opptrix base list 确认可用版本。'
+        + ` 默认推荐 ${meta.preferredAppTag}。不会自动本地编译。`,
+    )
+    return 1
+  }
+
   if (process.env.OPPTRIX_IMAGE?.trim()) {
     const imageRef = process.env.OPPTRIX_IMAGE.trim()
     console.log(`[opptrix] 使用 OPPTRIX_IMAGE=${imageRef}`)
     const pullEnv = { ...releaseEnv, OPPTRIX_IMAGE: imageRef }
     const pullCode = await runCompose(['pull'], { root, mirror, releaseEnv: pullEnv })
     if (pullCode === 0) {
-      console.log('[opptrix] 预构建镜像已就绪，启动中（不本地编译）…')
+      console.log('[opptrix] 预构建镜像已就绪，启动中…')
       return runCompose(['up', '-d'], { root, mirror, skipModels, releaseEnv: pullEnv })
     }
-    console.warn(`[opptrix] WARN: 拉取 ${imageRef} 失败（exit ${pullCode}），回退本地编译…`)
-  } else {
-    const candidates = resolvePullImageCandidates(resolved.ref, mirror)
-    if (!candidates.images.length) {
-      console.log('[opptrix] 无法解析预构建镜像引用，回退本地编译…')
-      root = ensureBuildContext(root, { mirror, ref: refFlag })
-      return upWithLocalBuild({ root, mirror, releaseEnv: buildReleaseEnv(root, releaseRef), skipModels })
-    }
+    return failPull(`OPPTRIX_IMAGE=${imageRef}（exit ${pullCode}）`)
+  }
 
-    if (mirror === 'cn' && candidates.probeResults.length) {
-      console.log(`[opptrix] GHCR 国内镜像测速: ${formatGhcrProbeResults(candidates.probeResults)}`)
-      console.log(`[opptrix] 选用 ${candidates.winnerHost}（${candidates.reason}）`)
-    } else if (mirror === 'foreign') {
-      console.log(`[opptrix] GHCR 使用官方 ${candidates.winnerHost}`)
-    }
+  const candidates = resolvePullImageCandidates(resolved.ref, mirror)
+  if (!candidates.images.length) {
+    return failPull(`无法解析预构建镜像引用（ref=${resolved.ref}）`)
+  }
 
-    let pulled = null
-    for (const imageRef of candidates.images) {
-      console.log(`[opptrix] 拉取预构建镜像 ${imageRef}`)
-      const pullEnv = { ...releaseEnv, OPPTRIX_IMAGE: imageRef }
-      const pullCode = await runCompose(['pull'], {
+  if (mirror === 'cn' && candidates.probeResults.length) {
+    console.log(`[opptrix] GHCR 国内镜像测速: ${formatGhcrProbeResults(candidates.probeResults)}`)
+    console.log(`[opptrix] 选用 ${candidates.winnerHost}（${candidates.reason}）`)
+  } else if (mirror === 'foreign') {
+    console.log(`[opptrix] GHCR 使用官方 ${candidates.winnerHost}`)
+  }
+
+  for (const imageRef of candidates.images) {
+    console.log(`[opptrix] 拉取预构建镜像 ${imageRef}`)
+    const pullEnv = { ...releaseEnv, OPPTRIX_IMAGE: imageRef }
+    const pullCode = await runCompose(['pull'], {
+      root,
+      mirror,
+      releaseEnv: pullEnv,
+    })
+    if (pullCode === 0) {
+      console.log('[opptrix] 预构建镜像已就绪，启动中…')
+      return runCompose(['up', '-d'], {
         root,
         mirror,
+        skipModels,
         releaseEnv: pullEnv,
       })
-      if (pullCode === 0) {
-        pulled = imageRef
-        console.log('[opptrix] 预构建镜像已就绪，启动中（不本地编译）…')
-        return runCompose(['up', '-d'], {
-          root,
-          mirror,
-          skipModels,
-          releaseEnv: pullEnv,
-        })
-      }
-      console.warn(`[opptrix] WARN: 拉取 ${imageRef} 失败（exit ${pullCode}），尝试下一源…`)
     }
-    void pulled
-    console.warn('[opptrix] WARN: 所有预构建镜像源均失败')
-    console.warn('[opptrix] 可能原因: 该版本尚未推送到 GHCR，或镜像站/官方均不可达')
-    console.warn('[opptrix] 回退: 克隆完整源码并本地构建（可用 --build 跳过 pull 直接走此路径）')
+    console.warn(`[opptrix] WARN: 拉取 ${imageRef} 失败（exit ${pullCode}），尝试下一源…`)
   }
 
-  root = ensureBuildContext(root, { mirror, ref: refFlag })
-  if (opts.update && fs.existsSync(path.join(root, '.git'))) {
-    const code = await gitPull(root, resolved.ref)
-    if (code !== 0) {
-      console.error('[opptrix] 源码同步未完全成功；仍可手动改代码后执行 up')
-    }
-  }
-  console.log('[opptrix] 提示: CLI 包更新请执行 npm update -g @opptrix/selfhost（selfhost-v*）')
-  return upWithLocalBuild({
-    root,
-    mirror,
-    releaseEnv: buildReleaseEnv(root, releaseRef),
-    skipModels,
-  })
+  return failPull(`已尝试：${candidates.images.join(' → ')}`)
 }
 
 async function cmdInit(parsed) {
@@ -595,12 +632,12 @@ async function cmdInit(parsed) {
   console.log(`[opptrix] 预构建镜像 ${meta.imageRepository}:<tag>（opptrix up 优先 pull）`)
   console.log(`[opptrix] deploy root → ${root}`)
   if (resolved.profile === 'cn') {
-    console.log('[opptrix] 国内构建：Node 前缀 docker.1ms.run/library/ + 官方 npm（可 OPPTRIX_NPM_REGISTRY 覆盖）+ 阿里云 Debian；clone 优先 Gitee')
-    console.log('[opptrix] 国内拉镜像：对 ghcr.nju.edu.cn / ghcr.1ms.run 测速择优（可用 OPPTRIX_GHCR_MIRROR 固定）')
+    console.log('[opptrix] 国内构建（仅开发者）: Node 前缀 docker.1ms.run/library/ + npm 候选华为/腾讯/官方 + 阿里云 Debian；clone 优先 Gitee')
+    console.log('[opptrix] 国内拉镜像：对 ghcr.nju.edu.cn / ghcr.milu.moe / ghcr.linkos.org 测速，最后回退 ghcr.io（可用 OPPTRIX_GHCR_MIRROR 固定）')
   } else {
-    console.log('[opptrix] 海外构建：官方 Docker/npm/apt；clone 优先 GitHub；拉镜像用官方 ghcr.io')
+    console.log('[opptrix] 海外：官方 Docker/npm/apt；clone 优先 GitHub；拉镜像用官方 ghcr.io')
   }
-  console.log('[opptrix] 下一步: opptrix up')
+  console.log('[opptrix] 下一步: opptrix up（拉取预构建镜像）')
   return 0
 }
 
@@ -617,11 +654,11 @@ async function cmdDoctor(parsed) {
   const root = resolveDeployRoot()
   console.log(`[opptrix] deploy root → ${root}`)
   if (isFullSourceTree(root)) {
-    console.log('[opptrix] OK full source tree (apps/packages/client-ui) — 可用于 --build')
+    console.log('[opptrix] OK full source tree (apps/packages/client-ui) — 开发者本地构建可用（需 OPPTRIX_DEV_ALLOW_BUILD=1）')
   } else if (fs.existsSync(path.join(root, 'docker-compose.yml'))) {
-    console.log('[opptrix] OK thin deploy（compose 清单）— 默认 pull 预构建；--build 时会自动 clone')
+    console.log('[opptrix] OK thin deploy（compose 清单）— 默认 pull 预构建镜像')
   } else {
-    console.log('[opptrix] 提示: 尚无 compose；执行 up 将写入 bundle 清单并优先 pull')
+    console.log('[opptrix] 提示: 尚无 compose；执行 up 将写入 bundle 清单并 pull 预构建')
   }
 
   const need = [
@@ -789,7 +826,10 @@ async function cmdUse(parsed) {
   writeHostConfig(root, { appRef: target })
   console.log(`[opptrix] 已写入应用版本偏好 appRef=${target} → ${path.join(root, '.opptrix.json')}`)
   if (target === 'main') {
-    console.log('[opptrix] 注意: main 为开发分支，稳定性与升级路径自负；将走本地编译。')
+    console.log(
+      '[opptrix] 注意: main 为开发分支。用户请改用 opptrix-selfhost-v* 预构建 tag；'
+        + '本地编译需 OPPTRIX_DEV_ALLOW_BUILD=1 opptrix up --build。',
+    )
   }
   if (!flagTrue(parsed.flags, 'apply')) {
     console.log('[opptrix] 下一步: opptrix up   （或 opptrix use … --apply 一步完成）')
@@ -799,6 +839,8 @@ async function cmdUse(parsed) {
 }
 
 async function cmdUp(parsed) {
+  const setupCode = await ensureSetupBeforeUp(parsed)
+  if (setupCode !== 0) return setupCode
   return cmdUpOrUpdate(parsed, { update: false })
 }
 
@@ -829,6 +871,8 @@ async function main() {
         return cmd ? 0 : 0
       case 'init':
         return await cmdInit(parsed)
+      case 'setup':
+        return await cmdSetup(parsed)
       case 'doctor':
         return await cmdDoctor(parsed)
       case 'base':
@@ -861,6 +905,8 @@ async function main() {
       }
       case 'env':
         return await cmdEnv(parsed)
+      case 'data':
+        return await cmdData(parsed)
       case 'down': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
         const args = ['down']
@@ -877,6 +923,13 @@ async function main() {
         return runCompose(args, { root, mirror, releaseEnv })
       }
       case 'build': {
+        if (!devAllowBuild()) {
+          console.error(
+            '[opptrix] opptrix build 仅供开发者。请使用 opptrix up 拉取预构建镜像；'
+              + '若必须本机编译，请设置 OPPTRIX_DEV_ALLOW_BUILD=1 后再执行。',
+          )
+          return 2
+        }
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: true })
         return runCompose(['build'], {
           root,

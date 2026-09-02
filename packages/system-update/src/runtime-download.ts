@@ -1,5 +1,7 @@
 /**
  * Download runtime .bin + .sha256 with adaptive mirror failover.
+ * Package order: CN → evzs CDN → update.opptrix.org → github; foreign → CDN → github.
+ * Gitee is never used as a runtime download source.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -8,10 +10,20 @@ import {
   type UpdateMirrorProfile,
 } from './download-mirror-profile.js'
 
-export type RuntimeDownloadSource = 'gitee' | 'github' | 'cdn'
+/** Authoritative check-update / publish target. */
+export const AUTHORITATIVE_UPDATE_CDN_BASE = 'https://update.opptrix.org'
+
+/** CN check-update + package CDN bases (first wins). */
+export const CN_UPDATE_CDN_BASES = [
+  'https://update.opptrix.evzs.com',
+  AUTHORITATIVE_UPDATE_CDN_BASE,
+] as const
+
+export type RuntimeDownloadSource = 'cdn_cn' | 'cdn' | 'github'
 
 export interface RuntimePackageMirrors {
   github?: { bin?: string; sha256?: string }
+  /** Present on older manifests only — ignored at download time. */
   gitee?: { bin?: string; sha256?: string }
 }
 
@@ -28,10 +40,20 @@ export interface DownloadFileOptions {
   onProgress?: (received: number, total: number | null) => void
 }
 
-function mirrorSourceOrder(profile: UpdateMirrorProfile): RuntimeDownloadSource[] {
-  return profile === 'cn'
-    ? ['gitee', 'github', 'cdn']
-    : ['github', 'gitee', 'cdn']
+function normalizeCdnBase(base: string): string {
+  return base.trim().replace(/\/+$/, '') || AUTHORITATIVE_UPDATE_CDN_BASE
+}
+
+/** Same path/query/hash under a different CDN host. */
+export function rewriteCdnBase(url: string, newBase: string): string {
+  const base = normalizeCdnBase(newBase)
+  try {
+    const parsed = new URL(url)
+    const next = new URL(base)
+    return `${next.origin}${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return url
+  }
 }
 
 export function buildRuntimeDownloadCandidates(
@@ -55,20 +77,24 @@ export function buildRuntimeDownloadCandidates(
     const b = bin?.trim()
     const s = sha?.trim()
     if (!b || !s) return
-    const key = `${source}:${b}:${s}`
+    const key = `${b}:${s}`
     if (seen.has(key)) return
     seen.add(key)
     out.push({ binUrl: b, sha256Url: s, source })
   }
 
   const mirrors = refs.mirrors ?? {}
-  for (const source of mirrorSourceOrder(profile)) {
-    if (source === 'cdn') {
-      push('cdn', cdnBin, cdnSha)
-      continue
+
+  if (profile === 'cn') {
+    for (let i = 0; i < CN_UPDATE_CDN_BASES.length; i++) {
+      const base = CN_UPDATE_CDN_BASES[i]
+      const source: RuntimeDownloadSource = i === 0 ? 'cdn_cn' : 'cdn'
+      push(source, rewriteCdnBase(cdnBin, base), rewriteCdnBase(cdnSha, base))
     }
-    const block = mirrors[source]
-    push(source, block?.bin, block?.sha256)
+    push('github', mirrors.github?.bin, mirrors.github?.sha256)
+  } else {
+    push('cdn', cdnBin, cdnSha)
+    push('github', mirrors.github?.bin, mirrors.github?.sha256)
   }
 
   if (out.length === 0) {

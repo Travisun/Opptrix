@@ -91,6 +91,13 @@ import {
 import { fetchUserAgreementHtml } from './legal-document.js'
 import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
+import {
+  closeHttpsServer,
+  ensureSelfSignedTlsMaterials,
+  listenHttpsAlongsideHttp,
+  resolveHttpsPort,
+} from './selfhost-https.js'
+import type { Server as HttpsServer } from 'node:https'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -2231,6 +2238,8 @@ app.delete<{ Querystring: { code?: string; market?: string; assetClass?: string 
 })
 
 let serveUi = false
+let httpsServer: HttpsServer | null = null
+const HTTPS_PORT = resolveHttpsPort()
 
 async function listenWithStaleCleanup(): Promise<void> {
   try {
@@ -2243,15 +2252,33 @@ async function listenWithStaleCleanup(): Promise<void> {
     try {
       await app.listen({ port: PORT, host: HOST })
       console.warn(`[server] 已清理残留进程并成功绑定 :${PORT}`)
-      return
     } catch (retryErr) {
       console.error(
         `\n  无法绑定 http://${HOST}:${PORT}/ — 端口仍被占用。\n`
-        + `  手动清理：lsof -ti :${PORT} -sTCP:LISTEN | xargs kill -9\n`
-        + `  或设置环境变量 STOCK_RESEARCH_PORT 使用其他端口。\n`,
+          + `  手动清理：lsof -ti :${PORT} -sTCP:LISTEN | xargs kill -9\n`
+          + `  或设置环境变量 STOCK_RESEARCH_PORT 使用其他端口。\n`,
       )
       throw retryErr
     }
+  }
+
+  if (HTTPS_PORT == null) return
+  try {
+    const tls = ensureSelfSignedTlsMaterials()
+    if (tls.created) {
+      console.log(`  TLS → 已生成自签名证书 (${tls.dir})`)
+    }
+    httpsServer = await listenHttpsAlongsideHttp({
+      httpServer: app.server,
+      host: HOST,
+      port: HTTPS_PORT,
+      key: tls.key,
+      cert: tls.cert,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[server] HTTPS :${HTTPS_PORT} 启动失败: ${msg}`)
+    throw err
   }
 }
 
@@ -2295,8 +2322,15 @@ async function bootstrap() {
   await listenWithStaleCleanup()
   const bindNote = HOST !== CONNECT_HOST ? ` (bind ${HOST})` : ''
   console.log(`\n  Opptrix API → http://${CONNECT_HOST}:${PORT}/api/health${bindNote}`)
+  if (HTTPS_PORT != null) {
+    console.log(`  Opptrix HTTPS → https://${CONNECT_HOST}:${HTTPS_PORT}/ （自签名；浏览器直连请用此端口）`)
+  }
   if (serveUi) {
-    console.log(`  Desktop UI → http://${CONNECT_HOST}:${PORT}\n`)
+    if (HTTPS_PORT != null) {
+      console.log(`  Web UI → https://<公网IP或本机>:${HTTPS_PORT}/\n`)
+    } else {
+      console.log(`  Desktop UI → http://${CONNECT_HOST}:${PORT}\n`)
+    }
   } else {
     console.log(`  Web UI → npm run dev → https://127.0.0.1:5173（自签名；设 WEB_HTTPS=0 可回退 HTTP）\n`)
   }
@@ -2390,7 +2424,11 @@ async function shutdown(signal: string) {
       stopEnrichmentScheduler()
     },
     closeBrowsers: () => browserSessionManager.closeAll(),
-    closeHttpApp: () => app.close(),
+    closeHttpApp: async () => {
+      await closeHttpsServer(httpsServer)
+      httpsServer = null
+      await app.close()
+    },
     unloadLlama: async () => {
       try {
         await llamaRuntime.unload()

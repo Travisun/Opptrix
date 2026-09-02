@@ -171,7 +171,8 @@ describe('channel tag + CDN helpers', () => {
       { archKey: 'linux-x64' },
     )
     assert.ok(withMirrors?.mirrors?.github?.bin?.includes('github.com'))
-    assert.ok(withMirrors?.mirrors?.gitee?.bin?.includes('gitee.com'))
+    // Old manifests may still embed mirrors.gitee — parse must ignore them.
+    assert.equal(withMirrors?.mirrors?.gitee, undefined)
 
     const arm64 = channel.parseHotLatestPayload(
       {
@@ -355,5 +356,26 @@ describe('apply exit injection', () => {
       else process.env.OPPTRIX_SYSTEM_DIR = prev
       fs.rmSync(tmp, { recursive: true, force: true })
     }
+  })
+})
+
+describe('resolveCheckUpdateCdnBases', () => {
+  it('cn profile tries evzs then update.opptrix.org', () => {
+    const bases = channel.resolveCheckUpdateCdnBases(
+      { cdnBase: 'https://update.opptrix.org', channel: 'selfhost' },
+      { profile: 'cn' },
+    )
+    assert.deepEqual(bases, [
+      'https://update.opptrix.evzs.com',
+      'https://update.opptrix.org',
+    ])
+  })
+
+  it('foreign profile uses configured authoritative CDN only', () => {
+    const bases = channel.resolveCheckUpdateCdnBases(
+      { cdnBase: 'https://update.opptrix.org', channel: 'selfhost' },
+      { profile: 'foreign' },
+    )
+    assert.deepEqual(bases, ['https://update.opptrix.org'])
   })
 })

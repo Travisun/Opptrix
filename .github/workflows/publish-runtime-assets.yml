@@ -1,4 +1,5 @@
-# Publish Opptrix runtime hot-update assets to CDN (R2), GitHub Release, and Gitee
+# Publish Opptrix runtime hot-update assets to CDN (R2) and GitHub Release.
+# Gitee release mirror is disabled (downloads use CDN + GitHub only).
 # Triggers: push tag runtime-v*  or  workflow_dispatch
 # Docker base images: publish-selfhost-image.yml (manual only).
 #
@@ -30,10 +31,6 @@ on:
         required: false
         type: string
         default: ''
-      skip_gitee:
-        description: 'Skip Gitee upload attempt'
-        type: boolean
-        default: false
       skip_r2:
         description: 'Skip R2/CDN sync (local/fork testing)'
         type: boolean
@@ -357,39 +354,6 @@ jobs:
           OPPTRIX_APP_VERSION: ${{ needs.resolve-meta.outputs.version }}
         run: node scripts/purge-hot-cdn-cache.mjs --version "${{ needs.resolve-meta.outputs.version }}"
 
-      # Prefer uploader from the workflow SHA so workflow_dispatch from main can
-      # re-mirror an older runtime-v* tag without retagging (pack still uses tag tree).
-      - name: Refresh Gitee uploader from workflow SHA
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_gitee) }}
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
-          sparse-checkout: |
-            scripts/upload-runtime-gitee.mjs
-          sparse-checkout-cone-mode: false
-          path: _gitee-uploader
-
-      - name: Mirror to Gitee (optional)
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_gitee) }}
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          OPPTRIX_UPDATE_GITEE_REPO: Travisun/Opptrix
-          OPPTRIX_UPDATE_GITEE_TARGET: main
-        run: |
-          set -euo pipefail
-          if [[ -f _gitee-uploader/scripts/upload-runtime-gitee.mjs ]]; then
-            cp -f _gitee-uploader/scripts/upload-runtime-gitee.mjs scripts/upload-runtime-gitee.mjs
-          fi
-          EXTRA=""
-          if [[ -n "${GITEE_TOKEN:-}" ]]; then
-            EXTRA="--require-token"
-          fi
-          node scripts/upload-runtime-gitee.mjs \
-            --version "${{ needs.resolve-meta.outputs.version }}" \
-            --dir dist-runtime \
-            --tag "${{ needs.resolve-meta.outputs.runtime_release_tag }}" \
-            $EXTRA
-
       - name: Smoke verify CDN check-update
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_r2) && env.HAS_R2_CREDS == 'true' }}
         shell: bash
@@ -452,6 +416,6 @@ jobs:
             echo "- minBaseImage: \`${BASE_IMG}\`"
             echo "- CDN: \`${BASE}/hot/check-update\` → \`linux-x64\` + \`linux-arm64\` packages"
             echo "- GitHub Release: per-arch \`.bin\`, legacy x64 alias, \`.tar.gz\`"
-            echo "- Gitee mirror: same set when \`GITEE_TOKEN\` configured"
+            echo "- Gitee mirror: disabled (clients use CDN + GitHub only)"
             echo "- Docs: \`docs/SYSTEM-UPDATE.md\`"
           } >> "$GITHUB_STEP_SUMMARY"

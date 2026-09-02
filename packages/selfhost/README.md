@@ -22,15 +22,15 @@
 安装并执行成功后，你会得到：
 
 1. 本机命令 **`opptrix`**（检查环境、初始化、启停实例）  
-2. 一份 Docker Compose 部署（默认 **拉取 GHCR 预构建镜像**；也可本地编译）  
-3. **自动判断**用国内源还是海外源（本地编译 / clone 时）  
-4. 浏览器打开 **http://127.0.0.1:8711** 使用完整 Opptrix Web 界面  
+2. 一份 Docker Compose 部署（默认 **拉取 GHCR 预构建镜像**；用户不本地编译）  
+3. **自动判断**用国内源还是海外源（拉镜像 / 国内 GHCR 镜像站）  
+4. 浏览器打开 **https://\<公网IP或本机\>:8712**（自签名 HTTPS；首次需信任证书）  
 
 典型问题本工具直接回答：
 
 - 「怎么在自己的 Linux 服务器上部署 Opptrix？」  
-- 「怎么用预构建镜像快速启动？怎么强制本地编译？」  
-- 「国内网络怎么拉镜像 / 克隆代码更快？」  
+- 「怎么用预构建镜像快速启动？」  
+- 「国内网络怎么拉镜像更快？」  
 - 「怎么启动、停止、看日志、升级自托管实例？」  
 - 「Mac / Windows 已经装了 Docker，怎么本地跑 Opptrix？」
 
@@ -55,7 +55,7 @@
 |------|----------|----------|
 | Node.js | **≥ 24** | `node -v` |
 | Docker | Engine + **Compose V2** | `docker compose version` |
-| 磁盘与网络 | 首次 pull 预构建较快；本地 `--build` 或拉模型时更大 | 预留数 GB 以上更稳妥 |
+| 磁盘与网络 | 首次 pull 预构建较快；拉模型时更大 | 预留数 GB 以上更稳妥 |
 
 - **Linux 服务器**：推荐；可用一键脚本先装 Docker / Node，再装本 CLI。  
 - **macOS / Windows**：请先自行安装 Docker Desktop（或等价环境）与 Node，再 `npm i -g @opptrix/selfhost`。
@@ -112,23 +112,44 @@ opptrix doctor
 目标：本机或服务器上出现可打开的 Opptrix。
 
 ```bash
-opptrix init          # 生成 compose.env，自动选国内/海外源并写入配置
-opptrix up            # 优先拉取预构建镜像 → 后台启动（失败再本地编译）
+opptrix setup         # 交互设置：镜像源、数据目录、端口、Docker 开机自启（非 TTY 用默认值）
+# 或: opptrix init    # 仅生成 compose.env / 默认偏好（不提问）
+opptrix up            # 无主机配置时会先 setup；再拉预构建镜像并启动
 opptrix health        # 确认服务健康
 ```
 
-然后浏览器打开：**http://127.0.0.1:8711**
+然后浏览器打开：**https://\<公网IP或本机\>:8712**（自签名；`8711` 为 HTTP/反代）
 
 | 步骤 | 你在做什么 | 成功后的效果 |
 |------|------------|--------------|
-| `init` | 准备配置 | 出现 `compose.env`、`.opptrix.json`（含检测到的 mirror） |
-| `up` | 拉镜像并启动 | 容器运行；端口 8711 可访问；数据写入 Docker 卷 |
+| `setup` | 选择镜像源 / 数据落盘位置 / 端口 | 写入 `.opptrix.json`、`compose.env`；可选 `docker-compose.override.yml`（宿主机绑定） |
+| `init` | 静默准备配置 | 出现 `compose.env`、`.opptrix.json`（含检测到的 mirror） |
+| `up` | 拉镜像并启动 | 容器运行；HTTPS 8712 / HTTP 8711 已映射；数据写入 Docker 卷或你指定的目录 |
 | `health` | 探活 | 打印健康检查成功信息 |
 
-默认**不**在本机全量编译。若需强制本地构建，或 GHCR 拉不到时：
+非交互示例：
 
 ```bash
-opptrix up --build
+opptrix setup --yes --mirror cn --data volume
+opptrix setup --yes --data /var/lib/opptrix --http-port 8711 --https-port 8712
+```
+
+### 迁移数据目录
+
+安装前或安装后均可把 `opptrix-home` 从 Docker 命名卷迁到宿主机目录（或反过来）：
+
+```bash
+opptrix data migrate --to /var/lib/opptrix --dry-run   # 只看计划
+opptrix data path /var/lib/opptrix --yes               # 停容器 → 复制 → 写 override → up
+opptrix data migrate --to volume --yes                 # 迁回命名卷
+```
+
+复制优先 `rsync -aH --info=progress2`，否则 `cp -a`；失败不删源。TTY 下须加 `--yes`。
+
+默认**不**在本机全量编译：`opptrix up` 只拉取预构建镜像。本地 Docker 构建仅开发者可用：
+
+```bash
+OPPTRIX_DEV_ALLOW_BUILD=1 opptrix up --build
 ```
 
 若只想先验证「能起来」、暂不下载本地模型：
@@ -226,7 +247,7 @@ opptrix up --mirror auto      # 显式再检测一次
 
 1. 使用环境变量 `OPPTRIX_DEPLOY_DIR`（若设置）  
 2. 或当前目录向上找到已有 Opptrix 仓库  
-3. 否则用 `~/.opptrix/instances/default`（写入 Compose 清单；`--build` 时再 clone）
+3. 否则用 `~/.opptrix/instances/default`（写入 Compose 清单并 pull 预构建；开发者本地构建才 clone）
 
 ```bash
 export OPPTRIX_DEPLOY_DIR=/data/opptrix
@@ -251,7 +272,7 @@ opptrix init
 opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 ```
 
-4. 浏览器打开 http://127.0.0.1:8711  
+4. 浏览器打开 https://\<公网IP或本机\>:8712  
 
 **效果：** 与 Linux 服务器同一套命令；本包**不会**替你安装 Docker。
 
@@ -267,11 +288,11 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `opptrix init` | 初始化配置 | 生成 `compose.env`，保存 mirror 等偏好 |
 | `opptrix tags` | 列出应用快照 | `opptrix-selfhost-v*`（≥ 最低版本）及升降级提示 |
 | `opptrix use <tag\|main>` | 写入版本偏好 | `.opptrix.json` 的 `appRef`；`--apply` 可立即启动 |
-| `opptrix up` | 优先 pull 预构建并后台启动 | 实例运行，默认可访问 8711 |
+| `opptrix up` | 拉取预构建并后台启动 | 实例运行，默认可访问 https://IP:8712 |
 | `opptrix start` / `stop` / `restart` | 启停重启 | 不强制重建镜像 |
 | `opptrix env set/get/list/unset` | 管理 `compose.env` | 默认写盘后 `compose up -d` 注入；`--no-restart` 仅保存 |
 | `opptrix down` | 移除容器 | 默认保留数据；加 `--volumes` 清空 |
-| `opptrix build` | 只本地构建镜像 | 不启动容器 |
+| `opptrix build` | 仅开发者本地构建（需 `OPPTRIX_DEV_ALLOW_BUILD=1`） | 不启动容器 |
 | `opptrix update` | 升级镜像 / 运行环境底座 | 重建容器；默认保留 data / models / system 卷与挂载；热更新另见产品内提示 |
 | `opptrix logs` | 查看日志 | `-f` 持续跟踪 |
 | `opptrix status` | 容器状态 | 等同 compose ps |
@@ -287,8 +308,8 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `--ref <tag\|main>` | 本次使用的应用版本 |
 | `--apply` | `use` 后直接启动 |
 | `--skip-models` | 跳过首启核心模型下载，更快冒烟 |
-| `--build` | 强制本地编译（跳过优先 pull） |
-| `--no-build` | 本地路径下 `up` 不加 `--build` |
+| `--build` | 开发者本地编译（需 `OPPTRIX_DEV_ALLOW_BUILD=1`） |
+| `--no-build` | 开发者本地路径下 `up` 不加 `--build` |
 | `--volumes` | `down` 时删除数据卷（危险） |
 | `-f` / `--follow` | 日志跟踪 |
 | `--tail <n>` | 日志尾部行数（默认 200） |
@@ -300,8 +321,9 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `OPPTRIX_DEPLOY_DIR` | 部署 / Compose 目录 |
 | `OPPTRIX_IMAGE` | 完整镜像引用（手动设置则跳过测速与候选列表） |
 | `OPPTRIX_IMAGE_REPO` | 镜像仓库路径（默认 `ghcr.io/travisun/opptrix`） |
-| `OPPTRIX_GHCR_MIRROR` | 强制 registry 主机：`ghcr.nju.edu.cn` 或 `ghcr.1ms.run` |
-| `OPPTRIX_FORCE_BUILD=1` | 同 `--build` |
+| `OPPTRIX_GHCR_MIRROR` | 强制 registry 主机（如 `ghcr.nju.edu.cn`） |
+| `OPPTRIX_DEV_ALLOW_BUILD=1` | 允许开发者本地 Docker 构建 |
+| `OPPTRIX_FORCE_BUILD=1` | 同 `--build`（仍需 `OPPTRIX_DEV_ALLOW_BUILD=1`） |
 | `OPPTRIX_BUILD_MIRROR` | `cn` / `foreign` / `auto` |
 | `OPPTRIX_FORCE_CN=1` | 强制按国内检测 |
 | `OPPTRIX_GIT_URL_CN` / `OPPTRIX_GIT_URL` | 覆盖 Gitee / GitHub 地址 |
@@ -320,9 +342,9 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | （旧版）用户数据 | 卷 `opptrix-data`（`/data`） | 见 `docker-compose.legacy-volumes.yml` |
 | （旧版）本地模型 | 卷 `opptrix-models`（`/models`） | 同上 |
 | （旧版）运行时槽位 | 卷 `opptrix-system`（`/system`） | 同上 |
-| 访问地址 | http://127.0.0.1:8711（默认只监听本机） | — |
+| 访问地址 | https://\<IP\>:8712（自签名 HTTPS，默认映射公网可访）；HTTP 8711 供反代 | — |
 
-远程公网访问请自己加反向代理与 HTTPS；完整挂载与安全说明见 [SELF-HOSTING.md](https://github.com/Travisun/Opptrix/blob/main/docs/SELF-HOSTING.md)。
+默认开箱：`https://公网IP:8712`（自签名）。若前面另有 Nginx 终结 TLS，upstream 用 `http://127.0.0.1:8711`。完整说明见 [SELF-HOSTING.md](https://github.com/Travisun/Opptrix/blob/main/docs/SELF-HOSTING.md)。
 
 ---
 
@@ -330,7 +352,7 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 
 ### Opptrix 怎么本地 Docker 部署？
 
-安装 Node ≥ 24 与 Docker Compose V2 后：`npm i -g @opptrix/selfhost && opptrix init && opptrix up`，浏览器打开 http://127.0.0.1:8711 。默认拉取预构建镜像；本地编译用 `opptrix up --build`。
+安装 Node ≥ 24 与 Docker Compose V2 后：`npm i -g @opptrix/selfhost && opptrix init && opptrix up`，浏览器打开 https://\<公网IP或本机\>:8712 。默认拉取预构建镜像；本地编译仅开发者：`OPPTRIX_DEV_ALLOW_BUILD=1 opptrix up --build`。
 
 ### 国内如何更快安装 Opptrix？
 
@@ -389,4 +411,4 @@ npm link -w @opptrix/selfhost
 
 ---
 
-**一句话：** 装 `@opptrix/selfhost` → 运行 `opptrix init && opptrix up` → 打开 http://127.0.0.1:8711 ，即可在自己的环境使用 Opptrix 投研工作台。
+**一句话：** 装 `@opptrix/selfhost` → 运行 `opptrix init && opptrix up` → 打开 https://\<公网IP或本机\>:8712 ，即可在自己的环境使用 Opptrix 投研工作台。

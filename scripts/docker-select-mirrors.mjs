@@ -31,18 +31,20 @@ export const PROBE_TARGETS = Object.freeze(
 
 /**
  * Keep in sync with packages/selfhost/src/mirrors.mjs CN_NPM_REGISTRY_CANDIDATES.
+ * Huawei → Tencent → official (empty). Do not use npmmirror as primary.
  * Empty string = official registry.npmjs.org.
  */
 export const CN_NPM_REGISTRY_CANDIDATES = Object.freeze([
   'https://mirrors.huaweicloud.com/repository/npm/',
+  'https://mirrors.cloud.tencent.com/npm/',
   '',
 ])
 
 /** Keep in sync with packages/selfhost/src/mirrors.mjs CN_MIRROR_DEFAULTS. */
 export const CN_BUILD_MIRRORS = Object.freeze({
-  // 1ms Hub library/ proxy (not bare host; not amd64/).
+  // 1ms Hub library/ proxy (DaoCloud invalid for Hub; not bare host; not amd64/).
   dockerImagePrefix: 'docker.1ms.run/library/',
-  // Huawei: verified packument+tarball for scoped pins; see CN_NPM_REGISTRY_CANDIDATES.
+  // Huawei primary; see CN_NPM_REGISTRY_CANDIDATES for Tencent + official fallback.
   npmRegistry: 'https://mirrors.huaweicloud.com/repository/npm/',
   aptMirror: 'mirrors.aliyun.com',
   pipIndexUrl: 'https://pypi.tuna.tsinghua.edu.cn/simple',

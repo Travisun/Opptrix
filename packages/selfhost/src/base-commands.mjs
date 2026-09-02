@@ -51,14 +51,14 @@ function printBaseHelp() {
 用法:
   opptrix base list [--no-dates] [--json]
   opptrix base status
-  opptrix base use <版本|tag> [--apply] [--allow-downgrade]
+  opptrix base use <版本|tag|latest> [--apply] [--allow-downgrade]
   opptrix base apply
 
-版本格式: 1.4.0 / v1.4.0 / opptrix-selfhost-v1.4.0
+版本格式: 1.4.0 / v1.4.0 / opptrix-selfhost-v1.4.0 / latest（→ 包内 preferredAppTag）
 
 说明:
   use 写入 .opptrix.json 的 appRef；apply 拉取预构建镜像并重建容器（保留数据卷）。
-  降级需 --allow-downgrade。`)
+  降级需 --allow-downgrade。用户路径仅 pull，不本地编译。`)
 }
 
 /**
@@ -152,14 +152,22 @@ export async function cmdBaseStatus(parsed) {
 export async function cmdBaseUse(parsed, rawTarget, applyFn) {
   const target = String(rawTarget ?? '').trim()
   if (!target) {
-    console.error('[opptrix] 用法: opptrix base use <版本> [--apply] [--allow-downgrade]')
+    console.error('[opptrix] 用法: opptrix base use <版本|latest|tag> [--apply] [--allow-downgrade]')
     return 2
   }
 
   const meta = readPackageMeta()
   const root = resolveDeployRoot()
-  const tag = normalizeBaseTag(target)
-  if (!tag && target !== 'main') {
+
+  // "latest" → package preferredAppTag (published default), never invent a version
+  let effectiveTarget = target
+  if (target === 'latest') {
+    effectiveTarget = meta.preferredAppTag
+    console.log(`[opptrix] latest → 包内 preferredAppTag ${effectiveTarget}`)
+  }
+
+  const tag = normalizeBaseTag(effectiveTarget)
+  if (!tag && effectiveTarget !== 'main') {
     console.error(`[opptrix] 无法识别底座版本: ${target}`)
     return 2
   }
@@ -196,9 +204,12 @@ export async function cmdBaseUse(parsed, rawTarget, applyFn) {
       message: 'appRef updated',
       deployRoot: root,
     })
-  } else if (target === 'main') {
+  } else if (effectiveTarget === 'main') {
     writeHostConfig(root, { appRef: 'main' })
-    console.log('[opptrix] 已选定 main（开发分支，风险自担）')
+    console.log(
+      '[opptrix] 已选定 main（开发分支）。用户请改用预构建 tag；'
+        + '本地编译需 OPPTRIX_DEV_ALLOW_BUILD=1。',
+    )
   }
 
   if (!flagTrue(parsed.flags, 'apply')) {

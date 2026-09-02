@@ -8,13 +8,13 @@ import { spawnSync } from 'node:child_process'
 
 /**
  * Ordered CN npm registry candidates (trailing slash normalized by callers).
- * Probed 2026-09: Huawei OK for scoped + unscoped tarballs; 163 all 404;
- * npm.aliyun.com DNS NXDOMAIN; npmmirror missing some pins (e.g. @fluentui/react-icons@2.0.336);
- * Tencent packument OK but npm ci has historically mangled tarball URLs.
- * Official npmjs is always the last fallback (empty string → leave npm default).
+ * Keep in sync with scripts/docker-select-mirrors.mjs.
+ * Huawei first (scoped + unscoped tarballs OK); Tencent second; do NOT use npmmirror
+ * as primary (missing some pins). Official npmjs last (empty string → npm default).
  */
 export const CN_NPM_REGISTRY_CANDIDATES = Object.freeze([
   'https://mirrors.huaweicloud.com/repository/npm/',
+  'https://mirrors.cloud.tencent.com/npm/',
   '',
 ])
 
@@ -22,7 +22,8 @@ export const CN_MIRROR_DEFAULTS = Object.freeze({
   /**
    * Docker Hub library/ proxy for Node base images.
    * Must be `docker.1ms.run/library/` (not bare `docker.1ms.run/` — wrong path;
-   * not `…/amd64/` — arch-specific and fails on arm64). DaoCloud 401 — use 1ms.run.
+   * not `…/amd64/` — arch-specific and fails on arm64). DaoCloud is invalid for Hub —
+   * keep docker.1ms.run/library/.
    */
   dockerImagePrefix: 'docker.1ms.run/library/',
   /**
@@ -38,11 +39,14 @@ export const OFFICIAL_GHCR_HOST = 'ghcr.io'
 
 /**
  * China GHCR pull mirrors (host only, no scheme).
- * Docs often show https://ghcr.nju.edu.cn/ — Docker image refs use the hostname.
+ * Ordered for latency probe; official ghcr.io appended as final fallback in
+ * resolveGhcrPullRepositories when includeOfficialFallback !== false.
+ * Note: docker.1ms.run is Docker Hub library/ only — not a GHCR host.
  */
 export const CN_GHCR_MIRROR_HOSTS = Object.freeze([
   'ghcr.nju.edu.cn',
-  'ghcr.1ms.run',
+  'ghcr.milu.moe',
+  'ghcr.linkos.org',
 ])
 
 /** Default git remotes for source clone (Docker build context). */
