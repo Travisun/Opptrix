@@ -41,7 +41,8 @@ test('ci-pins.env matches bootstrap Node pin and ubuntu LTS runner', () => {
   assert.ok(ubuntuRunner, 'CI_UBUNTU_RUNNER')
   assert.match(ubuntuRunner, /^ubuntu-24\.04$/)
   assert.match(selfhostCi, new RegExp(`CI_UBUNTU_RUNNER: ${ubuntuRunner}`))
-  assert.match(selfhostCi, /runs-on: \$\{\{ env\.CI_UBUNTU_RUNNER \}\}/)
+  // runs-on cannot use env context in GHA — must be literal matching the pin
+  assert.match(selfhostCi, new RegExp(`runs-on:\\s*${ubuntuRunner}`))
 })
 
 test('bootstrap/linux.sh bash -n passes', () => {

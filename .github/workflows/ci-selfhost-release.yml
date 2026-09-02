@@ -71,7 +71,7 @@ env:
 jobs:
   selfhost-npm-pack:
     name: npm pack (@opptrix/selfhost)
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -92,7 +92,7 @@ jobs:
 
   runtime-pack:
     name: Runtime pack (${{ matrix.platform_key }})
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: ${{ matrix.platform_key == 'linux-arm64' && 120 || 45 }}
     strategy:
       fail-fast: false
@@ -154,7 +154,7 @@ jobs:
 
   docker-build-smoke:
     name: Docker build smoke (linux/amd64)
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 90
     if: >-
       github.event_name == 'push'
@@ -211,7 +211,7 @@ jobs:
   merge-runtime-artifacts:
     name: Merge runtime packs + verify dual-arch manifest
     needs: runtime-pack
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5

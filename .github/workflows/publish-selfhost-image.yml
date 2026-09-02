@@ -37,7 +37,7 @@ env:
 jobs:
   build-and-push:
     name: Build & push GHCR image
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 120
     steps:
       - name: Resolve version tags

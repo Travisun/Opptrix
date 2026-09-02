@@ -45,7 +45,7 @@ env:
 jobs:
   resolve-meta:
     name: Resolve version
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     outputs:
       full_tag: ${{ steps.meta.outputs.full_tag }}
       version: ${{ steps.meta.outputs.version }}
@@ -78,7 +78,7 @@ jobs:
   pack:
     name: Pack runtime (${{ matrix.platform_key }})
     needs: resolve-meta
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: ${{ matrix.platform_key == 'linux-arm64' && 120 || 90 }}
     strategy:
       fail-fast: false
@@ -161,7 +161,7 @@ jobs:
   publish:
     name: Publish runtime & upload release assets
     needs: [resolve-meta, pack]
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 30
     env:
       HAS_R2_CREDS: ${{ secrets.R2_ACCESS_KEY_ID != '' }}

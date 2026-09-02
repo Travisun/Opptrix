@@ -20,7 +20,7 @@ env:
 jobs:
   build-and-test:
     name: Build & test (server / selfhost)
-    runs-on: ${{ env.CI_UBUNTU_RUNNER }}
+    runs-on: ubuntu-24.04  # pin: scripts/lib/ci-pins.env CI_UBUNTU_RUNNER
     timeout-minutes: 25
 
     steps:
