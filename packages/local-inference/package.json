@@ -16,10 +16,7 @@
   },
   "dependencies": {
     "@opptrix/shared": "*",
-    "ffmpeg-static": "^5.2.0",
+    "node-llama-cpp": "^3.19.0",
     "nodejs-whisper": "^0.3.0"
-  },
-  "optionalDependencies": {
-    "node-llama-cpp": "^3.19.0"
   }
 }

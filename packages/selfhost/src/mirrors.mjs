@@ -6,10 +6,30 @@ import { spawnSync } from 'node:child_process'
 
 /** @typedef {'cn' | 'foreign'} BuildMirrorProfile */
 
+/**
+ * Ordered CN npm registry candidates (trailing slash normalized by callers).
+ * Probed 2026-09: Huawei OK for scoped + unscoped tarballs; 163 all 404;
+ * npm.aliyun.com DNS NXDOMAIN; npmmirror missing some pins (e.g. @fluentui/react-icons@2.0.336);
+ * Tencent packument OK but npm ci has historically mangled tarball URLs.
+ * Official npmjs is always the last fallback (empty string → leave npm default).
+ */
+export const CN_NPM_REGISTRY_CANDIDATES = Object.freeze([
+  'https://mirrors.huaweicloud.com/repository/npm/',
+  '',
+])
+
 export const CN_MIRROR_DEFAULTS = Object.freeze({
-  /** Docker Hub library/ proxy for Node base images (DaoCloud 401 — use 1ms.run). */
+  /**
+   * Docker Hub library/ proxy for Node base images.
+   * Must be `docker.1ms.run/library/` (not bare `docker.1ms.run/` — wrong path;
+   * not `…/amd64/` — arch-specific and fails on arm64). DaoCloud 401 — use 1ms.run.
+   */
   dockerImagePrefix: 'docker.1ms.run/library/',
-  npmRegistry: 'https://registry.npmmirror.com',
+  /**
+   * Primary CN npm mirror (Huawei). Override via OPPTRIX_NPM_REGISTRY.
+   * Empty string = official registry.npmjs.org. See CN_NPM_REGISTRY_CANDIDATES.
+   */
+  npmRegistry: 'https://mirrors.huaweicloud.com/repository/npm/',
   aptMirror: 'mirrors.aliyun.com',
 })
 

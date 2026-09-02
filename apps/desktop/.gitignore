@@ -1,8 +1,0 @@
-runtime-stage/
-.cache/
-.secrets/
-release/
-build/
-electron/splash-logo.png
-electron/about-logo.png
-node_modules/

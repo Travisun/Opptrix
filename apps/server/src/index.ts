@@ -94,7 +94,7 @@ import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdow
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { cleanupStaleApiListeners } = require('../../desktop/electron/resolve-ports.cjs') as {
+const { cleanupStaleApiListeners } = require('../../../scripts/lib/resolve-ports.cjs') as {
   cleanupStaleApiListeners: (port: number, opts?: { aggressive?: boolean }) => Promise<boolean>
 }
 

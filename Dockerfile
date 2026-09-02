@@ -5,10 +5,13 @@
 # Native modules (better-sqlite3, duckdb, sharp, onnxruntime-node, @lancedb/lancedb,
 # node-llama-cpp) are compiled/installed against linux glibc Node 24 in the build stage.
 #
-# Runtime toolchain:
-#   - Default PATH Node: official node:24-bookworm-slim (stable)
+# Runtime toolchain (pin defaults: scripts/lib/ci-pins.env):
+#   - Default PATH Node: official node:${NODE_VERSION}-bookworm-slim
 #   - Optional track: nvm under /opt/nvm installs Node 22 LTS (does NOT replace PATH default)
 #   - Python: bookworm python3 (3.11) + pip + venv + dev headers
+#   - ffmpeg: Debian apt (FFMPEG_PATH=/usr/bin/ffmpeg); npm ffmpeg-static stripped from image
+#   - Playwright Chromium: preinstalled under /opt/opptrix/playwright-browsers
+#   - node-llama-cpp: compiled in build stage (cmake + libgomp)
 #
 # Build mirrors (CN / foreign) — pass via --build-arg or Compose:
 #   NODE_IMAGE_PREFIX  e.g. docker.1ms.run/library/  (must end with /)
@@ -21,7 +24,7 @@
 # RapidOCR / HY-MT during docker build. Models are fetched via product onboarding or
 # optional OPPTRIX_FETCH_MODELS_ON_START=1 at container start.
 
-ARG NODE_VERSION=24
+ARG NODE_VERSION=24.11.1
 ARG NODE_IMAGE_PREFIX=
 ARG MIRROR_AUTO=
 
@@ -65,6 +68,7 @@ RUN set -eu; \
     g++ \
     build-essential \
     pkg-config \
+    cmake \
     ca-certificates \
     curl \
   && rm -rf /var/lib/apt/lists/*
@@ -82,7 +86,8 @@ COPY docs ./docs
 COPY README.md LICENSE ./
 
 # Full workspace install (devDeps needed for TypeScript / Vite build)
-ENV NODE_ENV=development
+ENV NODE_ENV=development \
+  OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1
 RUN set -eu; \
     _NPM="${NPM_REGISTRY}"; \
     if [ "${MIRROR_AUTO}" = "1" ] && [ -z "${_NPM}" ]; then \
@@ -103,7 +108,7 @@ RUN npm prune --omit=dev
 
 # ── Stage: runtime ───────────────────────────────────────────────────────────
 # Re-declare ARGs after FROM (build-args do not carry across stages).
-ARG NODE_VERSION=24
+ARG NODE_VERSION=24.11.1
 ARG NODE_IMAGE_PREFIX=
 ARG MIRROR_AUTO=
 ARG OPPTRIX_BASE_VERSION=
@@ -149,12 +154,14 @@ RUN set -eu; \
     libgomp1 \
     tini \
     bash \
+    ffmpeg \
   && rm -rf /var/lib/apt/lists/* \
   && python3 -m pip install --break-system-packages --no-cache-dir pip \
   && ln -sf /usr/bin/python3 /usr/local/bin/python \
   && ln -sf /usr/bin/pip3 /usr/local/bin/pip
 
 # nvm optional track — default PATH stays official Node 24 from the base image.
+# NVM install tag: DOCKER_NVM_INSTALL_TAG in scripts/lib/ci-pins.env
 ENV NVM_DIR=/opt/nvm
 RUN mkdir -p "$NVM_DIR" \
   && curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh \
@@ -189,6 +196,20 @@ RUN groupadd --gid 10001 opptrix-agent \
 # Built monorepo tree (prefer correctness: keep workspace layout so Node resolution works)
 COPY --from=build /app /app
 
+# Self-host: system ffmpeg via apt (see FFMPEG_PATH). Drop npm static binary (~40MB+).
+RUN rm -rf /app/node_modules/ffmpeg-static
+
+# Playwright Chromium + OS deps (server browser tools / web preview export).
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/opptrix/playwright-browsers
+RUN set -eu; \
+  apt-get update \
+  && cd /app \
+  && npx --yes playwright install-deps chromium \
+  && mkdir -p "$PLAYWRIGHT_BROWSERS_PATH" \
+  && PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" npx playwright install chromium \
+  && rm -rf /var/lib/apt/lists/* \
+  && test -x "$(node -e "const { chromium } = require('playwright-core'); process.stdout.write(chromium.executablePath())")"
+
 RUN chmod +x /app/scripts/docker-entrypoint.sh \
   && chmod +x /app/scripts/system-boot.mjs \
   && chmod +x /app/scripts/opptrix-node-supervisor.mjs \
@@ -218,6 +239,8 @@ ENV NODE_ENV=production \
   OPPTRIX_RAPIDOCR_BUNDLED_DIR=/opptrix/models/llms/rapidocr-ppocrv4-mobile \
   OPPTRIX_SENSEVOICE_BUNDLED_DIR=/opptrix/models/sensevoice \
   OPPTRIX_WITH_MODELS=1 \
+  FFMPEG_PATH=/usr/bin/ffmpeg \
+  PLAYWRIGHT_BROWSERS_PATH=/opt/opptrix/playwright-browsers \
   OPPTRIX_BASE_VERSION=${OPPTRIX_BASE_VERSION} \
   OPPTRIX_RELEASE_TAG=${OPPTRIX_RELEASE_TAG}
 # Runtime release identity may be overridden by Compose env (OPPTRIX_APP_VERSION / CHANNEL / TAG)

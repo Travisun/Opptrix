@@ -1,7 +1,7 @@
 /**
  * 离线网页制品 vendor 根目录解析与 manifest 读取。
  * 查找顺序：OPPTRIX_WEB_VENDOR_DIR → OPPTRIX_RESOURCES_PATH/web-vendor
- * → monorepo apps/desktop/resources/web-vendor → cwd 相对回退。
+ * → monorepo resources/web-vendor → cwd 相对回退。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -33,7 +33,7 @@ function candidateRoots(): string[] {
   try {
     let dir = path.dirname(fileURLToPath(import.meta.url))
     for (let i = 0; i < 8; i++) {
-      out.push(path.join(dir, 'apps/desktop/resources/web-vendor'))
+      out.push(path.join(dir, 'resources/web-vendor'))
       const parent = path.dirname(dir)
       if (parent === dir) break
       dir = parent
@@ -42,7 +42,6 @@ function candidateRoots(): string[] {
     /* ignore */
   }
 
-  out.push(path.join(process.cwd(), 'apps/desktop/resources/web-vendor'))
   out.push(path.join(process.cwd(), 'resources/web-vendor'))
   return out
 }

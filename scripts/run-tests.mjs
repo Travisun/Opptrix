@@ -7,8 +7,7 @@
  *   OPPTRIX_LIVE_NETWORK_TESTS=1 npm run test:ci
  * or: npm run test:live-network
  *
- * Main CI (OPPTRIX_CI_SKIP_DESKTOP_TESTS=1) skips Electron/desktop-pack-only tests;
- * desktop release pipeline is covered by release-desktop.yml + audit-desktop-pack.
+ * Main CI focuses on server/Docker; Electron/desktop packaging has been removed.
  */
 import { readdirSync } from 'node:fs'
 import path from 'node:path'
@@ -18,34 +17,10 @@ const root = process.cwd()
 const testsDir = path.join(root, 'tests')
 const PER_FILE_TIMEOUT_MS = Number(process.env.OPPTRIX_TEST_FILE_TIMEOUT_MS ?? 90_000)
 
-/** Desktop/Electron-only — not run on server/docker main CI. */
-const DESKTOP_ONLY_TESTS = new Set([
-  'after-pack-mac-leaf-sign.test.mjs',
-  'desktop-bootloader.test.mjs',
-  'desktop-pack-python-ci-contract.test.mjs',
-  'desktop-startup-accel.test.mjs',
-  'kill-app-for-update.test.mjs',
-  'launch-args.test.mjs',
-  'linux-autostart.test.mjs',
-  'mac-sign-checklist.test.mjs',
-  'sidecar-supervisor.test.mjs',
-  'sync-release-to-ftp.test.mjs',
-  'sync-release-to-r2.test.mjs',
-  'translation-download-ack.test.mjs',
-  'window-state.test.mjs',
-])
-
-const skipDesktop = process.env.OPPTRIX_CI_SKIP_DESKTOP_TESTS === '1'
-
 const testFiles = readdirSync(testsDir)
   .filter(name => name.endsWith('.test.mjs'))
-  .filter(name => !(skipDesktop && DESKTOP_ONLY_TESTS.has(name)))
   .sort()
   .map(name => path.join('tests', name))
-
-if (skipDesktop) {
-  console.log(`[run-tests] skipping ${DESKTOP_ONLY_TESTS.size} desktop-only test files (OPPTRIX_CI_SKIP_DESKTOP_TESTS=1)`)
-}
 
 if (process.env.OPPTRIX_LIVE_NETWORK_TESTS === '1') {
   console.log('[run-tests] OPPTRIX_LIVE_NETWORK_TESTS=1 — including live upstream probes')

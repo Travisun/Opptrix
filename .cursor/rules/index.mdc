@@ -35,7 +35,7 @@ alwaysApply: false
 | `external-mcp-servers.mdc` | L1 | 外部 MCP |
 | `backward-compatibility.mdc` | L1 | 向后兼容 |
 | `schema-migration.mdc` | L1 | Schema 迁移 |
-| `desktop-release.mdc` | L1 | 桌面发版 |
+| `desktop-release.mdc` | L1 | 桌面发版（legacy） |
 | `desktop-mac-signing.mdc` | L1 | macOS 签名 |
 | `onboarding.mdc` | L1 | 引导激活 |
 | `code-quality.mdc` | L1 | 代码质量 |

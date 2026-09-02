@@ -18,7 +18,19 @@
 6. **增量改动**：按用户最新指示做最小 diff；不顺手重构
 7. **禁止断代**：schema、用户数据、Hub/API 变更须兼容 + 幂等迁移
 8. **禁止半成品**：新功能须技术/用户/产品三维完备，兼容现有架构与安全；交付前复审回炉直至达标（见 R11）
-9. **多平台默认可达**：功能改动须兼顾 macOS / Linux / Windows，禁止本机单一依赖定制（见 R12）
+9. **服务器 / Docker 优先**：自托管 Linux 容器为主交付路径；大体积通用二进制走镜像 OS 层（见 `docs/SELFHOST-RUNTIME-DEPS.md`），不再为 Electron sidecar 捆绑做新功能兼容（R12 已收窄）
+
+---
+
+## 产品路径（2026 · 服务器优先）
+
+| 路径 | 状态 | 依赖与安全 |
+|------|------|------------|
+| **Docker Compose 自托管** | **主路径** | `Dockerfile` + `scripts/lib/ci-pins.env`；ffmpeg/python 走 apt；原生模块 build stage 编译 |
+| **裸 Node + 反向代理** | 次要 | 须自装 ffmpeg/python3；行为与 Docker 对齐 |
+| **Electron 桌面** | **已移除** | 源码与打包逻辑已删除；仅 Web + Docker 自托管 |
+
+动手前 Read：**[`docs/SELFHOST-RUNTIME-DEPS.md`](./docs/SELFHOST-RUNTIME-DEPS.md)** — 硬依赖 vs 可抽离二进制矩阵。
 
 ---
 
@@ -174,16 +186,16 @@ packages 改动后：
 - 实现后按清单复审：端到端、失败态、不破坏邻接功能、测试与门禁、文档
 - Verifier / 主验收 AC 须含完备性相关项；细则：`.cursor/rules/feature-completeness.mdc`
 
-### R12. 多平台兼容（macOS / Linux / Windows）
+### R12. 运行环境与安全（Docker / Linux 优先）
 
-**任何功能改动须兼顾三平台可运行与稳步；不得以当前开发环境的单一依赖做功能定制而忽略其他平台。**
+**功能与安全改动以 Docker 自托管 + Linux 服务器为验收基准**；不再要求 Electron 三端打包、sidecar 捆绑二进制与桌面发版通过，方可合并服务器相关能力。
 
-- 适用：功能、沙盒、原生模块、路径、shell、打包、CI
-- `darwin` / `linux` / `win32` 均须有实现路径，或明确 skip / 降级策略
-- ❌ 硬编码本机路径；❌ 假设某一 OS 原生绑定全平台可用且无降级；❌ 只在本机验证就算完成
-- 平台分支（`process.platform` / 条件编译 / 专属模块）须成对维护；新增专属能力时写明其他平台行为
-- 沙盒（elevated、bwrap、Seatbelt 等）不得写成唯一实现而不给其他平台等价路径
-- 细则：`.cursor/rules/cross-platform-compat.mdc`
+- 适用：运行时依赖、沙盒、原生模块、CI、镜像、Agent 工具链
+- **通用二进制**（ffmpeg、Python 等）优先 **Debian apt + 显式 env**（`FFMPEG_PATH`、`OPPTRIX_PYTHON_PATH`），禁止新增 npm 静态大包除非无 apt 替代
+- **Node 原生绑定**（better-sqlite3、duckdb、sharp、onnxruntime-node、@lancedb/lancedb）须在 **Docker build stage** 针对 glibc Node 24 编译验证
+- 版本 pin：`scripts/lib/ci-pins.env`；镜像重建即拉取 Debian security 更新
+- 桌面 legacy（`ffmpeg-static`、Miniconda python、playwright 预打包）**不得**再作为新 API/解析路径的默认假设
+- 细则：`docs/SELFHOST-RUNTIME-DEPS.md`；沙盒见 `cross-platform-compat.mdc`（Linux 为主）
 
 ---
 
@@ -258,16 +270,6 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 # 同时改了 packages：先 npm run build:packages，再 check:ui
 ```
 
-## 桌面发版（摘要）
-
-1. Read `desktop-release` skill + `docs/DESKTOP-RELEASE.md`
-2. Phase A 代码就绪（`check:ui` / `build:packages` / **`audit:desktop-pack`**）
-3. Phase B bump `apps/desktop/package.json` version；写 `docs/releases/{version}.md`；更新 `ONBOARDING_RELEASE_BY_VERSION`（文案**仅**功能/使用结果，禁止技术与纯 UI 打磨）
-4. Phase C 兼容性；Phase D 用户确认后 `git tag desktop-v{version}` + push
-5. **禁止**未写更新日志 / 未跑打包预检 / 未对齐 version 就打标签
-6. **禁止**更新日志或引导开场写毛玻璃/按钮样式/依赖进程等技术或 UI 细节
-
-引导激活：只改文案不 bump 版本 → 老用户**不会**重走引导。`shared/onboarding.ts` 与 `client-ui/.../constants.ts` 必须双写同步。
 
 ---
 
@@ -283,7 +285,8 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 |------|-------|---------|
 | 探索代码 / 定位符号 | `codegraph` | `~/.projects-rules/Opptrix/.mimocode/skills/codegraph/SKILL.md` |
 | 改 `client-ui` | `client-ui` | 本地 skill + `docs/UI-DESIGN-SYSTEM.md` |
-| 桌面发版 / 打标签 | `desktop-release` | 本地 skill + `docs/DESKTOP-RELEASE.md` |
+| 桌面发版 / 打标签 | `desktop-release`（**legacy**） | 本地 skill + `docs/DESKTOP-RELEASE.md` |
+| 自托管 / Docker 依赖 | — | **`docs/SELFHOST-RUNTIME-DEPS.md`**、`docs/SELF-HOSTING.md` |
 | macOS 签名 / 公证 / 防漏签清单 | —（Read 本地规则） | `~/.projects-rules/Opptrix/.cursor/rules/desktop-mac-signing.mdc` |
 | SQLite / 数据库 | `schema-migration` | 本地 skill + `backward-compatibility.mdc` |
 | 行情 / Hub / 研究 API | `data-layer` | 本地 skill + `docs/DATA-LAYER.md` |

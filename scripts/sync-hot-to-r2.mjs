@@ -149,7 +149,7 @@ async function main() {
     putObjectFile,
     requireR2Env,
     verifyR2Credentials,
-  } = await import('../apps/desktop/scripts/lib/r2-client.mjs')
+  } = await import('./lib/r2-client.mjs')
 
   const r2Env = requireR2Env()
   const client = createR2Client(r2Env)
@@ -222,7 +222,7 @@ async function main() {
 main().catch(async (err) => {
   let message = err instanceof Error ? err.message : String(err)
   try {
-    const { explainR2Error } = await import('../apps/desktop/scripts/lib/r2-client.mjs')
+    const { explainR2Error } = await import('./lib/r2-client.mjs')
     message = explainR2Error(err)
   } catch {
     // r2 helper may be unavailable after npm prune — keep raw message

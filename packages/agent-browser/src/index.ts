@@ -28,9 +28,9 @@ export {
   type PruneBrowserScreenshotsResult,
 } from './screenshot-prune.js'
 export {
+  DOCKER_PLAYWRIGHT_BROWSERS_PATH,
   PLAYWRIGHT_BROWSERS_DIR_NAME,
   configurePlaywrightBrowsersPath,
   ensureChromiumAvailable,
   isChromiumAvailable,
-  resolvePackagedBrowsersPath,
 } from './chromium-install.js'

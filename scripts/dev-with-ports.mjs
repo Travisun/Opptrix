@@ -11,9 +11,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..')
 const require = createRequire(path.join(REPO_ROOT, 'package.json'))
 const { resolveApiPort, resolveWebPort, logPortPlan, applyPortEnv } = require(
-  path.join(REPO_ROOT, 'apps/desktop/electron/resolve-ports.cjs'),
+  path.join(REPO_ROOT, 'scripts/lib/resolve-ports.cjs'),
 )
-const { NPM_CMD, NPM_SHELL } = require(path.join(REPO_ROOT, 'apps/desktop/scripts/lib/commands.mjs'))
+const { NPM_CMD, NPM_SHELL } = require(path.join(REPO_ROOT, 'scripts/lib/commands.mjs'))
 
 const apiPlan = await resolveApiPort({ isDev: true, allowBump: true })
 const webPlan = await resolveWebPort({ allowBump: true })

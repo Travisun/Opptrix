@@ -8,8 +8,8 @@ import { resolveOpptrixAppVersion } from '../packages/shared/dist/paths.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
-const desktopVersion = JSON.parse(
-  fs.readFileSync(path.join(repoRoot, 'apps/desktop/package.json'), 'utf8'),
+const serverVersion = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, 'apps/server/package.json'), 'utf8'),
 ).version
 
 const savedEnv = process.env.OPPTRIX_APP_VERSION
@@ -24,13 +24,13 @@ test('resolveOpptrixAppVersion prefers OPPTRIX_APP_VERSION env', () => {
   assert.equal(resolveOpptrixAppVersion(), '9.9.9-test')
 })
 
-test('resolveOpptrixAppVersion reads apps/desktop/package.json when env unset', () => {
+test('resolveOpptrixAppVersion reads apps/server/package.json when env unset', () => {
   delete process.env.OPPTRIX_APP_VERSION
-  assert.equal(resolveOpptrixAppVersion(), desktopVersion)
-  assert.match(desktopVersion, /^\d+\.\d+\.\d+/)
+  assert.equal(resolveOpptrixAppVersion(), serverVersion)
+  assert.match(serverVersion, /^\d+\.\d+\.\d+/)
 })
 
-test('resolveOpptrixAppVersion ignores blank env and falls back to desktop package', () => {
+test('resolveOpptrixAppVersion ignores blank env and falls back to server package', () => {
   process.env.OPPTRIX_APP_VERSION = '   '
-  assert.equal(resolveOpptrixAppVersion(), desktopVersion)
+  assert.equal(resolveOpptrixAppVersion(), serverVersion)
 })

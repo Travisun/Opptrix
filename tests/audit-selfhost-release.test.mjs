@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import {
   assertCheckUpdateSmokeShape,
+  verifyBuildMirrorContracts,
   verifyDockerBuildContext,
   verifyRuntimePackLayout,
   verifySelfhostBundle,
@@ -16,6 +17,11 @@ const SELFHOST = path.join(ROOT, 'packages/selfhost')
 
 test('verifyDockerBuildContext accepts monorepo Dockerfile', () => {
   const r = verifyDockerBuildContext(ROOT)
+  assert.equal(r.ok, true)
+})
+
+test('verifyBuildMirrorContracts: CN library/ prefix + Huawei npm + CI Hub prefix', () => {
+  const r = verifyBuildMirrorContracts(ROOT)
   assert.equal(r.ok, true)
 })
 

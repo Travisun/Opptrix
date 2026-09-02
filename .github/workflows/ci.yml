@@ -49,4 +49,3 @@ jobs:
         run: npm run test:ci
         env:
           CI: true
-          OPPTRIX_CI_SKIP_DESKTOP_TESTS: '1'

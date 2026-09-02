@@ -66,15 +66,14 @@ function listDevLlmModelDirs(modelId: string, repoRoot?: string): string[] {
   return dirs
 }
 
-/** 相对本包位置解析桌面 stage 目录（不依赖 process.cwd）。 */
-function desktopStagedLlmDir(modelId: string): string {
+/** 相对本包位置解析仓库内 llms 候选（不依赖 process.cwd）。 */
+function repoStagedLlmDir(modelId: string): string {
   const here = path.dirname(fileURLToPath(import.meta.url))
-  // src|dist → packages/doc-library → repo root
-  return path.resolve(here, '../../../apps/desktop/resources/llms', modelId)
+  return path.resolve(here, '../../../models/llms', modelId)
 }
 
 /**
- * 优先 `OPPTRIX_E5_BUNDLED_DIR`，其次 Electron `resourcesPath/llms/…`。
+ * 优先 `OPPTRIX_E5_BUNDLED_DIR`，其次 env / runtime stage。
  * 仅返回磁盘上已存在的目录（避免空路径抢占用户目录回退）。
  */
 export function getBundledEmbeddingModelDir(repoRoot?: string): string | null {
@@ -88,18 +87,17 @@ export function getBundledEmbeddingModelDir(repoRoot?: string): string | null {
     candidates.push(path.join(resourcesPath, 'llms', EMBEDDING_MODEL_ID))
   }
 
-  // Sidecar：OPPTRIX_RUNTIME_STAGE = resources/runtime-stage
   const runtimeStage = process.env.OPPTRIX_RUNTIME_STAGE?.trim()
   if (runtimeStage) {
     candidates.push(path.join(path.dirname(runtimeStage), 'llms', EMBEDDING_MODEL_ID))
   }
 
   if (repoRoot) {
-    candidates.push(path.join(repoRoot, 'apps/desktop/resources/llms', EMBEDDING_MODEL_ID))
+    candidates.push(path.join(repoRoot, 'models/llms', EMBEDDING_MODEL_ID))
   }
 
-  candidates.push(desktopStagedLlmDir(EMBEDDING_MODEL_ID))
-  candidates.push(path.resolve('apps/desktop/resources/llms', EMBEDDING_MODEL_ID))
+  candidates.push(repoStagedLlmDir(EMBEDDING_MODEL_ID))
+  candidates.push(path.resolve('models/llms', EMBEDDING_MODEL_ID))
 
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir
@@ -165,10 +163,10 @@ export function getBundledEnginesRoot(repoRoot?: string): string | null {
   }
 
   if (repoRoot) {
-    candidates.push(path.join(repoRoot, 'apps/desktop/resources/engines'))
+    candidates.push(path.join(repoRoot, 'resources/engines'))
   }
 
-  candidates.push(path.resolve('apps/desktop/resources/engines'))
+  candidates.push(path.resolve('resources/engines'))
 
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir
@@ -287,11 +285,11 @@ export function getBundledRapidOcrModelDir(repoRoot?: string): string | null {
   }
 
   if (repoRoot) {
-    candidates.push(path.join(repoRoot, 'apps/desktop/resources/llms', RAPIDOCR_MODEL_ID))
+    candidates.push(path.join(repoRoot, 'models/llms', RAPIDOCR_MODEL_ID))
   }
 
-  candidates.push(desktopStagedLlmDir(RAPIDOCR_MODEL_ID))
-  candidates.push(path.resolve('apps/desktop/resources/llms', RAPIDOCR_MODEL_ID))
+  candidates.push(repoStagedLlmDir(RAPIDOCR_MODEL_ID))
+  candidates.push(path.resolve('models/llms', RAPIDOCR_MODEL_ID))
 
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir

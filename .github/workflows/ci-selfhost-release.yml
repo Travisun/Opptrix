@@ -19,6 +19,8 @@ on:
       - 'scripts/lib/selfhost-release-checks.mjs'
       - 'scripts/docker-entrypoint.sh'
       - 'scripts/system-boot.mjs'
+      - 'scripts/smoke-selfhost-lifecycle.mjs'
+      - 'scripts/lib/selfhost-lifecycle.mjs'
       - '.github/workflows/publish-selfhost.yml'
       - '.github/workflows/publish-selfhost-image.yml'
       - '.github/workflows/publish-runtime-assets.yml'
@@ -41,6 +43,8 @@ on:
       - 'scripts/lib/selfhost-release-checks.mjs'
       - 'scripts/docker-entrypoint.sh'
       - 'scripts/system-boot.mjs'
+      - 'scripts/smoke-selfhost-lifecycle.mjs'
+      - 'scripts/lib/selfhost-lifecycle.mjs'
       - '.github/workflows/publish-selfhost.yml'
       - '.github/workflows/publish-selfhost-image.yml'
       - '.github/workflows/publish-runtime-assets.yml'
@@ -192,6 +196,17 @@ jobs:
         run: |
           docker image inspect opptrix:ci-smoke --format '{{.Os}}/{{.Architecture}} {{.Id}}'
           docker run --rm -e OPPTRIX_ONCE=1 opptrix:ci-smoke node -e "console.log(process.version)"
+          docker run --rm -e OPPTRIX_ONCE=1 opptrix:ci-smoke sh -c 'test "$FFMPEG_PATH" = /usr/bin/ffmpeg && ffmpeg -version | head -1'
+          docker run --rm -e OPPTRIX_ONCE=1 opptrix:ci-smoke sh -c 'test "$PLAYWRIGHT_BROWSERS_PATH" = /opt/opptrix/playwright-browsers && test -x "$(node -e "const { chromium } = require(\"playwright-core\"); process.stdout.write(chromium.executablePath())")"'
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.OPPTRIX_NODE_PATCH_VERSION }}
+
+      - name: Lifecycle smoke (start / hot / base)
+        run: |
+          OPPTRIX_LIFECYCLE_IMAGE=opptrix:ci-smoke \
+          node scripts/smoke-selfhost-lifecycle.mjs
 
   merge-runtime-artifacts:
     name: Merge runtime packs + verify dual-arch manifest

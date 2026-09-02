@@ -475,18 +475,6 @@ describe('bundled python resolve priority', () => {
   })
 })
 
-describe('stage-python script contract', () => {
-  it('exists and hard-fails on missing catalog import path', async () => {
-    const fs = await import('node:fs')
-    const script = path.join(repoRoot, 'apps/desktop/scripts/stage-python.mjs')
-    assert.equal(fs.existsSync(script), true)
-    const src = fs.readFileSync(script, 'utf8')
-    assert.ok(src.includes('process.exit(1)'))
-    assert.ok(src.includes('materializePythonArtifact'))
-    assert.ok(src.includes('resources/python'))
-  })
-})
-
 describe('python settings validation', () => {
   it('defaults prefer_opptrix_python to true when omitted', async () => {
     const { validatePythonSettingsInput, normalizePythonSettings, DEFAULT_PYTHON_SETTINGS } =

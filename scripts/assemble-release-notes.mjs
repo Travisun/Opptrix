@@ -2,7 +2,7 @@
 /**
  * 组装 GitHub Release 正文：下载说明 + 更新日志 + 各平台安装说明。
  * 用法：node scripts/assemble-release-notes.mjs [version]
- * 默认 version 读取 apps/desktop/package.json。
+ * 默认 version 读取 apps/server/package.json。
  *
  * GitHub Release 仅承载 Notes，不挂安装包；用户下载见 https://opptrix.org/
  */
@@ -17,7 +17,7 @@ function readVersion() {
   const arg = process.argv[2]?.trim()
   if (arg) return arg
   const pkg = JSON.parse(
-    fs.readFileSync(path.join(root, 'apps/desktop/package.json'), 'utf8'),
+    fs.readFileSync(path.join(root, 'apps/server/package.json'), 'utf8'),
   )
   return String(pkg.version ?? '').trim()
 }

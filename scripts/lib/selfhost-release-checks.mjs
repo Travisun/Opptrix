@@ -3,6 +3,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { CN_MIRROR_DEFAULTS } from '../../packages/selfhost/src/mirrors.mjs'
 import {
   buildCheckUpdatePayload,
   buildReleasesManifest,
@@ -35,10 +36,26 @@ export function verifyDockerBuildContext(repoRoot) {
   if (!df.includes('OPPTRIX_HOME=/opptrix')) {
     throw new Error('Dockerfile missing OPPTRIX_HOME=/opptrix default')
   }
+  if (!/\bffmpeg\b/.test(df)) {
+    throw new Error('Dockerfile runtime must apt-install ffmpeg (self-host uses system binary, not ffmpeg-static)')
+  }
+  if (!df.includes('FFMPEG_PATH=/usr/bin/ffmpeg')) {
+    throw new Error('Dockerfile must set FFMPEG_PATH=/usr/bin/ffmpeg for self-host speech/media')
+  }
+  if (!df.includes('rm -rf /app/node_modules/ffmpeg-static')) {
+    throw new Error('Dockerfile must strip ffmpeg-static from runtime tree after COPY')
+  }
+  if (!df.includes('PLAYWRIGHT_BROWSERS_PATH=/opt/opptrix/playwright-browsers')) {
+    throw new Error('Dockerfile must set PLAYWRIGHT_BROWSERS_PATH for preinstalled Chromium')
+  }
+  if (!df.includes('playwright install chromium')) {
+    throw new Error('Dockerfile must preinstall Playwright Chromium in runtime stage')
+  }
   const entry = path.join(root, 'scripts/docker-entrypoint.sh')
   if (!fs.existsSync(entry)) {
     throw new Error('missing scripts/docker-entrypoint.sh')
   }
+  verifyBuildMirrorContracts(root)
   return { ok: true, dockerfile }
 }
 
@@ -150,4 +167,48 @@ export function assertCheckUpdateSmokeShape(payload, version, requiredPlatforms)
     throw new Error('releases[] missing')
   }
   return true
+}
+
+/**
+ * CN build defaults + GitHub CI must use official Hub (empty NODE_IMAGE_PREFIX).
+ * @param {string} repoRoot
+ */
+export function verifyBuildMirrorContracts(repoRoot) {
+  const root = path.resolve(repoRoot)
+  if (CN_MIRROR_DEFAULTS.dockerImagePrefix !== 'docker.1ms.run/library/') {
+    throw new Error(
+      `CN dockerImagePrefix must be docker.1ms.run/library/ (got ${CN_MIRROR_DEFAULTS.dockerImagePrefix})`,
+    )
+  }
+  const huawei = 'https://mirrors.huaweicloud.com/repository/npm/'
+  if (CN_MIRROR_DEFAULTS.npmRegistry !== huawei) {
+    throw new Error(
+      `CN npmRegistry default must be Huawei mirror (got ${JSON.stringify(CN_MIRROR_DEFAULTS.npmRegistry)})`,
+    )
+  }
+
+  const selectSrc = fs.readFileSync(path.join(root, 'scripts/docker-select-mirrors.mjs'), 'utf8')
+  const cnBlock = selectSrc.match(/CN_BUILD_MIRRORS[\s\S]*?FOREIGN_BUILD_MIRRORS/)
+  if (!cnBlock || !cnBlock[0].includes("dockerImagePrefix: 'docker.1ms.run/library/'")) {
+    throw new Error('scripts/docker-select-mirrors.mjs CN_BUILD_MIRRORS missing docker.1ms.run/library/')
+  }
+  if (!cnBlock[0].includes(huawei)) {
+    throw new Error('CN_BUILD_MIRRORS.npmRegistry must use Huawei npm mirror')
+  }
+  if (!selectSrc.includes('CN_NPM_REGISTRY_CANDIDATES') || !selectSrc.includes(huawei)) {
+    throw new Error('scripts/docker-select-mirrors.mjs must export CN_NPM_REGISTRY_CANDIDATES with Huawei')
+  }
+
+  for (const rel of [
+    '.github/workflows/ci-selfhost-release.yml',
+    '.github/workflows/publish-selfhost-image.yml',
+  ]) {
+    const wf = fs.readFileSync(path.join(root, rel), 'utf8')
+    // build-args: NODE_IMAGE_PREFIX= with empty value (official Hub)
+    if (!/^[\t ]*NODE_IMAGE_PREFIX=\s*$/m.test(wf)) {
+      throw new Error(`${rel} must set NODE_IMAGE_PREFIX= (empty) for official Docker Hub builds`)
+    }
+  }
+
+  return { ok: true }
 }

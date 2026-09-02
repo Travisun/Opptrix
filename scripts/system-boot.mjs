@@ -55,7 +55,7 @@ function resolveSeedVersion(seedRoot, fromArg) {
   if (fromSeedEnv) return fromSeedEnv
 
   const root = seedRoot || process.env.OPPTRIX_SEED_ROOT?.trim() || REPO_ROOT
-  for (const rel of ['apps/desktop/package.json', 'package.json']) {
+  for (const rel of ['package.json']) {
     const pkgPath = path.join(root, rel)
     if (!fs.existsSync(pkgPath)) continue
     try {

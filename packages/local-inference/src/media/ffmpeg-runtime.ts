@@ -1,11 +1,36 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
 import { ensureDirAsync } from '../paths.js'
 
-const require = createRequire(import.meta.url)
-const ffmpegBin: string | null = require('ffmpeg-static')
+/** Docker/服务器优先：FFMPEG_PATH 或系统 PATH；不再 bundled ffmpeg-static。 */
+let ffmpegStaticBin: string | null | undefined
+
+function resolveFfmpegStaticBin(): string | null {
+  // Legacy npm static bundle removed for server-first; keep hook for tests that mock require.
+  if (ffmpegStaticBin !== undefined) return ffmpegStaticBin
+  ffmpegStaticBin = null
+  return null
+}
+
+function candidateFromSystemPath(): string | null {
+  const whichCmd = process.platform === 'win32' ? 'where' : 'which'
+  try {
+    const hit = spawnSync(whichCmd, ['ffmpeg'], {
+      encoding: 'utf8',
+      timeout: 3000,
+      windowsHide: true,
+    })
+    const line = hit.stdout?.trim().split(/\r?\n/)[0]?.trim()
+    if (line) return line
+  } catch {
+    /* fall through */
+  }
+  const common = process.platform === 'win32'
+    ? []
+    : ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg']
+  return firstUsablePath(common)
+}
 
 export type FfmpegProbe = {
   durationSec: number | null
@@ -47,7 +72,7 @@ function expandAsarUnpacked(candidate: string): string[] {
   return out
 }
 
-/** 桌面 sidecar：`OPPTRIX_RUNTIME_STAGE/node_modules/ffmpeg-static/ffmpeg` */
+/** @deprecated 桌面 legacy；服务器路径请用 FFMPEG_PATH 或系统 PATH。 */
 function candidateFromRuntimeStage(): string | null {
   const stage = process.env.OPPTRIX_RUNTIME_STAGE?.trim()
   if (!stage) return null
@@ -143,14 +168,14 @@ function firstUsablePath(seeds: Array<string | null | undefined>): string | null
 
 /**
  * 解析可用的 ffmpeg 可执行路径。
- * 顺序：FFMPEG_PATH → ffmpeg-static → OPPTRIX_RUNTIME_STAGE 下的静态包；
+ * 顺序：FFMPEG_PATH → 系统 PATH（which / 常见路径）→ legacy OPPTRIX_RUNTIME_STAGE。
  * 并对 asar 路径尝试 asar.unpacked；存在但无 +x 时尝试 chmod。
  * 仅返回具备执行权限的路径（不跑 -version）。
  */
 export function resolveFfmpegBinaryPath(): string | null {
   const fromEnv = process.env.FFMPEG_PATH?.trim() || null
-  const fromStatic = ffmpegBin && String(ffmpegBin).trim() ? String(ffmpegBin) : null
-  return firstUsablePath([fromEnv, fromStatic, candidateFromRuntimeStage()])
+  const fromStatic = resolveFfmpegStaticBin()
+  return firstUsablePath([fromEnv, candidateFromSystemPath(), fromStatic, candidateFromRuntimeStage()])
 }
 
 /**

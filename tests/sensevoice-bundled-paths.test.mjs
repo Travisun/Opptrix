@@ -58,17 +58,4 @@ describe('sensevoice bundled path resolution', () => {
       path.join(path.resolve(resources), 'sensevoice'),
     )
   })
-
-  it('audit + sidecar-launch contract includes OPPTRIX_SENSEVOICE_BUNDLED_DIR', () => {
-    const audit = fs.readFileSync(
-      path.join(ROOT, 'apps/desktop/scripts/audit-desktop-pack.mjs'),
-      'utf8',
-    )
-    assert.match(audit, /OPPTRIX_SENSEVOICE_BUNDLED_DIR/)
-    const sidecar = fs.readFileSync(
-      path.join(ROOT, 'apps/desktop/electron/os-schedule/sidecar-launch.cjs'),
-      'utf8',
-    )
-    assert.match(sidecar, /OPPTRIX_SENSEVOICE_BUNDLED_DIR/)
-  })
 })

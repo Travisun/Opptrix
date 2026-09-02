@@ -87,8 +87,6 @@ describe('rapidocr bundled path resolution', () => {
 
   it('falls back to user dir when bundled missing', () => {
     delete process.env.OPPTRIX_RAPIDOCR_BUNDLED_DIR
-    const staged = path.join(ROOT, 'apps/desktop/resources/llms/rapidocr-ppocrv4-mobile')
-    if (fs.existsSync(path.join(staged, 'ch_PP-OCRv4_det_mobile.onnx'))) return
 
     const prevCwd = process.cwd()
     process.chdir(tmpRoot)
@@ -104,26 +102,8 @@ describe('rapidocr bundled path resolution', () => {
     }
   })
 
-  it('resolves staged desktop llms without relying on cwd', () => {
-    const staged = path.join(ROOT, 'apps/desktop/resources/llms/rapidocr-ppocrv4-mobile')
-    if (!fs.existsSync(path.join(staged, 'ch_PP-OCRv4_det_mobile.onnx'))) return
-
-    delete process.env.OPPTRIX_RAPIDOCR_BUNDLED_DIR
-    const prevCwd = process.cwd()
-    process.chdir(tmpRoot)
-    try {
-      const dir = lib.getBundledRapidOcrModelDir()
-      assert.ok(dir)
-      assert.equal(path.resolve(dir), path.resolve(staged))
-    } finally {
-      process.chdir(prevCwd)
-    }
-  })
-
   it('falls back to legacy ~/.opptrix/models when llms missing', () => {
     delete process.env.OPPTRIX_RAPIDOCR_BUNDLED_DIR
-    const staged = path.join(ROOT, 'apps/desktop/resources/llms/rapidocr-ppocrv4-mobile')
-    if (fs.existsSync(path.join(staged, 'ch_PP-OCRv4_det_mobile.onnx'))) return
 
     const prevCwd = process.cwd()
     process.chdir(tmpRoot)
@@ -150,27 +130,5 @@ describe('rapidocr bundled path resolution', () => {
     const ui = lib.getParseEnginesStatus()
     assert.equal(ui.deep.available, true)
     assert.equal(ui.deep.source, 'bundled')
-  })
-
-  it('stage-rapidocr script exists and lists required files', () => {
-    const src = fs.readFileSync(
-      path.join(ROOT, 'apps/desktop/scripts/stage-rapidocr.mjs'),
-      'utf8',
-    )
-    const downloadLib = fs.readFileSync(
-      path.join(ROOT, 'apps/desktop/scripts/lib/model-download.mjs'),
-      'utf8',
-    )
-    assert.match(src, /ch_PP-OCRv4_det_mobile\.onnx/)
-    assert.match(src, /rapidocr-ppocrv4-mobile/)
-    assert.match(src, /RapidAI\/RapidOCR/)
-    assert.match(src, /modelscope/)
-    assert.match(src, /resources\/llms/)
-    assert.match(src, /downloadFromSources/)
-    assert.match(src, /modelscopeBases/)
-    assert.doesNotMatch(src, /huggingface\.co\/\$\{HF_REPO\}/)
-    assert.match(downloadLib, /RETRYABLE_HTTP/)
-    assert.match(downloadLib, /download attempt/)
-    assert.match(downloadLib, /www\.modelscope\.cn/)
   })
 })

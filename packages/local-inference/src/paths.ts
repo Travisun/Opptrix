@@ -45,11 +45,11 @@ export function getBundledSenseVoiceDir(repoRoot?: string): string | null {
   }
 
   if (repoRoot) {
-    const dev = path.join(repoRoot, 'apps/desktop/resources/sensevoice')
+    const dev = path.join(repoRoot, 'models/sensevoice')
     if (fs.existsSync(dev)) return dev
   }
 
-  const cwdDev = path.resolve('apps/desktop/resources/sensevoice')
+  const cwdDev = path.resolve('models/sensevoice')
   if (fs.existsSync(cwdDev)) return cwdDev
 
   return null

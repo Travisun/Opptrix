@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 
 async function loadDownloadLib() {
   const href = pathToFileURL(
-    path.join(ROOT, 'apps/desktop/scripts/lib/model-download.mjs'),
+    path.join(ROOT, 'scripts/lib/model-download.mjs'),
   ).href
   return import(`${href}?t=${Date.now()}`)
 }
@@ -131,18 +131,8 @@ test('local-inference HY-MT catalog urls start with ModelScope', async () => {
     catalog = await import(
       pathToFileURL(path.join(ROOT, 'packages/local-inference/dist/catalog/models.js')).href
     )
-  } catch {
-    // rebuild may be needed — also check electron catalog which is plain cjs
-    const electron = require(
-      path.join(ROOT, 'apps/desktop/electron/translation-model-catalog.cjs'),
-    )
-    const q4 = electron.getCatalogModel('hy-mt-q4')
-    assert.ok(q4)
-    assert.equal(q4.urls[0].source, 'modelscope')
-    assert.match(q4.urls[0].url, /Tencent-Hunyuan\/HY-MT1\.5-1\.8B-GGUF/)
-    assert.equal(q4.urls[1].source, 'hf-mirror')
-    assert.equal(q4.urls[2].source, 'huggingface')
-    return
+  } catch (err) {
+    assert.fail(`local-inference catalog not built: ${err instanceof Error ? err.message : err}`)
   }
   const q4 = catalog.getCatalogModel('hy-mt-q4')
   assert.ok(q4)

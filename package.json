@@ -1,7 +1,7 @@
 {
   "name": "opptrix",
   "private": true,
-  "description": "Opptrix — 面向个人投资者的多市场投研数据助手（Web + Electron 桌面端）",
+  "description": "Opptrix — 面向个人投资者的多市场投研数据助手（Web + Docker 自托管）",
   "homepage": "https://www.opptrix.org",
   "license": "Apache-2.0",
   "author": "Opptrix Team",
@@ -18,7 +18,6 @@
     "stock",
     "a-share",
     "agent",
-    "electron",
     "fastify",
     "react"
   ],
@@ -35,11 +34,9 @@
     "release:selfhost": "node scripts/release-selfhost.mjs",
     "release:selfhost-app": "node scripts/release-selfhost-app.mjs",
     "pre-release:selfhost": "node scripts/pre-release-selfhost.mjs",
-    "dev:desktop": "npm run build:packages && npm run dev -w @opptrix/desktop",
     "dev:api": "npm run dev -w @opptrix/server",
     "dev:web": "npm run dev -w opptrix-client",
     "build": "npm run build:packages && npm run build -w opptrix-client",
-    "build:desktop": "npm run build -w @opptrix/desktop",
     "build:packages": "node scripts/ensure-dev-deps.mjs && npm run build -w @opptrix/shared -w @opptrix/system-update -w @opptrix/canvas -w @opptrix/user-store -w @opptrix/doc-library -w @opptrix/schedule -w @opptrix/local-inference -w @opptrix/market-data-core -w @opptrix/a-stock-layer -w @opptrix/news-feed -w @opptrix/article-enrichment -w @opptrix/provider-sdk -w @opptrix/market-data-providers-cn -w @opptrix/market-data-providers-us -w @opptrix/market-data-providers-crypto -w @opptrix/stock-eval -w @opptrix/market-data-store -w @opptrix/institutions -w @opptrix/t-strategy -w @opptrix/research-hub -w @opptrix/agent-browser -w @opptrix/agent-workspace -w @opptrix/agent-skills -w @opptrix/agent -w @opptrix/search-hub -w @opptrix/server",
     "typecheck:ui": "tsc -p client-ui/tsconfig.json --noEmit",
     "lint:ui": "eslint client-ui/src --max-warnings 9999 --quiet",
@@ -50,6 +47,7 @@
     "audit:selfhost-npm": "node scripts/audit-selfhost-release.mjs --npm",
     "audit:selfhost-runtime": "node scripts/audit-selfhost-release.mjs --runtime",
     "audit:selfhost-docker": "node scripts/audit-selfhost-release.mjs --docker --skip-build",
+    "prepare:pwa-icons": "node scripts/prepare-pwa-icons.mjs",
     "pack:runtime": "node scripts/pack-opptrix-runtime.mjs",
     "optimize:sponsors": "node scripts/optimize-sponsor-images.mjs",
     "start": "npm run start -w @opptrix/server",
@@ -116,10 +114,7 @@
   "allowScripts": {
     "better-sqlite3": true,
     "duckdb": true,
-    "electron": true,
-    "electron-winstaller": true,
     "esbuild": true,
-    "ffmpeg-static": true,
     "node-llama-cpp": true,
     "fsevents": true,
     "sharp": true

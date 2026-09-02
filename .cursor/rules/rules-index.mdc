@@ -48,7 +48,7 @@ alwaysApply: true
 | Agent 沙盒 | `agent-shell-sandbox.mdc` | `agent-workspace/shell`, workspace-tools |
 | 外部 MCP | `external-mcp-servers.mdc` | `mcp/external`, mcp-servers 配置 |
 | SQLite / 兼容 | `backward-compatibility.mdc`, `schema-migration.mdc` | store/schema/market-data |
-| 桌面发版 | `desktop-release.mdc`, `onboarding.mdc` | `apps/desktop/**`, releases |
+| 自托管 / Docker | `security.mdc`, `documentation.mdc` | `Dockerfile`, `compose.env.example`, `scripts/lib/ci-pins.env`, `packages/selfhost/**` |
 | macOS 签名 | `desktop-mac-signing.mdc` | after-pack/sign, mac-sign-checklist |
 | 代码质量 / 测试 / 性能 | `code-quality.mdc`, `testing.mdc`, `performance.mdc` | `packages/**`, `apps/**`, `tests/**` |
 | 写文档 | `documentation.mdc` | `docs/**/*`, `**/*.md` |
@@ -84,4 +84,4 @@ alwaysApply: true
 - client-ui → `npm run check:ui`
 - packages → `npm run build:packages`
 - Schema → `SCHEMA_VERSION` + 迁移测试
-- 发版 → Read 本地 `desktop-release.mdc` + `audit:desktop-pack`
+- 自托管 / Docker → `npm run audit:selfhost-release`（或 CI `ci-selfhost-release.yml`）

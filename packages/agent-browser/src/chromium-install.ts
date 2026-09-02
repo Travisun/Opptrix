@@ -1,10 +1,8 @@
 /**
  * Chromium install / probe for @opptrix/agent-browser.
  *
- * Runtime launch uses the full Chromium binary via `chromium.executablePath()`
- * (see playwright-session.ts). Probing that path is enough — we intentionally do
- * NOT depend on Playwright's chromium-headless-shell. Keep `playwright install chromium`
- * (do not add `--with-deps` / force a separate shell download for our headless path).
+ * Docker/self-host: PLAYWRIGHT_BROWSERS_PATH is pre-seeded in the image (see Dockerfile).
+ * Bare Node: runs `playwright install chromium` on first use unless OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1.
  */
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -12,60 +10,40 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { isDesktopRuntime } from '@opptrix/shared'
-import { ensureDarwinBundledChromiumHealed } from './chromium-darwin-heal.js'
+
+const isDockerEnv = (): boolean => process.env.OPPTRIX_DOCKER === '1'
 
 const require = createRequire(import.meta.url)
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-/** Relative directory inside desktop runtime-stage / packaged app resources. */
+/** Default browsers dir inside Docker images (see scripts/lib/ci-pins.env). */
+export const DOCKER_PLAYWRIGHT_BROWSERS_PATH = '/opt/opptrix/playwright-browsers'
 export const PLAYWRIGHT_BROWSERS_DIR_NAME = 'playwright-browsers'
 
 const DEFAULT_INSTALL_TIMEOUT_MS = 120_000
 
 let ensureInFlight: Promise<boolean> | null = null
-let healInFlight: Promise<string | null> | null = null
 
-export function resolvePackagedBrowsersPath(): string | null {
-  if (!isDesktopRuntime()) return null
-  const packaged = path.join(process.cwd(), PLAYWRIGHT_BROWSERS_DIR_NAME)
-  return fs.existsSync(packaged) ? packaged : null
+function defaultDockerBrowsersPath(): string | null {
+  if (process.env.OPPTRIX_DOCKER !== '1') return null
+  const fromEnv = process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()
+  if (fromEnv) return fromEnv
+  return fs.existsSync(DOCKER_PLAYWRIGHT_BROWSERS_PATH)
+    ? DOCKER_PLAYWRIGHT_BROWSERS_PATH
+    : null
 }
 
 function applyPlaywrightBrowsersPath(browsersPath: string): void {
   process.env.PLAYWRIGHT_BROWSERS_PATH = browsersPath
 }
 
-/** Apply PLAYWRIGHT_BROWSERS_PATH for packaged desktop before Playwright resolves executables. */
+/** Apply PLAYWRIGHT_BROWSERS_PATH before Playwright resolves executables. */
 export function configurePlaywrightBrowsersPath(): void {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()) return
-  const packaged = resolvePackagedBrowsersPath()
-  if (packaged) {
-    applyPlaywrightBrowsersPath(packaged)
+  const dockerPath = defaultDockerBrowsersPath()
+  if (dockerPath) {
+    applyPlaywrightBrowsersPath(dockerPath)
   }
-}
-
-async function ensurePlaywrightBrowsersPathConfigured(): Promise<void> {
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()) return
-  const packaged = resolvePackagedBrowsersPath()
-  if (!packaged) return
-
-  if (process.platform === 'darwin' && isDesktopRuntime()) {
-    if (!healInFlight) {
-      healInFlight = ensureDarwinBundledChromiumHealed(packaged)
-        .then((healed) => {
-          applyPlaywrightBrowsersPath(healed)
-          return healed
-        })
-        .finally(() => {
-          healInFlight = null
-        })
-    }
-    await healInFlight
-    return
-  }
-
-  applyPlaywrightBrowsersPath(packaged)
 }
 
 /** True when the full Chromium executable exists (same path used at launch). */
@@ -87,9 +65,9 @@ function resolvePlaywrightCli(): string {
 function spawnPlaywrightInstall(timeoutMs: number): Promise<boolean> {
   configurePlaywrightBrowsersPath()
   const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()
-  if (browsersPath) {
-    fs.mkdirSync(browsersPath, { recursive: true })
-  }
+    ?? path.join(process.cwd(), PLAYWRIGHT_BROWSERS_DIR_NAME)
+  fs.mkdirSync(browsersPath, { recursive: true })
+  applyPlaywrightBrowsersPath(browsersPath)
 
   let cli: string
   try {
@@ -122,15 +100,17 @@ function spawnPlaywrightInstall(timeoutMs: number): Promise<boolean> {
 }
 
 /**
- * Ensure Chromium exists; no-op when already installed or skip env is set.
- * Concurrent callers share one install attempt.
+ * Ensure Chromium exists; Docker images should already have browsers under PLAYWRIGHT_BROWSERS_PATH.
  */
 export async function ensureChromiumAvailable(
   opts?: { timeoutMs?: number },
 ): Promise<boolean> {
   if (process.env.OPPTRIX_SKIP_PLAYWRIGHT_BROWSER === '1') return false
-  await ensurePlaywrightBrowsersPathConfigured()
+  configurePlaywrightBrowsersPath()
   if (isChromiumAvailable()) return true
+  if (isDockerEnv() && process.env.OPPTRIX_PLAYWRIGHT_AUTO_INSTALL !== '1') {
+    return false
+  }
   if (!ensureInFlight) {
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_INSTALL_TIMEOUT_MS
     ensureInFlight = spawnPlaywrightInstall(timeoutMs).finally(() => {

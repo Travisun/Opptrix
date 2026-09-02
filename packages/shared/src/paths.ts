@@ -56,12 +56,14 @@ export function resolveOpptrixAppVersion(): string {
   if (fromEnv) return fromEnv
 
   try {
-    const pkgPath = path.join(resolveProjectRoot(), 'apps', 'desktop', 'package.json')
-    if (!fs.existsSync(pkgPath)) return 'unknown'
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: unknown }
-    if (typeof pkg.version === 'string') {
-      const v = pkg.version.trim()
-      if (v) return v
+    for (const rel of ['apps/server/package.json', 'package.json']) {
+      const pkgPath = path.join(resolveProjectRoot(), ...rel.split('/'))
+      if (!fs.existsSync(pkgPath)) continue
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: unknown }
+      if (typeof pkg.version === 'string') {
+        const v = pkg.version.trim()
+        if (v) return v
+      }
     }
   } catch {
     /* fall through */

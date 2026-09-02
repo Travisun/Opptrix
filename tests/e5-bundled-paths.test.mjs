@@ -89,8 +89,6 @@ describe('e5 bundled path resolution', () => {
 
   it('falls back to user dir when bundled missing', () => {
     delete process.env.OPPTRIX_E5_BUNDLED_DIR
-    const staged = path.join(ROOT, 'apps/desktop/resources/llms/multilingual-e5-small')
-    if (fs.existsSync(path.join(staged, 'config.json'))) return
 
     const prevCwd = process.cwd()
     process.chdir(tmpRoot)
@@ -108,26 +106,8 @@ describe('e5 bundled path resolution', () => {
     }
   })
 
-  it('resolves staged desktop llms without relying on cwd', () => {
-    const staged = path.join(ROOT, 'apps/desktop/resources/llms/multilingual-e5-small')
-    if (!fs.existsSync(path.join(staged, 'config.json'))) return
-
-    delete process.env.OPPTRIX_E5_BUNDLED_DIR
-    const prevCwd = process.cwd()
-    process.chdir(tmpRoot)
-    try {
-      const dir = lib.getBundledEmbeddingModelDir()
-      assert.ok(dir)
-      assert.equal(path.resolve(dir), path.resolve(staged))
-    } finally {
-      process.chdir(prevCwd)
-    }
-  })
-
   it('falls back to legacy ~/.opptrix/models when llms missing', () => {
     delete process.env.OPPTRIX_E5_BUNDLED_DIR
-    const staged = path.join(ROOT, 'apps/desktop/resources/llms/multilingual-e5-small')
-    if (fs.existsSync(path.join(staged, 'config.json'))) return
 
     const prevCwd = process.cwd()
     process.chdir(tmpRoot)
@@ -169,16 +149,5 @@ describe('e5 bundled path resolution', () => {
     const resolved = lib.resolveEmbeddingModelDir()
     assert.equal(resolved.source, 'bundled')
     assert.equal(path.resolve(resolved.dir), path.resolve(bundled))
-  })
-
-  it('stage-e5 script exists and lists required files', () => {
-    const src = fs.readFileSync(
-      path.join(ROOT, 'apps/desktop/scripts/stage-e5.mjs'),
-      'utf8',
-    )
-    assert.match(src, /model_quantized\.onnx/)
-    assert.match(src, /multilingual-e5-small/)
-    assert.match(src, /MODELSCOPE/)
-    assert.match(src, /resources\/llms/)
   })
 })

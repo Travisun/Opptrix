@@ -15,7 +15,7 @@ import {
   modelscopeBases,
   HF_MIRROR,
   preferForeignMirrors,
-} from '../../apps/desktop/scripts/lib/model-download.mjs'
+} from './model-download.mjs'
 
 export const GGUF_MAGIC = Buffer.from('GGUF', 'ascii')
 

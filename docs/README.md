@@ -24,7 +24,13 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 2. [DEVELOPMENT.md](./DEVELOPMENT.md) — 日常命令、调试、测试、FAQ
 3. [ARCHITECTURE.md](./ARCHITECTURE.md) — 分层与请求流
 4. [example/README.md](../example/README.md) — 示例配置
-5. [DESKTOP.md](./DESKTOP.md) / [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) — 仓库内 Electron 相关（维护者，非用户安装路径）
+5. [DESKTOP.md](./DESKTOP.md) / [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) — Electron **legacy 维护**（非用户安装路径）
+
+### 自托管 / 运维
+
+1. [SELF-HOSTING.md](./SELF-HOSTING.md) — 部署与升级
+2. **[SELFHOST-RUNTIME-DEPS.md](./SELFHOST-RUNTIME-DEPS.md)** — **Docker 运行时依赖矩阵（硬依赖 / 抽离策略）**
+3. [SYSTEM-UPDATE.md](./SYSTEM-UPDATE.md) — 热更新
 
 ### 数据层 / Provider 开发者
 
@@ -68,7 +74,8 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 | [FREE-PROVIDER-SERIAL-GUARD.md](./FREE-PROVIDER-SERIAL-GUARD.md) | 免费源串行保护（主机闸门 / 批内全开） |
 | [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md) | 数据层落地进度 |
 | [SELF-HOSTING.md](./SELF-HOSTING.md) | Docker 自托管；`@opptrix/selfhost`（`opptrix`）与 `opptrix-selfhost-v*` 快照 |
-| [DESKTOP.md](./DESKTOP.md) | Electron 桌面开发 |
+| [SELFHOST-RUNTIME-DEPS.md](./SELFHOST-RUNTIME-DEPS.md) | **自托管运行时依赖矩阵**（apt vs npm 原生 vs 卷；服务器优先） |
+| [DESKTOP.md](./DESKTOP.md) | Electron 桌面（legacy 维护） |
 | [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md) | 桌面发布与自动更新 |
 | [UI-DESIGN-SYSTEM.md](./UI-DESIGN-SYSTEM.md) | UI 设计系统 |
 | [UI-LAYOUT.md](./UI-LAYOUT.md) | 布局规范 |

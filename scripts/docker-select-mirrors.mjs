@@ -22,16 +22,28 @@ import path from 'node:path'
 
 export const PROBE_TARGETS = Object.freeze(
   /** @type {ProbeTarget[]} */ ([
-    { group: 'cn', id: 'npm', host: 'registry.npmmirror.com' },
+    { group: 'cn', id: 'npm', host: 'mirrors.huaweicloud.com' },
     { group: 'foreign', id: 'npm', host: 'registry.npmjs.org' },
     { group: 'cn', id: 'apt', host: 'mirrors.aliyun.com' },
     { group: 'foreign', id: 'apt', host: 'deb.debian.org' },
   ]),
 )
 
+/**
+ * Keep in sync with packages/selfhost/src/mirrors.mjs CN_NPM_REGISTRY_CANDIDATES.
+ * Empty string = official registry.npmjs.org.
+ */
+export const CN_NPM_REGISTRY_CANDIDATES = Object.freeze([
+  'https://mirrors.huaweicloud.com/repository/npm/',
+  '',
+])
+
+/** Keep in sync with packages/selfhost/src/mirrors.mjs CN_MIRROR_DEFAULTS. */
 export const CN_BUILD_MIRRORS = Object.freeze({
+  // 1ms Hub library/ proxy (not bare host; not amd64/).
   dockerImagePrefix: 'docker.1ms.run/library/',
-  npmRegistry: 'https://registry.npmmirror.com',
+  // Huawei: verified packument+tarball for scoped pins; see CN_NPM_REGISTRY_CANDIDATES.
+  npmRegistry: 'https://mirrors.huaweicloud.com/repository/npm/',
   aptMirror: 'mirrors.aliyun.com',
   pipIndexUrl: 'https://pypi.tuna.tsinghua.edu.cn/simple',
 })
@@ -97,6 +109,38 @@ export function probeMirrorTargets(targets = PROBE_TARGETS, opts = {}) {
 }
 
 /**
+ * Normalize registry URL (empty = official npmjs).
+ * @param {string} raw
+ */
+export function normalizeNpmRegistryUrl(raw) {
+  const v = String(raw ?? '').trim()
+  if (!v) return ''
+  return v.endsWith('/') ? v : `${v}/`
+}
+
+/**
+ * First CN npm candidate whose host:443 is reachable (empty = official, always ok).
+ * @param {string[]} [candidates]
+ * @param {{ probeFn?: (host: string) => { host: string, ok: boolean, ms: number } }} [opts]
+ * @returns {{ registry: string, reason: string }}
+ */
+export function pickCnNpmRegistry(candidates = CN_NPM_REGISTRY_CANDIDATES, opts = {}) {
+  const probe = typeof opts.probeFn === 'function' ? opts.probeFn : (host) => probeHostLatency(host)
+  for (const raw of candidates) {
+    const registry = normalizeNpmRegistryUrl(raw)
+    if (!registry) {
+      return { registry: '', reason: 'official-npmjs' }
+    }
+    const host = registry.replace(/^https?:\/\//i, '').replace(/\/.*$/, '')
+    const r = probe(host)
+    if (r.ok) {
+      return { registry, reason: `reachable:${host}` }
+    }
+  }
+  return { registry: '', reason: 'all-candidates-unreachable' }
+}
+
+/**
  * Pick cn when CN endpoints are clearly faster; foreign when tied or CN unreachable.
  * @param {ProbeResult[]} results
  * @returns {MirrorProfile}
@@ -152,9 +196,14 @@ export function resolveDockerMirrors(opts = {}) {
     ? probeMirrorTargets(PROBE_TARGETS, { probeFn: opts.probeFn })
     : []
   const profile = probeNetwork ? selectMirrorProfile(results) : 'foreign'
+  const mirrors = mirrorsForProfile(profile)
+  if (profile === 'cn' && probeNetwork) {
+    const picked = pickCnNpmRegistry(CN_NPM_REGISTRY_CANDIDATES, { probeFn: opts.probeFn })
+    mirrors.npmRegistry = picked.registry
+  }
   return {
     profile,
-    mirrors: mirrorsForProfile(profile),
+    mirrors,
     probes: results,
   }
 }

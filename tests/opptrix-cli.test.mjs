@@ -45,6 +45,8 @@ test('normalizeMirrorProfile and resolveBuildMirrorEnv cn/foreign', () => {
   assert.throws(() => normalizeMirrorProfile('nope'))
 
   assert.equal(ensureTrailingSlash('docker.1ms.run/library'), 'docker.1ms.run/library/')
+  assert.equal(CN_MIRROR_DEFAULTS.dockerImagePrefix, 'docker.1ms.run/library/')
+  assert.match(CN_MIRROR_DEFAULTS.npmRegistry, /huaweicloud\.com\/repository\/npm/)
 
   const cn = resolveBuildMirrorEnv('cn', {})
   assert.equal(cn.profile, 'cn')
@@ -58,8 +60,10 @@ test('normalizeMirrorProfile and resolveBuildMirrorEnv cn/foreign', () => {
 
   const override = resolveBuildMirrorEnv('cn', {
     OPPTRIX_DOCKER_IMAGE_PREFIX: 'docker.1ms.run/library',
+    OPPTRIX_NPM_REGISTRY: 'https://registry.npmmirror.com',
   })
   assert.equal(override.OPPTRIX_DOCKER_IMAGE_PREFIX, 'docker.1ms.run/library/')
+  assert.equal(override.OPPTRIX_NPM_REGISTRY, 'https://registry.npmmirror.com')
 })
 
 test('resolveMirrorProfile auto detects via locale / force flags', () => {

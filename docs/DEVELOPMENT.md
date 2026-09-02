@@ -4,11 +4,21 @@
 
 ## 环境
 
-- **Node.js** ≥ 24（Active LTS）
+- **Node.js** ≥ 24（Active LTS）；pin 见 `scripts/lib/ci-pins.env`
 - **npm** workspaces（根目录单一 `package-lock.json`，**仅在根目录** `npm install` / `npm ci`）
-- 推荐 macOS / Linux；Windows 可用 WSL 或原生 Node
+- **主路径**：Linux 服务器 + **Docker Compose**（见 [SELF-HOSTING.md](./SELF-HOSTING.md)）
+- 本地裸跑：推荐 macOS / Linux + 系统 `ffmpeg` / `python3`；Windows 可用 WSL
 
-支持 **Web**（`npm run dev`）与 **Electron 桌面**（`npm run dev:desktop`），共用 `client-ui` 与 `apps/server`。
+**推荐开发方式**（与生产一致）：
+
+```bash
+npm i -g @opptrix/selfhost   # 或仓内 link
+opptrix init && opptrix up   # 优先 GHCR 预构建镜像
+```
+
+纯本地 API + Web UI：`npm run dev`（见下文）。Electron 桌面为 **legacy 维护**，见 [DESKTOP.md](./DESKTOP.md)。
+
+运行时依赖矩阵：[SELFHOST-RUNTIME-DEPS.md](./SELFHOST-RUNTIME-DEPS.md)
 
 ## 仓库结构
 

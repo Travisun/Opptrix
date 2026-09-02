@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -14,12 +13,6 @@ import {
   shouldNotify,
   truncateNotificationText,
 } from '../client-ui/src/platform/chatNotifications.ts'
-
-const require = createRequire(import.meta.url)
-const {
-  mapDarwinAuthorizationStatus,
-  sanitizeNotificationPayload,
-} = require('../apps/desktop/electron/notifications.cjs')
 
 describe('chat notification attention', () => {
   const attending = {
@@ -255,75 +248,5 @@ describe('web notification helpers', () => {
       if (prevWindow === undefined) delete g.window
       else g.window = prevWindow
     }
-  })
-})
-
-describe('sanitizeNotificationPayload', () => {
-  it('accepts valid chat payload', () => {
-    const out = sanitizeNotificationPayload({
-      title: '对话已生成完成',
-      body: '摘要',
-      silent: true,
-      tag: 'chat:done:sess1',
-      sessionId: 'sess1',
-      kind: 'chat_done',
-      extraIgnored: true,
-    })
-    assert.deepEqual(out, {
-      title: '对话已生成完成',
-      body: '摘要',
-      silent: true,
-      tag: 'chat:done:sess1',
-      sessionId: 'sess1',
-      kind: 'chat_done',
-    })
-  })
-
-  it('rejects empty or overlong title', () => {
-    assert.equal(sanitizeNotificationPayload({ title: '  ' }), null)
-    assert.equal(sanitizeNotificationPayload({ title: 'x'.repeat(121) }), null)
-  })
-
-  it('drops invalid tag and sessionId', () => {
-    const out = sanitizeNotificationPayload({
-      title: '需要你的确认',
-      tag: 'bad tag!',
-      sessionId: '../evil',
-      kind: 'chat_ask',
-    })
-    assert.equal(out?.title, '需要你的确认')
-    assert.equal(out?.tag, undefined)
-    assert.equal(out?.sessionId, undefined)
-    assert.equal(out?.kind, 'chat_ask')
-  })
-
-  it('truncates body and ignores unknown kind', () => {
-    const out = sanitizeNotificationPayload({
-      title: 't',
-      body: 'b'.repeat(250),
-      kind: 'other',
-    })
-    assert.equal(out?.body?.length, 200)
-    assert.equal(out?.kind, undefined)
-  })
-})
-
-describe('mapDarwinAuthorizationStatus', () => {
-  it('maps authorized family to granted', () => {
-    assert.equal(mapDarwinAuthorizationStatus('authorized'), 'granted')
-    assert.equal(mapDarwinAuthorizationStatus('provisional'), 'granted')
-    assert.equal(mapDarwinAuthorizationStatus('temporary'), 'granted')
-    assert.equal(mapDarwinAuthorizationStatus('ephemeral'), 'granted')
-  })
-
-  it('maps denied family to denied', () => {
-    assert.equal(mapDarwinAuthorizationStatus('denied'), 'denied')
-    assert.equal(mapDarwinAuthorizationStatus('restricted'), 'denied')
-  })
-
-  it('maps undetermined to default (never fake granted)', () => {
-    assert.equal(mapDarwinAuthorizationStatus('not-determined'), 'default')
-    assert.equal(mapDarwinAuthorizationStatus(''), 'default')
-    assert.equal(mapDarwinAuthorizationStatus(undefined), 'default')
   })
 })

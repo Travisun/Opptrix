@@ -10,7 +10,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..')
 
 async function importDownload() {
   return import(
-    pathToFileURL(path.join(repoRoot, 'apps/desktop/scripts/lib/model-download.mjs')).href
+    pathToFileURL(path.join(repoRoot, 'scripts/lib/model-download.mjs')).href
   )
 }
 

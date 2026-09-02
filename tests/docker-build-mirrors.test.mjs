@@ -52,11 +52,14 @@ test('docker-compose-with-mirrors.sh delegates to opptrix', () => {
 test('compose.env.example documents build mirror vars', () => {
   const env = read('compose.env.example')
   assert.match(env, /OPPTRIX_DOCKER_IMAGE_PREFIX/)
+  assert.match(env, /docker\.1ms\.run\/library\//)
   assert.match(env, /OPPTRIX_NPM_REGISTRY/)
+  assert.match(env, /官方 npm|official npm|留空|empty/i)
   assert.match(env, /OPPTRIX_APT_MIRROR/)
   assert.match(env, /^OPPTRIX_MIRROR_AUTO=1/m)
   assert.match(env, /OPPTRIX_FETCH_MODELS_ON_START/)
   assert.match(env, /opptrix|docker-compose-with-mirrors/)
+  assert.match(env, /NODE_IMAGE_PREFIX|Docker Hub|官方 Docker Hub/)
 })
 
 test('cn mirror profile exports via opptrix compose dry path', () => {

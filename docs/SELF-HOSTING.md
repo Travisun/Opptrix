@@ -55,9 +55,11 @@ opptrix up            # 优先拉取 GHCR 预构建镜像并启动
 
 | 组件 | 说明 |
 |------|------|
-| **Node（默认）** | 官方 `node:24-bookworm-slim`，`/usr/local/bin/node` 为稳定 PATH |
-| **Node（可选）** | nvm 在 `/opt/nvm`，已预装 **22 LTS**；`nvm use 22` 切换，不替换默认 24 |
+| **Node（默认）** | 官方 `node:24.11.1-bookworm-slim`（见 `scripts/lib/ci-pins.env`），`/usr/local/bin/node` 为稳定 PATH |
+| **Node（可选）** | nvm 在 `/opt/nvm`（`v0.40.2`），已预装 **22 LTS**；`nvm use 22` 切换，不替换默认 24 |
 | **Python** | Debian bookworm `python3`（3.11）+ `pip3` + `venv` + `python3-dev` |
+| **ffmpeg** | Debian apt `ffmpeg`（`FFMPEG_PATH=/usr/bin/ffmpeg`）；**不**打包 npm `ffmpeg-static` |
+| **Chromium（Playwright）** | 镜像内 `/opt/opptrix/playwright-browsers`（`PLAYWRIGHT_BROWSERS_PATH`） |
 | **Agent 隔离** | 默认 `OPPTRIX_AGENT_SANDBOX=off`：自由编程 + **双用户 DAC**（`opptrix_run` 降权为 `opptrix-agent`，无法读写 private/system） |
 | **构建镜像** | `OPPTRIX_BUILD_MIRROR` / 显式 `OPPTRIX_*_REGISTRY`；或 `OPPTRIX_MIRROR_AUTO_BUILD=1` 构建时探测 |
 | **运行时镜像** | `OPPTRIX_MIRROR_AUTO=1` 为 pip/npm 自动选国内/海外源 |
@@ -76,6 +78,8 @@ opptrix use main && opptrix up
 ```
 
 容器内可通过 `OPPTRIX_APP_VERSION` / `OPPTRIX_RELEASE_CHANNEL=selfhost` / `OPPTRIX_RELEASE_TAG` 识别当前快照（CLI 注入）。
+
+**运行时依赖**（ffmpeg / Python / 原生模块 / 模型 / Playwright 分层）：见 **[SELFHOST-RUNTIME-DEPS.md](./SELFHOST-RUNTIME-DEPS.md)**。
 
 ### 方式 B：一键 bootstrap（自动装 Docker + 托管 Node + CLI）
 
@@ -159,11 +163,13 @@ curl -fsS http://127.0.0.1:8711/api/health
 | 变量 | 作用 | 国内示例 |
 |------|------|----------|
 | `OPPTRIX_BUILD_MIRROR` / `--mirror` | `cn` / `foreign` | `cn` |
-| `OPPTRIX_DOCKER_IMAGE_PREFIX` | Node 基础镜像前缀（须以 `/` 结尾） | `docker.1ms.run/library/` |
-| `OPPTRIX_NPM_REGISTRY` | `npm ci` 注册表 | `https://registry.npmmirror.com` |
+| `OPPTRIX_DOCKER_IMAGE_PREFIX` | Node 基础镜像前缀（须以 `/` 结尾） | `docker.1ms.run/library/`（1ms 的 Hub **library/** 代理；勿用裸前缀或 `amd64/`） |
+| `OPPTRIX_NPM_REGISTRY` | `npm ci` 注册表（可选覆盖） | 国内默认华为云 `https://mirrors.huaweicloud.com/repository/npm/`；不可达时 `MIRROR_AUTO` 回退官方；**勿依赖** `npm.aliyun.com`（DNS 失效）/ `mirrors.163.com/npm`（404） |
 | `OPPTRIX_APT_MIRROR` | Debian apt 主机名（无 `https://`） | `mirrors.aliyun.com` |
 | `OPPTRIX_MIRROR_AUTO_BUILD` | 构建时 `MIRROR_AUTO=1` 探测源 | `1` |
 | `OPPTRIX_MIRROR_AUTO` | 运行时 pip/npm 自动选源（entrypoint 探测） | `1`（默认开启；设 `0` 关闭） |
+
+国内本地构建默认拉 `docker.1ms.run/library/node:…`；**GitHub CI**（`ci-selfhost-release` / `publish-selfhost-image`）将 `NODE_IMAGE_PREFIX` 留空，直接用官方 Docker Hub。
 
 `opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还可进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。
 
@@ -362,6 +368,17 @@ docker compose restart
 docker compose down          # 保留 volumes
 docker compose down -v       # ⚠ 删除数据与模型卷
 ```
+
+### 生命周期 smoke（开发者）
+
+验证「启动 → 热更新 → 底座刷新」时，对预构建镜像运行：
+
+```bash
+docker build -t opptrix:local-smoke .
+node scripts/smoke-selfhost-lifecycle.mjs
+```
+
+细节见 [SELFHOST-RUNTIME-DEPS.md](./SELFHOST-RUNTIME-DEPS.md) §5。
 
 ## 故障排查
 

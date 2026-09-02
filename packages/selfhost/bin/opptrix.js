@@ -595,7 +595,7 @@ async function cmdInit(parsed) {
   console.log(`[opptrix] 预构建镜像 ${meta.imageRepository}:<tag>（opptrix up 优先 pull）`)
   console.log(`[opptrix] deploy root → ${root}`)
   if (resolved.profile === 'cn') {
-    console.log('[opptrix] 国内构建：DaoCloud Node 前缀 + npmmirror + 阿里云 Debian；clone 优先 Gitee')
+    console.log('[opptrix] 国内构建：Node 前缀 docker.1ms.run/library/ + 官方 npm（可 OPPTRIX_NPM_REGISTRY 覆盖）+ 阿里云 Debian；clone 优先 Gitee')
     console.log('[opptrix] 国内拉镜像：对 ghcr.nju.edu.cn / ghcr.1ms.run 测速择优（可用 OPPTRIX_GHCR_MIRROR 固定）')
   } else {
     console.log('[opptrix] 海外构建：官方 Docker/npm/apt；clone 优先 GitHub；拉镜像用官方 ghcr.io')
