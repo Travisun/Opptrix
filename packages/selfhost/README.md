@@ -146,9 +146,11 @@ opptrix up --skip-models
 ```bash
 opptrix status        # 容器是否在跑
 opptrix logs -f       # 跟踪日志（出问题先看这里）
+opptrix env list      # 查看 compose.env（敏感项脱敏）
+opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=12 LLM_API_KEY=sk-xxx
 opptrix stop          # 停止（数据还在）
 opptrix start         # 再启动（不强制重建镜像）
-opptrix restart       # 重启
+opptrix restart       # 重启（不改 env；改变量请用 env set，会自动 up -d）
 opptrix down          # 删容器但默认保留数据卷
 ```
 
@@ -251,6 +253,7 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | `opptrix use <tag\|main>` | 写入版本偏好 | `.opptrix.json` 的 `appRef`；`--apply` 可立即启动 |
 | `opptrix up` | 优先 pull 预构建并后台启动 | 实例运行，默认可访问 8711 |
 | `opptrix start` / `stop` / `restart` | 启停重启 | 不强制重建镜像 |
+| `opptrix env set/get/list/unset` | 管理 `compose.env` | 默认写盘后 `compose up -d` 注入；`--no-restart` 仅保存 |
 | `opptrix down` | 移除容器 | 默认保留数据；加 `--volumes` 清空 |
 | `opptrix build` | 只本地构建镜像 | 不启动容器 |
 | `opptrix update` | 升级镜像 / 运行环境底座 | 重建容器；默认保留 data / models / system 卷与挂载；热更新另见产品内提示 |
