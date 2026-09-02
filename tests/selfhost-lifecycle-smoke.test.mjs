@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -83,6 +84,13 @@ test('dockerImageExists respects inspect deps', () => {
     false,
   )
   assert.equal(dockerImageExists(''), false)
+})
+
+test('lifecycle smoke isolates CDN and background updates', async () => {
+  const src = await fs.promises.readFile(SMOKE, 'utf8')
+  assert.match(src, /OPPTRIX_UPDATE_ENABLED:\s*'0'/)
+  assert.match(src, /OPPTRIX_BOOT_CDN_CHECK:\s*'0'/)
+  assert.match(src, /stage did not persist pending/)
 })
 
 test('optional docker lifecycle smoke when image present', async (t) => {

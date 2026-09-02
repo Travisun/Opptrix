@@ -86,6 +86,9 @@ function commonServerEnv(appVersion, baseVersion) {
     OPPTRIX_SKIP_MODEL_FETCH: '1',
     OPPTRIX_FETCH_MODELS_ON_START: '0',
     OPPTRIX_WITH_MODELS: '0',
+    // Isolate lifecycle smoke from CDN / silent hot-download races on state.json.
+    OPPTRIX_UPDATE_ENABLED: '0',
+    OPPTRIX_BOOT_CDN_CHECK: '0',
     OPPTRIX_APP_VERSION: appVersion,
     OPPTRIX_BASE_VERSION: baseVersion,
     OPPTRIX_RELEASE_TAG: baseVersion,
@@ -187,9 +190,21 @@ su.writeRuntimeMarker(dest, {
   hooks: existing?.hooks ?? { postActivate: [] },
 });
 su.setPendingVersion(to, systemDir);
-console.log(JSON.stringify({ pending: to, state: su.readState(systemDir) }));
+const st = su.readState(systemDir);
+if (st.pendingVersion !== to) {
+  throw new Error('setPendingVersion failed: expected ' + to + ' got ' + st.pendingVersion);
+}
+console.log(JSON.stringify({ pending: to, state: st }));
 `
-  dockerExecNode(name, ['--input-type=module', '-e', inline])
+  const staged = dockerExecNode(name, ['--input-type=module', '-e', inline])
+  const stagedOut = `${staged.stdout || ''}${staged.stderr || ''}`.trim()
+  const stateAfterStage = readState(name)
+  if (stateAfterStage.pendingVersion !== opts.to) {
+    throw new Error(
+      `stage did not persist pending=${opts.to}, got ${JSON.stringify(stateAfterStage.pendingVersion)}; `
+        + `stageOut=${stagedOut.slice(0, 800)}`,
+    )
+  }
   const act = docker(
     [
       'exec',
@@ -203,6 +218,14 @@ console.log(JSON.stringify({ pending: to, state: su.readState(systemDir) }));
     { allowFail: true },
   )
   const out = `${act.stdout || ''}${act.stderr || ''}`
+  if (classifyActivatePendingOutput(out) === 'noop') {
+    const st = readState(name)
+    return {
+      output: `${out}\n[lifecycle:debug] state=${JSON.stringify(st)} stageOut=${stagedOut.slice(0, 400)}`,
+      class: 'noop',
+      code: act.status ?? 1,
+    }
+  }
   return { output: out, class: classifyActivatePendingOutput(out), code: act.status ?? 1 }
 }
 

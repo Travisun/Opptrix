@@ -102,6 +102,8 @@ test('publish-runtime-assets workflow triggers on runtime-v*', async () => {
   assert.match(wf, /preferredAppTag/)
   assert.match(wf, /materialize-vendor/)
   assert.match(wf, /OPPTRIX_PACK_ASSERT_NO_ABI/)
+  assert.match(wf, /opptrix-runtime-\$\{\{\s*matrix\.platform_key\s*\}\}-v\*\.bin/)
+  assert.match(wf, /Synthesize legacy x64 alias/)
   assert.doesNotMatch(wf, /tags:\s*\n\s*-\s*'opptrix-selfhost-v\*'/)
 })
 

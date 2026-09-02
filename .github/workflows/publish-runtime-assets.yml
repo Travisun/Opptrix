@@ -209,8 +209,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtime-pack-${{ matrix.platform_key }}
-          path: dist-runtime/
+          # One arch copy only — avoid multi-alias inflation that broke artifact download.
+          path: |
+            dist-runtime/opptrix-runtime-${{ matrix.platform_key }}-v*.bin
+            dist-runtime/opptrix-runtime-${{ matrix.platform_key }}-v*.sha256
           if-no-files-found: error
+          compression-level: 0
 
   publish:
     name: Publish runtime & upload release assets
@@ -262,6 +266,27 @@ jobs:
           mkdir -p dist-runtime
           cp -v artifacts/runtime-pack-linux-x64/* dist-runtime/
           cp -v artifacts/runtime-pack-linux-arm64/* dist-runtime/
+          # Synthesize legacy x64 alias for GitHub Release + CDN check-update.
+          shopt -s nullglob
+          x64_bins=(dist-runtime/opptrix-runtime-linux-x64-v*.bin)
+          if [[ ${#x64_bins[@]} -ne 1 ]]; then
+            echo "::error::expected exactly one linux-x64 .bin, got ${#x64_bins[@]}"
+            ls -lah dist-runtime/ || true
+            exit 1
+          fi
+          x64_bin="${x64_bins[0]}"
+          base="$(basename "$x64_bin")"
+          ver="${base#opptrix-runtime-linux-x64-v}"
+          ver="${ver%.bin}"
+          legacy_bin="dist-runtime/opptrix-runtime-v${ver}.bin"
+          legacy_sha="dist-runtime/opptrix-runtime-v${ver}.sha256"
+          cp -v "$x64_bin" "$legacy_bin"
+          hex="$(awk '{print $1; exit}' "dist-runtime/opptrix-runtime-linux-x64-v${ver}.sha256")"
+          if [[ ! "$hex" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "::error::invalid sha256 hex for linux-x64 pack"
+            exit 1
+          fi
+          printf '%s  %s\n' "$hex" "opptrix-runtime-v${ver}.bin" > "$legacy_sha"
           ls -lah dist-runtime/
 
       - name: Ensure GitHub Release exists
