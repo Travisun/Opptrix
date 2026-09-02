@@ -163,7 +163,7 @@ curl -fsS http://127.0.0.1:8711/api/health
 | `OPPTRIX_NPM_REGISTRY` | `npm ci` 注册表 | `https://registry.npmmirror.com` |
 | `OPPTRIX_APT_MIRROR` | Debian apt 主机名（无 `https://`） | `mirrors.aliyun.com` |
 | `OPPTRIX_MIRROR_AUTO_BUILD` | 构建时 `MIRROR_AUTO=1` 探测源 | `1` |
-| `OPPTRIX_MIRROR_AUTO` | 运行时 pip/npm 自动选源 | `1` |
+| `OPPTRIX_MIRROR_AUTO` | 运行时 pip/npm 自动选源（entrypoint 探测） | `1`（默认开启；设 `0` 关闭） |
 
 `opptrix init --mirror cn` 会把偏好写入 `.opptrix.json`（已 gitignore）。构建参数还可进入 shell / 项目 `.env`；CLI 在执行 `up`/`build`/`update` 时会自动注入。
 

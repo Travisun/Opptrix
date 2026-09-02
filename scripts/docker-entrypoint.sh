@@ -125,8 +125,8 @@ else
   echo "[opptrix] WARN: agent DAC skipped (need root + user $AGENT_USER); shell runs as service uid"
 fi
 
-# Optional runtime mirror auto (pip / npm registry env)
-if [ "${OPPTRIX_MIRROR_AUTO:-0}" = "1" ]; then
+# Optional runtime mirror auto (pip / npm registry env) — default on in Docker
+if [ "${OPPTRIX_MIRROR_AUTO:-1}" = "1" ]; then
   if eval "$(node /app/scripts/docker-select-mirrors.mjs --runtime-eval 2>/dev/null)"; then
     if [ -n "${PIP_INDEX_URL:-}" ]; then export PIP_INDEX_URL; fi
     if [ -n "${NPM_CONFIG_REGISTRY:-}" ]; then

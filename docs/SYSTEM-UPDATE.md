@@ -244,7 +244,7 @@ Docker：`scripts/docker-entrypoint.sh` + tini。
 | `OPPTRIX_BASE_VERSION` | 当前 Docker 底座 tag（semver 比对用） |
 | `OPPTRIX_RELEASE_TAG` | 自托管 release tag（`opptrix-selfhost-v*`） |
 | `OPPTRIX_FETCH_MODELS_ON_START` | `1` 时 entrypoint 首启拉核心模型（默认 `0`，引导下载） |
-| `OPPTRIX_MIRROR_AUTO` | `1` 时运行时自动配置 pip/npm 镜像 |
+| `OPPTRIX_MIRROR_AUTO` | `1` 时运行时自动配置 pip/npm 镜像（Docker 默认 `1`，entrypoint 启动探测） |
 | `OPPTRIX_DOCKER=1` | 强制 Docker 路径默认值 |
 | `OPPTRIX_UPDATE_CHANNEL` | 默认 `selfhost` |
 | `OPPTRIX_UPDATE_CDN_BASE` | CDN 根，默认 `https://update.opptrix.org` |

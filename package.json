@@ -33,6 +33,8 @@
     "build:selfhost": "npm run build -w @opptrix/selfhost",
     "publish:selfhost": "npm run build -w @opptrix/selfhost && npm publish -w @opptrix/selfhost",
     "release:selfhost": "node scripts/release-selfhost.mjs",
+    "release:selfhost-app": "node scripts/release-selfhost-app.mjs",
+    "pre-release:selfhost": "node scripts/pre-release-selfhost.mjs",
     "dev:desktop": "npm run build:packages && npm run dev -w @opptrix/desktop",
     "dev:api": "npm run dev -w @opptrix/server",
     "dev:web": "npm run dev -w opptrix-client",

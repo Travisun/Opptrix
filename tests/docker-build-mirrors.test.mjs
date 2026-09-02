@@ -36,6 +36,7 @@ test('docker-compose.yml passes build mirror args from env', () => {
   assert.match(yml, /NPM_REGISTRY:\s*"\$\{OPPTRIX_NPM_REGISTRY:-\}"/)
   assert.match(yml, /APT_MIRROR:\s*"\$\{OPPTRIX_APT_MIRROR:-\}"/)
   assert.match(yml, /MIRROR_AUTO:\s*"\$\{OPPTRIX_MIRROR_AUTO_BUILD:-\}"/)
+  assert.match(yml, /OPPTRIX_MIRROR_AUTO:\s*"\$\{OPPTRIX_MIRROR_AUTO:-1\}"/)
   assert.match(yml, /OPPTRIX_FETCH_MODELS_ON_START:\s*"\$\{OPPTRIX_FETCH_MODELS_ON_START:-0\}"/)
 })
 
@@ -52,7 +53,7 @@ test('compose.env.example documents build mirror vars', () => {
   assert.match(env, /OPPTRIX_DOCKER_IMAGE_PREFIX/)
   assert.match(env, /OPPTRIX_NPM_REGISTRY/)
   assert.match(env, /OPPTRIX_APT_MIRROR/)
-  assert.match(env, /OPPTRIX_MIRROR_AUTO/)
+  assert.match(env, /^OPPTRIX_MIRROR_AUTO=1/m)
   assert.match(env, /OPPTRIX_FETCH_MODELS_ON_START/)
   assert.match(env, /opptrix|docker-compose-with-mirrors/)
 })
