@@ -206,9 +206,13 @@ RUN rm -rf /app/node_modules/ffmpeg-static
 # ABI / heavy natives → vendor layer; /app seed stays slim for hot-update shape.
 # Lifecycle (seed/extract/activate/rollback) copies ABI from vendor into the
 # target slot's node_modules (ESM-safe recursive copy; not symlinks).
+# After materialize, fuse ABI copies back into /app so residual /app-based
+# resolution (workspace symlinks) and seed cpSync still see better-sqlite3 etc.
 RUN mkdir -p /opt/opptrix/vendor/node_modules \
   && node /app/scripts/materialize-vendor.mjs --app /app --vendor /opt/opptrix/vendor/node_modules \
-  && test -d /opt/opptrix/vendor/node_modules/better-sqlite3
+  && test -d /opt/opptrix/vendor/node_modules/better-sqlite3 \
+  && node --input-type=module -e "import { fuseVendorAbiIntoSlot } from '/app/packages/system-update/dist/vendor-fuse.js'; fuseVendorAbiIntoSlot('/app', { vendorNodeModules: '/opt/opptrix/vendor/node_modules' })" \
+  && test -d /app/node_modules/better-sqlite3
 
 # Playwright Chromium + OS deps (server browser tools / web preview export).
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/opptrix/playwright-browsers

@@ -28,7 +28,7 @@
 |------|------------|-----------|
 | 冷启动 seed | `seedCurrentSlot` | 新 current slot |
 | 镜像升底座 | `stageSeedVersionAsPending` | pending slot（seed 或 reuse 后） |
-| CDN / CLI / server 解压 | `extractUpdateArchive` | 解压后的 pending slot |
+| CDN / CLI / server 解压 | `extractUpdateArchive` | 解压后 **materialize 外链** → ABI fuse → pending slot |
 | 热激活 | `activatePending` | 新 current slot |
 | 回滚 | `rollbackToBackup` | backup → current slot |
 | entrypoint / supervisor | `system-boot ensure` / `activate-pending` | boot（+ pending 可选）；`needsBaseRefresh` 跳过激活时仍 fuse **current** boot |
@@ -37,9 +37,11 @@
 2. Vendor 缺失（裸 Node / 非 Docker）时 **软跳过**（不抛错，返回 `missingInVendor`）
 3. 热更新解压出**新 slot** → extract 已融合 → `activate` **再次融合**（按表重建 ABI **拷贝**；保留热更自带的非 ABI 包）
 
-测试见 `tests/runtime-vendor-resolve.test.mjs`、`tests/vendor-fuse-lifecycle.test.mjs`、`tests/materialize-vendor.test.mjs`。
+测试见 `tests/runtime-vendor-resolve.test.mjs`、`tests/vendor-fuse-lifecycle.test.mjs`、`tests/materialize-vendor.test.mjs`、`tests/materialize-external-symlinks.test.mjs`。
 
-镜像构建：`scripts/materialize-vendor.mjs` 把 ABI 从 `/app` 挪到 vendor。  
+镜像构建：`scripts/materialize-vendor.mjs` 把 ABI 从 `/app` 挪到 vendor；随后 `fuseVendorAbiIntoSlot('/app')` 再把 ABI 实拷回 `/app/node_modules`。  
+Seed：`copySeedTree` 在 `cpSync` 后对外部 workspace 符号链接做 `materializeExternalSymlinks`，再 fuse slot。  
+热更解压：`extractUpdateArchive` 在 fuse 前同样 `materializeExternalSymlinks`（防绝对链指回 `/app`）。  
 启动：`bootstrap-cdn-runtime.mjs`（可关 `OPPTRIX_BOOT_CDN_CHECK=0`）→ extract/seed → `system-boot ensure/activate` → vendor 融合。  
 发版 pack：CI 先 materialize 再 `--assert-no-abi`。
 

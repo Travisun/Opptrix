@@ -110,6 +110,7 @@ test('publish-runtime-assets workflow triggers on runtime-v*', async () => {
 test('Dockerfile materializes ABI vendor and enables boot CDN check', async () => {
   const df = await fs.promises.readFile(path.join(ROOT, 'Dockerfile'), 'utf8')
   assert.match(df, /materialize-vendor\.mjs/)
+  assert.match(df, /fuseVendorAbiIntoSlot\('\/app'/)
   assert.match(df, /OPPTRIX_VENDOR_NODE_MODULES=\/opt\/opptrix\/vendor\/node_modules/)
   assert.match(df, /OPPTRIX_BOOT_CDN_CHECK=1/)
   assert.match(df, /bootstrap-cdn-runtime\.mjs/)

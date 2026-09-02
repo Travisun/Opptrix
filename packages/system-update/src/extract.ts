@@ -14,6 +14,7 @@ import {
   resolveSystemPaths,
   slotPath,
 } from './paths.js'
+import { materializeExternalSymlinks } from './materialize-tree.js'
 import { fuseVendorAbiIntoSlot } from './vendor-fuse.js'
 import { verifySlotDirectory } from './verify.js'
 
@@ -163,6 +164,9 @@ export function extractUpdateArchive(opts: ExtractOptions): ExtractResult {
   fs.mkdirSync(slotsDir, { recursive: true })
   if (fs.existsSync(destSlot)) fs.rmSync(destSlot, { recursive: true, force: true })
   fs.renameSync(ready, destSlot)
+  // Packs should be self-contained; still break any absolute/out-of-slot links
+  // (legacy or mis-packed workspace symlinks) before ABI fuse.
+  materializeExternalSymlinks(destSlot)
   fuseVendorAbiIntoSlot(destSlot)
 
   if (fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true })

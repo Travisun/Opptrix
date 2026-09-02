@@ -171,6 +171,11 @@ export {
 export type { DbSnapshotManifest } from './db-snapshot.js'
 
 export {
+  materializeExternalSymlinks,
+} from './materialize-tree.js'
+export type { MaterializeExternalSymlinksResult } from './materialize-tree.js'
+
+export {
   ABI_PINNED_NAME_PREFIXES,
   ABI_PINNED_PACKAGE_NAMES,
   DEFAULT_VENDOR_NODE_MODULES,

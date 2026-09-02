@@ -20,6 +20,7 @@ import {
 } from './runtime-marker.js'
 import { compareSemver } from './semver.js'
 import { patchState, readState } from './state.js'
+import { materializeExternalSymlinks } from './materialize-tree.js'
 import { fuseVendorAbiIntoSlot } from './vendor-fuse.js'
 import { verifySlotDirectory } from './verify.js'
 
@@ -113,6 +114,9 @@ function copySeedTree(seedRoot: string, dest: string, version: string): void {
     fs.rmSync(dest, { recursive: true, force: true })
   }
   fs.cpSync(seedRoot, dest, { recursive: true, dereference: true })
+  // Node may leave workspace package symlinks pointing outside `dest` even with
+  // dereference:true — materialize so slot resolution never loads /app packages.
+  materializeExternalSymlinks(dest)
   ensureRuntimeMarkerForSeed(dest, version)
   const check = verifySlotDirectory(dest)
   if (!check.ok) {
