@@ -80,25 +80,26 @@ jobs:
 
   runtime-pack:
     name: Runtime pack (${{ matrix.platform_key }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.platform_key == 'linux-arm64' && 120 || 45 }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-latest
-            platform_key: linux-x64
-          - runner: ubuntu-24.04-arm64
-            platform_key: linux-arm64
+        platform_key: [linux-x64, linux-arm64]
     steps:
       - uses: actions/checkout@v5
 
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.platform_key == 'linux-arm64'
+
       - uses: actions/setup-node@v5
+        if: matrix.platform_key == 'linux-x64'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install build tools (native modules)
+        if: matrix.platform_key == 'linux-x64'
         shell: bash
         run: |
           set -euo pipefail
@@ -107,9 +108,11 @@ jobs:
             python3 make g++ build-essential pkg-config
 
       - name: Install dependencies
+        if: matrix.platform_key == 'linux-x64'
         run: npm ci
 
-      - name: Pack runtime + CDN dry-run
+      - name: Pack runtime + CDN dry-run (linux-x64)
+        if: matrix.platform_key == 'linux-x64'
         env:
           OPPTRIX_APP_VERSION: ${{ env.RUNTIME_CI_VERSION }}
           OPPTRIX_RELEASE_TAG: opptrix-selfhost-v${{ env.RUNTIME_CI_VERSION }}
@@ -118,7 +121,13 @@ jobs:
           node scripts/audit-selfhost-release.mjs \
             --runtime \
             --version "${RUNTIME_CI_VERSION}" \
-            --platform-key "${{ matrix.platform_key }}"
+            --platform-key linux-x64
+
+      - name: Pack runtime + CDN dry-run (linux-arm64 via QEMU)
+        if: matrix.platform_key == 'linux-arm64'
+        env:
+          RUNTIME_CI_VERSION: ${{ env.RUNTIME_CI_VERSION }}
+        run: bash scripts/ci-runtime-pack-arm64-docker.sh
 
       - name: Upload runtime pack artifact
         uses: actions/upload-artifact@v4
