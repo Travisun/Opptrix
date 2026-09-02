@@ -16,6 +16,10 @@
   },
   "dependencies": {
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*"
+    "@opptrix/user-store": "*",
+    "nodemailer": "^6.10.1"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^6.4.24"
   }
 }

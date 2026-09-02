@@ -26,6 +26,8 @@ import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettin
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
 import PortfolioFeeSettingsSection from './settings/PortfolioFeeSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
+import { readSystemUpdateTab } from '../utils/settingsDeepLink'
+import SystemUpdateSettingsSection from './settings/SystemUpdateSettingsSection'
 import AccountSecuritySettingsSection from './settings/AccountSecuritySettingsSection'
 import PwaInstallSettingsSection from './settings/PwaInstallSettingsSection'
 import { SystemProxySettingsSection } from './settings/SystemProxySettingsSection'
@@ -343,6 +345,8 @@ interface SettingsPageProps {
   sidebarVisible?: boolean
   onSidebarClose?: () => void
   initialSection?: SettingsSection
+  /** Fired when the user picks another settings section (for URL deep-link sync). */
+  onSectionChange?: (section: SettingsSection) => void
   /**
    * Electron left inset for the content-column title bar when settings sidebar is overlay.
    * Panel (inline) mode ignores this and uses the compact `DESKTOP_TITLE_GAP` inset.
@@ -368,6 +372,7 @@ function SettingsPageView({
   sidebarVisible = true,
   onSidebarClose,
   initialSection,
+  onSectionChange,
   chromeToolbarReserve: _chromeToolbarReserve = 0,
   sidebarWidth: sidebarWidthProp,
   sidebarDragging: sidebarDraggingProp,
@@ -420,6 +425,10 @@ function SettingsPageView({
   const beginSettingsSidebarDrag = onBeginSidebarDrag ?? internalBeginSidebarDrag
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, settingsSidebarWidth)
   const [section, setSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection))
+  const selectSection = useCallback((next: SettingsSection) => {
+    setSection(next)
+    onSectionChange?.(next)
+  }, [onSectionChange])
   const [search, setSearch] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
@@ -803,6 +812,9 @@ function SettingsPageView({
       case 'multimodal':
         return <MultimodalSettingsSection />
 
+      case 'system_update':
+        return <SystemUpdateSettingsSection initialTab={readSystemUpdateTab()} />
+
       case 'about':
         return <AboutSettingsSection contentFlush={contentFlush} />
 
@@ -827,7 +839,7 @@ function SettingsPageView({
             mode="panel"
             width={settingsSidebarWidth}
             active={section}
-            onSelect={setSection}
+            onSelect={selectSection}
             onBack={onBack}
             search={search}
             onSearchChange={setSearch}
@@ -851,7 +863,7 @@ function SettingsPageView({
           visible={sidebarVisible}
           onClose={onSidebarClose}
           active={section}
-          onSelect={setSection}
+          onSelect={selectSection}
           onBack={onBack}
           search={search}
           onSearchChange={setSearch}
