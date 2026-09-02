@@ -167,11 +167,13 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 | `OPPTRIX_UPDATE_CHANNEL` | 通道，默认 `selfhost` |
 | `OPPTRIX_UPDATE_CDN_BASE` | 热更新 CDN 根，默认 `https://update.opptrix.org` |
 | `OPPTRIX_UPDATE_ENABLED` | `1` 强制开 / `0` 强制关 |
+| `OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS` | 后台定期检查间隔（小时），默认 `24`；服务启动后仍会先做一次检查 |
+| `OPPTRIX_UPDATE_CHECK_INTERVAL_MS` | 同上，毫秒粒度（优先于 `…_HOURS`） |
 | `OPPTRIX_SYSTEM_DIR` | 系统槽位根目录（见 `@opptrix/system-update`） |
 | `OPPTRIX_BASE_VERSION` | Docker/自托管底座身份（如 `opptrix-selfhost-v1.4.0`）；热更新对照 `requires.minBaseImage` |
 | `OPPTRIX_RELEASE_TAG` | 发版标签；未设 `OPPTRIX_BASE_VERSION` 时可作为底座回退 |
 
-检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（固定返回 latest）；包 `{base}/hot/packages/opptrix-runtime-vX.Y.Z.bin` + 同名 `.sha256`。打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
+检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（固定返回 latest）；包 `{base}/hot/packages/opptrix-runtime-vX.Y.Z.bin` + 同名 `.sha256`。请求头 `User-Agent` 为 `Opptrix-system-update/{currentVersion}`，便于更新服务识别实例版本。后台默认每 24 小时自动检查一次（另在进程启动约 2s 后检查）；打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
 
 ### 端点
 
