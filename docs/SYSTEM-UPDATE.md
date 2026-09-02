@@ -68,9 +68,11 @@ npm ci && npm run build && npm prune --omit=dev
 
 | 用途 | URL / 文件名 |
 |------|----------------|
-| 检查最新版 | `GET {base}/hot/check-update` → JSON `latest` |
-| 运行时包 | `{base}/hot/packages/opptrix-runtime-v{VER}.bin`（内容为 tar.gz） |
-| 摘要 sidecar | `{base}/hot/packages/opptrix-runtime-v{VER}.sha256` |
+| 检查最新版 | `GET {base}/hot/check-update` → JSON `latest` + `releases[]`（最近 **8** 版，含 `description`） |
+| 历史版本清单 | `GET {base}/hot/releases` → JSON `{ retention: { max: 8 }, releases: [...] }`（与 check-update 中 `releases` 一致） |
+| 运行时包（按架构） | `{base}/hot/packages/opptrix-runtime-linux-{x64\|arm64}-v{VER}.bin`（内容为 tar.gz） |
+| 摘要 sidecar | 与 `.bin` 同 basename 的 `.sha256` |
+| 遗留 x64 别名 | `{base}/hot/packages/opptrix-runtime-v{VER}.bin` + `.sha256`（与 `linux-x64` 同内容，兼容旧客户端） |
 
 `{base}` 默认 `https://update.opptrix.org`，可用 `OPPTRIX_UPDATE_CDN_BASE` 覆盖。
 
@@ -80,12 +82,15 @@ npm ci && npm run build && npm prune --omit=dev
 
 **示例（1.4.0，CDN）**
 
-| 文件 |
-|------|
-| `opptrix-runtime-v1.4.0.bin` |
-| `opptrix-runtime-v1.4.0.sha256`（**必需**，sidecar 内 basename 为 `.bin`） |
+| 架构 | `.bin` | `.sha256` |
+|------|--------|-----------|
+| linux-x64 | `opptrix-runtime-linux-x64-v1.4.0.bin` | 同名 `.sha256`（sidecar basename 为 `.bin`） |
+| linux-arm64 | `opptrix-runtime-linux-arm64-v1.4.0.bin` | 同上 |
+| 遗留 x64 | `opptrix-runtime-v1.4.0.bin` | `opptrix-runtime-v1.4.0.sha256` |
 
-可选：CI 仍可额外上传 `opptrix-runtime-linux-x64-v1.4.0.tar.gz` 等别名，但 CDN 客户端只拉取上述 `.bin` 对。
+客户端按 `process.arch` 映射为 `linux-x64` 或 `linux-arm64`，优先读 `latest.packages[arch]`；无 `packages` 时 x64 回退 `latest.bin` / `latest.sha256`。
+
+CI 在 `ubuntu-latest`（x64）与 `ubuntu-24.04-arm64` 各打一包后合并上传；Docker 底座镜像为 `linux/amd64` + `linux/arm64` 双架构（GHCR）。
 
 ---
 
@@ -93,8 +98,8 @@ npm ci && npm run build && npm prune --omit=dev
 
 **权威摘要源**是 CDN 上与 `.bin` 成对发布的 **`.sha256` sidecar**：
 
-1. 客户端 `GET …/hot/check-update`，解析 `latest.version` 与 `bin` / `sha256` URL（可省略 URL，按命名约定拼接）。
-2. 下载 `opptrix-runtime-v*.bin` 与 `opptrix-runtime-v*.sha256`。
+1. 客户端 `GET …/hot/check-update`，解析 `latest.version`；按本机架构选择 `latest.packages[linux-x64|linux-arm64]` 的 `bin` / `sha256`（x64 可回退 `latest.bin` / `latest.sha256`）。
+2. 下载对应 `.bin` 与 `.sha256` sidecar。
 3. `verifyArchiveSha256` / `extractUpdateArchive` 读取 sidecar 首行 hex，与本地 `.bin` 摘要比对；**不匹配 → 拒绝解压/应用**。
 
 打包脚本写出的 CDN sidecar 格式：
@@ -108,9 +113,10 @@ npm ci && npm run build && npm prune --omit=dev
 ## 打包
 
 ```bash
-# 推荐：与 CI / Docker 相同
+# 推荐：与 CI / Docker 相同（x64 与 arm64 各打一包）
 npm ci && npm run build && npm prune --omit=dev
-node scripts/pack-opptrix-runtime.mjs --version 1.4.0 --also-platform-name
+node scripts/pack-opptrix-runtime.mjs --version 1.4.0 --platform-key linux-x64 --also-platform-name
+node scripts/pack-opptrix-runtime.mjs --version 1.4.0 --platform-key linux-arm64 --also-platform-name
 
 # 帮助 / 演练
 node scripts/pack-opptrix-runtime.mjs --help
@@ -124,6 +130,7 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 | `OPPTRIX_RELEASE_TAG` | 打包时若形如 `opptrix-selfhost-v*` 则用作 minBaseImage |
 | `--root` / `OPPTRIX_PACK_ROOT` | 待打包树（默认仓库根） |
 | `--out-dir` / `OPPTRIX_PACK_OUT` | 输出目录（默认 `dist-runtime/`） |
+| `--platform-key` / `OPPTRIX_PACK_PLATFORM_KEY` | `linux-x64` 或 `linux-arm64`（默认随 `process.arch`） |
 | `--also-platform-name` | 额外写出 `opptrix-runtime-{platform}-{arch}-v*.tar.gz` |
 | `--dry-run` | 只打印计划 |
 | `--skip-built-check` | 跳过 dist / node_modules 检查 |
@@ -138,15 +145,17 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 
 打 tag `opptrix-selfhost-v*`（或手动触发 workflow）后，`.github/workflows/publish-runtime-assets.yml` 会：
 
-1. **打包**：`node scripts/pack-opptrix-runtime.mjs --version X.Y.Z --also-platform-name`  
-   产出 `.bin`、`.sha256`、`.tar.gz`（及 linux-x64 别名）。
+1. **打包（矩阵）**：`ubuntu-latest` + `ubuntu-24.04-arm64` 上各执行 `pack-opptrix-runtime.mjs --platform-key … --also-platform-name`，合并产出 per-arch `.bin` / `.sha256`、遗留 x64 别名与 `.tar.gz`。
 2. **CDN（主通道）**：`scripts/sync-hot-to-r2.mjs` 上传至 Cloudflare R2：
-   - `hot/packages/opptrix-runtime-vX.Y.Z.bin`（`application/octet-stream`）
-   - `hot/packages/opptrix-runtime-vX.Y.Z.sha256`
-   - `hot/check-update`（`application/json`，含 `latest` 与 CDN URL）
-3. **GitHub Release**：附件含 `.bin`、`.sha256`、`.tar.gz`（及 linux-x64 别名）供归档/镜像 workflow。
+   - `hot/packages/opptrix-runtime-linux-{x64,arm64}-vX.Y.Z.bin` + `.sha256`
+   - `hot/packages/opptrix-runtime-vX.Y.Z.bin` + `.sha256`（x64 遗留别名）
+   - `hot/check-update`（`application/json`，含 `latest`、`releases[]`、`latest.description` 与 CDN URL）
+   - `hot/releases`（同上 `releases[]`，供 CLI `opptrix runtime list` / `use <版本>` 选用历史版）
+3. **GitHub Release**：附件含上述全部架构产物供归档/镜像 workflow。
 4. **Gitee Release**：`scripts/upload-runtime-gitee.mjs` 上传相同附件集（需 `GITEE_TOKEN`）。
 5. **可选**：配置 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` 时 purge `/hot/*` 相关 URL；CI 末尾 smoke `GET …/hot/check-update`。
+
+发版时 `sync-hot-to-r2.mjs` 会从 `docs/releases/{version}.md` 的「## 新功能 / ## 修复」提取 `description`，合并 CDN 上已有清单并截断为最近 8 版。
 
 **自托管实例默认从 CDN 拉热更新**（`OPPTRIX_UPDATE_CDN_BASE`，默认 `https://update.opptrix.org`），不再依赖 Release 附件列表。
 
@@ -253,7 +262,7 @@ Docker：`scripts/docker-entrypoint.sh` + tini。
 | `OPPTRIX_UPDATE_CHECK_INTERVAL_MS` | 同上，毫秒粒度（优先于 `…_HOURS`） |
 | `OPPTRIX_DESKTOP=1` | 桌面端默认关热更新 |
 
-长运行服务（Docker / 自托管）在进程启动约 2s 后会检查一次远程 `check-update`，之后按上述间隔定时复查；请求 CDN 时 `User-Agent` 为 `Opptrix-system-update/{currentVersion}`，便于统计各版本实例。
+长运行服务（Docker / 自托管）在进程启动约 2s 后会检查一次远程 `check-update`，之后按上述间隔定时复查；请求 CDN 时 `User-Agent` 为 `Opptrix-system-update/{currentVersion} ({linux-x64|linux-arm64})`，便于统计各版本与架构实例。
 
 API 细节见 `docs/API.md`。
 

@@ -38,6 +38,7 @@ import {
   type ChannelEnv,
   type HotLatestRelease,
 } from './system-update-channel.js'
+import { setAvailableReleaseDescription } from './system-update-release-cache.js'
 import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
 import { downloadToFile } from './system-update-download.js'
 import {
@@ -98,8 +99,11 @@ export async function runUpdateCheck(opts?: {
     }
 
     if (!latest || !shouldOfferLatestVersion(state, latest.version, current)) {
+      setAvailableReleaseDescription(null, null)
       return buildSystemUpdateStatus(readState())
     }
+
+    setAvailableReleaseDescription(latest.version, latest.description)
 
     void startSilentDownload(latest, env).catch(() => {})
     return buildSystemUpdateStatus(readState())

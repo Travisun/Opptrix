@@ -173,13 +173,13 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 | `OPPTRIX_BASE_VERSION` | Docker/自托管底座身份（如 `opptrix-selfhost-v1.4.0`）；热更新对照 `requires.minBaseImage` |
 | `OPPTRIX_RELEASE_TAG` | 发版标签；未设 `OPPTRIX_BASE_VERSION` 时可作为底座回退 |
 
-检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（固定返回 latest）；包 `{base}/hot/packages/opptrix-runtime-vX.Y.Z.bin` + 同名 `.sha256`。请求头 `User-Agent` 为 `Opptrix-system-update/{currentVersion}`，便于更新服务识别实例版本。后台默认每 24 小时自动检查一次（另在进程启动约 2s 后检查）；打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
+检查与下载：`GET {OPPTRIX_UPDATE_CDN_BASE}/hot/check-update`（返回 `latest` + 最近 **8** 版 `releases[]`，每版含 `description.features` / `description.fixes` 与 `packages.linux-x64` / `packages.linux-arm64`）；历史版本清单亦可通过 `GET …/hot/releases`。CLI `opptrix runtime list` 展示说明并支持 `use <版本>` 选用保留版本。客户端按本机架构下载对应 `{base}/hot/packages/opptrix-runtime-linux-{x64|arm64}-vX.Y.Z.bin` + `.sha256`（x64 可回退遗留 `opptrix-runtime-vX.Y.Z.bin`）。请求头 `User-Agent` 为 `Opptrix-system-update/{currentVersion} ({linux-x64|linux-arm64})`。后台默认每 24 小时自动检查一次（另在进程启动约 2s 后检查）；`GET /api/system-update/status` 在发现新版本时附带 `availableDescription`（来自 CDN）。打包、信任模型与槽位流程见 **[`docs/SYSTEM-UPDATE.md`](./SYSTEM-UPDATE.md)**。
 
 ### 端点
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/system-update/status` | `{ enabled, currentVersion, availableVersion, readyToApply, needsBaseRefresh, baseRefreshHint, cliCommand, updateBlocked, blockedVersions, lastBlockedReason, uiPhase, download, firstBoot, error, … }` |
+| GET | `/api/system-update/status` | `{ enabled, currentVersion, availableVersion, availableDescription?, readyToApply, needsBaseRefresh, baseRefreshHint, cliCommand, updateBlocked, blockedVersions, lastBlockedReason, uiPhase, download, firstBoot, error, … }` |
 | POST | `/api/system-update/check` | 立即检查；发现可用新版本（非封锁）则后台静默下载 latest |
 | POST | `/api/system-update/apply` | 确认应用（账户已创建时需登录）；成功则返回后进程退出 42；若需底座升级则 **409** `needs_base_refresh`；封锁版本不可应用 |
 | POST | `/api/system-update/rollback` | 回退到上一槽位（需登录）；返回后进程退出 44 |

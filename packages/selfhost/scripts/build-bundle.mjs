@@ -21,6 +21,7 @@ const FILES = [
   { src: 'scripts/docker-entrypoint.sh', dest: 'scripts/docker-entrypoint.sh' },
   { src: 'scripts/system-boot.mjs', dest: 'scripts/system-boot.mjs' },
   { src: 'scripts/opptrix-node-supervisor.mjs', dest: 'scripts/opptrix-node-supervisor.mjs' },
+  { src: 'scripts/runtime-update-cli.mjs', dest: 'scripts/runtime-update-cli.mjs' },
 ]
 
 function main() {

@@ -91,6 +91,10 @@ function collectAssets(dir, version) {
   const names = [
     `opptrix-runtime-v${v}.bin`,
     `opptrix-runtime-v${v}.sha256`,
+    `opptrix-runtime-linux-x64-v${v}.bin`,
+    `opptrix-runtime-linux-x64-v${v}.sha256`,
+    `opptrix-runtime-linux-arm64-v${v}.bin`,
+    `opptrix-runtime-linux-arm64-v${v}.sha256`,
     `opptrix-runtime-v${v}.tar.gz`,
     `opptrix-runtime-v${v}.tar.gz.sha256`,
     `opptrix-runtime-linux-x64-v${v}.tar.gz`,

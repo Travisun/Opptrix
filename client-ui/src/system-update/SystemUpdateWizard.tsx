@@ -105,6 +105,15 @@ const useStyles = makeStyles({
     color: opptrixCssVars.accent,
     letterSpacing: '0.02em',
   },
+  notes: {
+    width: '100%',
+    textAlign: 'left',
+    margin: 0,
+    padding: '0 0 0 1.1em',
+    fontSize: 'var(--opptrix-font-base)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.55,
+  },
   spinnerWrap: {
     marginTop: '4px',
     display: 'flex',
@@ -170,6 +179,11 @@ export default function SystemUpdateWizard() {
   const progressMessage = progressSlice.message
   const canRollback = Boolean(status.backupVersion)
   const actionBusy = applying || rollingBack
+  const releaseNotes = status.availableDescription
+  const noteItems = [
+    ...(releaseNotes?.features ?? []),
+    ...(releaseNotes?.fixes ?? []),
+  ].slice(0, 5)
 
   let title = '发现新版本'
   let lead = '新版本已准备就绪。确认后即可完成更新，你的对话与本地数据会保留。'
@@ -249,6 +263,13 @@ export default function SystemUpdateWizard() {
           </Text>
         )}
         <Text className={s.lead} block>{lead}</Text>
+        {noteItems.length > 0 && status.readyToApply && !needsBase && !blocked && (
+          <ul className={s.notes}>
+            {noteItems.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        )}
         {showBaseRefresh && (
           <Text className={s.cli} block>{cli}</Text>
         )}

@@ -54,8 +54,11 @@ export {
   selfhostTagForVersion,
   compareSemver,
   hotCheckUpdateUrl,
+  hotReleasesUrl,
   hotPackageUrls,
   parseHotLatestPayload,
+  parseHotReleasesPayload,
+  fetchHotReleases,
 } from './system-update-channel.js'
 
 async function upgradeLockOnRequest(

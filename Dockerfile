@@ -192,7 +192,8 @@ COPY --from=build /app /app
 RUN chmod +x /app/scripts/docker-entrypoint.sh \
   && chmod +x /app/scripts/system-boot.mjs \
   && chmod +x /app/scripts/opptrix-node-supervisor.mjs \
-  && chmod +x /app/scripts/docker-select-mirrors.mjs
+  && chmod +x /app/scripts/docker-select-mirrors.mjs \
+  && chmod +x /app/scripts/runtime-update-cli.mjs
 
 ENV NODE_ENV=production \
   STOCK_RESEARCH_HOST=0.0.0.0 \

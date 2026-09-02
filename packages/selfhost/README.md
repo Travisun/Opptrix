@@ -165,16 +165,32 @@ opptrix down          # 删容器但默认保留数据卷
 
 ## 场景三：升级 Opptrix 实例与 CLI
 
-版本分轨：`opptrix-selfhost-v*` 是应用快照（并对应 GHCR 镜像）；`selfhost-v*` 只发布 CLI 包。
+版本分轨：`opptrix-selfhost-v*` 是**底座**（Docker 镜像）；runtime semver 是**卷内热更新**；`selfhost-v*` 只发布 CLI 包。
 
 ```bash
-opptrix tags                       # 查看可升级 / 可回退的应用快照
-opptrix use opptrix-selfhost-v1.3.6 && opptrix up   # 切到指定版本并优先 pull
-npm update -g @opptrix/selfhost    # 仅升级管理命令本身（selfhost-v*）
-opptrix update                     # 优先拉新预构建镜像；保留配置与卷
+# 底座
+opptrix base list
+opptrix base use 1.4.1 --apply              # 选定并拉取镜像、重建容器
+opptrix base use 1.4.0 --apply --allow-downgrade   # 回退底座（需显式确认）
+
+# 运行时（始终经 Docker 内脚本，不依赖 8711 API）
+opptrix runtime list
+opptrix runtime use latest --apply --yes    # staging + 激活 + restart
+opptrix runtime rollback --yes
+
+# 联合
+opptrix update status
+opptrix update all --yes                    # 按 CDN minBaseImage 先底座后 runtime
+
+# 兼容旧命令
+opptrix tags          # 等同 opptrix base list
+opptrix use …         # 等同 opptrix base use
+opptrix update        # 等同 opptrix base apply
+
+npm update -g @opptrix/selfhost             # 仅升级 CLI 包（selfhost-v*）
 ```
 
-**效果：** 应用与 CLI 分轨升级/回退；**沿用**原 `compose.env`、挂载 override、数据卷 `opptrix-home`（或旧版 `opptrix-data` / `opptrix-models` / `opptrix-system`）。已有核心模型跳过下载；强制重下见 `OPPTRIX_FORCE_MODEL_FETCH=1`。默认不会静默跟 `main`。维护者打 `opptrix-selfhost-v*` 后 CI 推送镜像到 `ghcr.io/travisun/opptrix`；国内 `opptrix up` 会对 `ghcr.nju.edu.cn` / `ghcr.1ms.run` 测速后拉取。
+**效果：** 应用与 CLI 分轨升级/回退；**沿用**原 `compose.env`、挂载 override、数据卷 `opptrix-home`（用户数据在 `/opptrix/private`，不在 runtime 包内）。审计日志：`<部署目录>/.opptrix/update-audit.jsonl`。
 
 **热更新 vs `opptrix update`：** 产品内「系统更新」在**不换镜像**的前提下，把新运行时解压进 system 槽位并切换 `boot`（协议见 [SYSTEM-UPDATE.md](https://github.com/Travisun/Opptrix/blob/main/docs/SYSTEM-UPDATE.md)）。当提示需要刷新**底座 / 运行环境 / Node** 时，请用本 CLI 的 **`opptrix update`**：它重建容器、换镜像，但默认保留命名卷与 operator 挂载。启动时若镜像种子版本高于当前 boot，会**冲掉**旧热更新 pending，以镜像 `/app` 晋升为 pending 并在底座满足 `minBaseImage` 时 `activate` → **first-boot 库迁移与 postActivate 钩子**。只有 `opptrix down --volumes` 才会删卷。
 

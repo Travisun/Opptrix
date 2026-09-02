@@ -3784,6 +3784,8 @@ export type SystemUpdateStatus = {
   blockedVersions?: string[]
   updateBlocked?: boolean
   lastBlockedReason?: string | null
+  /** Release notes for availableVersion (from CDN). */
+  availableDescription?: { features: string[]; fixes: string[] } | null
 }
 
 export type SystemUpdateApplyResult = {
@@ -3812,6 +3814,7 @@ export const SYSTEM_UPDATE_DISABLED: SystemUpdateStatus = {
   blockedVersions: [],
   updateBlocked: false,
   lastBlockedReason: null,
+  availableDescription: null,
 }
 
 export async function getSystemUpdateStatus(): Promise<SystemUpdateStatus> {

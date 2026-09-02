@@ -22,12 +22,15 @@ import {
 } from '../apps/desktop/scripts/lib/r2-client.mjs'
 import {
   HOT_CHECK_UPDATE_KEY,
-  buildCheckUpdatePayload,
+  HOT_RELEASES_KEY,
   contentTypeForHotObjectKey,
   hotCheckUpdateUrl,
+  hotReleasesUrl,
   normalizeCdnBase,
-  resolveHotUploadPlan,
+  prepareHotReleaseSync,
+  resolveHotMultiArchUploadPlan,
 } from './lib/hot-cdn.mjs'
+import { loadReleaseNotesForVersion } from './lib/release-notes.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -108,26 +111,42 @@ async function main() {
   }
 
   const cdnBase = normalizeCdnBase(opts.cdnBase)
-  const plan = resolveHotUploadPlan(opts.dir, opts.version)
-  const payload = buildCheckUpdatePayload({
+  const plan = resolveHotMultiArchUploadPlan(opts.dir, opts.version)
+  const description = loadReleaseNotesForVersion(plan.version)
+  const { releasesManifest, checkUpdate: payload } = await prepareHotReleaseSync({
     version: plan.version,
     cdnBase,
-    binSize: plan.binSize,
+    packages: plan.packages,
+    description,
     nodeRange: process.env.OPPTRIX_RUNTIME_NODE_RANGE?.trim(),
     minBaseImage: process.env.OPPTRIX_MIN_BASE_IMAGE?.trim(),
   })
   const checkUpdateJson = `${JSON.stringify(payload, null, 2)}\n`
+  const releasesJson = `${JSON.stringify(releasesManifest, null, 2)}\n`
 
   console.log(`[r2:hot] version=${plan.version} cdn=${cdnBase}`)
-  console.log(`[r2:hot] bin key=${plan.files.packageKey} (${plan.binSize} bytes)`)
-  console.log(`[r2:hot] sha256 key=${plan.files.sha256Key}`)
+  for (const archPlan of plan.archPlans) {
+    console.log(
+      `[r2:hot] ${archPlan.archKey} key=${archPlan.files.packageKey} (${archPlan.binSize} bytes)`,
+    )
+  }
+  if (plan.legacy) {
+    console.log(`[r2:hot] legacy x64 alias key=${plan.legacy.packageKey}`)
+  }
   console.log(`[r2:hot] manifest key=${HOT_CHECK_UPDATE_KEY}`)
+  console.log(`[r2:hot] releases key=${HOT_RELEASES_KEY} (${releasesManifest.releases.length} versions, max ${releasesManifest.retention.max})`)
   console.log(`[r2:hot] check-update URL=${hotCheckUpdateUrl(cdnBase)}`)
+  console.log(`[r2:hot] releases URL=${hotReleasesUrl(cdnBase)}`)
+  if (description.features.length || description.fixes.length) {
+    console.log(`[r2:hot] release notes: ${description.features.length} features, ${description.fixes.length} fixes`)
+  }
 
   if (opts.dryRun) {
     console.log('[r2:hot] dry-run: no upload')
     console.log('[r2:hot] check-update payload preview:')
     process.stdout.write(checkUpdateJson)
+    console.log('[r2:hot] releases payload preview:')
+    process.stdout.write(releasesJson)
     process.exit(0)
   }
 
@@ -138,31 +157,63 @@ async function main() {
   await verifyR2Credentials(client, r2Env.bucket)
   console.log('[r2:hot] credentials OK')
 
-  await putObjectFile(
-    client,
-    r2Env.bucket,
-    plan.files.packageKey,
-    plan.files.binPath,
-    contentTypeForHotObjectKey(plan.files.packageKey),
-  )
-  console.log(`[r2:hot] uploaded ${plan.files.packageKey}`)
-  await assertObjectPresent(client, r2Env.bucket, plan.files.packageKey, plan.binSize)
+  /** @type {Array<{ packageKey: string, localPath: string, expectedSize?: number }>} */
+  const uploads = []
+  for (const archPlan of plan.archPlans) {
+    uploads.push({
+      packageKey: archPlan.files.packageKey,
+      localPath: archPlan.files.binPath,
+      expectedSize: archPlan.binSize,
+    })
+    uploads.push({
+      packageKey: archPlan.files.sha256Key,
+      localPath: archPlan.files.sha256Path,
+    })
+  }
+  if (plan.legacy) {
+    const legacyBin = plan.legacy.binPath
+    const legacyAlreadyUploaded = plan.archPlans.some(
+      (p) => p.archKey === 'linux-x64' && p.files.binPath === legacyBin,
+    )
+    if (!legacyAlreadyUploaded) {
+      uploads.push({
+        packageKey: plan.legacy.packageKey,
+        localPath: plan.legacy.binPath,
+        expectedSize: fs.statSync(plan.legacy.binPath).size,
+      })
+      uploads.push({
+        packageKey: plan.legacy.sha256Key,
+        localPath: plan.legacy.sha256Path,
+      })
+    }
+  }
 
-  const sha256Size = fs.statSync(plan.files.sha256Path).size
-  await putObjectFile(
-    client,
-    r2Env.bucket,
-    plan.files.sha256Key,
-    plan.files.sha256Path,
-    contentTypeForHotObjectKey(plan.files.sha256Key),
-  )
-  console.log(`[r2:hot] uploaded ${plan.files.sha256Key}`)
-  await assertObjectPresent(client, r2Env.bucket, plan.files.sha256Key, sha256Size)
+  for (const item of uploads) {
+    await putObjectFile(
+      client,
+      r2Env.bucket,
+      item.packageKey,
+      item.localPath,
+      contentTypeForHotObjectKey(item.packageKey),
+    )
+    console.log(`[r2:hot] uploaded ${item.packageKey}`)
+    await assertObjectPresent(
+      client,
+      r2Env.bucket,
+      item.packageKey,
+      item.expectedSize,
+    )
+  }
 
   const manifestType = contentTypeForHotObjectKey(HOT_CHECK_UPDATE_KEY)
   await putObjectText(client, r2Env.bucket, HOT_CHECK_UPDATE_KEY, checkUpdateJson, manifestType)
   console.log(`[r2:hot] uploaded ${HOT_CHECK_UPDATE_KEY}`)
   await assertObjectPresent(client, r2Env.bucket, HOT_CHECK_UPDATE_KEY)
+
+  const releasesType = contentTypeForHotObjectKey(HOT_RELEASES_KEY)
+  await putObjectText(client, r2Env.bucket, HOT_RELEASES_KEY, releasesJson, releasesType)
+  console.log(`[r2:hot] uploaded ${HOT_RELEASES_KEY}`)
+  await assertObjectPresent(client, r2Env.bucket, HOT_RELEASES_KEY)
 
   console.log('[r2:hot] sync complete')
 }

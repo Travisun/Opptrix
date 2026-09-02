@@ -2,6 +2,12 @@
  * CDN hot-update channel for selfhost runtime packages.
  * Default base: https://update.opptrix.org
  */
+import {
+  resolveLinuxRuntimeArchKey,
+  runtimeArchBinBasename,
+  runtimeArchSha256Basename,
+  type LinuxRuntimeArchKey,
+} from './system-update-arch.js'
 import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
 
 export const DEFAULT_UPDATE_CDN_BASE = 'https://update.opptrix.org'
@@ -13,6 +19,11 @@ export interface ChannelEnv {
   channel: string
 }
 
+export interface HotReleaseDescription {
+  features: string[]
+  fixes: string[]
+}
+
 export interface HotLatestRelease {
   version: string
   binUrl: string
@@ -21,6 +32,16 @@ export interface HotLatestRelease {
   sha256Name: string
   size: number | null
   publishedAt: string | null
+  archKey: LinuxRuntimeArchKey
+  description: HotReleaseDescription
+}
+
+export interface HotReleaseCatalogEntry extends HotLatestRelease {
+  requires: {
+    node: string | null
+    minBaseImage: string | null
+    platforms: LinuxRuntimeArchKey[]
+  }
 }
 
 export function readChannelEnv(): ChannelEnv {
@@ -71,6 +92,28 @@ export function hotCheckUpdateUrl(cdnBase: string): string {
   return `${normalizeCdnBase(cdnBase)}/hot/check-update`
 }
 
+export function hotReleasesUrl(cdnBase: string): string {
+  return `${normalizeCdnBase(cdnBase)}/hot/releases`
+}
+
+export function parseHotReleaseDescription(raw: unknown): HotReleaseDescription {
+  if (typeof raw !== 'object' || raw === null) {
+    return { features: [], fixes: [] }
+  }
+  const row = raw as JsonRecord
+  const features = Array.isArray(row.features)
+    ? row.features
+      .filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
+      .map((s) => s.trim())
+    : []
+  const fixes = Array.isArray(row.fixes)
+    ? row.fixes
+      .filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
+      .map((s) => s.trim())
+    : []
+  return { features, fixes }
+}
+
 /** CDN package URLs — `opptrix-runtime-v{version}.bin` + `.sha256`. */
 export function hotPackageUrls(version: string, cdnBase: string): {
   binUrl: string
@@ -100,27 +143,66 @@ function resolveCdnUrl(cdnBase: string, ref: string): string {
 
 type JsonRecord = Record<string, unknown>
 
-/** Defensive parse of `GET …/hot/check-update` payload. */
-export function parseHotLatestPayload(
-  raw: unknown,
+function parsePackageEntry(
+  pkg: unknown,
   cdnBase: string,
+): { binUrl: string; sha256Url: string; size: number | null } | null {
+  if (typeof pkg !== 'object' || pkg === null) return null
+  const row = pkg as JsonRecord
+  const binRef = typeof row.bin === 'string' && row.bin.trim() ? row.bin.trim() : null
+  const shaRef =
+    (typeof row.sha256 === 'string' && row.sha256.trim() ? row.sha256.trim() : null)
+    ?? (typeof row.sha === 'string' && row.sha.trim() ? row.sha.trim() : null)
+  if (!binRef || !shaRef) return null
+  const size =
+    typeof row.size === 'number' && Number.isFinite(row.size) && row.size >= 0
+      ? row.size
+      : null
+  return {
+    binUrl: resolveCdnUrl(cdnBase, binRef),
+    sha256Url: resolveCdnUrl(cdnBase, shaRef),
+    size,
+  }
+}
+
+function basenameFromUrl(url: string, fallback: string): string {
+  const segment = url.split('/').pop()?.split('?')[0]?.trim()
+  return segment || fallback
+}
+
+function parseReleaseRowPackage(
+  row: JsonRecord,
+  cdnBase: string,
+  archKey: LinuxRuntimeArchKey,
+  version: string,
 ): HotLatestRelease | null {
-  if (typeof raw !== 'object' || raw === null) return null
-  const root = raw as JsonRecord
-  const latest = root.latest
-  if (typeof latest !== 'object' || latest === null) return null
-  const row = latest as JsonRecord
+  const archDefaults = {
+    binName: runtimeArchBinBasename(version, archKey),
+    sha256Name: runtimeArchSha256Basename(version, archKey),
+  }
 
-  const versionRaw =
-    (typeof row.version === 'string' && row.version)
-    || (typeof row.tag === 'string' && row.tag)
-    || null
-  if (!versionRaw) return null
+  const packages = row.packages
+  if (typeof packages === 'object' && packages !== null) {
+    const selected = parsePackageEntry((packages as JsonRecord)[archKey], cdnBase)
+    if (selected) {
+      return {
+        version,
+        binUrl: selected.binUrl,
+        sha256Url: selected.sha256Url,
+        binName: basenameFromUrl(selected.binUrl, archDefaults.binName),
+        sha256Name: basenameFromUrl(selected.sha256Url, archDefaults.sha256Name),
+        size: selected.size,
+        publishedAt:
+          typeof row.publishedAt === 'string' && row.publishedAt.trim()
+            ? row.publishedAt.trim()
+            : null,
+        archKey,
+        description: parseHotReleaseDescription(row.description),
+      }
+    }
+  }
 
-  let version = versionRaw.trim().replace(/^v/, '')
-  const fromTag = parseSelfhostTag(versionRaw)
-  if (fromTag) version = fromTag.version
-  if (!parseSemver(version)) return null
+  if (archKey !== 'linux-x64') return null
 
   const defaults = hotPackageUrls(version, cdnBase)
   const binRef = typeof row.bin === 'string' && row.bin.trim() ? row.bin.trim() : null
@@ -148,7 +230,91 @@ export function parseHotLatestPayload(
     sha256Name: defaults.sha256Name,
     size,
     publishedAt,
+    archKey,
+    description: parseHotReleaseDescription(row.description),
   }
+}
+
+/** Defensive parse of `GET …/hot/check-update` payload. */
+export function parseHotLatestPayload(
+  raw: unknown,
+  cdnBase: string,
+  opts?: { archKey?: LinuxRuntimeArchKey },
+): HotLatestRelease | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const root = raw as JsonRecord
+  const latest = root.latest
+  if (typeof latest !== 'object' || latest === null) return null
+  const row = latest as JsonRecord
+
+  const versionRaw =
+    (typeof row.version === 'string' && row.version)
+    || (typeof row.tag === 'string' && row.tag)
+    || null
+  if (!versionRaw) return null
+
+  let version = versionRaw.trim().replace(/^v/, '')
+  const fromTag = parseSelfhostTag(versionRaw)
+  if (fromTag) version = fromTag.version
+  if (!parseSemver(version)) return null
+
+  const archKey = opts?.archKey ?? resolveLinuxRuntimeArchKey()
+  return parseReleaseRowPackage(row, cdnBase, archKey, version)
+}
+
+/** Parse one catalog entry from hot/releases or check-update releases[]. */
+export function parseHotReleaseCatalogEntry(
+  raw: unknown,
+  cdnBase: string,
+  opts?: { archKey?: LinuxRuntimeArchKey },
+): HotReleaseCatalogEntry | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const row = raw as JsonRecord
+  const versionRaw = typeof row.version === 'string' ? row.version.trim() : ''
+  const version = versionRaw.replace(/^v/, '')
+  if (!parseSemver(version)) return null
+
+  const archKey = opts?.archKey ?? resolveLinuxRuntimeArchKey()
+  const parsed = parseReleaseRowPackage(row, cdnBase, archKey, version)
+  if (!parsed) return null
+
+  const requiresRaw = row.requires
+  const requires = typeof requiresRaw === 'object' && requiresRaw !== null
+    ? requiresRaw as JsonRecord
+    : {}
+
+  const platformsRaw = requires.platforms
+  const platforms = Array.isArray(platformsRaw)
+    ? platformsRaw.filter((p): p is LinuxRuntimeArchKey => p === 'linux-x64' || p === 'linux-arm64')
+    : [archKey]
+
+  return {
+    ...parsed,
+    requires: {
+      node: typeof requires.node === 'string' ? requires.node : null,
+      minBaseImage: typeof requires.minBaseImage === 'string' ? requires.minBaseImage : null,
+      platforms,
+    },
+  }
+}
+
+/** Parse hot/releases manifest (newest first, max 8). */
+export function parseHotReleasesPayload(
+  raw: unknown,
+  cdnBase: string,
+  opts?: { archKey?: LinuxRuntimeArchKey },
+): HotReleaseCatalogEntry[] {
+  if (typeof raw !== 'object' || raw === null) return []
+  const root = raw as JsonRecord
+  const releases = root.releases
+  if (!Array.isArray(releases)) return []
+  /** @type {HotReleaseCatalogEntry[]} */
+  const out = []
+  for (const row of releases) {
+    const entry = parseHotReleaseCatalogEntry(row, cdnBase, opts)
+    if (entry) out.push(entry)
+  }
+  return out
 }
 
 async function fetchCheckUpdateJson(
@@ -191,5 +357,20 @@ export async function fetchHotLatest(
   const timeoutMs = opts?.timeoutMs ?? 25_000
   const url = hotCheckUpdateUrl(env.cdnBase)
   const raw = await fetchCheckUpdateJson(url, timeoutMs, opts?.signal, opts?.userAgent)
-  return parseHotLatestPayload(raw, env.cdnBase)
+  return parseHotLatestPayload(raw, env.cdnBase, {
+    archKey: resolveLinuxRuntimeArchKey(),
+  })
+}
+
+/** Fetch retained release catalog from CDN hot/releases. */
+export async function fetchHotReleases(
+  env: ChannelEnv = readChannelEnv(),
+  opts?: { timeoutMs?: number; signal?: AbortSignal; userAgent?: string },
+): Promise<HotReleaseCatalogEntry[]> {
+  const timeoutMs = opts?.timeoutMs ?? 25_000
+  const url = hotReleasesUrl(env.cdnBase)
+  const raw = await fetchCheckUpdateJson(url, timeoutMs, opts?.signal, opts?.userAgent)
+  return parseHotReleasesPayload(raw, env.cdnBase, {
+    archKey: resolveLinuxRuntimeArchKey(),
+  })
 }

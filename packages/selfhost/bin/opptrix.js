@@ -44,6 +44,9 @@ import {
   resolveMirrorProfile,
 } from '../src/mirrors.mjs'
 import { flagString, flagTrue, parseArgv } from '../src/parse.mjs'
+import { handleBaseCommand } from '../src/base-commands.mjs'
+import { handleRuntimeCommand } from '../src/runtime-commands.mjs'
+import { handleUpdateCommand } from '../src/update-commands.mjs'
 import {
   ensureComposeEnv,
   isFullSourceTree,
@@ -79,8 +82,11 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
 命令:
   init              生成 compose.env，保存默认镜像偏好
   doctor            检查 Docker / Compose / 构建上下文
-  tags              列出可用应用快照（opptrix-selfhost-v* ≥ 最低版本）
-  use <tag|main>    写入本机偏好版本；加 --apply 立即拉取/启动
+  base              底座（Docker 镜像）list / status / use / apply
+  runtime           运行时热更新 list / status / use / apply / rollback
+  update            联合 status / audit / all（legacy: 等同 base apply）
+  tags              [别名] opptrix base list
+  use <tag|main>    [别名] opptrix base use
   up                优先拉取预构建镜像并启动（失败或 --build 再本地编译）
   start             启动已有容器（不重建）
   stop              停止容器
@@ -88,9 +94,7 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   env               管理 compose.env 运行时变量（set / get / list / unset）
   down              停止并移除容器（默认保留数据卷；加 --volumes 才会删卷）
   build             仅本地构建镜像
-  update            升级运行环境/镜像/Node 底座：拉新预构建并重建容器；
-                    默认保留数据卷 / 模型卷 / 系统槽位卷与挂载，不会清空挂载数据。
-                    应用内热更新另见产品内提示（与本命令分工不同）
+  update            [legacy] 等同 opptrix base apply（拉预构建镜像并重建容器）
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
   health            探测 http://127.0.0.1:8711/api/health
@@ -105,6 +109,8 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
                         也可读 .opptrix.json / OPPTRIX_BUILD_MIRROR）
   --ref <tag|main>      本次使用的应用版本（写入前可用 use 固定偏好）
   --apply               use 后直接 ensure + 启动
+  --allow-downgrade     允许底座降到更低 opptrix-selfhost-v*
+  --yes, -y             runtime apply/rollback/update all 跳过确认
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
   --build               强制本地编译镜像（不优先 pull 预构建）
   --no-build            本地路径下 up 时不加 --build（已有镜像时）
@@ -127,8 +133,11 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
 
 示例:
   opptrix init
-  opptrix tags
-  opptrix use ${meta.preferredAppTag}
+  opptrix base list
+  opptrix base use 1.4.1 --apply
+  opptrix runtime list
+  opptrix runtime use latest --apply --yes
+  opptrix update status
   opptrix up
   opptrix up --build
   opptrix up --ref ${meta.preferredAppTag}
@@ -822,10 +831,20 @@ async function main() {
         return await cmdInit(parsed)
       case 'doctor':
         return await cmdDoctor(parsed)
+      case 'base':
+        return await handleBaseCommand(parsed, cmdUpOrUpdate)
+      case 'runtime':
+        return await handleRuntimeCommand(parsed)
       case 'tags':
-        return await cmdTags(parsed)
+        return await handleBaseCommand(
+          { ...parsed, command: 'base', args: ['list', ...parsed.args] },
+          cmdUpOrUpdate,
+        )
       case 'use':
-        return await cmdUse(parsed)
+        return await handleBaseCommand(
+          { ...parsed, command: 'base', args: ['use', ...parsed.args] },
+          cmdUpOrUpdate,
+        )
       case 'up':
         return await cmdUp(parsed)
       case 'start': {
@@ -867,7 +886,10 @@ async function main() {
         })
       }
       case 'update':
-        return await cmdUpdate(parsed)
+        if (!parsed.args.length || parsed.args[0] === 'apply' || parsed.args[0] === 'up') {
+          return await cmdUpOrUpdate(parsed, { update: true })
+        }
+        return await handleUpdateCommand(parsed, cmdUpOrUpdate)
       case 'logs':
         return await cmdLogs(parsed)
       case 'status':

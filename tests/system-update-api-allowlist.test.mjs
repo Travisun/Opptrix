@@ -108,10 +108,12 @@ describe('channel tag + CDN helpers', () => {
         },
       },
       base,
+      { archKey: 'linux-x64' },
     )
     assert.ok(parsed)
     assert.equal(parsed.version, '1.4.0')
     assert.equal(parsed.size, 123)
+    assert.equal(parsed.archKey, 'linux-x64')
     assert.equal(
       parsed.binUrl,
       'https://update.opptrix.org/hot/packages/opptrix-runtime-v1.4.0.bin',
@@ -120,22 +122,111 @@ describe('channel tag + CDN helpers', () => {
       parsed.sha256Url,
       'https://update.opptrix.org/hot/packages/opptrix-runtime-v1.4.0.sha256',
     )
+    assert.deepEqual(parsed.description, { features: [], fixes: [] })
+
+    const withNotes = channel.parseHotLatestPayload(
+      {
+        latest: {
+          version: '1.4.0',
+          packages: {
+            'linux-x64': {
+              bin: '/hot/packages/opptrix-runtime-linux-x64-v1.4.0.bin',
+              sha256: '/hot/packages/opptrix-runtime-linux-x64-v1.4.0.sha256',
+              size: 123,
+            },
+          },
+          description: { features: ['新功能 A'], fixes: ['修复 B'] },
+        },
+      },
+      base,
+      { archKey: 'linux-x64' },
+    )
+    assert.ok(withNotes)
+    assert.deepEqual(withNotes.description, { features: ['新功能 A'], fixes: ['修复 B'] })
+
+    const arm64 = channel.parseHotLatestPayload(
+      {
+        latest: {
+          version: '1.4.0',
+          packages: {
+            'linux-arm64': {
+              bin: '/hot/packages/opptrix-runtime-linux-arm64-v1.4.0.bin',
+              sha256: '/hot/packages/opptrix-runtime-linux-arm64-v1.4.0.sha256',
+              size: 456,
+            },
+          },
+        },
+      },
+      base,
+      { archKey: 'linux-arm64' },
+    )
+    assert.ok(arm64)
+    assert.equal(arm64.archKey, 'linux-arm64')
+    assert.equal(arm64.size, 456)
+    assert.equal(
+      arm64.binUrl,
+      'https://update.opptrix.org/hot/packages/opptrix-runtime-linux-arm64-v1.4.0.bin',
+    )
 
     const fromTag = channel.parseHotLatestPayload(
       { latest: { tag: 'opptrix-selfhost-v1.5.0' } },
       base,
+      { archKey: 'linux-x64' },
     )
     assert.ok(fromTag)
     assert.equal(fromTag.version, '1.5.0')
     assert.equal(fromTag.binName, 'opptrix-runtime-v1.5.0.bin')
 
-    const defaults = channel.parseHotLatestPayload({ latest: { version: '2.0.0' } }, base)
+    const defaults = channel.parseHotLatestPayload(
+      { latest: { version: '2.0.0' } },
+      base,
+      { archKey: 'linux-x64' },
+    )
     assert.ok(defaults)
     assert.equal(
       defaults.binUrl,
       'https://update.opptrix.org/hot/packages/opptrix-runtime-v2.0.0.bin',
     )
     assert.equal(channel.parseHotLatestPayload({ latest: {} }, base), null)
+    assert.equal(
+      channel.parseHotLatestPayload(
+        { latest: { version: '2.0.0' } },
+        base,
+        { archKey: 'linux-arm64' },
+      ),
+      null,
+    )
+  })
+
+  it('parseHotReleasesPayload returns catalog with descriptions', () => {
+    const base = 'https://update.opptrix.org'
+    const rows = channel.parseHotReleasesPayload(
+      {
+        channel: 'selfhost',
+        retention: { max: 8 },
+        releases: [
+          {
+            version: '1.3.0',
+            publishedAt: '2026-01-01T00:00:00.000Z',
+            description: { features: ['A'], fixes: [] },
+            packages: {
+              'linux-x64': {
+                bin: '/hot/packages/opptrix-runtime-linux-x64-v1.3.0.bin',
+                sha256: '/hot/packages/opptrix-runtime-linux-x64-v1.3.0.sha256',
+                size: 10,
+              },
+            },
+            requires: { node: '>=24 <25', minBaseImage: 'opptrix-selfhost-v1.3.0', platforms: ['linux-x64'] },
+          },
+        ],
+      },
+      base,
+      { archKey: 'linux-x64' },
+    )
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].version, '1.3.0')
+    assert.deepEqual(rows[0].description, { features: ['A'], fixes: [] })
+    assert.equal(rows[0].requires.minBaseImage, 'opptrix-selfhost-v1.3.0')
   })
 })
 

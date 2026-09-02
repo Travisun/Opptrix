@@ -19,7 +19,8 @@ import {
   type SystemUpdateState,
 } from '@opptrix/system-update'
 import { resolveOpptrixAppVersion } from '@opptrix/shared'
-import { readChannelEnv } from './system-update-channel.js'
+import { readChannelEnv, type HotReleaseDescription } from './system-update-channel.js'
+import { getAvailableReleaseDescription } from './system-update-release-cache.js'
 
 const APPLY_EXIT_DELAY_MS = 400
 
@@ -104,6 +105,8 @@ export interface SystemUpdateStatusDto {
   /** Pending version is blocked after a failed first-boot — wait for a newer release. */
   updateBlocked: boolean
   lastBlockedReason: string | null
+  /** User-facing release notes for availableVersion (from CDN check-update). */
+  availableDescription: HotReleaseDescription | null
 }
 
 function runtimeCheckEnv(): Parameters<typeof evaluateRuntimeRequires>[1] {
@@ -199,6 +202,7 @@ export function buildSystemUpdateStatus(
     blockedVersions,
     updateBlocked: pendingBlocked,
     lastBlockedReason: s.lastBlockedReason ?? null,
+    availableDescription: getAvailableReleaseDescription(available),
   }
 }
 

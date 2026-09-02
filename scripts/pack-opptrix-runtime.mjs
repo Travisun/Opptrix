@@ -10,8 +10,8 @@
  * Outputs (CDN channel — `hotPackageUrls`):
  *   opptrix-runtime-v{VER}.tar.gz          (legacy / local)
  *   opptrix-runtime-v{VER}.tar.gz.sha256
- *   opptrix-runtime-v{VER}.bin             (CDN upload; same bytes as tar.gz)
- *   opptrix-runtime-v{VER}.sha256          (digest for .bin)
+ *   opptrix-runtime-linux-{x64|arm64}-v{VER}.bin (+ .sha256)  (CDN per-arch)
+ *   opptrix-runtime-v{VER}.bin (+ .sha256)                    (legacy x64 alias)
  *   optional: opptrix-runtime-{platform}-{arch}-v{VER}.tar.gz(+.sha256)
  *
  * Usage:
@@ -25,6 +25,10 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  runtimeArchBinFilename,
+  runtimeArchBinSha256Filename,
+} from './lib/hot-cdn.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '..')
@@ -34,13 +38,16 @@ const HELP = `Usage: node scripts/pack-opptrix-runtime.mjs [options]
 Pack a built monorepo (or Docker-exported /app tree) into release assets:
   opptrix-runtime-v{VER}.tar.gz
   opptrix-runtime-v{VER}.tar.gz.sha256
-  opptrix-runtime-v{VER}.bin              (CDN; identical to tar.gz)
-  opptrix-runtime-v{VER}.sha256           (digest sidecar for .bin)
+  opptrix-runtime-v{VER}.bin              (legacy x64 CDN alias; linux-x64 only)
+  opptrix-runtime-v{VER}.sha256
+  opptrix-runtime-linux-{x64|arm64}-v{VER}.bin
+  opptrix-runtime-linux-{x64|arm64}-v{VER}.sha256
 
 Options:
   --version <semver>   App version (or OPPTRIX_APP_VERSION / package.json)
   --root <dir>         Tree to pack (default: repo root)
   --out-dir <dir>      Output directory (default: <root>/dist-runtime)
+  --platform-key <key> linux-x64 | linux-arm64 (default: from process.arch)
   --also-platform-name Also write opptrix-runtime-{platform}-{arch}-v{VER}.tar.gz
   --dry-run            Print plan / excludes; do not write archives
   --skip-built-check   Do not require apps/server/dist/index.js
@@ -51,9 +58,10 @@ Env:
   OPPTRIX_PACK_ROOT    Same as --root
   OPPTRIX_PACK_OUT     Same as --out-dir
 
-Preferred CI flow (ubuntu-latest):
+Preferred CI flow (matrix ubuntu-latest + ubuntu-24.04-arm64):
   npm ci && npm run build && npm prune --omit=dev
-  node scripts/pack-opptrix-runtime.mjs --version "$VERSION" --also-platform-name
+  node scripts/pack-opptrix-runtime.mjs --version "$VERSION" --platform-key linux-x64 --also-platform-name
+  node scripts/pack-opptrix-runtime.mjs --version "$VERSION" --platform-key linux-arm64 --also-platform-name
 
 Asset names must match apps/server hotPackageUrls /
 @opptrix/system-update runtimeArchiveFilename.
@@ -101,14 +109,25 @@ const EXCLUDE_ARGS = [
 ]
 
 /**
+ * @param {string | null | undefined} raw
+ * @returns {'linux-x64' | 'linux-arm64'}
+ */
+function resolvePlatformKey(raw) {
+  const key = String(raw ?? '').trim()
+  if (key === 'linux-x64' || key === 'linux-arm64') return key
+  return process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
+}
+
+/**
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-  /** @type {{ version: string | null, root: string, outDir: string | null, alsoPlatform: boolean, dryRun: boolean, skipBuiltCheck: boolean, help: boolean }} */
+  /** @type {{ version: string | null, root: string, outDir: string | null, platformKey: 'linux-x64' | 'linux-arm64', alsoPlatform: boolean, dryRun: boolean, skipBuiltCheck: boolean, help: boolean }} */
   const opts = {
     version: process.env.OPPTRIX_APP_VERSION?.trim() || null,
     root: process.env.OPPTRIX_PACK_ROOT?.trim() || DEFAULT_ROOT,
     outDir: process.env.OPPTRIX_PACK_OUT?.trim() || null,
+    platformKey: resolvePlatformKey(process.env.OPPTRIX_PACK_PLATFORM_KEY),
     alsoPlatform: false,
     dryRun: false,
     skipBuiltCheck: false,
@@ -126,6 +145,8 @@ function parseArgs(argv) {
       opts.root = path.resolve(String(argv[++i] ?? ''))
     } else if (a === '--out-dir') {
       opts.outDir = path.resolve(String(argv[++i] ?? ''))
+    } else if (a === '--platform-key') {
+      opts.platformKey = resolvePlatformKey(String(argv[++i] ?? ''))
     } else if (a.startsWith('--version=')) {
       opts.version = a.slice('--version='.length).trim() || null
     } else {
@@ -234,8 +255,9 @@ function resolveMinBaseImage(version) {
 /**
  * @param {string} root
  * @param {string} version
+ * @param {'linux-x64' | 'linux-arm64'} platformKey
  */
-function writeRuntimeMarker(root, version) {
+function writeRuntimeMarker(root, version, platformKey) {
   const file = path.join(root, 'opptrix-runtime.json')
   const body = {
     app: 'opptrix',
@@ -244,6 +266,7 @@ function writeRuntimeMarker(root, version) {
     requires: {
       node: '>=24 <25',
       minBaseImage: resolveMinBaseImage(version),
+      platforms: [platformKey],
     },
     hooks: {
       postActivate: [],
@@ -352,6 +375,7 @@ function main() {
 
   console.log(`[pack-opptrix-runtime] root=${root}`)
   console.log(`[pack-opptrix-runtime] version=${version}`)
+  console.log(`[pack-opptrix-runtime] platform=${opts.platformKey}`)
   console.log(`[pack-opptrix-runtime] out=${archivePath}`)
   console.log(`[pack-opptrix-runtime] excludes=${EXCLUDE_ARGS.length} patterns`)
 
@@ -361,6 +385,9 @@ function main() {
     console.log(`[pack-opptrix-runtime] dry-run: would create ${archiveName}.sha256`)
     console.log(`[pack-opptrix-runtime] dry-run: would create ${runtimeBinFilename(version)}`)
     console.log(`[pack-opptrix-runtime] dry-run: would create ${runtimeBinSha256Filename(version)}`)
+    console.log(
+      `[pack-opptrix-runtime] dry-run: would create ${runtimeArchBinFilename(version, opts.platformKey)}`,
+    )
     if (opts.alsoPlatform) {
       console.log(`[pack-opptrix-runtime] dry-run: would also create ${platformArchiveFilename(version)}`)
     }
@@ -368,7 +395,7 @@ function main() {
   }
 
   fs.mkdirSync(outDir, { recursive: true })
-  writeRuntimeMarker(root, version)
+  writeRuntimeMarker(root, version, opts.platformKey)
   console.log(`[pack-opptrix-runtime] wrote ${path.join(root, 'opptrix-runtime.json')}`)
 
   if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath)
@@ -380,13 +407,23 @@ function main() {
   console.log(`[pack-opptrix-runtime] wrote ${sidecar}`)
   console.log(`[pack-opptrix-runtime] sha256 ${hex}`)
 
-  const binName = runtimeBinFilename(version)
-  const binPath = path.join(outDir, binName)
-  fs.copyFileSync(archivePath, binPath)
-  const binShaName = runtimeBinSha256Filename(version)
-  const binShaPath = writeSha256Sidecar(binPath, hex, binShaName)
-  console.log(`[pack-opptrix-runtime] wrote ${binPath} (CDN alias)`)
-  console.log(`[pack-opptrix-runtime] wrote ${binShaPath}`)
+  const archBinName = runtimeArchBinFilename(version, opts.platformKey)
+  const archBinPath = path.join(outDir, archBinName)
+  fs.copyFileSync(archivePath, archBinPath)
+  const archShaName = runtimeArchBinSha256Filename(version, opts.platformKey)
+  const archShaPath = writeSha256Sidecar(archBinPath, hex, archShaName)
+  console.log(`[pack-opptrix-runtime] wrote ${archBinPath} (CDN ${opts.platformKey})`)
+  console.log(`[pack-opptrix-runtime] wrote ${archShaPath}`)
+
+  if (opts.platformKey === 'linux-x64') {
+    const binName = runtimeBinFilename(version)
+    const binPath = path.join(outDir, binName)
+    fs.copyFileSync(archivePath, binPath)
+    const binShaName = runtimeBinSha256Filename(version)
+    const binShaPath = writeSha256Sidecar(binPath, hex, binShaName)
+    console.log(`[pack-opptrix-runtime] wrote ${binPath} (legacy x64 alias)`)
+    console.log(`[pack-opptrix-runtime] wrote ${binShaPath}`)
+  }
 
   if (opts.alsoPlatform) {
     const platName = platformArchiveFilename(version)

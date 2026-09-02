@@ -35,19 +35,19 @@ describe('system-update check schedule', () => {
 })
 
 describe('system-update user agent', () => {
-  it('includes explicit version', () => {
+  it('includes explicit version and linux arch key', () => {
     assert.equal(
-      ua.buildSystemUpdateUserAgent('1.4.2'),
-      'Opptrix-system-update/1.4.2',
+      ua.buildSystemUpdateUserAgent('1.4.2', 'linux-x64'),
+      'Opptrix-system-update/1.4.2 (linux-x64)',
     )
     assert.equal(
-      ua.buildSystemUpdateUserAgent('v1.4.2'),
-      'Opptrix-system-update/1.4.2',
+      ua.buildSystemUpdateUserAgent('v1.4.2', 'linux-arm64'),
+      'Opptrix-system-update/1.4.2 (linux-arm64)',
     )
   })
 
   it('falls back to product token when version unknown', () => {
-    assert.equal(ua.buildSystemUpdateUserAgent('unknown'), 'Opptrix-system-update')
-    assert.equal(ua.buildSystemUpdateUserAgent(''), 'Opptrix-system-update')
+    assert.match(ua.buildSystemUpdateUserAgent('unknown'), /Opptrix-system-update \(/)
+    assert.match(ua.buildSystemUpdateUserAgent(''), /Opptrix-system-update \(/)
   })
 })
