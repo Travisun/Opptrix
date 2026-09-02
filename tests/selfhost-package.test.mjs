@@ -129,7 +129,7 @@ test('readPackageMeta exposes imageRepository', async () => {
   const { readPackageMeta } = await import('../packages/selfhost/src/paths.mjs')
   const meta = readPackageMeta()
   assert.equal(meta.minAppTag, 'opptrix-selfhost-v1.3.6')
-  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.2')
+  assert.equal(meta.preferredAppTag, 'opptrix-selfhost-v1.4.3')
   assert.equal(meta.imageRepository, 'ghcr.io/travisun/opptrix')
 })
 
