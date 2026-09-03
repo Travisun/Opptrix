@@ -118,3 +118,8 @@ skills-lock.json
 # local prepare:fonts debug
 .prepare-fonts-out.tmp
 
+
+# Architecture / product docs — local only; repo tracks release notes only
+/docs/*
+!/docs/releases/
+!/docs/releases/**
