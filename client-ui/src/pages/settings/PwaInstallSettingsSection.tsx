@@ -2,27 +2,52 @@ import { useState } from 'react'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { usePwaInstall } from '../../hooks/usePwaInstall'
 import { isElectron } from '../../platform/detect'
+import { resolvePwaInstallGuide } from '../../pwa/pwaInstallGuides'
 import { SettingsGroup, SettingsRow, SettingsSectionLabel } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 
 /**
- * Web 端：Chrome 一键安装到桌面；Safari / iOS 引导「添加到主屏幕」。
+ * Web 端：Chrome / Edge 一键安装；其余浏览器按分端步骤引导。
  * Electron 壳不展示。
  */
 export default function PwaInstallSettingsSection() {
   const toast = useSettingsToast()
-  const { canPrompt, isInstalled, promptInstall } = usePwaInstall()
+  const {
+    canPrompt,
+    isInstalled,
+    promptInstall,
+    mode,
+    isIos,
+    isSafari,
+    isAndroid,
+    isFirefox,
+    isEdge,
+    isChromium,
+    isWindows,
+  } = usePwaInstall()
   const [busy, setBusy] = useState(false)
 
   if (isElectron()) return null
 
+  const guide = resolvePwaInstallGuide({
+    isIos,
+    isSafari,
+    isAndroid,
+    isFirefox,
+    isEdge,
+    isChromium,
+    isWindows,
+  })
+
   const handleInstall = async () => {
     setBusy(true)
     try {
-      const ok = await promptInstall()
-      if (ok) toast.showSuccess('已添加到桌面')
+      const result = await promptInstall()
+      if (result === 'accepted') toast.showSuccess('已添加到桌面')
+      else if (result === 'dismissed') toast.showError('未完成安装，可稍后在浏览器菜单中重试')
+      else toast.showError('暂时无法完成安装，请按浏览器内的安装步骤操作')
     } catch {
-      toast.showError('暂时无法完成安装，请稍后重试，或使用浏览器菜单添加')
+      toast.showError('暂时无法完成安装，请稍后重试，或按浏览器内的安装步骤操作')
     } finally {
       setBusy(false)
     }
@@ -35,7 +60,7 @@ export default function PwaInstallSettingsSection() {
         <SettingsGroup>
           <SettingsRow
             title="桌面应用"
-            desc="已从浏览器安装到本机，可从桌面或程序坞直接打开"
+            desc="本机已安装，请从桌面或程序坞打开，获得独立窗口体验"
             last
           />
         </SettingsGroup>
@@ -43,14 +68,16 @@ export default function PwaInstallSettingsSection() {
     )
   }
 
-  if (canPrompt) {
+  if (canPrompt || mode === 'native') {
     return (
       <div>
         <SettingsSectionLabel spaced>本机应用</SettingsSectionLabel>
         <SettingsGroup>
           <SettingsRow
             title="安装到桌面"
-            desc="安装后可从桌面或程序坞打开，独立窗口使用"
+            desc={isEdge
+              ? '使用 Edge 安装后，可从桌面或任务栏以独立窗口打开'
+              : '安装后可从桌面或程序坞打开，独立窗口使用'}
             control={(
               <OpptrixButton
                 variant="secondary"
@@ -73,8 +100,8 @@ export default function PwaInstallSettingsSection() {
       <SettingsSectionLabel spaced>本机应用</SettingsSectionLabel>
       <SettingsGroup>
         <SettingsRow
-          title="添加到主屏幕"
-          desc="在浏览器菜单中选择「添加到主屏幕」或「安装应用」，即可像本地应用一样打开"
+          title={guide.title}
+          desc={guide.meta}
           last
         />
       </SettingsGroup>

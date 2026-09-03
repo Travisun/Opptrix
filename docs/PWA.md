@@ -4,7 +4,13 @@
 
 **安全上下文**：通知与 Service Worker 仅在 **HTTPS** 或 **localhost** 下可用。自托管时请用 HTTPS 反向代理，或本地 `http://127.0.0.1` 开发。
 
-**安装为应用（PWA）**：页面提供 `manifest.webmanifest`、favicon / 应用图标、安装截图与最小 Service Worker（仅满足可安装条件，不做离线缓存策略、不处理 push）。在 Chrome / Edge 中可通过地址栏「安装」，或在 **设置 → 常规 → 本机应用** 中一键安装到桌面。Electron 桌面壳不注册该 Service Worker，也不展示安装入口。
+**安装为应用（PWA）**：页面提供 `manifest.webmanifest`（含自描述 `related_applications` 以便检测是否已安装）、favicon / 应用图标、安装截图与最小 Service Worker（仅满足可安装条件，不做离线缓存策略、不处理 push）。
+
+- **Chrome / Edge**：优先唤起系统安装窗；已安装或浏览器不再提供安装事件时顶部提醒静默。兜底指引按浏览器区分最新菜单路径（Chrome：「保存并分享」；Edge：「应用 → 将此站点安装为应用」）。
+- **Safari（Mac）**：引导「分享 / 文件 → 添加到程序坞」。
+- **iPhone**：引导「分享 → 添加到主屏幕」（含「以网页 App 打开」）。
+- **Firefox**：Windows 引导任务栏固定（实验室开关）；Android 引导菜单安装；其他桌面说明能力有限并建议改用 Chrome / Edge / Safari。
+- **设置 → 常规 → 本机应用**：与上述分端文案一致。Electron 桌面壳不注册该 Service Worker，也不展示安装入口。
 
 ### iPhone / Safari「添加到主屏幕」
 

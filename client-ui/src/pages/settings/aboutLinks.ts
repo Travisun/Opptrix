@@ -3,10 +3,10 @@ export const OPPTRIX_WEBSITE = 'https://www.opptrix.org'
 /** Opptrix 量化投研交流社区（Discourse） */
 export const OPPTRIX_COMMUNITY = 'https://opptrix.net/'
 export const OPPTRIX_COMMUNITY_INVITE_CODE = 'A8SA8'
-/** 外链打开（关于页等） */
-export const OPPTRIX_USER_AGREEMENT = 'https://www.opptrix.org/user-agreement.html'
+/** 外链打开（关于页、登录同意等）— 与官网 legal 路由一致 */
+export const OPPTRIX_USER_AGREEMENT = 'https://opptrix.org/legal/user-agreement'
 /** 引导内嵌 iframe — 与站点路由一致 */
-export const OPPTRIX_USER_AGREEMENT_EMBED = 'https://www.opptrix.org/user-agreement'
+export const OPPTRIX_USER_AGREEMENT_EMBED = 'https://opptrix.org/legal/user-agreement'
 export const OPPTRIX_PRIVACY_POLICY = 'https://www.opptrix.org/privacy-policy.html'
 export const OPPTRIX_DISCLAIMER = 'https://opptrix.org/legal/disclaimer'
 
