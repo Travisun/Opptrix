@@ -85,7 +85,17 @@ test('ensureRemoteDirIfMissing creates only missing relative segments', async ()
   const listed = []
   /** @type {string[]} */
   const ensured = []
+  /** @type {string[]} */
+  const cds = []
+  let cwd = '/login'
   const client = {
+    async pwd() {
+      return cwd
+    },
+    async cd(dir) {
+      cds.push(dir)
+      cwd = dir
+    },
     async list(dir) {
       listed.push(dir)
       if (dir === 'hot') return []
@@ -93,12 +103,49 @@ test('ensureRemoteDirIfMissing creates only missing relative segments', async ()
     },
     async ensureDir(dir) {
       ensured.push(dir)
+      cwd = `/login/${dir}`
     },
   }
-  const result = await ensureRemoteDirIfMissing(client, 'hot/packages')
+  const result = await ensureRemoteDirIfMissing(client, 'hot/packages', '/login')
   assert.equal(result.path, 'hot/packages')
   assert.deepEqual(result.created, ['hot/packages'])
   assert.ok(listed.includes('hot'))
   assert.ok(listed.includes('hot/packages'))
   assert.deepEqual(ensured, ['hot/packages'])
+  // Every check/create must re-enter login home so paths stay login-relative.
+  assert.ok(cds.filter((d) => d === '/login').length >= 3)
+  assert.equal(cwd, '/login')
+})
+
+test('ensureRemoteDirIfMissing re-enters home between ensureDir calls', async () => {
+  /** @type {string[]} */
+  const ops = []
+  let cwd = '/'
+  const client = {
+    async pwd() {
+      return cwd
+    },
+    async cd(dir) {
+      ops.push(`cd:${dir}`)
+      cwd = dir
+    },
+    async list(dir) {
+      ops.push(`list:${dir}@${cwd}`)
+      throw new Error('missing')
+    },
+    async ensureDir(dir) {
+      ops.push(`ensure:${dir}@${cwd}`)
+      cwd = `/${dir}`
+    },
+  }
+  await ensureRemoteDirIfMissing(client, 'hot/packages', '/')
+  assert.deepEqual(
+    ops.filter((o) => o.startsWith('list:') || o.startsWith('ensure:')),
+    [
+      'list:hot@/',
+      'ensure:hot@/',
+      'list:hot/packages@/',
+      'ensure:hot/packages@/',
+    ],
+  )
 })

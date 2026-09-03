@@ -7,6 +7,9 @@
  *
  * Paths are relative to the FTP login directory (chroot-friendly). Absolute
  * `/hot/...` breaks on chrooted accounts (550 Can't change directory).
+ *
+ * basic-ftp leaves CWD inside the last ensureDir/cd target — every multi-step
+ * operation must re-enter login home before using login-relative paths.
  */
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -57,6 +60,24 @@ export function joinHotFtpRemotePath(remoteRoot, objectKey) {
   const root = String(remoteRoot ?? '').replace(/^\/+/, '').replace(/\/+$/, '')
   if (!root) return key
   return path.posix.join(root, key)
+}
+
+/**
+ * Capture pwd right after access — treat as immutable login home for the session.
+ * @param {import('basic-ftp').Client} client
+ */
+export async function captureHotFtpLoginHome(client) {
+  const home = String(await client.pwd()).trim()
+  return home || '/'
+}
+
+/**
+ * @param {import('basic-ftp').Client} client
+ * @param {string} loginHome
+ */
+export async function cdHotFtpLoginHome(client, loginHome) {
+  const home = String(loginHome ?? '').trim() || '/'
+  await client.cd(home)
 }
 
 /**
@@ -136,7 +157,7 @@ export function listingFileNames(listing) {
 
 /**
  * @param {import('basic-ftp').Client} client
- * @param {string} remoteDir
+ * @param {string} remoteDir path relative to current CWD (caller must be at login home)
  */
 export async function remoteDirExists(client, remoteDir) {
   const dir = String(remoteDir ?? '').replace(/^\/+/, '').replace(/\/+$/, '') || '.'
@@ -149,14 +170,18 @@ export async function remoteDirExists(client, remoteDir) {
 }
 
 /**
- * List then create only when missing (segment by segment, relative to login home).
+ * List then create only when missing (segment by segment).
+ * Always re-enters loginHome before each check/create so paths stay login-relative.
  * @param {import('basic-ftp').Client} client
  * @param {string} remoteDir
+ * @param {string} [loginHome] pwd() after access; captured if omitted
  * @returns {Promise<{ path: string, created: string[] }>}
  */
-export async function ensureRemoteDirIfMissing(client, remoteDir) {
+export async function ensureRemoteDirIfMissing(client, remoteDir, loginHome) {
+  const home = String(loginHome ?? await client.pwd()).trim() || '/'
   const raw = String(remoteDir ?? '').replace(/\\/g, '/').trim()
   if (!raw || raw === '/' || raw === '.') {
+    await cdHotFtpLoginHome(client, home)
     return { path: '.', created: [] }
   }
   const normalized = raw.replace(/^\/+/, '').replace(/\/+$/, '')
@@ -166,13 +191,16 @@ export async function ensureRemoteDirIfMissing(client, remoteDir) {
   let current = ''
   for (const part of parts) {
     current = current ? `${current}/${part}` : part
+    await cdHotFtpLoginHome(client, home)
     const exists = await remoteDirExists(client, current)
     if (!exists) {
+      await cdHotFtpLoginHome(client, home)
       await client.ensureDir(current)
       created.push(current)
       console.log(`[ftp:hot] created dir ${current}`)
     }
   }
+  await cdHotFtpLoginHome(client, home)
   return { path: normalized, created }
 }
 
@@ -200,19 +228,25 @@ export function requireHotFtpEnv(env = process.env) {
 }
 
 /**
- * Upload a local file into remoteRoot/objectKey (cd to dirname, STOR basename).
+ * Upload a local file into remoteRoot/objectKey (from login home → dirname → STOR).
  * @param {import('basic-ftp').Client} client
  * @param {string} remoteRoot
  * @param {string} objectKey
  * @param {string} localPath
+ * @param {string} [loginHome]
  */
-export async function uploadHotFtpFile(client, remoteRoot, objectKey, localPath) {
+export async function uploadHotFtpFile(client, remoteRoot, objectKey, localPath, loginHome) {
+  const home = String(loginHome ?? await client.pwd()).trim() || '/'
   const remotePath = joinHotFtpRemotePath(remoteRoot, objectKey)
   const dir = path.posix.dirname(remotePath)
   const name = path.posix.basename(remotePath)
-  await ensureRemoteDirIfMissing(client, dir === '.' ? '' : dir)
-  await client.cd(dir === '.' ? '.' : dir)
+  await ensureRemoteDirIfMissing(client, dir === '.' ? '' : dir, home)
+  await cdHotFtpLoginHome(client, home)
+  if (dir && dir !== '.') {
+    await client.cd(dir)
+  }
   await client.uploadFrom(localPath, name)
+  await cdHotFtpLoginHome(client, home)
   return remotePath
 }
 
@@ -222,15 +256,21 @@ export async function uploadHotFtpFile(client, remoteRoot, objectKey, localPath)
  * @param {string} remoteRoot
  * @param {string} objectKey
  * @param {string} body
+ * @param {string} [loginHome]
  */
-export async function uploadHotFtpText(client, remoteRoot, objectKey, body) {
+export async function uploadHotFtpText(client, remoteRoot, objectKey, body, loginHome) {
+  const home = String(loginHome ?? await client.pwd()).trim() || '/'
   const remotePath = joinHotFtpRemotePath(remoteRoot, objectKey)
   const dir = path.posix.dirname(remotePath)
   const name = path.posix.basename(remotePath)
-  await ensureRemoteDirIfMissing(client, dir === '.' ? '' : dir)
-  await client.cd(dir === '.' ? '.' : dir)
+  await ensureRemoteDirIfMissing(client, dir === '.' ? '' : dir, home)
+  await cdHotFtpLoginHome(client, home)
+  if (dir && dir !== '.') {
+    await client.cd(dir)
+  }
   const buf = Buffer.from(body, 'utf8')
   await client.uploadFrom(Readable.from([buf]), name)
+  await cdHotFtpLoginHome(client, home)
   return remotePath
 }
 
@@ -239,9 +279,12 @@ export async function uploadHotFtpText(client, remoteRoot, objectKey, body) {
  * @param {import('basic-ftp').Client} client
  * @param {string} remoteRoot
  * @param {ReadonlySet<string> | Iterable<string>} keepNames
+ * @param {string} [loginHome]
  */
-export async function pruneHotFtpPackages(client, remoteRoot, keepNames) {
+export async function pruneHotFtpPackages(client, remoteRoot, keepNames, loginHome) {
+  const home = String(loginHome ?? await client.pwd()).trim() || '/'
   const packagesDir = joinHotFtpRemotePath(remoteRoot, HOT_PACKAGES_PREFIX)
+  await cdHotFtpLoginHome(client, home)
   const exists = await remoteDirExists(client, packagesDir)
   if (!exists) {
     console.log(`[ftp:hot] packages dir missing (${packagesDir}) — skip prune`)
@@ -258,5 +301,6 @@ export async function pruneHotFtpPackages(client, remoteRoot, keepNames) {
     console.log(`[ftp:hot] removing obsolete package: ${name}`)
     await client.remove(name)
   }
+  await cdHotFtpLoginHome(client, home)
   return { pruned: prune, kept }
 }

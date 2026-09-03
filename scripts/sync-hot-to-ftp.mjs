@@ -41,6 +41,7 @@ import {
 import {
   DEFAULT_CN_HOT_CDN_BASE,
   buildHotPackageKeepNames,
+  captureHotFtpLoginHome,
   ensureRemoteDirIfMissing,
   joinHotFtpRemotePath,
   pruneHotFtpPackages,
@@ -258,19 +259,30 @@ async function main() {
       port: ftp.port,
       secure: ftp.secure,
     })
+    // basic-ftp mutates CWD; freeze login home and always re-enter before relative paths.
+    const loginHome = await captureHotFtpLoginHome(client)
+    console.log(`[ftp:hot] loginHome=${loginHome}`)
 
     // Ensure hot/ and hot/packages/ exist (create only when missing).
     await ensureRemoteDirIfMissing(
       client,
       joinHotFtpRemotePath(ftp.remoteDir, 'hot'),
+      loginHome,
     )
     await ensureRemoteDirIfMissing(
       client,
       joinHotFtpRemotePath(ftp.remoteDir, HOT_PACKAGES_PREFIX),
+      loginHome,
     )
 
     for (const item of packageUploads) {
-      const abs = await uploadHotFtpFile(client, ftp.remoteDir, item.objectKey, item.localPath)
+      const abs = await uploadHotFtpFile(
+        client,
+        ftp.remoteDir,
+        item.objectKey,
+        item.localPath,
+        loginHome,
+      )
       console.log(`[ftp:hot] uploaded ${abs} (${formatBytes(item.size)})`)
     }
 
@@ -280,6 +292,7 @@ async function main() {
       ftp.remoteDir,
       HOT_CHECK_UPDATE_KEY,
       checkUpdateJson,
+      loginHome,
     )
     console.log(`[ftp:hot] overwrote ${checkPath}`)
     const releasesPath = await uploadHotFtpText(
@@ -287,10 +300,16 @@ async function main() {
       ftp.remoteDir,
       HOT_RELEASES_KEY,
       releasesJson,
+      loginHome,
     )
     console.log(`[ftp:hot] overwrote ${releasesPath}`)
 
-    const { pruned, kept } = await pruneHotFtpPackages(client, ftp.remoteDir, keepNames)
+    const { pruned, kept } = await pruneHotFtpPackages(
+      client,
+      ftp.remoteDir,
+      keepNames,
+      loginHome,
+    )
     console.log(
       `[ftp:hot] prune done — removed ${pruned.length}, kept ${kept.length} package artifact(s)`,
     )
