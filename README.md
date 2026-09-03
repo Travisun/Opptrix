@@ -178,7 +178,7 @@ npm i -g @opptrix/selfhost
 # npm i -g @opptrix/selfhost --registry https://registry.npmmirror.com
 
 opptrix init
-opptrix up            # 优先 pull 预构建镜像 → http://127.0.0.1:8711
+opptrix up            # 优先 pull 预构建镜像 → https://127.0.0.1:8712
 opptrix doctor
 ```
 

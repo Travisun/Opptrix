@@ -1,5 +1,6 @@
 /**
- * Docker self-host HTTPS (self-signed) — port 8712 alongside HTTP 8711.
+ * Docker self-host HTTPS (self-signed) — production default is HTTPS :8712 only.
+ * HTTP :8711 is off unless `OPPTRIX_ENABLE_HTTP=1` (reverse-proxy opt-in).
  *
  * Certs live under `$OPPTRIX_SYSTEM_DIR/tls` (or `$OPPTRIX_HOME/system/tls`) so they
  * survive container recreate on the named volume. Generation uses `openssl` when
@@ -12,7 +13,39 @@ import path from 'node:path'
 import type { Server as HttpServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+export const DEFAULT_HTTP_PORT = 8711
 export const DEFAULT_HTTPS_PORT = 8712
+
+function envFlagOff(raw: string | undefined): boolean {
+  const t = String(raw ?? '').trim().toLowerCase()
+  return t === '0' || t === 'off' || t === 'false' || t === 'no'
+}
+
+function envFlagOn(raw: string | undefined): boolean {
+  const t = String(raw ?? '').trim().toLowerCase()
+  return t === '1' || t === 'true' || t === 'yes' || t === 'on'
+}
+
+/**
+ * Resolve HTTP listen port.
+ * - Docker (`OPPTRIX_DOCKER=1`): off unless `OPPTRIX_ENABLE_HTTP` is on
+ * - Non-Docker: default 8711 (`STOCK_RESEARCH_PORT`); `OPPTRIX_ENABLE_HTTP=0` disables
+ */
+export function resolveHttpPort(env: NodeJS.ProcessEnv = process.env): number | null {
+  if (envFlagOff(env.STOCK_RESEARCH_PORT)) return null
+  const raw = env.STOCK_RESEARCH_PORT?.trim()
+  let port = DEFAULT_HTTP_PORT
+  if (raw && /^\d+$/.test(raw)) {
+    const n = Number(raw)
+    if (n <= 0) return null
+    port = n
+  }
+  if (env.OPPTRIX_DOCKER === '1') {
+    return envFlagOn(env.OPPTRIX_ENABLE_HTTP) ? port : null
+  }
+  if (envFlagOff(env.OPPTRIX_ENABLE_HTTP)) return null
+  return port
+}
 
 export type SelfSignedTlsMaterials = {
   key: Buffer

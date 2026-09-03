@@ -241,7 +241,8 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh \
 
 ENV NODE_ENV=production \
   STOCK_RESEARCH_HOST=0.0.0.0 \
-  STOCK_RESEARCH_PORT=8711 \
+  OPPTRIX_ENABLE_HTTP=0 \
+  OPPTRIX_HTTPS_PORT=8712 \
   SERVE_UI=1 \
   OPPTRIX_HOME=/opptrix \
   OPPTRIX_DATA_DIR=/opptrix/private \
@@ -272,7 +273,7 @@ ENV NODE_ENV=production \
 # Runtime release identity may be overridden by Compose env (OPPTRIX_APP_VERSION / CHANNEL / TAG)
 # Entrypoint seeds /system from /app, then runs server from /system/boot (supervisor loop).
 
-EXPOSE 8711
+EXPOSE 8712
 
 VOLUME ["/opptrix"]
 

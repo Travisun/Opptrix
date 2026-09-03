@@ -13,6 +13,7 @@
 | 打包脚本 | `scripts/pack-opptrix-runtime.mjs` |
 | Gitee 镜像上传 | `scripts/upload-runtime-gitee.mjs` |
 | CDN (R2) 同步 | `scripts/sync-hot-to-r2.mjs` |
+| 国内 CDN (FTP) 同步 | `scripts/sync-hot-to-ftp.mjs`（镜像 `update.opptrix.evzs.com`，目录与 R2 同构） |
 | CI | `.github/workflows/publish-runtime-assets.yml`（tag `runtime-v*`；底座镜像另走手动 `publish-selfhost-image`） |
 
 ---
@@ -146,14 +147,14 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 打 tag `runtime-v*`（或手动 `workflow_dispatch`）后，`.github/workflows/publish-runtime-assets.yml` 会：
 
 1. **打包（矩阵）**：`ubuntu-24.04`（x64）+ QEMU arm64 各执行 `pack-opptrix-runtime.mjs`，写入 `requires.minBaseImage`（默认仓库 `preferredAppTag`，可用 dispatch `min_base_image` / `OPPTRIX_MIN_BASE_IMAGE` 覆盖；与 runtime semver **可错开**）。合并产出 per-arch `.bin` / `.sha256`、遗留 x64 别名与 `.tar.gz`。
-2. **CDN（主通道）**：`scripts/sync-hot-to-r2.mjs` 上传至 Cloudflare R2：
+2. **CDN（权威通道）**：`scripts/sync-hot-to-r2.mjs` 上传至 Cloudflare R2 → `https://update.opptrix.org`：
    - `hot/packages/opptrix-runtime-linux-{x64,arm64}-vX.Y.Z.bin` + `.sha256`
    - `hot/packages/opptrix-runtime-vX.Y.Z.bin` + `.sha256`（x64 遗留别名）
    - `hot/check-update`（`application/json`，含 `latest`、`releases[]`、`latest.description` 与 CDN URL；镜像 URL 指向 `runtime-v*` Release）
    - `hot/releases`（同上 `releases[]`，供 CLI `opptrix runtime list` / `use <版本>` 选用历史版）
-3. **GitHub Release**：在 tag `runtime-vX.Y.Z` 上挂载上述全部架构产物。
-4. **Gitee Release**：`scripts/upload-runtime-gitee.mjs` 上传相同附件集（需 `GITEE_TOKEN`；默认 tag 同为 `runtime-v*`）。
-5. **可选**：配置 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` 时 purge `/hot/*` 相关 URL；CI 末尾 smoke `GET …/hot/check-update`。
+3. **国内 CDN（FTP 镜像）**：`scripts/sync-hot-to-ftp.mjs` 同步至 `https://update.opptrix.evzs.com`（目录与 R2 同构）。先 LIST 再建缺失目录；先上传包再覆盖清单；再按保留策略清理 `hot/packages` 中超出最近 8 版的历史包。清单内 URL 仍写权威域名，国内客户端下载时改写主机。
+4. **GitHub Release**：在 tag `runtime-vX.Y.Z` 上挂载上述全部架构产物。
+5. **可选**：配置 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` 时 purge `/hot/*` 相关 URL；CI 末尾分别 smoke 权威 CDN 与国内 CDN 的 `GET …/hot/check-update`。
 
 **底座 Docker 镜像**不随 `runtime-v*` 自动构建：在 Actions 手动运行 `publish-selfhost-image.yml`（`workflow_dispatch`，输入 `opptrix-selfhost-vX.Y.Z`）。
 
@@ -161,14 +162,14 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 
 **自托管实例默认从 CDN 拉热更新**（`OPPTRIX_UPDATE_CDN_BASE`，默认 `https://update.opptrix.org`），不再依赖 Release 附件列表。
 
-**自适应下载线路**（检测仍只走 CDN 小清单 `hot/check-update` / `hot/releases`；大包按线路 failover）：
+**自适应下载线路**（检测走 CDN 小清单 `hot/check-update` / `hot/releases`；大包按线路 failover；**不再使用 Gitee 下载**）：
 
 | 区域 | 优先顺序 |
 |------|----------|
-| 国内 (`cn`) | Gitee Release → GitHub Release → CDN |
-| 海外 (`foreign`) | GitHub Release → Gitee Release → CDN |
+| 国内 (`cn`) | 国内 CDN（evzs）→ 权威 CDN（org）→ GitHub Release |
+| 海外 (`foreign`) | 权威 CDN → GitHub Release |
 
-清单 `latest.packages[arch].mirrors` 与 `latest.mirrors` 携带 GitHub/Gitee 成对 URL；服务端静默下载与容器内 `opptrix runtime use` 共用 `@opptrix/system-update` 的 `downloadRuntimeAssetPair`，按 `OPPTRIX_UPDATE_MIRROR` / `OPPTRIX_MIRROR`（或 locale + Docker Hub 探测）选序，失败自动换下一源。`.sha256` sidecar 校验不变。
+清单 `latest.packages[arch].mirrors` / `latest.mirrors` 携带 GitHub URL；国内线路会对 CDN URL 改写主机。服务端静默下载与容器内 `opptrix runtime use` 共用 `downloadRuntimeAssetPair`。`.sha256` sidecar 校验不变。
 
 ### GitHub Secrets（CI）
 
@@ -178,11 +179,13 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 | `R2_ACCESS_KEY_ID` | R2 S3 API Access Key（**非** `cfut_*` API Token） |
 | `R2_SECRET_ACCESS_KEY` | R2 S3 Secret Access Key |
 | `R2_BUCKET` | R2 bucket 名称 |
-| `GITEE_TOKEN` | Gitee 私有 token（上传 Release 附件；缺则跳过并打印手动步骤） |
+| `FTP_HOST` / `FTP_USERNAME` / `FTP_PASSWORD` | 国内 CDN FTP（站点根应对齐 `update.opptrix.evzs.com` 的 `hot/`） |
+| `FTP_REMOTE_DIR` | 可选；默认 `/`（站点文档根）。若账号已 chroot 到站点根，保持 `/` 即可 |
+| `FTP_PORT` / `FTP_SECURE` | 可选；端口默认 21；`FTP_SECURE=true` 启用显式 TLS |
 | `CLOUDFLARE_API_TOKEN` | 可选；purge `hot/check-update` 与当版 package URL |
 | `CLOUDFLARE_ZONE_ID` | 可选；与上配对 |
 
-tag push **必须**配置 R2 四件套，否则 workflow 失败以便及时发现。fork / 手动 `workflow_dispatch` 可无 R2（跳过 CDN 并 warning）。
+tag push **必须**配置 R2 四件套与 FTP 三件套，否则 workflow 失败以便及时发现。fork / 手动 `workflow_dispatch` 可无密钥（跳过对应通道并 warning；可用 `skip_r2` / `skip_ftp`）。
 
 本地演练：
 
@@ -194,6 +197,7 @@ npm run audit:selfhost-runtime
 
 node scripts/pack-opptrix-runtime.mjs --version 1.4.0 --also-platform-name
 node scripts/sync-hot-to-r2.mjs --dir dist-runtime --version 1.4.0 --dry-run
+node scripts/sync-hot-to-ftp.mjs --dir dist-runtime --version 1.4.0 --dry-run
 node scripts/purge-hot-cdn-cache.mjs --version 1.4.0   # 需 CF token
 ```
 

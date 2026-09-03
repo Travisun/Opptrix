@@ -12,6 +12,7 @@
  * Flags: --keep  retain container/volume after success
  */
 import { spawnSync } from 'node:child_process'
+import https from 'node:https'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -29,7 +30,7 @@ import {
 } from './lib/selfhost-lifecycle.mjs'
 
 const HOME = '/opptrix'
-const CONTAINER_PORT = 8711
+const CONTAINER_PORT = 8712
 const MARKER_PATH = `${HOME}/${LIFECYCLE_MARKER_REL}`
 
 function log(phase, msg) {
@@ -73,7 +74,8 @@ function dockerExecNode(name, scriptArgs, opts = {}) {
 function commonServerEnv(appVersion, baseVersion) {
   return {
     STOCK_RESEARCH_HOST: '0.0.0.0',
-    STOCK_RESEARCH_PORT: String(CONTAINER_PORT),
+    OPPTRIX_ENABLE_HTTP: '0',
+    OPPTRIX_HTTPS_PORT: String(CONTAINER_PORT),
     SERVE_UI: '1',
     OPPTRIX_HOME: HOME,
     OPPTRIX_DATA_DIR: `${HOME}/private`,
@@ -124,14 +126,38 @@ async function waitHealth(port, timeoutMs) {
   let last = ''
   while (Date.now() < deadline) {
     try {
-      const ac = new AbortController()
-      const t = setTimeout(() => ac.abort(), 3000)
-      const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: ac.signal })
-      clearTimeout(t)
-      const text = await res.text()
+      const text = await new Promise((resolve, reject) => {
+        const req = https.get(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/api/health',
+            rejectUnauthorized: false,
+            timeout: 3000,
+          },
+          (res) => {
+            /** @type {Buffer[]} */
+            const chunks = []
+            res.on('data', (c) => chunks.push(Buffer.from(c)))
+            res.on('end', () => {
+              const body = Buffer.concat(chunks).toString('utf8')
+              if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                reject(new Error(`health HTTP ${res.statusCode}`))
+                return
+              }
+              resolve(body)
+            })
+          },
+        )
+        req.on('timeout', () => {
+          req.destroy()
+          reject(new Error('timeout'))
+        })
+        req.on('error', reject)
+      })
       last = text
       const body = parseHealthBody(text)
-      if (res.ok && isHealthOk(body)) return body
+      if (isHealthOk(body)) return body
     } catch (err) {
       last = err instanceof Error ? err.message : String(err)
     }

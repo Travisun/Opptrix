@@ -1,6 +1,6 @@
 /**
  * Pure helpers for Opptrix self-host hot-update CDN paths and check-update JSON.
- * Shared by scripts/sync-hot-to-r2.mjs and tests.
+ * Shared by scripts/sync-hot-to-r2.mjs, scripts/sync-hot-to-ftp.mjs, and tests.
  */
 import fs from 'node:fs'
 import {

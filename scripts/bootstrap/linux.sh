@@ -491,7 +491,7 @@ EOF
   # 快速验证（跳过模型）: opptrix up --skip-models
   # 若需强制镜像: opptrix up --mirror cn|foreign
 
-浏览器: http://127.0.0.1:8711
+浏览器: https://127.0.0.1:8712
 EOF
 }
 

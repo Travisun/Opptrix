@@ -82,6 +82,6 @@ test('@opptrix/selfhost README covers install, commands, mirrors', () => {
   assert.match(readme, /OPPTRIX_DEPLOY_DIR/)
   assert.match(readme, /常见问题|FAQ/)
   assert.match(readme, /场景/)
-  assert.match(readme, /127\.0\.0\.1:8711/)
+  assert.match(readme, /127\.0\.0\.1:8712/)
   assert.match(readme, /Apache-2\.0/)
 })

@@ -5,7 +5,6 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { probeHealth, runCompose } from './compose.mjs'
-import { readComposeEnvMap } from './compose-env.mjs'
 import {
   isContainerRunning,
   readComposeContainerName,
@@ -13,7 +12,6 @@ import {
 import { ensureThinDeploy } from './ensure-source.mjs'
 import { flagString, flagTrue } from './parse.mjs'
 import {
-  composeEnvPath,
   ensureComposeEnv,
   readHostConfig,
   resolveDeployRoot,
@@ -355,38 +353,11 @@ function printCopyFailureRecovery(sourceLabel) {
  * @param {number} [maxAttempts]
  */
 export async function waitForHealth(root, maxAttempts = 30) {
-  let port = 8711
-  try {
-    const envFile = composeEnvPath(root)
-    if (fs.existsSync(envFile)) {
-      const map = readComposeEnvMap(fs.readFileSync(envFile, 'utf8'))
-      const p = Number(map.get('OPPTRIX_HOST_HTTP_PORT') || '8711')
-      if (Number.isInteger(p) && p > 0) port = p
-    }
-  } catch {
-    // keep default
-  }
-  const cfg = readHostConfig(root)
-  if (typeof cfg.httpPort === 'number' && cfg.httpPort > 0) port = cfg.httpPort
-
   for (let i = 0; i < maxAttempts; i++) {
-    // probeHealth is hardcoded to 8711; inline fetch when custom port
-    const url = `http://127.0.0.1:${port}/api/health`
-    try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(5000) })
-      if (resp.ok) {
-        console.log(`[opptrix] health OK (${resp.status}) ${url}`)
-        return true
-      }
-    } catch {
-      // retry
-    }
-    if (port === 8711) {
-      const h = await probeHealth(root)
-      if (h.ok) {
-        console.log(`[opptrix] health OK (${h.status})`)
-        return true
-      }
+    const h = await probeHealth(root)
+    if (h.ok) {
+      console.log(`[opptrix] health OK (${h.status}) ${h.url || ''}`.trim())
+      return true
     }
     await new Promise((r) => setTimeout(r, 2000))
   }

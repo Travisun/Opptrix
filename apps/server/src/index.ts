@@ -95,6 +95,7 @@ import {
   closeHttpsServer,
   ensureSelfSignedTlsMaterials,
   listenHttpsAlongsideHttp,
+  resolveHttpPort,
   resolveHttpsPort,
 } from './selfhost-https.js'
 import type { Server as HttpsServer } from 'node:https'
@@ -105,7 +106,11 @@ const { cleanupStaleApiListeners } = require('../../../scripts/lib/resolve-ports
   cleanupStaleApiListeners: (port: number, opts?: { aggressive?: boolean }) => Promise<boolean>
 }
 
-const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
+const HTTP_PORT = resolveHttpPort()
+const HTTPS_PORT = resolveHttpsPort()
+const PORT = HTTP_PORT ?? HTTPS_PORT ?? 8711
+const PUBLIC_PROTO = HTTPS_PORT != null ? 'https' : 'http'
+const PUBLIC_PORT = HTTPS_PORT ?? HTTP_PORT ?? PORT
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 /** 绑定 0.0.0.0/:: 时，进程内回调须用 loopback（fetch 不能访问 0.0.0.0） */
 function connectHostForBind(bindHost: string): string {
@@ -133,7 +138,7 @@ const serverAppContext = {
     version: APP_VERSION,
     runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
     desktop: process.env.OPPTRIX_DESKTOP === '1',
-    server: { host: HOST, port: PORT, connect_host: CONNECT_HOST },
+    server: { host: HOST, port: PUBLIC_PORT, connect_host: CONNECT_HOST, proto: PUBLIC_PROTO },
     tool_count: agent.tools.list().length,
     mining_tool_count: agent.tools.miningTools().length,
   }),
@@ -146,7 +151,7 @@ agent = new AgentEngine(hub, {
   defaultTopN: cfg.default_top_n,
   appContext: serverAppContext,
 })
-agent.setApiBaseUrl(`http://${CONNECT_HOST}:${PORT}/api`)
+agent.setApiBaseUrl(`${PUBLIC_PROTO}://${CONNECT_HOST}:${PUBLIC_PORT}/api`)
 
 /** 协作任务会话只读：禁止外部 REST 打断（Runner 仍可直调 engine.chat） */
 function isReadonlyCollaborationSession(sessionId: string): boolean {
@@ -2239,30 +2244,40 @@ app.delete<{ Querystring: { code?: string; market?: string; assetClass?: string 
 
 let serveUi = false
 let httpsServer: HttpsServer | null = null
-const HTTPS_PORT = resolveHttpsPort()
 
-async function listenWithStaleCleanup(): Promise<void> {
+async function listenHttpIfEnabled(): Promise<void> {
+  if (HTTP_PORT == null) {
+    await app.ready()
+    return
+  }
   try {
-    await app.listen({ port: PORT, host: HOST })
+    await app.listen({ port: HTTP_PORT, host: HOST })
   } catch (err) {
     const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
     if (code !== 'EADDRINUSE') throw err
-    console.warn(`[server] 端口 ${PORT} 被占用，尝试清理残留 Opptrix sidecar…`)
-    await cleanupStaleApiListeners(PORT, { aggressive: true })
+    console.warn(`[server] 端口 ${HTTP_PORT} 被占用，尝试清理残留 Opptrix sidecar…`)
+    await cleanupStaleApiListeners(HTTP_PORT, { aggressive: true })
     try {
-      await app.listen({ port: PORT, host: HOST })
-      console.warn(`[server] 已清理残留进程并成功绑定 :${PORT}`)
+      await app.listen({ port: HTTP_PORT, host: HOST })
+      console.warn(`[server] 已清理残留进程并成功绑定 :${HTTP_PORT}`)
     } catch (retryErr) {
       console.error(
-        `\n  无法绑定 http://${HOST}:${PORT}/ — 端口仍被占用。\n`
-          + `  手动清理：lsof -ti :${PORT} -sTCP:LISTEN | xargs kill -9\n`
+        `\n  无法绑定 http://${HOST}:${HTTP_PORT}/ — 端口仍被占用。\n`
+          + `  手动清理：lsof -ti :${HTTP_PORT} -sTCP:LISTEN | xargs kill -9\n`
           + `  或设置环境变量 STOCK_RESEARCH_PORT 使用其他端口。\n`,
       )
       throw retryErr
     }
   }
+}
 
-  if (HTTPS_PORT == null) return
+async function listenHttpsIfEnabled(): Promise<void> {
+  if (HTTPS_PORT == null) {
+    if (process.env.OPPTRIX_DOCKER === '1') {
+      throw new Error('Docker 生产环境必须启用 HTTPS（OPPTRIX_HTTPS_PORT，默认 8712）')
+    }
+    return
+  }
   try {
     const tls = ensureSelfSignedTlsMaterials()
     if (tls.created) {
@@ -2276,10 +2291,32 @@ async function listenWithStaleCleanup(): Promise<void> {
       cert: tls.cert,
     })
   } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+    if (code === 'EADDRINUSE') {
+      console.warn(`[server] HTTPS 端口 ${HTTPS_PORT} 被占用，尝试清理残留 Opptrix sidecar…`)
+      await cleanupStaleApiListeners(HTTPS_PORT, { aggressive: true })
+      const tls = ensureSelfSignedTlsMaterials()
+      httpsServer = await listenHttpsAlongsideHttp({
+        httpServer: app.server,
+        host: HOST,
+        port: HTTPS_PORT,
+        key: tls.key,
+        cert: tls.cert,
+      })
+      return
+    }
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[server] HTTPS :${HTTPS_PORT} 启动失败: ${msg}`)
     throw err
   }
+}
+
+async function listenWithStaleCleanup(): Promise<void> {
+  if (HTTP_PORT == null && HTTPS_PORT == null) {
+    throw new Error('HTTP 与 HTTPS 均已关闭，无法监听')
+  }
+  await listenHttpIfEnabled()
+  await listenHttpsIfEnabled()
 }
 
 async function bootstrap() {
@@ -2321,15 +2358,17 @@ async function bootstrap() {
 
   await listenWithStaleCleanup()
   const bindNote = HOST !== CONNECT_HOST ? ` (bind ${HOST})` : ''
-  console.log(`\n  Opptrix API → http://${CONNECT_HOST}:${PORT}/api/health${bindNote}`)
+  if (HTTP_PORT != null) {
+    console.log(`\n  Opptrix API → http://${CONNECT_HOST}:${HTTP_PORT}/api/health${bindNote}`)
+  }
   if (HTTPS_PORT != null) {
-    console.log(`  Opptrix HTTPS → https://${CONNECT_HOST}:${HTTPS_PORT}/ （自签名；浏览器直连请用此端口）`)
+    console.log(`\n  Opptrix HTTPS → https://${CONNECT_HOST}:${HTTPS_PORT}/api/health${bindNote} （自签名）`)
   }
   if (serveUi) {
     if (HTTPS_PORT != null) {
       console.log(`  Web UI → https://<公网IP或本机>:${HTTPS_PORT}/\n`)
-    } else {
-      console.log(`  Desktop UI → http://${CONNECT_HOST}:${PORT}\n`)
+    } else if (HTTP_PORT != null) {
+      console.log(`  Desktop UI → http://${CONNECT_HOST}:${HTTP_PORT}\n`)
     }
   } else {
     console.log(`  Web UI → npm run dev → https://127.0.0.1:5173（自签名；设 WEB_HTTPS=0 可回退 HTTP）\n`)

@@ -24,7 +24,7 @@ import {
   writeHomeBindOverride,
 } from './data-migrate.mjs'
 
-export const DEFAULT_HTTP_PORT = 8711
+export const DEFAULT_HTTP_PORT = 0
 export const DEFAULT_HTTPS_PORT = 8712
 export const DEFAULT_VOLUME_NAME = 'opptrix-home'
 
@@ -191,7 +191,7 @@ export async function collectSetupAnswers(parsed, opts = {}) {
   }
 
   const httpPort = parsePort(
-    await ask('宿主机 HTTP 端口', String(fromFlags.httpPort ?? DEFAULT_HTTP_PORT)),
+    await ask('宿主机 HTTP 端口（0=不开启）', String(fromFlags.httpPort ?? DEFAULT_HTTP_PORT)),
     DEFAULT_HTTP_PORT,
   )
   const httpsPort = parsePort(
@@ -330,8 +330,11 @@ export function applySetupAnswers(root, answers) {
   ensureComposeEnv(root)
 
   const set = {
-    OPPTRIX_HOST_HTTP_PORT: String(answers.httpPort),
     OPPTRIX_HOST_HTTPS_PORT: String(answers.httpsPort),
+    OPPTRIX_ENABLE_HTTP: answers.httpPort > 0 ? '1' : '0',
+  }
+  if (answers.httpPort > 0) {
+    set.OPPTRIX_HOST_HTTP_PORT = String(answers.httpPort)
   }
   if (answers.skipModels) {
     set.OPPTRIX_SKIP_MODEL_FETCH = '1'
@@ -374,7 +377,7 @@ export function printSetupHelp() {
 选项:
   --mirror auto|cn|foreign   镜像源（默认 auto）
   --data volume|<路径>       命名卷 opptrix-home，或宿主机绑定目录
-  --http-port <n>            宿主机 HTTP（默认 8711）
+  --http-port <n>            宿主机 HTTP（默认 0=不开启；反代可设 8711）
   --https-port <n>           宿主机 HTTPS（默认 8712）
   --skip-models              跳过首启模型下载
   --yes, -y                  非交互，直接写入默认/选项
@@ -382,7 +385,7 @@ export function printSetupHelp() {
 示例:
   opptrix setup
   opptrix setup --yes --mirror cn --data /var/lib/opptrix
-  opptrix setup --data volume --http-port 8711
+  opptrix setup --data volume --https-port 8712
 `)
 }
 

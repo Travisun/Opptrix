@@ -35,7 +35,7 @@ test('normalizeHostDataPath expands ~ and resolves', () => {
 test('parsePort clamps invalid to fallback', () => {
   assert.equal(parsePort('8711', 80), 8711)
   assert.equal(parsePort('nope', 8712), 8712)
-  assert.equal(parsePort('0', 8711), 8711)
+  assert.equal(parsePort('0', 0), 0)
   assert.equal(parsePort('99999', 8711), 8711)
 })
 
@@ -43,7 +43,7 @@ test('mergeSetupAnswers defaults and bind path', () => {
   const d = mergeSetupAnswers({})
   assert.equal(d.mirror, 'auto')
   assert.equal(d.dataStorage, 'volume')
-  assert.equal(d.httpPort, 8711)
+  assert.equal(d.httpPort, 0)
   assert.equal(d.httpsPort, 8712)
 
   const b = mergeSetupAnswers({ dataStorage: 'bind', dataPath: '~/opx' })
@@ -170,7 +170,7 @@ test('defaultSetupAnswers stable', () => {
     mirror: 'auto',
     dataStorage: 'volume',
     dataPath: null,
-    httpPort: 8711,
+    httpPort: 0,
     httpsPort: 8712,
     skipModels: false,
   })

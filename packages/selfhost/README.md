@@ -118,20 +118,20 @@ opptrix up            # 无主机配置时会先 setup；再拉预构建镜像�
 opptrix health        # 确认服务健康
 ```
 
-然后浏览器打开：**https://\<公网IP或本机\>:8712**（自签名；`8711` 为 HTTP/反代）
+然后浏览器打开：**https://\<公网IP或本机\>:8712**（自签名 HTTPS；HTTP 默认关闭）
 
 | 步骤 | 你在做什么 | 成功后的效果 |
 |------|------------|--------------|
 | `setup` | 选择镜像源 / 数据落盘位置 / 端口 | 写入 `.opptrix.json`、`compose.env`；可选 `docker-compose.override.yml`（宿主机绑定） |
 | `init` | 静默准备配置 | 出现 `compose.env`、`.opptrix.json`（含检测到的 mirror） |
-| `up` | 拉镜像并启动 | 容器运行；HTTPS 8712 / HTTP 8711 已映射；数据写入 Docker 卷或你指定的目录 |
+| `up` | 拉镜像并启动 | 容器运行；默认仅 HTTPS 8712；数据写入 Docker 卷或你指定的目录 |
 | `health` | 探活 | 打印健康检查成功信息 |
 
 非交互示例：
 
 ```bash
 opptrix setup --yes --mirror cn --data volume
-opptrix setup --yes --data /var/lib/opptrix --http-port 8711 --https-port 8712
+opptrix setup --yes --data /var/lib/opptrix --https-port 8712
 ```
 
 ### 迁移数据目录
@@ -342,9 +342,9 @@ opptrix up --skip-models    # 建议先跳过模型，确认能打开页面
 | （旧版）用户数据 | 卷 `opptrix-data`（`/data`） | 见 `docker-compose.legacy-volumes.yml` |
 | （旧版）本地模型 | 卷 `opptrix-models`（`/models`） | 同上 |
 | （旧版）运行时槽位 | 卷 `opptrix-system`（`/system`） | 同上 |
-| 访问地址 | https://\<IP\>:8712（自签名 HTTPS，默认映射公网可访）；HTTP 8711 供反代 | — |
+| 访问地址 | https://\<IP\>:8712（自签名 HTTPS，默认映射公网可访）；HTTP 默认关闭 | — |
 
-默认开箱：`https://公网IP:8712`（自签名）。若前面另有 Nginx 终结 TLS，upstream 用 `http://127.0.0.1:8711`。完整说明见 [SELF-HOSTING.md](https://github.com/Travisun/Opptrix/blob/main/docs/SELF-HOSTING.md)。
+默认开箱：`https://公网IP:8712`（自签名）。若前面另有 Nginx 终结 TLS，可将 upstream 指到 `https://127.0.0.1:8712`，或设 `OPPTRIX_ENABLE_HTTP=1` 后使用明文 8711。完整说明见 [SELF-HOSTING.md](https://github.com/Travisun/Opptrix/blob/main/docs/SELF-HOSTING.md)。
 
 ---
 

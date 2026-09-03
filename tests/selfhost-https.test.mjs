@@ -30,6 +30,21 @@ test('resolveHttpsPort: Docker defaults to 8712; off disables', async () => {
   assert.equal(mod.resolveHttpsPort({ OPPTRIX_HTTPS_PORT: '8712' }), 8712)
 })
 
+test('resolveHttpPort: Docker off unless ENABLE_HTTP; non-Docker defaults 8711', async () => {
+  const mod = await loadMod()
+  assert.equal(mod.resolveHttpPort({ OPPTRIX_DOCKER: '1' }), null)
+  assert.equal(mod.resolveHttpPort({ OPPTRIX_DOCKER: '1', STOCK_RESEARCH_PORT: '8711' }), null)
+  assert.equal(mod.resolveHttpPort({ OPPTRIX_DOCKER: '1', OPPTRIX_ENABLE_HTTP: '1' }), 8711)
+  assert.equal(mod.resolveHttpPort({
+    OPPTRIX_DOCKER: '1',
+    OPPTRIX_ENABLE_HTTP: '1',
+    STOCK_RESEARCH_PORT: '9080',
+  }), 9080)
+  assert.equal(mod.resolveHttpPort({}), 8711)
+  assert.equal(mod.resolveHttpPort({ STOCK_RESEARCH_PORT: '9000' }), 9000)
+  assert.equal(mod.resolveHttpPort({ OPPTRIX_ENABLE_HTTP: '0' }), null)
+})
+
 test('ensureSelfSignedTlsMaterials creates pem once', async () => {
   const openssl = spawnSync('openssl', ['version'], { encoding: 'utf8' })
   if ((openssl.status ?? 1) !== 0) {

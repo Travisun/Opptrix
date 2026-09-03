@@ -214,10 +214,19 @@ test('docker-compose supports OPPTRIX_IMAGE override', async () => {
   assert.match(yml, /build:/)
 })
 
-test('docker-compose publishes http 8711 and https 8712', async () => {
+test('docker-compose publishes https 8712 only by default', async () => {
   const yml = await fs.promises.readFile(path.join(ROOT, 'docker-compose.yml'), 'utf8')
-  assert.match(yml, /OPPTRIX_HOST_HTTP_PORT:-8711/)
   assert.match(yml, /OPPTRIX_HOST_HTTPS_PORT:-8712/)
   assert.match(yml, /OPPTRIX_HTTPS_PORT/)
-  assert.doesNotMatch(yml, /127\.0\.0\.1:8711:8711/)
+  assert.match(yml, /OPPTRIX_ENABLE_HTTP: "\$\{OPPTRIX_ENABLE_HTTP:-0\}"/)
+  assert.match(yml, /CMD-SHELL.*curl -fsk https:\/\/127\.0\.0\.1:\$\{OPPTRIX_HTTPS_PORT:-8712\}\/api\/health/)
+  assert.doesNotMatch(yml, /^\s+- "\$\{OPPTRIX_HOST_HTTP_PORT:-8711\}:8711"/m)
+})
+
+test('resolveHealthProbe defaults to https 8712', async () => {
+  const { resolveHealthProbe } = await import('../packages/selfhost/src/compose.mjs')
+  const probe = resolveHealthProbe(path.join(os.tmpdir(), 'opptrix-no-such-deploy'))
+  assert.equal(probe.proto, 'https')
+  assert.equal(probe.port, 8712)
+  assert.equal(probe.url, 'https://127.0.0.1:8712/api/health')
 })

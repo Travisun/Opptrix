@@ -101,7 +101,7 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   update            [legacy] 等同 opptrix base apply（拉预构建镜像并重建容器）
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
-  health            探测 http://127.0.0.1:8711/api/health（浏览器请用 https://IP:8712）
+  health            探测 https://127.0.0.1:8712/api/health（自签名 HTTPS）
   compose           透传 docker compose：opptrix compose -- <args…>
   install-cli       本机 npm link 本包
   uninstall-cli     npm unlink -g @opptrix/selfhost
@@ -117,7 +117,7 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   --yes, -y             setup / data migrate / runtime apply 等跳过确认
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
   --data volume|<路径>  setup 数据存储（命名卷或宿主机目录）
-  --http-port / --https-port  setup 宿主机端口（默认 8711/8712）
+  --http-port / --https-port  setup 宿主机端口（HTTP 默认关闭 / HTTPS 8712）
   --to <路径|volume>    data migrate 目标
   --dry-run             data 只打印迁移计划
   --build               开发者本地编译（需 OPPTRIX_DEV_ALLOW_BUILD=1）

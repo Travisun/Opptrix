@@ -98,7 +98,7 @@ opptrix up --mirror cn
 
 可选环境变量见脚本头注释（`OPPTRIX_REPO_DIR`、`OPPTRIX_NODE_VERSION`、`OPPTRIX_BOOTSTRAP_UP=1` 等）。
 
-浏览器打开 [https://127.0.0.1:8712](https://127.0.0.1:8712)（自签名 HTTPS；公网则为 `https://<公网IP>:8712`）。HTTP `8711` 供反代与 health，不作默认产品入口。
+浏览器打开 [https://127.0.0.1:8712](https://127.0.0.1:8712)（自签名 HTTPS；公网则为 `https://<公网IP>:8712`）。HTTP 默认不开启。
 
 ### macOS / Windows（自备 Docker + Node）
 
@@ -127,7 +127,7 @@ opptrix up
 | `opptrix down` | 停止并移除容器（默认**保留**数据卷） |
 | `opptrix logs -f` | 跟踪日志 |
 | `opptrix status` | 容器状态 |
-| `opptrix health` | 探测 `http://127.0.0.1:8711/api/health` |
+| `opptrix health` | 探测 `https://127.0.0.1:8712/api/health`（自签名，CLI 会跳过证书校验） |
 | `opptrix uninstall-cli` | 取消全局命令 |
 
 仓内未装全局时：`npm run opptrix -- up --mirror cn`。仅验证服务、暂不拉模型：`opptrix up --mirror cn --skip-models`。
@@ -159,7 +159,7 @@ OPPTRIX_IMAGE=ghcr.io/travisun/opptrix:opptrix-selfhost-v1.3.6 docker compose pu
 OPPTRIX_IMAGE=ghcr.io/travisun/opptrix:opptrix-selfhost-v1.3.6 docker compose up -d
 # 或本地编译:
 OPPTRIX_BUILD_MIRROR=cn ./scripts/docker-compose-with-mirrors.sh up -d --build
-curl -fsS http://127.0.0.1:8711/api/health
+curl -fsk https://127.0.0.1:8712/api/health
 ```
 
 ### 构建镜像源（国内外切换）
@@ -346,19 +346,24 @@ Docker 自托管默认 **`OPPTRIX_AGENT_SANDBOX=off`**：`opptrix_run` **不**�
 仍须假设：容器逃逸、Agent 对**已授权**工作区内容的外传、服务进程自身泄露——不在本模型保证范围内。
 ## TLS 与端口
 
-默认双端口（容器与宿主机同号映射，监听 `0.0.0.0`，可用公网 IP 访问）：
+生产默认**只开 HTTPS :8712**（容器与宿主机同号映射，监听 `0.0.0.0`，可用公网 IP 访问）。HTTP 默认不监听、不映射。
 
 | 端口 | 协议 | 用途 |
 |------|------|------|
-| **8712** | HTTPS（自签名） | **浏览器默认入口**：`https://<公网IP>:8712` |
-| **8711** | HTTP | 健康检查、宿主机 Nginx 等反代 upstream |
+| **8712** | HTTPS（自签名） | **默认入口与健康检查**：`https://<公网IP>:8712`、`/api/health` |
+| **8711** | HTTP | 默认关闭。仅反代需要明文 upstream 时开启 |
 
-自签名证书首次启动写入卷内 `/opptrix/system/tls/`（`key.pem` / `cert.pem`）。浏览器会提示「不安全」——属预期，信任后即可使用。产品**不内置** Let’s Encrypt（国内多数无备案域名）；需要正规证书时在宿主机用 Nginx/Caddy 终结 TLS，upstream 指 `http://127.0.0.1:8711`。
+自签名证书首次启动写入卷内 `/opptrix/system/tls/`（`key.pem` / `cert.pem`）。浏览器会提示「不安全」——属预期，信任后即可使用。产品**不内置** Let’s Encrypt（国内多数无备案域名）；需要正规证书时在宿主机用 Nginx/Caddy 终结 TLS。upstream 可：
+
+1. **推荐**：`https://127.0.0.1:8712`（反代关闭证书校验，或导入自签），或  
+2. 设 `OPPTRIX_ENABLE_HTTP=1`，在 compose override 中映射 `8711`，upstream 指 `http://127.0.0.1:8711`。
 
 | 变量 | 说明 |
 |------|------|
-| `OPPTRIX_HTTPS_PORT` | 容器内 HTTPS 端口（默认 `8712`；`0` 关闭） |
-| `OPPTRIX_HOST_HTTP_PORT` / `OPPTRIX_HOST_HTTPS_PORT` | 宿主机映射端口（改后需 recreate） |
+| `OPPTRIX_HTTPS_PORT` | 容器内 HTTPS 端口（默认 `8712`；Docker 下不可关） |
+| `OPPTRIX_ENABLE_HTTP` | `1` 时监听 HTTP（`STOCK_RESEARCH_PORT`，默认 8711） |
+| `OPPTRIX_HOST_HTTPS_PORT` | 宿主机 HTTPS 映射端口（改后需 recreate） |
+| `OPPTRIX_HOST_HTTP_PORT` | 仅在自行增加 HTTP 端口映射时使用 |
 | `OPPTRIX_AUTH_COOKIE_SECURE` | 默认 `1`（HTTPS 自签入口）；仅明文调试时可改 |
 | `OPPTRIX_TRUSTED_PROXIES` | 反代 IP/CIDR；**为空时不信任** `X-Forwarded-*` |
 | `OPPTRIX_TRUSTED_LOCAL_CIDRS` | 额外视为「本地」的网段（可选） |

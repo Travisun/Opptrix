@@ -8,8 +8,8 @@
 #   cp compose.env.example compose.env   # optional runtime overrides
 #   OPPTRIX_DEV_ALLOW_BUILD=1 opptrix up --build
 #   # or: docker compose up -d --build
-#   open https://<公网IP或本机>:8712   （自签名 HTTPS，推荐浏览器入口）
-#   http://…:8711 仅供反代 upstream / health；勿当作默认产品入口
+#   open https://<公网IP或本机>:8712   （自签名 HTTPS，默认唯一入口）
+#   HTTP 默认关闭。反代需要明文 upstream 时设 OPPTRIX_ENABLE_HTTP=1 并自行映射 8711。
 #
 # Persistence: single named volume `opptrix-home` → `/opptrix`
 #   private/   user DB, auth, vault, sessions… (service-only)
@@ -43,12 +43,14 @@ services:
       - path: compose.env
         required: false
     ports:
-      # 默认映射到宿主机全接口，便于公网 IP:端口访问；可用 compose.env 覆盖
-      - "${OPPTRIX_HOST_HTTP_PORT:-8711}:8711"
+      # 默认只发布 HTTPS；可用 compose.env 覆盖宿主机端口
       - "${OPPTRIX_HOST_HTTPS_PORT:-8712}:8712"
+      # HTTP 默认不映射。需要时设 OPPTRIX_ENABLE_HTTP=1 并增加：
+      # - "${OPPTRIX_HOST_HTTP_PORT:-8711}:8711"
     environment:
       STOCK_RESEARCH_HOST: "0.0.0.0"
-      STOCK_RESEARCH_PORT: "8711"
+      OPPTRIX_ENABLE_HTTP: "${OPPTRIX_ENABLE_HTTP:-0}"
+      STOCK_RESEARCH_PORT: "${STOCK_RESEARCH_PORT:-8711}"
       OPPTRIX_HTTPS_PORT: "${OPPTRIX_HTTPS_PORT:-8712}"
       # 浏览器走 HTTPS 自签时 Cookie Secure（反代终结 TLS 时可改）
       OPPTRIX_AUTH_COOKIE_SECURE: "${OPPTRIX_AUTH_COOKIE_SECURE:-1}"
@@ -88,7 +90,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8711/api/health"]
+      test: ["CMD-SHELL", "curl -fsk https://127.0.0.1:${OPPTRIX_HTTPS_PORT:-8712}/api/health"]
       interval: 30s
       timeout: 8s
       retries: 8

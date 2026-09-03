@@ -25,10 +25,12 @@ services:
       - path: compose.env
         required: false
     ports:
-      - "127.0.0.1:8711:8711"
+      - "${OPPTRIX_HOST_HTTPS_PORT:-8712}:8712"
     environment:
       STOCK_RESEARCH_HOST: "0.0.0.0"
-      STOCK_RESEARCH_PORT: "8711"
+      OPPTRIX_ENABLE_HTTP: "${OPPTRIX_ENABLE_HTTP:-0}"
+      STOCK_RESEARCH_PORT: "${STOCK_RESEARCH_PORT:-8711}"
+      OPPTRIX_HTTPS_PORT: "${OPPTRIX_HTTPS_PORT:-8712}"
       SERVE_UI: "1"
       # Clear image default OPPTRIX_HOME → entrypoint legacy /data+/models+/system layout
       OPPTRIX_HOME: ""
@@ -66,7 +68,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8711/api/health"]
+      test: ["CMD-SHELL", "curl -fsk https://127.0.0.1:${OPPTRIX_HTTPS_PORT:-8712}/api/health"]
       interval: 30s
       timeout: 8s
       retries: 8

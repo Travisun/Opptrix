@@ -1,5 +1,6 @@
-# Publish Opptrix runtime hot-update assets to CDN (R2) and GitHub Release.
+# Publish Opptrix runtime hot-update assets to CDN (R2 + CN FTP) and GitHub Release.
 # Gitee release mirror is disabled (downloads use CDN + GitHub only).
+# CN mirror: FTP → https://update.opptrix.evzs.com (same hot/ layout as R2).
 # Triggers: push tag runtime-v*  or  workflow_dispatch
 # Docker base images: publish-selfhost-image.yml (manual only).
 #
@@ -33,6 +34,10 @@ on:
         default: ''
       skip_r2:
         description: 'Skip R2/CDN sync (local/fork testing)'
+        type: boolean
+        default: false
+      skip_ftp:
+        description: 'Skip CN FTP CDN sync (local/fork testing)'
         type: boolean
         default: false
 
@@ -220,6 +225,7 @@ jobs:
     timeout-minutes: 30
     env:
       HAS_R2_CREDS: ${{ secrets.R2_ACCESS_KEY_ID != '' }}
+      HAS_FTP_CREDS: ${{ secrets.FTP_HOST != '' && secrets.FTP_USERNAME != '' && secrets.FTP_PASSWORD != '' }}
     steps:
       - name: Require R2 secrets (tag push)
         if: github.event_name == 'push'
@@ -241,6 +247,26 @@ jobs:
           fi
           if [[ -z "${{ secrets.R2_BUCKET }}" ]]; then
             echo "::error::Missing GitHub secret R2_BUCKET — required for tag push CDN publish"
+            missing=1
+          fi
+          if [[ "$missing" -ne 0 ]]; then exit 1; fi
+
+      - name: Require FTP secrets (tag push)
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [[ -z "${{ secrets.FTP_HOST }}" ]]; then
+            echo "::error::Missing GitHub secret FTP_HOST — required for tag push CN CDN publish"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.FTP_USERNAME }}" ]]; then
+            echo "::error::Missing GitHub secret FTP_USERNAME — required for tag push CN CDN publish"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.FTP_PASSWORD }}" ]]; then
+            echo "::error::Missing GitHub secret FTP_PASSWORD — required for tag push CN CDN publish"
             missing=1
           fi
           if [[ "$missing" -ne 0 ]]; then exit 1; fi
@@ -403,6 +429,60 @@ jobs:
             console.log('CDN check-update OK for', v, '(linux-x64 + linux-arm64 + releases)');
           " "$VER"
 
+      - name: Install FTP upload client
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_ftp) && env.HAS_FTP_CREDS == 'true' }}
+        run: npm install basic-ftp@^5.0.5 --no-save --no-fund --no-audit
+
+      - name: Sync hot assets to CN FTP CDN
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_ftp) && env.HAS_FTP_CREDS == 'true' }}
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_SECURE: ${{ secrets.FTP_SECURE }}
+          FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+          OPPTRIX_UPDATE_CDN_BASE: ${{ env.OPPTRIX_UPDATE_CDN_BASE }}
+          OPPTRIX_RELEASE_TAG: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_MIN_BASE_IMAGE: ${{ needs.resolve-base.outputs.min_base_image }}
+          OPPTRIX_RUNTIME_RELEASE_TAG: ${{ needs.resolve-meta.outputs.runtime_release_tag }}
+          HOT_FTP_SMOKE_BASE: https://update.opptrix.evzs.com
+        run: |
+          set -euo pipefail
+          node scripts/sync-hot-to-ftp.mjs \
+            --dir dist-runtime \
+            --version "${{ needs.resolve-meta.outputs.version }}"
+
+      - name: Note skipped FTP sync
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.skip_ftp) || env.HAS_FTP_CREDS != 'true' }}
+        shell: bash
+        run: |
+          echo "::warning::CN FTP CDN sync skipped (fork/manual without secrets or skip_ftp=true)"
+
+      - name: Smoke verify CN FTP CDN check-update
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_ftp) && env.HAS_FTP_CREDS == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://update.opptrix.evzs.com/hot/check-update"
+          VER="${{ needs.resolve-meta.outputs.version }}"
+          echo "Fetching ${URL} …"
+          if ! BODY="$(curl -fsS --max-time 45 "$URL")"; then
+            echo "::warning::CN CDN check-update fetch failed (FTP may need HTTP propagation)"
+            exit 0
+          fi
+          echo "$BODY" | node -e "
+            const v = process.argv[1];
+            let j;
+            try { j = JSON.parse(require('fs').readFileSync(0, 'utf8')); }
+            catch (e) { console.error('invalid JSON'); process.exit(1); }
+            if (!j.latest || j.latest.version !== v) {
+              console.error('CN latest.version mismatch:', j.latest?.version, 'expected', v);
+              process.exit(1);
+            }
+            console.log('CN CDN smoke OK for', v);
+          " "$VER"
+
       - name: Summarize
         shell: bash
         run: |
@@ -414,7 +494,8 @@ jobs:
             echo "### Runtime assets"
             echo "- Runtime tag: \`${TAG}\`"
             echo "- minBaseImage: \`${BASE_IMG}\`"
-            echo "- CDN: \`${BASE}/hot/check-update\` → \`linux-x64\` + \`linux-arm64\` packages"
+            echo "- CDN (authoritative): \`${BASE}/hot/check-update\` → \`linux-x64\` + \`linux-arm64\` packages"
+            echo "- CN CDN (FTP mirror): \`https://update.opptrix.evzs.com/hot/check-update\` (same \`hot/\` layout; retain ≤8 versions)"
             echo "- GitHub Release: per-arch \`.bin\`, legacy x64 alias, \`.tar.gz\`"
             echo "- Gitee mirror: disabled (clients use CDN + GitHub only)"
             echo "- Docs: \`docs/SYSTEM-UPDATE.md\`"
