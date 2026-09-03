@@ -3565,24 +3565,11 @@ export interface PythonRuntimeStatus {
   active_path: string | null
   active_version: string | null
   ready: boolean
+  /** 在线一键安装已移除；恒为 false */
   recommend_install: boolean
   message: string
   /** 安装包内是否带有托管 Python */
   bundled_available?: boolean
-}
-
-export interface PythonInstallJobSnapshot {
-  state: 'idle' | 'queued' | 'running' | 'failed' | 'completed'
-  message: string
-  accepted: boolean
-  phase: 'idle' | 'prepare' | 'download' | 'extract' | 'configure' | 'pip' | 'verify' | 'done'
-  percent: number
-  bytes_downloaded: number
-  bytes_total: number | null
-  steps: string[]
-  error: string | null
-  /** Agent 轮询用；设置页可忽略 */
-  job_id?: string | null
 }
 
 export const pythonSettings = {
@@ -3598,15 +3585,6 @@ export const pythonSettings = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     }),
-
-  startInstall: () =>
-    jsonFetch<{ job: PythonInstallJobSnapshot; status: PythonInstallJobSnapshot }>(
-      '/settings/python/install',
-      { method: 'POST' },
-    ),
-
-  getInstallJob: () =>
-    jsonFetch<{ job: PythonInstallJobSnapshot }>('/settings/python/install'),
 }
 
 export type SemanticModelInstallPhase =

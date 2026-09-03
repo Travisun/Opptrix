@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ProgressBar, Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   ArrowSyncRegular,
   CheckmarkCircleRegular,
@@ -7,7 +7,6 @@ import {
 } from '@fluentui/react-icons'
 import {
   pythonSettings as pythonApi,
-  type PythonInstallJobSnapshot,
   type PythonRuntimeStatus,
   type PythonSettings,
 } from '../../api/client'
@@ -17,14 +16,9 @@ import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive, motion } from '../../theme/mixins'
 import {
   SettingsAddBar,
-  SettingsGroup,
   SettingsListPanel,
   SettingsListRow,
-  SettingsRow,
   SettingsStaticBlock,
-  settingsHairlineBorder,
-  settingsSurfaceRadius,
-  settingsSurfaceTint,
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import SettingsMonospaceEditor from './SettingsMonospaceEditor'
@@ -82,28 +76,6 @@ const useStyles = makeStyles({
   },
   statusReady: { color: opptrixCssVars.success },
   statusWarn: { color: opptrixCssVars.warning },
-  meta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-  },
-  progressBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '10px 14px',
-    border: settingsHairlineBorder,
-    borderRadius: settingsSurfaceRadius,
-    backgroundColor: settingsSurfaceTint,
-  },
-  progressLabel: {
-    fontSize: 'var(--opptrix-font-md)',
-    color: opptrixCssVars.textPrimary,
-  },
-  progressMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textSecondary,
-  },
 })
 
 type Tab = 'status' | 'mirrors'
@@ -130,15 +102,6 @@ function formatVersion(version: string | null): string {
   return version.replace(/^Python\s+/i, '')
 }
 
-function formatInstallProgress(job: PythonInstallJobSnapshot): string {
-  if (job.percent > 0) return `${job.percent}%`
-  return '准备中…'
-}
-
-function isInstallActive(job: PythonInstallJobSnapshot | null): boolean {
-  return job?.state === 'queued' || job?.state === 'running'
-}
-
 export default function PythonEnvironmentSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
@@ -152,8 +115,6 @@ export default function PythonEnvironmentSettingsSection() {
   const [mirrorsText, setMirrorsText] = useState('')
   const [status, setStatus] = useState<PythonRuntimeStatus | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [installBusy, setInstallBusy] = useState(false)
-  const [installJob, setInstallJob] = useState<PythonInstallJobSnapshot | null>(null)
   const skipSave = useRef(true)
   const baseline = useRef<PythonSettings | null>(null)
 
@@ -189,27 +150,6 @@ export default function PythonEnvironmentSettingsSection() {
 
   useEffect(() => { void load() }, [load])
 
-  useEffect(() => {
-    if (!isInstallActive(installJob)) return undefined
-    const timer = window.setInterval(() => {
-      void pythonApi.getInstallJob()
-        .then(resp => {
-          setInstallJob(resp.job)
-          if (resp.job.state === 'completed') {
-            void refreshStatus()
-          }
-        })
-        .catch(() => { /* 轮询失败静默，下次重试 */ })
-    }, 1500)
-    return () => window.clearInterval(timer)
-  }, [installJob, refreshStatus])
-
-  useEffect(() => {
-    void pythonApi.getInstallJob()
-      .then(resp => setInstallJob(resp.job))
-      .catch(() => { /* ignore */ })
-  }, [])
-
   useDebouncedEffect(() => {
     if (loading || skipSave.current) {
       skipSave.current = false
@@ -220,12 +160,9 @@ export default function PythonEnvironmentSettingsSection() {
 
     const next: PythonSettings = {
       pip_index_urls: textToMirrors(mirrorsText),
-      prefer_opptrix_python: settings.prefer_opptrix_python,
+      prefer_opptrix_python: true,
     }
-    if (
-      base.prefer_opptrix_python === next.prefer_opptrix_python
-      && mirrorsToText(base.pip_index_urls) === mirrorsToText(next.pip_index_urls)
-    ) {
+    if (mirrorsToText(base.pip_index_urls) === mirrorsToText(next.pip_index_urls)) {
       return
     }
 
@@ -244,25 +181,7 @@ export default function PythonEnvironmentSettingsSection() {
         toast.showError(e instanceof Error ? e.message : '保存失败')
         window.setTimeout(() => setSaveState('idle'), 2000)
       })
-  }, [mirrorsText, settings.prefer_opptrix_python, loading, toast], SETTINGS_SAVE_MS)
-
-  const handleInstall = async () => {
-    setInstallBusy(true)
-    try {
-      const resp = await pythonApi.startInstall()
-      setInstallJob(resp.job)
-      if (resp.job.state === 'completed') {
-        await refreshStatus()
-        toast.showSuccess('Opptrix 托管 Python 已安装')
-      } else if (resp.job.state === 'failed') {
-        toast.showError(resp.job.message)
-      }
-    } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '暂时无法开始安装')
-    } finally {
-      setInstallBusy(false)
-    }
-  }
+  }, [mirrorsText, loading, toast], SETTINGS_SAVE_MS)
 
   const saveHintText = (() => {
     switch (saveState) {
@@ -304,7 +223,7 @@ export default function PythonEnvironmentSettingsSection() {
       {tab === 'status' && (
         <>
           <Text className={s.tabHint} block>
-            查看当前可用的 Python。随应用提供的托管版本优先于本机 Python。
+            查看当前可用的 Python。桌面版随应用提供的版本优先于本机；服务器与 Docker 使用系统 Python。
           </Text>
           <SettingsListPanel>
             <SettingsAddBar
@@ -349,66 +268,13 @@ export default function PythonEnvironmentSettingsSection() {
                     <Text>
                       {status.opptrix_path
                         ? `${formatVersion(status.opptrix_version)}${status.bundled_available ? ' · 随应用提供' : ''}`
-                        : '未安装'}
+                        : '未提供'}
                     </Text>
                   )}
                 />
               </>
             )}
           </SettingsListPanel>
-          {(!status?.opptrix_path || status?.recommend_install || installJob?.state === 'failed') && (
-            <SettingsGroup>
-              <SettingsRow
-                title="安装托管 Python"
-                desc="一键安装 Opptrix 托管版本（随应用提供时通常已就绪），无需单独配置本机 Python"
-                control={(
-                  <OpptrixButton
-                    variant="primary"
-                    onClick={() => { void handleInstall() }}
-                    disabled={installBusy || isInstallActive(installJob)}
-                  >
-                    {installBusy || isInstallActive(installJob) ? '安装中…' : installJob?.state === 'failed' ? '重试安装' : '开始安装'}
-                  </OpptrixButton>
-                )}
-                last
-              />
-            </SettingsGroup>
-          )}
-          {isInstallActive(installJob) && installJob && (
-            <div className={s.progressBlock}>
-              <Text className={s.progressLabel} block>{installJob.message}</Text>
-              {installJob.bytes_total != null && installJob.bytes_total > 0 && (
-                <Text className={s.progressMeta} block>
-                  已下载 {(installJob.bytes_downloaded / 1024 / 1024).toFixed(1)} MB / {(installJob.bytes_total / 1024 / 1024).toFixed(1)} MB
-                </Text>
-              )}
-              <ProgressBar
-                value={installJob.percent > 0 ? installJob.percent / 100 : undefined}
-                thickness="medium"
-                color="brand"
-                shape="rounded"
-              />
-              <Text className={s.progressMeta} block>{formatInstallProgress(installJob)}</Text>
-            </div>
-          )}
-          {installJob?.state === 'failed' && (
-            <Text className={s.meta} block>{installJob.message}</Text>
-          )}
-          <SettingsGroup>
-            <SettingsRow
-              title="优先使用 Opptrix 托管"
-              desc="已安装托管版本时始终优先采用；此开关默认开启，安装成功后也会自动开启"
-              control={(
-                <Switch
-                  checked={settings.prefer_opptrix_python}
-                  onChange={(_, data) => {
-                    setSettings(prev => ({ ...prev, prefer_opptrix_python: data.checked }))
-                  }}
-                />
-              )}
-              last
-            />
-          </SettingsGroup>
         </>
       )}
 

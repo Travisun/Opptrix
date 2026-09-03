@@ -301,8 +301,8 @@ function buildStatusMessage(
       return 'Docker 镜像未检测到系统 Python。请在 Dockerfile 中安装 python3 后重建镜像。'
     }
     return bundledAvailable
-      ? '正在准备随应用提供的 Python…若仍不可用，可在设置中重新安装托管版本。'
-      : '尚未检测到可用的 Python。可在设置中安装托管版本，或先在系统中安装 Python。'
+      ? '随应用提供的 Python 尚未就绪。请重启应用后再试；若仍不可用，请在本机安装 Python 3。'
+      : '尚未检测到可用的 Python。请在本机安装 Python 3，或使用已内置运行环境的桌面版。'
   }
   if (activeSource === 'system' && docker) {
     return '已使用容器内系统 Python（Docker 自托管），可直接运行脚本与安装依赖。'
@@ -366,7 +366,8 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   }
 
   const ready = active_path != null
-  const recommend_install = docker ? false : !ready
+  // 在线一键安装已移除；字段保留兼容旧客户端，恒为 false
+  const recommend_install = false
 
   return {
     system_path: system?.path ?? null,

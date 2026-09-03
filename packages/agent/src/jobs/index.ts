@@ -54,7 +54,6 @@ export {
 export {
   registerDefaultJobAdapters,
   unregisterJobAdaptersForTests,
-  pythonInstallAdapter,
   fuyaoDumpAdapter,
   shellCommandAdapter,
   type JobAdapter,

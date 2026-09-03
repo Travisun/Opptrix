@@ -1,10 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import {
-  getPythonInstallJobStatus,
   getPythonPlatformStatus,
   getPythonSettings,
   savePythonSettings,
-  startPythonInstallJob,
 } from '@opptrix/agent-workspace'
 import type { PythonSettings } from '@opptrix/shared'
 
@@ -24,13 +22,4 @@ export function registerPythonSettingsRoutes(app: FastifyInstance): void {
     }
     return { settings: result.settings }
   })
-
-  app.post('/api/settings/python/install', async () => {
-    const job = startPythonInstallJob()
-    return { job, status: getPythonInstallJobStatus() }
-  })
-
-  app.get('/api/settings/python/install', async () => ({
-    job: getPythonInstallJobStatus(),
-  }))
 }

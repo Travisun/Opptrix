@@ -557,7 +557,7 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
     avoidTools: ['get_system_info'],
     confidence: 'high',
-    hint: '问 Python 环境/版本 → python_env_status；仅用户明确要装/修 Python，或 opptrix_run(python/pip) 失败未就绪时再 ensure_python（preparing|installing+job_id，自动挂起并终态续跑，勿 poll/sleep）；编程默认直接 opptrix_run',
+    hint: '问 Python 环境/版本 → python_env_status；仅用户明确要检查 Python，或 opptrix_run(python/pip) 失败未就绪时再 ensure_python（只读探测 ready|failed，不下载）；编程默认直接 opptrix_run',
   },
   {
     intent: 'turn_wake',

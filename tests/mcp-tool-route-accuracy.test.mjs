@@ -110,7 +110,7 @@ const PRIMARY_CASES = [
   { message: '写一个 python 脚本算一下收益率', expectPrimary: 'workspace_glob', intent: 'workspace_coding' },
   { message: '帮我改一下工作区里的脚本', expectPrimary: 'workspace_glob', intent: 'workspace_coding' },
   { message: '检查一下 Python 环境', expectPrimary: 'python_env_status', intent: 'python_env' },
-  { message: 'ensure_python 返回 preparing 后用 job_id 轮询', expectPrimary: 'python_env_status', intent: 'python_env' },
+  { message: 'ensure_python 检查 Python 是否就绪', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: '等一会儿再检查下载是否完成然后继续', expectPrimary: 'schedule_turn_wake', intent: 'turn_wake' },
   { message: 'schedule_turn_wake 延后续跑', expectPrimary: 'schedule_turn_wake', intent: 'turn_wake' },
   { message: '有哪些后台任务在跑', expectPrimary: 'list_jobs', intent: 'list_jobs' },

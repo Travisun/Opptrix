@@ -161,19 +161,6 @@ export {
   readPipMirrorCacheFileForTests,
 } from './python/pip-mirrors.js'
 export {
-  getPythonInstallJobStatus,
-  startPythonInstallJob,
-  waitForPythonInstallJob,
-  resetPythonInstallJobForTests,
-  setPythonInstallPipelineDepsForTests,
-  subscribePythonInstallJob,
-  PYTHON_INSTALL_JOB_ID,
-  type PythonInstallJobSnapshot,
-  type PythonInstallJobState,
-  type PythonInstallPhase,
-  type PythonInstallPipelineDeps,
-} from './python/install-job.js'
-export {
   ensurePythonReady,
   resetEnsurePythonDepsForTests,
   setEnsurePythonDepsForTests,

@@ -321,11 +321,11 @@ describe('toAgentPythonEnvView', () => {
       ready: true,
       recommend_install: false,
       message: 'ok',
-    }, true)
+    })
     assert.equal(view.ready, true)
     assert.equal(view.active_source, 'opptrix')
     assert.equal(view.priority, '当前优先：Opptrix 托管（随应用提供）')
-    assert.equal(view.prefer_opptrix_python, true)
+    assert.equal(view.recommend_install, false)
     assert.equal(view.opptrix_installed, true)
     assert.equal(view.system_detected, true)
     assert.ok(view.argv_policy.includes('python'))
@@ -334,6 +334,7 @@ describe('toAgentPythonEnvView', () => {
     assert.equal('system_path' in view, false)
     assert.equal('opptrix_path' in view, false)
     assert.equal('active_path' in view, false)
+    assert.equal('prefer_opptrix_python' in view, false)
   })
 })
 

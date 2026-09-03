@@ -100,7 +100,6 @@ test('ensurePythonReady does not start install job in Docker', async () => {
   const { ensurePythonReady, setEnsurePythonDepsForTests, resetEnsurePythonDepsForTests } =
     await import('../packages/agent-workspace/dist/python/ensure-python.js')
 
-  let jobStarted = false
   setEnsurePythonDepsForTests({
     getStatus: async () => ({
       ready: false,
@@ -114,16 +113,12 @@ test('ensurePythonReady does not start install job in Docker', async () => {
       opptrix_version: null,
       active_path: null,
     }),
-    startJob: () => {
-      jobStarted = true
-      return { state: 'idle', accepted: false, job_id: 'python-install' }
-    },
   })
 
   await withEnv({ OPPTRIX_DOCKER: '1' }, async () => {
     const result = await ensurePythonReady()
-    assert.equal(jobStarted, false)
     assert.equal(result.ready, false)
+    assert.equal(result.status, 'failed')
     assert.equal(result.recommend_install, false)
     assert.match(result.message, /Docker|python3/)
   })

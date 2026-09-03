@@ -616,10 +616,10 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/settings/python` | 读取当前设置 |
-| GET | `/api/settings/python/status` | 探测系统 / Opptrix 托管 Python 与当前采用源 |
-| PUT | `/api/settings/python` | 校验并保存镜像列表与优先托管开关 |
-| POST | `/api/settings/python/install` | 启动托管 Python 安装（幂等：进行中返回当前 job） |
-| GET | `/api/settings/python/install` | 查询安装任务状态与进度 snapshot |
+| GET | `/api/settings/python/status` | 探测系统 / Opptrix 托管（桌面包内种子）与当前采用源 |
+| PUT | `/api/settings/python` | 校验并保存 pip 镜像列表 |
+
+在线一键「安装托管 Python」已移除。桌面版依赖安装包内置树种子到用户目录；服务器与 Docker 仅使用系统 `python3`。
 
 **GET `/api/settings/python/status` 响应（摘要）**
 
@@ -639,27 +639,9 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `pip_index_urls` | string[] | pip 镜像 URL 列表（首个用于 `PIP_INDEX_URL`） |
-| `prefer_opptrix_python` | boolean | 默认 `true`；运行时只要托管已安装即优先采用（存量 `false` 会迁移为 `true`） |
+| `prefer_opptrix_python` | boolean | 兼容字段；运行时只要托管/包内已就绪即优先采用 |
 
-**GET `/api/settings/python/install` 响应（摘要）**
-
-```json
-{
-  "job": {
-    "state": "running",
-    "message": "正在下载 Python 安装包…",
-    "accepted": true,
-    "phase": "download",
-    "percent": 35,
-    "bytes_downloaded": 5242880,
-    "bytes_total": 15728640,
-    "steps": ["准备安装", "下载安装包", "解压文件", "配置环境", "安装 pip", "验证安装"],
-    "error": null
-  }
-}
-```
-
-`POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
+`recommend_install` 恒为 `false`（兼容旧客户端）。
 
 ### 分析习惯（按模型）
 
@@ -1238,7 +1220,7 @@ Content-Type: application/json
 
 **会话后台 Job（`list_jobs` / Composer 任务面板）**
 
-长任务（`opptrix_run({ background: true })`、`ensure_python` 安装、`prepare_fuyao_dump` 冷下载等）登记为全局 Job；有会话 watch 时推送进度，终态触发同会话自动续跑。Agent 工具 `list_jobs` / `cancel_job` 与下列 REST 语义对齐。**无** `wait_job` 工具或等价阻塞等待 API。
+长任务（`opptrix_run({ background: true })`、`prepare_fuyao_dump` 冷下载等）登记为全局 Job；有会话 watch 时推送进度，终态触发同会话自动续跑。Agent 工具 `list_jobs` / `cancel_job` 与下列 REST 语义对齐。**无** `wait_job` 工具或等价阻塞等待 API。`ensure_python` 仅为同步探测，不再登记安装 Job。
 
 **GET `/api/sessions/:id/jobs`**
 

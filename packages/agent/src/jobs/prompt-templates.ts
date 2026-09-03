@@ -10,7 +10,6 @@ const TEMPLATES: Record<BackgroundJobKind, (jobId: string) => string> = {
 }
 
 const TOOL_KIND: Record<string, BackgroundJobKind> = {
-  ensure_python: 'python-install',
   prepare_fuyao_dump: 'fuyao-dump',
   // opptrix_run 仅 background 返回带 kind/job_id；见 result.kind / resolveJobKindFromJobId
 }

@@ -931,9 +931,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   ensure_python: {
     packId: 'workspace',
     usageGuide:
-      '失败兜底：仅当用户明确要安装/修复 Python，或 opptrix_run(python/pip) 因未就绪失败时再调用；禁止作为编程第一步或改文件前仪式。未就绪立即 preparing/installing+job_id；系统通常自动挂起并终态续跑；勿 poll/sleep 查进度。',
+      '失败兜底：仅当用户明确要检查/修复 Python，或 opptrix_run(python/pip) 因未就绪失败时再调用；禁止作为编程第一步。只读探测，不会下载安装；未就绪返回 failed 与说明（本机装 Python 3 / 桌面内置 / Docker 装 python3）。',
     compliance:
-      '勿在本工具内死等；status=preparing|installing 时依赖自动挂起与终态续跑；必要时可 ensure_python({ job_id }) 查状态，无 job 事件才 schedule_turn_wake（禁止传 job_id）；反空转对进行中 status 豁免；ready 后勿空转同参；failed 勿假装已安装；编程默认直接 opptrix_run。',
+      '同步返回 ready|failed；勿期望 preparing/installing/job_id；failed 勿假装已安装；编程默认直接 opptrix_run。',
   },
   list_local_data_apis: {
     packId: 'workspace',

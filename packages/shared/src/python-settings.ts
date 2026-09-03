@@ -3,8 +3,8 @@ export interface PythonSettings {
   /** pip 镜像候选源（运行时按延迟探测选用最快源） */
   pip_index_urls: string[]
   /**
-   * 偏好展示 / 安装成功后写入 true。
-   * 运行时解析：只要托管 Python 存在即优先使用（见 resolvePythonRuntime），不因 false 回退系统。
+   * 偏好展示字段（兼容存量）。运行时只要托管/包内 Python 存在即优先采用。
+   * 在线一键安装已移除；桌面依赖包内种子，服务器/Docker 依赖系统 Python。
    */
   prefer_opptrix_python: boolean
 }

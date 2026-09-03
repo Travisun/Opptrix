@@ -1025,18 +1025,12 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
       name: 'ensure_python',
       category: '工作区',
       description:
-        '失败/装修兜底：仅当用户明确要装/修 Python，或 opptrix_run(python/pip) 因未就绪失败时再调用；禁止作为编程第一步。未就绪立即 preparing/installing+job_id（通常自动挂起并终态续跑）；已就绪同步返回 ready',
-      parameters: S({
-        job_id: {
-          type: 'string',
-          description: '轮询用：上次返回 status=preparing|installing 时的 job_id',
-        },
-      }),
-      handler: async (args) => {
+        '失败兜底：确认当前 Python 是否就绪（只读探测，不下载安装）。仅当用户明确要检查 Python，或 opptrix_run(python/pip) 因未就绪失败时再调用；禁止作为编程第一步。已就绪返回 ready；未就绪返回 failed 与可行动说明（本机安装 Python 3 / 使用桌面内置 / Docker 装 python3）',
+      parameters: S({}),
+      handler: async () => {
         try {
           requireBridge()
-          const jobId = String(args.job_id ?? '').trim()
-          return await ws.ensurePython(jobId ? { jobId } : undefined)
+          return await ws.ensurePython()
         } catch (err) {
           return toolError(err)
         }
