@@ -23,9 +23,15 @@ import {
   overrideComposePath,
   writeHomeBindOverride,
 } from './data-migrate.mjs'
+import { ensureUserAgreementAccepted, USER_AGREEMENT_URL } from './deploy-ux.mjs'
+import {
+  DEFAULT_HTTP_PORT,
+  DEFAULT_HTTPS_PORT,
+  findFreeHostPort,
+  isHostPortFree,
+} from './ports.mjs'
 
-export const DEFAULT_HTTP_PORT = 0
-export const DEFAULT_HTTPS_PORT = 8712
+export { DEFAULT_HTTP_PORT, DEFAULT_HTTPS_PORT }
 export const DEFAULT_VOLUME_NAME = 'opptrix-home'
 
 /**
@@ -320,6 +326,36 @@ export async function maybeOfferDockerAutostart(opts = {}) {
 }
 
 /**
+ * Auto-pick free host ports when defaults / answers collide with occupied ports.
+ * @param {SetupAnswers} answers
+ * @returns {Promise<SetupAnswers>}
+ */
+export async function resolveSetupPorts(answers) {
+  let httpsPort = answers.httpsPort
+  let httpPort = answers.httpPort
+
+  if (!(await isHostPortFree(httpsPort))) {
+    const next = await findFreeHostPort({
+      start: httpsPort + 1,
+      exclude: httpPort > 0 ? [httpPort] : [],
+    })
+    console.log(`[opptrix] HTTPS 端口 ${httpsPort} 已被占用，已自动改用 ${next}`)
+    httpsPort = next
+  }
+
+  if (httpPort > 0 && !(await isHostPortFree(httpPort))) {
+    const next = await findFreeHostPort({
+      start: httpPort + 1,
+      exclude: [httpsPort],
+    })
+    console.log(`[opptrix] HTTP 端口 ${httpPort} 已被占用，已自动改用 ${next}`)
+    httpPort = next
+  }
+
+  return { ...answers, httpsPort, httpPort }
+}
+
+/**
  * Persist setup answers to .opptrix.json, compose.env, and optional override.
  * @param {string} root
  * @param {SetupAnswers} answers
@@ -378,9 +414,11 @@ export function printSetupHelp() {
   --mirror auto|cn|foreign   镜像源（默认 auto）
   --data volume|<路径>       命名卷 opptrix-home，或宿主机绑定目录
   --http-port <n>            宿主机 HTTP（默认 0=不开启；反代可设 8711）
-  --https-port <n>           宿主机 HTTPS（默认 8712）
+  --https-port <n>           宿主机 HTTPS（默认 8712；占用时自动改用空闲端口）
   --skip-models              跳过首启模型下载
   --yes, -y                  非交互，直接写入默认/选项
+  --agree-tos                已阅读并同意用户协议（非 TTY 必填）
+                             ${USER_AGREEMENT_URL}
 
 示例:
   opptrix setup
@@ -400,10 +438,19 @@ export async function cmdSetup(parsed) {
   }
 
   const root = resolveDeployRoot()
+  const tos = await ensureUserAgreementAccepted(parsed, { root, actionLabel: '完成部署设置' })
+  if (tos !== 0) return tos
+
   const interactive = Boolean(process.stdin.isTTY) && !flagTrue(parsed.flags, 'yes', 'y')
 
   if (!interactive && !flagTrue(parsed.flags, 'yes', 'y') && !Object.keys(answersFromFlags(parsed)).length) {
-    const answers = defaultSetupAnswers()
+    let answers = defaultSetupAnswers()
+    try {
+      answers = await resolveSetupPorts(answers)
+    } catch (err) {
+      console.error(`[opptrix] ${err instanceof Error ? err.message : err}`)
+      return 1
+    }
     applySetupAnswers(root, answers)
     console.log('[opptrix] 非 TTY：已写入默认部署设置（可用 opptrix setup --yes 或加选项显式确认）')
     console.log(`[opptrix] deploy root → ${root}`)
@@ -423,6 +470,13 @@ export async function cmdSetup(parsed) {
   } catch (err) {
     console.error(`[opptrix] ${err instanceof Error ? err.message : err}`)
     return 2
+  }
+
+  try {
+    answers = await resolveSetupPorts(answers)
+  } catch (err) {
+    console.error(`[opptrix] ${err instanceof Error ? err.message : err}`)
+    return 1
   }
 
   applySetupAnswers(root, answers)

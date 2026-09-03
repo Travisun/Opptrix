@@ -74,6 +74,49 @@ export function resolveHostBaseVersion(env?: RuntimeCheckEnv): string | null {
   return null
 }
 
+/**
+ * Prefer hot-update runtime (`state.currentVersion`) over baked app / image version.
+ */
+export function preferRuntimeAppVersion(
+  runtimeVersion: string | null | undefined,
+  fallbackVersion: string,
+): string {
+  const runtime = typeof runtimeVersion === 'string' ? runtimeVersion.trim() : ''
+  return runtime || fallbackVersion
+}
+
+/**
+ * Product-facing base label: strip `opptrix-selfhost-v` / leading `v`.
+ */
+export function normalizeBaseVersionLabel(raw: string | null | undefined): string | null {
+  if (raw == null) return null
+  const trimmed = String(raw).trim()
+  if (!trimmed) return null
+  if (trimmed.startsWith(BASE_IMAGE_TAG_PREFIX)) {
+    const rest = trimmed.slice(BASE_IMAGE_TAG_PREFIX.length).trim()
+    return rest || trimmed
+  }
+  const withoutV = trimmed.replace(/^v/i, '').trim()
+  return withoutV || trimmed
+}
+
+/**
+ * Runtime-first `version` plus distinct base (falls back to appVersion when host base unset).
+ */
+export function resolveDisplayedAppVersions(input: {
+  runtimeVersion?: string | null
+  hostBaseVersion?: string | null
+  appVersion: string
+}): { version: string; runtimeVersion: string; baseVersion: string } {
+  const version = preferRuntimeAppVersion(input.runtimeVersion, input.appVersion)
+  const baseRaw =
+    (typeof input.hostBaseVersion === 'string' && input.hostBaseVersion.trim()
+      ? input.hostBaseVersion.trim()
+      : null) ?? input.appVersion
+  const baseVersion = normalizeBaseVersionLabel(baseRaw) ?? input.appVersion
+  return { version, runtimeVersion: version, baseVersion }
+}
+
 function runtimeIsDocker(env?: RuntimeCheckEnv): boolean {
   if (typeof env?.isDocker === 'boolean') return env.isDocker
   return isDockerEnv()

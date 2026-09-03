@@ -171,6 +171,51 @@ export function loadKnownEnvKeys(examplePath) {
 }
 
 /**
+ * Known compose.env keys with optional short comments from example file.
+ * @param {string} examplePath
+ * @returns {Array<{ key: string, comment: string | null }>}
+ */
+export function loadKnownEnvKeyCatalog(examplePath) {
+  /** @type {Array<{ key: string, comment: string | null }>} */
+  const out = []
+  /** @type {Set<string>} */
+  const seen = new Set()
+  if (!fs.existsSync(examplePath)) return out
+  const lines = fs.readFileSync(examplePath, 'utf8').split('\n')
+  /** @type {string[]} */
+  let pending = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) {
+      pending = []
+      continue
+    }
+    if (trimmed.startsWith('#') && !/^\s*#?\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line)) {
+      const note = trimmed.replace(/^#\s?/, '').trim()
+      if (note && !note.startsWith('──') && !note.startsWith('Copy to')) {
+        pending.push(note)
+      }
+      continue
+    }
+    const m = /^\s*#?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line)
+    if (!m) {
+      pending = []
+      continue
+    }
+    const key = m[1]
+    if (seen.has(key)) {
+      pending = []
+      continue
+    }
+    seen.add(key)
+    const comment = pending.length ? pending[pending.length - 1] : null
+    out.push({ key, comment })
+    pending = []
+  }
+  return out
+}
+
+/**
  * @param {string} key
  * @param {Set<string>} known
  * @returns {string | null}
@@ -231,4 +276,12 @@ export function resolveComposeEnvFile(root) {
  */
 export function knownEnvKeysForRoot(root) {
   return loadKnownEnvKeys(composeEnvExamplePath(root))
+}
+
+/**
+ * @param {string} root
+ * @returns {Array<{ key: string, comment: string | null }>}
+ */
+export function knownEnvKeyCatalogForRoot(root) {
+  return loadKnownEnvKeyCatalog(composeEnvExamplePath(root))
 }

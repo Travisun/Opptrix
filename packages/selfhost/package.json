@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/selfhost",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Opptrix 自托管 CLI（opptrix）：Docker Compose 部署，优先拉取 GHCR 预构建镜像，应用快照 opptrix-selfhost-v*，版本列表/升级回退，国内海外镜像",
   "type": "module",
   "license": "Apache-2.0",

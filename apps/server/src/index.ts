@@ -14,6 +14,7 @@ import {
   registerSystemUpdateRoutes,
   startSystemUpdateAfterListen,
 } from './system-update-routes.js'
+import { resolveHealthVersionFields } from './system-update-service.js'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
@@ -353,9 +354,12 @@ app.get<{ Params: { code: string } }>('/api/stock/:code/prep', async (req) => {
 })
 
 app.get('/api/health', async (req) => {
+  const versions = resolveHealthVersionFields(APP_VERSION)
   const publicBody = {
     status: 'ok' as const,
-    version: APP_VERSION,
+    version: versions.version,
+    runtime_version: versions.runtime_version,
+    base_version: versions.base_version,
   }
   if (!shouldExposeFullHealth(req)) return publicBody
   const channel = process.env.OPPTRIX_RELEASE_CHANNEL?.trim() || undefined

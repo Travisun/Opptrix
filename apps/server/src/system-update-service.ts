@@ -7,6 +7,7 @@ import {
   evaluateRuntimeRequires,
   isDockerEnv,
   isVersionBlocked,
+  resolveDisplayedAppVersions,
   resolveHostBaseVersion,
   patchState,
   readRuntimeMarker,
@@ -82,6 +83,8 @@ export function userFacingUpdateError(err: unknown): string {
 export interface SystemUpdateStatusDto {
   enabled: boolean
   currentVersion: string
+  /** Host Docker / image base (distinct from hot runtime). */
+  baseVersion: string | null
   availableVersion: string | null
   pendingVersion: string | null
   backupVersion: string | null
@@ -162,7 +165,13 @@ export function buildSystemUpdateStatus(
   enabled = isSystemUpdateEnabled(),
 ): SystemUpdateStatusDto {
   const s = state ?? readState()
-  const current = s.currentVersion ?? resolveOpptrixAppVersion()
+  const appVersion = resolveOpptrixAppVersion()
+  const displayed = resolveDisplayedAppVersions({
+    runtimeVersion: s.currentVersion,
+    hostBaseVersion: resolveHostBaseVersion(),
+    appVersion,
+  })
+  const current = displayed.version
   const job = s.downloadJob ?? null
   const blockedVersions = s.blockedVersions ?? []
   const pendingBlocked = Boolean(
@@ -179,6 +188,7 @@ export function buildSystemUpdateStatus(
   return {
     enabled,
     currentVersion: current,
+    baseVersion: displayed.baseVersion,
     availableVersion: available,
     pendingVersion: pendingBlocked ? null : s.pendingVersion,
     backupVersion: s.backupVersion,
@@ -203,6 +213,24 @@ export function buildSystemUpdateStatus(
     updateBlocked: pendingBlocked,
     lastBlockedReason: s.lastBlockedReason ?? null,
     availableDescription: getAvailableReleaseDescription(available),
+  }
+}
+
+/** Health / About: runtime-first `version` plus distinct `base_version`. */
+export function resolveHealthVersionFields(appVersion = resolveOpptrixAppVersion()): {
+  version: string
+  runtime_version: string
+  base_version: string
+} {
+  const displayed = resolveDisplayedAppVersions({
+    runtimeVersion: readState().currentVersion,
+    hostBaseVersion: resolveHostBaseVersion(),
+    appVersion,
+  })
+  return {
+    version: displayed.version,
+    runtime_version: displayed.runtimeVersion,
+    base_version: displayed.baseVersion,
   }
 }
 

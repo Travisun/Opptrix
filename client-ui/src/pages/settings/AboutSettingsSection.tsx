@@ -122,7 +122,21 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       return
     }
     void getHealth()
-      .then(health => setVersionLabel(health.version ? `v${health.version}` : null))
+      .then((health) => {
+        const runtime = health.runtime_version || health.version
+        if (!runtime) {
+          setVersionLabel(null)
+          return
+        }
+        const runtimeLabel = runtime.replace(/^v/i, '')
+        const baseRaw = health.base_version?.trim()
+        const baseLabel = baseRaw ? baseRaw.replace(/^v/i, '') : ''
+        if (baseLabel && baseLabel !== runtimeLabel) {
+          setVersionLabel(`运行时 v${runtimeLabel} · 底座 v${baseLabel}`)
+        } else {
+          setVersionLabel(`运行时 v${runtimeLabel}`)
+        }
+      })
       .catch(() => setVersionLabel(null))
   }, [])
 

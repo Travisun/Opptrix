@@ -156,7 +156,14 @@ export function legacyHostConfigPath(root = resolveDeployRoot()) {
 
 /**
  * @param {string} root
- * @returns {{ mirror?: string, skipModels?: boolean, appRef?: string }}
+ * @returns {{
+ *   mirror?: string,
+ *   skipModels?: boolean,
+ *   appRef?: string,
+ *   userAgreementAcceptedAt?: string,
+ *   userAgreementVersion?: string,
+ *   [key: string]: unknown,
+ * }}
  */
 export function readHostConfig(root = resolveDeployRoot()) {
   for (const p of [hostConfigPath(root), legacyHostConfigPath(root)]) {
@@ -164,7 +171,7 @@ export function readHostConfig(root = resolveDeployRoot()) {
       const raw = fs.readFileSync(p, 'utf8')
       const data = JSON.parse(raw)
       if (!data || typeof data !== 'object') continue
-      return /** @type {{ mirror?: string, skipModels?: boolean, appRef?: string }} */ (data)
+      return /** @type {{ mirror?: string, skipModels?: boolean, appRef?: string, userAgreementAcceptedAt?: string, userAgreementVersion?: string, [key: string]: unknown }} */ (data)
     } catch {
       // try next
     }

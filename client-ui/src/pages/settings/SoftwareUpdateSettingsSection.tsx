@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ProgressBar, Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   ArrowDownloadRegular,
@@ -23,6 +23,24 @@ import {
   SettingsSectionLabel,
 } from './SettingsPrimitives'
 import { buildSystemUpdatePanel } from './systemUpdatePanelModel'
+
+function stripVersionPrefix(raw: string): string {
+  return raw.trim().replace(/^v/i, '')
+}
+
+/** Product-facing dual version: 运行时 + 底座 when both known and distinct. */
+function formatRuntimeBaseVersionDesc(
+  runtime: string | null | undefined,
+  base: string | null | undefined,
+): string | null {
+  const runtimeLabel = runtime?.trim() ? stripVersionPrefix(runtime) : ''
+  const baseLabel = base?.trim() ? stripVersionPrefix(base) : ''
+  if (!runtimeLabel) return null
+  if (baseLabel && baseLabel !== runtimeLabel) {
+    return `运行时 v${runtimeLabel} · 底座 v${baseLabel}`
+  }
+  return `运行时 v${runtimeLabel}`
+}
 
 const useStyles = makeStyles({
   root: {
@@ -135,6 +153,8 @@ export default function SoftwareUpdateSettingsSection({ embedded = false }: { em
   } = useSystemUpdate()
 
   const [versionLabel, setVersionLabel] = useState<string | null>(null)
+  const [healthRuntime, setHealthRuntime] = useState<string | null>(null)
+  const [healthBase, setHealthBase] = useState<string | null>(null)
   const [checkedOnce, setCheckedOnce] = useState(false)
   const [systemCheckedOnce, setSystemCheckedOnce] = useState(false)
   const [cliCopied, setCliCopied] = useState(false)
@@ -150,9 +170,46 @@ export default function SoftwareUpdateSettingsSection({ embedded = false }: { em
       return
     }
     void getHealth()
-      .then(health => setVersionLabel(health.version ? `v${health.version}` : null))
-      .catch(() => setVersionLabel(null))
+      .then((health) => {
+        const runtime = health.runtime_version || health.version || null
+        const base = health.base_version ?? null
+        setHealthRuntime(runtime)
+        setHealthBase(base)
+        setVersionLabel(formatRuntimeBaseVersionDesc(runtime, base))
+      })
+      .catch(() => {
+        setHealthRuntime(null)
+        setHealthBase(null)
+        setVersionLabel(null)
+      })
   }, [])
+
+  const selfHostVersionDesc = useMemo(() => {
+    if (showElectronUpdate) return versionLabel
+    const runtime = systemStatus.currentVersion || healthRuntime
+    const base = systemStatus.baseVersion || healthBase
+    return formatRuntimeBaseVersionDesc(runtime, base) ?? versionLabel
+  }, [
+    showElectronUpdate,
+    versionLabel,
+    systemStatus.currentVersion,
+    systemStatus.baseVersion,
+    healthRuntime,
+    healthBase,
+  ])
+
+  const serviceVersionDesc = useMemo(() => {
+    if (!showSystemUpdate) return null
+    const runtime = systemStatus.currentVersion || healthRuntime
+    const base = systemStatus.baseVersion || healthBase
+    return formatRuntimeBaseVersionDesc(runtime, base)
+  }, [
+    showSystemUpdate,
+    systemStatus.currentVersion,
+    systemStatus.baseVersion,
+    healthRuntime,
+    healthBase,
+  ])
 
   const handleCheckUpdate = useCallback(() => {
     setCheckedOnce(true)
@@ -212,7 +269,9 @@ export default function SoftwareUpdateSettingsSection({ embedded = false }: { em
     && systemStatus.backupVersion,
   )
 
-  const versionDesc = versionLabel ?? '读取版本中…'
+  const versionDesc = showElectronUpdate
+    ? (versionLabel ?? '读取版本中…')
+    : (selfHostVersionDesc ?? '读取版本中…')
 
   if (!showElectronUpdate && !showSystemUpdate) {
     return (
@@ -343,7 +402,11 @@ export default function SoftwareUpdateSettingsSection({ embedded = false }: { em
             {showElectronUpdate && (
               <SettingsRow
                 title="检查服务更新"
-                desc="检查运行中的服务是否有可用热更新"
+                desc={
+                  serviceVersionDesc
+                    ? `检查运行中的服务是否有可用热更新（${serviceVersionDesc}）`
+                    : '检查运行中的服务是否有可用热更新'
+                }
                 control={(
                   <OpptrixButton
                     variant="secondary"

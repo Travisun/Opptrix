@@ -25,7 +25,7 @@ test('selfhost package.json exposes bin opptrix', async () => {
   assert.equal(pkg.name, '@opptrix/selfhost')
   assert.equal(pkg.bin.opptrix, 'bin/opptrix.js')
   assert.equal(pkg.publishConfig?.access, 'public')
-  assert.equal(pkg.version, '0.1.8')
+  assert.equal(pkg.version, '0.1.9')
   assert.equal(pkg.opptrixSelfhost?.minAppTag, 'opptrix-selfhost-v1.3.6')
   assert.equal(pkg.opptrixSelfhost?.preferredAppTag, 'opptrix-selfhost-v1.4.5')
   assert.equal(pkg.opptrixSelfhost?.imageRepository, 'ghcr.io/travisun/opptrix')
@@ -78,6 +78,36 @@ test('opptrix help mentions prebuilt pull and --build', () => {
   assert.match(r.stdout, /ghcr\.io\/travisun\/opptrix/)
   assert.match(r.stdout, /\bsetup\b/)
   assert.match(r.stdout, /\bdata\b/)
+  assert.match(r.stdout, /\bport\b/)
+  assert.match(r.stdout, /env keys|keys/)
+  assert.match(r.stdout, /--agree-tos/)
+})
+
+test('opptrix env keys lists compose.env.example catalog', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-cli-env-keys-'))
+  try {
+    const r = spawnSync(process.execPath, [CLI, 'env', 'keys'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, OPPTRIX_DEPLOY_DIR: dir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    assert.equal(r.status, 0, r.stderr || r.stdout)
+    assert.match(r.stdout, /OPPTRIX_HOST_HTTPS_PORT/)
+    assert.match(r.stdout, /已知环境变量|compose\.env\.example/)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('opptrix port help lists status and set', () => {
+  const r = spawnSync(process.execPath, [CLI, 'port', 'help'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /port status/)
+  assert.match(r.stdout, /port set/)
 })
 
 test('opptrix setup --help lists options', () => {
@@ -89,6 +119,7 @@ test('opptrix setup --help lists options', () => {
   assert.match(r.stdout, /opptrix setup/)
   assert.match(r.stdout, /--mirror/)
   assert.match(r.stdout, /--data/)
+  assert.match(r.stdout, /--agree-tos/)
   assert.match(r.stdout, /Docker/)
 })
 
@@ -106,7 +137,7 @@ test('opptrix data help lists migrate', () => {
 test('opptrix setup non-TTY writes defaults under OPPTRIX_DEPLOY_DIR', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-cli-setup-'))
   try {
-    const r = spawnSync(process.execPath, [CLI, 'setup'], {
+    const r = spawnSync(process.execPath, [CLI, 'setup', '--agree-tos'], {
       cwd: ROOT,
       encoding: 'utf8',
       env: { ...process.env, OPPTRIX_DEPLOY_DIR: dir },
@@ -118,6 +149,7 @@ test('opptrix setup non-TTY writes defaults under OPPTRIX_DEPLOY_DIR', () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(dir, '.opptrix.json'), 'utf8'))
     assert.equal(cfg.setupCompleted, true)
     assert.equal(cfg.dataStorage, 'volume')
+    assert.equal(cfg.userAgreementVersion, '2026-03')
     assert.ok(fs.existsSync(path.join(dir, 'compose.env')))
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })

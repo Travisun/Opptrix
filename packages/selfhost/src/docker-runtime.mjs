@@ -4,10 +4,51 @@
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { detectDocker } from './compose.mjs'
 
 export const DEFAULT_CONTAINER_NAME = 'opptrix'
 export const RUNTIME_CLI_IN_CONTAINER = '/app/scripts/runtime-update-cli.mjs'
+export const RUNTIME_CLI_BOOT_IN_CONTAINER = '/opptrix/system/boot/scripts/runtime-update-cli.mjs'
+
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+/**
+ * Prefer hot-updated boot slot script when present; else image /app script.
+ * @param {string[]} scriptArgs
+ */
+export function runtimeCliShellCommand(scriptArgs) {
+  const quoted = scriptArgs.map(shellQuote).join(' ')
+  return (
+    `CLI="${RUNTIME_CLI_BOOT_IN_CONTAINER}"; `
+    + `[ -f "$CLI" ] || CLI="${RUNTIME_CLI_IN_CONTAINER}"; `
+    + `exec node "$CLI" ${quoted}`
+  )
+}
+
+/**
+ * @param {string} s
+ */
+function shellQuote(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`
+}
+
+/**
+ * Copy package-bundled runtime-update-cli into the running container (/app)
+ * so download progress improvements apply without waiting for a new base image.
+ * @param {string} containerName
+ * @returns {boolean}
+ */
+export function syncHostRuntimeCli(containerName) {
+  const src = path.join(PACKAGE_ROOT, 'bundle', 'scripts', 'runtime-update-cli.mjs')
+  if (!fs.existsSync(src)) return false
+  const r = spawnSync(
+    'docker',
+    ['cp', src, `${containerName}:${RUNTIME_CLI_IN_CONTAINER}`],
+    { encoding: 'utf8', shell: false },
+  )
+  return r.status === 0
+}
 
 /**
  * @param {string} deployRoot
@@ -50,12 +91,16 @@ export function containerExists(name) {
  * @param {{
  *   containerName: string,
  *   inheritStdio?: boolean,
+ *   streamStderr?: boolean,
  * }} opts
  * @returns {Promise<{ code: number, stdout: string, stderr: string, via: 'docker-exec' }>}
  */
 export function dockerExecRuntimeCli(scriptArgs, opts) {
-  const args = ['exec', opts.containerName, 'node', RUNTIME_CLI_IN_CONTAINER, ...scriptArgs]
-  return runDocker(args, { inheritStdio: opts.inheritStdio })
+  const args = ['exec', opts.containerName, 'sh', '-c', runtimeCliShellCommand(scriptArgs)]
+  return runDocker(args, {
+    inheritStdio: opts.inheritStdio,
+    streamStderr: opts.streamStderr,
+  })
 }
 
 /**
@@ -64,6 +109,7 @@ export function dockerExecRuntimeCli(scriptArgs, opts) {
  *   deployRoot: string,
  *   env?: NodeJS.ProcessEnv,
  *   inheritStdio?: boolean,
+ *   streamStderr?: boolean,
  * }} opts
  * @returns {Promise<{ code: number, stdout: string, stderr: string, via: 'compose-run' }>}
  */
@@ -74,15 +120,16 @@ export function dockerComposeRunRuntimeCli(scriptArgs, opts) {
     '--rm',
     '--no-deps',
     '--entrypoint',
-    'node',
+    'sh',
     'opptrix',
-    RUNTIME_CLI_IN_CONTAINER,
-    ...scriptArgs,
+    '-c',
+    runtimeCliShellCommand(scriptArgs),
   ]
   return runDocker(args, {
     cwd: opts.deployRoot,
     env: opts.env,
     inheritStdio: opts.inheritStdio,
+    streamStderr: opts.streamStderr,
   })
 }
 
@@ -103,10 +150,16 @@ export function dockerRestartContainer(containerName) {
 
 /**
  * @param {string[]} dockerArgs
- * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, inheritStdio?: boolean }} [opts]
+ * @param {{
+ *   cwd?: string,
+ *   env?: NodeJS.ProcessEnv,
+ *   inheritStdio?: boolean,
+ *   streamStderr?: boolean,
+ * }} [opts]
  */
 function runDocker(dockerArgs, opts = {}) {
   const inherit = opts.inheritStdio === true
+  const streamStderr = opts.streamStderr === true && !inherit
   return new Promise((resolve, reject) => {
     const child = spawn('docker', dockerArgs, {
       cwd: opts.cwd,
@@ -120,7 +173,11 @@ function runDocker(dockerArgs, opts = {}) {
     const err = []
     if (!inherit) {
       child.stdout?.on('data', (c) => out.push(Buffer.from(c)))
-      child.stderr?.on('data', (c) => err.push(Buffer.from(c)))
+      child.stderr?.on('data', (c) => {
+        const buf = Buffer.from(c)
+        err.push(buf)
+        if (streamStderr) process.stderr.write(buf)
+      })
     }
     child.on('error', reject)
     child.on('close', (code) => {
@@ -137,7 +194,13 @@ function runDocker(dockerArgs, opts = {}) {
 /**
  * Run runtime-update-cli with exec fallback to compose run.
  * @param {string[]} scriptArgs
- * @param {{ deployRoot: string, containerName?: string, inheritStdio?: boolean, composeEnv?: NodeJS.ProcessEnv }} opts
+ * @param {{
+ *   deployRoot: string,
+ *   containerName?: string,
+ *   inheritStdio?: boolean,
+ *   streamStderr?: boolean,
+ *   composeEnv?: NodeJS.ProcessEnv,
+ * }} opts
  */
 export async function runRuntimeCli(scriptArgs, opts) {
   const docker = detectDocker()
@@ -146,9 +209,13 @@ export async function runRuntimeCli(scriptArgs, opts) {
   }
   const containerName = opts.containerName ?? readComposeContainerName(opts.deployRoot)
   if (isContainerRunning(containerName)) {
+    if (opts.streamStderr) {
+      syncHostRuntimeCli(containerName)
+    }
     const r = await dockerExecRuntimeCli(scriptArgs, {
       containerName,
       inheritStdio: opts.inheritStdio,
+      streamStderr: opts.streamStderr,
     })
     return { ...r, via: 'docker-exec', containerName }
   }
@@ -161,19 +228,28 @@ export async function runRuntimeCli(scriptArgs, opts) {
     deployRoot: opts.deployRoot,
     env: opts.composeEnv,
     inheritStdio: opts.inheritStdio,
+    streamStderr: opts.streamStderr,
   })
   return { ...r, via: 'compose-run', containerName }
 }
 
 /**
+ * Parse last JSON object from runtime-update-cli --json stdout (NDJSON-tolerant).
  * @param {string} stdout
  */
 export function parseRuntimeCliJson(stdout) {
   const trimmed = String(stdout ?? '').trim()
   if (!trimmed) return null
-  const line = trimmed.split('\n').filter(Boolean).pop() ?? trimmed
+  const lines = trimmed.split('\n').map((l) => l.trim()).filter(Boolean)
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    try {
+      return JSON.parse(lines[i])
+    } catch {
+      // keep scanning — docker/runtime may prepend non-JSON lines
+    }
+  }
   try {
-    return JSON.parse(line)
+    return JSON.parse(trimmed)
   } catch {
     return null
   }

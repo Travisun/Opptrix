@@ -18,8 +18,9 @@ import {
   parseAppTag,
   resolveImageRef,
 } from '../src/app-refs.mjs'
-import { detectDocker, gitPull, npmLinkCli, npmUnlinkCli, probeHealth, runCompose } from '../src/compose.mjs'
+import { detectDocker, gitPull, npmLinkCli, npmUnlinkCli, probeHealth, resolveHealthProbe, runCompose } from '../src/compose.mjs'
 import {
+  knownEnvKeyCatalogForRoot,
   knownEnvKeysForRoot,
   maskEnvValue,
   parseEnvSetTokens,
@@ -46,8 +47,26 @@ import {
 import { flagString, flagTrue, parseArgv } from '../src/parse.mjs'
 import { handleBaseCommand } from '../src/base-commands.mjs'
 import { cmdData } from '../src/data-migrate.mjs'
+import {
+  afterComposeUpReady,
+  ensureUserAgreementAccepted,
+  parseHealthVersions,
+  restartAndAwaitReady,
+  USER_AGREEMENT_URL,
+} from '../src/deploy-ux.mjs'
+import {
+  isContainerRunning,
+  readComposeContainerName,
+} from '../src/docker-runtime.mjs'
+import {
+  ensureDeployHostPorts,
+  isHostPortListening,
+  readConfiguredHostPorts,
+  writeHostPorts,
+  DEFAULT_HTTPS_PORT,
+} from '../src/ports.mjs'
+import { parsePort, cmdSetup, ensureSetupBeforeUp } from '../src/setup-wizard.mjs'
 import { handleRuntimeCommand } from '../src/runtime-commands.mjs'
-import { cmdSetup, ensureSetupBeforeUp } from '../src/setup-wizard.mjs'
 import { handleUpdateCommand } from '../src/update-commands.mjs'
 import {
   ensureComposeEnv,
@@ -84,24 +103,25 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
 命令:
   init              生成 compose.env，保存默认镜像偏好
   setup             交互式部署设置（镜像源 / 数据目录 / 端口 / Docker 开机自启）
-  doctor            检查 Docker / Compose / 部署上下文
+  doctor            检查 Docker / Compose / 部署目录 / 端口 / 版本
   base              底座（Docker 镜像）list / status / use / apply
   runtime           运行时热更新 list / status / use / apply / rollback
   update            联合 status / audit / all（legacy: 等同 base apply）
   tags              [别名] opptrix base list
   use <tag|main>    [别名] opptrix base use
-  up                拉取预构建镜像并启动（无主机配置时先 setup；用户路径仅 pull）
+  up                拉取预构建镜像并启动（无主机配置时先 setup；端口占用时自动改用空闲端口）
   start             启动已有容器（不重建）
   stop              停止容器
   restart           重启容器
-  env               管理 compose.env 运行时变量（set / get / list / unset）
+  port              查看 / 设置宿主机 HTTPS 端口（status / set）
+  env               管理 compose.env（set / get / list / unset / keys）
   data              数据路径迁移：path / migrate（命名卷 ↔ 宿主机目录）
   down              停止并移除容器（默认保留数据卷；加 --volumes 才会删卷）
   build             仅本地构建镜像（需 OPPTRIX_DEV_ALLOW_BUILD=1）
   update            [legacy] 等同 opptrix base apply（拉预构建镜像并重建容器）
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
-  health            探测 https://127.0.0.1:8712/api/health（自签名 HTTPS）
+  health            探测本机 HTTPS 健康检查（端口见配置，默认 8712）
   compose           透传 docker compose：opptrix compose -- <args…>
   install-cli       本机 npm link 本包
   uninstall-cli     npm unlink -g @opptrix/selfhost
@@ -114,10 +134,11 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   --ref <tag|main>      本次使用的应用版本（写入前可用 use 固定偏好）
   --apply               use 后直接 ensure + 启动
   --allow-downgrade     允许底座降到更低 opptrix-selfhost-v*
-  --yes, -y             setup / data migrate / runtime apply 等跳过确认
+  --yes, -y             setup / data migrate / runtime apply / port set 等跳过确认
+  --agree-tos           表示已阅读并同意用户协议（非 TTY 启动前必填；见 ${USER_AGREEMENT_URL}）
   --skip-models         跳过首启模型下载（OPPTRIX_SKIP_MODEL_FETCH=1）
   --data volume|<路径>  setup 数据存储（命名卷或宿主机目录）
-  --http-port / --https-port  setup 宿主机端口（HTTP 默认关闭 / HTTPS 8712）
+  --http-port / --https-port  setup / up 宿主机端口（HTTP 默认关闭 / HTTPS 8712；占用时自动改用空闲端口）
   --to <路径|volume>    data migrate 目标
   --dry-run             data 只打印迁移计划
   --build               开发者本地编译（需 OPPTRIX_DEV_ALLOW_BUILD=1）
@@ -151,11 +172,15 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   opptrix runtime use latest --apply --yes
   opptrix update status
   opptrix up
+  opptrix up --https-port 8720
   opptrix up --ref ${meta.preferredAppTag}
   opptrix up --skip-models
+  opptrix port status
+  opptrix port set 8720 --yes
   opptrix data path /var/lib/opptrix --yes
   opptrix data migrate --to volume --dry-run
   opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=6
+  opptrix env keys
   opptrix env list
   opptrix logs -f
 `)
@@ -169,11 +194,13 @@ function printEnvHelp() {
   opptrix env get KEY
   opptrix env list
   opptrix env unset KEY [KEY2 …]
+  opptrix env keys
 
 说明:
   写入部署目录下的 compose.env（与 opptrix init 相同位置）。
   默认在修改后执行 docker compose up -d，使新环境变量注入容器
   （restart 不会重载 env_file，请勿用手动 restart 代替）。
+  env keys 列出 compose.env.example 中的已知键（含简短说明）。
 
 选项:
   --no-restart        只更新 compose.env，不启动/重建容器
@@ -183,7 +210,26 @@ function printEnvHelp() {
   opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=12
   opptrix env set LLM_API_KEY=sk-xxx LLM_PROVIDER=DeepSeek
   opptrix env unset LLM_API_KEY
+  opptrix env keys
   opptrix env list
+`)
+}
+
+function printPortHelp() {
+  console.log(`Opptrix 宿主机端口
+
+用法:
+  opptrix port status
+  opptrix port set <端口> [--yes] [--agree-tos]
+
+说明:
+  查看或更改 HTTPS 宿主机发布端口（写入 OPPTRIX_HOST_HTTPS_PORT 与 .opptrix.json）。
+  set 后会 docker compose up -d --force-recreate，并等待健康检查。
+  启动时若默认端口被占用，up / setup 会自动改用空闲端口。
+
+示例:
+  opptrix port status
+  opptrix port set 8720 --yes --agree-tos
 `)
 }
 
@@ -235,7 +281,8 @@ async function applyComposeEnvChange(parsed, patch) {
   const args = ['up', '-d']
   if (flagTrue(parsed.flags, 'force-recreate')) args.push('--force-recreate')
   console.log('[opptrix] 正在重建容器以注入新环境变量…')
-  return runCompose(args, { root: deployRoot, mirror, releaseEnv })
+  const code = await runCompose(args, { root: deployRoot, mirror, releaseEnv })
+  return finishComposeStart(deployRoot, code)
 }
 
 async function cmdEnv(parsed) {
@@ -313,8 +360,108 @@ async function cmdEnv(parsed) {
     return applyComposeEnvChange(parsed, { unset: keys })
   }
 
+  if (sub === 'keys') {
+    const catalog = knownEnvKeyCatalogForRoot(root)
+    if (!catalog.length) {
+      console.log('[opptrix] 未找到 compose.env.example 键目录')
+      return 0
+    }
+    console.log(`[opptrix] 已知环境变量（来自 compose.env.example，共 ${catalog.length} 项）`)
+    for (const row of catalog) {
+      if (row.comment) {
+        console.log(`${row.key}\t# ${row.comment}`)
+      } else {
+        console.log(row.key)
+      }
+    }
+    return 0
+  }
+
   console.error(`[opptrix] 未知 env 子命令: ${sub}`)
   printEnvHelp()
+  return 2
+}
+
+/**
+ * @param {import('../src/parse.mjs').ParsedArgv} parsed
+ */
+async function cmdPort(parsed) {
+  const sub = (parsed.args[0] || '').trim()
+  if (!sub || sub === 'help' || sub === '-h' || sub === '--help') {
+    printPortHelp()
+    return 0
+  }
+
+  const root = resolveDeployRoot()
+
+  if (sub === 'status') {
+    const ports = readConfiguredHostPorts(root)
+    const probe = resolveHealthProbe(root)
+    const listening = await isHostPortListening(ports.httpsPort)
+    const name = readComposeContainerName(root)
+    const running = isContainerRunning(name)
+    console.log(`[opptrix] deploy root → ${root}`)
+    console.log(`[opptrix] HTTPS 宿主机端口: ${ports.httpsPort}${listening ? '（监听中）' : '（未监听）'}`)
+    if (ports.httpPort > 0) {
+      const httpListening = await isHostPortListening(ports.httpPort)
+      console.log(`[opptrix] HTTP 宿主机端口:  ${ports.httpPort}${httpListening ? '（监听中）' : '（未监听）'}`)
+    } else {
+      console.log('[opptrix] HTTP 宿主机端口:  已关闭')
+    }
+    console.log(`[opptrix] 健康探测: ${probe.url}`)
+    console.log(`[opptrix] 容器 ${name}: ${running ? '运行中' : '未运行'}`)
+    return 0
+  }
+
+  if (sub === 'set') {
+    const raw = (parsed.args[1] || '').trim()
+    if (!raw) {
+      console.error('[opptrix] 用法: opptrix port set <端口> [--yes]')
+      return 2
+    }
+    const httpsPort = parsePort(raw, 0)
+    if (!httpsPort || httpsPort < 1) {
+      console.error(`[opptrix] 无效端口: ${raw}`)
+      return 2
+    }
+
+    const tos = await ensureUserAgreementAccepted(parsed, {
+      root,
+      actionLabel: '更改访问端口并重建服务',
+    })
+    if (tos !== 0) return tos
+
+    if (!flagTrue(parsed.flags, 'yes', 'y') && process.stdin.isTTY) {
+      console.log(`[opptrix] 将把 HTTPS 宿主机端口改为 ${httpsPort} 并重建容器`)
+      console.log('[opptrix] 继续请加 --yes')
+      return 2
+    }
+
+    ensureThinDeploy(root)
+    ensureComposeEnv(root)
+    const prev = readConfiguredHostPorts(root)
+    writeHostPorts(root, { httpsPort, httpPort: prev.httpPort })
+    console.log(`[opptrix] 已写入 HTTPS 端口 ${httpsPort} → compose.env / .opptrix.json`)
+
+    const docker = detectDocker()
+    if (!docker.ok) {
+      console.warn(`[opptrix] WARN: ${docker.message}`)
+      console.warn('[opptrix] 端口已保存；Docker 就绪后请执行 opptrix up')
+      return 0
+    }
+
+    const { root: deployRoot, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
+    console.log('[opptrix] 正在重建容器以应用新端口…')
+    const code = await runCompose(['up', '-d', '--force-recreate'], {
+      root: deployRoot,
+      mirror,
+      releaseEnv,
+    })
+    return finishComposeStart(deployRoot, code)
+  }
+
+  console.error(`[opptrix] 未知 port 子命令: ${sub}`)
+  printPortHelp()
   return 2
 }
 
@@ -440,8 +587,17 @@ function prepareRoot(parsed, opts = {}) {
 }
 
 /**
+ * After successful compose up/start: wait for health and print ready summary.
+ * @param {string} root
+ * @param {number} code
+ */
+async function finishComposeStart(root, code) {
+  if (code !== 0) return code
+  return afterComposeUpReady(root)
+}
+
+/**
  * Local build path: full source + compose up --build (unless --no-build).
- * @param {import('../src/parse.mjs').ParsedArgv} parsed
  * @param {{
  *   root: string,
  *   mirror: import('../src/mirrors.mjs').BuildMirrorProfile,
@@ -458,12 +614,13 @@ async function upWithLocalBuild(ctx) {
   if (!process.env.OPPTRIX_IMAGE) {
     env.OPPTRIX_IMAGE = 'opptrix:local'
   }
-  return runCompose(args, {
+  const code = await runCompose(args, {
     root: ctx.root,
     mirror: ctx.mirror,
     skipModels: ctx.skipModels,
     releaseEnv: env,
   })
+  return finishComposeStart(ctx.root, code)
 }
 
 /**
@@ -478,6 +635,12 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
 
   const mirror = resolveMirror(parsed)
   let root = resolveDeployRoot()
+  const tos = await ensureUserAgreementAccepted(parsed, {
+    root,
+    actionLabel: opts.update ? '更新并启动服务' : '启动服务',
+  })
+  if (tos !== 0) return tos
+
   const refFlag = flagString(parsed.flags, 'ref')
   const resolved = resolveEnsureAppRef({ root, ref: refFlag })
   const skipModels = flagTrue(parsed.flags, 'skip-models')
@@ -485,6 +648,20 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
   const forceBuild = wantsLocalBuild(parsed)
   const noBuild = flagTrue(parsed.flags, 'no-build')
   const meta = readPackageMeta()
+
+  const httpsFlag = flagString(parsed.flags, 'https-port')
+  const httpFlag = flagString(parsed.flags, 'http-port')
+  try {
+    await ensureDeployHostPorts(root, {
+      httpsPort: httpsFlag ? parsePort(httpsFlag, DEFAULT_HTTPS_PORT) : undefined,
+      httpPort: httpFlag != null && httpFlag !== ''
+        ? parsePort(httpFlag, 0)
+        : undefined,
+    })
+  } catch (err) {
+    console.error(`[opptrix] ${err instanceof Error ? err.message : err}`)
+    return 1
+  }
 
   if (opts.update) {
     console.log(
@@ -567,7 +744,8 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
     const pullCode = await runCompose(['pull'], { root, mirror, releaseEnv: pullEnv })
     if (pullCode === 0) {
       console.log('[opptrix] 预构建镜像已就绪，启动中…')
-      return runCompose(['up', '-d'], { root, mirror, skipModels, releaseEnv: pullEnv })
+      const upCode = await runCompose(['up', '-d'], { root, mirror, skipModels, releaseEnv: pullEnv })
+      return finishComposeStart(root, upCode)
     }
     return failPull(`OPPTRIX_IMAGE=${imageRef}（exit ${pullCode}）`)
   }
@@ -594,12 +772,13 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
     })
     if (pullCode === 0) {
       console.log('[opptrix] 预构建镜像已就绪，启动中…')
-      return runCompose(['up', '-d'], {
+      const upCode = await runCompose(['up', '-d'], {
         root,
         mirror,
         skipModels,
         releaseEnv: pullEnv,
       })
+      return finishComposeStart(root, upCode)
     }
     console.warn(`[opptrix] WARN: 拉取 ${imageRef} 失败（exit ${pullCode}），尝试下一源…`)
   }
@@ -661,6 +840,43 @@ async function cmdDoctor(parsed) {
     console.log('[opptrix] 提示: 尚无 compose；执行 up 将写入 bundle 清单并 pull 预构建')
   }
 
+  const containerName = readComposeContainerName(root)
+  const containerRunning = isContainerRunning(containerName)
+  console.log(`[opptrix] 容器 ${containerName}: ${containerRunning ? '运行中' : '未运行'}`)
+
+  const ports = readConfiguredHostPorts(root)
+  const probe = resolveHealthProbe(root)
+  const httpsListening = await isHostPortListening(ports.httpsPort)
+  console.log(
+    `[opptrix] HTTPS 宿主机端口 ${ports.httpsPort}${httpsListening ? '（监听中）' : '（未监听）'}`
+      + ` → ${probe.url}`,
+  )
+  if (ports.httpPort > 0) {
+    const httpListening = await isHostPortListening(ports.httpPort)
+    console.log(
+      `[opptrix] HTTP 宿主机端口 ${ports.httpPort}${httpListening ? '（监听中）' : '（未监听）'}`,
+    )
+  }
+
+  let runtimeVersion = null
+  let baseVersion = null
+  try {
+    const h = await probeHealth(root)
+    const versions = parseHealthVersions(h.body)
+    runtimeVersion = versions.runtimeVersion
+    baseVersion = versions.baseVersion
+  } catch {
+    // ignore probe/parse errors
+  }
+  const cfg = readHostConfig(root)
+  if (!baseVersion) {
+    baseVersion = typeof cfg.appRef === 'string' && cfg.appRef.trim()
+      ? cfg.appRef.trim()
+      : meta.preferredAppTag
+  }
+  console.log(`[opptrix] 运行时版本: ${runtimeVersion || '（未探测）'}`)
+  console.log(`[opptrix] 底座版本:   ${baseVersion}`)
+
   const need = [
     'docker-compose.yml',
     'Dockerfile',
@@ -710,7 +926,6 @@ async function cmdDoctor(parsed) {
     console.log('[opptrix] OK 附带 docker-compose.legacy-volumes.yml（旧三卷迁移）')
   }
 
-  const cfg = readHostConfig(root)
   console.log(`[opptrix] config mirror=${cfg.mirror ?? '(unset)'} appRef=${cfg.appRef ?? '(unset)'}`)
   try {
     const resolved = resolveEnsureAppRef({ root, ref: flagString(parsed.flags, 'ref') })
@@ -893,7 +1108,10 @@ async function main() {
         return await cmdUp(parsed)
       case 'start': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
-        return runCompose(['start'], { root, mirror, releaseEnv })
+        const tos = await ensureUserAgreementAccepted(parsed, { root, actionLabel: '启动服务' })
+        if (tos !== 0) return tos
+        const startCode = await runCompose(['start'], { root, mirror, releaseEnv })
+        return finishComposeStart(root, startCode)
       }
       case 'stop': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
@@ -901,10 +1119,14 @@ async function main() {
       }
       case 'restart': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
-        return runCompose(['restart'], { root, mirror, releaseEnv })
+        const tos = await ensureUserAgreementAccepted(parsed, { root, actionLabel: '重启服务' })
+        if (tos !== 0) return tos
+        return restartAndAwaitReady(root, { mirror, releaseEnv })
       }
       case 'env':
         return await cmdEnv(parsed)
+      case 'port':
+        return await cmdPort(parsed)
       case 'data':
         return await cmdData(parsed)
       case 'down': {
@@ -951,7 +1173,8 @@ async function main() {
         return runCompose(['ps'], { root, mirror, releaseEnv })
       }
       case 'health': {
-        const h = await probeHealth()
+        const root = resolveDeployRoot()
+        const h = await probeHealth(root)
         if (h.ok) {
           console.log(`[opptrix] health OK (${h.status}) ${h.body}`)
           return 0

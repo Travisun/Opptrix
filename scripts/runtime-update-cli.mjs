@@ -23,6 +23,34 @@ const REPO_ROOT = path.resolve(__dirname, '..')
 const DEFAULT_CDN = 'https://update.opptrix.org'
 
 /**
+ * @param {number} received
+ * @param {number | null} total
+ * @param {number} startedAtMs
+ */
+function formatProgress(received, total, startedAtMs) {
+  const elapsedSec = Math.max(0.001, (Date.now() - startedAtMs) / 1000)
+  const mb = (received / (1024 * 1024)).toFixed(1)
+  const speed = received / elapsedSec
+  const speedLabel = speed > 1024 * 1024
+    ? `${(speed / (1024 * 1024)).toFixed(1)} MB/s`
+    : `${(speed / 1024).toFixed(0)} KB/s`
+  const elapsedLabel = elapsedSec < 60
+    ? `${elapsedSec.toFixed(0)}s`
+    : `${Math.floor(elapsedSec / 60)}m${Math.floor(elapsedSec % 60)}s`
+  if (total && total > 0) {
+    const pct = Math.min(100, Math.floor((received / total) * 100))
+    const remain = Math.max(0, total - received)
+    const etaSec = speed > 0 ? remain / speed : 0
+    const etaLabel = etaSec < 60
+      ? `${Math.ceil(etaSec)}s`
+      : `${Math.floor(etaSec / 60)}m${Math.ceil(etaSec % 60)}s`
+    const totalMb = (total / (1024 * 1024)).toFixed(1)
+    return `下载 ${pct}%  ${mb}/${totalMb} MB  ${speedLabel}  已用 ${elapsedLabel}  剩余约 ${etaLabel}`
+  }
+  return `下载 ${mb} MB  ${speedLabel}  已用 ${elapsedLabel}`
+}
+
+/**
  * @param {boolean} json
  * @param {Record<string, unknown>} payload
  */
@@ -297,6 +325,8 @@ async function stageReleasePackage(su, pkg, source, current) {
   const shaSidecar = archivePath.replace(/\.bin$/, '.sha256')
 
   const headers = { 'User-Agent': buildUserAgent(pkg.version) }
+  const startedAt = Date.now()
+  let lastProgressAt = 0
   const { source: mirrorSource } = await su.downloadRuntimeAssetPair(
     {
       binUrl: pkg.binUrl,
@@ -307,10 +337,18 @@ async function stageReleasePackage(su, pkg, source, current) {
       binDest: archivePath,
       shaDest: shaSidecar,
       headers,
-      timeoutMs: 180_000,
+      timeoutMs: 600_000,
       probeNetwork: true,
+      onProgress: (received, total) => {
+        const now = Date.now()
+        if (now - lastProgressAt < 250 && total != null && received < total) return
+        lastProgressAt = now
+        process.stderr.write(`\r[runtime-update] ${formatProgress(received, total, startedAt)}   `)
+      },
     },
   )
+  process.stderr.write('\n')
+  process.stderr.write(`[runtime-update] 下载完成（源 ${mirrorSource}），正在解压…\n`)
 
   const extracted = su.extractUpdateArchive({
     archivePath,

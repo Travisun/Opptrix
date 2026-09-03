@@ -4,13 +4,16 @@
 import { appendUpdateAudit } from './update-audit.mjs'
 import { normalizeRuntimeVersion } from './version-format.mjs'
 import { flagTrue } from './parse.mjs'
-import { readPackageMeta, resolveDeployRoot } from './paths.mjs'
+import { readHostConfig, readPackageMeta, resolveDeployRoot } from './paths.mjs'
 import {
-  dockerRestartContainer,
   parseRuntimeCliJson,
   readComposeContainerName,
   runRuntimeCli,
 } from './docker-runtime.mjs'
+import {
+  ensureUserAgreementAccepted,
+  restartAndAwaitReady,
+} from './deploy-ux.mjs'
 
 /**
  * @param {import('./parse.mjs').ParsedArgv} parsed
@@ -47,26 +50,29 @@ function printRuntimeHelp() {
 用法:
   opptrix runtime list
   opptrix runtime status
-  opptrix runtime use [latest|<版本>] [--apply] [--yes]
-  opptrix runtime apply [--yes]
-  opptrix runtime rollback [--yes]
+  opptrix runtime use [latest|<版本>] [--apply] [--yes] [--agree-tos]
+  opptrix runtime apply [--yes] [--agree-tos]
+  opptrix runtime rollback [--yes] [--agree-tos]
 
 说明:
   所有操作经 docker exec / compose run 在容器 Linux 环境内执行，不依赖 8711 API。
-  use 默认拉取 CDN latest；也可 use CDN 保留的最近 8 个历史版本，或已有本机 slot。apply/rollback 后自动 restart 容器。
+  use 默认拉取 CDN latest；下载进度在 stderr 显示。apply/rollback 后 compose restart 并等待健康检查。
   用户数据在 /opptrix/private，不在 runtime 包内，升级/回退不会删除。`)
 }
 
 /**
+ * @param {string[]} subArgs
  * @param {import('./parse.mjs').ParsedArgv} parsed
+ * @param {{ streamStderr?: boolean }} [opts]
  */
-async function runCli(subArgs, parsed) {
+async function runCli(subArgs, parsed, opts = {}) {
   const root = resolveDeployRoot()
-  const json = flagTrue(parsed.flags, 'json')
+  // Always request --json and capture stdout. Optionally live-forward stderr (download progress).
   const args = [...subArgs, '--json']
   const r = await runRuntimeCli(args, {
     deployRoot: root,
-    inheritStdio: !json,
+    inheritStdio: false,
+    streamStderr: opts.streamStderr === true,
   })
   const payload = parseRuntimeCliJson(r.stdout)
   return { ...r, payload, deployRoot: root }
@@ -109,6 +115,15 @@ export async function cmdRuntimeList(parsed) {
   const local = await runCli(['list-local'], parsed)
   const releases = await runCli(['fetch-releases'], parsed)
 
+  if (flagTrue(parsed.flags, 'json')) {
+    console.log(JSON.stringify({
+      ok: true,
+      local: local.payload,
+      releases: releases.payload,
+    }))
+    return local.payload?.ok === false || releases.payload?.ok === false ? 1 : 0
+  }
+
   console.log('[opptrix] 运行时版本列表')
   const catalog = releases.payload?.ok ? releases.payload.releases ?? [] : []
   const retention = releases.payload?.retention
@@ -138,6 +153,7 @@ export async function cmdRuntimeList(parsed) {
       if (req.minBaseImage) console.log(`  需要底座: ${req.minBaseImage}`)
     } else {
       console.log('[opptrix] WARN: 无法读取 CDN 版本列表')
+      if (releases.stderr?.trim()) console.error(releases.stderr.trim())
     }
   }
 
@@ -149,6 +165,9 @@ export async function cmdRuntimeList(parsed) {
     console.log(`  pending: ${st.pendingVersion ?? '—'}`)
     console.log(`  backup: ${st.backupVersion ?? '—'}`)
     console.log(`  slots: ${(st.slots ?? []).join(', ') || '—'}`)
+  } else {
+    console.log('  （无法读取本机 slot 状态）')
+    if (local.stderr?.trim()) console.error(local.stderr.trim())
   }
 
   console.log('')
@@ -177,6 +196,9 @@ export async function cmdRuntimeList(parsed) {
  */
 export async function cmdRuntimeUse(parsed, raw) {
   const root = resolveDeployRoot()
+  const tos = await ensureUserAgreementAccepted(parsed, { root, actionLabel: '下载并更新运行时' })
+  if (tos !== 0) return tos
+
   const input = String(raw ?? 'latest').trim() || 'latest'
   const version = input === 'latest' ? 'latest' : normalizeRuntimeVersion(input)
   if (input !== 'latest' && !version) {
@@ -185,8 +207,8 @@ export async function cmdRuntimeUse(parsed, raw) {
   }
 
   const target = version ?? 'latest'
-  console.log(`[opptrix] runtime use ${target}（Docker 内下载/ staging）…`)
-  const { code, payload, via } = await runCli(['use', target], parsed)
+  console.log(`[opptrix] runtime use ${target}（Docker 内下载 / staging）…`)
+  const { code, payload, via } = await runCli(['use', target], parsed, { streamStderr: true })
 
   if (!payload?.ok) {
     console.error(`[opptrix] runtime use 失败: ${payload?.error ?? `exit ${code}`}`)
@@ -236,7 +258,7 @@ export async function cmdRuntimeUse(parsed, raw) {
     return cmdRuntimeApply(parsed)
   }
   if (payload.needsApply) {
-    console.log('[opptrix] 下一步: opptrix runtime apply')
+    console.log('[opptrix] 下一步: opptrix runtime apply --yes')
   }
   return 0
 }
@@ -246,6 +268,9 @@ export async function cmdRuntimeUse(parsed, raw) {
  */
 export async function cmdRuntimeApply(parsed) {
   const root = resolveDeployRoot()
+  const tos = await ensureUserAgreementAccepted(parsed, { root, actionLabel: '应用运行时并重启' })
+  if (tos !== 0) return tos
+
   if (!flagTrue(parsed.flags, 'yes', 'y') && process.stdin.isTTY) {
     console.log('[opptrix] 将激活 pending runtime 并重启容器（用户数据库保留在 /opptrix/private）')
     console.log('[opptrix] 继续请加 --yes')
@@ -271,8 +296,14 @@ export async function cmdRuntimeApply(parsed) {
     return code || 1
   }
 
-  console.log(`[opptrix] 已切换 boot → ${payload.currentVersion}，正在重启容器…`)
-  const restartCode = await dockerRestartContainer(containerName ?? readComposeContainerName(root))
+  console.log(`[opptrix] 已切换 boot → ${payload.currentVersion}`)
+  const cfg = readHostConfig(root)
+  const hostBase = typeof cfg.appRef === 'string' && cfg.appRef.trim() ? cfg.appRef.trim() : null
+  const restartCode = await restartAndAwaitReady(root, {
+    containerName: containerName ?? readComposeContainerName(root),
+    runtimeVersion: payload.currentVersion,
+    baseVersion: hostBase,
+  })
   appendUpdateAudit({
     action: 'runtime.apply',
     layer: 'runtime',
@@ -281,15 +312,10 @@ export async function cmdRuntimeApply(parsed) {
     fromVersion: payload.previousVersion,
     ok: restartCode === 0,
     exitCode: restartCode,
-    message: 'activate + docker restart',
+    message: 'activate + compose restart + health',
     deployRoot: root,
   })
-  if (restartCode !== 0) {
-    console.error('[opptrix] 容器重启失败，请手动 opptrix restart')
-    return restartCode
-  }
-  console.log('[opptrix] 容器已重启；首次启动将执行库迁移与钩子（如有）')
-  return 0
+  return restartCode
 }
 
 /**
@@ -297,6 +323,9 @@ export async function cmdRuntimeApply(parsed) {
  */
 export async function cmdRuntimeRollback(parsed) {
   const root = resolveDeployRoot()
+  const tos = await ensureUserAgreementAccepted(parsed, { root, actionLabel: '回退运行时并重启' })
+  if (tos !== 0) return tos
+
   if (!flagTrue(parsed.flags, 'yes', 'y') && process.stdin.isTTY) {
     console.log('[opptrix] 将回退到 backup runtime 并重启容器（不会删除 /opptrix/private 用户数据）')
     console.log('[opptrix] 继续请加 --yes')
@@ -318,8 +347,14 @@ export async function cmdRuntimeRollback(parsed) {
     return code || 1
   }
 
-  console.log(`[opptrix] 已回退 ${payload.fromVersion} → ${payload.toVersion}，重启容器…`)
-  const restartCode = await dockerRestartContainer(containerName ?? readComposeContainerName(root))
+  console.log(`[opptrix] 已回退 ${payload.fromVersion} → ${payload.toVersion}`)
+  const cfg = readHostConfig(root)
+  const hostBase = typeof cfg.appRef === 'string' && cfg.appRef.trim() ? cfg.appRef.trim() : null
+  const restartCode = await restartAndAwaitReady(root, {
+    containerName: containerName ?? readComposeContainerName(root),
+    runtimeVersion: payload.toVersion,
+    baseVersion: hostBase,
+  })
   appendUpdateAudit({
     action: 'runtime.rollback',
     layer: 'runtime',
@@ -330,5 +365,5 @@ export async function cmdRuntimeRollback(parsed) {
     exitCode: restartCode,
     deployRoot: root,
   })
-  return restartCode === 0 ? 0 : restartCode
+  return restartCode
 }

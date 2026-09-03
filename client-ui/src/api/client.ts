@@ -1546,7 +1546,11 @@ export async function getHealth() {
   if (!resp.ok) throw new Error(`Health check failed: ${resp.status}`)
   return resp.json() as Promise<{
     status: string
+    /** Runtime-first (hot-update current when set). */
     version: string
+    runtime_version?: string
+    /** Host image / base (distinct from hot runtime). */
+    base_version?: string | null
     llm_configured: boolean
     model: string | null
     available_models?: number
@@ -3768,6 +3772,8 @@ export type SystemUpdateFirstBootDto = {
 export type SystemUpdateStatus = {
   enabled: boolean
   currentVersion: string | null
+  /** Host Docker / image base (distinct from hot runtime). */
+  baseVersion?: string | null
   availableVersion: string | null
   pendingVersion?: string | null
   backupVersion?: string | null
@@ -3800,6 +3806,7 @@ export type SystemUpdateApplyResult = {
 export const SYSTEM_UPDATE_DISABLED: SystemUpdateStatus = {
   enabled: false,
   currentVersion: null,
+  baseVersion: null,
   availableVersion: null,
   pendingVersion: null,
   backupVersion: null,

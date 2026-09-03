@@ -87,7 +87,10 @@ export type {
 export {
   evaluateRuntimeRequires,
   nodeVersionSatisfies,
+  normalizeBaseVersionLabel,
   parseBaseImageVersion,
+  preferRuntimeAppVersion,
+  resolveDisplayedAppVersions,
   resolveHostBaseVersion,
 } from './platform-check.js'
 export type {
