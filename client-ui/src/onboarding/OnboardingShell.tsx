@@ -590,7 +590,11 @@ export function OnboardingInlineLink({
     <button
       type="button"
       className={mergeClasses(s.inlineLink, className)}
-      onClick={onClick}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClick()
+      }}
     >
       {children}
     </button>

@@ -13,19 +13,16 @@ import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
 import { applyFontFamily, readFontFamilyPreference } from './theme/fontFamily'
 import { applyFontScale, readFontScalePreference } from './theme/fontScale'
+import { bootstrapPwaInstallCapture } from './pwa/pwaInstallCapture'
 import './styles/fonts.css'
 import './styles/global.css'
 
 applyFontFamily(readFontFamilyPreference())
 applyFontScale(readFontScalePreference())
 
-/** Web PWA：生产环境注册最小 Service Worker（无 Push）；Electron 不注册 */
-if (!isElectron() && import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => {
-      /* installability best-effort */
-    })
-  })
+/** Capture BIP + register SW before React mounts (Chrome fires early). */
+if (!isElectron()) {
+  bootstrapPwaInstallCapture()
 }
 
 if (isDesktopApp()) {

@@ -1,13 +1,16 @@
-import { useCallback, useState, type FormEvent, type ReactNode } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { Checkbox, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { loginWithPassword, loginWithTotp } from '../api/auth'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MacTrafficLights from '../desktop/MacTrafficLights'
 import { desktopFrameTitlebarHeight } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
+import { OnboardingAtmosphere } from '../onboarding/OnboardingAtmosphere'
+import { OnboardingInlineLink, useOnboardingShellStyles } from '../onboarding/OnboardingShell'
+import { OPPTRIX_USER_AGREEMENT } from '../pages/settings/aboutLinks'
+import { openExternalUrl } from '../platform/openUrl'
 import { electronPlatform, isElectron } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
-import { useOnboardingShellStyles } from '../onboarding/OnboardingShell'
 import {
   AuthCodeField,
   AuthFieldStack,
@@ -19,6 +22,7 @@ import { formatAuthError } from './authErrors'
 /** Electron shell chrome shared by login / loading / error (mac drag + traffic lights). */
 function AuthWindowShell({ children }: { children: ReactNode }) {
   const shell = useOnboardingShellStyles()
+  const shellRef = useRef<HTMLDivElement>(null)
   const macFullscreen = useElectronFullscreen()
   const electronChrome = isElectron()
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
@@ -28,12 +32,15 @@ function AuthWindowShell({ children }: { children: ReactNode }) {
 
   return (
     <div
+      ref={shellRef}
       className={mergeClasses(
         shell.root,
         electronWin && shell.rootFrameTitlebar,
         'opptrix-onboarding-shell',
       )}
+      style={{ '--onb-dx': '0', '--onb-dy': '0' } as CSSProperties}
     >
+      <OnboardingAtmosphere hostRef={shellRef} />
       {showTitleBar ? (
         <header
           className={mergeClasses(
@@ -84,6 +91,34 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
+  agreeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginTop: '14px',
+    padding: '10px 12px',
+    textAlign: 'left',
+    lineHeight: 1.4,
+    borderRadius: '10px',
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
+    backgroundColor: opptrixCssVars.surface,
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+    '& .fui-Checkbox': {
+      margin: 0,
+      flexShrink: 0,
+    },
+    '& .fui-Checkbox__indicator': {
+      margin: 0,
+    },
+  },
+  agreeText: {
+    display: 'inline',
+    fontSize: 'var(--opptrix-font-base)',
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.45,
+  },
   actions: {
     marginTop: '16px',
     display: 'flex',
@@ -112,10 +147,15 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
   const [ticket, setTicket] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [agreed, setAgreed] = useState(false)
 
   const totpStep = ticket != null
 
   const submitPassword = useCallback(async () => {
+    if (!agreed) {
+      setError('请先阅读并同意用户协议')
+      return
+    }
     if (!username.trim() || !password) {
       setError('请填写用户名和密码')
       return
@@ -139,7 +179,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
     } finally {
       setBusy(false)
     }
-  }, [username, password, onSuccess])
+  }, [agreed, username, password, onSuccess])
 
   const submitTotp = useCallback(async () => {
     if (!ticket) return
@@ -213,6 +253,25 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
                     />
                   )}
                 </AuthFieldStack>
+                {!totpStep && (
+                  <label className={s.agreeRow}>
+                    <Checkbox
+                      checked={agreed}
+                      onChange={(_, data) => setAgreed(Boolean(data.checked))}
+                      disabled={busy}
+                      aria-label="同意用户协议"
+                    />
+                    <Text className={s.agreeText}>
+                      我已阅读并同意
+                      {' '}
+                      <OnboardingInlineLink
+                        onClick={() => openExternalUrl(OPPTRIX_USER_AGREEMENT)}
+                      >
+                        《用户协议》
+                      </OnboardingInlineLink>
+                    </Text>
+                  </label>
+                )}
                 {error ? (
                   <Text className={shell.error} block role="alert">{error}</Text>
                 ) : null}
@@ -239,7 +298,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
                   <OpptrixButton
                     variant="primary"
                     type="submit"
-                    disabled={busy}
+                    disabled={busy || (!totpStep && !agreed)}
                   >
                     {busy ? '正在验证…' : totpStep ? '继续' : '登录'}
                   </OpptrixButton>
