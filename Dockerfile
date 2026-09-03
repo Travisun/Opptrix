@@ -235,6 +235,7 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh \
   && chmod +x /app/scripts/opptrix-node-supervisor.mjs \
   && chmod +x /app/scripts/docker-select-mirrors.mjs \
   && chmod +x /app/scripts/runtime-update-cli.mjs \
+  && chmod +x /app/scripts/selfhost-auth-cli.mjs \
   && chmod +x /app/scripts/materialize-vendor.mjs \
   && chmod +x /app/scripts/scrub-install-deps.mjs \
   && chmod +x /app/scripts/bootstrap-cdn-runtime.mjs

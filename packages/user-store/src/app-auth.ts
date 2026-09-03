@@ -197,6 +197,48 @@ export class AppAuthRepository {
         : false
       if (!totpOk && !recoveryOk) throw new Error('验证码不正确')
     }
+    this.clearTotpFields()
+  }
+
+  /**
+   * Host/CLI recovery — clear TOTP + recovery codes without old password.
+   * No-op if unclaimed.
+   */
+  forceClearTotp(): void {
+    if (!this.isClaimed()) return
+    this.clearTotpFields()
+  }
+
+  /**
+   * Host/CLI recovery — set new password without old password.
+   * By default disables TOTP and revokes all sessions.
+   */
+  adminResetPassword(opts: { newPassword: string; disableTotp?: boolean }): {
+    username: string
+    totpWasEnabled: boolean
+    totpDisabled: boolean
+    sessionsRevoked: number
+  } {
+    const row = this.readOwner()
+    if (!row) throw new Error('尚未创建账户')
+    const totpWasEnabled = row.totp_enabled === 1
+    const shouldDisableTotp = opts.disableTotp !== false
+    this.setPassword(opts.newPassword)
+    let totpDisabled = false
+    if (shouldDisableTotp) {
+      this.clearTotpFields()
+      totpDisabled = totpWasEnabled
+    }
+    const sessionsRevoked = this.revokeAllSessions()
+    return {
+      username: row.username,
+      totpWasEnabled,
+      totpDisabled,
+      sessionsRevoked,
+    }
+  }
+
+  private clearTotpFields(): void {
     this.db.prepare(`
       UPDATE app_owner SET
         totp_secret_enc = NULL, totp_secret_iv = NULL, totp_secret_tag = NULL,

@@ -100,6 +100,64 @@ describe('app-auth repository', () => {
     assert.equal(auth.isClaimed(), false)
     assert.equal(auth.listSessions().length, 0)
   })
+
+  it('adminResetPassword clears TOTP by default and revokes sessions; --keep-totp path via disableTotp:false', async () => {
+    const { getUserDataStore, totpCodeAt, resetAuthKeyCacheForTests } =
+      await import('../packages/user-store/dist/index.js')
+    getUserDataStore().close()
+    resetAuthKeyCacheForTests()
+    const auth = getUserDataStore().appAuth
+    if (auth.isClaimed()) auth.wipeOwnerForSafeMode()
+    auth.createOwner({ username: 'admin1', password: 'Admin1!pass' })
+    const setup = auth.beginTotpSetup()
+    const code = totpCodeAt(setup.secret, Math.floor(Date.now() / 1000))
+    auth.confirmTotp(code)
+    assert.equal(auth.getOwnerPublic()?.totp_enabled, true)
+    auth.issueSession({ label: 'a', desktop: false })
+    auth.issueSession({ label: 'b', desktop: true })
+    assert.equal(auth.listSessions().length, 2)
+
+    const reset = auth.adminResetPassword({ newPassword: 'Admin2!pass' })
+    assert.equal(reset.username, 'admin1')
+    assert.equal(reset.totpWasEnabled, true)
+    assert.equal(reset.totpDisabled, true)
+    assert.equal(reset.sessionsRevoked, 2)
+    assert.equal(auth.verifyPassword('Admin2!pass'), true)
+    assert.equal(auth.verifyPassword('Admin1!pass'), false)
+    assert.equal(auth.getOwnerPublic()?.totp_enabled, false)
+    assert.equal(auth.listSessions().length, 0)
+
+    // re-enable TOTP, reset with keep-totp
+    const setup2 = auth.beginTotpSetup()
+    const code2 = totpCodeAt(setup2.secret, Math.floor(Date.now() / 1000))
+    auth.confirmTotp(code2)
+    auth.issueSession({ label: 'c', desktop: false })
+    const keep = auth.adminResetPassword({ newPassword: 'Admin3!pass', disableTotp: false })
+    assert.equal(keep.totpWasEnabled, true)
+    assert.equal(keep.totpDisabled, false)
+    assert.equal(keep.sessionsRevoked, 1)
+    assert.equal(auth.getOwnerPublic()?.totp_enabled, true)
+    assert.equal(auth.verifyPassword('Admin3!pass'), true)
+    assert.equal(auth.listSessions().length, 0)
+  })
+
+  it('forceClearTotp clears TOTP without password; no-op when unclaimed', async () => {
+    const { getUserDataStore, totpCodeAt, resetAuthKeyCacheForTests } =
+      await import('../packages/user-store/dist/index.js')
+    getUserDataStore().close()
+    resetAuthKeyCacheForTests()
+    const auth = getUserDataStore().appAuth
+    if (auth.isClaimed()) auth.wipeOwnerForSafeMode()
+    auth.forceClearTotp() // no-op
+    auth.createOwner({ username: 'force1', password: 'Force1!pass' })
+    const setup = auth.beginTotpSetup()
+    const code = totpCodeAt(setup.secret, Math.floor(Date.now() / 1000))
+    auth.confirmTotp(code)
+    assert.equal(auth.getOwnerPublic()?.totp_enabled, true)
+    auth.forceClearTotp()
+    assert.equal(auth.getOwnerPublic()?.totp_enabled, false)
+    assert.equal(auth.verifyPassword('Force1!pass'), true)
+  })
 })
 
 describe('claimed gate helpers', () => {

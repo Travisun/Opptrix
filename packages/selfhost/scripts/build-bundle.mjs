@@ -22,6 +22,7 @@ const FILES = [
   { src: 'scripts/system-boot.mjs', dest: 'scripts/system-boot.mjs' },
   { src: 'scripts/opptrix-node-supervisor.mjs', dest: 'scripts/opptrix-node-supervisor.mjs' },
   { src: 'scripts/runtime-update-cli.mjs', dest: 'scripts/runtime-update-cli.mjs' },
+  { src: 'scripts/selfhost-auth-cli.mjs', dest: 'scripts/selfhost-auth-cli.mjs' },
 ]
 
 function main() {

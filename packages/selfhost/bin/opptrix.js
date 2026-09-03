@@ -50,6 +50,7 @@ import {
 } from '../src/mirrors.mjs'
 import { flagString, flagTrue, parseArgv } from '../src/parse.mjs'
 import { handleBaseCommand } from '../src/base-commands.mjs'
+import { handleAuthCommand } from '../src/auth-commands.mjs'
 import { cmdData } from '../src/data-migrate.mjs'
 import {
   afterComposeUpReady,
@@ -126,6 +127,7 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   logs              查看日志（-f / --follow 跟踪）
   status            容器状态（compose ps）
   health            探测本机 HTTPS 健康检查（端口见配置，默认 8712）
+  auth              本地账户恢复：whoami / reset-password / disable-totp
   compose           透传 docker compose：opptrix compose -- <args…>
   install-cli       本机 npm link 本包
   uninstall-cli     npm unlink -g @opptrix/selfhost
@@ -186,6 +188,8 @@ macOS / Windows: 自备 Docker + Node ≥24 后 npm i -g @opptrix/selfhost
   opptrix env set OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS=6
   opptrix env keys
   opptrix env list
+  opptrix auth whoami
+  opptrix auth reset-password --yes
   opptrix logs -f
 `)
 }
@@ -1201,6 +1205,8 @@ async function main() {
         console.error(`[opptrix] health FAIL ${h.error || h.status || ''} ${h.body || ''}`)
         return 1
       }
+      case 'auth':
+        return await handleAuthCommand(parsed)
       case 'compose': {
         const { root, mirror, releaseEnv } = prepareRoot(parsed, { needFullSource: false })
         return runCompose(parsed.args.length ? parsed.args : [], { root, mirror, releaseEnv })

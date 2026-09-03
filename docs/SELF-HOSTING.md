@@ -128,6 +128,8 @@ opptrix up
 | `opptrix logs -f` | 跟踪日志 |
 | `opptrix status` | 容器状态 |
 | `opptrix health` | 探测 `https://127.0.0.1:8712/api/health`（自签名，CLI 会跳过证书校验） |
+| `opptrix auth whoami` | 查看本地账户是否已创建、用户名与二次验证状态 |
+| `opptrix auth reset-password` | 忘记密码时在宿主机重置（默认关闭二次验证并使全部登录失效；`--keep-totp` 可保留） |
 | `opptrix uninstall-cli` | 取消全局命令 |
 
 仓内未装全局时：`npm run opptrix -- up --mirror cn`。仅验证服务、暂不拉模型：`opptrix up --mirror cn --skip-models`。
@@ -323,7 +325,8 @@ services:
 
 - **未创建账户**：任意客户端可调用 API 以完成首次配置与建账户（Docker 端口映射时浏览器即使打开 `127.0.0.1`，容器内看到的也是网桥 IP，故不再用「本机 IP」卡首次引导）。建账户等接口对非本机仍有软限流。
 - **创建账户后**：须登录后方可使用（含版本升级引导）；可在设置中管理会话与二次验证。
-- 首次打开 UI 按引导 **认领 / 创建账户**（claim），再按需开启 TOTP。
+- 首次打开 UI 按引导 **认领 / 创建账户**（claim），再按需开启二次验证。
+- **忘记本地密码**（Docker 自托管）：在宿主机执行 `opptrix auth whoami` 确认账户，再 `opptrix auth reset-password --yes`（交互输入新密码，或 `--password`）。默认会关闭二次验证并使全部登录失效；仅需关二次验证时用 `opptrix auth disable-totp --yes`。须容器正在运行，且能对本机 Docker 操作。
 
 公开端口时存在「先到先得」抢占账户的风险；建议尽快完成认领，或仅在受信网络暴露。切勿把未加反向代理、长期未认领的实例裸挂公网。
 

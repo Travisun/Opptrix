@@ -49,6 +49,8 @@ test('build-bundle copies deploy assets', () => {
     'compose.env.example',
     '.dockerignore',
     'scripts/docker-entrypoint.sh',
+    'scripts/runtime-update-cli.mjs',
+    'scripts/selfhost-auth-cli.mjs',
     'BUILD.json',
   ]) {
     assert.ok(fs.existsSync(path.join(bundle, rel)), rel)
@@ -79,8 +81,21 @@ test('opptrix help mentions prebuilt pull and --build', () => {
   assert.match(r.stdout, /\bsetup\b/)
   assert.match(r.stdout, /\bdata\b/)
   assert.match(r.stdout, /\bport\b/)
+  assert.match(r.stdout, /\bauth\b/)
   assert.match(r.stdout, /env keys|keys/)
   assert.match(r.stdout, /--agree-tos/)
+})
+
+test('opptrix auth help mentions reset-password', () => {
+  const r = spawnSync(process.execPath, [CLI, 'auth', 'help'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /whoami/)
+  assert.match(r.stdout, /reset-password/)
+  assert.match(r.stdout, /disable-totp/)
+  assert.match(r.stdout, /--keep-totp/)
 })
 
 test('opptrix env keys lists compose.env.example catalog', () => {
