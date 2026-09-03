@@ -78,33 +78,10 @@ logs/
 data/cache/
 outputs/
 
-# CodeGraph local index (keep .codegraph/.gitignore if committed)
-.codegraph/*
-!.codegraph/.gitignore
-!.codegraph/index.mdc
-
-# Local rules / Cursor / MiMoCode — canonical: ~/.projects-rules/Opptrix/
-.cursor/*
-!.cursor/index.mdc
-!.cursor/hooks.json
-!.cursor/hooks/
-.cursor/hooks/*
-!.cursor/hooks/ensure-codegraph.sh
-!.cursor/hooks/selfhost-release-hint.sh
-!.cursor/hooks/index.mdc
-!.cursor/rules/
-.cursor/rules/*
-!.cursor/rules/rules-index.mdc
-!.cursor/rules/index.mdc
-!.cursor/skills/
-.cursor/skills/*
-!.cursor/skills/index.mdc
-.cursor/mcp.json
-.cursor/cli.json
-
-.mimocode/*
-!.mimocode/index.mdc
-!.mimocode/.gitignore
+# CodeGraph / Cursor / MiMoCode — never track; keep entirely local
+.codegraph/
+.cursor/
+.mimocode/
 
 # Local trials when using example/ configs
 example/runtime-local/
@@ -112,7 +89,6 @@ example/runtime-local/
 
 # Agent/MiMoCode generated files
 .agents/
-.mimocode/.cron-lock
 skills-lock.json
 
 # local prepare:fonts debug
