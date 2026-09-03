@@ -20,6 +20,10 @@ import {
 } from '../src/app-refs.mjs'
 import { detectDocker, gitPull, npmLinkCli, npmUnlinkCli, probeHealth, resolveHealthProbe, runCompose } from '../src/compose.mjs'
 import {
+  ensureDockerEngineAutostart,
+  reportAutostartDoctor,
+} from '../src/autostart.mjs'
+import {
   knownEnvKeyCatalogForRoot,
   knownEnvKeysForRoot,
   maskEnvValue,
@@ -641,6 +645,12 @@ async function cmdUpOrUpdate(parsed, opts = {}) {
   })
   if (tos !== 0) return tos
 
+  // Engine autostart once per up/update (container policy enforced after compose ready)
+  await ensureDockerEngineAutostart({
+    interactive: Boolean(process.stdin.isTTY) && !flagTrue(parsed.flags, 'yes', 'y'),
+    yes: flagTrue(parsed.flags, 'yes', 'y') || !process.stdin.isTTY,
+  })
+
   const refFlag = flagString(parsed.flags, 'ref')
   const resolved = resolveEnsureAppRef({ root, ref: refFlag })
   const skipModels = flagTrue(parsed.flags, 'skip-models')
@@ -843,6 +853,15 @@ async function cmdDoctor(parsed) {
   const containerName = readComposeContainerName(root)
   const containerRunning = isContainerRunning(containerName)
   console.log(`[opptrix] 容器 ${containerName}: ${containerRunning ? '运行中' : '未运行'}`)
+  if (d.ok) {
+    if (process.platform === 'linux') {
+      await ensureDockerEngineAutostart({
+        interactive: Boolean(process.stdin.isTTY),
+        yes: !process.stdin.isTTY,
+      })
+    }
+    reportAutostartDoctor(containerName, { autoFix: true, includeEngine: true })
+  }
 
   const ports = readConfiguredHostPorts(root)
   const probe = resolveHealthProbe(root)

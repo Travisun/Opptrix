@@ -246,6 +246,21 @@ test('docker-compose supports OPPTRIX_IMAGE override', async () => {
   assert.match(yml, /build:/)
 })
 
+test('docker-compose and legacy use restart unless-stopped', async () => {
+  const yml = await fs.promises.readFile(path.join(ROOT, 'docker-compose.yml'), 'utf8')
+  assert.match(yml, /^\s*restart:\s*unless-stopped\s*$/m)
+  const legacy = await fs.promises.readFile(
+    path.join(ROOT, 'docker-compose.legacy-volumes.yml'),
+    'utf8',
+  )
+  assert.match(legacy, /^\s*restart:\s*unless-stopped\s*$/m)
+  const bundleYml = path.join(ROOT, 'packages/selfhost/bundle/docker-compose.yml')
+  if (fs.existsSync(bundleYml)) {
+    const bundled = await fs.promises.readFile(bundleYml, 'utf8')
+    assert.match(bundled, /^\s*restart:\s*unless-stopped\s*$/m)
+  }
+})
+
 test('docker-compose publishes https 8712 only by default', async () => {
   const yml = await fs.promises.readFile(path.join(ROOT, 'docker-compose.yml'), 'utf8')
   assert.match(yml, /OPPTRIX_HOST_HTTPS_PORT:-8712/)

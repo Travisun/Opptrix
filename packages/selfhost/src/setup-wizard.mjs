@@ -1,7 +1,6 @@
 /**
  * Interactive deploy setup: mirror, data storage, ports, Docker-on-boot.
  */
-import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import readline from 'node:readline'
@@ -30,8 +29,18 @@ import {
   findFreeHostPort,
   isHostPortFree,
 } from './ports.mjs'
+import {
+  checkDockerAutostart,
+  ensureDockerEngineAutostart,
+  maybeOfferDockerAutostart,
+} from './autostart.mjs'
 
 export { DEFAULT_HTTP_PORT, DEFAULT_HTTPS_PORT }
+export {
+  checkDockerAutostart,
+  ensureDockerEngineAutostart,
+  maybeOfferDockerAutostart,
+}
 export const DEFAULT_VOLUME_NAME = 'opptrix-home'
 
 /**
@@ -220,112 +229,6 @@ export async function collectSetupAnswers(parsed, opts = {}) {
 }
 
 /**
- * @returns {{
- *   platform: string,
- *   enabled: boolean | null,
- *   message: string,
- *   enableCommand: string | null,
- * }}
- */
-export function checkDockerAutostart() {
-  const platform = process.platform
-  if (platform === 'linux') {
-    const r = spawnSync('systemctl', ['is-enabled', 'docker'], {
-      encoding: 'utf8',
-      shell: false,
-    })
-    const out = `${r.stdout || ''}${r.stderr || ''}`.trim()
-    const enabled = r.status === 0 && /^enabled$/i.test(out.split('\n')[0] || '')
-    if (enabled) {
-      return {
-        platform,
-        enabled: true,
-        message: 'Docker 服务已设置为开机自启（systemctl is-enabled docker → enabled）',
-        enableCommand: null,
-      }
-    }
-    // try docker.service unit name hint
-    const r2 = spawnSync('systemctl', ['is-enabled', 'docker.service'], {
-      encoding: 'utf8',
-      shell: false,
-    })
-    const out2 = `${r2.stdout || ''}${r2.stderr || ''}`.trim()
-    const enabled2 = r2.status === 0 && /^enabled$/i.test(out2.split('\n')[0] || '')
-    if (enabled2) {
-      return {
-        platform,
-        enabled: true,
-        message: 'Docker 服务已设置为开机自启（docker.service）',
-        enableCommand: null,
-      }
-    }
-    return {
-      platform,
-      enabled: false,
-      message: `Docker 开机自启未启用（systemctl: ${out || out2 || 'disabled/unknown'}）`,
-      enableCommand: 'sudo systemctl enable docker',
-    }
-  }
-
-  if (platform === 'darwin') {
-    return {
-      platform,
-      enabled: null,
-      message:
-        'macOS：请在 Docker Desktop → Settings → General 中勾选 “Start Docker Desktop when you sign in”（开机/登录时启动）。CLI 无法可靠代为开启。',
-      enableCommand: null,
-    }
-  }
-
-  if (platform === 'win32') {
-    return {
-      platform,
-      enabled: null,
-      message:
-        'Windows：请在 Docker Desktop 设置中开启登录时启动（Start Docker Desktop when you sign in）。',
-      enableCommand: null,
-    }
-  }
-
-  return {
-    platform,
-    enabled: null,
-    message: `当前平台 ${platform}：请自行确认 Docker 是否随系统启动。`,
-    enableCommand: null,
-  }
-}
-
-/**
- * @param {{ interactive?: boolean, yes?: boolean }} [opts]
- * @returns {Promise<void>}
- */
-export async function maybeOfferDockerAutostart(opts = {}) {
-  const status = checkDockerAutostart()
-  console.log(`[opptrix] ${status.message}`)
-  if (status.enabled !== false || !status.enableCommand) return
-
-  const interactive = opts.interactive !== false && Boolean(process.stdin.isTTY) && !opts.yes
-  let doEnable = Boolean(opts.yes)
-  if (interactive) {
-    const ans = await ask(`是否执行 \`${status.enableCommand}\`？(y/N)`, 'N')
-    doEnable = /^(y|yes|1|true)$/i.test(ans)
-  }
-  if (!doEnable) {
-    console.log(`[opptrix] 如需开机自启，请手动执行: ${status.enableCommand}`)
-    return
-  }
-
-  const parts = status.enableCommand.split(/\s+/)
-  const r = spawnSync(parts[0], parts.slice(1), { encoding: 'utf8', shell: false, stdio: 'inherit' })
-  if (r.status === 0) {
-    console.log('[opptrix] 已启用 Docker 开机自启')
-    return
-  }
-  console.warn('[opptrix] WARN: 无法自动启用（可能需要更高权限）')
-  console.warn(`[opptrix] 请手动执行: ${status.enableCommand}`)
-}
-
-/**
  * Auto-pick free host ports when defaults / answers collide with occupied ports.
  * @param {SetupAnswers} answers
  * @returns {Promise<SetupAnswers>}
@@ -407,8 +310,8 @@ export function printSetupHelp() {
   opptrix setup [选项]
   opptrix setup --yes
 
-交互（TTY）询问镜像源、数据存储、端口、是否跳过模型，并检查 Docker 开机自启。
-非 TTY 或 --yes 时使用默认值 / 命令行选项，退出码 0。
+交互（TTY）询问镜像源、数据存储、端口、是否跳过模型，并检查 Docker 开机自启（默认开启）。
+非 TTY 或 --yes 时使用默认值 / 命令行选项，退出码 0；Linux 上会尝试启用 Docker 开机自启。
 
 选项:
   --mirror auto|cn|foreign   镜像源（默认 auto）
@@ -457,9 +360,10 @@ export async function cmdSetup(parsed) {
     console.log(`[opptrix] data=volume(${DEFAULT_VOLUME_NAME}) ports=${answers.httpPort}/${answers.httpsPort} mirror=${answers.mirror}`)
     const docker = detectDocker()
     if (docker.ok) {
-      const st = checkDockerAutostart()
-      console.log(`[opptrix] ${st.message}`)
-      if (st.enableCommand) console.log(`[opptrix] 如需开机自启: ${st.enableCommand}`)
+      await ensureDockerEngineAutostart({
+        interactive: false,
+        yes: true,
+      })
     }
     return 0
   }
@@ -491,7 +395,7 @@ export async function cmdSetup(parsed) {
 
   const docker = detectDocker()
   if (docker.ok) {
-    await maybeOfferDockerAutostart({
+    await ensureDockerEngineAutostart({
       interactive,
       yes: flagTrue(parsed.flags, 'yes', 'y'),
     })

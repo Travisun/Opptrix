@@ -3,8 +3,10 @@
  */
 import os from 'node:os'
 import readline from 'node:readline'
+import { ensureContainerRestartPolicy } from './autostart.mjs'
 import { probeHealth, resolveHealthProbe, runCompose } from './compose.mjs'
 import { resolveCurrentDataSource } from './data-migrate.mjs'
+import { readComposeContainerName } from './docker-runtime.mjs'
 import { flagTrue } from './parse.mjs'
 import {
   readHostConfig,
@@ -316,6 +318,8 @@ export async function restartAndAwaitReady(root, opts = {}) {
     return restarted.code || 1
   }
   const health = await waitUntilHealthy(root, { label: '服务' })
+  const name = opts.containerName || readComposeContainerName(root)
+  ensureContainerRestartPolicy(name)
   if (opts.printSummary !== false) {
     printDeployReadySummary(root, {
       runtimeVersion: opts.runtimeVersion ?? health.runtimeVersion,
@@ -334,6 +338,7 @@ export async function restartAndAwaitReady(root, opts = {}) {
  */
 export async function afterComposeUpReady(root, opts = {}) {
   const health = await waitUntilHealthy(root, { label: '服务' })
+  ensureContainerRestartPolicy(readComposeContainerName(root))
   printDeployReadySummary(root, {
     runtimeVersion: opts.runtimeVersion ?? health.runtimeVersion,
     baseVersion: opts.baseVersion ?? health.baseVersion,

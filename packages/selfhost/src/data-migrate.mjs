@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { probeHealth, runCompose } from './compose.mjs'
+import { ensureContainerRestartPolicy } from './autostart.mjs'
 import {
   isContainerRunning,
   readComposeContainerName,
@@ -553,6 +554,7 @@ export async function cmdData(parsed) {
     console.error('[opptrix] up 失败；源数据仍保留，请检查 override / 权限后重试')
     return upCode
   }
+  ensureContainerRestartPolicy(readComposeContainerName(root))
   await waitForHealth(root)
   console.log('[opptrix] 数据路径迁移完成')
   return 0
