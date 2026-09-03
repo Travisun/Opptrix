@@ -119,7 +119,5 @@ skills-lock.json
 .prepare-fonts-out.tmp
 
 
-# Architecture / product docs — local only; repo tracks release notes only
-/docs/*
-!/docs/releases/
-!/docs/releases/**
+# docs/ — never track; keep entirely local so pull/checkout cannot clobber working copies
+/docs/
