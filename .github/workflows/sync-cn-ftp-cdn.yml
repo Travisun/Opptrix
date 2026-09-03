@@ -1,0 +1,122 @@
+# Sync already-published runtime packages to CN FTP CDN only.
+# Does not re-pack, does not touch R2 / GitHub Release.
+# Use when Publish runtime assets failed at the FTP step.
+name: Sync CN FTP CDN
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Runtime semver (e.g. 1.4.5) — downloads runtime-v{version} Release assets'
+        required: true
+        type: string
+      release_tag:
+        description: 'GitHub Release tag (empty = runtime-v{version})'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-cn-ftp-cdn-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  sync-ftp:
+    name: Sync hot assets to CN FTP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Require FTP secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [[ -z "${{ secrets.FTP_HOST }}" ]]; then
+            echo "::error::Missing FTP_HOST"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.FTP_USERNAME }}" ]]; then
+            echo "::error::Missing FTP_USERNAME"
+            missing=1
+          fi
+          if [[ -z "${{ secrets.FTP_PASSWORD }}" ]]; then
+            echo "::error::Missing FTP_PASSWORD"
+            missing=1
+          fi
+          if [[ "$missing" -ne 0 ]]; then exit 1; fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Download Release packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          TAG="${{ inputs.release_tag }}"
+          if [[ -z "$TAG" ]]; then
+            TAG="runtime-v${VER}"
+          fi
+          mkdir -p dist-runtime
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --dir dist-runtime \
+            --pattern "opptrix-runtime-*-v${VER}.bin" \
+            --pattern "opptrix-runtime-*-v${VER}.sha256" \
+            --pattern "opptrix-runtime-v${VER}.bin" \
+            --pattern "opptrix-runtime-v${VER}.sha256" \
+            --clobber
+          ls -lah dist-runtime/
+
+      - name: Install FTP client
+        run: npm install basic-ftp@^5.0.5 --no-save --no-fund --no-audit
+
+      - name: Sync hot assets to CN FTP CDN
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_SECURE: ${{ secrets.FTP_SECURE }}
+          FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+          OPPTRIX_UPDATE_CDN_BASE: https://update.opptrix.org
+          OPPTRIX_MIN_BASE_IMAGE: opptrix-selfhost-v${{ inputs.version }}
+          OPPTRIX_RUNTIME_RELEASE_TAG: runtime-v${{ inputs.version }}
+          HOT_FTP_SMOKE_BASE: https://update.opptrix.evzs.com
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          node scripts/sync-hot-to-ftp.mjs --dir dist-runtime --version "$VER"
+
+      - name: Smoke verify CN FTP CDN
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          URL="https://update.opptrix.evzs.com/hot/check-update"
+          echo "Fetching ${URL} …"
+          if ! BODY="$(curl -fsS --max-time 45 "$URL")"; then
+            echo "::warning::CN CDN check-update fetch failed (may need HTTP propagation)"
+            exit 0
+          fi
+          echo "$BODY" | node -e "
+            const v = process.argv[1];
+            let j;
+            try { j = JSON.parse(require('fs').readFileSync(0, 'utf8')); }
+            catch (e) { console.error('invalid JSON'); process.exit(1); }
+            if (!j.latest || j.latest.version !== v) {
+              console.error('CN latest.version mismatch:', j.latest?.version, 'expected', v);
+              process.exit(1);
+            }
+            console.log('CN CDN smoke OK for', v);
+          " "$VER"

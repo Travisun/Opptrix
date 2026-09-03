@@ -12,27 +12,28 @@ import {
   selectHotPackageFilesToPrune,
 } from '../scripts/lib/hot-ftp.mjs'
 
-test('resolveHotFtpRemoteDir defaults to site root', () => {
-  assert.equal(resolveHotFtpRemoteDir({}), '/')
-  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: '/' }), '/')
-  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: 'cdn' }), '/cdn')
-  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: '/cdn/' }), '/cdn')
+test('resolveHotFtpRemoteDir defaults to login home (relative)', () => {
+  assert.equal(resolveHotFtpRemoteDir({}), '')
+  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: '/' }), '')
+  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: '.' }), '')
+  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: 'cdn' }), 'cdn')
+  assert.equal(resolveHotFtpRemoteDir({ FTP_REMOTE_DIR: '/cdn/' }), 'cdn')
 })
 
-test('joinHotFtpRemotePath mirrors R2 object keys', () => {
+test('joinHotFtpRemotePath uses chroot-relative paths', () => {
   assert.equal(
-    joinHotFtpRemotePath('/', 'hot/check-update'),
-    '/hot/check-update',
+    joinHotFtpRemotePath('', 'hot/check-update'),
+    'hot/check-update',
   )
   assert.equal(
     joinHotFtpRemotePath('/', `${HOT_PACKAGES_PREFIX}/opptrix-runtime-v1.4.5.bin`),
-    '/hot/packages/opptrix-runtime-v1.4.5.bin',
+    'hot/packages/opptrix-runtime-v1.4.5.bin',
   )
   assert.equal(
     joinHotFtpRemotePath('/site', 'hot/releases'),
-    '/site/hot/releases',
+    'site/hot/releases',
   )
-  assert.throws(() => joinHotFtpRemotePath('/', '../etc/passwd'), /invalid/)
+  assert.throws(() => joinHotFtpRemotePath('', '../etc/passwd'), /invalid/)
 })
 
 test('isHotRuntimePackageArtifact matches arch + legacy names', () => {
@@ -79,7 +80,7 @@ test('listingFileNames skips directories', () => {
   assert.deepEqual(names, ['a.bin', 'b.sha256'])
 })
 
-test('ensureRemoteDirIfMissing creates only missing segments', async () => {
+test('ensureRemoteDirIfMissing creates only missing relative segments', async () => {
   /** @type {string[]} */
   const listed = []
   /** @type {string[]} */
@@ -87,17 +88,17 @@ test('ensureRemoteDirIfMissing creates only missing segments', async () => {
   const client = {
     async list(dir) {
       listed.push(dir)
-      if (dir === '/hot') return []
+      if (dir === 'hot') return []
       throw new Error('missing')
     },
     async ensureDir(dir) {
       ensured.push(dir)
     },
   }
-  const result = await ensureRemoteDirIfMissing(client, '/hot/packages')
-  assert.equal(result.path, '/hot/packages')
-  assert.deepEqual(result.created, ['/hot/packages'])
-  assert.ok(listed.includes('/hot'))
-  assert.ok(listed.includes('/hot/packages'))
-  assert.deepEqual(ensured, ['/hot/packages'])
+  const result = await ensureRemoteDirIfMissing(client, 'hot/packages')
+  assert.equal(result.path, 'hot/packages')
+  assert.deepEqual(result.created, ['hot/packages'])
+  assert.ok(listed.includes('hot'))
+  assert.ok(listed.includes('hot/packages'))
+  assert.deepEqual(ensured, ['hot/packages'])
 })

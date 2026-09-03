@@ -1,9 +1,12 @@
 /**
  * FTP helpers for self-host hot-update CDN mirror (CN: update.opptrix.evzs.com).
- * Remote layout matches R2 object keys under the FTP site root:
+ * Remote layout matches R2 object keys under the FTP login home (usually site root):
  *   hot/check-update
  *   hot/releases
  *   hot/packages/opptrix-runtime-*.bin|.sha256
+ *
+ * Paths are relative to the FTP login directory (chroot-friendly). Absolute
+ * `/hot/...` breaks on chrooted accounts (550 Can't change directory).
  */
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -20,8 +23,11 @@ import {
   runtimeBinSha256Filename,
 } from './hot-cdn.mjs'
 
-/** Default FTP document root — same path layout as https://update.opptrix.evzs.com/ */
-export const DEFAULT_HOT_FTP_REMOTE_DIR = '/'
+/**
+ * Empty string = FTP login home (site document root for update.opptrix.evzs.com).
+ * Non-empty = subdirectory under login home (no leading slash).
+ */
+export const DEFAULT_HOT_FTP_REMOTE_DIR = ''
 
 /** Public CN hot CDN (HTTP smoke / docs). */
 export const DEFAULT_CN_HOT_CDN_BASE = 'https://update.opptrix.evzs.com'
@@ -29,17 +35,17 @@ export const DEFAULT_CN_HOT_CDN_BASE = 'https://update.opptrix.evzs.com'
 export { HOT_CHECK_UPDATE_KEY, HOT_PACKAGES_PREFIX, HOT_RELEASES_KEY, HOT_RELEASES_RETENTION_MAX }
 
 /**
+ * Normalize FTP remote root relative to login home (strip leading/trailing `/`).
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function resolveHotFtpRemoteDir(env = process.env) {
   const raw = String(env.FTP_REMOTE_DIR ?? '').trim()
   if (!raw || raw === '/' || raw === '.') return DEFAULT_HOT_FTP_REMOTE_DIR
-  const withSlash = raw.startsWith('/') ? raw : `/${raw}`
-  return withSlash.replace(/\/+$/, '') || DEFAULT_HOT_FTP_REMOTE_DIR
+  return raw.replace(/^\/+/, '').replace(/\/+$/, '')
 }
 
 /**
- * Absolute remote path: remoteRoot + object key (e.g. hot/packages/foo.bin).
+ * Remote path relative to login home: remoteRoot + object key.
  * @param {string} remoteRoot
  * @param {string} objectKey
  */
@@ -48,10 +54,9 @@ export function joinHotFtpRemotePath(remoteRoot, objectKey) {
   if (!key || key.includes('..')) {
     throw new Error(`invalid hot FTP object key: ${objectKey}`)
   }
-  const root = String(remoteRoot ?? DEFAULT_HOT_FTP_REMOTE_DIR).replace(/\/+$/, '') || ''
-  if (!root || root === '/') return `/${key}`
-  const normalized = root.startsWith('/') ? root : `/${root}`
-  return path.posix.join(normalized, key)
+  const root = String(remoteRoot ?? '').replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!root) return key
+  return path.posix.join(root, key)
 }
 
 /**
@@ -134,7 +139,7 @@ export function listingFileNames(listing) {
  * @param {string} remoteDir
  */
 export async function remoteDirExists(client, remoteDir) {
-  const dir = String(remoteDir ?? '').replace(/\/+$/, '') || '/'
+  const dir = String(remoteDir ?? '').replace(/^\/+/, '').replace(/\/+$/, '') || '.'
   try {
     await client.list(dir)
     return true
@@ -144,23 +149,23 @@ export async function remoteDirExists(client, remoteDir) {
 }
 
 /**
- * List parent; create only when missing (segment by segment).
+ * List then create only when missing (segment by segment, relative to login home).
  * @param {import('basic-ftp').Client} client
  * @param {string} remoteDir
  * @returns {Promise<{ path: string, created: string[] }>}
  */
 export async function ensureRemoteDirIfMissing(client, remoteDir) {
-  const raw = String(remoteDir ?? '').replace(/\\/g, '/').trim() || '/'
-  if (raw === '/' || raw === '.') {
-    return { path: '/', created: [] }
+  const raw = String(remoteDir ?? '').replace(/\\/g, '/').trim()
+  if (!raw || raw === '/' || raw === '.') {
+    return { path: '.', created: [] }
   }
-  const normalized = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/+$/, '') || '/'
+  const normalized = raw.replace(/^\/+/, '').replace(/\/+$/, '')
   const parts = normalized.split('/').filter(Boolean)
   /** @type {string[]} */
   const created = []
   let current = ''
   for (const part of parts) {
-    current = `${current}/${part}`
+    current = current ? `${current}/${part}` : part
     const exists = await remoteDirExists(client, current)
     if (!exists) {
       await client.ensureDir(current)
@@ -202,13 +207,13 @@ export function requireHotFtpEnv(env = process.env) {
  * @param {string} localPath
  */
 export async function uploadHotFtpFile(client, remoteRoot, objectKey, localPath) {
-  const abs = joinHotFtpRemotePath(remoteRoot, objectKey)
-  const dir = path.posix.dirname(abs)
-  const name = path.posix.basename(abs)
-  await ensureRemoteDirIfMissing(client, dir)
-  await client.cd(dir)
+  const remotePath = joinHotFtpRemotePath(remoteRoot, objectKey)
+  const dir = path.posix.dirname(remotePath)
+  const name = path.posix.basename(remotePath)
+  await ensureRemoteDirIfMissing(client, dir === '.' ? '' : dir)
+  await client.cd(dir === '.' ? '.' : dir)
   await client.uploadFrom(localPath, name)
-  return abs
+  return remotePath
 }
 
 /**
@@ -219,14 +224,14 @@ export async function uploadHotFtpFile(client, remoteRoot, objectKey, localPath)
  * @param {string} body
  */
 export async function uploadHotFtpText(client, remoteRoot, objectKey, body) {
-  const abs = joinHotFtpRemotePath(remoteRoot, objectKey)
-  const dir = path.posix.dirname(abs)
-  const name = path.posix.basename(abs)
-  await ensureRemoteDirIfMissing(client, dir)
-  await client.cd(dir)
+  const remotePath = joinHotFtpRemotePath(remoteRoot, objectKey)
+  const dir = path.posix.dirname(remotePath)
+  const name = path.posix.basename(remotePath)
+  await ensureRemoteDirIfMissing(client, dir === '.' ? '' : dir)
+  await client.cd(dir === '.' ? '.' : dir)
   const buf = Buffer.from(body, 'utf8')
   await client.uploadFrom(Readable.from([buf]), name)
-  return abs
+  return remotePath
 }
 
 /**
