@@ -8,10 +8,10 @@ import {
   useSystemUpdate,
 } from '../hooks/useSystemUpdate'
 import { copyTextToClipboard } from '../platform/clipboard'
+import { glassPanel } from '../theme/mixins'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 
-const DEFAULT_BASE_HINT =
-  '当前运行环境无法安装此版本。请在服务器上执行下方命令。数据与已保存内容会保留。'
+const DEFAULT_BASE_HINT = '请在服务器执行下方命令后再继续。你的对话与数据会保留。'
 const DEFAULT_CLI = 'opptrix update'
 const BLOCKED_COPY =
   '此版本未能完成更新，已恢复当前版本。将等待后续新版本，中间版本会自动跳过。'
@@ -23,21 +23,26 @@ const useStyles = makeStyles({
     left: '50%',
     transform: 'translateX(-50%)',
     zIndex: 4200,
-    width: 'min(520px, calc(100vw - 32px))',
+    width: 'min(380px, calc(100vw - 32px))',
     pointerEvents: 'none',
   },
   card: {
+    ...glassPanel,
     pointerEvents: 'auto',
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
-    padding: '12px 14px',
-    borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixCssVars.surface,
+    flexDirection: 'column',
+    gap: '10px',
+    padding: '12px 14px 12px',
+    borderRadius: opptrixTokens.radiusLg,
     border: `1px solid ${opptrixCssVars.separator}`,
     boxShadow: '0 8px 28px rgba(0, 0, 0, 0.08)',
   },
-  body: {
+  header: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+  },
+  headerText: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
@@ -47,6 +52,7 @@ const useStyles = makeStyles({
   title: {
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
+    letterSpacing: '-0.01em',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
@@ -55,6 +61,16 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
+  dismiss: {
+    flexShrink: 0,
+    minWidth: '28px',
+    width: '28px',
+    height: '28px',
+    padding: 0,
+    marginTop: '-2px',
+    marginRight: '-4px',
+    color: opptrixCssVars.textTertiary,
+  },
   cli: {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: 'var(--opptrix-font-md)',
@@ -62,43 +78,65 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     border: `1px solid ${opptrixCssVars.separator}`,
     borderRadius: opptrixTokens.radiusSm,
-    padding: '6px 8px',
-    marginTop: '4px',
+    padding: '8px 10px',
     wordBreak: 'break-all',
+    lineHeight: 1.4,
   },
-  actions: {
+  footer: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
-    paddingTop: '1px',
+    justifyContent: 'space-between',
+    gap: '10px',
+    paddingTop: '2px',
   },
-  cta: {
+  later: {
     minHeight: '28px',
     height: '28px',
-    padding: '0 10px',
+    padding: '0 6px',
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 500,
+    color: opptrixCssVars.textTertiary,
+  },
+  primary: {
+    minHeight: '28px',
+    height: '28px',
+    padding: '0 12px',
     fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
-  },
-  dismiss: {
-    minWidth: '28px',
-    width: '28px',
-    height: '28px',
-    padding: 0,
+    letterSpacing: '-0.01em',
+    flexShrink: 0,
+    '& .fui-Button__icon': {
+      fontSize: 'var(--opptrix-font-base)',
+      width: '13px',
+      height: '13px',
+      marginInlineEnd: '0',
+    },
+    '& .fui-Button__icon svg': {
+      width: '13px',
+      height: '13px',
+    },
   },
 })
 
-type SystemUpdateReadyBannerProps = {
-  dismissed: boolean
-  onDismiss: () => void
+function shortBaseHint(raw: string | null | undefined): string {
+  const t = raw?.trim()
+  if (!t) return DEFAULT_BASE_HINT
+  // Keep banner to one short line; long server hints belong in the dialog.
+  if (t.length > 72) return DEFAULT_BASE_HINT
+  return t
 }
 
-export default function SystemUpdateReadyBanner({
-  dismissed,
-  onDismiss,
-}: SystemUpdateReadyBannerProps) {
+export default function SystemUpdateReadyBanner() {
   const s = useStyles()
-  const { active, status, openConfirm, waitingForBaseRefresh, environmentWaiting } = useSystemUpdate()
+  const {
+    active,
+    status,
+    openConfirm,
+    dismissUpdatePrompt,
+    promptDismissed,
+    waitingForBaseRefresh,
+    environmentWaiting,
+  } = useSystemUpdate()
   const [copied, setCopied] = useState(false)
 
   const blocked = isSystemUpdateBlocked(status)
@@ -117,14 +155,16 @@ export default function SystemUpdateReadyBanner({
   if (!active || !status.enabled) return null
   if (isSystemUpdateBlocking(status)) return null
   if (status.uiPhase !== 'normal') return null
-  if (environmentWaiting && waitingForBaseRefresh) {
+  if (waitingForBaseRefresh) {
     return (
       <div className={s.wrap} role="status" aria-live="polite">
         <div className={s.card}>
-          <div className={s.body}>
-            <Text className={s.title} block>正在等待运行环境就绪…</Text>
+          <div className={s.headerText}>
+            <Text className={s.title} block>
+              {environmentWaiting ? '正在等待服务恢复…' : '正在等待环境就绪…'}
+            </Text>
             <Text className={s.meta} block>
-              服务器正在重建运行环境，请稍候。完成后你可以继续更新。
+              完成后你可以继续更新，请稍候。
             </Text>
           </div>
         </div>
@@ -135,19 +175,19 @@ export default function SystemUpdateReadyBanner({
     return (
       <div className={s.wrap} role="status" aria-live="polite">
         <div className={s.card}>
-          <div className={s.body}>
-            <Text className={s.title} block>此版本未能完成更新</Text>
-            <Text className={s.meta} block>{BLOCKED_COPY}</Text>
-          </div>
-          <div className={s.actions}>
+          <div className={s.header}>
+            <div className={s.headerText}>
+              <Text className={s.title} block>此版本未能完成更新</Text>
+              <Text className={s.meta} block>{BLOCKED_COPY}</Text>
+            </div>
             <OpptrixButton
               className={s.dismiss}
               variant="ghost"
               size="small"
-              aria-label="暂时关闭提醒"
-              title="暂时关闭提醒"
+              aria-label="关闭提醒"
+              title="关闭提醒"
               icon={<DismissRegular fontSize={14} />}
-              onClick={onDismiss}
+              onClick={dismissUpdatePrompt}
             />
           </div>
         </div>
@@ -155,23 +195,42 @@ export default function SystemUpdateReadyBanner({
     )
   }
   if (!needsBase && !showReady) return null
-  if (dismissed) return null
+  if (promptDismissed) return null
 
   const version = status.availableVersion
   if (needsBase) {
-    const title = '需要更新运行环境'
-    const meta = status.baseRefreshHint?.trim() || DEFAULT_BASE_HINT
     return (
       <div className={s.wrap} role="status" aria-live="polite">
         <div className={s.card}>
-          <div className={s.body}>
-            <Text className={s.title} block>{title}</Text>
-            <Text className={s.meta} block>{meta}</Text>
-            <Text className={s.cli} block>{cli}</Text>
-          </div>
-          <div className={s.actions}>
+          <div className={s.header}>
+            <div className={s.headerText}>
+              <Text className={s.title} block>需要更新后再继续</Text>
+              <Text className={s.meta} block>
+                {shortBaseHint(status.baseRefreshHint)}
+              </Text>
+            </div>
             <OpptrixButton
-              className={mergeClasses(s.cta, 'opptrix-focusable')}
+              className={s.dismiss}
+              variant="ghost"
+              size="small"
+              aria-label="关闭提醒"
+              title="关闭提醒"
+              icon={<DismissRegular fontSize={14} />}
+              onClick={dismissUpdatePrompt}
+            />
+          </div>
+          <Text className={s.cli} block>{cli}</Text>
+          <div className={s.footer}>
+            <OpptrixButton
+              className={mergeClasses(s.later, 'opptrix-focusable')}
+              variant="ghost"
+              size="small"
+              onClick={openConfirm}
+            >
+              查看步骤
+            </OpptrixButton>
+            <OpptrixButton
+              className={mergeClasses(s.primary, 'opptrix-focusable')}
               variant="primary"
               size="small"
               icon={<CopyRegular fontSize={13} />}
@@ -179,42 +238,45 @@ export default function SystemUpdateReadyBanner({
             >
               {copied ? '已复制' : '复制命令'}
             </OpptrixButton>
-            <OpptrixButton
-              className={mergeClasses(s.cta, 'opptrix-focusable')}
-              variant="secondary"
-              size="small"
-              onClick={openConfirm}
-            >
-              查看说明
-            </OpptrixButton>
-            <OpptrixButton
-              className={s.dismiss}
-              variant="ghost"
-              size="small"
-              aria-label="暂时关闭提醒"
-              title="暂时关闭提醒"
-              icon={<DismissRegular fontSize={14} />}
-              onClick={onDismiss}
-            />
           </div>
         </div>
       </div>
     )
   }
 
-  const title = version ? `新版本 v${version} 已就绪` : '新版本已就绪'
-  const meta = '可以开始更新。更新期间暂时无法使用其他功能。'
-
   return (
     <div className={s.wrap} role="status" aria-live="polite">
       <div className={s.card}>
-        <div className={s.body}>
-          <Text className={s.title} block>{title}</Text>
-          <Text className={s.meta} block>{meta}</Text>
-        </div>
-        <div className={s.actions}>
+        <div className={s.header}>
+          <div className={s.headerText}>
+            <Text className={s.title} block>
+              {version ? `新版本 v${version} 已就绪` : '新版本已就绪'}
+            </Text>
+            <Text className={s.meta} block>
+              更新期间暂时无法使用其他功能，对话与数据会保留。
+            </Text>
+          </div>
           <OpptrixButton
-            className={mergeClasses(s.cta, 'opptrix-focusable')}
+            className={s.dismiss}
+            variant="ghost"
+            size="small"
+            aria-label="关闭提醒"
+            title="关闭提醒"
+            icon={<DismissRegular fontSize={14} />}
+            onClick={dismissUpdatePrompt}
+          />
+        </div>
+        <div className={s.footer}>
+          <OpptrixButton
+            className={mergeClasses(s.later, 'opptrix-focusable')}
+            variant="ghost"
+            size="small"
+            onClick={dismissUpdatePrompt}
+          >
+            稍后
+          </OpptrixButton>
+          <OpptrixButton
+            className={mergeClasses(s.primary, 'opptrix-focusable')}
             variant="primary"
             size="small"
             icon={<ArrowSyncRegular fontSize={13} />}
@@ -222,15 +284,6 @@ export default function SystemUpdateReadyBanner({
           >
             查看更新
           </OpptrixButton>
-          <OpptrixButton
-            className={s.dismiss}
-            variant="ghost"
-            size="small"
-            aria-label="暂时关闭提醒"
-            title="暂时关闭提醒"
-            icon={<DismissRegular fontSize={14} />}
-            onClick={onDismiss}
-          />
         </div>
       </div>
     </div>

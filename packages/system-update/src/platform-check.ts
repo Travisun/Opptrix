@@ -188,7 +188,10 @@ function evaluateMinBaseImage(
   const docker = runtimeIsDocker(env)
 
   if (!hostBase) {
-    if (docker || minBaseImage.trim()) {
+    // Docker / self-host images must report a base tag. Local/dev Node runs
+    // often have minBaseImage in the marker but no OPPTRIX_BASE_VERSION — do not
+    // force a base-refresh prompt there.
+    if (docker) {
       reasons.push('host base version unknown; base refresh required')
       return true
     }

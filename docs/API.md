@@ -132,7 +132,7 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 
 ## 系统更新（自托管热更新）
 
-面向 Docker / 裸 Node 自托管。桌面端默认关闭（`OPPTRIX_DESKTOP=1`）；可用 `OPPTRIX_UPDATE_ENABLED=1` 强制开启，`=0` 强制关闭。
+面向 Docker / 裸 Node 自托管。桌面端默认关闭（`OPPTRIX_DESKTOP=1`）；monorepo 本地开发默认**不自动下载、不进入热更新流程**。可用 `OPPTRIX_UPDATE_ENABLED=1` 手动开启能力，`=0` 强制关闭。开发态开启后仍默认不后台静默下载，需再设 `OPPTRIX_UPDATE_AUTO=1`；手动 `POST /api/system-update/check` 在已开启时可用。
 
 静默检查并下载新版本后，若当前运行环境可安装，则 `GET /api/system-update/status` 的 `readyToApply` 为 `true`；用户确认后 `POST .../apply` 写入待应用状态并在短延迟后以退出码 **42** 退出，由外部监督进程切换版本。激活后首次启动进入 `first_boot_hooks`（退出码 **43**）；回退为 **44**。
 
@@ -166,8 +166,9 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 |------|------|
 | `OPPTRIX_UPDATE_CHANNEL` | 通道，默认 `selfhost` |
 | `OPPTRIX_UPDATE_CDN_BASE` | 热更新 CDN 根，默认 `https://update.opptrix.org` |
-| `OPPTRIX_UPDATE_ENABLED` | `1` 强制开 / `0` 强制关 |
-| `OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS` | 后台定期检查间隔（小时），默认 `24`；服务启动后仍会先做一次检查 |
+| `OPPTRIX_UPDATE_ENABLED` | `1` 强制开 / `0` 强制关；monorepo 开发默认关 |
+| `OPPTRIX_UPDATE_AUTO` | `1` 强制开后台静默检查下载 / `0` 强制关；monorepo 即使已 `UPDATE_ENABLED=1` 也默认不自动下载 |
+| `OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS` | 后台定期检查间隔（小时），默认 `24`；自托管开启自动检查时，服务启动后仍会先做一次检查 |
 | `OPPTRIX_UPDATE_CHECK_INTERVAL_MS` | 同上，毫秒粒度（优先于 `…_HOURS`） |
 | `OPPTRIX_SYSTEM_DIR` | 系统槽位根目录（见 `@opptrix/system-update`） |
 | `OPPTRIX_BASE_VERSION` | Docker/自托管底座身份（如 `opptrix-selfhost-v1.4.0`）；热更新对照 `requires.minBaseImage` |

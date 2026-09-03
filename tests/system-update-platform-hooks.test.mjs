@@ -197,6 +197,37 @@ describe('evaluateRuntimeRequires', () => {
     assert.ok(r.reasons.some(s => /host base version unknown/i.test(s)))
   })
 
+  it('ok when minBaseImage set but host base missing outside Docker (local/dev)', () => {
+    const prevBase = process.env.OPPTRIX_BASE_VERSION
+    const prevTag = process.env.OPPTRIX_RELEASE_TAG
+    delete process.env.OPPTRIX_BASE_VERSION
+    delete process.env.OPPTRIX_RELEASE_TAG
+    try {
+      const r = su.evaluateRuntimeRequires(
+        {
+          app: 'opptrix',
+          kind: 'runtime',
+          version: '2.0.0',
+          requires: { minBaseImage: 'opptrix-selfhost-v1.4.4' },
+        },
+        {
+          nodeVersion: '24.0.0',
+          platform: 'darwin',
+          arch: 'arm64',
+          baseVersion: null,
+          isDocker: false,
+        },
+      )
+      assert.equal(r.ok, true)
+      assert.equal(r.needsBaseRefresh, false)
+    } finally {
+      if (prevBase === undefined) delete process.env.OPPTRIX_BASE_VERSION
+      else process.env.OPPTRIX_BASE_VERSION = prevBase
+      if (prevTag === undefined) delete process.env.OPPTRIX_RELEASE_TAG
+      else process.env.OPPTRIX_RELEASE_TAG = prevTag
+    }
+  })
+
   it('resolveHostBaseVersion prefers OPPTRIX_BASE_VERSION', () => {
     const prevBase = process.env.OPPTRIX_BASE_VERSION
     const prevTag = process.env.OPPTRIX_RELEASE_TAG

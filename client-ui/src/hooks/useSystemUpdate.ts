@@ -31,7 +31,7 @@ const POLL_IDLE_MS = 60_000
 const POLL_READY_MS = 12_000
 const POLL_ACTIVE_MS = 1_500
 const RECONNECT_POLL_MS = 2_000
-const AWAIT_BASE_REFRESH_KEY = 'opptrix-awaiting-base-refresh'
+const AWAIT_BASE_REFRESH_KEY = 'opptrix-awaiting-base-refresh-v2'
 
 function isBlockingPhase(phase: SystemUpdatePhase): boolean {
   return phase === 'wizard_apply' || phase === 'first_boot_hooks' || phase === 'failed'
@@ -63,6 +63,12 @@ function writeAwaitingBaseRefresh(version: string | null): void {
   }
 }
 
+function promptKey(status: SystemUpdateStatus): string {
+  return status.availableVersion
+    ?? status.pendingVersion
+    ?? (status.needsBaseRefresh ? 'base' : 'ready')
+}
+
 export function isSystemUpdateBlocked(status: SystemUpdateStatus): boolean {
   return Boolean(status.updateBlocked)
 }
@@ -75,6 +81,12 @@ export interface SystemUpdateContextValue {
   confirmOpen: boolean
   openConfirm: () => void
   closeConfirm: () => void
+  /** Close wizard + clear base-wait + dismiss banner for this version. */
+  dismissUpdatePrompt: () => void
+  /** User confirmed they ran the base-refresh CLI — start polling. */
+  beginAwaitingBaseRefresh: () => void
+  /** Banner / soft dismissed for the current available/pending version. */
+  promptDismissed: boolean
   checkNow: () => Promise<void>
   applyNow: () => Promise<boolean>
   /** Restore previous version when backupVersion is available. */
@@ -116,6 +128,7 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
     () => Boolean(readAwaitingBaseRefresh()),
   )
   const [environmentWaiting, setEnvironmentWaiting] = useState(false)
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null)
   const statusRef = useRef(status)
   statusRef.current = status
 
@@ -130,20 +143,6 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
     if (!active) return
     void refresh()
   }, [active, refresh])
-
-  useEffect(() => {
-    if (!active) return
-    if (!status.needsBaseRefresh) return
-    const ver = status.pendingVersion ?? status.availableVersion
-    if (!ver) return
-    writeAwaitingBaseRefresh(ver)
-    setWaitingForBaseRefresh(true)
-  }, [
-    active,
-    status.needsBaseRefresh,
-    status.pendingVersion,
-    status.availableVersion,
-  ])
 
   useEffect(() => {
     if (!active) return
@@ -201,6 +200,7 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
           writeAwaitingBaseRefresh(null)
           setWaitingForBaseRefresh(false)
           setConfirmOpen(true)
+          setDismissedKey(null)
           return
         }
 
@@ -222,10 +222,32 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
     }
   }, [active, waitingForBaseRefresh])
 
-  const openConfirm = useCallback(() => setConfirmOpen(true), [])
+  const openConfirm = useCallback(() => {
+    setDismissedKey(null)
+    setConfirmOpen(true)
+  }, [])
+
   const closeConfirm = useCallback(() => {
     if (isBlockingPhase(statusRef.current.uiPhase)) return
     setConfirmOpen(false)
+  }, [])
+
+  const dismissUpdatePrompt = useCallback(() => {
+    if (isBlockingPhase(statusRef.current.uiPhase)) return
+    setConfirmOpen(false)
+    writeAwaitingBaseRefresh(null)
+    setWaitingForBaseRefresh(false)
+    setEnvironmentWaiting(false)
+    setDismissedKey(promptKey(statusRef.current))
+  }, [])
+
+  const beginAwaitingBaseRefresh = useCallback(() => {
+    const ver = statusRef.current.pendingVersion ?? statusRef.current.availableVersion
+    if (!ver) return
+    writeAwaitingBaseRefresh(ver)
+    setWaitingForBaseRefresh(true)
+    setDismissedKey(null)
+    setConfirmOpen(true)
   }, [])
 
   const checkNow = useCallback(async () => {
@@ -236,6 +258,7 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
       setStatus(next)
       if (isSystemUpdateBlocked(next)) return
       if (next.readyToApply || next.needsBaseRefresh || isBlockingPhase(next.uiPhase)) {
+        setDismissedKey(null)
         setConfirmOpen(true)
       }
     } catch {
@@ -306,6 +329,7 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
         || result.status?.needsBaseRefresh
         || isBlockingPhase(result.status?.uiPhase ?? 'normal')
       ) {
+        setDismissedKey(null)
         setConfirmOpen(true)
       }
       return true
@@ -319,6 +343,8 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
     }
   }, [active])
 
+  const promptDismissed = dismissedKey != null && dismissedKey === promptKey(status)
+
   const value = useMemo<SystemUpdateContextValue>(
     () => ({
       active,
@@ -326,6 +352,9 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
       confirmOpen,
       openConfirm,
       closeConfirm,
+      dismissUpdatePrompt,
+      beginAwaitingBaseRefresh,
+      promptDismissed,
       checkNow,
       applyNow,
       rollbackNow,
@@ -344,6 +373,9 @@ export function SystemUpdateProvider({ children }: { children: ReactNode }) {
       confirmOpen,
       openConfirm,
       closeConfirm,
+      dismissUpdatePrompt,
+      beginAwaitingBaseRefresh,
+      promptDismissed,
       checkNow,
       applyNow,
       rollbackNow,

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, memo, useEffect } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, NewsRegular, ArchiveRegular, GlobeRegular, CommentMultipleRegular, PeopleTeamRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, NewsRegular, ArchiveRegular, GlobeRegular, CommentMultipleRegular, PeopleTeamRegular, SignOutRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -23,6 +23,11 @@ import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSi
 import ExpertSessionIcon from './ExpertSessionIcon'
 import HoverMarqueeText from './HoverMarqueeText'
 import ComposerTooltipMenu, { ComposerTooltipMenuItem } from './ComposerTooltipMenu'
+import { logout } from '../api/auth'
+import { useAuthStatus } from '../auth/AuthGate'
+import { emitAuthRequired } from '../auth/authEvents'
+import { formatAuthError } from '../auth/authErrors'
+import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 export type SidebarListTab = 'chat' | 'experts' | 'archive'
@@ -367,6 +372,9 @@ function SessionSidebar({
   const s = useStyles()
   const { resolvedScheme } = useTheme()
   const { label: versionLabel } = useAppVersion()
+  const { status: authStatus } = useAuthStatus()
+  const { confirm } = useOpptrixDialogAlert()
+  const canLogout = Boolean(authStatus?.session)
   const isDrawer = mode === 'drawer'
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
@@ -419,6 +427,29 @@ function SessionSidebar({
   useEffect(() => {
     setSettingsMenuOpen(false)
   }, [activeRoute])
+
+  const handleLogout = useCallback(async () => {
+    setSettingsMenuOpen(false)
+    const ok = await confirm({
+      title: '退出登录？',
+      message: '退出后需要重新登录才能继续使用。',
+      confirmLabel: '退出登录',
+      cancelLabel: '取消',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await logout()
+      emitAuthRequired()
+    } catch (err) {
+      await confirm({
+        title: '暂时无法退出',
+        message: formatAuthError(err),
+        confirmLabel: '知道了',
+        cancelLabel: '关闭',
+      })
+    }
+  }, [confirm])
 
   const sidebarBody = (
     <>
@@ -605,7 +636,7 @@ function SessionSidebar({
           anchorRef={settingsBtnRef}
           align="start"
           width={220}
-          maxHeight={160}
+          maxHeight={canLogout ? 220 : 160}
           ariaLabel="设置菜单"
           onClose={() => setSettingsMenuOpen(false)}
         >
@@ -628,6 +659,12 @@ function SessionSidebar({
             <SettingsRegular fontSize={16} />
             <span>系统设置</span>
           </ComposerTooltipMenuItem>
+          {canLogout ? (
+            <ComposerTooltipMenuItem onClick={() => { void handleLogout() }}>
+              <SignOutRegular fontSize={16} />
+              <span>退出登录</span>
+            </ComposerTooltipMenuItem>
+          ) : null}
           </div>
         </ComposerTooltipMenu>
       </div>

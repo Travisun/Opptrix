@@ -43,6 +43,7 @@ import { buildSystemUpdateUserAgent } from './system-update-user-agent.js'
 import {
   buildSystemUpdateStatus,
   clearBlockedPending,
+  isSystemUpdateAutoCheckEnabled,
   isSystemUpdateEnabled,
   packageReadyFrom,
   scheduleSystemUpdateExit,
@@ -302,6 +303,9 @@ export function startSystemUpdateBackground(opts?: {
   if (!isSystemUpdateEnabled()) return () => {}
 
   void runFirstBootHooksIfNeeded().catch(() => {})
+
+  // Monorepo / local: no silent check+download unless OPPTRIX_UPDATE_AUTO=1
+  if (!isSystemUpdateAutoCheckEnabled()) return () => {}
 
   if (opts?.checkOnStart !== false) {
     setTimeout(() => {

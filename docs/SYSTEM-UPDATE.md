@@ -1,6 +1,6 @@
 # Opptrix 系统热更新（SYSTEM-UPDATE）
 
-自托管（Docker Compose / 裸 Node）热更新的**唯一协议说明**。桌面端 Electron 默认关闭；通道下载与 UI 走服务端 `/api/system-update/*`。
+自托管（Docker Compose / 裸 Node）热更新的**唯一协议说明**。桌面端 Electron、以及 monorepo 本地开发（`npm run dev`，进程不在 `$OPPTRIX_SYSTEM_DIR` 的 boot/slots 下）**默认不自动检查/下载、不进入热更新流程**；需手动指定 `OPPTRIX_UPDATE_ENABLED=1` 才开启（开发态后台静默下载仍默认关，另需 `OPPTRIX_UPDATE_AUTO=1`）。通道下载与 UI 走服务端 `/api/system-update/*`。
 
 相关实现：
 
@@ -282,10 +282,12 @@ Docker：`scripts/docker-entrypoint.sh` + tini。
 | `OPPTRIX_UPDATE_CDN_BASE` | CDN 根，默认 `https://update.opptrix.org` |
 | `OPPTRIX_UPDATE_MIRROR` | 热更新包下载线路：`auto`（默认）、`cn`、`foreign`；与 `OPPTRIX_MIRROR` 同义，未设时按 locale/TZ 与 Docker Hub 探测自动选择 |
 | `OPPTRIX_FORCE_CN` / `OPPTRIX_FORCE_FOREIGN` | 强制国内/海外下载线路（调试用） |
-| `OPPTRIX_UPDATE_ENABLED` | `1`/`0` 强制开/关 |
+| `OPPTRIX_UPDATE_ENABLED` | `1`/`0` 强制开/关；开发环境默认关，需 `=1` 才进入热更新能力 |
+| `OPPTRIX_UPDATE_AUTO` | `1`/`0` 强制开/关后台静默检查下载；开发环境即使 `UPDATE_ENABLED=1` 也默认不自动下载，需 `=1` |
 | `OPPTRIX_UPDATE_CHECK_INTERVAL_HOURS` | 后台定期检查间隔（小时），默认 `24` |
 | `OPPTRIX_UPDATE_CHECK_INTERVAL_MS` | 同上，毫秒粒度（优先于 `…_HOURS`） |
 | `OPPTRIX_DESKTOP=1` | 桌面端默认关热更新 |
+| （默认） | 非 Docker 且进程入口不在 `$OPPTRIX_SYSTEM_DIR`（boot/slots）时视为开发环境：不自动下载、不进入热更新流程 |
 
 长运行服务（Docker / 自托管）在进程启动约 2s 后会检查一次远程 `check-update`，之后按上述间隔定时复查；请求 CDN 时 `User-Agent` 为 `Opptrix-system-update/{currentVersion} ({linux-x64|linux-arm64})`，便于统计各版本与架构实例。
 

@@ -1,8 +1,22 @@
-import { createPortal } from 'react-dom'
 import { useCallback, useState } from 'react'
-import { ProgressBar, Spinner, Text, makeStyles } from '@fluentui/react-components'
+import { createPortal } from 'react-dom'
+import {
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  ProgressBar,
+  Spinner,
+  Text,
+  makeStyles,
+  mergeClasses,
+} from '@fluentui/react-components'
 import { CopyRegular } from '@fluentui/react-icons'
-import { systemUpdateApplyProgress } from '../api/client'
+import {
+  systemUpdateApplyProgress,
+} from '../api/client'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import {
@@ -14,121 +28,100 @@ import { copyTextToClipboard } from '../platform/clipboard'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 
 const DEFAULT_BASE_HINT =
-  '当前运行环境无法安装此版本。请在服务器上执行下方命令。数据与已保存内容会保留。'
+  '当前环境无法直接安装此版本。请在服务器执行下方命令，完成后再回来继续。对话与数据会保留。'
 const DEFAULT_CLI = 'opptrix update'
 const BLOCKED_COPY =
   '此版本未能完成更新，已恢复当前版本。将等待后续新版本，中间版本会自动跳过。'
 
 const useStyles = makeStyles({
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 5000,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px',
-    boxSizing: 'border-box',
-    backgroundColor: opptrixCssVars.canvas,
+  surface: {
+    width: 'min(400px, calc(100vw - 32px))',
+    maxWidth: '400px',
   },
-  panel: {
-    width: '100%',
-    maxWidth: '420px',
+  body: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-    gap: '14px',
-  },
-  kicker: {
-    fontSize: 'var(--opptrix-font-md)',
-    fontWeight: 600,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    color: opptrixCssVars.accent,
-  },
-  title: {
-    fontSize: 'clamp(24px, 4vw, 32px)',
-    fontWeight: 600,
-    letterSpacing: '-0.03em',
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.2,
+    gap: '10px',
   },
   lead: {
-    fontSize: 'var(--opptrix-font-lg)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.65,
-    maxWidth: '28em',
-  },
-  meta: {
-    fontSize: 'var(--opptrix-font-base)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.5,
-  },
-  cli: {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-    fontSize: 'var(--opptrix-font-base)',
-    color: opptrixCssVars.textPrimary,
-    backgroundColor: opptrixCssVars.surface,
-    border: `1px solid ${opptrixCssVars.separator}`,
-    borderRadius: opptrixTokens.radiusMd,
-    padding: '10px 14px',
-    width: '100%',
-    boxSizing: 'border-box',
-    textAlign: 'left',
-    wordBreak: 'break-all',
-  },
-  progressWrap: {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    marginTop: '8px',
-  },
-  actions: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '10px',
-    justifyContent: 'center',
-    marginTop: '8px',
-  },
-  secondary: {
-    minHeight: '36px',
-  },
-  primary: {
-    minHeight: '36px',
-    minWidth: '120px',
-  },
-  versionChip: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
-    color: opptrixCssVars.accent,
-    letterSpacing: '0.02em',
-  },
-  notes: {
-    width: '100%',
-    textAlign: 'left',
-    margin: 0,
-    padding: '0 0 0 1.1em',
     fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
+  version: {
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 500,
+    color: opptrixCssVars.textTertiary,
+    letterSpacing: '0.01em',
+  },
+  notes: {
+    margin: 0,
+    padding: '0 0 0 1.1em',
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.55,
+  },
+  cliRow: {
+    display: 'flex',
+    alignItems: 'stretch',
+    gap: '8px',
+    width: '100%',
+  },
+  cli: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textPrimary,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    borderRadius: opptrixTokens.radiusSm,
+    padding: '8px 10px',
+    wordBreak: 'break-all',
+    lineHeight: 1.4,
+    boxSizing: 'border-box',
+  },
+  copyBtn: {
+    flexShrink: 0,
+    minHeight: 'auto',
+    alignSelf: 'stretch',
+    padding: '0 12px',
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 600,
+  },
+  progressWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    paddingTop: '2px',
+  },
+  progressMeta: {
+    fontSize: 'var(--opptrix-font-md)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+  },
   spinnerWrap: {
-    marginTop: '4px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: '8px 0 4px',
   },
   error: {
-    fontSize: 'var(--opptrix-font-base)',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.error,
     lineHeight: 1.5,
   },
-  card: {
-    width: '100%',
-    padding: '8px 0',
-    borderRadius: opptrixTokens.radiusMd,
+  actions: {
+    justifyContent: 'flex-end',
+    gap: '6px',
+    marginTop: '2px',
+  },
+  actionBtn: {
+    minHeight: '28px',
+    height: '28px',
+    padding: '0 12px',
+    fontSize: 'var(--opptrix-font-md)',
+    fontWeight: 600,
   },
 })
 
@@ -143,7 +136,8 @@ export default function SystemUpdateWizard() {
     active,
     status,
     confirmOpen,
-    closeConfirm,
+    dismissUpdatePrompt,
+    beginAwaitingBaseRefresh,
     applyNow,
     rollbackNow,
     reconnecting,
@@ -191,14 +185,20 @@ export default function SystemUpdateWizard() {
   let showBaseRefresh = false
   let showProgress = false
   let showSpinner = false
+  let showBlockedOnly = false
 
   if (environmentWaiting && waitingForBaseRefresh) {
-    title = '正在等待运行环境就绪…'
-    lead = '服务器正在重建运行环境，请稍候。完成后你可以继续更新。'
+    title = '正在等待服务恢复…'
+    lead = '服务器正在重建环境，请稍候。完成后你可以继续更新。'
+    showSpinner = true
+  } else if (waitingForBaseRefresh) {
+    title = '正在等待环境就绪…'
+    lead = '请稍候。完成后你可以继续更新。'
     showSpinner = true
   } else if (blocked) {
     title = '此版本未能完成更新'
     lead = BLOCKED_COPY
+    showBlockedOnly = true
   } else if (reconnecting || status.uiPhase === 'wizard_apply') {
     title = '正在更新…'
     lead = '正在准备新版本，请稍候。请勿关闭或刷新此页面。'
@@ -215,12 +215,12 @@ export default function SystemUpdateWizard() {
       || '这次更新没有顺利完成。你可以稍后重试，或继续使用当前版本。'
     showConfirmActions = true
   } else if (needsBase) {
-    title = '需要更新运行环境'
+    title = '需要先更新环境'
     lead = status.baseRefreshHint?.trim() || DEFAULT_BASE_HINT
     showBaseRefresh = true
   } else if (status.readyToApply) {
     title = version ? `新版本 v${version} 已就绪` : '新版本已就绪'
-    lead = '确认后即可开始更新。更新期间暂时无法使用其他功能。'
+    lead = '确认后即可开始更新。更新期间暂时无法使用其他功能，对话与数据会保留。'
     showConfirmActions = true
   } else {
     title = '正在准备新版本…'
@@ -243,136 +243,172 @@ export default function SystemUpdateWizard() {
     void rollbackNow()
   }
 
+  const canDismiss = !blocking && !waitingForBaseRefresh && !showBlockedOnly
+  const showVersionLine = Boolean(
+    version
+    && status.uiPhase !== 'failed'
+    && !showBlockedOnly
+    && !showSpinner
+    && !(environmentWaiting && waitingForBaseRefresh),
+  )
+
   const node = (
-    <div
-      className={s.overlay}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="system-update-wizard-title"
+    <Dialog
+      open
+      modalType={canDismiss ? 'modal' : 'alert'}
+      onOpenChange={(_, data) => {
+        if (!data.open && canDismiss) dismissUpdatePrompt()
+      }}
     >
-      <div className={s.panel}>
-        <Text className={s.kicker} block>Opptrix</Text>
-        <Text id="system-update-wizard-title" className={s.title} block>
-          {title}
-        </Text>
-        {version && status.uiPhase !== 'failed' && (
-          <Text className={s.versionChip} block>
-            {status.currentVersion && status.availableVersion
-              ? `v${status.currentVersion} → v${status.availableVersion}`
-              : `v${version}`}
-          </Text>
+      <DialogSurface
+        className={mergeClasses(
+          'opptrix-glass-dialog-surface',
+          'opptrix-dialog-alert-surface',
+          s.surface,
         )}
-        <Text className={s.lead} block>{lead}</Text>
-        {noteItems.length > 0 && status.readyToApply && !needsBase && !blocked && (
-          <ul className={s.notes}>
-            {noteItems.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        )}
-        {showBaseRefresh && (
-          <Text className={s.cli} block>{cli}</Text>
-        )}
-        {status.uiPhase === 'failed' && status.error?.trim() && (
-          <Text className={s.error} block>{status.error}</Text>
-        )}
-
-        {(showProgress || showSpinner) && (
-          <div className={s.card}>
-            {showSpinner && (
-              <div className={s.spinnerWrap}>
-                <Spinner size="medium" label={progressMessage ?? '正在准备新版本…'} />
+      >
+        <DialogBody className={mergeClasses('opptrix-dialog-alert-body', s.body)}>
+          <DialogTitle className="opptrix-dialog-alert-title">{title}</DialogTitle>
+          <DialogContent className={mergeClasses('opptrix-dialog-alert-content', s.body)}>
+            {showVersionLine && (
+              <Text className={s.version} block>
+                {status.currentVersion && status.availableVersion
+                  ? `v${status.currentVersion} → v${status.availableVersion}`
+                  : `v${version}`}
+              </Text>
+            )}
+            <Text className={s.lead} block>{lead}</Text>
+            {noteItems.length > 0 && status.readyToApply && !needsBase && !blocked && (
+              <ul className={s.notes}>
+                {noteItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
+            {showBaseRefresh && (
+              <div className={s.cliRow}>
+                <Text className={s.cli} block>{cli}</Text>
+                <OpptrixButton
+                  className={mergeClasses(s.copyBtn, 'opptrix-focusable')}
+                  variant="secondary"
+                  size="small"
+                  icon={<CopyRegular fontSize={13} />}
+                  onClick={handleCopyCli}
+                >
+                  {copied ? '已复制' : '复制'}
+                </OpptrixButton>
               </div>
             )}
-            {showProgress && !showSpinner && (
-              <div className={s.progressWrap}>
-                <ProgressBar
-                  value={progressValue}
-                  max={1}
-                  thickness="medium"
-                  shape="rounded"
-                />
-                <Text className={s.meta} block>
-                  {progressMessage
-                    ?? (progressSlice.percent != null && progressSlice.percent > 0
-                      ? `已完成 ${Math.round(progressSlice.percent)}%`
-                      : '正在准备新版本…')}
-                </Text>
-              </div>
+            {status.uiPhase === 'failed' && status.error?.trim() && lead !== status.error.trim() && (
+              <Text className={s.error} block>{status.error}</Text>
             )}
-          </div>
-        )}
+            {(showProgress || showSpinner) && (
+              <>
+                {showSpinner && (
+                  <div className={s.spinnerWrap}>
+                    <Spinner size="medium" label={progressMessage ?? '请稍候…'} />
+                  </div>
+                )}
+                {showProgress && !showSpinner && (
+                  <div className={s.progressWrap}>
+                    <ProgressBar
+                      value={progressValue}
+                      max={1}
+                      thickness="medium"
+                      shape="rounded"
+                    />
+                    <Text className={s.progressMeta} block>
+                      {progressMessage
+                        ?? (progressSlice.percent != null && progressSlice.percent > 0
+                          ? `已完成 ${Math.round(progressSlice.percent)}%`
+                          : '正在准备新版本…')}
+                    </Text>
+                  </div>
+                )}
+              </>
+            )}
+          </DialogContent>
 
-        {showBaseRefresh && (
-          <div className={s.actions}>
-            {!blocking && (
+          {showBaseRefresh && (
+            <DialogActions className={mergeClasses('opptrix-dialog-alert-actions', s.actions)}>
               <OpptrixButton
-                className={s.secondary}
+                className={s.actionBtn}
                 variant="ghost"
-                onClick={closeConfirm}
+                onClick={dismissUpdatePrompt}
               >
                 稍后
               </OpptrixButton>
-            )}
-            <OpptrixButton
-              className={s.primary}
-              variant="primary"
-              icon={<CopyRegular fontSize={14} />}
-              onClick={handleCopyCli}
-            >
-              {copied ? '已复制' : '复制命令'}
-            </OpptrixButton>
-          </div>
-        )}
-
-        {showConfirmActions && status.uiPhase !== 'failed' && !blocked && (
-          <div className={s.actions}>
-            {!blocking && (
               <OpptrixButton
-                className={s.secondary}
-                variant="ghost"
-                onClick={closeConfirm}
-                disabled={actionBusy}
+                className={s.actionBtn}
+                variant="primary"
+                onClick={beginAwaitingBaseRefresh}
               >
-                稍后
+                我已执行命令
               </OpptrixButton>
-            )}
-            <OpptrixButton
-              className={s.primary}
-              variant="primary"
-              disabled={actionBusy}
-              icon={applying ? <Spinner size="tiny" /> : undefined}
-              onClick={() => { void applyNow() }}
-            >
-              {applying ? '正在准备新版本…' : '立即更新'}
-            </OpptrixButton>
-          </div>
-        )}
+            </DialogActions>
+          )}
 
-        {status.uiPhase === 'failed' && (
-          <div className={s.actions}>
-            {canRollback && (
+          {showConfirmActions && status.uiPhase !== 'failed' && !blocked && (
+            <DialogActions className={mergeClasses('opptrix-dialog-alert-actions', s.actions)}>
+              {!blocking && (
+                <OpptrixButton
+                  className={s.actionBtn}
+                  variant="ghost"
+                  onClick={dismissUpdatePrompt}
+                  disabled={actionBusy}
+                >
+                  稍后
+                </OpptrixButton>
+              )}
               <OpptrixButton
-                className={s.secondary}
-                variant="ghost"
+                className={s.actionBtn}
+                variant="primary"
                 disabled={actionBusy}
-                onClick={() => { void handleRollback() }}
+                icon={applying ? <Spinner size="tiny" /> : undefined}
+                onClick={() => { void applyNow() }}
               >
-                {rollingBack ? '正在恢复…' : '恢复上一版本'}
+                {applying ? '正在准备…' : '立即更新'}
               </OpptrixButton>
-            )}
-            <OpptrixButton
-              className={s.primary}
-              variant="primary"
-              disabled={actionBusy}
-              onClick={() => { void applyNow() }}
-            >
-              重试更新
-            </OpptrixButton>
-          </div>
-        )}
-      </div>
-    </div>
+            </DialogActions>
+          )}
+
+          {status.uiPhase === 'failed' && (
+            <DialogActions className={mergeClasses('opptrix-dialog-alert-actions', s.actions)}>
+              {canRollback && (
+                <OpptrixButton
+                  className={s.actionBtn}
+                  variant="ghost"
+                  disabled={actionBusy}
+                  onClick={() => { void handleRollback() }}
+                >
+                  {rollingBack ? '正在恢复…' : '恢复上一版本'}
+                </OpptrixButton>
+              )}
+              <OpptrixButton
+                className={s.actionBtn}
+                variant="primary"
+                disabled={actionBusy}
+                onClick={() => { void applyNow() }}
+              >
+                重试更新
+              </OpptrixButton>
+            </DialogActions>
+          )}
+
+          {showBlockedOnly && (
+            <DialogActions className={mergeClasses('opptrix-dialog-alert-actions', s.actions)}>
+              <OpptrixButton
+                className={s.actionBtn}
+                variant="primary"
+                onClick={dismissUpdatePrompt}
+              >
+                知道了
+              </OpptrixButton>
+            </DialogActions>
+          )}
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   )
 
   return createPortal(node, document.body)

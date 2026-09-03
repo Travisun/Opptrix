@@ -1,6 +1,8 @@
 /**
  * System-update status, apply, rollback, injectable process.exit.
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   OPPTRIX_EXIT_RESTART_APPLY,
   OPPTRIX_EXIT_RESTART_ROLLBACK,
@@ -60,10 +62,60 @@ export function scheduleSystemUpdateExit(code: number, delayMs = APPLY_EXIT_DELA
   }, delayMs).unref?.()
 }
 
+function realpathOrResolve(p: string): string {
+  try {
+    return fs.realpathSync(p)
+  } catch {
+    return path.resolve(p)
+  }
+}
+
+/**
+ * True when the API entry lives under `$OPPTRIX_SYSTEM_DIR` (boot / slots).
+ * Monorepo `npm run dev` starts `apps/server/dist/index.js` outside that tree.
+ */
+export function isRunningFromSelfhostSystemTree(
+  entryPath: string | null | undefined = process.argv[1],
+  systemDir: string = resolveSystemDir(),
+): boolean {
+  const raw = typeof entryPath === 'string' ? entryPath.trim() : ''
+  if (!raw) return false
+  const entry = realpathOrResolve(raw)
+  const root = realpathOrResolve(systemDir)
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep
+  return entry === root || entry.startsWith(prefix)
+}
+
+/**
+ * Monorepo / local checkout (not Docker, not selfhost boot/slots).
+ * Hot update stays off here unless explicitly opted in.
+ */
+export function isSystemUpdateDevRuntime(): boolean {
+  return !isDockerEnv() && !isRunningFromSelfhostSystemTree()
+}
+
+/**
+ * Whether system-update APIs / UI are available.
+ * Desktop + monorepo dev default off; set OPPTRIX_UPDATE_ENABLED=1 to opt in.
+ */
 export function isSystemUpdateEnabled(): boolean {
   if (process.env.OPPTRIX_UPDATE_ENABLED?.trim() === '0') return false
   if (process.env.OPPTRIX_UPDATE_ENABLED?.trim() === '1') return true
   if (process.env.OPPTRIX_DESKTOP === '1') return false
+  if (isSystemUpdateDevRuntime()) return false
+  return true
+}
+
+/**
+ * Background check + silent download (startup + interval).
+ * Monorepo never auto-downloads unless OPPTRIX_UPDATE_AUTO=1 (and update is enabled).
+ * Manual POST /api/system-update/check still works when enabled.
+ */
+export function isSystemUpdateAutoCheckEnabled(): boolean {
+  if (!isSystemUpdateEnabled()) return false
+  if (process.env.OPPTRIX_UPDATE_AUTO?.trim() === '0') return false
+  if (process.env.OPPTRIX_UPDATE_AUTO?.trim() === '1') return true
+  if (isSystemUpdateDevRuntime()) return false
   return true
 }
 
