@@ -2,14 +2,14 @@
 /**
  * Upload self-host hot-update runtime (.bin + .sha256) and manifests to CN FTP CDN.
  *
- * Layout (under FTP_REMOTE_DIR, default `/` = site root for update.opptrix.evzs.com):
+ * Layout (under FTP login home; optional FTP_REMOTE_DIR subdirectory):
  *   hot/packages/*.bin|.sha256
  *   hot/check-update
  *   hot/releases
  *
  * Order (same safety as historical desktop FTP):
- *   1) ensure dirs (list → create only if missing)
- *   2) upload packages
+ *   1) ensure dirs (from login home; list → create only if missing)
+ *   2) upload packages (re-enter login home between files — basic-ftp mutates CWD)
  *   3) overwrite manifests (feed flip)
  *   4) prune package files outside retained ≤8 versions
  *
