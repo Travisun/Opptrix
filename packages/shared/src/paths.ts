@@ -24,6 +24,25 @@ export function resolvePythonRuntimeRoot(): string {
   return path.join(resolveUserDataRoot(), 'runtimes', 'python')
 }
 
+/** 扩展平台：插件私有数据根 (~/.opptrix/plugin-data) */
+export function resolvePluginDataRoot(): string {
+  return path.join(resolveUserDataRoot(), 'plugin-data')
+}
+
+/** 单个扩展的数据目录 (~/.opptrix/plugin-data/{pluginId}) */
+export function resolvePluginDataDir(pluginId: string): string {
+  const safe = pluginId.trim().replace(/[^a-zA-Z0-9._-]/g, '_')
+  if (!safe) {
+    throw new Error('invalid plugin id')
+  }
+  return path.join(resolvePluginDataRoot(), safe)
+}
+
+/** 已安装扩展目录 (~/.opptrix/extensions) */
+export function resolveExtensionsDir(): string {
+  return path.join(resolveUserDataRoot(), 'extensions')
+}
+
 export function isDesktopRuntime(): boolean {
   return process.env.OPPTRIX_DESKTOP === '1' || process.env.OPPTRIX_DESKTOP === '1'
 }
