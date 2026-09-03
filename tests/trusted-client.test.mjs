@@ -104,9 +104,9 @@ describe('trusted-client IP helpers', () => {
     assert.equal(isIpLocal('10.1.2.3', []), false)
   })
 
-  it('access gate matches Scheme A', () => {
+  it('access gate: unclaimed open for all, claimed always auth', () => {
     assert.equal(evaluateAccessGate(false, true), 'open')
-    assert.equal(evaluateAccessGate(false, false), 'local_only_deny')
+    assert.equal(evaluateAccessGate(false, false), 'open')
     assert.equal(evaluateAccessGate(true, false), 'auth_required')
   })
 })

@@ -103,13 +103,14 @@ describe('app-auth repository', () => {
 })
 
 describe('claimed gate helpers', () => {
-  it('evaluateAccessGate: unclaimed local open, remote deny, claimed always auth', async () => {
+  it('evaluateAccessGate: unclaimed always open, claimed always auth', async () => {
     const { evaluateAccessGate, authRequired } = await import('@opptrix/shared')
     assert.equal(evaluateAccessGate(false, true), 'open')
-    assert.equal(evaluateAccessGate(false, false), 'local_only_deny')
+    assert.equal(evaluateAccessGate(false, false), 'open')
     assert.equal(evaluateAccessGate(true, true), 'auth_required')
     assert.equal(evaluateAccessGate(true, false), 'auth_required')
     assert.equal(authRequired(true, false), true)
     assert.equal(authRequired(false, true), false)
+    assert.equal(authRequired(false, false), false)
   })
 })

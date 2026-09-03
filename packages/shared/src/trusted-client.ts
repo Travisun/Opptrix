@@ -191,12 +191,13 @@ export function isTrustedLocalAccess(
 }
 
 /**
- * Claimed → login required for all clients.
- * Unclaimed + local → open.
- * Unclaimed + remote → deny (403), not a login prompt.
+ * Unclaimed → open for all clients (first-boot / Docker onboarding; first visitor may claim).
+ * Claimed → login required for all clients (upgrade onboarding and normal use).
+ * `clientIsLocal` retained for call-site compatibility; no longer gates unclaimed access.
+ * `local_only_deny` remains in the union for older clients/docs; this helper no longer returns it.
  */
-export function evaluateAccessGate(claimed: boolean, clientIsLocal: boolean): AccessGate {
-  if (!claimed) return clientIsLocal ? 'open' : 'local_only_deny'
+export function evaluateAccessGate(claimed: boolean, _clientIsLocal: boolean): AccessGate {
+  if (!claimed) return 'open'
   return 'auth_required'
 }
 

@@ -83,7 +83,7 @@
 
 ## 本地账户与登录（Auth）
 
-本机单用户账户（无云端账号）。**未创建账户**时，仅本机 / 受信地址可调用 `/api/*`；**已创建后**所有访问都须登录。桌面客户端会话默认 **30 天**，Web 会话 **12 小时**。
+本机单用户账户（无云端账号）。**未创建账户**时，任意客户端可访问 `/api/*` 以完成首次配置（含建账户；公开暴露端口时存在「先到先得」抢占风险，建账户接口仍对非本机做软限流）。**已创建后**所有访问都须登录（含版本升级引导）。桌面客户端会话默认 **30 天**，Web 会话 **12 小时**。
 
 ### 环境变量
 
@@ -98,7 +98,7 @@
 
 Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `Authorization: Bearer <token>`。
 
-未创建账户且客户端不是本机/受信地址 → `403` `{ code: "local_only" }`。已创建但未登录 → `401` `{ code: "auth_required" }`。已启用 TOTP 时，修改系统代理、模型密钥、沙箱写入、改密/关闭 TOTP/踢掉全部会话需先 `POST /api/auth/step-up`，否则 `403` `{ code: "step_up_required" }`。
+已创建但未登录 → `401` `{ code: "auth_required" }`。已启用 TOTP 时，修改系统代理、模型密钥、沙箱写入、改密/关闭 TOTP/踢掉全部会话需先 `POST /api/auth/step-up`，否则 `403` `{ code: "step_up_required" }`。（历史码 `local_only` 已不再由未创建门禁返回。）
 
 限流与锁定（按解析后的访问者 IP；**本机/受信本地 IP 不软限流、不累计失败、不硬锁定**）：
 
@@ -128,7 +128,7 @@ Cookie：`opptrix_session`（HttpOnly; Path=/; SameSite=Lax）。亦可使用 `A
 | POST | `/api/auth/password` | `{ current_password, new_password, totp_code? }` |
 | POST | `/api/auth/step-up` | `{ code }` — 敏感操作提权，约 8 分钟 |
 
-`GET /api/health` 与 `GET /api/legal/*` 无需登录。已创建账户或非本机访问时，health 只返回 `status` 与 `version`。
+`GET /api/health` 与 `GET /api/legal/*` 无需登录。**未创建账户**时返回完整 health；**已创建且未登录**时只返回 `status` 与 `version`。
 
 ## 系统更新（自托管热更新）
 

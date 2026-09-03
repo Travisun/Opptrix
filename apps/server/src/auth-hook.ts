@@ -57,14 +57,8 @@ export function maybeWipeOwnerForSafeMode(): void {
 export function shouldExposeFullHealth(req: FastifyRequest): boolean {
   tryAttachSession(req)
   if (req.auth) return true
-  const claimed = getUserDataStore().appAuth.isClaimed()
-  const peer = peerIpOf(req)
-  const clientIp = resolveClientIp(
-    { ip: peer, headers: req.headers },
-    { trustedProxies: trustedProxiesFromEnv(), trustedLocalCidrs: trustedLocalCidrsFromEnv() },
-  )
-  const local = isTrustedLocalAccess(clientIp, peer)
-  return !claimed && local
+  // First boot (unclaimed): full health for onboarding; after claim, session required.
+  return !getUserDataStore().appAuth.isClaimed()
 }
 
 async function ownerAuthOnRequest(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -81,7 +75,6 @@ async function ownerAuthOnRequest(req: FastifyRequest, reply: FastifyReply): Pro
 
   const auth = getUserDataStore().appAuth
   const claimed = auth.isClaimed()
-  const local = isTrustedLocalAccess(clientIp, peer, opts)
 
   if (path === '/api/health' || path.startsWith('/api/legal/')) return
   if (path === '/api/auth/status') {
@@ -89,27 +82,8 @@ async function ownerAuthOnRequest(req: FastifyRequest, reply: FastifyReply): Pro
     return
   }
   if (path === '/api/auth/login' || path === '/api/auth/login/totp') return
-  if (path === '/api/auth/setup') {
-    if (!claimed && !local) {
-      await reply.code(403).send({
-        error: '需要先创建本地账户或仅限本机访问',
-        code: 'local_only',
-      })
-      return
-    }
-    return
-  }
-
-  if (!claimed) {
-    if (!local) {
-      await reply.code(403).send({
-        error: '需要先创建本地账户或仅限本机访问',
-        code: 'local_only',
-      })
-      return
-    }
-    return
-  }
+  // First-boot setup + all APIs while unclaimed (Docker host→bridge IP is not loopback).
+  if (path === '/api/auth/setup' || !claimed) return
 
   tryAttachSession(req)
   if (!req.auth) {
