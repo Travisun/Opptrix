@@ -180,7 +180,7 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 | `R2_SECRET_ACCESS_KEY` | R2 S3 Secret Access Key |
 | `R2_BUCKET` | R2 bucket 名称 |
 | `FTP_HOST` / `FTP_USERNAME` / `FTP_PASSWORD` | 国内 CDN FTP（站点根应对齐 `update.opptrix.evzs.com` 的 `hot/`） |
-| `FTP_REMOTE_DIR` | 可选；默认 `/`（站点文档根）。若账号已 chroot 到站点根，保持 `/` 即可 |
+| `FTP_REMOTE_DIR` | 可选；默认空＝FTP 登录主目录（站点文档根，相对路径 `hot/…`，适配 chroot）。勿用绝对 `/hot` |
 | `FTP_PORT` / `FTP_SECURE` | 可选；端口默认 21；`FTP_SECURE=true` 启用显式 TLS |
 | `CLOUDFLARE_API_TOKEN` | 可选；purge `hot/check-update` 与当版 package URL |
 | `CLOUDFLARE_ZONE_ID` | 可选；与上配对 |
