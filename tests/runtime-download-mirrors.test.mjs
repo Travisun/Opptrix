@@ -8,12 +8,14 @@ import {
   buildRuntimeDownloadCandidates,
   giteeReleaseAssetUrl,
   githubReleaseAssetUrl,
+  resolveCheckUpdateCdnBases,
   rewriteCdnBase,
 } from '../scripts/lib/runtime-release-mirrors.mjs'
 import {
   AUTHORITATIVE_UPDATE_CDN_BASE as AUTH_TS,
   CN_UPDATE_CDN_BASES as CN_BASES_TS,
   buildRuntimeDownloadCandidates as buildCandidatesTs,
+  resolveCheckUpdateCdnBases as resolveCheckUpdateCdnBasesTs,
   resolveUpdateMirrorProfile,
   rewriteCdnBase as rewriteCdnBaseTs,
 } from '../packages/system-update/dist/index.js'
@@ -32,6 +34,15 @@ test('CDN base constants align script ↔ package', () => {
   assert.equal(AUTH_TS, ORG)
   assert.deepEqual([...CN_UPDATE_CDN_BASES], [EVZS, ORG])
   assert.deepEqual([...CN_BASES_TS], [EVZS, ORG])
+})
+
+test('resolveCheckUpdateCdnBases prefers org then CN failover', () => {
+  assert.deepEqual(resolveCheckUpdateCdnBases(), [ORG, EVZS])
+  assert.deepEqual(resolveCheckUpdateCdnBasesTs(), [ORG, EVZS])
+  assert.deepEqual(
+    resolveCheckUpdateCdnBases({ configuredBase: ORG }),
+    [ORG, EVZS],
+  )
 })
 
 test('rewriteCdnBase preserves path under new host', () => {

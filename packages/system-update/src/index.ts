@@ -144,6 +144,7 @@ export {
   buildRuntimeDownloadCandidates,
   downloadRuntimeAssetPair,
   downloadToFile,
+  resolveCheckUpdateCdnBases,
   resolveUpdateMirrorProfile,
   rewriteCdnBase,
 } from './runtime-download.js'

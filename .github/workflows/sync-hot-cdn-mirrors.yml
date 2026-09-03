@@ -1,0 +1,177 @@
+# Sync already-published runtime packages to hot CDNs (R2 + CN FTP).
+# Does not re-pack or recreate GitHub Release.
+# Rebuilds check-update/releases with current retention floor + max 8.
+name: Sync hot CDN mirrors
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Runtime semver (e.g. 1.4.5) — downloads runtime-v{version} Release assets'
+        required: true
+        type: string
+      release_tag:
+        description: 'GitHub Release tag (empty = runtime-v{version})'
+        required: false
+        type: string
+        default: ''
+      skip_r2:
+        description: 'Skip authoritative R2 sync'
+        required: false
+        type: boolean
+        default: false
+      skip_ftp:
+        description: 'Skip CN FTP sync'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-hot-cdn-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync hot CDN mirrors
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Resolve credentials
+        id: creds
+        shell: bash
+        run: |
+          set -euo pipefail
+          HAS_R2=false
+          HAS_FTP=false
+          if [[ -n "${{ secrets.R2_ACCOUNT_ID }}" && -n "${{ secrets.R2_ACCESS_KEY_ID }}" \
+            && -n "${{ secrets.R2_SECRET_ACCESS_KEY }}" && -n "${{ secrets.R2_BUCKET }}" ]]; then
+            HAS_R2=true
+          fi
+          if [[ -n "${{ secrets.FTP_HOST }}" && -n "${{ secrets.FTP_USERNAME }}" \
+            && -n "${{ secrets.FTP_PASSWORD }}" ]]; then
+            HAS_FTP=true
+          fi
+          echo "has_r2=$HAS_R2" >> "$GITHUB_OUTPUT"
+          echo "has_ftp=$HAS_FTP" >> "$GITHUB_OUTPUT"
+          if [[ "${{ inputs.skip_r2 }}" != "true" && "$HAS_R2" != "true" ]]; then
+            echo "::error::Missing R2 secrets (or set skip_r2)"
+            exit 1
+          fi
+          if [[ "${{ inputs.skip_ftp }}" != "true" && "$HAS_FTP" != "true" ]]; then
+            echo "::error::Missing FTP secrets (or set skip_ftp)"
+            exit 1
+          fi
+
+      - name: Download Release packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          TAG="${{ inputs.release_tag }}"
+          if [[ -z "$TAG" ]]; then
+            TAG="runtime-v${VER}"
+          fi
+          mkdir -p dist-runtime
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --dir dist-runtime \
+            --pattern "opptrix-runtime-*-v${VER}.bin" \
+            --pattern "opptrix-runtime-*-v${VER}.sha256" \
+            --pattern "opptrix-runtime-v${VER}.bin" \
+            --pattern "opptrix-runtime-v${VER}.sha256" \
+            --clobber
+          ls -lah dist-runtime/
+
+      - name: Install sync deps
+        run: |
+          set -euo pipefail
+          npm install basic-ftp@^5.0.5 @aws-sdk/client-s3@^3.758.0 --no-save --no-fund --no-audit
+
+      - name: Sync hot assets to R2 (authoritative)
+        if: ${{ inputs.skip_r2 != true && steps.creds.outputs.has_r2 == 'true' }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          OPPTRIX_UPDATE_CDN_BASE: https://update.opptrix.org
+          OPPTRIX_MIN_BASE_IMAGE: opptrix-selfhost-v${{ inputs.version }}
+          OPPTRIX_RUNTIME_RELEASE_TAG: runtime-v${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          node scripts/sync-hot-to-r2.mjs --dir dist-runtime --version "$VER"
+
+      - name: Sync hot assets to CN FTP CDN
+        if: ${{ inputs.skip_ftp != true && steps.creds.outputs.has_ftp == 'true' }}
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_SECURE: ${{ secrets.FTP_SECURE }}
+          FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+          OPPTRIX_UPDATE_CDN_BASE: https://update.opptrix.org
+          OPPTRIX_MIN_BASE_IMAGE: opptrix-selfhost-v${{ inputs.version }}
+          OPPTRIX_RUNTIME_RELEASE_TAG: runtime-v${{ inputs.version }}
+          HOT_FTP_SMOKE_BASE: https://update.opptrix.evzs.com
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          node scripts/sync-hot-to-ftp.mjs --dir dist-runtime --version "$VER"
+
+      - name: Smoke verify authoritative + CN check-update
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          VER="${VER#v}"
+          for URL in \
+            "https://update.opptrix.org/hot/check-update" \
+            "https://update.opptrix.evzs.com/hot/check-update"
+          do
+            echo "Fetching ${URL} …"
+            if ! BODY="$(curl -fsS --max-time 45 "$URL")"; then
+              echo "::warning::check-update fetch failed for ${URL} (may need propagation)"
+              continue
+            fi
+            echo "$BODY" | node -e "
+              const v = process.argv[1];
+              let j;
+              try { j = JSON.parse(require('fs').readFileSync(0, 'utf8')); }
+              catch (e) { console.error('invalid JSON'); process.exit(1); }
+              if (!j.latest || j.latest.version !== v) {
+                console.error('latest.version mismatch:', j.latest?.version, 'expected', v);
+                process.exit(1);
+              }
+              const releases = Array.isArray(j.releases) ? j.releases : [];
+              const tooOld = releases.filter((r) => {
+                const parts = String(r.version || '').replace(/^v/, '').split('.').map(Number);
+                const floor = [1, 4, 5];
+                for (let i = 0; i < 3; i++) {
+                  const a = parts[i] || 0;
+                  const b = floor[i] || 0;
+                  if (a !== b) return a < b;
+                }
+                return false;
+              });
+              if (tooOld.length) {
+                console.error('releases below floor 1.4.5:', tooOld.map((r) => r.version));
+                process.exit(1);
+              }
+              console.log('smoke OK', process.argv[2], 'latest=' + v, 'releases=' + releases.length);
+            " "$VER" "$URL"
+          done

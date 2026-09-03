@@ -56,23 +56,46 @@ test('summarizeReleaseDescription prefers first feature', () => {
 test('mergeReleaseHistory keeps newest 8 and updates duplicate version', () => {
   /** @type {Array<Record<string, unknown>>} */
   const existing = []
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 5; i <= 14; i++) {
     existing.push(buildReleaseEntry({
-      version: `1.0.${i}`,
+      version: `1.4.${i}`,
       packages: { 'linux-x64': { binSize: i } },
       description: { features: [`v${i}`], fixes: [] },
     }))
   }
   const merged = mergeReleaseHistory(existing, buildReleaseEntry({
-    version: '1.0.5',
+    version: '1.4.8',
     packages: { 'linux-x64': { binSize: 999 } },
     description: { features: ['updated'], fixes: [] },
   }))
   assert.equal(merged.length, HOT_RELEASES_RETENTION_MAX)
-  assert.equal(merged[0].version, '1.0.10')
-  const v5 = merged.find((r) => r.version === '1.0.5')
-  assert.ok(v5)
-  assert.deepEqual(v5.description, { features: ['updated'], fixes: [] })
+  assert.equal(merged[0].version, '1.4.14')
+  const v8 = merged.find((r) => r.version === '1.4.8')
+  assert.ok(v8)
+  assert.deepEqual(v8.description, { features: ['updated'], fixes: [] })
+})
+
+test('mergeReleaseHistory drops versions below formal retention floor', () => {
+  const merged = mergeReleaseHistory(
+    [
+      buildReleaseEntry({
+        version: '1.4.4',
+        packages: { 'linux-x64': { binSize: 1 } },
+        description: { features: [], fixes: [] },
+      }),
+      buildReleaseEntry({
+        version: '1.4.2',
+        packages: { 'linux-x64': { binSize: 1 } },
+        description: { features: [], fixes: [] },
+      }),
+    ],
+    buildReleaseEntry({
+      version: '1.4.5',
+      packages: { 'linux-x64': { binSize: 2 } },
+      description: { features: ['formal'], fixes: [] },
+    }),
+  )
+  assert.deepEqual(merged.map((r) => r.version), ['1.4.5'])
 })
 
 test('compareHotSemver sorts semver', () => {

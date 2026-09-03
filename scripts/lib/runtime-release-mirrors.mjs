@@ -7,7 +7,10 @@
 /** Authoritative check-update / publish target. */
 export const AUTHORITATIVE_UPDATE_CDN_BASE = 'https://update.opptrix.org'
 
-/** CN check-update + package CDN bases (first wins). */
+/**
+ * CN package CDN bases for silent host rewrite (first = preferred download).
+ * check-update order is resolveCheckUpdateCdnBases (org first).
+ */
 export const CN_UPDATE_CDN_BASES = [
   'https://update.opptrix.evzs.com',
   AUTHORITATIVE_UPDATE_CDN_BASE,
@@ -213,6 +216,32 @@ export function parsePackageMirrors(raw) {
  */
 function normalizeCdnBase(base) {
   return String(base ?? '').trim().replace(/\/+$/, '') || AUTHORITATIVE_UPDATE_CDN_BASE
+}
+
+/**
+ * CDN bases for check-update / releases: authoritative org first, then CN failover.
+ * @param {{ configuredBase?: string }} [opts]
+ * @returns {string[]}
+ */
+export function resolveCheckUpdateCdnBases(opts = {}) {
+  const seen = new Set()
+  /** @type {string[]} */
+  const out = []
+  /**
+   * @param {string} raw
+   */
+  function push(raw) {
+    const base = normalizeCdnBase(raw)
+    if (seen.has(base)) return
+    seen.add(base)
+    out.push(base)
+  }
+  push(AUTHORITATIVE_UPDATE_CDN_BASE)
+  if (opts.configuredBase) push(opts.configuredBase)
+  for (const base of CN_UPDATE_CDN_BASES) {
+    push(base)
+  }
+  return out
 }
 
 /**

@@ -25,6 +25,13 @@ export const HOT_RELEASES_KEY = 'hot/releases'
 /** Max runtime versions retained on CDN manifest (newest first). */
 export const HOT_RELEASES_RETENTION_MAX = 8
 
+/**
+ * Formal hot-update retention floor: versions older than this are dropped from
+ * manifests (and pruned from CN FTP packages). Still capped by RETENTION_MAX.
+ * 1.4.5 is the first formally retained self-host hot package line.
+ */
+export const HOT_RELEASES_RETENTION_FLOOR = '1.4.5'
+
 /** @type {readonly ['linux-x64', 'linux-arm64']} */
 export const RUNTIME_LINUX_ARCH_KEYS = ['linux-x64', 'linux-arm64']
 
@@ -259,19 +266,34 @@ export function buildReleaseEntry(input) {
 }
 
 /**
- * Merge release history; newest first; cap at max entries.
+ * Merge release history; newest first; drop below retention floor; cap at max.
  * @param {Array<Record<string, unknown>>} existing
  * @param {Record<string, unknown>} newEntry
  * @param {number} [max]
+ * @param {string} [floor]
  */
-export function mergeReleaseHistory(existing, newEntry, max = HOT_RELEASES_RETENTION_MAX) {
+export function mergeReleaseHistory(
+  existing,
+  newEntry,
+  max = HOT_RELEASES_RETENTION_MAX,
+  floor = HOT_RELEASES_RETENTION_FLOOR,
+) {
   /** @type {Map<string, Record<string, unknown>>} */
   const byVersion = new Map()
   for (const row of existing) {
     if (typeof row?.version === 'string') byVersion.set(row.version, row)
   }
   byVersion.set(String(newEntry.version), newEntry)
+  const floorVer = String(floor ?? HOT_RELEASES_RETENTION_FLOOR).trim() || HOT_RELEASES_RETENTION_FLOOR
   return [...byVersion.values()]
+    .filter((row) => {
+      const v = String(row.version ?? '')
+      try {
+        return compareHotSemver(v, floorVer) >= 0
+      } catch {
+        return false
+      }
+    })
     .sort((a, b) => compareHotSemver(String(b.version), String(a.version)))
     .slice(0, max)
 }

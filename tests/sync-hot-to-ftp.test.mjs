@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   HOT_PACKAGES_PREFIX,
+  HOT_RELEASES_RETENTION_FLOOR,
   HOT_RELEASES_RETENTION_MAX,
   buildHotPackageKeepNames,
   ensureRemoteDirIfMissing,
@@ -68,6 +69,7 @@ test('buildHotPackageKeepNames + prune respects retention versions', () => {
 
 test('HOT_RELEASES_RETENTION_MAX stays 8 for FTP policy', () => {
   assert.equal(HOT_RELEASES_RETENTION_MAX, 8)
+  assert.equal(HOT_RELEASES_RETENTION_FLOOR, '1.4.5')
 })
 
 test('listingFileNames skips directories', () => {

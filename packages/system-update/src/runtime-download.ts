@@ -1,6 +1,11 @@
 /**
  * Download runtime .bin + .sha256 with adaptive mirror failover.
- * Package order: CN → evzs CDN → update.opptrix.org → github; foreign → CDN → github.
+ *
+ * check-update / releases JSON: always prefer AUTHORITATIVE (update.opptrix.org),
+ * then failover to CN CDN (same JSON mirrored). Manifest package URLs stay on org;
+ * CN downloads silently rewrite the host via rewriteCdnBase.
+ *
+ * Package order: CN → evzs → org → github; foreign → org CDN → github.
  * Gitee is never used as a runtime download source.
  */
 import fs from 'node:fs'
@@ -13,13 +18,39 @@ import {
 /** Authoritative check-update / publish target. */
 export const AUTHORITATIVE_UPDATE_CDN_BASE = 'https://update.opptrix.org'
 
-/** CN check-update + package CDN bases (first wins). */
+/**
+ * CN package CDN bases for silent host rewrite (first = preferred download).
+ * Not used as the primary check-update order — see resolveCheckUpdateCdnBases.
+ */
 export const CN_UPDATE_CDN_BASES = [
   'https://update.opptrix.evzs.com',
   AUTHORITATIVE_UPDATE_CDN_BASE,
 ] as const
 
 export type RuntimeDownloadSource = 'cdn_cn' | 'cdn' | 'github'
+
+/**
+ * CDN bases to try for check-update / releases list.
+ * Always authoritative org first; then configured override; then CN mirror failover.
+ */
+export function resolveCheckUpdateCdnBases(opts?: {
+  configuredBase?: string
+}): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const push = (raw: string): void => {
+    const base = normalizeCdnBase(raw)
+    if (seen.has(base)) return
+    seen.add(base)
+    out.push(base)
+  }
+  push(AUTHORITATIVE_UPDATE_CDN_BASE)
+  if (opts?.configuredBase) push(opts.configuredBase)
+  for (const base of CN_UPDATE_CDN_BASES) {
+    push(base)
+  }
+  return out
+}
 
 export interface RuntimePackageMirrors {
   github?: { bin?: string; sha256?: string }

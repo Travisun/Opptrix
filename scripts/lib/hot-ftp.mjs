@@ -17,6 +17,7 @@ import {
   HOT_CHECK_UPDATE_KEY,
   HOT_PACKAGES_PREFIX,
   HOT_RELEASES_KEY,
+  HOT_RELEASES_RETENTION_FLOOR,
   HOT_RELEASES_RETENTION_MAX,
   RUNTIME_LINUX_ARCH_KEYS,
   normalizeHotVersion,
@@ -35,7 +36,7 @@ export const DEFAULT_HOT_FTP_REMOTE_DIR = ''
 /** Public CN hot CDN (HTTP smoke / docs). */
 export const DEFAULT_CN_HOT_CDN_BASE = 'https://update.opptrix.evzs.com'
 
-export { HOT_CHECK_UPDATE_KEY, HOT_PACKAGES_PREFIX, HOT_RELEASES_KEY, HOT_RELEASES_RETENTION_MAX }
+export { HOT_CHECK_UPDATE_KEY, HOT_PACKAGES_PREFIX, HOT_RELEASES_KEY, HOT_RELEASES_RETENTION_FLOOR, HOT_RELEASES_RETENTION_MAX }
 
 /**
  * Normalize FTP remote root relative to login home (strip leading/trailing `/`).

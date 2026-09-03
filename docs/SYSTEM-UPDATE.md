@@ -158,18 +158,19 @@ node scripts/pack-opptrix-runtime.mjs --dry-run --version 1.4.0
 
 **底座 Docker 镜像**不随 `runtime-v*` 自动构建：在 Actions 手动运行 `publish-selfhost-image.yml`（`workflow_dispatch`，输入 `opptrix-selfhost-vX.Y.Z`）。
 
-发版时 `sync-hot-to-r2.mjs` 会从 `docs/releases/{version}.md` 的「## 新功能 / ## 修复」提取 `description`，合并 CDN 上已有清单并截断为最近 8 版。
+发版时 `sync-hot-to-r2.mjs` 会从 `docs/releases/{version}.md` 的「## 新功能 / ## 修复」提取 `description`，合并 CDN 上已有清单：丢弃低于正式保留下限（当前 **1.4.5**）的历史版，再截断为最近 8 版。
 
 **自托管实例默认从 CDN 拉热更新**（`OPPTRIX_UPDATE_CDN_BASE`，默认 `https://update.opptrix.org`），不再依赖 Release 附件列表。
 
-**自适应下载线路**（检测走 CDN 小清单 `hot/check-update` / `hot/releases`；大包按线路 failover；**不再使用 Gitee 下载**）：
+**自适应线路**（**不再使用 Gitee 下载**）：
 
-| 区域 | 优先顺序 |
+| 环节 | 优先顺序 |
 |------|----------|
-| 国内 (`cn`) | 国内 CDN（evzs）→ 权威 CDN（org）→ GitHub Release |
-| 海外 (`foreign`) | 权威 CDN → GitHub Release |
+| 检测 (`check-update` / `releases`) | 权威 CDN（org）→ 国内 CDN（evzs，failover） |
+| 国内 (`cn`) 大包下载 | 国内 CDN（evzs）→ 权威 CDN（org）→ GitHub Release（清单 URL 仍写 org，下载时静默改写主机） |
+| 海外 (`foreign`) 大包下载 | 权威 CDN → GitHub Release |
 
-清单 `latest.packages[arch].mirrors` / `latest.mirrors` 携带 GitHub URL；国内线路会对 CDN URL 改写主机。服务端静默下载与容器内 `opptrix runtime use` 共用 `downloadRuntimeAssetPair`。`.sha256` sidecar 校验不变。
+清单 `latest.packages[arch].mirrors` / `latest.mirrors` 携带 GitHub URL。服务端静默下载与容器内 `opptrix runtime use` 共用 `downloadRuntimeAssetPair`。`.sha256` sidecar 校验不变。
 
 ### GitHub Secrets（CI）
 

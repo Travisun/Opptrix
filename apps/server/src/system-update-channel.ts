@@ -6,7 +6,7 @@
 import {
   AUTHORITATIVE_UPDATE_CDN_BASE,
   CN_UPDATE_CDN_BASES,
-  resolveUpdateMirrorProfile,
+  resolveCheckUpdateCdnBases as resolveCheckUpdateCdnBasesShared,
   type RuntimePackageMirrors,
   type UpdateMirrorProfile,
 } from '@opptrix/system-update'
@@ -393,26 +393,16 @@ async function fetchCheckUpdateJson(
 
 /**
  * CDN bases to try for check-update / releases list.
- * CN: evzs → update.opptrix.org; foreign: configured / authoritative base.
+ * Always update.opptrix.org first; failover to CN mirror (same JSON).
+ * Package downloads still silently rewrite host for `cn` profile.
  */
 export function resolveCheckUpdateCdnBases(
   env: ChannelEnv = readChannelEnv(),
-  opts?: { profile?: UpdateMirrorProfile; processEnv?: NodeJS.ProcessEnv },
+  _opts?: { profile?: UpdateMirrorProfile; processEnv?: NodeJS.ProcessEnv },
 ): string[] {
-  const profile = opts?.profile
-    ?? resolveUpdateMirrorProfile(opts?.processEnv).profile
-  if (profile === 'cn') {
-    const seen = new Set<string>()
-    const out: string[] = []
-    for (const raw of CN_UPDATE_CDN_BASES) {
-      const base = normalizeCdnBase(raw)
-      if (seen.has(base)) continue
-      seen.add(base)
-      out.push(base)
-    }
-    return out
-  }
-  return [normalizeCdnBase(env.cdnBase)]
+  return resolveCheckUpdateCdnBasesShared({
+    configuredBase: env.cdnBase,
+  })
 }
 
 async function fetchChannelJsonWithFailover(
