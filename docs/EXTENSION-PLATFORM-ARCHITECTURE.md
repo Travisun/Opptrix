@@ -1,6 +1,7 @@
 # Opptrix 扩展平台 — 抽象架构 v2.5
 
 > **定位**：扩展平台的**唯一抽象架构入口**（先结构、后功能）。  
+> **上位内核**：[AI-OS-KERNEL.md](./AI-OS-KERNEL.md) — Agent Gate / Session / Memory / Jobs；本文 Gateway 与内核 **同源 ABI**。  
 > **产品演进**：近端 = 投研工作台；远端 = **通用 Agent 运行时**（可承载编程终端 / 任意领域解决方案）。  
 > **状态**：设计稿（未实现）  
 > **运行形态**：Web 优先（浏览器 / Docker 自托管）；不依赖 Electron  
