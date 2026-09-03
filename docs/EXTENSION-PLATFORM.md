@@ -1,20 +1,33 @@
-# Opptrix 扩展平台 — 实现规格 v1.3
+# Opptrix 扩展平台 — 实现规格（历史细节 · 服从 ARCHITECTURE）
 
-> **⚠️ 请先读抽象架构（v2.0）**：[EXTENSION-PLATFORM-ARCHITECTURE.md](./EXTENSION-PLATFORM-ARCHITECTURE.md)  
-> 本文档为 **实现细节与历史规格**（manifest、RPC、完整 API 表）。若与 v2.0 MVP 边界冲突，**以 v2.0 为准**。  
+> **权威文档**：[EXTENSION-PLATFORM-ARCHITECTURE.md](./EXTENSION-PLATFORM-ARCHITECTURE.md) **v2.4+**  
+> **本文地位**：实现细节备忘（manifest 字段草稿、RPC 草案、历史 API 表）。**凡与 ARCHITECTURE 冲突，一律以 ARCHITECTURE 为准。**  
 > **状态**：设计稿（未实现）  
 > **分支建议**：`feat/extension-platform`  
-> **运行形态**：**Web 优先**（浏览器 / PWA / Docker 自托管）；**不依赖 Electron Desktop**  
-> **关联**：本设计中的 **Plugin Platform** 与仓库内 **Self-Evolution Harness**（`docs/SELF-HARNESS-PRODUCT.md`）是不同概念，勿混用。
+> **运行形态**：Web 优先；不依赖 Electron  
+> **勿混用**：[Self-Harness](./SELF-HARNESS-PRODUCT.md) ≠ 本扩展平台；**行情 Provider（`provider-sdk`）≠ `.opx` 扩展**
 
-### v2.0 相对 v1.3 的结构变化
+### 阅读规则（强制）
 
-| v1.3（本文） | v2.0（抽象架构） |
-|--------------|------------------|
-| 5 套并列总线 | **Hook + Event + Alert** 三元组 |
-| P0–P7 七段里程碑 | **Phase A / B / C** 三阶段 |
-| 20+ Capability 一次列出 | **MVP 9 项** + Phase 2/3 分层 |
-| ConversationHub / NotificationBus 与 MVP 同级 | 推至 **Phase C / Phase 2** |
+| 主题 | 只看 |
+|------|------|
+| 产品三层 / 四平面 / R0·R1 / ADR | ARCHITECTURE |
+| Phase A/B/C/D 范围 | ARCHITECTURE §11–14 |
+| Hook / Event / Alert | ARCHITECTURE §4（**禁止**再实现五套总线） |
+| Domain Pack / fs.plugin·fs.workspace / jobs | ARCHITECTURE §10 |
+| 本文 §18–§26 旧里程碑与 Channel 大段 | **参考思路 only**；落地按 ARCHITECTURE Phase |
+
+### 相对 ARCHITECTURE v2.4 的废弃对照
+
+| 本文旧写法 | 现行（ARCHITECTURE） |
+|------------|----------------------|
+| 5 套并列总线 | Hook + Event + Alert |
+| P0–P7 / P2.5 / P4.5… | Phase **A / B / C / D** |
+| NotificationBus 作为独立平台 | **Alert**（Event 消费者） |
+| ConversationHub 与 MVP 同级 | Phase **C**；MVP 仅 web 现路径 |
+| 20+ Capability 一次暴露 | MVP 扁平 Token + Pack 分期 |
+| `schedule` 与 `jobs` 并列 | **`jobs.*` 统一门面**；schedule 为 kind |
+| 笼统 `fs.*` | **`fs.plugin` / `fs.workspace`** |
 
 ---
 
@@ -70,7 +83,7 @@
 | **Web 优先** | 默认部署为浏览器 SPA + `apps/server`；不假设 Electron / 原生壳 |
 | **Host 唯一入口** | 扩展禁止 `import @opptrix/agent` 等内部包；仅 `@opptrix/extension-sdk` |
 | **进程隔离** | 扩展逻辑在服务端 **独立子进程**；UI 在浏览器 MF 远程模块 |
-| **Channel 抽象** | **通知**与**对话**均通过可插拔 Channel；默认 Web，扩展可注册新 Channel |
+| **Channel 抽象** | 对话 = Transport（Phase C）；通知 = **Alert**（消费 Event）；见 ARCHITECTURE §4 |
 | **可撤销效应** | `activate()` 注册的一切 hook / worker / route / channel 必须可 `deactivate` 清理 |
 | **权限先行** | manifest 声明权限；运行时 PolicyProxy 强制校验 |
 | **官方商店 + 签名** | 商店包必须 Ed25519 验签；本地导入可走开发者模式 |
@@ -90,6 +103,14 @@
 | ADR-06 | 运行形态 | **Web 优先**；Docker 自托管；PWA 可选 | **不依赖 Electron Desktop**；无 Electron 专属 API 作为硬前提 |
 | ADR-07 | 通知 | **Notification Channel 抽象** | 统一 `NotificationBus`；内置多 channel；扩展可注册 |
 | ADR-08 | 对话 | **Conversation Channel 抽象** | 与 `LlmProvider`（模型后端）分离；默认 `web`；扩展可注册机器人/远程对话 |
+| **ADR-09** | **平台韧性 R0** | **扩展不得阻塞主系统启动与核心路径** | fail-open；listen 后异步激活；见 [ARCHITECTURE §9](./EXTENSION-PLATFORM-ARCHITECTURE.md#9-平台韧性铁律r0) |
+| **ADR-10** | **有序关闭 R1** | **关闭时有界 best-effort，扩展在关库前 deactivate** | 接入 `runSidecarShutdown`；见 [§9.6](./EXTENSION-PLATFORM-ARCHITECTURE.md#96-关闭与有序退出r1) |
+| **ADR-11** | **依赖自包含** | **私有 deps 打进 `.opx`；仅 React/UI Kit/SDK 由宿主 shared** | 安装零 `npm install`；见 [ARCHITECTURE §7.4](./EXTENSION-PLATFORM-ARCHITECTURE.md#74-依赖与打包模型自包含优先) |
+| **ADR-12** | **通用原语 + 领域包** | **Primitives 稳定；research 首发；coding/任意方案 Phase D** | 见 [ARCHITECTURE §10](./EXTENSION-PLATFORM-ARCHITECTURE.md#10-通用运行时原语-vs-领域包) |
+| **ADR-13** | **Pack 仅官方** | **第三方 `.opx` 不可自封 Domain Pack** | [§10.5](./EXTENSION-PLATFORM-ARCHITECTURE.md#105-domain-pack-加载与治理d2--d7--d8--adr-13) |
+| **ADR-14** | **双轨插件** | **provider-sdk ≠ Extension Host** | [§10.6](./EXTENSION-PLATFORM-ARCHITECTURE.md#106-两套插件系统d5--adr-14) |
+| **ADR-15** | **jobs 门面** | **schedule 为 jobs kind/别名** | [§10.7](./EXTENSION-PLATFORM-ARCHITECTURE.md#107-jobs-统一门面d3--adr-15) |
+| **ADR-16** | **fs 分拆** | **fs.plugin / fs.workspace** | [§10.8](./EXTENSION-PLATFORM-ARCHITECTURE.md#108-文件系统双-tokend4) |
 
 ---
 
@@ -673,6 +694,21 @@ opptrix-ext compat              # 打印 engines 与当前宿主兼容性
 
 ## 14. 安全、隔离与审计
 
+### 14.0 平台韧性 R0 / R1（硬性 · ADR-09 / ADR-10）
+
+| 阶段 | 策略 |
+|------|------|
+| **启动 R0** | fail-open；`listen` 前不 await 扩展；见 [ARCHITECTURE §9](./EXTENSION-PLATFORM-ARCHITECTURE.md#9-平台韧性铁律r0) |
+| **关闭 R1** | 有序 best-effort；扩展 `deactivate` 在关库前、有界超时；**不**无限等待所有 Event；见 [§9.6](./EXTENSION-PLATFORM-ARCHITECTURE.md#96-关闭与有序退出r1) |
+
+实现要点：
+
+- 启动：`listen` 之前 **禁止** `await` 扩展 activate  
+- 关闭：在 `runSidecarShutdown` 的 `stopSchedulers` 之后插入 `extensionShutdownPhase`  
+- `/api/health` **不** 依赖扩展 Host  
+- Hook/RPC/activate/deactivate **硬超时**  
+- Phase A 验收：恶意扩展不阻启动（R0）+ 关闭仍能在 `forceExitMs` 内退出且 `user-store` 关闭（R1）
+
 ### 14.1 威胁模型
 
 | 威胁 | 缓解 |
@@ -681,7 +717,7 @@ opptrix-ext compat              # 打印 engines 与当前宿主兼容性
 | 扩展读密钥 | Vault 无明文；LLM key 不出宿主 |
 | 扩展写任意文件 | Shell/脚本路径 allowlist + grant |
 | 扩展卡死 UI | MF ErrorBoundary；Host 子进程隔离 |
-| 扩展卡死 Server | RPC 超时；独立进程可 kill |
+| 扩展卡死 Server | RPC 超时；独立进程可 kill；**R0：不阻塞 listen/health/chat** |
 | 对话篡改 | P5 审计 + 用户授权 + 可见标记 |
 
 ### 14.2 审计日志
@@ -698,79 +734,77 @@ opptrix-ext compat              # 打印 engines 与当前宿主兼容性
 
 | 现有模块 | 扩展平台用法 |
 |----------|--------------|
-| `packages/agent` Engine | Hook 注入点；经 **ConversationHub** 统一入站；不替换 loop（v1） |
-| `packages/agent/src/llm/provider.ts` | `ILlmService` / **LlmProvider**（模型后端，非对话通道） |
-| `client-ui` 聊天 | **web** ConversationChannel 适配器 |
-| `packages/schedule/src/notify*` | 迁入 **NotificationBus**（§19.6） |
-| `client-ui/.../chatNotifications` | 废弃 Electron 路径 → in-app + websocket |
-| `packages/agent-skills` | `ISkillService` + contributes.skills |
-| `packages/agent-workspace` | `IShellService` |
-| `packages/schedule` | `IScheduleService` + job kind 注册 |
+| `packages/agent` Engine | Hook 注入点；**不替换** loop（v1）；入站远期经 Conversation Transport |
+| `packages/agent/src/llm/provider.ts` | `ILlmService` / LlmProvider（模型后端） |
+| `client-ui` 聊天 | web Transport（现路径；Phase C 再抽 Hub） |
+| `packages/schedule/src/notify*` | 迁入 **Alert** 路由（§19） |
+| `client-ui/.../chatNotifications` | 废弃 Electron → in-app Alert |
+| `packages/agent-skills` | `ctx.skills` / contributes.skills |
+| `packages/agent-workspace` | `ctx.shell`；Phase D 由 **coding pack** Adapter 包装，不重写 |
+| `packages/agent-browser` | Phase D `ctx.web.browser` 包装 |
+| `packages/schedule` | **`jobs` 门面**下的 schedule kind |
 | `packages/agent/src/mcp/external` | contributes.mcp |
-| `packages/shared/tool-packs` | contributes.agentTools |
-| `client-ui` | Shell + MF Host（浏览器） |
-| `apps/server` | ExtensionManager + Route 转发 + WS EventStream |
+| `packages/shared/tool-packs` | contributes.agentTools / `ctx.tools` |
+| `@opptrix/provider-sdk` | **行情 Provider 插件**；**不是** `.opx` 扩展（见 ARCHITECTURE §10.6） |
+| `client-ui` | Shell + MF Host |
+| `apps/server` | ExtensionManager + Route + WS EventStream |
 
 ---
 
 ## 16. 对照 DeepSeek Harness 能力矩阵
 
-| Harness 能力 | Opptrix v1.1 | 阶段 |
-|--------------|--------------|------|
-| 一切皆插件 | 部分（核心仍内置） | P0–P4 |
-| Profile / Bundle 分层 | 无 | P7 可选 |
-| cordis.patch.yml | 无 | P7 可选 |
-| 三分域事件 | **有**（+ conversation 域） | P1 |
-| 多通道对话 / Bot | **ConversationChannel** | P4.5–P5.5 |
-| 通知抽象 | **NotificationBus** | P2.5 |
-| Agent loop 可替换 | 无 | 长期 |
-| Session event log | 部分（SessionStore） | P2 强化 |
-| Tool waterfall | **有** | P2 |
-| UI 插件 | **MF Remote** | P2 |
-| Reversible effects | **Disposable** | P1 |
-| 官方/社区插件市场 | **仅官方** | P4 |
-| Web 优先部署 | **是**（无 Electron 硬依赖） | P0 |
+> 完整对照见 [ARCHITECTURE 附录 C](./EXTENSION-PLATFORM-ARCHITECTURE.md)。下表仅摘要。
+
+| Harness 能力 | Opptrix | 阶段 |
+|--------------|---------|------|
+| 通用 ctx 原语 | ① Primitives | A–C |
+| IDE terminals/lsp | ② `coding` pack | **D** |
+| Agent loop 可替换 | 默认关；实验开关 | D+ |
+| UI 插件 | MF Remote | A |
+| 官方市场 | 仅官方 + Ed25519 | B |
+| 投研 data/docs | ② `research` pack | A 首发 |
 
 ---
 
 ## 17. 架构短板与演进
 
-1. **Engine 单体**：v1 靠 Hook 外挂；v2 考虑 `IAgentLoop` 注册  
-2. **无 Profile 组合**：多扩展冲突靠 priority；后续引入 profile 层（对齐 Harness Bundle）  
-3. **MF 版本耦合**：`engines.opptrix` + shared strictVersion 缓解  
-4. **历史 Electron 通知路径**：`DESKTOP.md` 中 Electron 本地通知 **deprecated**；统一迁移至 NotificationBus（Web Push / in-app）  
-5. **Self-Evolution Harness 命名**：`extension-*` vs `harness-evolve-*` 文档隔离  
-6. **对话与模型曾混用**：通过 ConversationChannel vs LlmProvider 分层解决（§20）
+> 以 [ARCHITECTURE 附录 D](./EXTENSION-PLATFORM-ARCHITECTURE.md) 缺陷闭环为准；本节历史条目保留供对照。
+
+1. Engine 单体：v1 Hook 外挂；loop 替换仅 D+ 实验  
+2. Profile/Bundle：P7 → 归入 D 可选  
+3. MF 版本耦合：`engines.opptrix` + shared strictVersion  
+4. Electron 通知 deprecated → Alert  
+5. Self-Harness 命名隔离  
+6. 对话与模型分层：Transport ⊥ LlmProvider  
 
 ---
 
 ## 18. 分阶段交付
 
-| 阶段 | 交付物 | 验收 |
-|------|--------|------|
-| **P0** | SDK、manifest schema、Supervisor、**Platform 能力探测** | Host ping/pong；`platform.isWeb` |
-| **P1** | Hook bus、JSON-RPC、**EventStream (WS)** | `events.subscribe` 示例 |
-| **P2** | MF UI Host、sidebar/page、**in-app 通知** | 扩展 UI + toast |
-| **P2.5** | **NotificationBus** 核心 channel（in-app/webhook/email） | 计划任务通知迁入 Bus |
-| **P3** | `.opx`、本地安装、设置页 | 安装启用禁用卸载 |
-| **P3.5** | `http.fetch`、`search`、`documents` 只读、`jobs.*` | 投研扩展 demo |
-| **P4** | 官方 registry、验签、升级 | 端到端商店 |
-| **P4.5** | **ConversationHub + web channel** 抽象落地 | 现有 Web 聊天走 Channel |
-| **P5** | sessions.mutate、turn patch、审计、`auth.stepUp` | 安全评审 |
-| **P5.5** | **扩展注册 ConversationChannel**（如 Telegram） | 官方示例 Bot 扩展 |
-| **P6** | schedule/scripts/workers、`data.subscribe`、UI 细粒度插槽 | 常驻 worker + 行情订阅 |
-| **P7** | 配额、telemetry、testing SDK、扩展互调、数据导出 | 商店扩展可观测 |
+> **已废弃本文自拟 P0–P7。** 唯一路线图见 [ARCHITECTURE §14](./EXTENSION-PLATFORM-ARCHITECTURE.md#14-四阶段路线图)：**Phase A / B / C / D**。
+
+| 旧本文阶段 | 映射到 |
+|------------|--------|
+| P0–P2、P2.5 通知核心 | **A** + **B**（Alert） |
+| P3–P4 商店 | **B** |
+| P4.5–P5.5 对话/Bot | **C** |
+| P6–P7 Worker/配额/互操作 | **C** / **D** |
+| （无）编程终端 | **D** `coding` pack |
 
 ---
 
-## 19. 通知系统（Notification Channel）
+## 19. 通知系统（→ Alert）
+
+> **现行抽象 = Alert**（[ARCHITECTURE §4.3](./EXTENSION-PLATFORM-ARCHITECTURE.md#4-统一交互三元组hook--event--alert)）。  
+> 本节保留为 Alert 路由与投递 channel 的**实现备忘**；**禁止**再引入独立于 Event 的第二套订阅 API。  
+> Phase B：schedule notify 迁入 Alert；扩展可贡献投递 channel，仍走 `NotificationRouter` 消费 Event。
 
 ### 19.1 设计目标
 
-- **统一抽象**：扩展、计划任务、Agent Job、系统事件均经 `NotificationBus` 发送  
-- **多 Channel**：按用户偏好与场景路由；失败可降级、可重试  
-- **Web 优先**：不依赖 Electron；浏览器侧用 **in-app + Web Push（可选）**  
-- **与对话分离**：通知是「触达」；对话走 ConversationChannel（§20）
+- **统一抽象**：扩展、计划任务、Agent Job、系统事件经 **Alert 路由** 触达用户（常由 `job.*` / `schedule.*` Event 触发）  
+- **多投递 channel**：按用户偏好路由；失败可降级、可重试  
+- **Web 优先**：in-app + Web Push（可选）；不依赖 Electron  
+- **与对话分离**：Alert = 触达；对话 = Conversation Transport（§20 / Phase C）
 
 ### 19.2 核心类型
 
@@ -887,14 +921,17 @@ ctx.notifications.send({
 
 ---
 
-## 20. 对话系统（Conversation Channel）
+## 20. 对话系统（Conversation Transport · Phase C）
+
+> **现行抽象**：Conversation Transport ⊥ LlmProvider（[ARCHITECTURE §5](./EXTENSION-PLATFORM-ARCHITECTURE.md#5-推理与对话两个正交维度)）。  
+> MVP **不引入** ConversationHub 代码；Web 聊天走现有路径。本节为 Phase C 实现备忘。
 
 ### 20.1 设计目标
 
-- **抽象对话入口**：Web 聊天只是默认 Channel 之一  
+- **抽象对话入口**：Web 聊天只是默认 Transport 之一  
 - **统一会话模型**：无论来自浏览器还是 Telegram，消息进入同一 `SessionStore`  
-- **与 LlmProvider 分离**：Channel 负责传输格式；Engine 负责推理  
-- **扩展可注册**：机器人、企业 IM、远程 HTTP 对话 API
+- **与 LlmProvider 分离**：Transport 负责传输格式；Engine 负责推理  
+- **扩展可注册**：机器人、企业 IM、远程 HTTP（Phase C）
 
 ### 20.2 核心类型
 
@@ -1554,3 +1591,5 @@ Job 完成：先 `emit(job.terminal)` → NotificationBus 根据用户偏好发 
 | 1.2 | 2026-09-03 | 存储与数据库三层模型；多语言运行时分级；能力缺口审计表 |
 | 1.3 | 2026-09-03 | 实现 `@opptrix/plugin-storage`、`@opptrix/event-bus`；§26 Event vs Hook |
 | 2.0 | 2026-09-03 | **抽象架构独立成文** [EXTENSION-PLATFORM-ARCHITECTURE.md](./EXTENSION-PLATFORM-ARCHITECTURE.md)；本文降为规格附录 |
+| 2.4 | 2026-09-04 | 规格对齐 ARCHITECTURE v2.4：ADR-12 通用原语 + 领域包 / Phase D |
+| 2.5 | 2026-09-04 | 审计缺陷闭环：废弃 P0–P7；§19→Alert；§20→Phase C；Provider≠Ext；服从 ARCHITECTURE |

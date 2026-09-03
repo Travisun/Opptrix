@@ -156,4 +156,76 @@ flowchart LR
 
 ---
 
-*图表版本：2.0 · 2026-09-03*
+## 7. R0 启动时序（强制）
+
+```mermaid
+sequenceDiagram
+  participant Boot as apps/server bootstrap
+  participant Core as L2 Platform
+  participant Health as /api/health
+  participant Ext as ExtensionManager
+
+  Boot->>Core: register routes
+  Boot->>Health: listen OK
+  Note over Boot,Health: Phase 0 完成 — 不等待扩展
+
+  Boot-->>Ext: setImmediate scan（Phase 1 异步）
+  Ext->>Ext: parse manifests（可失败）
+
+  Note over Ext: Phase 2：仅 Enabled 扩展 spawn Host
+  Ext->>Ext: activate 超时 → Disabled
+
+  Note over Boot: 聊天/行情/会话 全程不 await Ext
+```
+
+---
+
+## 8. R1 关闭时序（有界 best-effort）
+
+```mermaid
+sequenceDiagram
+  participant OS as SIGTERM
+  participant SD as runSidecarShutdown
+  participant Ext as ExtensionManager
+  participant Core as user-store / natives
+
+  OS->>SD: shutdown()
+  SD->>SD: stopSchedulers
+  SD->>Ext: extensionShutdownPhase（预算 ≤5s）
+  Ext->>Ext: app.shuttingDown Event
+  Ext->>Ext: Hook app/onShutdown + deactivate（并行，per-ext 超时）
+  Ext->>Ext: flush plugin-storage
+  Ext->>Ext: app.shutdown Event
+  SD->>Core: closeBrowsers → closeHttp → … → user-store
+  Note over SD: forceExitMs 到期 → 强制 exit（已有）
+```
+
+---
+
+## 9. 通用原语 vs 领域包（产品三层）
+
+```mermaid
+flowchart TB
+  subgraph L3ext["③ Extensions .opx"]
+    E[Host + MF UI]
+  end
+  subgraph L2pack["② Domain Packs"]
+    R[research]
+    C[coding]
+    X[任意方案]
+  end
+  subgraph L1prim["① Platform Primitives"]
+    P[llm storage shell tools events …]
+  end
+  E --> R
+  E --> C
+  E --> X
+  E --> P
+  R --> P
+  C --> P
+  X --> P
+```
+
+---
+
+*图表版本：2.4.1 · 2026-09-04 — 产品三层*

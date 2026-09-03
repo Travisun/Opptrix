@@ -5,6 +5,7 @@
 export const SystemEvents = {
   app: {
     startup: 'app.startup',
+    shuttingDown: 'app.shuttingDown',
     shutdown: 'app.shutdown',
   },
   extension: {

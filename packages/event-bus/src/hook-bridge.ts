@@ -8,6 +8,7 @@ import type { EventDispatcher } from './dispatcher.js'
 export const HookToBusMap: Record<string, string> = {
   'app/onStartup': 'app.startup',
   'app/onShutdown': 'app.shutdown',
+  'app/onShuttingDown': 'app.shuttingDown',
   'extension/onActivate': 'extension.activated',
   'extension/onDeactivate': 'extension.deactivated',
   'session/messageCommitted': 'session.message.committed',
