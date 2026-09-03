@@ -360,22 +360,24 @@ describe('apply exit injection', () => {
 })
 
 describe('resolveCheckUpdateCdnBases', () => {
-  it('cn profile tries evzs then update.opptrix.org', () => {
-    const bases = channel.resolveCheckUpdateCdnBases(
-      { cdnBase: 'https://update.opptrix.org', channel: 'selfhost' },
-      { profile: 'cn' },
-    )
-    assert.deepEqual(bases, [
-      'https://update.opptrix.evzs.com',
+  it('always prefers org then CN failover (profile ignored for order)', () => {
+    const expected = [
       'https://update.opptrix.org',
-    ])
-  })
-
-  it('foreign profile uses configured authoritative CDN only', () => {
-    const bases = channel.resolveCheckUpdateCdnBases(
-      { cdnBase: 'https://update.opptrix.org', channel: 'selfhost' },
-      { profile: 'foreign' },
+      'https://update.opptrix.evzs.com',
+    ]
+    assert.deepEqual(
+      channel.resolveCheckUpdateCdnBases(
+        { cdnBase: 'https://update.opptrix.org', channel: 'selfhost' },
+        { profile: 'cn' },
+      ),
+      expected,
     )
-    assert.deepEqual(bases, ['https://update.opptrix.org'])
+    assert.deepEqual(
+      channel.resolveCheckUpdateCdnBases(
+        { cdnBase: 'https://update.opptrix.org', channel: 'selfhost' },
+        { profile: 'foreign' },
+      ),
+      expected,
+    )
   })
 })
