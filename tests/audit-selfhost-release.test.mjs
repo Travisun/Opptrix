@@ -31,8 +31,9 @@ test('verifySelfhostBundle after build', () => {
     encoding: 'utf8',
   })
   assert.equal(build.status, 0, build.stderr || build.stdout)
+  const pkg = JSON.parse(fs.readFileSync(path.join(SELFHOST, 'package.json'), 'utf8'))
   const r = verifySelfhostBundle(SELFHOST)
-  assert.equal(r.version, '0.1.7')
+  assert.equal(r.version, pkg.version)
 })
 
 test('verifyRuntimePackLayout validates single-arch pack layout', () => {

@@ -231,7 +231,9 @@ jobs:
       - name: Download runtime artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: runtime-pack-*
           path: artifacts
+          merge-multiple: false
 
       - name: Merge dist-runtime
         shell: bash
