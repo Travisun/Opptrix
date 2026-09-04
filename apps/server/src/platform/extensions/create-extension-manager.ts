@@ -19,6 +19,7 @@ import {
 import {
   registerSelfContainedHandlers,
   closeAllStorage,
+  registerContributionHandlers,
 } from './capability-handlers.js'
 import type {
   ExtensionActivationMode,
@@ -32,6 +33,11 @@ import type {
   ExtensionRunResult,
 } from './types.js'
 import { mapLegacyCapabilities } from './capability-token-registry.js'
+import { createHookRegistry, type HookRegistry } from './hook-registry.js'
+import {
+  createRouteContributionRegistry,
+  type RouteContributionRegistry,
+} from './route-contributions.js'
 
 /** Thrown by the exec thunk when the capability host returns a structured denial. */
 class CapabilityDenialError extends Error {
@@ -170,12 +176,18 @@ export function createExtensionManager(
   const services = opts?.services
   const dataRoot = opts?.dataRoot
 
+  // Hook + route contribution registries (Phase A contributions).
+  const hookRegistry: HookRegistry = createHookRegistry()
+  const routeRegistry: RouteContributionRegistry = createRouteContributionRegistry()
+
   // Capability host — the ONLY path from extensions to platform capabilities.
   const capabilityHost: CapabilityHost =
     opts?.capabilityHost ??
     createCapabilityHost({ events: events!, packs: undefined as never, dataRoot, services })
   // Register self-contained handlers (events, platform.info, storage).
   registerSelfContainedHandlers(capabilityHost, undefined as never)
+  // Register contribution handlers (hooks, routes) bound to this manager's registries.
+  registerContributionHandlers(capabilityHost, hookRegistry, routeRegistry)
 
   function persist(record: ExtensionRecord): void {
     if (!registry) return
@@ -524,6 +536,9 @@ export function createExtensionManager(
       if (!key) return { ok: false }
       const existing = records.get(key)
       if (!existing) return { ok: false }
+      // Contribution cleanup: unregister hooks + routes for this plugin (R1).
+      hookRegistry.unregisterForPlugin(key)
+      routeRegistry.unregisterForPlugin(key)
       const next: ExtensionRecord = {
         id: key,
         state: 'inactive',
@@ -690,6 +705,23 @@ export function createExtensionManager(
     host,
     getHostSupervisor(): ExtensionHostSupervisor {
       return hostSupervisor
+    },
+    // Phase A contribution accessors.
+    getHookRegistry(): HookRegistry {
+      return hookRegistry
+    },
+    getRouteRegistry(): RouteContributionRegistry {
+      return routeRegistry
+    },
+    /**
+     * Dispatch a hook event to all registered extension handlers (R0: non-blocking).
+     * Called by the platform (session store, agent engine) at lifecycle points.
+     */
+    hooksDispatch(
+      point: Parameters<HookRegistry['dispatch']>[0],
+      payload: Record<string, unknown>,
+    ): Promise<Array<{ pluginId: string; observation: CapabilityObservation }>> {
+      return hookRegistry.dispatch(point, payload)
     },
   }
 }

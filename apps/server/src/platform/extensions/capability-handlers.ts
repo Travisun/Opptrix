@@ -156,6 +156,64 @@ export function closeAllStorage(): void {
 }
 
 /**
+ * Register contribution handlers (hooks, routes) that need the manager's registries.
+ * Called by the manager after constructing hookRegistry + routeRegistry.
+ */
+export function registerContributionHandlers(
+  host: CapabilityHost,
+  hooks: import('./hook-registry.js').HookRegistry,
+  routes: import('./route-contributions.js').RouteContributionRegistry,
+): void {
+  host.register('hooks.register', async (args, ctx) => {
+    const point = String(args.point ?? '')
+    const handler = args.handler
+    if (typeof handler !== 'function') {
+      return { error: 'handler must be a function', code: 'invalid_args' }
+    }
+    const reg = hooks.register({
+      pluginId: ctx.pluginId,
+      point: point as import('./hook-registry.js').HookPoint,
+      handler: handler as (payload: Record<string, unknown>) => Promise<unknown>,
+      priority: typeof args.priority === 'number' ? args.priority : undefined,
+      timeoutMs: typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined,
+    })
+    if ('error' in reg) return { error: reg.error, code: 'invalid_args' }
+    return { id: reg.id, ok: true }
+  })
+
+  host.register('hooks.unregister', async (args) => {
+    const id = String(args.id ?? '')
+    hooks.unregister(id)
+    return { ok: true }
+  })
+
+  host.register('routes.register', async (args, ctx) => {
+    const path = String(args.path ?? '')
+    const handler = args.handler
+    if (typeof handler !== 'function') {
+      return { error: 'handler must be a function', code: 'invalid_args' }
+    }
+    const methods = Array.isArray(args.methods)
+      ? (args.methods.map(String) as import('./route-contributions.js').RouteMethod[])
+      : undefined
+    const reg = routes.register({
+      pluginId: ctx.pluginId,
+      path,
+      methods,
+      handler: handler as import('./route-contributions.js').RouteHandler,
+    })
+    if ('error' in reg) return { error: reg.error, code: 'invalid_args' }
+    return { id: reg.id, path: reg.path, ok: true }
+  })
+
+  host.register('routes.unregister', async (args) => {
+    const id = String(args.id ?? '')
+    routes.unregister(id)
+    return { ok: true }
+  })
+}
+
+/**
  * Register all self-contained Phase A handlers on a host.
  */
 export function registerSelfContainedHandlers(

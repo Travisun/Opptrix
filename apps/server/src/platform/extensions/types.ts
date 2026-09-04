@@ -187,6 +187,17 @@ export type ExtensionManager = {
   host: ExtensionHostFacade
   /** Underlying supervisor (status / restart). */
   getHostSupervisor(): ExtensionHostSupervisor
+  // Phase A contribution accessors.
+  getHookRegistry(): import('./hook-registry.js').HookRegistry
+  getRouteRegistry(): import('./route-contributions.js').RouteContributionRegistry
+  /**
+   * Dispatch a hook event to registered extension handlers (R0: non-blocking).
+   * Called by the platform at lifecycle points (session commit, tool pre-execute).
+   */
+  hooksDispatch(
+    point: import('./hook-registry.js').HookPoint,
+    payload: Record<string, unknown>,
+  ): Promise<Array<{ pluginId: string; observation: CapabilityObservation }>>
 }
 
 export type { ExtensionHostSupervisor, HostWorkerStatus }
