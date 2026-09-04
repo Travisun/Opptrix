@@ -635,7 +635,10 @@ describe('kernel-conformance Wave 6A', () => {
 
   it('C-HOST: register → activate → run callGate; meter bumps; inactive soft-fails', async () => {
     const ctx = platform.createPlatformContext()
-    const reg = ctx.extensions.register('host-ext', { trusted: true })
+    const reg = ctx.extensions.registerFromManifest(
+      { id: 'host-ext', permissions: ['platform.info'] },
+      { trusted: true },
+    )
     assert.equal(reg.ok, true)
     const act = await ctx.extensions.activate('host-ext')
     assert.equal(act.ok, true)
@@ -645,11 +648,11 @@ describe('kernel-conformance Wave 6A', () => {
     const result = await ctx.extensions.run('host-ext', async (api) => {
       assert.equal(typeof api.callGate, 'function')
       assert.equal('hub' in api, false)
-      return api.callGate('data.quote', { code: '600519' })
+      return api.callGate('platform.info', { scope: 'packs' })
     })
     assert.equal(result.ok, true)
     if (!result.ok) throw new Error('expected run ok')
-    const obs = /** @type {{ ok?: boolean, hostEcho?: boolean }} */ (result.data)
+    const obs = /** @type {{ ok?: boolean, data?: unknown }} */ (result.data)
     assert.equal(obs.ok, true)
     assert.equal(ctx.meter.snapshot().submitCount, before + 1)
 
