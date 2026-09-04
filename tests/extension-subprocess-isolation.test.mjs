@@ -322,6 +322,49 @@ describe('Phase B — subprocess isolation', () => {
     assert.equal(results.length, 0)
   })
 
+  it('deactivate/uninstall clears schedule declarations (no zombie ticks)', async () => {
+    const ctx = platform.createPlatformContext()
+    installWorkerJs(
+      ctx,
+      'sub.sched.2',
+      `exports.activate = async () => {
+         await callGate('schedule.register', {
+           jobKind: 'sub.sched.2.beat',
+           cron: 'interval:5m',
+           handler: () => ({}),
+         })
+       }`,
+      ['storage', 'schedule'],
+    )
+    await ctx.extensions.activate('sub.sched.2')
+    assert.ok(ctx.extensions.listExtensionSchedules().some((s) => s.extensionId === 'sub.sched.2'))
+    await ctx.extensions.deactivate('sub.sched.2')
+    assert.ok(
+      !ctx.extensions.listExtensionSchedules().some((s) => s.extensionId === 'sub.sched.2'),
+      'deactivate must clear schedule declarations',
+    )
+  })
+
+  it('sub-tick intervals are rejected at declaration (cadence honesty)', async () => {
+    const ctx = platform.createPlatformContext()
+    installWorkerJs(
+      ctx,
+      'sub.sched.3',
+      `exports.activate = async () => {
+         const r = await callGate('schedule.register', {
+           jobKind: 'sub.sched.3.fast',
+           cron: 'interval:10s',
+           handler: () => ({}),
+         })
+         if (r.ok) throw new Error('expected sub-tick interval rejection')
+       }`,
+      ['storage', 'schedule'],
+    )
+    const act = await ctx.extensions.activate('sub.sched.3')
+    assert.equal(act.ok, false, 'activate should surface the declaration rejection')
+    assert.ok(ctx.extensions.listExtensionSchedules().every((s) => s.extensionId !== 'sub.sched.3'))
+  })
+
   it('legacy worker backend still available via OPPTRIX_EXT_RUNTIME=worker', async () => {
     process.env.OPPTRIX_EXT_RUNTIME = 'worker'
     const ctx = platform.createPlatformContext()

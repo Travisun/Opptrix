@@ -219,7 +219,11 @@ export function createExtensionManager(
   // entries dispatch triggers back to the shared host child via RPC.
   const hookRegistry: HookRegistry = createHookRegistry({
     dispatchRemote: async (extensionId, point, payload, timeoutMs) => {
-      if (!sharedHost) return { results: [{ error: 'extension host not running' }], abort: false }
+      if (!sharedHost) {
+        // Throw (not a soft result) so the registry records a FAILED
+        // observation instead of ok:true-with-error-data (audit F6).
+        throw new Error('extension host not running')
+      }
       return sharedHost.dispatchHook(extensionId, point, payload, timeoutMs)
     },
   })
@@ -238,6 +242,16 @@ export function createExtensionManager(
       // cron-lite validation: interval:<N>s|m|h or daily@HH:MM
       if (!/^(interval:\d+(s|m|h)|daily@\d{2}:\d{2})$/.test(decl.cron)) {
         return { ok: false, error: 'cron must be interval:<N>s|m|h or daily@HH:MM' }
+      }
+      // Tick cadence is 60s — sub-tick intervals would silently fire every
+      // tick (60× deviation from the declared cadence). Reject explicitly.
+      const m2 = /^interval:(\d+)(s|m|h)$/.exec(decl.cron)
+      if (m2) {
+        const n = Number(m2[1])
+        const unitMs = m2[2] === 's' ? 1000 : m2[2] === 'm' ? 60_000 : 3_600_000
+        if (n * unitMs < 60_000) {
+          return { ok: false, error: 'interval must be ≥ 1m (scheduler cadence is 60s)' }
+        }
       }
       extSchedules.set(`${extensionId}:${decl.jobKind}`, { extensionId, ...decl })
       ensureScheduleTimer()
@@ -279,6 +293,8 @@ export function createExtensionManager(
   const hostCrashTimes: number[] = []
   /** Extension schedule declarations (reactive model: cron/interval callbacks). */
   const extSchedules = new Map<string, { extensionId: string; jobKind: string; cron: string }>()
+  /** Fire-once worker_js extensions — never replayed on host crash (audit F4). */
+  const fireOnceExtensions = new Set<string>()
   let scheduleTimer: ReturnType<typeof setInterval> | null = null
 
   function handleHostCrash(): void {
@@ -297,18 +313,28 @@ export function createExtensionManager(
       }
       return
     }
-    // Bounded restart + reload every active worker_js extension.
+    // Bounded restart + reload every active RESIDENT worker_js extension.
+    // Fire-once extensions (no touchpoints) are NOT reloaded — reloading would
+    // replay their activate() side effects with no trigger (audit F4).
+    const reloadables = activeWorkerJs.filter((r) => !fireOnceExtensions.has(r.id))
+    // Contribution declarations are re-sent by the reloaded entry — clear the
+    // parent-side registries first or hooks double-fire (audit F1).
+    for (const r of reloadables) {
+      hookRegistry.unregisterForPlugin(r.id)
+      routeRegistry.unregisterForPlugin(r.id)
+      cleanupExtensionEventListeners(r.id)
+    }
     void (async () => {
       if (!sharedHost) return
       try {
         await sharedHost.start()
       } catch {
-        for (const r of activeWorkerJs) {
+        for (const r of reloadables) {
           markRunError(r.id, '扩展宿主进程重启失败')
         }
         return
       }
-      for (const r of activeWorkerJs) {
+      for (const r of reloadables) {
         const src = entrySources.get(r.id)
         if (!src) continue
         const loaded = await sharedHost.load(r.id, src)
@@ -779,6 +805,13 @@ export function createExtensionManager(
       records.set(key, next)
       persist(next)
       emitBestEffort(SystemEvents.extension.activated, { id: key })
+      // Reactive model bookkeeping: fire-once extensions (no touchpoints)
+      // are tracked so a host crash does not replay their activate().
+      if (mode === 'worker_js' && !resident) {
+        fireOnceExtensions.add(key)
+      } else {
+        fireOnceExtensions.delete(key)
+      }
       // Soft warning only — do not disable worker_js.
       if (mode === 'worker_js') {
         return { ok: true, experimental: true }
@@ -795,6 +828,11 @@ export function createExtensionManager(
       hookRegistry.unregisterForPlugin(key)
       routeRegistry.unregisterForPlugin(key)
       cleanupExtensionEventListeners(key)
+      // Reactive model: drop this extension's schedule declarations (audit F2
+      // — zombie schedules kept ticking against a deactivated extension).
+      for (const [k, decl] of [...extSchedules]) {
+        if (decl.extensionId === key) extSchedules.delete(k)
+      }
       if (sharedHost) {
         await sharedHost.unload(key).catch(() => {})
       }
@@ -821,6 +859,9 @@ export function createExtensionManager(
       hookRegistry.unregisterForPlugin(key)
       routeRegistry.unregisterForPlugin(key)
       cleanupExtensionEventListeners(key)
+      for (const [k, decl] of [...extSchedules]) {
+        if (decl.extensionId === key) extSchedules.delete(k)
+      }
       // Uninstall is sync; unload is best-effort cleanup (child state dies with
       // the extension record).
       void sharedHost?.unload(key).catch(() => {})
@@ -884,7 +925,25 @@ export function createExtensionManager(
       for (const rec of loaded) {
         if (rec.state !== 'active') continue
         const events = rec.activationEvents
-        if (events !== undefined && !events.includes('onStartup')) continue
+        if (events !== undefined && !events.includes('onStartup')) {
+          // Reactive model: no onStartup → not boot-activated. Honest state:
+          // worker_js sources are lost on restart anyway, so leaving
+          // state='active' would create a false-active zombie (audit F3).
+          // Mark inactive — the user re-enables manually (trigger-based lazy
+          // activation lands in a follow-up).
+          if (rec.activation === 'worker_js') {
+            const reset: ExtensionRecord = {
+              id: rec.id,
+              state: 'inactive',
+              ...stripMeta(rec),
+              jsLoaded: false,
+              hostBound: false,
+            }
+            records.set(rec.id, reset)
+            persist(reset)
+          }
+          continue
+        }
         const mode = rec.activation ?? 'catalog_only'
         if (mode === 'worker_js') {
           const next: ExtensionRecord = {
@@ -947,6 +1006,9 @@ export function createExtensionManager(
             hookRegistry.unregisterForPlugin(id)
             routeRegistry.unregisterForPlugin(id)
             cleanupExtensionEventListeners(id)
+            for (const [k, decl] of [...extSchedules]) {
+              if (decl.extensionId === id) extSchedules.delete(k)
+            }
             if (sharedHost) {
               await sharedHost.unload(id).catch(() => {})
             }

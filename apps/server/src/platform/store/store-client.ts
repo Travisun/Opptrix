@@ -33,7 +33,14 @@ export type StoreClientOptions = {
   /** Registry base URL. Defaults to official; tests inject a mock server. */
   baseUrl?: string
   /** Transport override (tests). Defaults to global fetch. */
-  fetchImpl?: (url: string, init?: { method?: string; headers?: Record<string, string> }) => Promise<{
+  fetchImpl?: (
+    url: string,
+    init?: {
+      method?: string
+      headers?: Record<string, string>
+      signal?: AbortSignal
+    },
+  ) => Promise<{
     ok: boolean
     status: number
     headers: Record<string, string>
@@ -88,7 +95,12 @@ async function storeFetch(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20_000)
   try {
-    const resp = await doFetch(url, { headers: { accept: accept === 'json' ? 'application/json' : 'application/octet-stream' } })
+    // Signal must ride the fetch init — otherwise the timeout never cancels
+    // an in-flight request/body read and endpoints hang forever (audit P1-1).
+    const resp = await doFetch(url, {
+      headers: { accept: accept === 'json' ? 'application/json' : 'application/octet-stream' },
+      signal: controller.signal,
+    })
     const headers: Record<string, string> = {}
     const h = resp.headers as unknown
     if (h && typeof (h as { forEach?: unknown }).forEach === 'function') {

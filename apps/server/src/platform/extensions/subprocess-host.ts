@@ -103,7 +103,7 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
   let child: ChildProcess | null = null
   let status: SharedHostStatus = 'stopped'
   let intentionalStop = false
-  let readyWaiter: (() => void) | null = null
+  let startPromise: Promise<void> | null = null
   const pending = new Map<string, Pending>()
   const resident = new Set<string>()
 
@@ -247,36 +247,65 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
 
     async start(): Promise<void> {
       if (status === 'running' && child) return
+      // In-flight guard: concurrent start() calls share one fork (audit P2-1).
+      if (status === 'starting' && startPromise) return startPromise
       intentionalStop = false
       status = 'starting'
-      try {
-        const c = fork(entryPath, [], {
-          execArgv: [`--max-old-space-size=${maxOldSpace}`],
-          stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
-        })
-        child = c
-        wireChild(c)
-        // Wait for the child's ready handshake.
-        await new Promise<void>((resolve, reject) => {
-          const onReady = (raw: unknown): void => {
-            if (raw != null && typeof raw === 'object' && (raw as Record<string, unknown>).t === 'ready') {
-              c.off('message', onReady)
-              clearTimeout(timer)
-              resolve()
+      startPromise = (async () => {
+        let c: ChildProcess | null = null
+        try {
+          // Env allowlist: the child runs untrusted extension code inside a
+          // vm whose escape is a known boundary — never leak host secrets
+          // (API keys, tokens) through the environment (audit P1-2).
+          const allowEnv = ['PATH', 'HOME', 'NODE_ENV', 'LANG', 'TMPDIR', 'TEMP', 'TMP', 'SYSTEMROOT', 'COMSPEC']
+          const env: Record<string, string> = {}
+          for (const k of allowEnv) {
+            const v = process.env[k]
+            if (v !== undefined) env[k] = v
+          }
+          const spawned = fork(entryPath, [], {
+            execArgv: [`--max-old-space-size=${maxOldSpace}`],
+            env,
+            stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+          })
+          c = spawned
+          child = c
+          wireChild(c)
+          // Wait for the child's ready handshake.
+          await new Promise<void>((resolve, reject) => {
+            const onReady = (raw: unknown): void => {
+              if (raw != null && typeof raw === 'object' && (raw as Record<string, unknown>).t === 'ready') {
+                c!.off('message', onReady)
+                clearTimeout(timer)
+                resolve()
+              }
+            }
+            const timer = setTimeout(() => {
+              c!.off('message', onReady)
+              reject(new Error('extension host ready timeout'))
+            }, READY_TIMEOUT_MS)
+            c!.on('message', onReady)
+          })
+          status = 'running'
+        } catch (err) {
+          // Kill the spawned child — a ready-timeout orphan would otherwise
+          // leak a full Node process per failed start (audit P2-1).
+          if (c) {
+            try {
+              c.removeAllListeners('exit')
+              c.kill('SIGKILL')
+            } catch {
+              // already gone
             }
           }
-          const timer = setTimeout(() => {
-            c.off('message', onReady)
-            reject(new Error('extension host ready timeout'))
-          }, READY_TIMEOUT_MS)
-          c.on('message', onReady)
-        })
-        status = 'running'
-      } catch (err) {
-        status = 'crashed'
-        child = null
-        throw err instanceof Error ? err : new Error(String(err))
-      }
+          if (child === c) child = null
+          status = intentionalStop ? 'stopped' : 'crashed'
+          throw err instanceof Error ? err : new Error(String(err))
+        } finally {
+          startPromise = null
+        }
+      })()
+      return startPromise
     },
 
     async stop(): Promise<void> {
