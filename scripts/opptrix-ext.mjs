@@ -15,8 +15,8 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs'
+import { generateKeyPairSync, createPrivateKey, createHash, sign } from 'node:crypto'
 import { join, resolve, basename } from 'node:path'
-import { createHash } from 'node:crypto'
 import { deflateSync } from 'node:zlib'
 import { cwd } from 'node:process'
 import { pathToFileURL } from 'node:url'
@@ -298,11 +298,83 @@ function crc32(buf) {
   return ~c >>> 0
 }
 
+// ── keygen ──────────────────────────────────────────────────────────────────
+
+function cmdKeygen() {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+  const pub = publicKey.export({ type: 'spki', format: 'pem' }).toString()
+  const priv = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+  writeFileSync(join(cwd(), 'publisher-private-key.pem'), priv, { mode: 0o600 })
+  writeFileSync(join(cwd(), 'publisher-public-key.pem'), pub)
+  console.log('[opptrix-ext] keypair generated:')
+  console.log('  publisher-private-key.pem  (never ship / never commit)')
+  console.log('  publisher-public-key.pem   (distribute with your extension or publish to the store)')
+}
+
+// ── sign ────────────────────────────────────────────────────────────────────
+
+function cmdSign() {
+  const keyPath = join(cwd(), 'publisher-private-key.pem')
+  if (!existsSync(keyPath)) {
+    console.error('[opptrix-ext] publisher-private-key.pem not found — run `opptrix-ext keygen`')
+    process.exit(1)
+  }
+  const opxPath = join(cwd(), 'dist')
+  if (!existsSync(opxPath)) {
+    console.error('[opptrix-ext] dist/ not found — run `opptrix-ext pack` first')
+    process.exit(1)
+  }
+  // Sign the most recent .opx in dist/.
+  const files = readdirSync(opxPath).filter((f) => f.endsWith('.opx'))
+  if (files.length === 0) {
+    console.error('[opptrix-ext] no .opx in dist/ — run `opptrix-ext pack` first')
+    process.exit(1)
+  }
+  const opxName = files.sort().at(-1)
+  const zipBuf = readFileSync(join(opxPath, opxName))
+  const priv = readFileSync(keyPath, 'utf8')
+  const sig = signChecksumsFromZip(zipBuf, priv)
+  writeFileSync(join(opxPath, opxName + '.sig'), sig)
+  console.log(`[opptrix-ext] signed → dist/${opxName}.sig (${sig.length} bytes)`)
+  console.log('  embed into the .opx as SIGNATURE.ed25519 or upload the .sig alongside.')
+}
+
+/** Sign a built CHECKSUMS payload derived from the zip's own entries. */
+function signChecksumsFromZip(zipBuf, privateKeyPem) {
+  const entries = readZipEntriesFlat(zipBuf)
+  const lines = entries
+    .map(({ name, data }) => `${createHash('sha256').update(data).digest('hex')}  ${name}`)
+    .sort()
+  const payload = lines.join('\n') + (lines.length > 0 ? '\n' : '')
+  const key = createPrivateKey(privateKeyPem)
+  return sign(null, Buffer.from(payload, 'utf8'), key)
+}
+
+/** Minimal flat zip entry reader (name + data) for signing. */
+function readZipEntriesFlat(buf) {
+  const entries = []
+  // Walk local file headers sequentially (pack writes them contiguously).
+  let off = 0
+  while (off + 30 <= buf.length) {
+    if (buf.readUInt32LE(off) !== 0x04034b50) break
+    const nameLen = buf.readUInt16LE(off + 26)
+    const extraLen = buf.readUInt16LE(off + 28)
+    const dataLen = buf.readUInt32LE(off + 18)
+    const name = buf.slice(off + 30, off + 30 + nameLen).toString('utf8')
+    const data = buf.slice(off + 30 + nameLen, off + 30 + nameLen + dataLen)
+    entries.push({ name, data })
+    off += 30 + nameLen + extraLen + dataLen
+  }
+  return entries
+}
+
 // ── main (manual arg parsing — no external deps) ────────────────────────────
 
 const [, , cmd, ...rest] = process.argv
 
 const commands = {
+  keygen: cmdKeygen,
+  sign: cmdSign,
   create: () => {
     const name = rest[0]
     if (!name) {
@@ -319,6 +391,8 @@ const commands = {
     console.log(`opptrix-ext — Opptrix extension CLI (Phase A)
 
 Commands:
+  keygen          Generate an Ed25519 publisher keypair
+  sign            Sign the latest .opx with the publisher key
   create <name>   Scaffold a new extension
   build           Bundle host entry with esbuild
   pack            Produce .opx package

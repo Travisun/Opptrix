@@ -3,6 +3,7 @@
  * Wave 58A: optionally extract a single allowlisted entry JS into an in-memory string
  * (never writes to disk, never eval/require/imports entrypoint code in this process).
  */
+import { createHash } from 'node:crypto'
 import { inflateRawSync } from 'node:zlib'
 import type {
   ExtensionActivationMode,
@@ -413,4 +414,45 @@ export function parseOpxManifestFromZip(
     manifest,
     ...(entrySource !== undefined ? { entrySource, entryPath } : {}),
   }
+}
+
+/**
+ * Phase B signing material — build the deterministic CHECKSUMS payload from
+ * every zip entry and extract SIGNATURE.ed25519 when present.
+ * (Exported for the install-time signature verification path.)
+ */
+export type OpxSigningMaterial =
+  | { ok: true; checksumsPayload: string; signature: Buffer | null }
+  | { ok: false; error: string }
+
+const SIGNATURE_ENTRY_NAME = 'SIGNATURE.ed25519'
+
+export function readOpxSigningMaterial(buffer: Uint8Array | Buffer): OpxSigningMaterial {
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)
+  const cd = readCentralDirectory(buf)
+  if (!cd.ok) return cd
+  const lines: Array<{ name: string; line: string }> = []
+  let signature: Buffer | null = null
+  for (const entry of cd.entries) {
+    // Skip directory entries and the signature file itself.
+    if (entry.name.endsWith('/')) continue
+    if (entry.name === SIGNATURE_ENTRY_NAME) {
+      const sigPayload = readEntryPayload(buf, entry, 1_000, 'signature')
+      if (!sigPayload.ok) return sigPayload
+      signature = sigPayload.data
+      continue
+    }
+    const payload = readEntryPayload(buf, entry, OPX_ENTRY_SOURCE_MAX_BYTES, entry.name)
+    if (!payload.ok) return payload
+    lines.push({
+      name: entry.name,
+      line: `${createHash('sha256').update(payload.data).digest('hex')}  ${entry.name}`,
+    })
+  }
+  // Deterministic order: sort by entry NAME (mirrors buildChecksumsPayload —
+  // sorting the rendered lines would order by hash and mismatch the signer).
+  lines.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  const orderedLines = lines.map((l) => l.line)
+  const checksumsPayload = orderedLines.join('\n') + (orderedLines.length > 0 ? '\n' : '')
+  return { ok: true, checksumsPayload, signature }
 }
