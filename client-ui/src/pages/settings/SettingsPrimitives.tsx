@@ -11,6 +11,7 @@ import {
 } from '@fluentui/react-icons'
 import type { ReactNode } from 'react'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import { designTokens } from '../../theme/design-tokens'
 import { inputShellInteractive, motion, nativeIconInteractive } from '../../theme/mixins'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
@@ -23,7 +24,7 @@ export const settingsSurfaceRadius = '12px'
 const useStyles = makeStyles({
   group: {
     border: settingsHairlineBorder,
-    borderRadius: settingsSurfaceRadius,
+    borderRadius: designTokens.semantic.radiusCard, // 12px — matches settingsSurfaceRadius
     backgroundColor: settingsSurfaceTint,
     overflow: 'hidden',
     transitionProperty: 'border-color, background-color',
@@ -37,7 +38,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '20px',
+    gap: designTokens.SPACING.xxl + 'px',
     padding: '12px 14px',
     minHeight: '42px',
     '@media (max-width: 660px)': {
@@ -103,7 +104,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '12px',
+    gap: designTokens.SPACING.md + 'px',
     padding: '8px 14px',
     minHeight: '32px',
   },

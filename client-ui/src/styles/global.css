@@ -25,6 +25,43 @@ body {
   line-height: 1.5;
 }
 
+:root {
+  /* Structural design tokens (theme-independent) — Phase B three-layer
+     architecture mirror of client-ui/src/theme/design-tokens.ts. Spacing,
+     radius, z-bands, motion. Extension theming consumes these via ui-kit. */
+  --opptrix-space-xxs: 2px;
+  --opptrix-space-xs: 4px;
+  --opptrix-space-sm: 8px;
+  --opptrix-space-md: 12px;
+  --opptrix-space-lg: 16px;
+  --opptrix-space-xl: 20px;
+  --opptrix-space-xxl: 24px;
+  --opptrix-space-xxxl: 32px;
+  --opptrix-radius-xs: 4px;
+  --opptrix-radius-sm: 6px;
+  --opptrix-radius-md: 8px;
+  --opptrix-radius-lg: 12px;
+  --opptrix-radius-xl: 16px;
+  --opptrix-radius-full: 9999px;
+  --opptrix-z-base: 0;
+  --opptrix-z-raised: 10;
+  --opptrix-z-sticky: 100;
+  --opptrix-z-sidebar-overlay: 200;
+  --opptrix-z-dropdown: 300;
+  --opptrix-z-popover: 400;
+  --opptrix-z-right-panel: 500;
+  --opptrix-z-dialog: 600;
+  --opptrix-z-toast: 700;
+  --opptrix-z-tooltip: 800;
+  --opptrix-motion-fast: 120ms;
+  --opptrix-motion-base: 200ms;
+  --opptrix-motion-slow: 320ms;
+  --opptrix-motion-slide: 480ms;
+  --opptrix-motion-panel: 640ms;
+  --opptrix-motion-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --opptrix-motion-easing-decelerate: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root,
 [data-theme="light"] {
   /* Cursor Light–aligned neutrals (theme-cursor): editor #FCFCFC > sidebar #F3F3F3 */
