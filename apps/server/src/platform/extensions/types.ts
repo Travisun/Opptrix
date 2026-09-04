@@ -83,12 +83,16 @@ export type ExtensionRecord = {
   /** From manifest; omitted ⇒ treat as catalog_only. */
   activation?: ExtensionActivationMode
   /**
+   * Lazy-activation gate (reactive model): extensions without 'onStartup' are
+   * NOT re-activated at server boot — they wait for a trigger (command, view,
+   * route request) or a manual activate.
+   */
+  activationEvents?: Array<'onStartup' | 'onCommand' | 'onView'>
+  /**
    * Set true after worker_stub / worker_js activate binds the shared host worker.
-   * For worker_stub this does not mean user JS was loaded; for worker_js it does
-   * after a successful `load_extension` into the worker vm.
    */
   hostBound?: boolean
-  /** True after worker_js successfully loaded entry source into the host worker vm. */
+  /** True after worker_js successfully loaded entry source into the host vm. */
   jsLoaded?: boolean
   /**
    * Install-time trust (SF1). Set `true` only when register/register-opx accepted
@@ -192,6 +196,14 @@ export type ExtensionManager = {
   host: ExtensionHostFacade
   /** Underlying supervisor (status / restart). */
   getHostSupervisor(): ExtensionHostSupervisor
+  /**
+   * Phase B shared host subprocess supervisor (all worker_js extensions in one
+   * forked child, per-extension vm contexts). Null when the legacy worker
+   * backend is selected via OPPTRIX_EXT_RUNTIME=worker.
+   */
+  getSharedHost(): import('./subprocess-host.js').SharedHostSupervisor | null
+  /** Registered extension schedule declarations (diagnostics). */
+  listExtensionSchedules(): Array<{ extensionId: string; jobKind: string; cron: string }>
   // Phase A contribution accessors.
   getHookRegistry(): import('./hook-registry.js').HookRegistry
   getRouteRegistry(): import('./route-contributions.js').RouteContributionRegistry

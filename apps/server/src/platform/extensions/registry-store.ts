@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS extensions (
   capabilities TEXT NOT NULL DEFAULT '[]',
   permissions TEXT NOT NULL DEFAULT '[]',
   activation TEXT NOT NULL DEFAULT 'catalog_only',
+  activation_events TEXT NOT NULL DEFAULT '[]',
   trusted INTEGER NOT NULL DEFAULT 0,
   host_bound INTEGER NOT NULL DEFAULT 0,
   js_loaded INTEGER NOT NULL DEFAULT 0,
@@ -63,6 +64,12 @@ function rowToRecord(row: Record<string, unknown>): ExtensionRecord {
   if (row.error != null) rec.error = String(row.error)
   if (row.activation != null) {
     rec.activation = row.activation as ExtensionRecord['activation']
+  }
+  try {
+    const ev = JSON.parse(String(row.activation_events ?? '[]'))
+    if (Array.isArray(ev) && ev.length > 0) rec.activationEvents = ev
+  } catch {
+    // corrupt field → default onStartup semantics
   }
   try {
     if (row.capabilities != null) {
@@ -100,10 +107,12 @@ export function createExtensionRegistryStore(dbPath?: string): ExtensionRegistry
   const stmtInsert = db.prepare(`
     INSERT INTO extensions
       (id, state, name, version, capabilities, permissions, activation,
-       trusted, host_bound, js_loaded, error, entry_path, contributes, updated_at)
+       activation_events, trusted, host_bound, js_loaded, error, entry_path,
+       contributes, updated_at)
     VALUES
       (:id, :state, :name, :version, :capabilities, :permissions, :activation,
-       :trusted, :host_bound, :js_loaded, :error, :entry_path, :contributes, :updated_at)
+       :activation_events, :trusted, :host_bound, :js_loaded, :error,
+       :entry_path, :contributes, :updated_at)
     ON CONFLICT(id) DO UPDATE SET
       state = excluded.state,
       name = excluded.name,
@@ -111,6 +120,7 @@ export function createExtensionRegistryStore(dbPath?: string): ExtensionRegistry
       capabilities = excluded.capabilities,
       permissions = excluded.permissions,
       activation = excluded.activation,
+      activation_events = excluded.activation_events,
       trusted = excluded.trusted,
       host_bound = excluded.host_bound,
       js_loaded = excluded.js_loaded,
@@ -131,6 +141,7 @@ export function createExtensionRegistryStore(dbPath?: string): ExtensionRegistry
       capabilities: JSON.stringify(record.capabilities ?? []),
       permissions: JSON.stringify(record.permissions ?? []),
       activation: record.activation ?? 'catalog_only',
+      activation_events: JSON.stringify(record.activationEvents ?? ['onStartup']),
       trusted: record.trusted ? 1 : 0,
       host_bound: record.hostBound ? 1 : 0,
       js_loaded: record.jsLoaded ? 1 : 0,

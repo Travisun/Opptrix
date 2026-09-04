@@ -252,6 +252,19 @@ export interface AgentSettings {
   approvalTracker?: ApprovalTracker
   /** Optional turn checkpoint mirror; when unset, chat path is unchanged (W11). */
   turnCheckpoint?: TurnCheckpointHooks
+  /**
+   * Phase B extension-platform hooks (read-only observations; fire-and-forget).
+   * The engine never awaits them on the hot path (R0-3) and never inspects
+   * results — audit-only semantics.
+   */
+  extensionHooks?: {
+    toolPreExecute?: (payload: {
+      sessionId?: string
+      tool: string
+      args: Record<string, unknown>
+    }) => void | Promise<void>
+    sessionMessageCommitted?: (payload: { sessionId: string }) => void | Promise<void>
+  }
   /** Optional soft usage meter; when unset, chat path is unchanged (W48). */
   usageMeter?: UsageMeterHooks
   /** @deprecated single llm */
@@ -349,6 +362,16 @@ export class AgentEngine {
   private readonly capabilityGate: CapabilityGate
   private readonly approvalTracker: ApprovalTracker | undefined
   private readonly turnCheckpoint: TurnCheckpointHooks | undefined
+  private readonly extensionHooks:
+    | {
+        toolPreExecute?: (payload: {
+          sessionId?: string
+          tool: string
+          args: Record<string, unknown>
+        }) => void | Promise<void>
+        sessionMessageCommitted?: (payload: { sessionId: string }) => void | Promise<void>
+      }
+    | undefined
   private readonly usageMeter: UsageMeterHooks | undefined
   private readonly toolPackSessions = new ToolPackSessionStore()
   private readonly agentSkillSessions = new AgentSkillSessionStore()
@@ -418,6 +441,7 @@ export class AgentEngine {
     this.capabilityGate = settings.capabilityGate ?? createPassthroughGate()
     this.approvalTracker = settings.approvalTracker
     this.turnCheckpoint = settings.turnCheckpoint
+    this.extensionHooks = settings.extensionHooks
     this.usageMeter = settings.usageMeter
     this.tools = new ToolRegistry(hub, settings.appContext)
     this.discover = new DiscoverRunner(hub, this.registry, this.tools, this.capabilityGate)
@@ -1542,6 +1566,34 @@ export class AgentEngine {
     }
   }
 
+  /** Best-effort: extension hook observations must never break chat (R0-3). */
+  private fireExtensionHook(
+    point: 'toolPreExecute',
+    payload: { sessionId?: string; tool: string; args: Record<string, unknown> },
+  ): void
+  private fireExtensionHook(
+    point: 'sessionMessageCommitted',
+    payload: { sessionId: string },
+  ): void
+  private fireExtensionHook(
+    point: 'toolPreExecute' | 'sessionMessageCommitted',
+    payload: Record<string, unknown>,
+  ): void {
+    try {
+      if (point === 'toolPreExecute') {
+        void this.extensionHooks?.toolPreExecute?.(payload as {
+          sessionId?: string
+          tool: string
+          args: Record<string, unknown>
+        })
+        return
+      }
+      void this.extensionHooks?.sessionMessageCommitted?.(payload as { sessionId: string })
+    } catch {
+      /* swallow — R0 */
+    }
+  }
+
   /** Best-effort: platform checkpoint must never break chat. */
   private safeCheckpointSave(snapshot: TurnCheckpointSnapshot): void {
     if (!this.turnCheckpoint) return
@@ -2344,6 +2396,7 @@ export class AgentEngine {
             } else if (!activeSet.has(fn) && !parseNamespacedMcpTool(fn)) {
               result = { error: unloadedToolHint(fn) }
             } else {
+              this.fireExtensionHook('toolPreExecute', { sessionId, tool: fn, args })
               const obs = await this.capabilityGate.submit(
                 {
                   token: fn,
@@ -2666,6 +2719,7 @@ export class AgentEngine {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)
     }
     this.sessions.save(record)
+    this.fireExtensionHook('sessionMessageCommitted', { sessionId: record.id })
     this.safeCheckpointSave({
       phase: 'assistant',
       sessionId: record.id,

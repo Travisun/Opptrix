@@ -203,7 +203,7 @@ export async function registerExtensionsHttp(
               method: string,
               url: string,
             ) => {
-              route: { handle: unknown; pluginId: string }
+              route: { handle?: unknown; pluginId: string; kind: 'local' | 'remote' }
               params: Record<string, string>
             } | null
           }
@@ -236,20 +236,40 @@ export async function registerExtensionsHttp(
       const contentType = req.headers['content-type']
       if (typeof contentType === 'string') fwdHeaders['content-type'] = contentType
       try {
-        const response = await invokeRouteHandler(
-          matched.route.handle as (req: unknown) => Promise<{
-            status: number
-            body: unknown
-            headers?: Record<string, string>
-          }>,
-          {
-            method,
-            path: subPath,
-            query: (req.query as Record<string, string>) || {},
-            body: (req as FastifyRequest & { body: unknown }).body,
-            headers: fwdHeaders,
-          },
-        )
+        let response: { status: number; body: unknown; headers?: Record<string, string> }
+        if (matched.route.kind === 'remote') {
+          // Hosted (subprocess) extension — dispatch via the shared host RPC.
+          const sharedHost = platform.extensions.getSharedHost()
+          if (!sharedHost) {
+            return reply.code(503).send({ error: 'extension host not available' })
+          }
+          response = await sharedHost.invokeRoute(
+            urlPluginId,
+            {
+              method,
+              path: subPath,
+              query: (req.query as Record<string, string>) || {},
+              body: (req as FastifyRequest & { body: unknown }).body,
+              headers: fwdHeaders,
+            },
+            15_000,
+          )
+        } else {
+          response = await invokeRouteHandler(
+            matched.route.handle as (req: unknown) => Promise<{
+              status: number
+              body: unknown
+              headers?: Record<string, string>
+            }>,
+            {
+              method,
+              path: subPath,
+              query: (req.query as Record<string, string>) || {},
+              body: (req as FastifyRequest & { body: unknown }).body,
+              headers: fwdHeaders,
+            },
+          )
+        }
         if (response.headers) {
           for (const [k, v] of Object.entries(response.headers)) {
             reply.header(k, v)

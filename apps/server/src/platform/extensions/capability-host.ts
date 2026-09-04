@@ -42,6 +42,8 @@ export type CapabilityServices = {
   dataQuery?: unknown
   /** Shell runner for shell.run. */
   shell?: unknown
+  /** Shared host supervisor (Phase B) — used for remote event forwarding. */
+  extHost?: unknown
 }
 
 export type CapabilityHost = {

@@ -19,7 +19,12 @@ export type RouteRegistration = {
   pluginId: string
   path: string // normalized, leading slash, e.g. "/hello"
   methods: RouteMethod[]
-  handle: RouteHandler
+  /**
+   * 'local': in-process handler. 'remote': hosted (subprocess) extension —
+   * the HTTP proxy dispatches via the shared host (declaration model).
+   */
+  kind: 'local' | 'remote'
+  handle?: RouteHandler
 }
 
 export type RouteHandler = (req: RouteRequest) => Promise<RouteResponse>
@@ -43,7 +48,8 @@ export type RouteContributionRegistry = {
     pluginId: string
     path: string
     methods?: RouteMethod[]
-    handler: RouteHandler
+    handler?: RouteHandler
+    remote?: boolean
   }): { id: string; path: string } | { error: string }
   unregister(id: string): void
   unregisterForPlugin(pluginId: string): void
@@ -73,15 +79,24 @@ export function createRouteContributionRegistry(): RouteContributionRegistry {
     pluginId: string
     path: string
     methods?: RouteMethod[]
-    handler: RouteHandler
+    handler?: RouteHandler
+    remote?: boolean
   }): { id: string; path: string } | { error: string } {
-    if (typeof reg.handler !== 'function') {
+    const remote = reg.remote === true
+    if (!remote && typeof reg.handler !== 'function') {
       return { error: 'handler must be a function' }
     }
     const path = normalizePath(reg.path)
     const methods = reg.methods ?? ['GET']
     const id = randomId()
-    routes.set(id, { id, pluginId: reg.pluginId, path, methods, handle: reg.handler })
+    routes.set(id, {
+      id,
+      pluginId: reg.pluginId,
+      path,
+      methods,
+      kind: remote ? 'remote' : 'local',
+      ...(remote ? {} : { handle: reg.handler }),
+    })
     return { id, path }
   }
 

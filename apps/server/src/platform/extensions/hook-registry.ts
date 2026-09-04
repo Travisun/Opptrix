@@ -33,7 +33,13 @@ export type HookRegistration = {
   point: HookPoint
   priority: number
   timeoutMs: number
-  handle: HookHandler['handle']
+  /**
+   * 'local': in-process handler (manager.run path).
+   * 'remote': hosted (subprocess) extension — the platform dispatches the
+   * trigger back to the extension host via RPC (declaration model).
+   */
+  kind: 'local' | 'remote'
+  handle?: HookHandler['handle']
 }
 
 const DEFAULT_HOOK_TIMEOUT_MS = 100
@@ -43,7 +49,8 @@ export type HookRegistry = {
   register(reg: {
     pluginId: string
     point: HookPoint
-    handler: HookHandler['handle']
+    handler?: HookHandler['handle']
+    remote?: boolean
     priority?: number
     timeoutMs?: number
   }): { id: string } | { error: string }
@@ -62,13 +69,22 @@ export type HookRegistry = {
   list(): HookRegistration[]
 }
 
-export function createHookRegistry(): HookRegistry {
+export function createHookRegistry(opts?: {
+  /** Dispatch a trigger to a hosted extension (RPC to the shared host). */
+  dispatchRemote?: (
+    extensionId: string,
+    point: string,
+    payload: Record<string, unknown>,
+    timeoutMs: number,
+  ) => Promise<{ results: unknown[]; abort: boolean }>
+}): HookRegistry {
   const hooks = new Map<string, HookRegistration>()
 
   function register(reg: {
     pluginId: string
     point: HookPoint
-    handler: HookHandler['handle']
+    handler?: HookHandler['handle']
+    remote?: boolean
     priority?: number
     timeoutMs?: number
   }): { id: string } | { error: string } {
@@ -76,7 +92,8 @@ export function createHookRegistry(): HookRegistry {
     if (!validPoints.includes(reg.point)) {
       return { error: `unknown hook point: ${reg.point}` }
     }
-    if (typeof reg.handler !== 'function') {
+    const remote = reg.remote === true
+    if (!remote && typeof reg.handler !== 'function') {
       return { error: 'handler must be a function' }
     }
     const id = randomUUID()
@@ -90,7 +107,8 @@ export function createHookRegistry(): HookRegistry {
       point: reg.point,
       priority: reg.priority ?? 0,
       timeoutMs,
-      handle: reg.handler,
+      kind: remote ? 'remote' : 'local',
+      ...(remote ? {} : { handle: reg.handler }),
     })
     return { id }
   }
@@ -117,11 +135,25 @@ export function createHookRegistry(): HookRegistry {
       matched.map(async (h) => {
         const auditId = randomUUID()
         try {
-          const data = await runWithTimeout(
-            () => h.handle(payload),
-            h.timeoutMs,
-            `hook ${point} timed out after ${h.timeoutMs}ms`,
-          )
+          const data =
+            h.kind === 'remote'
+              ? await runWithTimeout(
+                  async () => {
+                    const r =
+                      (await opts?.dispatchRemote?.(h.pluginId, point, payload, h.timeoutMs)) ?? {
+                        results: [],
+                        abort: false,
+                      }
+                    return r
+                  },
+                  h.timeoutMs,
+                  `hook ${point} timed out after ${h.timeoutMs}ms`,
+                )
+              : await runWithTimeout(
+                  () => h.handle!(payload),
+                  h.timeoutMs,
+                  `hook ${point} timed out after ${h.timeoutMs}ms`,
+                )
           return {
             pluginId: h.pluginId,
             observation: {

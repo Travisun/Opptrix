@@ -212,6 +212,11 @@ export function resetPlatformContextForTests(): void {
     void prev.extensions.host.stop().catch(() => {
       // soft
     })
+    // Phase B: stop the shared host subprocess, or leaked children keep the
+    // test runner's event loop alive.
+    void prev.extensions.getSharedHost()?.stop().catch(() => {
+      // soft
+    })
   }
   clearDomainPackPreferencesForTests()
   resetBrowserDetectCacheForTests()

@@ -52,12 +52,34 @@ const eventsHandler: CapabilityHandler = async (args, ctx) => {
   if (action === 'subscribe') {
     const topic = String(args.topic ?? '')
     if (!topic) return { error: 'topic required', code: 'invalid_args' }
+    const remote = args.remote === true
     const handler = args.handler
-    if (typeof handler !== 'function') {
+    if (!remote && typeof handler !== 'function') {
       return { error: 'handler must be a function', code: 'invalid_args' }
     }
-    const dispose = ctx.events.subscribeTopic(topic, handler as never)
-    if (typeof dispose === 'function') {
+    let dispose: (() => void) | undefined
+    if (remote) {
+      // Hosted extension: forward matching events to the shared host child.
+      const forwardHost = (ctx.services as Record<string, unknown> | undefined)?.extHost as
+        | { dispatchEvent: (extensionId: string, name: string, payload: unknown) => void }
+        | undefined
+      if (forwardHost) {
+        const listener = (envelope: unknown) => {
+          try {
+            const name = (envelope as { name?: string }).name ?? ''
+            forwardHost.dispatchEvent(ctx.pluginId, name, (envelope as { payload?: unknown }).payload)
+          } catch {
+            // best-effort
+          }
+        }
+        const d = ctx.events.subscribeTopic(topic, listener as never)
+        dispose = typeof d === 'function' ? d : undefined
+      }
+    } else {
+      const d = ctx.events.subscribeTopic(topic, handler as never)
+      dispose = typeof d === 'function' ? d : undefined
+    }
+    if (dispose) {
       const list = eventDisposals.get(ctx.pluginId) ?? []
       list.push(dispose)
       eventDisposals.set(ctx.pluginId, list)
@@ -220,25 +242,64 @@ export function closeAllStorage(): void {
   storageCache.clear()
 }
 
+export type ScheduleDeclaration = {
+  jobKind: string
+  cron: string
+  title?: string
+}
+
 /**
- * Register contribution handlers (hooks, routes) that need the manager's registries.
- * Called by the manager after constructing hookRegistry + routeRegistry.
+ * Register contribution handlers (hooks, routes, schedules) that need the
+ * manager's registries. Called by the manager after constructing
+ * hookRegistry + routeRegistry. Hosted (subprocess) extensions send
+ * declarations with `remote: true` and no handler — handlers stay in the
+ * child; the platform dispatches triggers back via RPC.
  */
 export function registerContributionHandlers(
   host: CapabilityHost,
   hooks: import('./hook-registry.js').HookRegistry,
   routes: import('./route-contributions.js').RouteContributionRegistry,
+  opts?: {
+    onScheduleDeclare?: (extensionId: string, decl: ScheduleDeclaration) => { ok: boolean; error?: string }
+    onScheduleRemove?: (extensionId: string, jobKind: string) => void
+  },
 ): void {
+  host.register('schedule.register', async (args, ctx) => {
+    if (!opts?.onScheduleDeclare) {
+      return { error: 'schedule registry unavailable', code: 'service_unavailable' }
+    }
+    const jobKind = String(args.jobKind ?? '')
+    const cron = String(args.cron ?? '')
+    if (!jobKind || !cron) {
+      return { error: 'jobKind and cron required', code: 'invalid_args' }
+    }
+    const result = opts.onScheduleDeclare(ctx.pluginId, {
+      jobKind,
+      cron,
+      ...(typeof args.title === 'string' ? { title: args.title } : {}),
+    })
+    if (!result.ok) return { error: result.error ?? 'schedule rejected', code: 'invalid_args' }
+    return { ok: true, jobKind }
+  })
+
+  host.register('schedule.unregister', async (args, ctx) => {
+    if (!opts?.onScheduleRemove) {
+      return { error: 'schedule registry unavailable', code: 'service_unavailable' }
+    }
+    opts.onScheduleRemove(ctx.pluginId, String(args.jobKind ?? ''))
+    return { ok: true }
+  })
   host.register('hooks.register', async (args, ctx) => {
     const point = String(args.point ?? '')
+    const remote = args.remote === true
     const handler = args.handler
-    if (typeof handler !== 'function') {
+    if (!remote && typeof handler !== 'function') {
       return { error: 'handler must be a function', code: 'invalid_args' }
     }
     const reg = hooks.register({
       pluginId: ctx.pluginId,
       point: point as import('./hook-registry.js').HookPoint,
-      handler: handler as (payload: Record<string, unknown>) => Promise<unknown>,
+      ...(remote ? { remote: true } : { handler: handler as (payload: Record<string, unknown>) => Promise<unknown> }),
       priority: typeof args.priority === 'number' ? args.priority : undefined,
       timeoutMs: typeof args.timeoutMs === 'number' ? args.timeoutMs : undefined,
     })
@@ -254,8 +315,9 @@ export function registerContributionHandlers(
 
   host.register('routes.register', async (args, ctx) => {
     const path = String(args.path ?? '')
+    const remote = args.remote === true
     const handler = args.handler
-    if (typeof handler !== 'function') {
+    if (!remote && typeof handler !== 'function') {
       return { error: 'handler must be a function', code: 'invalid_args' }
     }
     const methods = Array.isArray(args.methods)
@@ -265,7 +327,7 @@ export function registerContributionHandlers(
       pluginId: ctx.pluginId,
       path,
       methods,
-      handler: handler as import('./route-contributions.js').RouteHandler,
+      ...(remote ? { remote: true } : { handler: handler as import('./route-contributions.js').RouteHandler }),
     })
     if ('error' in reg) return { error: reg.error, code: 'invalid_args' }
     return { id: reg.id, path: reg.path, ok: true }

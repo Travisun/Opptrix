@@ -96,6 +96,7 @@ describe('opx worker_js load in host worker vm (Wave 58A)', () => {
   let platform
 
   beforeEach(async () => {
+  process.env.OPPTRIX_EXT_RUNTIME = 'worker'
     platform = await import(`${platformModUrl}?t=${Date.now()}`)
     platform.resetPlatformContextForTests()
   })
@@ -245,7 +246,9 @@ module.exports = {
     assert.doesNotMatch(activateSlice, /new\s+Function\s*\(/)
     assert.doesNotMatch(activateSlice, /\brequire\s*\(/)
     assert.doesNotMatch(activateSlice, /runInContext|runInNewContext|runInThisContext/)
-    assert.match(activateSlice, /loadExtension/)
+    // Loading must be delegated to a host runtime (subprocess or legacy
+    // worker) — never executed in the server process.
+    assert.match(activateSlice, /loadIntoRuntime/)
     assert.match(activateSlice, /worker_js/)
     assert.doesNotMatch(parse, /\beval\s*\(/)
     assert.doesNotMatch(parse, /\brequire\s*\(/)

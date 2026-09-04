@@ -186,6 +186,18 @@ agent = new AgentEngine(hub, {
   defaultTopN: cfg.default_top_n,
   appContext: serverAppContext,
   capabilityGate: platform.gate,
+  // Phase B: extension-platform hooks (read-only observations, fire-and-forget;
+  // bounded inside the hook registry ≤500ms so the chat hot path never waits).
+  extensionHooks: {
+    toolPreExecute: (payload) =>
+      platform.extensions
+        .hooksDispatch('agent.toolPreExecute', payload)
+        .then(() => undefined),
+    sessionMessageCommitted: (payload) =>
+      platform.extensions
+        .hooksDispatch('session.messageCommitted', payload)
+        .then(() => undefined),
+  },
   // Wave 56: approval queue owns ask_user; bridge is waiter (id ≡ promptId ≡ approval.id)
   approvalTracker: {
     track(input) {

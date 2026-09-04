@@ -13,6 +13,7 @@ describe('extension-host-worker Wave 13A', () => {
   let platform
 
   beforeEach(async () => {
+  process.env.OPPTRIX_EXT_RUNTIME = 'worker'
     platform = await import(platformModUrl)
     platform.resetPlatformContextForTests()
   })

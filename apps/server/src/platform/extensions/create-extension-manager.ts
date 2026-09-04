@@ -39,6 +39,10 @@ import {
   createRouteContributionRegistry,
   type RouteContributionRegistry,
 } from './route-contributions.js'
+import {
+  createSharedHostSupervisor,
+  type SharedHostSupervisor,
+} from './subprocess-host.js'
 
 /** Thrown by the exec thunk when the capability host returns a structured denial. */
 class CapabilityDenialError extends Error {
@@ -96,17 +100,18 @@ export function isStorageSafeId(id: string): boolean {
 
 function stripMeta(rec: ExtensionRecord): Pick<
   ExtensionRecord,
-  'name' | 'version' | 'capabilities' | 'permissions' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
+  'name' | 'version' | 'capabilities' | 'permissions' | 'activation' | 'activationEvents' | 'hostBound' | 'jsLoaded' | 'trusted'
 > {
   const out: Pick<
     ExtensionRecord,
-    'name' | 'version' | 'capabilities' | 'permissions' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
+    'name' | 'version' | 'capabilities' | 'permissions' | 'activation' | 'activationEvents' | 'hostBound' | 'jsLoaded' | 'trusted'
   > = { trusted: rec.trusted === true }
   if (rec.name !== undefined) out.name = rec.name
   if (rec.version !== undefined) out.version = rec.version
   if (rec.capabilities !== undefined) out.capabilities = [...rec.capabilities]
   if (rec.permissions !== undefined) out.permissions = [...rec.permissions]
   if (rec.activation !== undefined) out.activation = rec.activation
+  if (rec.activationEvents !== undefined) out.activationEvents = [...rec.activationEvents]
   if (rec.hostBound !== undefined) out.hostBound = rec.hostBound
   if (rec.jsLoaded !== undefined) out.jsLoaded = rec.jsLoaded
   return out
@@ -168,14 +173,34 @@ export type CreateExtensionManagerOptions = {
   services?: CapabilityServices
   /** Data root for per-extension storage paths. */
   dataRoot?: string
+  /**
+   * Host runtime for worker_js extensions: 'subprocess' (Phase B default —
+   * shared forked child, per-extension vm contexts) or 'worker' (legacy
+   * worker_threads backend, kept for tests). Unset → read
+   * OPPTRIX_EXT_RUNTIME (default 'subprocess').
+   */
+  runtime?: 'subprocess' | 'worker'
 }
 
 const DEFAULT_RUN_TIMEOUT_MS = 5000
 
+/** Env selection for the hosted-extension runtime (default: subprocess). */
+export function readExtRuntimeFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): 'subprocess' | 'worker' {
+  return env.OPPTRIX_EXT_RUNTIME === 'worker' ? 'worker' : 'subprocess'
+}
+
+/** Restart budget for the shared host child (design §6.3). */
+const HOST_RESTART_WINDOW_MS = 10 * 60_000
+const HOST_RESTART_MAX = 5
+/** Scheduler tick cadence for extension-registered jobs. */
+const EXT_SCHEDULE_TICK_MS = 60_000
+
 /**
  * In-process ExtensionManager Host sandbox.
  * Extensions only receive ExtensionHostApi.callGate → invokeViaGateway → gate.submit.
- * Wave 13A: optional worker_threads isolate via `host` / getHostSupervisor().
+ * Phase B: worker_js extensions run in a shared host subprocess by default.
  */
 export function createExtensionManager(
   opts?: CreateExtensionManagerOptions,
@@ -188,9 +213,16 @@ export function createExtensionManager(
   const registry = opts?.registry
   const services = opts?.services
   const dataRoot = opts?.dataRoot
+  const runtime: 'subprocess' | 'worker' = opts?.runtime ?? readExtRuntimeFromEnv()
 
-  // Hook + route contribution registries (Phase A contributions).
-  const hookRegistry: HookRegistry = createHookRegistry()
+  // Hook + route contribution registries (Phase A contributions). Remote
+  // entries dispatch triggers back to the shared host child via RPC.
+  const hookRegistry: HookRegistry = createHookRegistry({
+    dispatchRemote: async (extensionId, point, payload, timeoutMs) => {
+      if (!sharedHost) return { results: [{ error: 'extension host not running' }], abort: false }
+      return sharedHost.dispatchHook(extensionId, point, payload, timeoutMs)
+    },
+  })
   const routeRegistry: RouteContributionRegistry = createRouteContributionRegistry()
 
   // Capability host — the ONLY path from extensions to platform capabilities.
@@ -199,8 +231,95 @@ export function createExtensionManager(
     createCapabilityHost({ events: events!, packs: undefined as never, dataRoot, services })
   // Register self-contained handlers (events, platform.info, storage).
   registerSelfContainedHandlers(capabilityHost, undefined as never)
-  // Register contribution handlers (hooks, routes) bound to this manager's registries.
-  registerContributionHandlers(capabilityHost, hookRegistry, routeRegistry)
+  // Register contribution handlers (hooks, routes, schedules) bound to this
+  // manager's registries.
+  registerContributionHandlers(capabilityHost, hookRegistry, routeRegistry, {
+    onScheduleDeclare: (extensionId, decl) => {
+      // cron-lite validation: interval:<N>s|m|h or daily@HH:MM
+      if (!/^(interval:\d+(s|m|h)|daily@\d{2}:\d{2})$/.test(decl.cron)) {
+        return { ok: false, error: 'cron must be interval:<N>s|m|h or daily@HH:MM' }
+      }
+      extSchedules.set(`${extensionId}:${decl.jobKind}`, { extensionId, ...decl })
+      ensureScheduleTimer()
+      return { ok: true }
+    },
+    onScheduleRemove: (extensionId, jobKind) => {
+      extSchedules.delete(`${extensionId}:${jobKind}`)
+    },
+  })
+
+  /**
+   * Real capability dispatch for a hosted extension (child gate calls come
+   * here): gate check with the extension's OWN principal, then capability
+   * host dispatch. Audit P0-4 fix — the child never gets an echo.
+   */
+  function execCapabilityFor(
+    extensionId: string,
+    token: string,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return invokeViaGateway(
+      {
+        token,
+        args,
+        principal: { kind: 'extension', id: extensionId },
+      },
+      async () =>
+        capabilityHost.dispatch(token, args, {
+          pluginId: extensionId,
+          events: events!,
+          dataRoot,
+          services: services ?? {},
+        }),
+    ) as Promise<Record<string, unknown>>
+  }
+
+  /** Phase B shared host subprocess (created lazily below; closure-bound). */
+  let sharedHost: ReturnType<typeof createSharedHostSupervisor> | null = null
+  const hostCrashTimes: number[] = []
+  /** Extension schedule declarations (reactive model: cron/interval callbacks). */
+  const extSchedules = new Map<string, { extensionId: string; jobKind: string; cron: string }>()
+  let scheduleTimer: ReturnType<typeof setInterval> | null = null
+
+  function handleHostCrash(): void {
+    const now = Date.now()
+    hostCrashTimes.push(now)
+    while (hostCrashTimes.length > 0 && now - hostCrashTimes[0] > HOST_RESTART_WINDOW_MS) {
+      hostCrashTimes.shift()
+    }
+    const activeWorkerJs = [...records.values()].filter(
+      (r) => r.state === 'active' && r.activation === 'worker_js',
+    )
+    if (activeWorkerJs.length === 0) return
+    if (hostCrashTimes.length > HOST_RESTART_MAX) {
+      for (const r of activeWorkerJs) {
+        markRunError(r.id, '扩展宿主进程连续崩溃次数过多，已停止自动重启，请手动重新启用')
+      }
+      return
+    }
+    // Bounded restart + reload every active worker_js extension.
+    void (async () => {
+      if (!sharedHost) return
+      try {
+        await sharedHost.start()
+      } catch {
+        for (const r of activeWorkerJs) {
+          markRunError(r.id, '扩展宿主进程重启失败')
+        }
+        return
+      }
+      for (const r of activeWorkerJs) {
+        const src = entrySources.get(r.id)
+        if (!src) continue
+        const loaded = await sharedHost.load(r.id, src)
+        if (loaded.ok && !loaded.hasResidentTouchpoint) {
+          await sharedHost.unload(r.id)
+        }
+      }
+    })().catch(() => {
+      // R0: restart failures never propagate
+    })
+  }
 
   function persist(record: ExtensionRecord): void {
     if (!registry) return
@@ -283,6 +402,97 @@ export function createExtensionManager(
     emitBestEffort(SystemEvents.extension.crashed, { id, error: message })
   }
 
+  /** cron-lite evaluation state: last daily-run date per declaration key. */
+  const scheduleLastRun = new Map<string, string>()
+
+  function evaluateScheduleTick(now = new Date()): void {
+    if (!sharedHost || sharedHost.status() !== 'running') return
+    for (const [key, decl] of extSchedules) {
+      let due = false
+      const intervalMatch = /^interval:(\d+)(s|m|h)$/.exec(decl.cron)
+      if (intervalMatch) {
+        const n = Number(intervalMatch[1])
+        const unitMs = intervalMatch[2] === 's' ? 1000 : intervalMatch[2] === 'm' ? 60_000 : 3_600_000
+        due = now.getTime() % (n * unitMs) < EXT_SCHEDULE_TICK_MS
+      } else {
+        const dailyMatch = /^daily@(\d{2}):(\d{2})$/.exec(decl.cron)
+        if (dailyMatch) {
+          const hh = Number(dailyMatch[1])
+          const mm = Number(dailyMatch[2])
+          const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+          const lastKey = scheduleLastRun.get(key)
+          if (now.getHours() === hh && now.getMinutes() === mm && lastKey !== todayKey) {
+            due = true
+            scheduleLastRun.set(key, todayKey)
+          }
+        }
+      }
+      if (!due) continue
+      void sharedHost
+        .scheduleTick(decl.extensionId, decl.jobKind, { triggeredAt: now.toISOString() }, 60_000)
+        .catch(() => {
+          // best-effort: a failed tick never breaks the scheduler
+        })
+    }
+  }
+
+  function ensureScheduleTimer(): void {
+    if (scheduleTimer) return
+    scheduleTimer = setInterval(() => {
+      try {
+        evaluateScheduleTick()
+      } catch {
+        // never break the event loop
+      }
+    }, EXT_SCHEDULE_TICK_MS)
+    scheduleTimer.unref?.()
+  }
+
+  // ── Phase B: shared host subprocess (subprocess runtime only) ─────────────
+  if (runtime === 'subprocess') {
+    sharedHost = createSharedHostSupervisor({
+      execCapability: execCapabilityFor,
+      onCrash: () => handleHostCrash(),
+    })
+  }
+
+  /** Load (or reload) a worker_js extension into the selected runtime. */
+  async function loadIntoRuntime(
+    key: string,
+    source: string,
+    loadTimeoutMs?: number,
+  ): Promise<{ ok: true; resident: boolean } | { ok: false; error: string }> {
+    if (runtime === 'subprocess' && sharedHost) {
+      if (sharedHost.status() !== 'running') {
+        try {
+          await sharedHost.start()
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      }
+      const loaded = await sharedHost.load(key, source, loadTimeoutMs)
+      if (!loaded.ok) return { ok: false, error: loaded.error }
+      // Reactive model (fire-once): an extension with no resident touchpoints
+      // (hooks / routes / events / schedules) does not stay loaded.
+      if (!loaded.hasResidentTouchpoint) {
+        await sharedHost.unload(key)
+        return { ok: true, resident: false }
+      }
+      return { ok: true, resident: true }
+    }
+    // Legacy worker_threads backend.
+    const loaded = await hostSupervisorProxy.loadExtension(key, source)
+    if (!loaded.ok) return { ok: false, error: loaded.error ?? 'load failed' }
+    return { ok: true, resident: true }
+  }
+
+  /** Forward-declared proxy to the legacy supervisor (defined below). */
+  const hostSupervisorProxy = {
+    loadExtension(id: string, source: string) {
+      return hostSupervisor.loadExtension(id, source)
+    },
+  }
+
   function hostApiFor(extensionId: string): ExtensionHostApi {
     return {
       callGate(
@@ -300,7 +510,12 @@ export function createExtensionManager(
             const result = await capabilityHost.dispatch(
               token,
               safeArgs,
-              { pluginId: extensionId, events: events!, dataRoot, services: services ?? {} },
+              {
+                pluginId: extensionId,
+                events: events!,
+                dataRoot,
+                services: { ...(services ?? {}), extHost: sharedHost },
+              },
             )
             // If the host returns a structured denial, throw to convert into a
             // gate denial observation (keeps the success path unwrapped).
@@ -447,6 +662,14 @@ export function createExtensionManager(
     if (actParsed.value !== undefined) {
       record.activation = actParsed.value
     }
+    // Reactive model: activationEvents gate lazy activation at boot.
+    if (Array.isArray(raw.activationEvents)) {
+      const events = raw.activationEvents
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => v.trim())
+        .filter((v) => v === 'onStartup' || v === 'onCommand' || v === 'onView')
+      record.activationEvents = events as ExtensionRecord['activationEvents']
+    }
 
     if (actParsed.value === 'worker_js') {
       const src =
@@ -519,6 +742,7 @@ export function createExtensionManager(
       }
 
       let jsLoaded = false
+      let resident = true
       // C1–C3 / Selection A: worker_js is experimental and is NOT the system-extension model.
       // Product path for system .opx: in-process Host contribution points (routes/pages/hooks);
       // Gateway→Gate. Trust Gate + install claim; worker_threads vm ≠ process isolation.
@@ -530,14 +754,15 @@ export function createExtensionManager(
             error: 'worker_js entry source missing (register via .opx zip)',
           }
         }
-        const loaded = await hostSupervisor.loadExtension(key, source)
+        const loaded = await loadIntoRuntime(key, source)
         if (!loaded.ok) {
           return {
             ok: false,
-            error: loaded.error ?? 'extension load failed in host worker',
+            error: loaded.error,
           }
         }
         jsLoaded = true
+        resident = loaded.resident
       }
 
       const next: ExtensionRecord = {
@@ -570,6 +795,9 @@ export function createExtensionManager(
       hookRegistry.unregisterForPlugin(key)
       routeRegistry.unregisterForPlugin(key)
       cleanupExtensionEventListeners(key)
+      if (sharedHost) {
+        await sharedHost.unload(key).catch(() => {})
+      }
       const next: ExtensionRecord = {
         id: key,
         state: 'inactive',
@@ -593,6 +821,9 @@ export function createExtensionManager(
       hookRegistry.unregisterForPlugin(key)
       routeRegistry.unregisterForPlugin(key)
       cleanupExtensionEventListeners(key)
+      // Uninstall is sync; unload is best-effort cleanup (child state dies with
+      // the extension record).
+      void sharedHost?.unload(key).catch(() => {})
       // Drop the in-memory entry source (pre-release audit: stale source leak).
       entrySources.delete(key)
       records.delete(key)
@@ -642,6 +873,9 @@ export function createExtensionManager(
       // Fire-and-forget per extension; failures mark error, never throw.
       // Inline (not via activate()) to avoid forward-reference to a sibling closure.
       //
+      // Reactive model (activationEvents gate): extensions whose manifest did
+      // not declare 'onStartup' wait for a trigger or manual activate.
+      //
       // worker_js honesty (pre-release audit F2): entry sources live only in
       // the in-memory `entrySources` map and are NOT persisted. Re-activating
       // without the source would produce a false-active record whose JS is
@@ -649,6 +883,8 @@ export function createExtensionManager(
       // honest recovery path is uninstall + re-install via the UI.
       for (const rec of loaded) {
         if (rec.state !== 'active') continue
+        const events = rec.activationEvents
+        if (events !== undefined && !events.includes('onStartup')) continue
         const mode = rec.activation ?? 'catalog_only'
         if (mode === 'worker_js') {
           const next: ExtensionRecord = {
@@ -711,6 +947,9 @@ export function createExtensionManager(
             hookRegistry.unregisterForPlugin(id)
             routeRegistry.unregisterForPlugin(id)
             cleanupExtensionEventListeners(id)
+            if (sharedHost) {
+              await sharedHost.unload(id).catch(() => {})
+            }
             const next: ExtensionRecord = {
               id,
               state: 'inactive',
@@ -733,6 +972,19 @@ export function createExtensionManager(
       }
       // R1: close per-extension storage handles (Tier 1 flush).
       closeAllStorage()
+      // R1: stop the extension schedule timer.
+      if (scheduleTimer) {
+        clearInterval(scheduleTimer)
+        scheduleTimer = null
+      }
+      // R1: stop the shared host subprocess (Phase B).
+      if (sharedHost) {
+        try {
+          await sharedHost.stop()
+        } catch {
+          // best-effort
+        }
+      }
       // Stop the shared host worker (R1: release worker_threads).
       try {
         await host.stop()
@@ -786,6 +1038,16 @@ export function createExtensionManager(
     host,
     getHostSupervisor(): ExtensionHostSupervisor {
       return hostSupervisor
+    },
+    getSharedHost(): SharedHostSupervisor | null {
+      return runtime === 'subprocess' ? sharedHost : null
+    },
+    listExtensionSchedules(): Array<{ extensionId: string; jobKind: string; cron: string }> {
+      return [...extSchedules.values()].map((d) => ({
+        extensionId: d.extensionId,
+        jobKind: d.jobKind,
+        cron: d.cron,
+      }))
     },
     // Phase A contribution accessors.
     getHookRegistry(): HookRegistry {
