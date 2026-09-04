@@ -93,6 +93,7 @@ import { fetchUserAgreementHtml } from './legal-document.js'
 import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
 import { registerExtensionsHttp } from './extensions-http.js'
+import { registerStoreHttp } from './store-http.js'
 import { bindLateBoundServices } from './platform/extensions/late-bound-handlers.js'
 import {
   admitAndRememberJobWake,
@@ -1079,6 +1080,14 @@ app.post<{
 await registerExtensionsHttp(app, {
   platform,
   devMode: process.env.OPPTRIX_EXT_DEV === '1',
+})
+
+// Phase B store client endpoints (UI entry hidden until next release).
+await registerStoreHttp(app, {
+  platform,
+  ...(process.env.OPPTRIX_STORE_REGISTRY_BASE
+    ? { baseUrl: process.env.OPPTRIX_STORE_REGISTRY_BASE }
+    : {}),
 })
 
 app.get('/api/legal/user-agreement', async (_req, reply) => {

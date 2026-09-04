@@ -119,6 +119,12 @@ export {
   type ParseOpxManifestResult,
 } from './extensions/index.js'
 export {
+  installFromStore,
+  createStoreClient,
+  resolveRegistryBase,
+  OFFICIAL_REGISTRY_BASE,
+} from './store/store-client.js'
+export {
   createHandsPort,
   createHandsConfirmHandler,
   runWithHandsConfirmSession,

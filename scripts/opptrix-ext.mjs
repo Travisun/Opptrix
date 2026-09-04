@@ -372,9 +372,55 @@ function readZipEntriesFlat(buf) {
 
 const [, , cmd, ...rest] = process.argv
 
+// ── store (client of the local server's /api/platform/store endpoints) ─────
+
+async function storeApi(path, init) {
+  const base = process.env.OPPTRIX_SERVER_URL ?? 'http://127.0.0.1:8711'
+  const resp = await fetch(base + '/api/platform/store' + path, init)
+  const body = await resp.json().catch(() => ({}))
+  return { status: resp.status, body }
+}
+
 const commands = {
   keygen: cmdKeygen,
   sign: cmdSign,
+  store: async () => {
+    const sub = rest[0]
+    try {
+      if (sub === 'search') {
+        const q = rest[1] ?? ''
+        const { body } = await storeApi(`/search?q=${encodeURIComponent(q)}`)
+        for (const item of body.items ?? []) {
+          console.log(`${item.id}  v${item.version}  ${item.name ?? ''}`)
+        }
+        if ((body.items ?? []).length === 0) console.log('(no results)')
+        return
+      }
+      if (sub === 'info') {
+        const id = rest[1]
+        if (!id) { console.error('usage: opptrix-ext store info <id>'); process.exit(1) }
+        const { body } = await storeApi(`/extensions/${encodeURIComponent(id)}`)
+        console.log(JSON.stringify(body, null, 2))
+        return
+      }
+      if (sub === 'install') {
+        const id = rest[1]
+        if (!id) { console.error('usage: opptrix-ext store install <id> [version]'); process.exit(1) }
+        const version = rest[2]
+        const { body } = await storeApi('/install', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id, ...(version ? { version } : {}) }),
+        })
+        console.log(JSON.stringify(body, null, 2))
+        return
+      }
+      console.log('usage: opptrix-ext store <search|info|install> …')
+    } catch (err) {
+      console.error('[opptrix-ext] store error:', err.message)
+      process.exit(1)
+    }
+  },
   create: () => {
     const name = rest[0]
     if (!name) {
@@ -393,6 +439,7 @@ const commands = {
 Commands:
   keygen          Generate an Ed25519 publisher keypair
   sign            Sign the latest .opx with the publisher key
+  store <sub>     Marketplace (search/info/install) — needs local server
   create <name>   Scaffold a new extension
   build           Bundle host entry with esbuild
   pack            Produce .opx package
