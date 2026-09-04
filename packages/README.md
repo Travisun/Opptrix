@@ -25,7 +25,7 @@ store
          agent · user-store
               │
               ▼
-         server (+ desktop 壳)
+         server（自托管）
 ```
 
 ## 基础与数据
@@ -68,7 +68,7 @@ store
 | `@opptrix/agent` | LLM Provider、MCP ToolRegistry（40+ 工具）、多会话 |
 | `@opptrix/user-store` | 用户 SQLite（配置、会话、关注、Provider 设置） |
 | `@opptrix/server` | Fastify HTTP、Chat SSE、静态 SPA |
-| `@opptrix/desktop` | Electron 主进程、sidecar 生命周期、打包 |
+| `@opptrix/extension-sdk` | 扩展开发者 SDK（类型 + ManifestBuilder；扩展平台 Phase A） |
 | `opptrix-client` | React + Fluent UI（`client-ui/`） |
 
 ## Hub Features（节选）
@@ -95,7 +95,6 @@ npm run build -w @opptrix/server
 ```bash
 npm run build:packages   # 所有 packages + server
 npm run build            # + client-ui
-npm run build:desktop    # Electron 发行包
 npm run clean
 ```
 
