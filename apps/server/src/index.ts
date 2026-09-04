@@ -93,6 +93,7 @@ import { fetchUserAgreementHtml } from './legal-document.js'
 import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
 import { registerExtensionsHttp } from './extensions-http.js'
+import { bindLateBoundServices } from './platform/extensions/late-bound-handlers.js'
 import {
   admitAndRememberJobWake,
   admitChatBestEffort,
@@ -400,6 +401,12 @@ registerSystemUpdateRoutes(app)
 registerCoreModelsRoutes(app)
 
 const scheduleService = getScheduleService()
+// Phase A: bind real services for extension late-bound capabilities
+// (data.query → hub.dispatch; schedule.list → scheduleService).
+bindLateBoundServices({
+  hub: { dispatch: (feature, params) => hub.dispatch(feature, params as never) },
+  schedule: { listJobs: () => scheduleService.listJobs() as unknown as Array<Record<string, unknown>> },
+})
 const workspaceService = getWorkspaceService()
 scheduleService.setExecutor(createJobExecutor({
   agent: {

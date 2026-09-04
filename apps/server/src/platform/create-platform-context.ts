@@ -9,6 +9,7 @@ import { createCheckpointStore } from './checkpoint/create-checkpoint-store.js'
 import { createExtensionManager } from './extensions/create-extension-manager.js'
 import { createCapabilityHost } from './extensions/capability-host.js'
 import { registerSelfContainedHandlers } from './extensions/capability-handlers.js'
+import { registerLateBoundHandlers } from './extensions/late-bound-handlers.js'
 import { resetBrowserDetectCacheForTests } from './hands/browser-detect.js'
 import { createHandsPort } from './hands/create-hands-port.js'
 import { createIngressRouter } from './ingress/create-ingress-router.js'
@@ -80,9 +81,11 @@ export function createPlatformContext(): PlatformContext {
   const extensionRegistry = createExtensionRegistryStore()
   // Capability host — dispatches extension callGate tokens to real services.
   // Self-contained handlers (events, platform.info, storage) registered here;
-  // late-bound handlers (llm, data.query, shell, schedule) registered by index.ts.
+  // late-bound handlers (data.query, schedule, llm, shell) registered here too —
+  // real services bound later via bindLateBoundServices() from index.ts.
   const capabilityHost = createCapabilityHost({ events, packs })
   registerSelfContainedHandlers(capabilityHost, packs)
+  registerLateBoundHandlers(capabilityHost)
   const extensions = createExtensionManager({
     events,
     gate,

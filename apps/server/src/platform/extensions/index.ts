@@ -15,6 +15,12 @@ export {
   closeAllStorage,
   removeExtensionData,
 } from './capability-handlers.js'
+export {
+  bindLateBoundServices,
+  registerLateBoundHandlers,
+  type LateBoundHub,
+  type LateBoundSchedule,
+} from './late-bound-handlers.js'
 export { admitPlatformExtensions } from './admit-platform-extensions.js'
 export { admitPlatformHostWorker } from './admit-platform-host-worker.js'
 export {

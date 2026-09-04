@@ -93,6 +93,8 @@ export {
   registerSelfContainedHandlers,
   closeAllStorage,
   removeExtensionData,
+  bindLateBoundServices,
+  registerLateBoundHandlers,
   admitPlatformExtensions,
   admitPlatformHostWorker,
   admitRegisterExtension,
