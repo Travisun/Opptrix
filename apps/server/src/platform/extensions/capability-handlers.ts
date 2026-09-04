@@ -14,6 +14,11 @@ import type { PackInfo } from '../packs/types.js'
 import type { CapabilityHandler, CapabilityHost } from './capability-host.js'
 import type { PluginStorageService } from '@opptrix/plugin-storage'
 import { SqlitePluginKvStore } from '@opptrix/plugin-storage'
+import {
+  exportPluginData,
+  importPluginData,
+  removePluginDataDir,
+} from '@opptrix/plugin-storage'
 import { resolveCapabilityRule } from './capability-token-registry.js'
 import type { DomainPackId } from '../packs/types.js'
 
@@ -70,7 +75,7 @@ const platformInfoHandler: CapabilityHandler = async (args, ctx) => {
 // Per-extension storage handles, created lazily and cached.
 const storageCache = new Map<string, PluginStorageService>()
 
-function getStorage(pluginId: string, _dataRoot?: string): PluginStorageService {
+function getStorage(pluginId: string): PluginStorageService {
   const existing = storageCache.get(pluginId)
   if (existing) return existing
   // Do NOT pass dataRoot: SqlitePluginKvStore defaults to resolvePluginDataDir(pluginId)
@@ -83,7 +88,7 @@ function getStorage(pluginId: string, _dataRoot?: string): PluginStorageService 
 const storageHandler: CapabilityHandler = async (args, ctx) => {
   const op = String(args.op ?? '')
   const key = String(args.key ?? '')
-  const store = getStorage(ctx.pluginId, ctx.dataRoot)
+  const store = getStorage(ctx.pluginId)
 
   switch (op) {
     case 'get': {
@@ -103,8 +108,36 @@ const storageHandler: CapabilityHandler = async (args, ctx) => {
       const keys = await store.keys(prefix)
       return { keys }
     }
+    case 'export': {
+      // Do NOT pass dataRoot: exportPluginData defaults to resolvePluginDataDir(pluginId)
+      // which matches the cached store's path. Passing dataRoot would redirect to a
+      // different directory (dataRoot is the full plugin dir, not the user root).
+      const data = exportPluginData(ctx.pluginId)
+      return { version: data.version, pluginId: data.pluginId, kv: data.kv }
+    }
+    case 'import': {
+      const payload = args.payload as Parameters<typeof importPluginData>[1]
+      if (!payload || typeof payload !== 'object') {
+        return { error: 'payload required', code: 'invalid_args' }
+      }
+      await importPluginData(ctx.pluginId, payload, { merge: args.merge === true })
+      return { ok: true }
+    }
     default:
       return { error: `unknown storage op: ${op}`, code: 'invalid_args' }
+  }
+}
+
+/**
+ * Remove an extension's private data directory (uninstall cleanup).
+ * Best-effort: returns { ok: false } if the directory is absent or removal fails.
+ */
+export function removeExtensionData(pluginId: string): { ok: boolean } {
+  try {
+    removePluginDataDir(pluginId)
+    return { ok: true }
+  } catch {
+    return { ok: false }
   }
 }
 

@@ -13,6 +13,7 @@ export {
 export {
   registerSelfContainedHandlers,
   closeAllStorage,
+  removeExtensionData,
 } from './capability-handlers.js'
 export { admitPlatformExtensions } from './admit-platform-extensions.js'
 export { admitPlatformHostWorker } from './admit-platform-host-worker.js'

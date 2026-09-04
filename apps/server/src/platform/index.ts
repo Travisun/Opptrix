@@ -89,6 +89,10 @@ export {
 export {
   createExtensionManager,
   createExtensionRegistryStore,
+  createCapabilityHost,
+  registerSelfContainedHandlers,
+  closeAllStorage,
+  removeExtensionData,
   admitPlatformExtensions,
   admitPlatformHostWorker,
   admitRegisterExtension,
@@ -103,6 +107,7 @@ export {
   OPX_ZIP_MAX_BYTES,
   OPX_MANIFEST_MAX_BYTES,
   OPX_ENTRY_SOURCE_MAX_BYTES,
+  requiredPermission,
   type CreateExtensionManagerOptions,
   type CreateExtensionHostSupervisorOptions,
   type ExtensionHostWorkerHandle,
