@@ -8,17 +8,32 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
+const ENFORCE_ENV = 'OPPTRIX_PLATFORM_PACK_ENFORCE'
+
 describe('hands-port Wave 10A', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
+  /** @type {string | undefined} */
+  let prevEnforceEnv
+
   beforeEach(async () => {
+    prevEnforceEnv = process.env[ENFORCE_ENV]
+    // Hands tokens map to coding pack; isolate from SF1 packEnforce default ON.
+    process.env[ENFORCE_ENV] = '0'
     platform = await import(platformModUrl)
     platform.resetPlatformContextForTests()
+    // hands.* → coding pack; enable so packEnforce ON cannot deny invoke
+    platform.createPlatformContext().packs.enable('coding', true)
   })
 
   afterEach(() => {
     platform.resetPlatformContextForTests()
+    if (prevEnforceEnv === undefined) {
+      delete process.env[ENFORCE_ENV]
+    } else {
+      process.env[ENFORCE_ENV] = prevEnforceEnv
+    }
   })
 
   it('issue ping → invoke → pong; ticket is one-shot', async () => {

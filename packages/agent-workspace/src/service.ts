@@ -209,6 +209,10 @@ export class WorkspaceService {
     return { grant, abs }
   }
 
+  /**
+   * Retained for potential future sticky UX (unused after SF-thin-A: grant file
+   * overwrite/delete/download no longer call this).
+   */
   private async requireConfirmation(
     sessionId: string,
     rootId: string,
@@ -400,7 +404,7 @@ export class WorkspaceService {
 
   /**
    * 按 1-based 闭区间行号批量替换；校验全部 edits 后原子写入。
-   * 局部替换不走整文件 overwrite 确认；文件必须已存在。
+   * 文件必须已存在（授权根内写删已免确认，见 writeFile/deletePath）。
    */
   async replaceLines(
     sessionId: string,
@@ -498,13 +502,14 @@ export class WorkspaceService {
 
   /**
    * 应用 OpenCode `*** Begin Patch`（Add/Update/Delete）；全部经 gatePath。
-   * Update/Add 写入不走整文件 overwrite 确认（与 replaceLines 一致）；Delete 仍需确认。
+   * Add/Update/Delete 均在授权根内直接落盘（SF-thin-A：grant 内写删免确认）。
+   * `confirm` 保留签名兼容，忽略。
    */
   async applyPatch(
     sessionId: string,
     rootId: string,
     patchText: string,
-    confirm?: ConfirmHandler,
+    _confirm?: ConfirmHandler,
   ): Promise<import('./apply-patch.js').ApplyPatchResult> {
     const { applyOpenCodePatchText } = await import('./apply-patch.js')
     const eolByPath = new Map<string, WorkspaceEol>()
@@ -538,7 +543,7 @@ export class WorkspaceService {
         maybeChownForDockerAgent(abs)
       },
       deletePath: async (relPath) => {
-        await this.deletePath(sessionId, rootId, relPath, confirm)
+        await this.deletePath(sessionId, rootId, relPath)
       },
     })
   }
@@ -592,20 +597,22 @@ export class WorkspaceService {
     }
   }
 
+  /**
+   * 授权根内新建或覆盖文本。SF-thin-A：覆盖不再弹确认（Docker DAC 护内核）。
+   * `_confirm` 保留兼容，忽略。
+   */
   async writeFile(
     sessionId: string,
     rootId: string,
     relPath: string,
     content: string,
-    confirm?: ConfirmHandler,
+    _confirm?: ConfirmHandler,
   ): Promise<{ path: string; bytes: number }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertWritable(grant)
-    let exists = false
     let existingEol: WorkspaceEol | undefined
     try {
       await fs.access(abs)
-      exists = true
       try {
         const prev = await fs.readFile(abs)
         existingEol = decodeWorkspaceText(prev).eol
@@ -616,9 +623,6 @@ export class WorkspaceService {
     } catch { /* new file */ }
     const buf = encodeWorkspaceText(content, { relPath, eol: existingEol })
     await this.quota.assertCanWrite(buf.length)
-    if (exists) {
-      await this.requireConfirmation(sessionId, rootId, relPath, 'overwrite', confirm)
-    }
     await fs.mkdir(path.dirname(abs), { recursive: true })
     maybeChownForDockerAgent(path.dirname(abs))
     await fs.writeFile(abs, buf)
@@ -633,19 +637,26 @@ export class WorkspaceService {
     return { path: relPath }
   }
 
+  /**
+   * 授权根内删除文件或目录。SF-thin-A：删除不再弹确认。
+   * `_confirm` 保留兼容，忽略。
+   */
   async deletePath(
     sessionId: string,
     rootId: string,
     relPath: string,
-    confirm?: ConfirmHandler,
+    _confirm?: ConfirmHandler,
   ): Promise<{ deleted: string }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertWritable(grant)
-    await this.requireConfirmation(sessionId, rootId, relPath, 'delete', confirm)
     await fs.rm(abs, { recursive: true, force: true })
     return { deleted: relPath }
   }
 
+  /**
+   * 流式下载到授权根。SF-thin-A：覆盖已有文件不再弹确认。
+   * `opts.confirm` 保留兼容，忽略。
+   */
   async downloadFile(
     sessionId: string,
     rootId: string,
@@ -661,14 +672,6 @@ export class WorkspaceService {
   ): Promise<{ path: string; bytes_written: number; content_type?: string }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertWritable(grant)
-    let exists = false
-    try {
-      await fs.access(abs)
-      exists = true
-    } catch { /* new */ }
-    if (exists) {
-      await this.requireConfirmation(sessionId, rootId, relPath, 'overwrite', opts?.confirm)
-    }
     const usageBefore = await this.quota.currentUsage()
     await this.quota.assertCanWrite(1)
     const result = await streamDownloadToFile({

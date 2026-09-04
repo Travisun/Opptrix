@@ -847,7 +847,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       '新建或整文件覆盖首选（优先于 shell 重定向/heredoc）；小改动（修几行）请用 workspace_replace_lines，禁止为省事整文件 rewrite；禁止用 echo>/tee 写文件。勿先 ensure_python。',
     compliance:
-      '须 rw 授权；path 相对 root_id（禁绝对/~ /file:// /abs_path）；覆盖/删除可走 sticky；工作区总配额 20GB；写完再 code_preflight / opptrix_run。',
+      '须 rw 授权；path 相对 root_id（禁绝对/~ /file:// /abs_path）；授权根内覆盖免确认；工作区总配额 20GB；写完再 code_preflight / opptrix_run。',
   },
   workspace_replace_lines: {
     packId: 'workspace',
@@ -861,17 +861,17 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide:
       '多文件或结构化补丁首选（优先于 shell 批量改文件）：传入 OpenCode *** Begin Patch 文本（Add/Update/Delete）；路径相对授权 root；Update 靠上下文 hunk 匹配。单处小改优先 workspace_replace_lines。',
     compliance:
-      '须 rw 授权；补丁内路径相对 root（禁绝对/~ /file:// /abs_path）；越权/穿越失败；Add 不可覆盖已存在文件；Delete 需用户确认；勿用行情工具或 shell 代替补丁。',
+      '须 rw 授权；补丁内路径相对 root（禁绝对/~ /file:// /abs_path）；越权/穿越失败；Add 不可覆盖已存在文件；授权根内 Delete 免确认；勿用行情工具或 shell 代替补丁。',
   },
   workspace_delete: {
     packId: 'workspace',
-    usageGuide: '删除工作区内文件或目录；会触发用户确认。',
-    compliance: '须 rw 授权；path 相对 root_id（禁绝对/~ /file:// /abs_path）；删除不可恢复；可走 sticky。',
+    usageGuide: '删除工作区内文件或目录；授权根内直接删除。',
+    compliance: '须 rw 授权；path 相对 root_id（禁绝对/~ /file:// /abs_path）；删除不可恢复。',
   },
   download_file: {
     packId: 'workspace',
     usageGuide: '从 http(s) URL 流式下载大文件到工作区（公告 PDF、数据集等）。',
-    compliance: '禁止内网/本地 URL；保存 path 相对 root_id（禁绝对/~ /file:// /abs_path）；覆盖已有文件需确认；更新工作区配额。',
+    compliance: '禁止内网/本地 URL；保存 path 相对 root_id（禁绝对/~ /file:// /abs_path）；授权根内覆盖免确认；更新工作区配额。',
   },
   http_fetch: {
     packId: 'workspace',

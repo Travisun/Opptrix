@@ -1,5 +1,6 @@
 export type {
   BrowserClickResult,
+  BrowserNavigateOpts,
   BrowserNavigateResult,
   BrowserScreenshotResult,
   BrowserSession,
@@ -9,7 +10,15 @@ export type {
   WaitUntil,
 } from './types.js'
 export { DEFAULT_TIMEOUTS } from './types.js'
-export { assertAllowedUrl, normalizeUrl, UrlPolicyError } from './url-policy.js'
+export {
+  assertAllowedUrl,
+  assertAllowedUrlAsync,
+  normalizeUrl,
+  normalizeUrlAsync,
+  UrlPolicyError,
+  type AssertAllowedUrlAsyncOpts,
+  type DnsLookupFn,
+} from './url-policy.js'
 export { normalizeRef, RefMap, RefNotFoundError } from './ref-map.js'
 export { truncateSnapshot } from './snapshot.js'
 export { createBrowserSessionManager, resetBrowserSessionManagerForTests } from './session-manager.js'

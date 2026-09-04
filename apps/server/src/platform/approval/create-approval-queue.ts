@@ -99,11 +99,18 @@ export function createApprovalQueue(): ApprovalQueue {
       return out
     },
 
-    resolve(id: string, decision: { approved: boolean; note?: string }): boolean {
+    resolve(
+      id: string,
+      decision: { approved: boolean; note?: string },
+      opts?: { sessionId?: string },
+    ): boolean {
       const key = String(id ?? '').trim()
       if (!key) return false
       const row = byId.get(key)
       if (!row || row.status !== 'pending') return false
+      const bindSession =
+        typeof opts?.sessionId === 'string' ? opts.sessionId.trim() : ''
+      if (bindSession && row.sessionId !== bindSession) return false
       row.status = 'resolved'
       row.decision = {
         approved: decision.approved === true,

@@ -8,6 +8,8 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
+const ENFORCE_ENV = 'OPPTRIX_PLATFORM_PACK_ENFORCE'
+
 /** Minimal no-op stubs for unused adapter methods. */
 function baseWorkspace(overrides = {}) {
   return {
@@ -37,23 +39,36 @@ describe('hands-port Wave 17A writeFile', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
+  /** @type {string | undefined} */
+  let prevEnforceEnv
+
   beforeEach(async () => {
+    prevEnforceEnv = process.env[ENFORCE_ENV]
+    // Hands tokens map to coding pack; isolate from SF1 packEnforce default ON.
+    process.env[ENFORCE_ENV] = '0'
     platform = await import(platformModUrl)
     platform.resetPlatformContextForTests()
+    // hands.* → coding pack; enable so packEnforce ON cannot deny invoke
+    platform.createPlatformContext().packs.enable('coding', true)
   })
 
   afterEach(() => {
     platform.resetPlatformContextForTests()
+    if (prevEnforceEnv === undefined) {
+      delete process.env[ENFORCE_ENV]
+    } else {
+      process.env[ENFORCE_ENV] = prevEnforceEnv
+    }
   })
 
   it('issue writeFile → invoke returns path/bytes via adapter', async () => {
-    /** @type {Array<{ sessionId: string, rootId: string, relPath: string, content: string, opts?: { confirmOverwrite?: boolean } }>} */
+    /** @type {Array<{ sessionId: string, rootId: string, relPath: string, content: string }>} */
     const calls = []
     const hands = platform.createHandsPort({
       gate: platform.createPlatformContext().gate,
       workspace: baseWorkspace({
-        async writeFile(sessionId, rootId, relPath, content, opts) {
-          calls.push({ sessionId, rootId, relPath, content, opts })
+        async writeFile(sessionId, rootId, relPath, content) {
+          calls.push({ sessionId, rootId, relPath, content })
           return { path: relPath, bytes: Buffer.byteLength(content, 'utf8') }
         },
       }),
@@ -80,7 +95,6 @@ describe('hands-port Wave 17A writeFile', () => {
     assert.equal(calls[0]?.rootId, 'default')
     assert.equal(calls[0]?.relPath, 'out/a.txt')
     assert.equal(calls[0]?.content, 'hello write')
-    assert.equal(calls[0]?.opts?.confirmOverwrite, false)
     const data = /** @type {{ path?: string, bytes?: number }} */ (obs.data)
     assert.equal(data.path, 'out/a.txt')
     assert.equal(data.bytes, Buffer.byteLength('hello write', 'utf8'))
@@ -126,17 +140,12 @@ describe('hands-port Wave 17A writeFile', () => {
     assert.match(bad.error, /unsupported hands token/)
   })
 
-  it('overwrite without confirmOverwrite → confirmation_required', async () => {
+  it('overwrite succeeds without confirmOverwrite (thin-A)', async () => {
     const hands = platform.createHandsPort({
       gate: platform.createPlatformContext().gate,
       workspace: baseWorkspace({
-        async writeFile(_sessionId, _rootId, _relPath, _content, opts) {
-          if (opts?.confirmOverwrite !== true) {
-            const err = new Error('需要用户确认')
-            err.name = 'ConfirmationRequiredError'
-            throw err
-          }
-          return { path: 'x.txt', bytes: 1 }
+        async writeFile(_sessionId, _rootId, relPath, content) {
+          return { path: relPath, bytes: Buffer.byteLength(content, 'utf8') }
         },
       }),
     })
@@ -153,24 +162,18 @@ describe('hands-port Wave 17A writeFile', () => {
     assert.equal(issued.ok, true)
     if (!issued.ok) throw new Error('expected issue ok')
     const obs = await hands.invoke(issued.ticket)
-    assert.equal(obs.ok, false)
-    assert.equal(obs.denialCode, 'confirmation_required')
-    assert.match(String(obs.error), /需要用户确认/)
+    assert.equal(obs.ok, true)
+    if (!obs.ok) throw new Error('expected invoke ok')
+    const data = /** @type {{ path?: string, bytes?: number }} */ (obs.data)
+    assert.equal(data.path, 'x.txt')
+    assert.equal(data.bytes, Buffer.byteLength('overwrite', 'utf8'))
   })
 
-  it('overwrite with confirmOverwrite true → ok', async () => {
-    /** @type {boolean | undefined} */
-    let seenConfirm
+  it('confirmOverwrite legacy arg ignored — still succeeds', async () => {
     const hands = platform.createHandsPort({
       gate: platform.createPlatformContext().gate,
       workspace: baseWorkspace({
-        async writeFile(_sessionId, _rootId, relPath, content, opts) {
-          seenConfirm = opts?.confirmOverwrite
-          if (opts?.confirmOverwrite !== true) {
-            const err = new Error('需要用户确认')
-            err.name = 'ConfirmationRequiredError'
-            throw err
-          }
+        async writeFile(_sessionId, _rootId, relPath, content) {
           return { path: relPath, bytes: Buffer.byteLength(content, 'utf8') }
         },
       }),
@@ -191,7 +194,6 @@ describe('hands-port Wave 17A writeFile', () => {
     const obs = await hands.invoke(issued.ticket)
     assert.equal(obs.ok, true)
     if (!obs.ok) throw new Error('expected invoke ok')
-    assert.equal(seenConfirm, true)
     const data = /** @type {{ path?: string, bytes?: number }} */ (obs.data)
     assert.equal(data.path, 'x.txt')
     assert.equal(data.bytes, 2)

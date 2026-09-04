@@ -109,20 +109,19 @@ test('quota rejects write when over limit', async () => {
   })
 })
 
-test('delete/overwrite without sticky requires confirm handler', async () => {
+test('delete/overwrite inside grant succeed without confirm (thin-A)', async () => {
   await withTmpDataDir(async (tmp) => {
     const svc = new WorkspaceService()
     const sessionId = 'confirm-test'
     await svc.ensureDefaultRoot(sessionId)
-    await svc.writeFile(sessionId, 'default', 'a.txt', 'hello', async () => ({
-      selected_ids: ['once'],
-    }))
-    await svc.writeFile(sessionId, 'default', 'a.txt', 'world', async () => ({
-      selected_ids: ['cancel'],
-    })).then(
-      () => assert.fail('should cancel'),
-      err => assert.match(String(err.message), /取消/),
-    )
+    await svc.writeFile(sessionId, 'default', 'a.txt', 'hello')
+    const overwritten = await svc.writeFile(sessionId, 'default', 'a.txt', 'world')
+    assert.equal(overwritten.path, 'a.txt')
+    assert.ok(overwritten.bytes > 0)
+    const read = await svc.readFile(sessionId, 'default', 'a.txt')
+    assert.equal(read.content, 'world')
+    const deleted = await svc.deletePath(sessionId, 'default', 'a.txt')
+    assert.equal(deleted.deleted, 'a.txt')
   })
 })
 

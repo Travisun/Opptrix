@@ -2,7 +2,6 @@ import {
   getEventDispatcher,
   resetEventDispatcherForTests,
 } from '@opptrix/event-bus'
-import { getWorkspaceService } from '@opptrix/agent-workspace'
 import { createAlertFacade } from './alerts/create-alert-facade.js'
 import { createApprovalQueue } from './approval/create-approval-queue.js'
 import { createCheckpointStore } from './checkpoint/create-checkpoint-store.js'
@@ -12,7 +11,10 @@ import { createHandsPort } from './hands/create-hands-port.js'
 import { createIngressRouter } from './ingress/create-ingress-router.js'
 import { createJobsFacade } from './jobs/create-jobs-facade.js'
 import { createMemoryFacade } from './memory/create-memory-facade.js'
-import { createPackRegistry } from './packs/create-pack-registry.js'
+import {
+  clearDomainPackPreferencesForTests,
+  createPackRegistry,
+} from './packs/create-pack-registry.js'
 import { createPlatformGate } from './gate/index.js'
 import {
   CHAT_ADMIT_RING_CAP,
@@ -26,14 +28,20 @@ import {
 
 let shared: PlatformContext | null = null
 
-/** Env `OPPTRIX_PLATFORM_PACK_ENFORCE=1|true|yes` enables domain-pack checks (default OFF). */
+/**
+ * Env `OPPTRIX_PLATFORM_PACK_ENFORCE` — domain-pack checks at the gate.
+ * Unset → ON (SF1 default). Explicit `0|false|no` → OFF. `1|true|yes` → ON.
+ */
 export function readPackEnforceFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   const raw = env.OPPTRIX_PLATFORM_PACK_ENFORCE
-  if (raw === undefined || raw === null) return false
+  if (raw === undefined || raw === null) return true
   const v = String(raw).trim().toLowerCase()
-  return v === '1' || v === 'true' || v === 'yes'
+  if (v === '0' || v === 'false' || v === 'no') return false
+  if (v === '1' || v === 'true' || v === 'yes') return true
+  // Unknown non-empty values: treat as ON (fail closed toward enforce).
+  return true
 }
 
 /**
@@ -65,43 +73,8 @@ export function createPlatformContext(): PlatformContext {
     maxSubmits,
   })
   const extensions = createExtensionManager({ events, gate })
-  const hands = createHandsPort({
-    gate,
-    workspace: {
-      listGrants: (sessionId) => getWorkspaceService().listGrants(sessionId),
-      listDir: (sessionId, rootId, relPath) =>
-        getWorkspaceService().listDir(sessionId, rootId, relPath),
-      readFile: (sessionId, rootId, relPath) =>
-        getWorkspaceService().readFile(sessionId, rootId, relPath),
-      writeFile: (sessionId, rootId, relPath, content, opts) => {
-        const confirm =
-          opts?.confirmOverwrite === true
-            ? async () => ({ selected_ids: ['once'] })
-            : undefined
-        return getWorkspaceService().writeFile(
-          sessionId,
-          rootId,
-          relPath,
-          content,
-          confirm,
-        )
-      },
-      mkdir: (sessionId, rootId, relPath) =>
-        getWorkspaceService().mkdir(sessionId, rootId, relPath),
-      deletePath: (sessionId, rootId, relPath, opts) => {
-        const confirm =
-          opts?.confirmDelete === true
-            ? async () => ({ selected_ids: ['once'] })
-            : undefined
-        return getWorkspaceService().deletePath(
-          sessionId,
-          rootId,
-          relPath,
-          confirm,
-        )
-      },
-    },
-  })
+  const hands = createHandsPort({ gate })
+  // SF-thin-A: Hands grant file overwrite/delete match WorkspaceService (no confirm wire).
   const jobs = createJobsFacade({ events })
   const ingress = createIngressRouter()
   const checkpoint = createCheckpointStore()
@@ -127,6 +100,9 @@ export function createPlatformContext(): PlatformContext {
     checkpointApply: null,
     bindCheckpointApply(hooks) {
       ctx.checkpointApply = hooks
+    },
+    bindHandsConfirmHandler(handler) {
+      hands.bindHandsConfirmHandler(handler)
     },
     approval,
     memory,
@@ -197,7 +173,7 @@ export function getPlatformContext(): PlatformContext {
   return shared
 }
 
-/** Tests only — clears platform + shared event dispatcher. */
+/** Tests only — clears platform + shared event dispatcher + pack prefs. */
 export function resetPlatformContextForTests(): void {
   const prev = shared
   shared = null
@@ -206,6 +182,7 @@ export function resetPlatformContextForTests(): void {
       // soft
     })
   }
+  clearDomainPackPreferencesForTests()
   resetBrowserDetectCacheForTests()
   resetEventDispatcherForTests()
 }

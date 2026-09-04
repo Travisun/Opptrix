@@ -104,6 +104,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
         sessionId: record.id,
         checkpointId: id,
         apply: true,
+        confirm: true,
       })
       assert.equal(result.ok, true)
       if (!result.ok) throw new Error('expected ok')
@@ -156,6 +157,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
       const result = platform.admitCheckpointRestore(ctx, {
         sessionId: record.id,
         apply: true,
+        confirm: true,
       })
       assert.equal(result.ok, true)
       if (!result.ok) throw new Error('expected ok')
@@ -171,6 +173,53 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
     })
   })
 
+  it('apply:true without confirm → confirm_required (no apply)', async () => {
+    await withTempStore(async () => {
+      const ctx = platform.createPlatformContext()
+      const store = new agentMod.SessionStore()
+      const record = store.create({ title: 'need-confirm' })
+      let applied = 0
+      ctx.bindCheckpointApply({
+        apply(input) {
+          applied += 1
+          return store.applyCheckpoint(input)
+        },
+      })
+      ctx.checkpoint.save(record.id, {
+        phase: 'user',
+        sessionId: record.id,
+        title: 'should-not-apply',
+        model: 'x:y',
+        messageCount: 0,
+        turnCount: 0,
+        at: '2026-01-01T00:00:00.000Z',
+      })
+
+      const missing = platform.admitCheckpointRestore(ctx, {
+        sessionId: record.id,
+        apply: true,
+      })
+      assert.equal(missing.ok, false)
+      if (missing.ok) throw new Error('expected fail')
+      assert.equal(missing.error, 'confirm_required')
+      assert.equal(applied, 0)
+
+      const falseConfirm = platform.admitCheckpointRestore(ctx, {
+        sessionId: record.id,
+        apply: true,
+        confirm: false,
+      })
+      assert.equal(falseConfirm.ok, false)
+      if (falseConfirm.ok) throw new Error('expected fail')
+      assert.equal(falseConfirm.error, 'confirm_required')
+      assert.equal(applied, 0)
+
+      const same = store.get(record.id)
+      assert.ok(same)
+      assert.equal(same.title, 'need-confirm')
+    })
+  })
+
   it('missing session / missing checkpoint / unwired hook handled', async () => {
     await withTempStore(async () => {
       const ctx = platform.createPlatformContext()
@@ -179,6 +228,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
       const unwired = platform.admitCheckpointRestore(ctx, {
         sessionId: 'any',
         apply: true,
+        confirm: true,
       })
       assert.equal(unwired.ok, false)
       if (unwired.ok) throw new Error('expected fail')
@@ -193,6 +243,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
       const noCp = platform.admitCheckpointRestore(ctx, {
         sessionId: 'never-saved',
         apply: true,
+        confirm: true,
       })
       assert.equal(noCp.ok, false)
       if (noCp.ok) throw new Error('expected fail')
@@ -209,6 +260,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
       const noSession = platform.admitCheckpointRestore(ctx, {
         sessionId: 'ghost-sess',
         apply: true,
+        confirm: true,
       })
       assert.equal(noSession.ok, false)
       if (noSession.ok) throw new Error('expected fail')
@@ -216,7 +268,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
     })
   })
 
-  it('C-CHECKPOINT-HARD-RESTORE + ABI 0.8.43-w58', async () => {
+  it('C-CHECKPOINT-HARD-RESTORE + ABI 0.8.52-thin-a', async () => {
     await withTempStore(async () => {
       const ctx = platform.createPlatformContext()
       const store = new agentMod.SessionStore()
@@ -238,12 +290,13 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
       const result = platform.admitCheckpointRestore(ctx, {
         sessionId: record.id,
         apply: true,
+        confirm: true,
       })
       assert.equal(result.ok, true)
       if (!result.ok) throw new Error('expected ok')
       assert.equal(result.applied, true)
-      assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-      assert.equal(ctx.abiVersion, '0.8.43-w58')
+      assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+      assert.equal(ctx.abiVersion, '0.8.52-thin-a')
     })
   })
 })

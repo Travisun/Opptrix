@@ -79,8 +79,11 @@ export {
 } from './gate/index.js'
 export {
   createPackRegistry,
+  clearDomainPackPreferencesForTests,
+  PLATFORM_DOMAIN_PACKS_PREF_KEY,
   admitPlatformPacks,
   setPlatformPackEnabled,
+  type DomainPackEnablement,
 } from './packs/index.js'
 export {
   createExtensionManager,
@@ -108,11 +111,15 @@ export {
 } from './extensions/index.js'
 export {
   createHandsPort,
+  createHandsConfirmHandler,
+  runWithHandsConfirmSession,
   admitPlatformHands,
   defaultBrowserDetect,
   defaultHandsBrowserAdapter,
   resetBrowserDetectCacheForTests,
   type CreateHandsPortOptions,
+  type CreateHandsConfirmHandlerDeps,
+  type HandsConfirmPushPayload,
   type HandsBrowserDetect,
 } from './hands/index.js'
 export {

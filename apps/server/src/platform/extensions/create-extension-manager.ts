@@ -39,12 +39,12 @@ const ACTIVATION_MODES = new Set<ExtensionActivationMode>([
 
 function stripMeta(rec: ExtensionRecord): Pick<
   ExtensionRecord,
-  'name' | 'version' | 'capabilities' | 'activation' | 'hostBound' | 'jsLoaded'
+  'name' | 'version' | 'capabilities' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
 > {
   const out: Pick<
     ExtensionRecord,
-    'name' | 'version' | 'capabilities' | 'activation' | 'hostBound' | 'jsLoaded'
-  > = {}
+    'name' | 'version' | 'capabilities' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
+  > = { trusted: rec.trusted === true }
   if (rec.name !== undefined) out.name = rec.name
   if (rec.version !== undefined) out.version = rec.version
   if (rec.capabilities !== undefined) out.capabilities = [...rec.capabilities]
@@ -152,6 +152,7 @@ export function createExtensionManager(
       id,
       state: 'error',
       error: message,
+      trusted: prev?.trusted === true,
       ...(prev ? stripMeta(prev) : {}),
     })
     emitBestEffort(SystemEvents.extension.crashed, { id, error: message })
@@ -233,13 +234,20 @@ export function createExtensionManager(
 
   function registerFromManifest(
     manifest: ExtensionManifest | Record<string, unknown>,
-    regOpts?: { entrySource?: string },
+    regOpts?: { trusted?: boolean; entrySource?: string },
   ): { ok: true } | { ok: false; error: string } {
     if (manifest == null || typeof manifest !== 'object') {
       return { ok: false, error: 'manifest required' }
     }
 
     const raw = manifest as Record<string, unknown>
+
+    // SF1: install-time trust only (opts.trusted or body field trusted === true).
+    const trusted =
+      regOpts?.trusted === true || raw.trusted === true
+    if (!trusted) {
+      return { ok: false, error: 'trust_required' }
+    }
 
     for (const pathKey of REJECTED_PATH_KEYS) {
       if (
@@ -262,7 +270,7 @@ export function createExtensionManager(
       return { ok: false, error: `extension already registered: ${key}` }
     }
 
-    const record: ExtensionRecord = { id: key, state: 'inactive' }
+    const record: ExtensionRecord = { id: key, state: 'inactive', trusted: true }
     if (typeof raw.name === 'string' && raw.name.trim()) {
       record.name = raw.name.trim()
     }
@@ -305,13 +313,15 @@ export function createExtensionManager(
       return [...records.values()].map((r) => ({ ...r }))
     },
 
-    register(id: string): { ok: true } | { ok: false; error: string } {
-      return registerFromManifest({ id })
+    register(id: string, regOpts?: { trusted?: boolean }): { ok: true } | { ok: false; error: string } {
+      return registerFromManifest({ id }, regOpts)
     },
 
     registerFromManifest,
 
-    async activate(id: string): Promise<{ ok: boolean; error?: string }> {
+    async activate(
+      id: string,
+    ): Promise<{ ok: boolean; error?: string; experimental?: true }> {
       const key = String(id ?? '').trim()
       if (!key) {
         return { ok: false, error: 'extension id required' }
@@ -346,6 +356,9 @@ export function createExtensionManager(
       }
 
       let jsLoaded = false
+      // C1–C3 / Selection A: worker_js is experimental and is NOT the system-extension model.
+      // Product path for system .opx: in-process Host contribution points (routes/pages/hooks);
+      // Gateway→Gate. Trust Gate + install claim; worker_threads vm ≠ process isolation.
       if (mode === 'worker_js') {
         const source = entrySources.get(key)
         if (!source) {
@@ -377,6 +390,10 @@ export function createExtensionManager(
       }
       records.set(key, next)
       emitBestEffort(SystemEvents.extension.activated, { id: key })
+      // Soft warning only — do not disable worker_js.
+      if (mode === 'worker_js') {
+        return { ok: true, experimental: true }
+      }
       return { ok: true }
     },
 

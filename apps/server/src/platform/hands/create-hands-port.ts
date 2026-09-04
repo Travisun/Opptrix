@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto'
 import type { CapabilityGate } from '@opptrix/agent'
 import {
   ConfirmationRequiredError,
+  getSandboxSettings,
   getWorkspaceService,
+  type ConfirmHandler,
 } from '@opptrix/agent-workspace'
-import { normalizeUrl } from '@opptrix/agent-browser'
+import { assertAllowedUrlAsync } from '@opptrix/agent-browser'
 import { defaultHandsBrowserAdapter } from './browser-adapter.js'
 import {
   defaultBrowserDetect,
@@ -51,6 +53,11 @@ export type CreateHandsPortOptions = {
   gate: CapabilityGate
   /** When omitted, binds to process `getWorkspaceService()`. */
   workspace?: HandsWorkspaceAdapter
+  /**
+   * @deprecated SF-thin-A: grant file overwrite/delete no longer use Hands confirm.
+   * Kept for call-site compat; ignored.
+   */
+  confirmHandler?: ConfirmHandler
   /**
    * Wave 54A: optional browser package probe (injected in tests).
    * Default: import `@opptrix/agent-browser` + factory check — never launches.
@@ -113,11 +120,30 @@ function isConfirmationRequired(err: unknown): boolean {
   return err instanceof Error && err.name === 'ConfirmationRequiredError'
 }
 
-/** Auto-allow once when ticket args request confirm — no UI hang. */
-const AUTO_ONCE_CONFIRM = async (): Promise<{ selected_ids: string[] }> => ({
-  selected_ids: ['once'],
-})
+/**
+ * @deprecated SF-thin-A: grant file ops no longer throw this from HandsPort.
+ * Kept for denial mapping / legacy callers.
+ */
+export class HandsConfirmRequiredError extends Error {
+  readonly denialCode = 'confirm_required'
 
+  constructor(message = 'confirm handler not bound') {
+    super(message)
+    this.name = 'HandsConfirmRequiredError'
+  }
+}
+
+export function isHandsConfirmRequired(err: unknown): err is HandsConfirmRequiredError {
+  if (err instanceof HandsConfirmRequiredError) return true
+  if (!(err instanceof Error) || err.name !== 'HandsConfirmRequiredError') return false
+  const code = (err as unknown as { denialCode?: unknown }).denialCode
+  return code === 'confirm_required'
+}
+
+/**
+ * Default workspace adapter — same policy as WorkspaceService (SF-thin-A):
+ * grant 内 write/delete 直接落盘；`confirmOverwrite` / `confirmDelete` 为 legacy no-op。
+ */
 function defaultWorkspace(): HandsWorkspaceAdapter {
   return {
     listGrants(sessionId) {
@@ -129,29 +155,16 @@ function defaultWorkspace(): HandsWorkspaceAdapter {
     readFile(sessionId, rootId, relPath) {
       return getWorkspaceService().readFile(sessionId, rootId, relPath)
     },
-    writeFile(sessionId, rootId, relPath, content, opts) {
-      const confirm =
-        opts?.confirmOverwrite === true ? AUTO_ONCE_CONFIRM : undefined
-      return getWorkspaceService().writeFile(
-        sessionId,
-        rootId,
-        relPath,
-        content,
-        confirm,
-      )
+    writeFile(sessionId, rootId, relPath, content, _opts) {
+      // legacy: confirmOverwrite ignored (SF-thin-A)
+      return getWorkspaceService().writeFile(sessionId, rootId, relPath, content)
     },
     mkdir(sessionId, rootId, relPath) {
       return getWorkspaceService().mkdir(sessionId, rootId, relPath)
     },
-    deletePath(sessionId, rootId, relPath, opts) {
-      const confirm =
-        opts?.confirmDelete === true ? AUTO_ONCE_CONFIRM : undefined
-      return getWorkspaceService().deletePath(
-        sessionId,
-        rootId,
-        relPath,
-        confirm,
-      )
+    deletePath(sessionId, rootId, relPath, _opts) {
+      // legacy: confirmDelete ignored (SF-thin-A)
+      return getWorkspaceService().deletePath(sessionId, rootId, relPath)
     },
   }
 }
@@ -183,7 +196,8 @@ function serializePlainObject(result: unknown): unknown {
  * Free-form shell (run/command/…) and browser click/type/screenshot/goto
  * tokens stay hard-denied at issue.
  * Workspace failures throw from exec → Gate rethrows → invoke returns ok:false.
- * ConfirmationRequiredError → denialCode confirmation_required (no UI hang).
+ * ConfirmationRequiredError → denialCode confirmation_required (legacy / non-file paths).
+ * HandsConfirmRequiredError → denialCode confirm_required (deprecated SF2 path).
  * HandsShellDenialError → denialCode (e.g. unsupported_platform on win32).
  */
 export function createHandsPort(opts: CreateHandsPortOptions): HandsPort {
@@ -219,12 +233,13 @@ export function createHandsPort(opts: CreateHandsPortOptions): HandsPort {
       return await probeBrowser()
     }
 
-    // Wave 57A: real navigate via HandsBrowserAdapter (UrlPolicy pre-check).
+    // Wave 57A / SF3: navigate via HandsBrowserAdapter (async UrlPolicy + DNS SSRF).
     if (token === 'hands.browser.navigate') {
       const url = requireArgString(args, 'url')
-      const normalized = normalizeUrl(url)
+      const allowLan = getSandboxSettings().allow_lan_access === true
+      const parsed = await assertAllowedUrlAsync(url, { allowLan })
       const waitUntil = parseWaitUntil(args.waitUntil)
-      return await browser.navigate(normalized, waitUntil)
+      return await browser.navigate(parsed.href, waitUntil, { allowLan })
     }
 
     if (token === 'hands.workspace.listGrants') {
@@ -253,10 +268,9 @@ export function createHandsPort(opts: CreateHandsPortOptions): HandsPort {
       const rootId = requireArgString(args, 'rootId')
       const relPath = requireArgString(args, 'relPath')
       const content = requireArgContent(args)
-      const confirmOverwrite = args.confirmOverwrite === true
-      const result = await workspace.writeFile(sessionId, rootId, relPath, content, {
-        confirmOverwrite,
-      })
+      // SF-thin-A: confirmOverwrite legacy no-op — do not gate on it
+      void args.confirmOverwrite
+      const result = await workspace.writeFile(sessionId, rootId, relPath, content)
       return serializePlainObject(result)
     }
 
@@ -272,10 +286,9 @@ export function createHandsPort(opts: CreateHandsPortOptions): HandsPort {
       const sessionId = requireArgString(args, 'sessionId')
       const rootId = requireArgString(args, 'rootId')
       const relPath = requireArgString(args, 'relPath')
-      const confirmDelete = args.confirmDelete === true
-      const result = await workspace.deletePath(sessionId, rootId, relPath, {
-        confirmDelete,
-      })
+      // SF-thin-A: confirmDelete legacy no-op — do not gate on it
+      void args.confirmDelete
+      const result = await workspace.deletePath(sessionId, rootId, relPath)
       return serializePlainObject(result)
     }
 
@@ -368,6 +381,13 @@ export function createHandsPort(opts: CreateHandsPortOptions): HandsPort {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
+        if (isHandsConfirmRequired(err)) {
+          return {
+            ok: false,
+            denialCode: err.denialCode,
+            error: message,
+          }
+        }
         if (isConfirmationRequired(err)) {
           return {
             ok: false,
@@ -388,6 +408,14 @@ export function createHandsPort(opts: CreateHandsPortOptions): HandsPort {
 
     pendingCount() {
       return tickets.size
+    },
+
+    /**
+     * SF-thin-A: grant file ops no longer use Hands confirm — dead no-op.
+     * Kept so PlatformContext / index call sites compile without ask_user pushes.
+     */
+    bindHandsConfirmHandler(_handler: ConfirmHandler | null) {
+      /* no-op */
     },
   }
 }

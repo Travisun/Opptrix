@@ -55,11 +55,15 @@ function packDescription(pack: PlatformPackInfo, packEnforce: boolean): string {
     case 'research':
       return packEnforce
         ? '行情、资讯、财报与组合等投研相关能力。关闭后，投研相关工具可能受限'
-        : '行情、资讯、财报与组合等投研相关能力'
+        : '行情、资讯、财报与组合等投研相关能力（当前服务未开启能力限制，开关仅预置）'
     case 'coding':
-      return '编写与运行代码、处理本地文件等编程相关能力'
+      return packEnforce
+        ? '编写与运行代码、处理本地文件等编程相关能力'
+        : '编写与运行代码、处理本地文件等编程相关能力（当前服务未开启能力限制，开关仅预置）'
     default:
-      return '扩展工作台可用能力范围'
+      return packEnforce
+        ? '扩展工作台可用能力范围'
+        : '扩展工作台可用能力范围（当前服务未开启能力限制，开关仅预置）'
   }
 }
 
@@ -69,7 +73,7 @@ export default function CapabilityPacksSettingsSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [packs, setPacks] = useState<PlatformPackInfo[]>([])
-  const [packEnforce, setPackEnforce] = useState(false)
+  const [packEnforce, setPackEnforce] = useState(true)
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
@@ -100,6 +104,10 @@ export default function CapabilityPacksSettingsSection() {
       const result = await setPlatformPackEnabled(pack.id, next)
       if (result.packs.length > 0) {
         setPacks(result.packs)
+      }
+      // Soft preference write fail: server kept in-memory enable — keep UI toggle.
+      if (!result.ok) {
+        toast.showError('能力包状态已更新，但可能无法长期保存。重启后请再确认一次')
       }
     } catch {
       setPacks((list) => list.map((p) => (p.id === pack.id ? { ...p, enabled: prevEnabled } : p)))
@@ -148,8 +156,8 @@ export default function CapabilityPacksSettingsSection() {
     <div className={s.root}>
       <Text className={s.hint} block>
         {packEnforce
-          ? '能力包决定工作台可使用的能力范围。可按需开启或关闭；关闭投研能力包后，投研相关工具可能受限。'
-          : '能力包决定工作台可使用的能力范围。可按需开启或关闭。'}
+          ? '能力限制默认开启：下方开关会实际限制可用能力。投研能力包默认可用；关闭后，投研相关工具可能受限。'
+          : '能力限制当前已关闭（服务环境显式关闭）。下方开关可改预置状态，但关闭能力包不会拦截功能。'}
       </Text>
 
       <div>
@@ -160,7 +168,7 @@ export default function CapabilityPacksSettingsSection() {
             desc={
               packEnforce
                 ? '未启用的能力包对应功能将不可用'
-                : '当前不会因能力包关闭而拦截功能'
+                : '当前不会因能力包关闭而拦截功能；通常能力限制为开启，当前由服务配置关闭'
             }
             last
           />

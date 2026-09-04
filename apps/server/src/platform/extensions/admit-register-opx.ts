@@ -6,11 +6,15 @@ import { parseOpxManifestFromZip } from './parse-opx-manifest-from-zip.js'
  * Diagnostic: Ingress admit → parse .opx zip manifest → registerFromManifest.
  * Wave 58A: may store extracted entry source in memory for worker_js; never
  * eval/require extension code in the server process.
+ * C3 / Selection A: system-extension product path is in-process Host contributions
+ * (routes/pages/hooks → Gateway→Gate). `worker_js` remains experimental script
+ * activation — not the model for system UI/HTTP plugins; no process isolation.
+ * SF1: requires install-time `trusted: true` in opts (or body field forwarded by HTTP).
  */
 export function admitRegisterOpx(
   platform: Pick<PlatformContext, 'ingress' | 'extensions' | 'info'>,
   buffer: Uint8Array | Buffer,
-  opts?: { origin?: string },
+  opts?: { origin?: string; trusted?: boolean },
 ):
   | {
       ok: true
@@ -41,6 +45,7 @@ export function admitRegisterOpx(
   }
 
   const registered = platform.extensions.registerFromManifest(parsed.manifest, {
+    trusted: opts?.trusted === true,
     ...(parsed.entrySource !== undefined
       ? { entrySource: parsed.entrySource }
       : {}),

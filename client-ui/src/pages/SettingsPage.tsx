@@ -22,6 +22,7 @@ import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
 import DocLibrarySettingsSection from './settings/DocLibrarySettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import CapabilityPacksSettingsSection from './settings/CapabilityPacksSettingsSection'
+import PlatformMeterSettingsSection from './settings/PlatformMeterSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
@@ -793,7 +794,16 @@ function SettingsPageView({
         return <SandboxSettingsSection />
 
       case 'capability_packs':
-        return <CapabilityPacksSettingsSection />
+        return (
+          <>
+            <div className={s.sectionBlock}>
+              <CapabilityPacksSettingsSection />
+            </div>
+            <div className={s.sectionBlock}>
+              <PlatformMeterSettingsSection />
+            </div>
+          </>
+        )
 
       case 'schedule':
         return <ScheduleSettingsSection />

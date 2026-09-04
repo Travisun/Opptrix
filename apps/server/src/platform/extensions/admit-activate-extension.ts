@@ -9,6 +9,7 @@ import type { PlatformContext } from '../types.js'
  * Proves Ingress ⊥ Inference (no chat / no gate submit).
  * Wave 55A: surfaces activation / hostBound when present on the record.
  * Wave 58A: worker_js loads entry source inside the host worker vm only.
+ * C3: worker_js activate returns soft `experimental: true` (not disabled).
  */
 export async function admitActivateExtension(
   platform: Pick<PlatformContext, 'ingress' | 'extensions' | 'info'>,
@@ -27,6 +28,8 @@ export async function admitActivateExtension(
       hostBound?: boolean
       /** Present when worker_js successfully loaded entry source into the worker vm. */
       jsLoaded?: boolean
+      /** Soft trust warning: worker_js is experimental (system UI/HTTP plugins are in-process). */
+      experimental?: true
     }
   | { ok: false; error: string }
 > {
@@ -75,5 +78,6 @@ export async function admitActivateExtension(
     ...(extension.jsLoaded !== undefined
       ? { jsLoaded: extension.jsLoaded }
       : {}),
+    ...(activated.experimental === true ? { experimental: true as const } : {}),
   }
 }

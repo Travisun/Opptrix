@@ -37,7 +37,7 @@ describe('extension deactivate (Wave 40A)', () => {
       name: 'Wave40 Demo',
       version: '1.0.0',
       capabilities: ['quotes'],
-    })
+    }, { trusted: true })
     assert.equal(reg.ok, true)
 
     const act = await platform.admitActivateExtension(ctx, 'ext-w40')
@@ -78,10 +78,10 @@ describe('extension deactivate (Wave 40A)', () => {
     assert.equal(ctx.info().extensionsActive, 0)
   })
 
-  it('C-EXT-DEACTIVATE + ABI 0.8.43-w58', async () => {
+  it('C-EXT-DEACTIVATE + ABI 0.8.52-thin-a', async () => {
     const ctx = platform.createPlatformContext()
     assert.equal(
-      ctx.extensions.registerFromManifest({ id: 'c-ext-deact' }).ok,
+      ctx.extensions.registerFromManifest({ id: 'c-ext-deact' }, { trusted: true }).ok,
       true,
     )
     const act = await platform.admitActivateExtension(ctx, 'c-ext-deact')
@@ -91,8 +91,8 @@ describe('extension deactivate (Wave 40A)', () => {
     if (!deact.ok) throw new Error('expected ok')
     assert.equal(deact.extension.state, 'inactive')
     assert.equal(deact.extensionsActive, 0)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 
   it('deactivate path has no eval/import/readFile of extension code', () => {

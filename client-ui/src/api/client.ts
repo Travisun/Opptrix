@@ -3625,19 +3625,157 @@ export async function fetchPlatformPacks(): Promise<PlatformPacksResult> {
 export async function setPlatformPackEnabled(
   id: string,
   enabled: boolean,
-): Promise<{ ok: true; packs: PlatformPackInfo[] }> {
+): Promise<
+  | { ok: true; packs: PlatformPackInfo[]; persisted: true }
+  | { ok: false; packs: PlatformPackInfo[]; persisted: false; error?: string }
+> {
   const json = await jsonFetch<{
     ok?: boolean
     packs?: PlatformPackInfo[]
+    persisted?: boolean
     error?: string
   }>(`/platform/packs/${encodeURIComponent(id)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
   })
+  const packs = Array.isArray(json.packs) ? json.packs : []
+  if (json.ok === true && json.persisted !== false) {
+    return { ok: true, packs, persisted: true }
+  }
+  // Soft preference write failure (HTTP 200 + ok:false) — memory applied server-side.
   return {
-    ok: true,
+    ok: false,
+    packs,
+    persisted: false,
+    error: typeof json.error === 'string' ? json.error : undefined,
+  }
+}
+
+// ─── Platform info / meter (read-only settings) ───
+
+export type PlatformMeterSnapshot = {
+  submitCount: number
+  errorCount: number
+  denyCount: number
+  maxSubmits: number | null
+  recentCount: number
+  recentDenials: number
+  tokenInTotal: number
+  tokenOutTotal: number
+}
+
+export type PlatformInfoResult = {
+  abiVersion: string
+  meter: PlatformMeterSnapshot
+  packEnforce: boolean
+  packs: PlatformPackInfo[]
+  traceId?: string
+  origin?: string
+}
+
+export type PlatformMeterDenial = {
+  at: string
+  denialCode: string
+  token?: string
+}
+
+export type PlatformMeterDenialsResult = {
+  denials: PlatformMeterDenial[]
+  recentDenialCount: number
+  denyCount: number
+  submitCount: number
+  errorCount: number
+  traceId?: string
+  origin?: string
+}
+
+function parseMeterSnapshot(raw: unknown): PlatformMeterSnapshot {
+  const empty: PlatformMeterSnapshot = {
+    submitCount: 0,
+    errorCount: 0,
+    denyCount: 0,
+    maxSubmits: null,
+    recentCount: 0,
+    recentDenials: 0,
+    tokenInTotal: 0,
+    tokenOutTotal: 0,
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return empty
+  const m = raw as Record<string, unknown>
+  const num = (v: unknown): number =>
+    typeof v === 'number' && Number.isFinite(v) ? v : 0
+  return {
+    submitCount: num(m.submitCount),
+    errorCount: num(m.errorCount),
+    denyCount: num(m.denyCount),
+    maxSubmits:
+      typeof m.maxSubmits === 'number' && Number.isFinite(m.maxSubmits)
+        ? m.maxSubmits
+        : null,
+    recentCount: num(m.recentCount),
+    recentDenials: num(m.recentDenials),
+    tokenInTotal: num(m.tokenInTotal),
+    tokenOutTotal: num(m.tokenOutTotal),
+  }
+}
+
+function parseMeterDenial(raw: unknown): PlatformMeterDenial | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const row = raw as Record<string, unknown>
+  const denialCode = typeof row.denialCode === 'string' ? row.denialCode.trim() : ''
+  if (!denialCode) return null
+  const at = typeof row.at === 'string' ? row.at : ''
+  const token = typeof row.token === 'string' ? row.token : undefined
+  return { at, denialCode, token }
+}
+
+/** Platform kernel snapshot (meter counters + packs). Fail-open callers should catch. */
+export async function fetchPlatformInfo(): Promise<PlatformInfoResult> {
+  const json = await jsonFetch<{
+    abiVersion?: string
+    meter?: unknown
+    packEnforce?: boolean
+    packs?: PlatformPackInfo[]
+    traceId?: string
+    origin?: string
+    error?: string
+  }>('/platform/info')
+  return {
+    abiVersion: typeof json.abiVersion === 'string' ? json.abiVersion : '',
+    meter: parseMeterSnapshot(json.meter),
+    packEnforce: json.packEnforce === true,
     packs: Array.isArray(json.packs) ? json.packs : [],
+    traceId: typeof json.traceId === 'string' ? json.traceId : undefined,
+    origin: typeof json.origin === 'string' ? json.origin : undefined,
+  }
+}
+
+/** Recent clean gate denials + counters. Fail-open callers should catch. */
+export async function fetchPlatformMeterDenials(): Promise<PlatformMeterDenialsResult> {
+  const json = await jsonFetch<{
+    denials?: unknown
+    recentDenialCount?: number
+    denyCount?: number
+    submitCount?: number
+    errorCount?: number
+    traceId?: string
+    origin?: string
+    error?: string
+  }>('/platform/meter/denials')
+  const denials = Array.isArray(json.denials)
+    ? json.denials.map(parseMeterDenial).filter((d): d is PlatformMeterDenial => d != null)
+    : []
+  const num = (v: unknown): number =>
+    typeof v === 'number' && Number.isFinite(v) ? v : 0
+  return {
+    denials,
+    recentDenialCount: num(json.recentDenialCount),
+    denyCount: num(json.denyCount),
+    submitCount: num(json.submitCount),
+    errorCount: num(json.errorCount),
+    traceId: typeof json.traceId === 'string' ? json.traceId : undefined,
+    origin: typeof json.origin === 'string' ? json.origin : undefined,
   }
 }
 

@@ -47,9 +47,9 @@ describe('admitPlatformJobs helper (Wave 26A)', () => {
     assert.equal(result.jobsListed, ctx.info().jobsListed)
   })
 
-  it('ABI is 0.8.43-w58', () => {
+  it('ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

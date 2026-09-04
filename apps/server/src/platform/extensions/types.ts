@@ -48,6 +48,11 @@ export type ExtensionRecord = {
   hostBound?: boolean
   /** True after worker_js successfully loaded entry source into the host worker vm. */
   jsLoaded?: boolean
+  /**
+   * Install-time trust (SF1). Set `true` only when register/register-opx accepted
+   * `trusted: true`. Activate/run do not re-ask trust.
+   */
+  trusted: boolean
 }
 
 export type ExtensionGatewayAction = {
@@ -84,19 +89,28 @@ export type ExtensionHostFacade = {
 
 export type ExtensionManager = {
   list(): ExtensionRecord[]
-  /** Register an inactive catalog entry; duplicate / empty → ok:false. */
-  register(id: string): { ok: true } | { ok: false; error: string }
+  /** Register an inactive catalog entry; duplicate / empty → ok:false. Requires install-time trust. */
+  register(
+    id: string,
+    opts?: { trusted?: boolean },
+  ): { ok: true } | { ok: false; error: string }
   /**
    * Manifest-only register: metadata → inactive catalog entry.
+   * Requires install-time `trusted: true` (opts or body field); else `trust_required`.
    * Rejects host file-path fields (`sourcePath` / `path` / …).
    * Wave 58A: optional `entrySource` (already extracted from .opx zip) is stored
    * in-memory for worker_js activate — never eval'd/require'd in this process.
    */
   registerFromManifest(
     manifest: ExtensionManifest | Record<string, unknown>,
-    opts?: { entrySource?: string },
+    opts?: { trusted?: boolean; entrySource?: string },
   ): { ok: true } | { ok: false; error: string }
-  activate(id: string): Promise<{ ok: boolean; error?: string }>
+  /**
+   * Activate a registered extension.
+   * `experimental: true` soft warning when mode is `worker_js` (not the product
+   * system-extension path — in-process Host contribution points are).
+   */
+  activate(id: string): Promise<{ ok: boolean; error?: string; experimental?: true }>
   deactivate(id: string): Promise<{ ok: boolean }>
   /** R0: never throws; failures become disabled+error */
   bootScan(): Promise<void>

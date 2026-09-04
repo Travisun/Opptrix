@@ -66,9 +66,30 @@ describe('admitPlatformPacks helper (Wave 22A)', () => {
     assert.equal(ctx.packs.isEnabled('research'), true)
   })
 
-  it('ABI is 0.8.43-w58', () => {
+  it('ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+  })
+
+  it('C4: pack enablement persists across createPackRegistry via preference', () => {
+    platform.clearDomainPackPreferencesForTests()
+    const first = platform.createPackRegistry()
+    assert.equal(first.isEnabled('coding'), false)
+    first.enable('coding', true)
+    assert.equal(first.isEnabled('coding'), true)
+
+    const second = platform.createPackRegistry()
+    assert.equal(second.isEnabled('coding'), true)
+    assert.equal(second.isEnabled('research'), true)
+
+    second.enable('coding', false)
+    const third = platform.createPackRegistry()
+    assert.equal(third.isEnabled('coding'), false)
+
+    platform.clearDomainPackPreferencesForTests()
+    const fresh = platform.createPackRegistry()
+    assert.equal(fresh.isEnabled('coding'), false)
+    assert.equal(fresh.isEnabled('research'), true)
   })
 })

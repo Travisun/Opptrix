@@ -13,6 +13,7 @@ import type { ResearchHub } from '@opptrix/research-hub'
 import type { ToolRegistry } from './tools.js'
 import {
   createPassthroughGate,
+  toolResultFromGateObservation,
   type CapabilityGate,
 } from './capability-gate.js'
 import { McpToolBroker } from './mcp/broker.js'
@@ -929,7 +930,7 @@ export class DiscoverRunner {
                 },
                 () => broker.call(toolName, args, { signal }),
               )
-              result = obs.data
+              result = toolResultFromGateObservation(obs)
             } catch (e) {
               result = { error: e instanceof Error ? e.message : String(e) }
             }

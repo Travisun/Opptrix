@@ -58,14 +58,14 @@ describe('platform meter soft usage (Wave 47A)', () => {
     assert.equal(ctx.meter.snapshot().tokenOutTotal, cap)
   })
 
-  it('C-METER-USAGE + ABI 0.8.43-w58', () => {
+  it('C-METER-USAGE + ABI 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
     ctx.meter.recordUsage({ tokenIn: 3, tokenOut: 7 })
     assert.equal(ctx.meter.snapshot().tokenInTotal, 3)
     assert.equal(ctx.meter.snapshot().tokenOutTotal, 7)
     assert.equal(ctx.info().meter.tokenInTotal, 3)
     assert.equal(ctx.info().meter.tokenOutTotal, 7)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

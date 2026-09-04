@@ -38,7 +38,7 @@ describe('admitPlatformExtensions helper (Wave 35A)', () => {
 
   it('register inactive → list includes record; active count stays 0', () => {
     const ctx = platform.createPlatformContext()
-    const reg = ctx.extensions.register('ext-w35')
+    const reg = ctx.extensions.register('ext-w35', { trusted: true })
     assert.equal(reg.ok, true)
 
     const result = platform.admitPlatformExtensions(ctx)
@@ -53,7 +53,7 @@ describe('admitPlatformExtensions helper (Wave 35A)', () => {
 
   it('activate → extensionsActive matches info(); custom origin', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.register('ext-active').ok, true)
+    assert.equal(ctx.extensions.register('ext-active', { trusted: true }).ok, true)
     const act = await ctx.extensions.activate('ext-active')
     assert.equal(act.ok, true)
 
@@ -68,9 +68,9 @@ describe('admitPlatformExtensions helper (Wave 35A)', () => {
     assert.equal(result.extensions.find((r) => r.id === 'ext-active')?.state, 'active')
   })
 
-  it('ABI is 0.8.43-w58', () => {
+  it('ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

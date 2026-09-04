@@ -35,16 +35,36 @@ export function admitPlatformPacks(
 /**
  * Enable/disable a domain pack in the registry only.
  * Does not flip env `OPPTRIX_PLATFORM_PACK_ENFORCE`.
+ *
+ * In-memory enablement is always applied for known ids. Preference write is soft:
+ * on failure returns `ok: false` with `persisted: false` and current packs —
+ * memory is not cleared.
  */
 export function setPlatformPackEnabled(
   platform: Pick<PlatformContext, 'packs'>,
   id: string,
   enabled: boolean,
-): { ok: true } | { ok: false; error: string } {
+):
+  | { ok: true; packs: PackInfo[]; persisted: true }
+  | { ok: false; error: string; packs: PackInfo[]; persisted: false } {
   const packId = id as DomainPackId
   if (!platform.packs.supports(packId)) {
-    return { ok: false, error: `unsupported pack id: ${id}` }
+    return {
+      ok: false,
+      error: `unsupported pack id: ${id}`,
+      packs: platform.packs.list(),
+      persisted: false,
+    }
   }
-  platform.packs.enable(packId, enabled)
-  return { ok: true }
+  const save = platform.packs.enable(packId, enabled)
+  const packs = platform.packs.list()
+  if (!save.persisted) {
+    return {
+      ok: false,
+      error: save.error ?? 'preference write failed',
+      packs,
+      persisted: false,
+    }
+  }
+  return { ok: true, packs, persisted: true }
 }

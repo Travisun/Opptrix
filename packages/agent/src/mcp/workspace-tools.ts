@@ -506,7 +506,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'workspace_write',
       category: '工作区',
-      description: '新建/覆盖文本首选（优先于 shell 重定向/heredoc）；覆盖前需用户确认（可设 sticky）；小改动请用 workspace_replace_lines',
+      description: '新建/覆盖文本首选（优先于 shell 重定向/heredoc）；授权根内覆盖无需再确认；小改动请用 workspace_replace_lines',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id' },
         path: { type: 'string', description: PATH_REL_PARAM_DESC },
@@ -642,7 +642,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'workspace_delete',
       category: '工作区',
-      description: '删除授权工作区内的文件或目录；删除前需用户确认（可设 sticky）',
+      description: '删除授权工作区内的文件或目录；授权根内删除无需再确认（护内核靠沙盒边界）',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id' },
         path: { type: 'string', description: PATH_REL_PARAM_DESC },
@@ -665,7 +665,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'download_file',
       category: '工作区',
-      description: '从 http(s) URL 流式下载大文件到授权工作区；覆盖已有文件需确认',
+      description: '从 http(s) URL 流式下载大文件到授权工作区；授权根内覆盖已有文件无需再确认',
       parameters: S({
         url: { type: 'string', description: 'http 或 https URL' },
         root_id: { type: 'string', description: '目标工作区 root_id' },

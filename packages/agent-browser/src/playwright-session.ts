@@ -6,10 +6,11 @@ import { configurePlaywrightBrowsersPath, ensureChromiumAvailable } from './chro
 import { RefMap, RefNotFoundError, normalizeRef } from './ref-map.js'
 import { resolveScreenshotDir } from './screenshot-prune.js'
 import { truncateSnapshot } from './snapshot.js'
-import { normalizeUrl, UrlPolicyError } from './url-policy.js'
+import { assertAllowedUrlAsync, UrlPolicyError } from './url-policy.js'
 import {
   DEFAULT_TIMEOUTS,
   type BrowserClickResult,
+  type BrowserNavigateOpts,
   type BrowserNavigateResult,
   type BrowserScreenshotResult,
   type BrowserSession,
@@ -50,11 +51,17 @@ export class PlaywrightBrowserSession implements BrowserSession {
     private readonly dispose: () => Promise<void>,
   ) {}
 
-  async navigate(url: string, waitUntil: WaitUntil = 'domcontentloaded'): Promise<BrowserNavigateResult> {
+  async navigate(
+    url: string,
+    waitUntil: WaitUntil = 'domcontentloaded',
+    opts?: BrowserNavigateOpts,
+  ): Promise<BrowserNavigateResult> {
     try {
-      const normalized = normalizeUrl(url)
+      const parsed = await assertAllowedUrlAsync(url, {
+        allowLan: opts?.allowLan === true,
+      })
       this.refMap.clear()
-      const response = await this.page.goto(normalized, {
+      const response = await this.page.goto(parsed.href, {
         waitUntil,
         timeout: DEFAULT_TIMEOUTS.navigation,
       })

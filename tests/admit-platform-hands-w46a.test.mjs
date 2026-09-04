@@ -52,7 +52,7 @@ describe('admitPlatformHands helper (Wave 46A)', () => {
     assert.equal('token' in result, false)
   })
 
-  it('custom origin; C-HANDS-DIAG + ABI 0.8.43-w58', () => {
+  it('custom origin; C-HANDS-DIAG + ABI 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
     const issued = ctx.hands.issue({ token: 'hands.ping' })
     assert.equal(issued.ok, true)
@@ -65,7 +65,7 @@ describe('admitPlatformHands helper (Wave 46A)', () => {
     assert.equal(result.origin, 'cli.diagnostic')
     assert.equal(result.pendingCount, 1)
     assert.equal(result.handsTicketsPending, ctx.info().handsTicketsPending)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

@@ -2,9 +2,11 @@ import type { PlatformContext } from '../types.js'
 import type { ApprovalRequest } from './types.js'
 
 /**
- * Readonly diagnostic: Ingress admit → approval.list() + approvalsPending.
+ * Readonly diagnostic: Ingress admit → approval.list(sessionId) + approvalsPending.
  * Proves Ingress ⊥ Inference (no chat / no gate submit / no resolve/cancel).
- * Optional sessionId is forwarded to admit and used as list() filter when set.
+ *
+ * C1 choice: sessionId is **required**. Without it → ok:false `sessionId required`
+ * (no global pending dump).
  */
 export function admitPlatformApprovals(
   platform: Pick<PlatformContext, 'ingress' | 'approval' | 'info'>,
@@ -26,21 +28,19 @@ export function admitPlatformApprovals(
   const sessionId =
     typeof opts?.sessionId === 'string' ? opts.sessionId.trim() : ''
 
-  const admitRaw: { text: string; sessionId?: string } = {
-    text: 'platform.approvals',
-  }
-  if (sessionId) {
-    admitRaw.sessionId = sessionId
+  if (!sessionId) {
+    return { ok: false, error: 'sessionId required' }
   }
 
-  const admitted = platform.ingress.admit(origin, admitRaw)
+  const admitted = platform.ingress.admit(origin, {
+    text: 'platform.approvals',
+    sessionId,
+  })
   if (!admitted.ok) {
     return { ok: false, error: admitted.error }
   }
 
-  const approvals = sessionId
-    ? platform.approval.list(sessionId)
-    : platform.approval.list()
+  const approvals = platform.approval.list(sessionId)
 
   return {
     ok: true,

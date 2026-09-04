@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, onTurnWakeFired, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, userPromptAnswerFromApprovalDecision, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, onTurnWakeFired, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, userPromptAnswerFromApprovalDecision, createUserPromptId, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState, listMountRoots, emptyMountsReason, browseWorkspaceDirs } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { registerAuthRoutes } from './auth-routes.js'
@@ -227,6 +227,7 @@ platform.approval.bindUserPromptResolve(({ id, sessionId, decision }) => {
     userPromptAnswerFromApprovalDecision(decision),
   )
 })
+// SF-thin-A: grant file overwrite/delete no longer wire Hands confirm (avoids unused ask_user)
 platform.memory.bindWorkingSource((sessionId) => {
   const s = agent.getSession(sessionId)
   return s?.sessionMemory ?? null
@@ -515,7 +516,8 @@ app.get('/api/platform/info', async (_req, reply) => {
 
 /**
  * Diagnostic: Ingress admit → meter.listRecentDenials() + meter counters.
- * Not attached to `/api/health`; subject to owner auth when claimed. No UI.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ * SF4: settings UI reads this for recent denials (fail-open).
  */
 app.get('/api/platform/meter/denials', async (_req, reply) => {
   const result = admitPlatformMeterDenials(platform)
@@ -557,16 +559,19 @@ app.get<{
 })
 
 /**
- * Diagnostic: Ingress admit → approval.list() + approvalsPending.
- * Query: optional sessionId (forwarded to admit and list filter).
+ * Diagnostic: Ingress admit → approval.list(sessionId) + approvalsPending.
+ * Query: sessionId **required** (C1 — no global pending dump).
  * Not attached to `/api/health`; subject to owner auth when claimed.
  */
 app.get<{
   Querystring: { sessionId?: string }
 }>('/api/platform/approvals', async (req, reply) => {
   const rawSession = String(req.query.sessionId ?? '').trim()
+  if (!rawSession) {
+    return reply.code(400).send({ error: 'sessionId required' })
+  }
   const result = admitPlatformApprovals(platform, {
-    sessionId: rawSession || undefined,
+    sessionId: rawSession,
   })
   if (!result.ok) {
     return reply.code(400).send({ error: result.error })
@@ -581,22 +586,35 @@ app.get<{
 
 /**
  * Diagnostic: Ingress admit → approval.resolve(id, decision) + approvalsPending.
- * Body: { approved: boolean; note?: string }.
+ * Body: { approved: boolean; note?: string; sessionId?: string }.
+ * sessionId: body.sessionId, else req.auth.sessionId when claimed (C1 bind).
+ * Soft UserPrompt mirror (Wave 50A): when bindUserPromptResolve is live, resolve
+ * may settle ask_user waiters (approval id ≡ promptId) — fail-open.
  * Returns 200 with resolved boolean even when id unknown/already resolved (mirrors queue).
- * Not attached to `/api/health`; subject to owner auth when claimed. No ask_user bridge.
+ * session_mismatch → 400. Not attached to `/api/health`; subject to owner auth when claimed.
  */
 app.post<{
   Params: { id: string }
-  Body: { approved?: boolean; note?: string }
+  Body: { approved?: boolean; note?: string; sessionId?: string }
 }>('/api/platform/approvals/:id/resolve', async (req, reply) => {
   const body = req.body ?? {}
   if (typeof body.approved !== 'boolean') {
     return reply.code(400).send({ error: 'approved required' })
   }
-  const result = admitResolveApproval(platform, req.params.id, {
-    approved: body.approved,
-    ...(typeof body.note === 'string' ? { note: body.note } : {}),
-  })
+  const bodySession =
+    typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
+  const authSession =
+    typeof req.auth?.sessionId === 'string' ? req.auth.sessionId.trim() : ''
+  const sessionId = bodySession || authSession || undefined
+  const result = admitResolveApproval(
+    platform,
+    req.params.id,
+    {
+      approved: body.approved,
+      ...(typeof body.note === 'string' ? { note: body.note } : {}),
+    },
+    sessionId ? { sessionId } : undefined,
+  )
   if (!result.ok) {
     return reply.code(400).send({ error: result.error })
   }
@@ -721,19 +739,21 @@ app.get<{
 
 /**
  * Soft/hard restore: Ingress admit → checkpoint payload (id or latest).
- * Body: { checkpointId?, apply? } — omit apply / false → soft (applied false);
- * apply:true → SessionStore mutation via bound hook (metadata + optional truncate).
+ * Body: { checkpointId?, apply?, confirm? } — omit apply / false → soft (applied false);
+ * apply:true requires confirm:true → SessionStore mutation via bound hook;
+ * apply without confirm → 400 confirm_required (C3).
  * Not attached to `/api/health`; subject to owner auth when claimed.
  */
 app.post<{
   Params: { sessionId: string }
-  Body: { checkpointId?: string; apply?: boolean }
+  Body: { checkpointId?: string; apply?: boolean; confirm?: boolean }
 }>('/api/platform/sessions/:sessionId/checkpoint/restore', async (req, reply) => {
   const body = req.body ?? {}
   const result = admitCheckpointRestore(platform, {
     sessionId: req.params.sessionId,
     ...(typeof body.checkpointId === 'string' ? { checkpointId: body.checkpointId } : {}),
     ...(body.apply === true ? { apply: true } : {}),
+    ...(body.confirm === true ? { confirm: true } : {}),
   })
   if (!result.ok) {
     return reply.code(400).send({ error: result.error })
@@ -848,8 +868,9 @@ app.post<{
 
 /**
  * Diagnostic: Ingress admit → extensions.registerFromManifest (in-memory JSON only).
- * Body: { id, name?, version?, capabilities?, origin? }.
- * Rejects file-path fields; never loads/evals extension code. No UI. No .opx.
+ * Body: { id, name?, version?, capabilities?, trusted?, origin? }.
+ * SF1: requires `trusted: true` (install-time trust). Rejects file-path fields;
+ * never loads/evals extension code. No UI. No .opx.
  */
 app.post<{
   Body: {
@@ -857,6 +878,7 @@ app.post<{
     name?: string
     version?: string
     capabilities?: string[]
+    trusted?: boolean
     origin?: string
     sourcePath?: string
     path?: string
@@ -868,7 +890,10 @@ app.post<{
   const result = admitRegisterExtension(
     platform,
     manifest,
-    typeof origin === 'string' ? { origin } : undefined,
+    {
+      ...(typeof origin === 'string' ? { origin } : {}),
+      ...(manifest.trusted === true ? { trusted: true } : {}),
+    },
   )
   if (!result.ok) {
     return reply.code(400).send({ error: result.error })
@@ -884,12 +909,13 @@ app.post<{
 
 /**
  * Diagnostic: Ingress admit → parse .opx zip → registerFromManifest (inactive).
- * Body: `{ zipBase64: string, origin? }`.
+ * Body: `{ zipBase64: string, trusted?: boolean, origin? }`.
+ * SF1: requires `trusted: true` (install-time trust).
  * Limits: zip ≤ 2MB (`OPX_ZIP_MAX_BYTES`), manifest ≤ 64KB.
  * Root `manifest.json` or `opx.manifest.json` only — never extracts/evals JS/CSS. No UI.
  */
 app.post<{
-  Body: { zipBase64?: string; origin?: string }
+  Body: { zipBase64?: string; trusted?: boolean; origin?: string }
 }>('/api/platform/extensions/register-opx', async (req, reply) => {
   const body = req.body ?? {}
   const zipBase64 = typeof body.zipBase64 === 'string' ? body.zipBase64.trim() : ''
@@ -910,11 +936,10 @@ app.post<{
       error: `zip exceeds ${OPX_ZIP_MAX_BYTES} bytes`,
     })
   }
-  const result = admitRegisterOpx(
-    platform,
-    buffer,
-    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
-  )
+  const result = admitRegisterOpx(platform, buffer, {
+    ...(typeof body.origin === 'string' ? { origin: body.origin } : {}),
+    ...(body.trusted === true ? { trusted: true } : {}),
+  })
   if (!result.ok) {
     return reply.code(400).send({ error: result.error })
   }
@@ -950,6 +975,10 @@ app.post<{
     origin: result.origin,
     extension: result.extension,
     extensionsActive: result.extensionsActive,
+    ...(result.activation !== undefined ? { activation: result.activation } : {}),
+    ...(result.hostBound !== undefined ? { hostBound: result.hostBound } : {}),
+    ...(result.jsLoaded !== undefined ? { jsLoaded: result.jsLoaded } : {}),
+    ...(result.experimental === true ? { experimental: true } : {}),
   }
 })
 
@@ -1071,11 +1100,27 @@ app.post<{
   }
   const setResult = setPlatformPackEnabled(platform, req.params.id, enabled)
   if (!setResult.ok) {
-    return reply.code(400).send({ error: setResult.error })
+    // Soft persist fail: in-memory applied; return 200 + packs so UI keeps toggle.
+    // Unsupported id → 400 (no memory change for unknown ids).
+    if (setResult.error.startsWith('unsupported pack id')) {
+      return reply.code(400).send({
+        ok: false,
+        error: setResult.error,
+        packs: setResult.packs,
+        persisted: false,
+      })
+    }
+    return {
+      ok: false,
+      error: setResult.error,
+      packs: setResult.packs,
+      persisted: false,
+    }
   }
   return {
     ok: true,
-    packs: platform.packs.list(),
+    packs: setResult.packs,
+    persisted: true,
   }
 })
 

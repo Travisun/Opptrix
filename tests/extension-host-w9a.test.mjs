@@ -29,7 +29,7 @@ describe('extension-host Wave 9A', () => {
 
   it('register → activate → run callGate → observation ok; meter.submitCount increases', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.register('ext-a').ok, true)
+    assert.equal(ctx.extensions.register('ext-a', { trusted: true }).ok, true)
     assert.equal((await ctx.extensions.activate('ext-a')).ok, true)
 
     const before = ctx.meter.snapshot().submitCount
@@ -46,12 +46,12 @@ describe('extension-host Wave 9A', () => {
     const info = ctx.info()
     assert.equal(info.extensions, 1)
     assert.equal(info.extensionsActive, 1)
-    assert.equal(info.abiVersion, '0.8.43-w58')
+    assert.equal(info.abiVersion, '0.8.52-thin-a')
   })
 
   it('run while inactive → ok:false without throw', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.register('ext-idle').ok, true)
+    assert.equal(ctx.extensions.register('ext-idle', { trusted: true }).ok, true)
     const result = await ctx.extensions.run('ext-idle', async () => ({ x: 1 }))
     assert.equal(result.ok, false)
     if (result.ok) throw new Error('expected fail')
@@ -69,7 +69,7 @@ describe('extension-host Wave 9A', () => {
       }
     })
 
-    assert.equal(ctx.extensions.register('ext-boom').ok, true)
+    assert.equal(ctx.extensions.register('ext-boom', { trusted: true }).ok, true)
     assert.equal((await ctx.extensions.activate('ext-boom')).ok, true)
 
     const result = await ctx.extensions.run('ext-boom', async () => {
@@ -93,7 +93,7 @@ describe('extension-host Wave 9A', () => {
 
   it('callGate is the only Host API path (no hub / agent / store)', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.register('ext-api').ok, true)
+    assert.equal(ctx.extensions.register('ext-api', { trusted: true }).ok, true)
     assert.equal((await ctx.extensions.activate('ext-api')).ok, true)
 
     const result = await ctx.extensions.run('ext-api', async (api) => {
@@ -110,10 +110,10 @@ describe('extension-host Wave 9A', () => {
 
   it('register rejects empty and duplicate; run timeout marks error', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.register('').ok, false)
-    assert.equal(ctx.extensions.register('  ').ok, false)
-    assert.equal(ctx.extensions.register('dup').ok, true)
-    const dup = ctx.extensions.register('dup')
+    assert.equal(ctx.extensions.register('', { trusted: true }).ok, false)
+    assert.equal(ctx.extensions.register('  ', { trusted: true }).ok, false)
+    assert.equal(ctx.extensions.register('dup', { trusted: true }).ok, true)
+    const dup = ctx.extensions.register('dup', { trusted: true })
     assert.equal(dup.ok, false)
     if (dup.ok) throw new Error('expected duplicate fail')
     assert.match(dup.error, /already registered/)

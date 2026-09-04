@@ -8,7 +8,7 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
-describe('admitPlatformApprovals helper (Wave 27A)', () => {
+describe('admitPlatformApprovals helper (Wave 27A / C1)', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
@@ -21,9 +21,19 @@ describe('admitPlatformApprovals helper (Wave 27A)', () => {
     platform.resetPlatformContextForTests()
   })
 
-  it('empty list → ok with [] and approvalsPending matching info', () => {
+  it('missing sessionId → ok:false sessionId required (C1 no global dump)', () => {
     const ctx = platform.createPlatformContext()
     const result = platform.admitPlatformApprovals(ctx)
+    assert.equal(result.ok, false)
+    if (result.ok) throw new Error('expected fail')
+    assert.equal(result.error, 'sessionId required')
+  })
+
+  it('empty list for session → ok with [] and approvalsPending matching info', () => {
+    const ctx = platform.createPlatformContext()
+    const result = platform.admitPlatformApprovals(ctx, {
+      sessionId: 'sess-empty',
+    })
     assert.equal(result.ok, true)
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.origin, 'web.diagnostic')
@@ -34,7 +44,7 @@ describe('admitPlatformApprovals helper (Wave 27A)', () => {
     assert.equal(result.approvalsPending, 0)
   })
 
-  it('lists pending; sessionId filters; custom origin passed through', () => {
+  it('lists pending for sessionId; filters other sessions; custom origin', () => {
     const ctx = platform.createPlatformContext()
     const a = ctx.approval.request({
       sessionId: 'sess-a',
@@ -48,13 +58,6 @@ describe('admitPlatformApprovals helper (Wave 27A)', () => {
     })
     assert.equal(a.ok, true)
     assert.equal(b.ok, true)
-
-    const all = platform.admitPlatformApprovals(ctx)
-    assert.equal(all.ok, true)
-    if (!all.ok) throw new Error('expected ok')
-    assert.equal(all.approvals.length, 2)
-    assert.equal(all.approvalsPending, 2)
-    assert.equal(all.approvalsPending, ctx.info().approvalsPending)
 
     const filtered = platform.admitPlatformApprovals(ctx, {
       sessionId: 'sess-a',
@@ -70,9 +73,9 @@ describe('admitPlatformApprovals helper (Wave 27A)', () => {
     assert.equal(filtered.approvalsPending, 2)
   })
 
-  it('ABI is 0.8.43-w58', () => {
+  it('ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

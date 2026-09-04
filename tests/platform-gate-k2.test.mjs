@@ -72,7 +72,7 @@ describe('platform-gate K2', () => {
 
   it('createPlatformContext wires a non-null gate + meter', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
     assert.ok(ctx.gate)
     assert.equal(typeof ctx.gate.submit, 'function')
     assert.ok(ctx.meter)

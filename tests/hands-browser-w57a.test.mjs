@@ -8,19 +8,33 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
+const ENFORCE_ENV = 'OPPTRIX_PLATFORM_PACK_ENFORCE'
+
 describe('hands-port Wave 57A browser.navigate', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
+  /** @type {string | undefined} */
+  let prevEnforceEnv
+
   beforeEach(async () => {
+    prevEnforceEnv = process.env[ENFORCE_ENV]
+    process.env[ENFORCE_ENV] = '0'
     platform = await import(platformModUrl)
     platform.resetPlatformContextForTests()
+    // hands.* → coding pack; enable so packEnforce ON cannot deny invoke
+    platform.createPlatformContext().packs.enable('coding', true)
     platform.resetBrowserDetectCacheForTests()
   })
 
   afterEach(() => {
     platform.resetPlatformContextForTests()
     platform.resetBrowserDetectCacheForTests()
+    if (prevEnforceEnv === undefined) {
+      delete process.env[ENFORCE_ENV]
+    } else {
+      process.env[ENFORCE_ENV] = prevEnforceEnv
+    }
   })
 
   it('injected browser adapter navigate → ok with url/title', async () => {
@@ -178,10 +192,10 @@ describe('hands-port Wave 57A browser.navigate', () => {
     assert.equal(typeof data.title, 'string')
   })
 
-  it('C-HANDS-BROWSER-NAVIGATE + ABI 0.8.43-w58', async () => {
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
+  it('C-HANDS-BROWSER-NAVIGATE + ABI 0.8.52-thin-a', async () => {
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
 
     const hands = platform.createHandsPort({
       gate: ctx.gate,
@@ -199,5 +213,68 @@ describe('hands-port Wave 57A browser.navigate', () => {
     if (!issued.ok) throw new Error('expected navigate ticket')
     const obs = await hands.invoke(issued.ticket)
     assert.equal(obs.ok, true)
+  })
+
+  it('reject private literal IP when LAN off; allow when allow_lan_access', async () => {
+    const fs = await import('node:fs/promises')
+    const os = await import('node:os')
+    const pathMod = await import('node:path')
+    const {
+      saveSandboxSettings,
+      resetSandboxSettingsStoreForTests,
+    } = await import('@opptrix/agent-workspace')
+
+    const tmp = await fs.mkdtemp(pathMod.join(os.tmpdir(), 'opptrix-hands-lan-'))
+    const prev = process.env.OPPTRIX_DATA_DIR
+    process.env.OPPTRIX_DATA_DIR = tmp
+    resetSandboxSettingsStoreForTests()
+
+    try {
+      /** @type {string[]} */
+      const navigated = []
+      const hands = platform.createHandsPort({
+        gate: platform.createPlatformContext().gate,
+        browser: {
+          async navigate(url) {
+            navigated.push(url)
+            return { url, title: 'lan', status: 200 }
+          },
+        },
+      })
+
+      saveSandboxSettings({ allowed_domains: [], allow_lan_access: false })
+      {
+        const issued = hands.issue({
+          token: 'hands.browser.navigate',
+          args: { url: 'http://192.168.1.10/' },
+        })
+        assert.equal(issued.ok, true)
+        if (!issued.ok) throw new Error('expected issue ok')
+        const obs = await hands.invoke(issued.ticket)
+        assert.equal(obs.ok, false)
+        assert.match(String(obs.error ?? ''), /Private|Local|not allowed/i)
+      }
+
+      saveSandboxSettings({
+        allowed_domains: ['192.168.1.10'],
+        allow_lan_access: true,
+      })
+      {
+        const issued = hands.issue({
+          token: 'hands.browser.navigate',
+          args: { url: 'http://192.168.1.10/' },
+        })
+        assert.equal(issued.ok, true)
+        if (!issued.ok) throw new Error('expected issue ok')
+        const obs = await hands.invoke(issued.ticket)
+        assert.equal(obs.ok, true)
+        assert.equal(navigated.at(-1), 'http://192.168.1.10/')
+      }
+    } finally {
+      resetSandboxSettingsStoreForTests()
+      if (prev == null) delete process.env.OPPTRIX_DATA_DIR
+      else process.env.OPPTRIX_DATA_DIR = prev
+      await fs.rm(tmp, { recursive: true, force: true })
+    }
   })
 })

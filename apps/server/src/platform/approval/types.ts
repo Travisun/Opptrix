@@ -43,8 +43,15 @@ export type ApprovalQueue = {
   request(input: ApprovalRequestInput): ApprovalRequestResult
   /** Pending only; optional session filter. */
   list(sessionId?: string): ApprovalRequest[]
-  /** False if missing or already resolved/cancelled. */
-  resolve(id: string, decision: { approved: boolean; note?: string }): boolean
+  /**
+   * False if missing, already resolved/cancelled, or (when opts.sessionId set)
+   * pending row.sessionId does not match (C1 session bind).
+   */
+  resolve(
+    id: string,
+    decision: { approved: boolean; note?: string },
+    opts?: { sessionId?: string },
+  ): boolean
   /** Cancel pending for session; returns count cancelled. */
   cancelSession(sessionId: string): number
   /**

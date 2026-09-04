@@ -33,7 +33,7 @@ describe('extension manifest register (Wave 38A)', () => {
       name: 'Wave38 Demo',
       version: '1.0.0',
       capabilities: ['quotes', 'news'],
-    })
+    }, { trusted: true })
     assert.equal(reg.ok, true)
 
     const listed = ctx.extensions.list()
@@ -43,17 +43,32 @@ describe('extension manifest register (Wave 38A)', () => {
     assert.equal(listed[0]?.name, 'Wave38 Demo')
     assert.equal(listed[0]?.version, '1.0.0')
     assert.deepEqual(listed[0]?.capabilities, ['quotes', 'news'])
+    assert.equal(listed[0]?.trusted, true)
     assert.equal(ctx.info().extensionsActive, 0)
+  })
+
+  it('register without trust → trust_required (SF1)', () => {
+    const ctx = platform.createPlatformContext()
+    const noTrust = ctx.extensions.registerFromManifest({ id: 'ext-no-trust' })
+    assert.equal(noTrust.ok, false)
+    if (noTrust.ok) throw new Error('expected trust_required')
+    assert.equal(noTrust.error, 'trust_required')
+    assert.equal(ctx.extensions.list().length, 0)
+
+    const viaRegister = ctx.extensions.register('ext-no-trust-2')
+    assert.equal(viaRegister.ok, false)
+    if (viaRegister.ok) throw new Error('expected trust_required')
+    assert.equal(viaRegister.error, 'trust_required')
   })
 
   it('duplicate / empty id fails; register(id) still works', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.registerFromManifest({ id: '' }).ok, false)
-    assert.equal(ctx.extensions.register('ext-id-only').ok, true)
+    assert.equal(ctx.extensions.registerFromManifest({ id: '' }, { trusted: true }).ok, false)
+    assert.equal(ctx.extensions.register('ext-id-only', { trusted: true }).ok, true)
     const dup = ctx.extensions.registerFromManifest({
       id: 'ext-id-only',
       name: 'again',
-    })
+    }, { trusted: true })
     assert.equal(dup.ok, false)
     if (dup.ok) throw new Error('expected duplicate fail')
     assert.match(dup.error, /already registered/)
@@ -64,7 +79,7 @@ describe('extension manifest register (Wave 38A)', () => {
     const withPath = ctx.extensions.registerFromManifest({
       id: 'ext-path',
       sourcePath: '/tmp/evil.js',
-    })
+    }, { trusted: true })
     assert.equal(withPath.ok, false)
     if (withPath.ok) throw new Error('expected path reject')
     assert.match(withPath.error, /file path|sourcePath/i)
@@ -73,16 +88,16 @@ describe('extension manifest register (Wave 38A)', () => {
     const withEntry = ctx.extensions.registerFromManifest({
       id: 'ext-entry',
       entry: './plugin.mjs',
-    })
+    }, { trusted: true })
     assert.equal(withEntry.ok, false)
     assert.equal(ctx.extensions.list().length, 0)
   })
 
-  it('admitRegisterExtension → list; custom origin; ABI 0.8.43-w58', () => {
+  it('admitRegisterExtension → list; custom origin; ABI 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
     const result = platform.admitRegisterExtension(
       ctx,
-      {
+      { trusted: true,
         id: 'ext-admit',
         name: 'Admit',
         version: '0.1.0',
@@ -99,8 +114,8 @@ describe('extension manifest register (Wave 38A)', () => {
     assert.equal(result.extension.name, 'Admit')
     assert.equal(result.extensions.length, 1)
     assert.equal(result.extensionsActive, 0)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 
   it('source has no eval/require/import of user code paths', () => {

@@ -93,7 +93,7 @@ describe('admitCancelSessionApprovals helper (Wave 45A)', () => {
     assert.equal(blank.ok, false)
   })
 
-  it('custom origin passed through; ABI is 0.8.43-w58', () => {
+  it('custom origin passed through; ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
     const created = ctx.approval.request({
       sessionId: 'sess-w45c',
@@ -111,7 +111,7 @@ describe('admitCancelSessionApprovals helper (Wave 45A)', () => {
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.origin, 'cli.diagnostic')
     assert.equal(result.cancelled, 1)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

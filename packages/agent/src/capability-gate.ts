@@ -35,3 +35,25 @@ export function createPassthroughGate(): CapabilityGate {
     },
   }
 }
+
+/**
+ * Map a Gate observation to the tool-result shape the model sees.
+ * Clean denials (`!obs.ok`) become `{ error, denialCode? }` — never treat as success payload.
+ */
+export function toolResultFromGateObservation(obs: CapabilityObservation): unknown {
+  if (!obs.ok) {
+    const denialCode = typeof obs.denialCode === 'string' && obs.denialCode.trim()
+      ? obs.denialCode.trim()
+      : undefined
+    const message =
+      typeof obs.message === 'string' && obs.message.trim()
+        ? obs.message.trim()
+        : denialCode
+          ? `Capability denied: ${denialCode}`
+          : 'Capability denied'
+    return denialCode
+      ? { error: message, denialCode }
+      : { error: message }
+  }
+  return obs.data
+}

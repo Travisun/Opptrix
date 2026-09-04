@@ -8,6 +8,7 @@ import {
 const SOFT_RESTORE_NOTE = 'soft_restore_no_engine_apply' as const
 const HARD_RESTORE_NOTE = 'hard_restore_metadata_applied' as const
 const APPLY_NOT_WIRED = 'checkpoint apply not wired' as const
+const CONFIRM_REQUIRED = 'confirm_required' as const
 
 function asPayload(raw: unknown): Record<string, unknown> | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
@@ -51,12 +52,19 @@ export type AdmitCheckpointRestoreOk = {
 
 /**
  * Soft restore (default): Ingress admit → load checkpoint payload (get or latest).
- * Hard restore (`apply: true`): mutate SessionStore via bound checkpointApply hook
- * (title/model + turns snapshot when present, else optional turn truncate).
+ * Hard restore (`apply: true`): requires explicit `confirm: true`; mutates SessionStore
+ * via bound checkpointApply hook (title/model + turns snapshot when present, else
+ * optional turn truncate). Without confirm → `confirm_required`, no apply.
  */
 export function admitCheckpointRestore(
   platform: Pick<PlatformContext, 'ingress' | 'checkpoint' | 'checkpointApply'>,
-  input: { sessionId: string; checkpointId?: string; apply?: boolean },
+  input: {
+    sessionId: string
+    checkpointId?: string
+    apply?: boolean
+    /** Required when `apply: true` (C3 hard-restore confirm). */
+    confirm?: boolean
+  },
   opts?: { origin?: string },
 ): AdmitCheckpointRestoreOk | { ok: false; error: string } {
   const sid = typeof input.sessionId === 'string' ? input.sessionId.trim() : ''
@@ -65,6 +73,11 @@ export function admitCheckpointRestore(
   }
 
   const wantApply = input.apply === true
+
+  // C3: hard restore is destructive — require explicit confirm before any apply.
+  if (wantApply && input.confirm !== true) {
+    return { ok: false, error: CONFIRM_REQUIRED }
+  }
 
   if (wantApply && !platform.checkpointApply) {
     return { ok: false, error: APPLY_NOT_WIRED }

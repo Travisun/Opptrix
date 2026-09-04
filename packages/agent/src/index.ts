@@ -1,6 +1,7 @@
 export { AgentEngine, ChatCancelledError, type AgentSettings, type ChatResult, type SessionContextUsage } from './engine.js'
 export {
   createPassthroughGate,
+  toolResultFromGateObservation,
   type CapabilityAction,
   type CapabilityGate,
   type CapabilityObservation,

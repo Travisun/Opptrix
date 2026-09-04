@@ -184,6 +184,20 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     desc: '编写与运行代码、处理本地文件等编程相关能力',
     keywords: ['编程', 'coding', '代码'],
   },
+  {
+    section: 'capability_packs',
+    group: '调用概况',
+    title: '能力调用概况',
+    desc: '已发起调用、未通过次数与用量概况',
+    keywords: ['调用', '概况', '未通过', '用量'],
+  },
+  {
+    section: 'capability_packs',
+    group: '调用概况',
+    title: '最近未通过的请求',
+    desc: '因能力限制或次数上限未通过的近期请求',
+    keywords: ['未通过', '拦截', '限制'],
+  },
 
   // 计划任务
   { section: 'schedule', title: '启用计划任务', desc: '关闭后，任务不会自动执行', keywords: ['总开关', '执行'] },

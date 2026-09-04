@@ -31,7 +31,8 @@ function tryAttachSession(req: FastifyRequest): void {
   auth.touchSession(session.id)
 }
 
-function isSensitiveRoute(method: string, path: string): boolean {
+/** Exported for unit tests (C1). */
+export function isSensitiveRoute(method: string, path: string): boolean {
   const m = method.toUpperCase()
   if (m === 'PATCH' && path === '/api/config') return true
   if (m === 'POST' && path === '/api/providers') return true
@@ -42,7 +43,18 @@ function isSensitiveRoute(method: string, path: string): boolean {
   if (m === 'POST' && path === '/api/auth/totp/disable') return true
   if (m === 'POST' && path === '/api/auth/password') return true
   if (m === 'POST' && path === '/api/auth/sessions/revoke-all') return true
+  // SF1: `/api/platform` mutators do NOT require TOTP step-up (install-time trust + session auth).
   return false
+}
+
+/**
+ * C1: while unclaimed, block mutating `/api/platform/*` (GET/HEAD stay open).
+ * Non-platform routes remain open for Docker first-boot onboarding.
+ */
+export function isUnclaimedPlatformMutate(method: string, path: string): boolean {
+  if (path !== '/api/platform' && !path.startsWith('/api/platform/')) return false
+  const m = method.toUpperCase()
+  return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE'
 }
 
 let safeModeWiped = false
@@ -82,8 +94,19 @@ async function ownerAuthOnRequest(req: FastifyRequest, reply: FastifyReply): Pro
     return
   }
   if (path === '/api/auth/login' || path === '/api/auth/login/totp') return
-  // First-boot setup + all APIs while unclaimed (Docker host→bridge IP is not loopback).
-  if (path === '/api/auth/setup' || !claimed) return
+  // First-boot setup always open.
+  if (path === '/api/auth/setup') return
+  // Unclaimed: keep non-platform APIs open (Docker first-boot); lock platform mutates only.
+  if (!claimed) {
+    if (isUnclaimedPlatformMutate(req.method, path)) {
+      await reply.code(403).send({
+        error: '请先完成安装与账户设置',
+        code: 'install_required',
+      })
+      return
+    }
+    return
+  }
 
   tryAttachSession(req)
   if (!req.auth) {

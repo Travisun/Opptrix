@@ -1,4 +1,15 @@
-export { createHandsPort, type CreateHandsPortOptions } from './create-hands-port.js'
+export {
+  createHandsPort,
+  HandsConfirmRequiredError,
+  isHandsConfirmRequired,
+  type CreateHandsPortOptions,
+} from './create-hands-port.js'
+export {
+  createHandsConfirmHandler,
+  runWithHandsConfirmSession,
+  type CreateHandsConfirmHandlerDeps,
+  type HandsConfirmPushPayload,
+} from './create-hands-confirm-handler.js'
 export {
   defaultBrowserDetect,
   resetBrowserDetectCacheForTests,

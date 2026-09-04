@@ -1,3 +1,5 @@
+import type { ConfirmHandler } from '@opptrix/agent-workspace'
+
 /** HandsPort ActionTicket — short-TTL, one-shot capability credential. */
 export type ActionTicket = {
   id: string
@@ -38,6 +40,11 @@ export type HandsNavigateResult = {
   status?: number
 }
 
+/** SF3: optional navigate opts (LAN from sandbox settings). */
+export type HandsNavigateOpts = {
+  allowLan?: boolean
+}
+
 /**
  * Wave 57A: injectable browser navigate surface (tests inject fakes).
  * Default: createBrowserSessionManager().withSession(s => s.navigate(...)).
@@ -46,6 +53,7 @@ export type HandsBrowserAdapter = {
   navigate(
     url: string,
     waitUntil?: HandsWaitUntil,
+    opts?: HandsNavigateOpts,
   ): Promise<HandsNavigateResult>
 }
 
@@ -67,6 +75,7 @@ export type HandsWorkspaceAdapter = {
     rootId: string,
     relPath: string,
     content: string,
+    /** @deprecated SF-thin-A legacy no-op; HandsPort no longer gates on confirmOverwrite */
     opts?: { confirmOverwrite?: boolean },
   ): Promise<unknown> | unknown
   mkdir(
@@ -78,6 +87,7 @@ export type HandsWorkspaceAdapter = {
     sessionId: string,
     rootId: string,
     relPath: string,
+    /** @deprecated SF-thin-A legacy no-op; HandsPort no longer gates on confirmDelete */
     opts?: { confirmDelete?: boolean },
   ): Promise<unknown> | unknown
 }
@@ -95,4 +105,10 @@ export type HandsPort = {
 
   /** Unused tickets currently held (diagnostics / info()). */
   pendingCount(): number
+
+  /**
+   * SF-thin-A: grant file ops no longer use Hands confirm — dead no-op.
+   * Prefer not wiring from index.ts (avoids unused ask_user pushes).
+   */
+  bindHandsConfirmHandler(handler: ConfirmHandler | null): void
 }

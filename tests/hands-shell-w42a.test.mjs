@@ -8,17 +8,32 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
+const ENFORCE_ENV = 'OPPTRIX_PLATFORM_PACK_ENFORCE'
+
 describe('hands-port Wave 42A shell.platform (no-spawn)', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
+  /** @type {string | undefined} */
+  let prevEnforceEnv
+
   beforeEach(async () => {
+    prevEnforceEnv = process.env[ENFORCE_ENV]
+    // Hands tokens map to coding pack; isolate from SF1 packEnforce default ON.
+    process.env[ENFORCE_ENV] = '0'
     platform = await import(platformModUrl)
     platform.resetPlatformContextForTests()
+    // hands.* → coding pack; enable so packEnforce ON cannot deny invoke
+    platform.createPlatformContext().packs.enable('coding', true)
   })
 
   afterEach(() => {
     platform.resetPlatformContextForTests()
+    if (prevEnforceEnv === undefined) {
+      delete process.env[ENFORCE_ENV]
+    } else {
+      process.env[ENFORCE_ENV] = prevEnforceEnv
+    }
   })
 
   it('issue shell.platform → invoke returns platform + arch via gate.submit', async () => {
@@ -60,7 +75,7 @@ describe('hands-port Wave 42A shell.platform (no-spawn)', () => {
     assert.equal(ctx.hands.pendingCount(), 0)
   })
 
-  it('C-HANDS-SHELL + ABI 0.8.43-w58', async () => {
+  it('C-HANDS-SHELL + ABI 0.8.52-thin-a', async () => {
     const ctx = platform.createPlatformContext()
     const issued = ctx.hands.issue({ token: 'hands.shell.platform' })
     assert.equal(issued.ok, true)
@@ -79,7 +94,7 @@ describe('hands-port Wave 42A shell.platform (no-spawn)', () => {
     })
     assert.equal(restricted.ok, true)
 
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

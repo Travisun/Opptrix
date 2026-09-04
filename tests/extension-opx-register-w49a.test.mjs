@@ -117,7 +117,7 @@ describe('opx zip register (Wave 49A)', () => {
     assert.equal(parsed.manifest.id, 'ext-opx-w49')
 
     const ctx = platform.createPlatformContext()
-    const result = platform.admitRegisterOpx(ctx, zip, {
+    const result = platform.admitRegisterOpx(ctx, zip, { trusted: true,
       origin: 'cli.diagnostic',
     })
     assert.equal(result.ok, true)
@@ -180,7 +180,7 @@ describe('opx zip register (Wave 49A)', () => {
       id: 'ext-with-entry-direct',
       entry: './dist/host/index.js',
       main: 'index.js',
-    })
+    }, { trusted: true })
     assert.equal(direct.ok, false)
     if (direct.ok) throw new Error('expected fail')
     assert.match(direct.error, /file path|entry|main/i)
@@ -192,7 +192,7 @@ describe('opx zip register (Wave 49A)', () => {
         main: 'index.js',
       }),
     })
-    const result = platform.admitRegisterOpx(ctx, zip)
+    const result = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(result.ok, true, result.ok ? '' : result.error)
     if (!result.ok) throw new Error('expected ok after strip')
     assert.equal(result.extension.id, 'ext-with-entry')
@@ -213,18 +213,18 @@ describe('opx zip register (Wave 49A)', () => {
     }
   })
 
-  it('C-OPX-REGISTER + ABI 0.8.43-w58', () => {
+  it('C-OPX-REGISTER + ABI 0.8.52-thin-a', () => {
     const zip = buildStoredZip({
       'manifest.json': JSON.stringify({ id: 'c-opx-register' }),
     })
     const ctx = platform.createPlatformContext()
-    const result = platform.admitRegisterOpx(ctx, zip)
+    const result = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(result.ok, true)
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.extension.id, 'c-opx-register')
     assert.equal(result.extension.state, 'inactive')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
     assert.ok(platform.OPX_ZIP_MAX_BYTES <= 2 * 1024 * 1024)
     assert.ok(platform.OPX_MANIFEST_MAX_BYTES <= 64 * 1024)
   })

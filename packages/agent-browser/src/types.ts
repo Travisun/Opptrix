@@ -36,8 +36,17 @@ export interface BrowserScreenshotResult {
   url: string
 }
 
+export type BrowserNavigateOpts = {
+  /** When true, allow private/LAN targets (sandbox allow_lan_access). */
+  allowLan?: boolean
+}
+
 export interface BrowserSession {
-  navigate(url: string, waitUntil?: WaitUntil): Promise<BrowserNavigateResult>
+  navigate(
+    url: string,
+    waitUntil?: WaitUntil,
+    opts?: BrowserNavigateOpts,
+  ): Promise<BrowserNavigateResult>
   snapshot(maxChars?: number): Promise<BrowserSnapshotResult>
   click(ref: string): Promise<BrowserClickResult>
   type(

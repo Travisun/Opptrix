@@ -66,8 +66,10 @@ function sanitizeUsageDelta(raw: unknown): number {
  * Soft quota (when `maxSubmits` is a positive integer): if `submitCount >= max`
  * before processing, deny with `quota_exceeded` (no exec). Checked before pack.
  *
- * When `packEnforce` is OFF (default): no pack denies; always runs `exec` unless quota.
- * When ON: may deny with `denialCode: 'pack_disabled'` before `exec` if the domain pack is off.
+ * When `packEnforce` is OFF (`OPPTRIX_PLATFORM_PACK_ENFORCE=0|false|no`): no pack denies;
+ * always runs `exec` unless quota.
+ * When ON (SF1 default when env unset): may deny with `denialCode: 'pack_disabled'`
+ * before `exec` if the domain pack is off.
  *
  * Clean denies (`pack_disabled`, `quota_exceeded`) bump `denyCount`, not `errorCount`,
  * and push a record onto the recent-denials ring (cap 32).

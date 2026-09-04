@@ -8,7 +8,7 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
-describe('admitResolveApproval helper (Wave 28A)', () => {
+describe('admitResolveApproval helper (Wave 28A / C1)', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
@@ -44,6 +44,54 @@ describe('admitResolveApproval helper (Wave 28A)', () => {
     assert.equal(result.approvalsPending, 0)
     assert.equal(ctx.info().approvalsPending, 0)
     assert.equal(ctx.approval.list().length, 0)
+  })
+
+  it('matching sessionId resolves; mismatch → session_mismatch', () => {
+    const ctx = platform.createPlatformContext()
+    const created = ctx.approval.request({
+      sessionId: 'sess-bind',
+      kind: 'tool.exec',
+    })
+    assert.equal(created.ok, true)
+    if (!created.ok) throw new Error('expected request ok')
+
+    const bad = platform.admitResolveApproval(
+      ctx,
+      created.id,
+      { approved: true },
+      { sessionId: 'other-sess' },
+    )
+    assert.equal(bad.ok, false)
+    if (bad.ok) throw new Error('expected fail')
+    assert.equal(bad.error, 'session_mismatch')
+    assert.equal(ctx.info().approvalsPending, 1)
+
+    const ok = platform.admitResolveApproval(
+      ctx,
+      created.id,
+      { approved: false },
+      { sessionId: 'sess-bind' },
+    )
+    assert.equal(ok.ok, true)
+    if (!ok.ok) throw new Error('expected ok')
+    assert.equal(ok.resolved, true)
+    assert.equal(ctx.info().approvalsPending, 0)
+
+    // queue.resolve bind
+    const c2 = ctx.approval.request({
+      sessionId: 'sess-q',
+      kind: 'ask_user',
+    })
+    assert.equal(c2.ok, true)
+    if (!c2.ok) throw new Error('expected request ok')
+    assert.equal(
+      ctx.approval.resolve(c2.id, { approved: true }, { sessionId: 'wrong' }),
+      false,
+    )
+    assert.equal(
+      ctx.approval.resolve(c2.id, { approved: true }, { sessionId: 'sess-q' }),
+      true,
+    )
   })
 
   it('unknown id → resolved false; already resolved → resolved false', () => {
@@ -100,7 +148,7 @@ describe('admitResolveApproval helper (Wave 28A)', () => {
     assert.ok(badApproved.error.includes('approved'))
   })
 
-  it('custom origin passed through; ABI is 0.8.43-w58', () => {
+  it('custom origin passed through; ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
     const created = ctx.approval.request({
       sessionId: 'sess-w28c',
@@ -118,7 +166,7 @@ describe('admitResolveApproval helper (Wave 28A)', () => {
     assert.equal(result.ok, true)
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.origin, 'cli.diagnostic')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

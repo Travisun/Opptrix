@@ -99,7 +99,7 @@ describe('admitCheckpointRestore helper (Wave 44A)', () => {
     assert.ok(typeof wrong.error === 'string' && wrong.error.length > 0)
   })
 
-  it('custom origin passed through; ABI is 0.8.43-w58', () => {
+  it('custom origin passed through; ABI is 0.8.52-thin-a', () => {
     const ctx = platform.createPlatformContext()
     const sessionId = 'sess-origin'
     ctx.checkpoint.save(sessionId, { ok: true })
@@ -112,7 +112,7 @@ describe('admitCheckpointRestore helper (Wave 44A)', () => {
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.origin, 'cli.diagnostic')
     assert.equal(result.applied, false)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

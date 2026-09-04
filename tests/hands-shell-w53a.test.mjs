@@ -8,19 +8,34 @@ const platformModUrl = pathToFileURL(
   path.join(here, '../apps/server/dist/platform/index.js'),
 ).href
 
+const ENFORCE_ENV = 'OPPTRIX_PLATFORM_PACK_ENFORCE'
+
 const isWin = process.platform === 'win32'
 
 describe('hands-port Wave 53A restricted shell.exec', () => {
   /** @type {typeof import('../apps/server/dist/platform/index.js')} */
   let platform
 
+  /** @type {string | undefined} */
+  let prevEnforceEnv
+
   beforeEach(async () => {
+    prevEnforceEnv = process.env[ENFORCE_ENV]
+    // Hands tokens map to coding pack; isolate from SF1 packEnforce default ON.
+    process.env[ENFORCE_ENV] = '0'
     platform = await import(platformModUrl)
     platform.resetPlatformContextForTests()
+    // hands.* → coding pack; enable so packEnforce ON cannot deny invoke
+    platform.createPlatformContext().packs.enable('coding', true)
   })
 
   afterEach(() => {
     platform.resetPlatformContextForTests()
+    if (prevEnforceEnv === undefined) {
+      delete process.env[ENFORCE_ENV]
+    } else {
+      process.env[ENFORCE_ENV] = prevEnforceEnv
+    }
   })
 
   async function invokeExec(argv) {
@@ -112,10 +127,10 @@ describe('hands-port Wave 53A restricted shell.exec', () => {
     }
   })
 
-  it('C-HANDS-SHELL-EXEC + ABI 0.8.43-w58', async () => {
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
+  it('C-HANDS-SHELL-EXEC + ABI 0.8.52-thin-a', async () => {
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
 
     const issued = ctx.hands.issue({
       token: 'hands.shell.exec',

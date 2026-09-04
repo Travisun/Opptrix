@@ -499,7 +499,7 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'sandbox':
       return '查看工作区隔离状态与网络访问规则'
     case 'capability_packs':
-      return '查看投研与编程能力包的启用状态'
+      return '管理能力包，并查看调用概况'
     case 'schedule':
       return '管理定时智能体任务与受控脚本'
     case 'python':

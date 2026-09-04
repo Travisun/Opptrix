@@ -115,7 +115,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
       name: 'Stub Ext',
       version: '1.0.0',
       activation: 'worker_stub',
-    })
+    }, { trusted: true })
     assert.equal(reg.ok, true)
     const listed = ctx.extensions.list().find((r) => r.id === 'ext-w55-stub')
     assert.equal(listed?.activation, 'worker_stub')
@@ -145,7 +145,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
       ctx.extensions.registerFromManifest({
         id: 'ext-w55-catalog',
         activation: 'catalog_only',
-      }).ok,
+      }, { trusted: true }).ok,
       true,
     )
     const act = await platform.admitActivateExtension(ctx, 'ext-w55-catalog')
@@ -161,7 +161,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
 
   it('omitted activation defaults to catalog_only behavior', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.registerFromManifest({ id: 'ext-w55-default' }).ok, true)
+    assert.equal(ctx.extensions.registerFromManifest({ id: 'ext-w55-default' }, { trusted: true }).ok, true)
     const act = await platform.admitActivateExtension(ctx, 'ext-w55-default')
     assert.equal(act.ok, true)
     if (!act.ok) throw new Error('expected ok')
@@ -176,7 +176,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
       id: 'ext-w55-entry',
       entry: './dist/host/index.js',
       activation: 'worker_stub',
-    })
+    }, { trusted: true })
     assert.equal(withEntry.ok, false)
     if (withEntry.ok) throw new Error('expected fail')
     assert.match(withEntry.error, /file path|entry/i)
@@ -190,7 +190,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
       }),
       'index.js': 'throw new Error("never")',
     })
-    const opx = platform.admitRegisterOpx(ctx, zip)
+    const opx = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(opx.ok, true, opx.ok ? '' : opx.error)
     if (!opx.ok) throw new Error('expected ok after strip')
     assert.equal(opx.extension.activation, 'worker_stub')
@@ -202,7 +202,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
     const bad = ctx.extensions.registerFromManifest({
       id: 'ext-w55-bad-act',
       activation: 'eval_js',
-    })
+    }, { trusted: true })
     assert.equal(bad.ok, false)
     if (bad.ok) throw new Error('expected fail')
     assert.match(bad.error, /activation/)
@@ -218,7 +218,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
       'dist/host/index.js': 'console.log("never loaded")',
     })
     const ctx = platform.createPlatformContext()
-    const reg = platform.admitRegisterOpx(ctx, zip)
+    const reg = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(reg.ok, true)
     if (!reg.ok) throw new Error('expected register ok')
     assert.equal(reg.extension.state, 'inactive')
@@ -251,13 +251,13 @@ describe('opx sandboxed activate (Wave 55A)', () => {
     assert.match(activateSlice, /hostBound/)
   })
 
-  it('C-OPX-ACTIVATE + ABI 0.8.43-w58', async () => {
+  it('C-OPX-ACTIVATE + ABI 0.8.52-thin-a', async () => {
     const ctx = platform.createPlatformContext()
     assert.equal(
       ctx.extensions.registerFromManifest({
         id: 'c-opx-activate',
         activation: 'worker_stub',
-      }).ok,
+      }, { trusted: true }).ok,
       true,
     )
     const act = await platform.admitActivateExtension(ctx, 'c-opx-activate')
@@ -265,7 +265,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
     if (!act.ok) throw new Error('expected ok')
     assert.equal(act.extension.state, 'active')
     assert.equal(act.hostBound, true)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
   })
 })

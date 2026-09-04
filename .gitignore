@@ -83,6 +83,14 @@ outputs/
 .cursor/
 .mimocode/
 
+# Reasonix tool state / permissions cache — never track
+.reasonix/
+reasonix.toml
+
+# Runtime pack output (scripts/pack-opptrix-runtime.mjs test runs)
+dist-runtime/
+opptrix-runtime.json
+
 # Local trials when using example/ configs
 example/runtime-local/
 .akshare-ref/

@@ -1,5 +1,6 @@
 import type { EventDispatcher } from '@opptrix/event-bus'
 import type { CapabilityGate, CheckpointApplyHooks } from '@opptrix/agent'
+import type { ConfirmHandler } from '@opptrix/agent-workspace'
 import type { AlertFacade } from './alerts/types.js'
 import type { ApprovalQueue } from './approval/types.js'
 import type { ExtensionManager, HostWorkerStatus } from './extensions/types.js'
@@ -11,8 +12,8 @@ import type { PlatformMeter } from './gate/types.js'
 import type { IngressRouter } from './ingress/types.js'
 import type { CheckpointStore } from './checkpoint/types.js'
 
-/** Platform ABI — Wave 58A: .opx worker_js load in host worker vm (callGate-only). */
-export const PLATFORM_ABI_VERSION = '0.8.43-w58'
+/** Platform ABI — thin-A: grant 内写删免确认；Hands=workspace 同策略（after SF4）. */
+export const PLATFORM_ABI_VERSION = '0.8.52-thin-a'
 
 /** Cap for in-memory job.wake observability ring (newest last). */
 export const JOB_WAKE_RING_CAP = 16
@@ -40,7 +41,7 @@ export type ChatAdmitRecord = {
 export type PlatformInfoSnapshot = {
   abiVersion: string
   packs: PackInfo[]
-  /** Whether gate domain-pack checks are active (env OPPTRIX_PLATFORM_PACK_ENFORCE). */
+  /** Whether gate domain-pack checks are active (env OPPTRIX_PLATFORM_PACK_ENFORCE; SF1 default ON). */
   packEnforce: boolean
   /** Total registered extensions (list().length). */
   extensions: number
@@ -107,6 +108,11 @@ export type PlatformContext = {
   checkpointApply: CheckpointApplyHooks | null
   /** Bind / clear the hard restore apply hook. */
   bindCheckpointApply(hooks: CheckpointApplyHooks | null): void
+  /**
+   * SF-thin-A: grant file ops no longer use Hands confirm — dead no-op.
+   * Delegates to `hands.bindHandsConfirmHandler` (also no-op).
+   */
+  bindHandsConfirmHandler(handler: ConfirmHandler | null): void
   /** In-memory approval queue (cap 64 pending). */
   approval: ApprovalQueue
   /** Memory facade: late-bound working snapshot + durable promote with provenance. */
@@ -138,7 +144,7 @@ export type {
   ExtensionHostSupervisor,
   HostWorkerStatus,
 } from './extensions/types.js'
-export type { DomainPackId, PackInfo, PackRegistry } from './packs/types.js'
+export type { DomainPackId, PackEnableResult, PackInfo, PackRegistry } from './packs/types.js'
 export type {
   AuditEntry,
   DenialRecord,

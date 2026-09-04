@@ -128,7 +128,7 @@ module.exports = {
 
     const ctx = platform.createPlatformContext()
     const before = ctx.meter.snapshot().submitCount
-    const reg = platform.admitRegisterOpx(ctx, zip)
+    const reg = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(reg.ok, true, reg.ok ? '' : reg.error)
     if (!reg.ok) throw new Error('expected register ok')
     assert.equal(reg.extension.activation, 'worker_js')
@@ -141,6 +141,7 @@ module.exports = {
     assert.equal(act.extension.state, 'active')
     assert.equal(act.hostBound, true)
     assert.equal(act.jsLoaded, true)
+    assert.equal(act.experimental, true)
     assert.equal(act.extension.jsLoaded, true)
     assert.equal(ctx.info().hostWorker, 'running')
     assert.ok(
@@ -158,7 +159,7 @@ module.exports = {
       'index.js': `require('fs'); module.exports = { activate() {} }`,
     })
     const ctx = platform.createPlatformContext()
-    const reg = platform.admitRegisterOpx(ctx, zip)
+    const reg = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(reg.ok, true, reg.ok ? '' : reg.error)
     if (!reg.ok) throw new Error('expected register ok')
 
@@ -206,7 +207,7 @@ module.exports = {
 `,
     })
     const ctx = platform.createPlatformContext()
-    const reg = platform.admitRegisterOpx(ctx, zip)
+    const reg = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(reg.ok, true, reg.ok ? '' : reg.error)
     if (!reg.ok) throw new Error('expected ok')
     assert.equal(reg.entryPath, 'lib/run.js')
@@ -225,7 +226,7 @@ module.exports = {
       id: 'ext-w58-json-entry',
       activation: 'worker_js',
       entry: 'index.js',
-    })
+    }, { trusted: true })
     assert.equal(bad.ok, false)
     if (bad.ok) throw new Error('expected fail')
     assert.match(bad.error, /file path|entry/i)
@@ -257,7 +258,7 @@ module.exports = {
     assert.match(rpc, /node:vm|from 'node:vm'|from "node:vm"/)
   })
 
-  it('C-OPX-WORKER-JS + ABI 0.8.43-w58', async () => {
+  it('C-OPX-WORKER-JS + ABI 0.8.52-thin-a', async () => {
     const zip = buildStoredZip({
       'manifest.json': JSON.stringify({
         id: 'c-opx-w58',
@@ -266,7 +267,7 @@ module.exports = {
       'dist/host/index.js': 'module.exports = { activate() { return callGate("c58") } }',
     })
     const ctx = platform.createPlatformContext()
-    const reg = platform.admitRegisterOpx(ctx, zip)
+    const reg = platform.admitRegisterOpx(ctx, zip, { trusted: true })
     assert.equal(reg.ok, true)
     if (!reg.ok) throw new Error('expected ok')
     assert.equal(reg.entryPath, 'dist/host/index.js')
@@ -274,8 +275,9 @@ module.exports = {
     assert.equal(act.ok, true, act.ok ? '' : act.error)
     if (!act.ok) throw new Error('expected ok')
     assert.equal(act.jsLoaded, true)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.43-w58')
-    assert.equal(ctx.abiVersion, '0.8.43-w58')
+    assert.equal(act.experimental, true)
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
     assert.ok(platform.OPX_ENTRY_SOURCE_MAX_BYTES <= 256 * 1024)
   })
 })

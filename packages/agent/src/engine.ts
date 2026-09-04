@@ -10,6 +10,7 @@ import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './l
 import { DiscoverRunner } from './discover.js'
 import {
   createPassthroughGate,
+  toolResultFromGateObservation,
   type CapabilityGate,
 } from './capability-gate.js'
 import { ToolRegistry } from './tools.js'
@@ -701,7 +702,7 @@ export class AgentEngine {
         root_id: string
         path: string
       }) => {
-        // 无人值守：自动放行覆盖/删除；子会话禁止自动放行，须父确认
+        // 无人值守：若仍命中覆盖/删除 sticky 确认（遗留路径）则自动放行；子会话禁止自动放行
         if (unattended) return pickUnattendedConfirmIds(payload.options)
         if (isSub) {
           const blocked = subagentBlockedToolError(
@@ -2351,7 +2352,7 @@ export class AgentEngine {
                 },
                 () => runInToolSession(sessionId, () => broker.call(fn, args, { signal })),
               )
-              result = obs.data
+              result = toolResultFromGateObservation(obs)
               // MCP 运维会改变外部 tools schema → 冷启动重建冻结集（accept cache miss）
               if (
                 fn === 'enable_mcp_server'
