@@ -92,6 +92,7 @@ import {
 import { fetchUserAgreementHtml } from './legal-document.js'
 import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
+import { registerExtensionsHttp } from './extensions-http.js'
 import {
   admitAndRememberJobWake,
   admitChatBestEffort,
@@ -1122,6 +1123,13 @@ app.post<{
     packs: setResult.packs,
     persisted: true,
   }
+})
+
+// Extensions HTTP API — install/activate/deactivate/uninstall/list + route proxy.
+// Registered in Phase A (before listen) so /api/platform/extensions is available early.
+await registerExtensionsHttp(app, {
+  platform,
+  devMode: process.env.OPPTRIX_EXT_DEV === '1',
 })
 
 app.get('/api/legal/user-agreement', async (_req, reply) => {

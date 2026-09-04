@@ -154,6 +154,11 @@ export type ExtensionManager = {
    */
   activate(id: string): Promise<{ ok: boolean; error?: string; experimental?: true }>
   deactivate(id: string): Promise<{ ok: boolean }>
+  /**
+   * Uninstall: deactivate (contribution cleanup), remove from registry + memory.
+   * Does NOT remove private data (caller decides via removeExtensionData).
+   */
+  uninstall(id: string): { ok: boolean; id: string }
   /** R0: never throws; failures become disabled+error */
   bootScan(): Promise<void>
   /**

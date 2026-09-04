@@ -4,7 +4,11 @@
  * (never writes to disk, never eval/require/imports entrypoint code in this process).
  */
 import { inflateRawSync } from 'node:zlib'
-import type { ExtensionActivationMode, ExtensionManifest } from './types.js'
+import type {
+  ExtensionActivationMode,
+  ExtensionManifest,
+  ExtensionPermission,
+} from './types.js'
 
 export const OPX_ZIP_MAX_BYTES = 2 * 1024 * 1024
 export const OPX_MANIFEST_MAX_BYTES = 64 * 1024
@@ -274,6 +278,21 @@ function toManifest(
     }
     manifest.capabilities = caps
   }
+  // Phase A: extract permissions[] (preferred) alongside legacy capabilities[].
+  if (raw.permissions !== undefined) {
+    if (!Array.isArray(raw.permissions)) {
+      return { ok: false, error: 'permissions must be a string array' }
+    }
+    const perms: ExtensionPermission[] = []
+    for (const item of raw.permissions) {
+      if (typeof item !== 'string') {
+        return { ok: false, error: 'permissions must be a string array' }
+      }
+      const t = item.trim()
+      if (t) perms.push(t as ExtensionPermission)
+    }
+    manifest.permissions = perms
+  }
   if (raw.activation !== undefined) {
     const act = raw.activation
     if (
@@ -296,6 +315,7 @@ function stripPathKeys(manifest: ExtensionManifest): ExtensionManifest {
   if (manifest.name !== undefined) out.name = manifest.name
   if (manifest.version !== undefined) out.version = manifest.version
   if (manifest.capabilities !== undefined) out.capabilities = [...manifest.capabilities]
+  if (manifest.permissions !== undefined) out.permissions = [...manifest.permissions]
   if (manifest.activation !== undefined) out.activation = manifest.activation
   return out
 }

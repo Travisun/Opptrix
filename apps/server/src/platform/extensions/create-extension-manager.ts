@@ -550,6 +550,28 @@ export function createExtensionManager(
       return { ok: true }
     },
 
+    /**
+     * Uninstall: deactivate (contribution cleanup), remove from registry + memory.
+     * Does NOT remove private data (caller decides via removeExtensionData).
+     */
+    uninstall(id: string): { ok: boolean; id: string } {
+      const key = String(id ?? '').trim()
+      if (!key) return { ok: false, id: id ?? '' }
+      if (!records.has(key)) return { ok: false, id: key }
+      // Contribution cleanup.
+      hookRegistry.unregisterForPlugin(key)
+      routeRegistry.unregisterForPlugin(key)
+      records.delete(key)
+      if (registry) {
+        try {
+          registry.remove(key)
+        } catch {
+          // best-effort
+        }
+      }
+      return { ok: true, id: key }
+    },
+
     async bootScan(): Promise<void> {
       // R0 Phase 1: clear prior run errors in-memory.
       for (const [id, rec] of records) {
