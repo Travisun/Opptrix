@@ -94,6 +94,7 @@ import { startRetentionMaintenance, stopRetentionMaintenance } from './retention
 import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
 import { registerExtensionsHttp } from './extensions-http.js'
 import { registerStoreHttp } from './store-http.js'
+import { registerChannelsHttp } from './channels-http.js'
 import { bindLateBoundServices } from './platform/extensions/late-bound-handlers.js'
 import { bindMarketPlane, getMarketPlane } from './market-data-plane.js'
 import {
@@ -1090,6 +1091,9 @@ await registerExtensionsHttp(app, {
   platform,
   devMode: process.env.OPPTRIX_EXT_DEV === '1',
 })
+
+// Phase B chat channels (external bots: Telegram/Slack/DingTalk/Feishu/WeCom/QQ).
+await registerChannelsHttp(app, { platform, agent })
 
 // Phase B store client endpoints (UI entry hidden until next release).
 await registerStoreHttp(app, {
