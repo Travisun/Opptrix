@@ -1,0 +1,20 @@
+{
+  "id": "com.opptrix.hello-world",
+  "name": "Hello World",
+  "version": "0.1.0",
+  "description": "Phase A sample extension — demonstrates storage, events, hooks, and routes.",
+  "permissions": [
+    "storage",
+    "events.subscribe",
+    "events.emit",
+    "platform.info"
+  ],
+  "activation": "catalog_only",
+  "contributes": {
+    "hooks": ["session.messageCommitted"],
+    "routes": ["/hello"]
+  },
+  "engines": {
+    "opptrix": "^0.9.0"
+  }
+}
