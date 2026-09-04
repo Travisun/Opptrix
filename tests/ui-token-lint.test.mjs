@@ -30,6 +30,7 @@ const THEME_DEF_FILES = new Set([
   'theme/markdownTokens.ts',
   'theme/fontScale.ts',
   'theme/design-tokens.ts',
+  'theme/applyTheme.ts',
 ])
 
 function walk(dir, out = []) {
