@@ -16,6 +16,7 @@ import {
   createPackRegistry,
 } from './packs/create-pack-registry.js'
 import { createPlatformGate } from './gate/index.js'
+import { createExtensionRegistryStore } from './extensions/registry-store.js'
 import {
   CHAT_ADMIT_RING_CAP,
   JOB_WAKE_RING_CAP,
@@ -72,7 +73,9 @@ export function createPlatformContext(): PlatformContext {
     packEnforce,
     maxSubmits,
   })
-  const extensions = createExtensionManager({ events, gate })
+  // Extension registry persistence — R0 Phase 1 scan on boot loads from here.
+  const extensionRegistry = createExtensionRegistryStore()
+  const extensions = createExtensionManager({ events, gate, registry: extensionRegistry })
   const hands = createHandsPort({ gate })
   // SF-thin-A: Hands grant file overwrite/delete match WorkspaceService (no confirm wire).
   const jobs = createJobsFacade({ events })

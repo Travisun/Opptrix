@@ -6,6 +6,10 @@ import {
   type CreateExtensionHostSupervisorOptions,
   type ExtensionHostSupervisor,
 } from './host-worker-rpc.js'
+import {
+  createExtensionRegistryStore,
+  type ExtensionRegistryStore,
+} from './registry-store.js'
 import type {
   ExtensionActivationMode,
   ExtensionGatewayAction,
@@ -13,9 +17,11 @@ import type {
   ExtensionHostFacade,
   ExtensionManager,
   ExtensionManifest,
+  ExtensionPermission,
   ExtensionRecord,
   ExtensionRunResult,
 } from './types.js'
+import { mapLegacyCapabilities } from './capability-token-registry.js'
 
 /** File-path / code-load keys — rejected this wave (in-memory JSON only). */
 const REJECTED_PATH_KEYS = [
@@ -39,15 +45,16 @@ const ACTIVATION_MODES = new Set<ExtensionActivationMode>([
 
 function stripMeta(rec: ExtensionRecord): Pick<
   ExtensionRecord,
-  'name' | 'version' | 'capabilities' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
+  'name' | 'version' | 'capabilities' | 'permissions' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
 > {
   const out: Pick<
     ExtensionRecord,
-    'name' | 'version' | 'capabilities' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
+    'name' | 'version' | 'capabilities' | 'permissions' | 'activation' | 'hostBound' | 'jsLoaded' | 'trusted'
   > = { trusted: rec.trusted === true }
   if (rec.name !== undefined) out.name = rec.name
   if (rec.version !== undefined) out.version = rec.version
   if (rec.capabilities !== undefined) out.capabilities = [...rec.capabilities]
+  if (rec.permissions !== undefined) out.permissions = [...rec.permissions]
   if (rec.activation !== undefined) out.activation = rec.activation
   if (rec.hostBound !== undefined) out.hostBound = rec.hostBound
   if (rec.jsLoaded !== undefined) out.jsLoaded = rec.jsLoaded
@@ -96,6 +103,11 @@ export type CreateExtensionManagerOptions = {
     CreateExtensionHostSupervisorOptions,
     'workerFactory' | 'workerEntryPath' | 'requestTimeoutMs'
   >
+  /**
+   * Persistence store. When provided, extension records survive restart
+   * (R0 Phase 1 scan on boot). When omitted, in-memory only (tests).
+   */
+  registry?: ExtensionRegistryStore
 }
 
 const DEFAULT_RUN_TIMEOUT_MS = 5000
@@ -113,6 +125,16 @@ export function createExtensionManager(
   const entrySources = new Map<string, string>()
   const events = opts?.events
   const gate = opts?.gate
+  const registry = opts?.registry
+
+  function persist(record: ExtensionRecord): void {
+    if (!registry) return
+    try {
+      registry.upsert(record)
+    } catch {
+      // persistence is best-effort; in-memory stays authoritative
+    }
+  }
 
   function emitBestEffort(name: string, payload: Record<string, unknown>): void {
     if (!events) return
@@ -284,6 +306,14 @@ export function createExtensionManager(
     if (capsParsed.value !== undefined) {
       record.capabilities = capsParsed.value
     }
+    // Phase A: map manifest.permissions[] (and legacy capabilities[]) → record.permissions[].
+    const rawPermissions = Array.isArray(raw.permissions) ? raw.permissions : undefined
+    const perms = mapLegacyCapabilities(
+      rawPermissions ?? capsParsed.value ?? [],
+    )
+    if (perms.length > 0) {
+      record.permissions = perms
+    }
     const actParsed = parseActivation(raw.activation)
     if (!actParsed.ok) {
       return { ok: false, error: actParsed.error }
@@ -305,6 +335,7 @@ export function createExtensionManager(
     }
 
     records.set(key, record)
+    persist(record)
     return { ok: true }
   }
 
@@ -389,6 +420,7 @@ export function createExtensionManager(
         next.jsLoaded = true
       }
       records.set(key, next)
+      persist(next)
       emitBestEffort(SystemEvents.extension.activated, { id: key })
       // Soft warning only — do not disable worker_js.
       if (mode === 'worker_js') {
@@ -402,25 +434,122 @@ export function createExtensionManager(
       if (!key) return { ok: false }
       const existing = records.get(key)
       if (!existing) return { ok: false }
-      records.set(key, {
+      const next: ExtensionRecord = {
         id: key,
         state: 'inactive',
         ...stripMeta(existing),
-      })
+      }
+      records.set(key, next)
+      persist(next)
       emitBestEffort(SystemEvents.extension.deactivated, { id: key })
       return { ok: true }
     },
 
     async bootScan(): Promise<void> {
-      // No filesystem / .opx load in Wave 9A/38A — clear prior run errors only.
+      // R0 Phase 1: clear prior run errors in-memory.
       for (const [id, rec] of records) {
         if (rec.state === 'error') {
-          records.set(id, {
+          const restored: ExtensionRecord = {
             id,
             state: 'inactive',
             ...stripMeta(rec),
+          }
+          records.set(id, restored)
+          persist(restored)
+        }
+      }
+    },
+
+    /**
+     * R0 Phase 1+2: load persisted records (if registry) and activate
+     * previously-active extensions. Idempotent, non-throwing.
+     * Called post-listen from bootstrap Phase B — must NOT block startup.
+     */
+    async ready(): Promise<void> {
+      if (!registry) return
+      if (records.size > 0) return // already loaded (e.g. test pre-seed)
+      let loaded: ExtensionRecord[] = []
+      try {
+        loaded = registry.loadAll()
+      } catch {
+        return // R0: persistence failure must not block startup
+      }
+      for (const rec of loaded) {
+        records.set(rec.id, rec)
+      }
+      // R0 Phase 2: re-activate extensions that were active before restart.
+      // Fire-and-forget per extension; failures mark error, never throw.
+      // Inline (not via activate()) to avoid forward-reference to a sibling closure.
+      for (const rec of loaded) {
+        if (rec.state === 'active' && rec.activation !== 'catalog_only') {
+          void (async () => {
+            const mode = rec.activation ?? 'catalog_only'
+            if (mode === 'worker_stub' || mode === 'worker_js') {
+              try {
+                if (hostSupervisor.status() !== 'running') {
+                  await hostSupervisor.start()
+                }
+              } catch {
+                return
+              }
+              if (hostSupervisor.status() !== 'running') return
+            }
+            const next: ExtensionRecord = {
+              id: rec.id,
+              state: 'active',
+              ...stripMeta(rec),
+              ...(mode === 'worker_stub' || mode === 'worker_js' ? { hostBound: true } : {}),
+            }
+            records.set(rec.id, next)
+            persist(next)
+            emitBestEffort(SystemEvents.extension.activated, { id: rec.id })
+          })().catch(() => {
+            // R0: single extension failure does not block others
           })
         }
+      }
+    },
+
+    /**
+     * R1 ordered shutdown: deactivate active extensions, flush + close registry.
+     * Bounded best-effort — never throws. Safe to call multiple times.
+     */
+    async shutdown(): Promise<void> {
+      const activeIds = [...records.values()]
+        .filter((r) => r.state === 'active')
+        .map((r) => r.id)
+      // Deactivate in parallel, per-ext best-effort. Inline (not via deactivate())
+      // to avoid forward-reference to a sibling closure.
+      await Promise.all(
+        activeIds.map((id) =>
+          (async () => {
+            const existing = records.get(id)
+            if (!existing) return
+            const next: ExtensionRecord = {
+              id,
+              state: 'inactive',
+              ...stripMeta(existing),
+            }
+            records.set(id, next)
+            persist(next)
+            emitBestEffort(SystemEvents.extension.deactivated, { id })
+          })().catch(() => {
+            // R1: single failure does not block others
+          }),
+        ),
+      )
+      if (registry) {
+        try {
+          registry.close()
+        } catch {
+          // R1: best-effort
+        }
+      }
+      // Stop the shared host worker (R1: release worker_threads).
+      try {
+        await host.stop()
+      } catch {
+        // R1: best-effort
       }
     },
 

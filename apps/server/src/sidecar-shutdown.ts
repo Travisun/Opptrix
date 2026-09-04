@@ -38,6 +38,12 @@ export type SidecarShutdownHooks = {
   log: SidecarShutdownLog
   /** Stop schedule / retention / news / enrichment timers (sync). */
   stopSchedulers: () => void
+  /**
+   * R1: ordered extension shutdown — deactivate active extensions, flush registry,
+   * stop host worker. Bounded best-effort (budget min(5s, forceExit×0.4)).
+   * Runs AFTER stopSchedulers, BEFORE closeBrowsers.
+   */
+  shutdownExtensions?: () => Promise<void>
   closeBrowsers: () => Promise<void>
   closeHttpApp: () => Promise<void>
   unloadLlama: () => Promise<void>
@@ -110,6 +116,9 @@ export async function runSidecarShutdown(hooks: SidecarShutdownHooks): Promise<v
     await runStep(hooks.log, 'stopSchedulers', () => {
       hooks.stopSchedulers()
     })
+    if (hooks.shutdownExtensions) {
+      await runStep(hooks.log, 'shutdownExtensions', () => hooks.shutdownExtensions?.())
+    }
     await runStep(hooks.log, 'closeBrowsers', () => hooks.closeBrowsers())
     await runStep(hooks.log, 'closeHttpApp', () => hooks.closeHttpApp())
     await runStep(hooks.log, 'unloadLlama', () => hooks.unloadLlama())

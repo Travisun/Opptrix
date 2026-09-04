@@ -78,6 +78,8 @@ export type ExtensionRecord = {
   name?: string
   version?: string
   capabilities?: string[]
+  /** Phase A permissions (from manifest.permissions[]). */
+  permissions?: ExtensionPermission[]
   /** From manifest; omitted ⇒ treat as catalog_only. */
   activation?: ExtensionActivationMode
   /**
@@ -154,6 +156,16 @@ export type ExtensionManager = {
   deactivate(id: string): Promise<{ ok: boolean }>
   /** R0: never throws; failures become disabled+error */
   bootScan(): Promise<void>
+  /**
+   * R0 Phase 1+2: load persisted records + re-activate previously-active extensions.
+   * Idempotent, non-throwing. Called post-listen.
+   */
+  ready(): Promise<void>
+  /**
+   * R1 ordered shutdown: deactivate active extensions, flush registry, stop host worker.
+   * Bounded best-effort, never throws.
+   */
+  shutdown(): Promise<void>
   /**
    * Run work only if extension is active.
    * R0: never throws out of run — timeout / work throw → state error + ok:false.

@@ -36,6 +36,10 @@ export {
   mapLegacyCapabilities,
   type CapabilityTokenRule,
 } from './capability-token-registry.js'
+export {
+  createExtensionRegistryStore,
+  type ExtensionRegistryStore,
+} from './registry-store.js'
 export type {
   ExtensionActivationMode,
   ExtensionPermission,

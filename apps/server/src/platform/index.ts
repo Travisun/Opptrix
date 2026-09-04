@@ -20,6 +20,7 @@ export {
   type ExtensionRunResult,
   type ExtensionHostSupervisor,
   type HostWorkerStatus,
+  type ExtensionRegistryStore,
   type DomainPackId,
   type PackInfo,
   type PackRegistry,
@@ -87,6 +88,7 @@ export {
 } from './packs/index.js'
 export {
   createExtensionManager,
+  createExtensionRegistryStore,
   admitPlatformExtensions,
   admitPlatformHostWorker,
   admitRegisterExtension,

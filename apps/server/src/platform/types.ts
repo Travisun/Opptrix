@@ -135,6 +135,8 @@ export type { JobsFacade, PlatformJobSnapshot } from './jobs/types.js'
 export type { CapabilityGate, CapabilityAction, CapabilityObservation } from '@opptrix/agent'
 export type {
   ExtensionActivationMode,
+  ExtensionPermission,
+  ExtensionContributes,
   ExtensionHostApi,
   ExtensionHostFacade,
   ExtensionManager,
@@ -144,6 +146,7 @@ export type {
   ExtensionHostSupervisor,
   HostWorkerStatus,
 } from './extensions/types.js'
+export type { ExtensionRegistryStore } from './extensions/registry-store.js'
 export type { DomainPackId, PackEnableResult, PackInfo, PackRegistry } from './packs/types.js'
 export type {
   AuditEntry,

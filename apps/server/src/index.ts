@@ -3132,6 +3132,12 @@ async function bootstrap() {
   // System hot-update: first-boot hooks + silent check (after listen so status API works)
   startSystemUpdateAfterListen()
 
+  // R0 Phase 1+2: load persisted extensions + re-activate previously-active ones.
+  // Fire-and-forget — must NOT block startup (R0-1).
+  void platform.extensions.ready().catch(() => {
+    // R0: extension startup failure must not block bootstrap
+  })
+
   // ── phaseB：listen 之后再跑调度/预热等非路由重活。
   // Fastify 5：listen 后路由树锁定，禁止再 app.register / app.get|post|… 注册新路由。
   startNewsFeedScheduler()
@@ -3230,6 +3236,14 @@ async function shutdown(signal: string) {
       stopRetentionMaintenance()
       stopNewsFeedScheduler()
       stopEnrichmentScheduler()
+    },
+    shutdownExtensions: async () => {
+      // R1: ordered extension shutdown — bounded best-effort, never throws.
+      try {
+        await platform.extensions.shutdown()
+      } catch {
+        // R1: best-effort; forceExit timer handles the hard bound
+      }
     },
     closeBrowsers: () => browserSessionManager.closeAll(),
     closeHttpApp: async () => {
