@@ -1,5 +1,5 @@
-import type { ColorScheme } from './tokens'
-import { opptrixTokensDark, opptrixTokensLight } from './tokens'
+import type { AppearanceType, ColorScheme } from './tokens'
+import { iosTokensDark, iosTokensLight, opptrixTokensDark, opptrixTokensLight } from './tokens'
 
 /** CSS custom property names for color tokens */
 export const CSS_VAR_KEYS = [
@@ -59,7 +59,11 @@ export const CSS_VAR_KEYS = [
   'glass-surface-border',
 ] as const
 
-type TokenColorSource = typeof opptrixTokensLight | typeof opptrixTokensDark
+type TokenColorSource =
+  | typeof opptrixTokensLight
+  | typeof opptrixTokensDark
+  | typeof iosTokensLight
+  | typeof iosTokensDark
 
 function tokenToCssVarMap(tokens: TokenColorSource): Record<string, string> {
   return {
@@ -120,15 +124,27 @@ function tokenToCssVarMap(tokens: TokenColorSource): Record<string, string> {
   }
 }
 
+
+
 const LIGHT_VARS = tokenToCssVarMap(opptrixTokensLight)
 const DARK_VARS = tokenToCssVarMap(opptrixTokensDark)
+const IOS_LIGHT_VARS = tokenToCssVarMap(iosTokensLight)
+const IOS_DARK_VARS = tokenToCssVarMap(iosTokensDark)
 
-export function getCssVarValues(scheme: ColorScheme): Record<string, string> {
+export function getCssVarValues(
+  scheme: ColorScheme,
+  appearance: AppearanceType = 'opptrix',
+): Record<string, string> {
+  if (appearance === 'ios') return scheme === 'dark' ? IOS_DARK_VARS : IOS_LIGHT_VARS
   return scheme === 'dark' ? DARK_VARS : LIGHT_VARS
 }
 
-export function applyCssVars(scheme: ColorScheme, root: HTMLElement = document.documentElement): void {
-  const values = getCssVarValues(scheme)
+export function applyCssVars(
+  scheme: ColorScheme,
+  appearance: AppearanceType = 'opptrix',
+  root: HTMLElement = document.documentElement,
+): void {
+  const values = getCssVarValues(scheme, appearance)
   for (const [key, value] of Object.entries(values)) {
     root.style.setProperty(`--opptrix-${key}`, value)
   }

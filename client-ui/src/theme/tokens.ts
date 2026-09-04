@@ -282,7 +282,107 @@ export const opptrixTokens = {
   ...opptrixTokensLight,
 } as const
 
-export function getOpptrixTokens(scheme: ColorScheme) {
+/** Design language axis: Opptrix (Cursor-aligned) or iOS (Apple system). */
+export type AppearanceType = 'opptrix' | 'ios'
+
+/**
+ * iOS palette — Apple system colors (iOS 17/18 light):
+ * grouped background #F2F2F7, systemBlue #007AFF, separator rgba(60,60,67,0.29).
+ * Only overrides keys whose VALUE differs from the Opptrix palette.
+ */
+export const iosTokensLight = {
+  ...opptrixTokensLight,
+  accent: '#007AFF',
+  accentHover: '#0071EB',
+  accentSoft: 'rgba(0, 122, 255, 0.12)',
+  accentMuted: 'rgba(0, 122, 255, 0.18)',
+
+  /** UITableView grouped background */
+  canvas: '#F2F2F7',
+  canvasAlt: '#F2F2F7',
+  canvasMuted: '#E5E5EA',
+  /** Grouped cards are white on gray */
+  surface: '#FFFFFF',
+  surfaceMuted: 'rgba(255, 255, 255, 0.72)',
+  surfaceHover: 'rgba(0, 0, 0, 0.045)',
+  surfaceGlass: 'rgba(242, 242, 247, 0.82)',
+
+  glass: 'rgba(255, 255, 255, 0.55)',
+  glassStrong: 'rgba(255, 255, 255, 0.72)',
+  glassNavSelected: 'rgba(0, 0, 0, 0.05)',
+  sidebarGlass: 'rgba(242, 242, 247, 0.85)',
+  sidebarSelected: 'rgba(0, 0, 0, 0.05)',
+
+  userBubble: '#FFFFFF',
+  gray100: '#F2F2F7',
+  gray200: '#E5E5EA',
+  gray300: 'rgba(60, 60, 67, 0.18)',
+
+  separator: 'rgba(60, 60, 67, 0.29)',
+  separatorStrong: 'rgba(60, 60, 67, 0.36)',
+  border: 'rgba(60, 60, 67, 0.18)',
+  borderStrong: 'rgba(60, 60, 67, 0.29)',
+
+  textPrimary: '#000000',
+  textSecondary: 'rgba(60, 60, 67, 0.60)',
+  textTertiary: 'rgba(60, 60, 67, 0.40)',
+
+  infoSoft: 'rgba(0, 0, 0, 0.05)',
+}
+
+/** iOS dark — system colors (dark): #000 grouped, blue #0A84FF, elevated #1C1C1E. */
+export const iosTokensDark = {
+  ...opptrixTokensDark,
+  accent: '#0A84FF',
+  accentHover: '#409CFF',
+  accentSoft: 'rgba(10, 132, 255, 0.18)',
+  accentMuted: 'rgba(10, 132, 255, 0.26)',
+  accentForeground: '#FFFFFF',
+
+  canvas: '#000000',
+  canvasAlt: '#000000',
+  canvasMuted: '#1C1C1E',
+  surface: '#1C1C1E',
+  surfaceMuted: 'rgba(28, 28, 30, 0.72)',
+  surfaceHover: 'rgba(120, 120, 128, 0.18)',
+  surfaceGlass: 'rgba(28, 28, 30, 0.82)',
+
+  glass: 'rgba(30, 30, 32, 0.55)',
+  glassStrong: 'rgba(44, 44, 46, 0.72)',
+  glassNavSelected: 'rgba(120, 120, 128, 0.24)',
+  sidebarGlass: 'rgba(20, 20, 22, 0.85)',
+  sidebarSelected: 'rgba(120, 120, 128, 0.24)',
+
+  userBubble: '#2C2C2E',
+  gray100: '#1C1C1E',
+  gray200: '#2C2C2E',
+  gray300: 'rgba(84, 84, 88, 0.48)',
+
+  separator: 'rgba(84, 84, 88, 0.60)',
+  separatorStrong: 'rgba(84, 84, 88, 0.72)',
+  border: 'rgba(84, 84, 88, 0.42)',
+  borderStrong: 'rgba(84, 84, 88, 0.60)',
+
+  textPrimary: '#FFFFFF',
+  textSecondary: 'rgba(235, 235, 245, 0.60)',
+  textTertiary: 'rgba(235, 235, 245, 0.38)',
+
+  success: '#30D158',
+  successSoft: 'rgba(48, 209, 88, 0.14)',
+  warning: '#FF9F0A',
+  warningSoft: 'rgba(255, 159, 10, 0.14)',
+  error: '#FF453A',
+  errorSoft: 'rgba(255, 69, 58, 0.14)',
+  infoSoft: 'rgba(235, 235, 245, 0.08)',
+}
+
+export function getOpptrixTokens(scheme: ColorScheme, appearance: AppearanceType = 'opptrix') {
+  if (appearance === 'ios') {
+    return {
+      ...layoutTokens,
+      ...(scheme === 'dark' ? iosTokensDark : iosTokensLight),
+    }
+  }
   return {
     ...layoutTokens,
     ...(scheme === 'dark' ? opptrixTokensDark : opptrixTokensLight),

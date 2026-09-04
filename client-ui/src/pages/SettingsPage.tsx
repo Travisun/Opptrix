@@ -60,7 +60,7 @@ import {
 } from '../platform/chatSound'
 import FontScalePreferencePicker from './settings/FontScalePreferencePicker'
 import FontFamilyPreferencePicker from './settings/FontFamilyPreferencePicker'
-import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars, type AppearanceType, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
 import WorkspaceSplitDivider from '../chat/WorkspaceSplitDivider'
