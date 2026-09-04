@@ -78,7 +78,18 @@ export function createPlatformContext(): PlatformContext {
     maxSubmits,
   })
   // Extension registry persistence — R0 Phase 1 scan on boot loads from here.
-  const extensionRegistry = createExtensionRegistryStore()
+  // Fault tolerance: a corrupt/unwritable registry must NOT crash the whole
+  // server at module load (R0). Degrade to in-memory mode (no persistence)
+  // with a loud warning; extension management keeps working for this run.
+  let extensionRegistry: ReturnType<typeof createExtensionRegistryStore> | undefined
+  try {
+    extensionRegistry = createExtensionRegistryStore()
+  } catch (err) {
+    console.warn(
+      '[platform] extension registry unavailable, running in-memory:',
+      err instanceof Error ? err.message : String(err),
+    )
+  }
   // Capability host — dispatches extension callGate tokens to real services.
   // Self-contained handlers (events, platform.info, storage) registered here;
   // late-bound handlers (data.query, schedule, llm, shell) registered here too —
@@ -89,7 +100,7 @@ export function createPlatformContext(): PlatformContext {
   const extensions = createExtensionManager({
     events,
     gate,
-    registry: extensionRegistry,
+    ...(extensionRegistry ? { registry: extensionRegistry } : {}),
     capabilityHost,
     dataRoot: resolveUserDataRoot(),
   })

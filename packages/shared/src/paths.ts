@@ -35,6 +35,12 @@ export function resolvePluginDataDir(pluginId: string): string {
   if (!safe) {
     throw new Error('invalid plugin id')
   }
+  // `.` / `..` survive the character allowlist — they would resolve to the
+  // plugin-data root itself or its parent (user data root), letting an
+  // uninstall recurse-delete far beyond one extension's directory.
+  if (safe === '.' || safe === '..' || safe.startsWith('..') || safe.includes('/')) {
+    throw new Error('invalid plugin id')
+  }
   return path.join(resolvePluginDataRoot(), safe)
 }
 

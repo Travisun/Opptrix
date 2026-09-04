@@ -105,6 +105,15 @@ async function ownerAuthOnRequest(req: FastifyRequest, reply: FastifyReply): Pro
       })
       return
     }
+    // Extension private-data export is data exposure, not onboarding
+    // diagnostics — deny pre-claim (safe-mode wipe leaves plugin-data on disk).
+    if (path.startsWith('/api/platform/extensions/') && path.endsWith('/storage/export')) {
+      await reply.code(403).send({
+        error: '请先完成安装与账户设置',
+        code: 'install_required',
+      })
+      return
+    }
     return
   }
 

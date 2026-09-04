@@ -39,19 +39,17 @@ export async function registerExtensionsHttp(
 ): Promise<void> {
   const { platform, devMode = false } = opts
 
-  // .opx upload arrives as raw bytes — register an octet-stream parser (scoped
-  // here; Fastify applies the first matching parser per content type).
-  app.addContentTypeParser(
-    'application/octet-stream',
-    { parseAs: 'buffer', bodyLimit: OPX_MAX_BYTES },
-    (_req, body, done) => done(null, body as Buffer),
-  )
+  // NOTE: `application/octet-stream` parsing is registered once app-wide by
+  // `session-attachment-routes.ts` — do NOT addContentTypeParser here again
+  // (Fastify throws FST_ERR_CTP_ALREADY_PRESENT). The install route below
+  // enforces its own 2MB body limit via route-level `bodyLimit`.
 
   // ── Install (.opx upload) ─────────────────────────────────────────────────
   app.post<{ Querystring: { activate?: string } }>(
     '/api/platform/extensions/install',
+    { bodyLimit: OPX_MAX_BYTES },
     async (req, reply) => {
-      // Body arrives as Buffer via the octet-stream parser registered above.
+      // Body arrives as Buffer via the app-wide octet-stream parser.
       const buf = req.body instanceof Buffer ? req.body : null
       if (!buf || buf.length === 0) {
         return reply.code(400).send({ error: 'empty body: send .opx bytes (application/octet-stream)' })
@@ -204,17 +202,39 @@ export async function registerExtensionsHttp(
             match: (
               method: string,
               url: string,
-            ) => { route: { handle: unknown }; params: Record<string, string> } | null
+            ) => {
+              route: { handle: unknown; pluginId: string }
+              params: Record<string, string>
+            } | null
           }
         }
       ).getRouteRegistry()
 
       const method = req.method
       const url = (req as FastifyRequest & { url: string }).url
-      const matched = routeRegistry.match(method, url)
+      const urlPluginId = (req.params as Record<string, string>).pluginId ?? ''
+
+      // Match against the extension-relative sub-path (everything after
+      // `/api/ext/{pluginId}`), NOT the full request URL — extensions register
+      // relative paths like `/hello` (pre-release audit: full-URL match 404'd).
+      const wildcard = (req.params as Record<string, string>)['*'] ?? ''
+      const qIdx = url.indexOf('?')
+      const subPath = `/${wildcard}${qIdx >= 0 ? url.slice(qIdx) : ''}`
+
+      const matched = routeRegistry.match(method, subPath)
       if (!matched) {
         return reply.code(404).send({ error: 'no extension route matched' })
       }
+      // Route ownership: a request to /api/ext/{A}/… must only ever dispatch
+      // to a route registered by extension A (prevents cross-extension path
+      // capture via the prefix-matching registry).
+      if (matched.route.pluginId !== urlPluginId) {
+        return reply.code(404).send({ error: 'no extension route matched' })
+      }
+      // Forward a minimal, safe header set — never session cookies/auth.
+      const fwdHeaders: Record<string, string> = {}
+      const contentType = req.headers['content-type']
+      if (typeof contentType === 'string') fwdHeaders['content-type'] = contentType
       try {
         const response = await invokeRouteHandler(
           matched.route.handle as (req: unknown) => Promise<{
@@ -224,10 +244,10 @@ export async function registerExtensionsHttp(
           }>,
           {
             method,
-            path: (req.params as Record<string, string>)['*'] || '',
+            path: subPath,
             query: (req.query as Record<string, string>) || {},
             body: (req as FastifyRequest & { body: unknown }).body,
-            headers: (req.headers as Record<string, string>) || {},
+            headers: fwdHeaders,
           },
         )
         if (response.headers) {
@@ -236,10 +256,9 @@ export async function registerExtensionsHttp(
           }
         }
         return reply.code(response.status).send(response.body)
-      } catch (err) {
-        return reply.code(500).send({
-          error: err instanceof Error ? err.message : 'extension route error',
-        })
+      } catch {
+        // Do not leak internal error details to the client (R9).
+        return reply.code(500).send({ error: 'extension route error' })
       }
     },
   })

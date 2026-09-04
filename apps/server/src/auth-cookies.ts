@@ -11,7 +11,29 @@ export const SESSION_COOKIE = 'opptrix_session'
 export function requestPath(req: FastifyRequest): string {
   const raw = req.url ?? '/'
   const q = raw.indexOf('?')
-  return q === -1 ? raw : raw.slice(0, q)
+  let pathOnly = q === -1 ? raw : raw.slice(0, q)
+  // The router (find-my-way) matches the percent-DECODED path, so auth prefix
+  // checks must decode too — `/%61pi/…` is `/api/…` to the router and must not
+  // bypass `/api`-scoped auth. Malformed encoding keeps the raw path (the
+  // router will reject it — fail-closed).
+  try {
+    pathOnly = decodeURIComponent(pathOnly)
+  } catch {
+    // keep raw
+  }
+  // Normalize dot segments and collapse duplicate slashes (conservative:
+  // over-normalizing only widens auth coverage, never narrows it).
+  const segments = pathOnly.split('/')
+  const out: string[] = []
+  for (const seg of segments) {
+    if (seg === '.') continue
+    if (seg === '..') {
+      if (out.length > 1) out.pop()
+      continue
+    }
+    out.push(seg)
+  }
+  return out.join('/').replace(/\/{2,}/g, '/')
 }
 
 export function peerIpOf(req: FastifyRequest): string {

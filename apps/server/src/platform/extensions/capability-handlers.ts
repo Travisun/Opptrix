@@ -24,6 +24,29 @@ import type { DomainPackId } from '../packs/types.js'
 
 // ── events.subscribe / events.emit ──────────────────────────────────────────
 
+/** Per-plugin event subscription disposals — cleaned up on deactivate/uninstall. */
+const eventDisposals = new Map<string, Array<() => void>>()
+
+/** Max serialized event payload size for extension emits (design §10.11). */
+const EVENT_PAYLOAD_MAX_BYTES = 64 * 1024
+
+/**
+ * Dispose all event subscriptions registered by a plugin
+ * (deactivate / uninstall contribution cleanup).
+ */
+export function cleanupExtensionEventListeners(pluginId: string): void {
+  const disposals = eventDisposals.get(pluginId)
+  if (!disposals) return
+  for (const dispose of disposals) {
+    try {
+      dispose()
+    } catch {
+      // best-effort
+    }
+  }
+  eventDisposals.delete(pluginId)
+}
+
 const eventsHandler: CapabilityHandler = async (args, ctx) => {
   const action = String(args.action ?? '')
   if (action === 'subscribe') {
@@ -34,15 +57,39 @@ const eventsHandler: CapabilityHandler = async (args, ctx) => {
       return { error: 'handler must be a function', code: 'invalid_args' }
     }
     const dispose = ctx.events.subscribeTopic(topic, handler as never)
-    return { subscribed: topic, dispose: typeof dispose === 'function' }
+    if (typeof dispose === 'function') {
+      const list = eventDisposals.get(ctx.pluginId) ?? []
+      list.push(dispose)
+      eventDisposals.set(ctx.pluginId, list)
+    }
+    return { subscribed: topic, ok: true }
   }
   if (action === 'emit') {
+    // Extensions may only emit inside their own `ext.{pluginId}.*` namespace
+    // (design §26.4 — prevents forging system event names).
     const name = String(args.name ?? '')
+    const expectedPrefix = `ext.${ctx.pluginId}.`
     if (!name) return { error: 'name required', code: 'invalid_args' }
-    ctx.events.emit(name, (args.payload ?? {}) as Record<string, unknown>, {
-      kind: 'extension',
-      id: ctx.pluginId,
-    })
+    if (!name.startsWith(expectedPrefix)) {
+      return {
+        error: `extensions may only emit events under ${expectedPrefix}*`,
+        code: 'invalid_args',
+      }
+    }
+    const payload = (args.payload ?? {}) as Record<string, unknown>
+    let payloadBytes = 0
+    try {
+      payloadBytes = Buffer.byteLength(JSON.stringify(payload) ?? '', 'utf8')
+    } catch {
+      return { error: 'payload must be JSON-serializable', code: 'invalid_args' }
+    }
+    if (payloadBytes > EVENT_PAYLOAD_MAX_BYTES) {
+      return {
+        error: `event payload exceeds ${EVENT_PAYLOAD_MAX_BYTES} bytes`,
+        code: 'payload_too_large',
+      }
+    }
+    ctx.events.emit(name, payload, { kind: 'extension', id: ctx.pluginId })
     return { emitted: name }
   }
   return { error: `unknown events action: ${action}`, code: 'invalid_args' }
@@ -129,10 +176,28 @@ const storageHandler: CapabilityHandler = async (args, ctx) => {
 }
 
 /**
+ * Close and evict one extension's cached storage handle. Must run BEFORE
+ * removing the data directory — otherwise the cached SQLite handle points at
+ * an unlinked inode and a same-id reinstall would silently write into the
+ * deleted file (pre-release audit F4a).
+ */
+export function evictExtensionStorage(pluginId: string): void {
+  const store = storageCache.get(pluginId)
+  if (!store) return
+  try {
+    store.close()
+  } catch {
+    // best-effort
+  }
+  storageCache.delete(pluginId)
+}
+
+/**
  * Remove an extension's private data directory (uninstall cleanup).
  * Best-effort: returns { ok: false } if the directory is absent or removal fails.
  */
 export function removeExtensionData(pluginId: string): { ok: boolean } {
+  evictExtensionStorage(pluginId)
   try {
     removePluginDataDir(pluginId)
     return { ok: true }

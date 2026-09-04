@@ -44,6 +44,13 @@ export const CAPABILITY_TOKEN_RULES: readonly CapabilityTokenRule[] = [
   { token: 'events.subscribe', permission: 'events.subscribe', pack: null, description: 'Subscribe to system events' },
   { token: 'events.emit', permission: 'events.emit', pack: null, description: 'Emit ext.{id}.* events' },
   { token: 'platform.info', permission: 'platform.info', pack: null, description: 'Read deployment + pack snapshot' },
+  // Contribution management tokens (fail-closed: every callable token must
+  // carry a permission mapping). Hooks observe lifecycle events; routes are
+  // the extension's own HTTP surface under /api/ext/{id}/*.
+  { token: 'hooks.register', permission: 'events.subscribe', pack: null, description: 'Register a read-only lifecycle hook' },
+  { token: 'hooks.unregister', permission: 'events.subscribe', pack: null, description: 'Unregister a lifecycle hook' },
+  { token: 'routes.register', permission: 'platform.info', pack: null, description: 'Register an HTTP sub-route' },
+  { token: 'routes.unregister', permission: 'platform.info', pack: null, description: 'Unregister an HTTP sub-route' },
 
   // ── Research domain pack (pack: 'research', requires pack enabled) ────────
   { token: 'data.query', permission: 'data.query', pack: 'research', description: 'Query instrument data (quotes, profile)' },
@@ -71,7 +78,10 @@ for (const rule of CAPABILITY_TOKEN_RULES) {
 
 /**
  * Resolve the capability rule for a token.
- * Supports exact match and wildcard prefix match (e.g. "storage.*" matches "storage.get").
+ * Exact match first, then longest-prefix match against prefix-style rules
+ * (e.g. rule token `storage.get` also governs `storage.anything` because the
+ * capability host dispatches `storage.` by prefix — the permission check must
+ * use the same granularity or variant tokens would bypass it).
  * Returns null if the token is not a recognized Phase A capability.
  */
 export function resolveCapabilityRule(token: string): CapabilityTokenRule | null {
@@ -79,20 +89,18 @@ export function resolveCapabilityRule(token: string): CapabilityTokenRule | null
   const exact = TOKEN_RULE_MAP.get(token)
   if (exact) return exact
 
-  // Wildcard prefix match: try truncating to "prefix.*" form.
-  const dotIdx = token.lastIndexOf('.')
-  if (dotIdx > 0) {
-    const wildcard = token.slice(0, dotIdx + 1) + '*'
-    // Check if any rule's token is a prefix pattern that matches.
-    for (const rule of CAPABILITY_TOKEN_RULES) {
-      if (rule.token.endsWith('.*')) {
-        const prefix = rule.token.slice(0, rule.token.length - 1) // "storage."
-        if (token.startsWith(prefix)) return rule
-      }
+  // Longest-prefix match (mirrors capability-host matchHandler granularity).
+  let best: { len: number; rule: CapabilityTokenRule } | undefined
+  for (const rule of CAPABILITY_TOKEN_RULES) {
+    const dotIdx = rule.token.lastIndexOf('.')
+    if (dotIdx <= 0) continue
+    const prefix = rule.token.slice(0, dotIdx + 1) // e.g. "storage."
+    if (!token.startsWith(prefix)) continue
+    if (!best || prefix.length > best.len) {
+      best = { len: prefix.length, rule }
     }
   }
-
-  return null
+  return best?.rule ?? null
 }
 
 /**

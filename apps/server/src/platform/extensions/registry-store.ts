@@ -69,7 +69,15 @@ function rowToRecord(row: Record<string, unknown>): ExtensionRecord {
       rec.capabilities = JSON.parse(String(row.capabilities))
     }
   } catch {
-    // corrupt row → drop
+    // corrupt field → drop (fail-closed: missing capabilities never grant)
+  }
+  try {
+    if (row.permissions != null) {
+      const parsed = JSON.parse(String(row.permissions))
+      if (Array.isArray(parsed)) rec.permissions = parsed
+    }
+  } catch {
+    // corrupt field → drop (fail-closed: missing permissions deny capability use)
   }
   return rec
 }

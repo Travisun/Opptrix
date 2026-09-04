@@ -148,7 +148,7 @@ describe('Phase A — route contributions', () => {
   it('extension registers a route and it can be matched', async () => {
     const ctx = platform.createPlatformContext()
     await ctx.extensions.registerFromManifest(
-      { id: 'route.1', permissions: ['storage'] },
+      { id: 'route.1', permissions: ['storage', 'platform.info'] },
       { trusted: true },
     )
     await ctx.extensions.activate('route.1')
@@ -190,7 +190,7 @@ describe('Phase A — route contributions', () => {
   it('route matching supports path params', async () => {
     const ctx = platform.createPlatformContext()
     await ctx.extensions.registerFromManifest(
-      { id: 'route.2', permissions: ['storage'] },
+      { id: 'route.2', permissions: ['storage', 'platform.info'] },
       { trusted: true },
     )
     await ctx.extensions.activate('route.2')
@@ -214,7 +214,7 @@ describe('Phase A — route contributions', () => {
   it('deactivate unregisters all routes for the plugin', async () => {
     const ctx = platform.createPlatformContext()
     await ctx.extensions.registerFromManifest(
-      { id: 'route.3', permissions: ['storage'] },
+      { id: 'route.3', permissions: ['storage', 'platform.info'] },
       { trusted: true },
     )
     await ctx.extensions.activate('route.3')

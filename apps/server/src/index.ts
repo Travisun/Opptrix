@@ -960,80 +960,10 @@ app.post<{
   }
 })
 
-/**
- * Diagnostic: Ingress admit → extensions.activate(id) for already-registered extensions.
- * Body optional: `{ origin? }`. Never loads/evals .opx / filesystem code. No UI.
- * Not attached to `/api/health`; subject to owner auth when claimed.
- */
-app.post<{
-  Params: { id: string }
-  Body: { origin?: string }
-}>('/api/platform/extensions/:id/activate', async (req, reply) => {
-  const body = req.body ?? {}
-  const result = await admitActivateExtension(
-    platform,
-    req.params.id,
-    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
-  )
-  if (!result.ok) {
-    return reply.code(400).send({ error: result.error })
-  }
-  return {
-    traceId: result.traceId,
-    origin: result.origin,
-    extension: result.extension,
-    extensionsActive: result.extensionsActive,
-    ...(result.activation !== undefined ? { activation: result.activation } : {}),
-    ...(result.hostBound !== undefined ? { hostBound: result.hostBound } : {}),
-    ...(result.jsLoaded !== undefined ? { jsLoaded: result.jsLoaded } : {}),
-    ...(result.experimental === true ? { experimental: true } : {}),
-  }
-})
-
-/**
- * Diagnostic: Ingress admit → extensions.deactivate(id); catalog kept, state → inactive.
- * Body optional: `{ origin? }`. State flip only — no code unload. No UI.
- * Not attached to `/api/health`; subject to owner auth when claimed.
- */
-app.post<{
-  Params: { id: string }
-  Body: { origin?: string }
-}>('/api/platform/extensions/:id/deactivate', async (req, reply) => {
-  const body = req.body ?? {}
-  const result = await admitDeactivateExtension(
-    platform,
-    req.params.id,
-    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
-  )
-  if (!result.ok) {
-    return reply.code(400).send({ error: result.error })
-  }
-  return {
-    traceId: result.traceId,
-    origin: result.origin,
-    extension: result.extension,
-    extensionsActive: result.extensionsActive,
-  }
-})
-
-/**
- * Diagnostic: Ingress admit → extensions.list() + extensionsActive + hostWorker.
- * Not attached to `/api/health`; subject to owner auth when claimed. No UI.
- * Does not activate extensions or load .opx.
- */
-app.get('/api/platform/extensions', async (_req, reply) => {
-  const result = admitPlatformExtensions(platform)
-  if (!result.ok) {
-    return reply.code(400).send({ error: result.error })
-  }
-  return {
-    traceId: result.traceId,
-    origin: result.origin,
-    extensions: result.extensions,
-    extensionsActive: result.extensionsActive,
-    hostWorker: result.hostWorker,
-  }
-})
+// NOTE: Extension activate / deactivate / list HTTP endpoints live in
+// `extensions-http.ts` (product surface: install/activate/deactivate/uninstall/
+// list/storage-export + /api/ext/:pluginId/* proxy). Registering the same
+// method+path twice throws FST_ERR_DUPLICATED_ROUTE at boot.
 
 /**
  * Diagnostic: Ingress admit → info().hostWorker status only.

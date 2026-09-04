@@ -20,6 +20,7 @@ import {
   registerSelfContainedHandlers,
   closeAllStorage,
   registerContributionHandlers,
+  cleanupExtensionEventListeners,
 } from './capability-handlers.js'
 import type {
   ExtensionActivationMode,
@@ -80,6 +81,18 @@ const ACTIVATION_MODES = new Set<ExtensionActivationMode>([
   'worker_stub',
   'worker_js',
 ])
+
+/**
+ * Storage-safe extension id — the id must equal its own sanitized form
+ * (see `@opptrix/shared` path sanitizers). Rejects `..` traversal, ids ending
+ * in `.` (dir-vs-file ambiguity) and any character that would be rewritten.
+ */
+export function isStorageSafeId(id: string): boolean {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) return false
+  if (id.includes('..')) return false
+  if (id.endsWith('.')) return false
+  return true
+}
 
 function stripMeta(rec: ExtensionRecord): Pick<
   ExtensionRecord,
@@ -390,6 +403,17 @@ export function createExtensionManager(
     if (!key) {
       return { ok: false, error: 'extension id required' }
     }
+    // Storage-safe id invariant: the id must equal its own sanitized form so
+    // that (a) the registry key, data directory and route namespace never
+    // drift, (b) look-alike ids (`com/a`, `com a`, …) cannot collide into one
+    // extension's storage, and (c) `..`-style traversal ids are impossible.
+    if (!isStorageSafeId(key)) {
+      return {
+        ok: false,
+        error:
+          'extension id must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ and must not contain ".." or end with "."',
+      }
+    }
     if (records.has(key)) {
       return { ok: false, error: `extension already registered: ${key}` }
     }
@@ -467,6 +491,12 @@ export function createExtensionManager(
         return { ok: false, error: `extension disabled: ${key}` }
       }
 
+      if (existing.state === 'active') {
+        // Idempotent activate: do not re-run entry JS or re-register
+        // contributions on repeated activate calls.
+        return { ok: true }
+      }
+
       const mode: ExtensionActivationMode =
         existing.activation ?? 'catalog_only'
 
@@ -536,9 +566,10 @@ export function createExtensionManager(
       if (!key) return { ok: false }
       const existing = records.get(key)
       if (!existing) return { ok: false }
-      // Contribution cleanup: unregister hooks + routes for this plugin (R1).
+      // Contribution cleanup: unregister hooks + routes + event listeners (R1).
       hookRegistry.unregisterForPlugin(key)
       routeRegistry.unregisterForPlugin(key)
+      cleanupExtensionEventListeners(key)
       const next: ExtensionRecord = {
         id: key,
         state: 'inactive',
@@ -561,6 +592,9 @@ export function createExtensionManager(
       // Contribution cleanup.
       hookRegistry.unregisterForPlugin(key)
       routeRegistry.unregisterForPlugin(key)
+      cleanupExtensionEventListeners(key)
+      // Drop the in-memory entry source (pre-release audit: stale source leak).
+      entrySources.delete(key)
       records.delete(key)
       if (registry) {
         try {
@@ -607,25 +641,47 @@ export function createExtensionManager(
       // R0 Phase 2: re-activate extensions that were active before restart.
       // Fire-and-forget per extension; failures mark error, never throw.
       // Inline (not via activate()) to avoid forward-reference to a sibling closure.
+      //
+      // worker_js honesty (pre-release audit F2): entry sources live only in
+      // the in-memory `entrySources` map and are NOT persisted. Re-activating
+      // without the source would produce a false-active record whose JS is
+      // never loaded. Mark such extensions `error` with a clear message — the
+      // honest recovery path is uninstall + re-install via the UI.
       for (const rec of loaded) {
-        if (rec.state === 'active' && rec.activation !== 'catalog_only') {
+        if (rec.state !== 'active') continue
+        const mode = rec.activation ?? 'catalog_only'
+        if (mode === 'worker_js') {
+          const next: ExtensionRecord = {
+            id: rec.id,
+            state: 'error',
+            error:
+              '扩展入口代码不随重启保留，需要卸载后重新安装（.opx）以恢复运行',
+            ...stripMeta(rec),
+          }
+          next.jsLoaded = false
+          records.set(rec.id, next)
+          persist(next)
+          emitBestEffort(SystemEvents.extension.crashed, {
+            id: rec.id,
+            error: next.error,
+          })
+          continue
+        }
+        if (mode === 'worker_stub') {
           void (async () => {
-            const mode = rec.activation ?? 'catalog_only'
-            if (mode === 'worker_stub' || mode === 'worker_js') {
-              try {
-                if (hostSupervisor.status() !== 'running') {
-                  await hostSupervisor.start()
-                }
-              } catch {
-                return
+            try {
+              if (hostSupervisor.status() !== 'running') {
+                await hostSupervisor.start()
               }
-              if (hostSupervisor.status() !== 'running') return
+            } catch {
+              return
             }
+            if (hostSupervisor.status() !== 'running') return
             const next: ExtensionRecord = {
               id: rec.id,
               state: 'active',
               ...stripMeta(rec),
-              ...(mode === 'worker_stub' || mode === 'worker_js' ? { hostBound: true } : {}),
+              hostBound: true,
             }
             records.set(rec.id, next)
             persist(next)
@@ -652,6 +708,9 @@ export function createExtensionManager(
           (async () => {
             const existing = records.get(id)
             if (!existing) return
+            hookRegistry.unregisterForPlugin(id)
+            routeRegistry.unregisterForPlugin(id)
+            cleanupExtensionEventListeners(id)
             const next: ExtensionRecord = {
               id,
               state: 'inactive',
