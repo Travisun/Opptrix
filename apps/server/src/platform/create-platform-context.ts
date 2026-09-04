@@ -2,10 +2,13 @@ import {
   getEventDispatcher,
   resetEventDispatcherForTests,
 } from '@opptrix/event-bus'
+import { resolveUserDataRoot } from '@opptrix/shared'
 import { createAlertFacade } from './alerts/create-alert-facade.js'
 import { createApprovalQueue } from './approval/create-approval-queue.js'
 import { createCheckpointStore } from './checkpoint/create-checkpoint-store.js'
 import { createExtensionManager } from './extensions/create-extension-manager.js'
+import { createCapabilityHost } from './extensions/capability-host.js'
+import { registerSelfContainedHandlers } from './extensions/capability-handlers.js'
 import { resetBrowserDetectCacheForTests } from './hands/browser-detect.js'
 import { createHandsPort } from './hands/create-hands-port.js'
 import { createIngressRouter } from './ingress/create-ingress-router.js'
@@ -75,7 +78,18 @@ export function createPlatformContext(): PlatformContext {
   })
   // Extension registry persistence — R0 Phase 1 scan on boot loads from here.
   const extensionRegistry = createExtensionRegistryStore()
-  const extensions = createExtensionManager({ events, gate, registry: extensionRegistry })
+  // Capability host — dispatches extension callGate tokens to real services.
+  // Self-contained handlers (events, platform.info, storage) registered here;
+  // late-bound handlers (llm, data.query, shell, schedule) registered by index.ts.
+  const capabilityHost = createCapabilityHost({ events, packs })
+  registerSelfContainedHandlers(capabilityHost, packs)
+  const extensions = createExtensionManager({
+    events,
+    gate,
+    registry: extensionRegistry,
+    capabilityHost,
+    dataRoot: resolveUserDataRoot(),
+  })
   const hands = createHandsPort({ gate })
   // SF-thin-A: Hands grant file overwrite/delete match WorkspaceService (no confirm wire).
   const jobs = createJobsFacade({ events })

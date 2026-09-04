@@ -10,6 +10,16 @@ import {
   createExtensionRegistryStore,
   type ExtensionRegistryStore,
 } from './registry-store.js'
+import {
+  createCapabilityHost,
+  requiredPermission,
+  type CapabilityHost,
+  type CapabilityServices,
+} from './capability-host.js'
+import {
+  registerSelfContainedHandlers,
+  closeAllStorage,
+} from './capability-handlers.js'
 import type {
   ExtensionActivationMode,
   ExtensionGatewayAction,
@@ -22,6 +32,28 @@ import type {
   ExtensionRunResult,
 } from './types.js'
 import { mapLegacyCapabilities } from './capability-token-registry.js'
+
+/** Thrown by the exec thunk when the capability host returns a structured denial. */
+class CapabilityDenialError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'CapabilityDenialError'
+  }
+}
+
+function isCapabilityDenial(result: unknown): result is { code: string; error: string } {
+  return (
+    result != null &&
+    typeof result === 'object' &&
+    'code' in result &&
+    'error' in result &&
+    typeof (result as Record<string, unknown>).code === 'string' &&
+    typeof (result as Record<string, unknown>).error === 'string'
+  )
+}
 
 /** File-path / code-load keys — rejected this wave (in-memory JSON only). */
 const REJECTED_PATH_KEYS = [
@@ -108,6 +140,15 @@ export type CreateExtensionManagerOptions = {
    * (R0 Phase 1 scan on boot). When omitted, in-memory only (tests).
    */
   registry?: ExtensionRegistryStore
+  /**
+   * Capability host — dispatches callGate tokens to real services.
+   * When omitted, a default host with self-contained handlers is created.
+   */
+  capabilityHost?: CapabilityHost
+  /** Late-bound services (llm, schedule, data query, shell). Set by index.ts. */
+  services?: CapabilityServices
+  /** Data root for per-extension storage paths. */
+  dataRoot?: string
 }
 
 const DEFAULT_RUN_TIMEOUT_MS = 5000
@@ -126,6 +167,15 @@ export function createExtensionManager(
   const events = opts?.events
   const gate = opts?.gate
   const registry = opts?.registry
+  const services = opts?.services
+  const dataRoot = opts?.dataRoot
+
+  // Capability host — the ONLY path from extensions to platform capabilities.
+  const capabilityHost: CapabilityHost =
+    opts?.capabilityHost ??
+    createCapabilityHost({ events: events!, packs: undefined as never, dataRoot, services })
+  // Register self-contained handlers (events, platform.info, storage).
+  registerSelfContainedHandlers(capabilityHost, undefined as never)
 
   function persist(record: ExtensionRecord): void {
     if (!registry) return
@@ -157,15 +207,43 @@ export function createExtensionManager(
         message: 'Capability gate is not available',
       }
     }
-    return gate.submit(
-      {
-        token: action.token,
-        args: action.args ?? {},
-        principal: action.principal,
-        traceId: action.traceId,
-      },
-      exec,
-    )
+    // Permission enforcement: an extension principal must have declared the
+    // required permission for the token (fail-closed).
+    if (action.principal?.kind === 'extension') {
+      const rec = records.get(action.principal.id ?? '')
+      const required = requiredPermission(action.token)
+      if (required && rec && !rec.permissions?.includes(required)) {
+        return {
+          ok: false,
+          denialCode: 'permission_denied',
+          auditId: randomUUID(),
+          message: `extension ${action.principal.id} lacks permission '${required}' for token '${action.token}'`,
+        }
+      }
+    }
+    try {
+      return await gate.submit(
+        {
+          token: action.token,
+          args: action.args ?? {},
+          principal: action.principal,
+          traceId: action.traceId,
+        },
+        exec,
+      )
+    } catch (err) {
+      // A structured capability denial (e.g. unknown token) is surfaced as a
+      // denial observation, not a thrown error (R0: never throw from callGate).
+      if (err instanceof CapabilityDenialError) {
+        return {
+          ok: false,
+          denialCode: err.code,
+          auditId: randomUUID(),
+          message: err.message,
+        }
+      }
+      throw err
+    }
   }
 
   function markRunError(id: string, message: string): void {
@@ -193,7 +271,19 @@ export function createExtensionManager(
             args: safeArgs,
             principal: { kind: 'extension', id: extensionId },
           },
-          async () => ({ hostEcho: true, token, args: safeArgs }),
+          async () => {
+            const result = await capabilityHost.dispatch(
+              token,
+              safeArgs,
+              { pluginId: extensionId, events: events!, dataRoot, services: services ?? {} },
+            )
+            // If the host returns a structured denial, throw to convert into a
+            // gate denial observation (keeps the success path unwrapped).
+            if (isCapabilityDenial(result)) {
+              throw new CapabilityDenialError(result.code, result.error)
+            }
+            return result
+          },
         )
       },
     }
@@ -545,6 +635,8 @@ export function createExtensionManager(
           // R1: best-effort
         }
       }
+      // R1: close per-extension storage handles (Tier 1 flush).
+      closeAllStorage()
       // Stop the shared host worker (R1: release worker_threads).
       try {
         await host.stop()

@@ -1,4 +1,19 @@
 export { createExtensionManager, type CreateExtensionManagerOptions } from './create-extension-manager.js'
+export {
+  createExtensionRegistryStore,
+  type ExtensionRegistryStore,
+} from './registry-store.js'
+export {
+  createCapabilityHost,
+  requiredPermission,
+  type CapabilityHost,
+  type CapabilityHandler,
+  type CapabilityServices,
+} from './capability-host.js'
+export {
+  registerSelfContainedHandlers,
+  closeAllStorage,
+} from './capability-handlers.js'
 export { admitPlatformExtensions } from './admit-platform-extensions.js'
 export { admitPlatformHostWorker } from './admit-platform-host-worker.js'
 export {
@@ -36,10 +51,6 @@ export {
   mapLegacyCapabilities,
   type CapabilityTokenRule,
 } from './capability-token-registry.js'
-export {
-  createExtensionRegistryStore,
-  type ExtensionRegistryStore,
-} from './registry-store.js'
 export type {
   ExtensionActivationMode,
   ExtensionPermission,

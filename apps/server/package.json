@@ -34,6 +34,7 @@
     "@opptrix/local-inference": "*",
     "@opptrix/market-data-store": "*",
     "@opptrix/news-feed": "*",
+    "@opptrix/plugin-storage": "*",
     "@opptrix/research-hub": "*",
     "@opptrix/schedule": "*",
     "@opptrix/search-hub": "*",

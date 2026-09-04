@@ -29,12 +29,18 @@ describe('extension-host Wave 9A', () => {
 
   it('register → activate → run callGate → observation ok; meter.submitCount increases', async () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.extensions.register('ext-a', { trusted: true }).ok, true)
+    assert.equal(
+      ctx.extensions.registerFromManifest(
+        { id: 'ext-a', permissions: ['platform.info'] },
+        { trusted: true },
+      ).ok,
+      true,
+    )
     assert.equal((await ctx.extensions.activate('ext-a')).ok, true)
 
     const before = ctx.meter.snapshot().submitCount
     const result = await ctx.extensions.run('ext-a', async (api) => {
-      return api.callGate('get_quotes', { code: '600519' })
+      return api.callGate('platform.info', { scope: 'packs' })
     })
     assert.equal(result.ok, true)
     if (!result.ok) throw new Error('expected ok')
