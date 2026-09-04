@@ -23,6 +23,7 @@ import DocLibrarySettingsSection from './settings/DocLibrarySettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import CapabilityPacksSettingsSection from './settings/CapabilityPacksSettingsSection'
 import PlatformMeterSettingsSection from './settings/PlatformMeterSettingsSection'
+import ExtensionsSettingsSection from './settings/ExtensionsSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
@@ -798,6 +799,9 @@ function SettingsPageView({
           <>
             <div className={s.sectionBlock}>
               <CapabilityPacksSettingsSection />
+            </div>
+            <div className={s.sectionBlock}>
+              <ExtensionsSettingsSection />
             </div>
             <div className={s.sectionBlock}>
               <PlatformMeterSettingsSection />

@@ -3652,6 +3652,97 @@ export async function setPlatformPackEnabled(
   }
 }
 
+// ─── Platform extensions (Phase A management) ───
+
+export type PlatformExtensionInfo = {
+  id: string
+  state: 'inactive' | 'active' | 'disabled' | 'error'
+  error?: string
+  name?: string
+  version?: string
+  permissions?: string[]
+  activation?: string
+  trusted: boolean
+}
+
+export type PlatformExtensionsResult = {
+  extensions: PlatformExtensionInfo[]
+  hostWorker: string
+  traceId?: string
+  origin?: string
+}
+
+/** List installed extensions + host worker status. */
+export async function fetchPlatformExtensions(): Promise<PlatformExtensionsResult> {
+  const json = await jsonFetch<{
+    extensions?: PlatformExtensionInfo[]
+    hostWorker?: string
+    error?: string
+  }>('/platform/extensions')
+  return {
+    extensions: Array.isArray(json.extensions) ? json.extensions : [],
+    hostWorker: typeof json.hostWorker === 'string' ? json.hostWorker : 'unknown',
+  }
+}
+
+/** Activate a registered extension. */
+export async function activatePlatformExtension(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const json = await jsonFetch<{ ok?: boolean; error?: string }>(
+    `/platform/extensions/${encodeURIComponent(id)}/activate`,
+    { method: 'POST' },
+  )
+  return { ok: json.ok === true, error: typeof json.error === 'string' ? json.error : undefined }
+}
+
+/** Deactivate an active extension. */
+export async function deactivatePlatformExtension(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const json = await jsonFetch<{ ok?: boolean; error?: string }>(
+    `/platform/extensions/${encodeURIComponent(id)}/deactivate`,
+    { method: 'POST' },
+  )
+  return { ok: json.ok === true, error: typeof json.error === 'string' ? json.error : undefined }
+}
+
+/** Uninstall an extension (removes registration; keepData=true preserves private storage). */
+export async function uninstallPlatformExtension(
+  id: string,
+  opts?: { keepData?: boolean },
+): Promise<{ ok: boolean; error?: string }> {
+  const qs = opts?.keepData ? '?keepData=true' : ''
+  const json = await jsonFetch<{ ok?: boolean; error?: string }>(
+    `/platform/extensions/${encodeURIComponent(id)}${qs}`,
+    { method: 'DELETE' },
+  )
+  return { ok: json.ok === true, error: typeof json.error === 'string' ? json.error : undefined }
+}
+
+/** Install an .opx package (raw bytes upload). */
+export async function installPlatformExtension(
+  file: File,
+): Promise<{ ok: boolean; id?: string; name?: string; error?: string }> {
+  const buf = await file.arrayBuffer()
+  const json = await jsonFetch<{
+    ok?: boolean
+    id?: string
+    name?: string
+    error?: string
+  }>('/platform/extensions/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: buf,
+  })
+  return {
+    ok: typeof json.id === 'string',
+    id: typeof json.id === 'string' ? json.id : undefined,
+    name: typeof json.name === 'string' ? json.name : undefined,
+    error: typeof json.error === 'string' ? json.error : undefined,
+  }
+}
+
 // ─── Platform info / meter (read-only settings) ───
 
 export type PlatformMeterSnapshot = {

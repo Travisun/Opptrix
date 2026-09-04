@@ -39,21 +39,25 @@ export async function registerExtensionsHttp(
 ): Promise<void> {
   const { platform, devMode = false } = opts
 
+  // .opx upload arrives as raw bytes — register an octet-stream parser (scoped
+  // here; Fastify applies the first matching parser per content type).
+  app.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer', bodyLimit: OPX_MAX_BYTES },
+    (_req, body, done) => done(null, body as Buffer),
+  )
+
   // ── Install (.opx upload) ─────────────────────────────────────────────────
   app.post<{ Querystring: { activate?: string } }>(
     '/api/platform/extensions/install',
     async (req, reply) => {
+      // Body arrives as Buffer via the octet-stream parser registered above.
       const buf = req.body instanceof Buffer ? req.body : null
       if (!buf || buf.length === 0) {
-        // Also accept raw body string.
-        const raw = req.body
-        if (!raw || typeof raw !== 'string') {
-          return reply.code(400).send({ error: 'empty body: send .opx bytes as raw body' })
-        }
-        return reply.code(400).send({ error: 'binary .opx required' })
+        return reply.code(400).send({ error: 'empty body: send .opx bytes (application/octet-stream)' })
       }
       if (buf.length > OPX_MAX_BYTES) {
-        return reply.code(413).send({ error: ` .opx exceeds ${OPX_MAX_BYTES} bytes` })
+        return reply.code(413).send({ error: `.opx exceeds ${OPX_MAX_BYTES} bytes` })
       }
 
       const regResult = admitRegisterOpx(platform, buf, {
