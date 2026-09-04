@@ -114,6 +114,15 @@ async function ownerAuthOnRequest(req: FastifyRequest, reply: FastifyReply): Pro
       })
       return
     }
+    // Extension route proxy: unclaimed instances have no extensions (install
+    // is locked) — deny outright to keep the surface closed by construction.
+    if (path.startsWith('/api/ext/')) {
+      await reply.code(403).send({
+        error: '请先完成安装与账户设置',
+        code: 'install_required',
+      })
+      return
+    }
     return
   }
 

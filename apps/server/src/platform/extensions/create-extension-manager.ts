@@ -43,6 +43,7 @@ import {
   createSharedHostSupervisor,
   type SharedHostSupervisor,
 } from './subprocess-host.js'
+import { getMarketPlane } from '../../market-data-plane.js'
 
 /** Thrown by the exec thunk when the capability host returns a structured denial. */
 class CapabilityDenialError extends Error {
@@ -196,6 +197,8 @@ const HOST_RESTART_WINDOW_MS = 10 * 60_000
 const HOST_RESTART_MAX = 5
 /** Scheduler tick cadence for extension-registered jobs. */
 const EXT_SCHEDULE_TICK_MS = 60_000
+/** Max resident worker_js extensions (bounds shared-host child memory). */
+const EXT_MAX_RESIDENT = Number(process.env.OPPTRIX_EXT_MAX_RESIDENT ?? 16) || 16
 
 /**
  * In-process ExtensionManager Host sandbox.
@@ -487,6 +490,7 @@ export function createExtensionManager(
     key: string,
     source: string,
     loadTimeoutMs?: number,
+    residentHint?: boolean,
   ): Promise<{ ok: true; resident: boolean } | { ok: false; error: string }> {
     if (runtime === 'subprocess' && sharedHost) {
       if (sharedHost.status() !== 'running') {
@@ -494,6 +498,17 @@ export function createExtensionManager(
           await sharedHost.start()
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      }
+      // Resident cap (1GB VPS profile): each vm context adds child heap.
+      if (
+        !residentHint &&
+        sharedHost.listResidentExtensions().length >= EXT_MAX_RESIDENT &&
+        !sharedHost.listResidentExtensions().includes(key)
+      ) {
+        return {
+          ok: false,
+          error: `resident extension limit reached (${EXT_MAX_RESIDENT}); deactivate one first`,
         }
       }
       const loaded = await sharedHost.load(key, source, loadTimeoutMs)
@@ -780,8 +795,25 @@ export function createExtensionManager(
             error: 'worker_js entry source missing (register via .opx zip)',
           }
         }
-        const loaded = await loadIntoRuntime(key, source)
+        const loaded = await loadIntoRuntime(
+          key,
+          source,
+          undefined,
+          sharedHost?.listResidentExtensions().includes(key) ?? false,
+        )
         if (!loaded.ok) {
+          // Failure cleanup: the child may have executed part of activate()
+          // and registered declarations before failing — leave nothing live
+          // behind a failed activation (audit P3-8).
+          hookRegistry.unregisterForPlugin(key)
+          routeRegistry.unregisterForPlugin(key)
+          cleanupExtensionEventListeners(key)
+          for (const [k, decl] of [...extSchedules]) {
+            if (decl.extensionId === key) extSchedules.delete(k)
+          }
+          if (sharedHost) {
+            await sharedHost.unload(key).catch(() => {})
+          }
           return {
             ok: false,
             error: loaded.error,
@@ -833,6 +865,7 @@ export function createExtensionManager(
       for (const [k, decl] of [...extSchedules]) {
         if (decl.extensionId === key) extSchedules.delete(k)
       }
+      getMarketPlane().unsubscribeFor(key)
       if (sharedHost) {
         await sharedHost.unload(key).catch(() => {})
       }
@@ -862,6 +895,7 @@ export function createExtensionManager(
       for (const [k, decl] of [...extSchedules]) {
         if (decl.extensionId === key) extSchedules.delete(k)
       }
+      getMarketPlane().unsubscribeFor(key)
       // Uninstall is sync; unload is best-effort cleanup (child state dies with
       // the extension record).
       void sharedHost?.unload(key).catch(() => {})
@@ -1009,6 +1043,7 @@ export function createExtensionManager(
             for (const [k, decl] of [...extSchedules]) {
               if (decl.extensionId === id) extSchedules.delete(k)
             }
+            getMarketPlane().unsubscribeFor(id)
             if (sharedHost) {
               await sharedHost.unload(id).catch(() => {})
             }

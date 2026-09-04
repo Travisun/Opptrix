@@ -37,6 +37,8 @@ export const SystemEvents = {
   },
   market: {
     quote: 'market.quote',
+    /** Per-tick quote update from the market data plane (Phase B). */
+    quoteUpdated: 'market.quote.updated',
     subscription: 'market.subscription',
   },
   notification: {

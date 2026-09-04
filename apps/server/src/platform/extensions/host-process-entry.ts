@@ -90,6 +90,9 @@ function ext(id: string): LocalExt {
   return e
 }
 
+/** Per-load nonce — bound to the loaded extensionId; parent validates on gate. */
+let loadNonce = ''
+
 function askGate(
   extensionId: string,
   token: string,
@@ -98,7 +101,7 @@ function askGate(
   const id = randomUUID()
   return new Promise((resolve) => {
     pendingGates.set(id, { resolve })
-    msg({ t: 'gate', id, extensionId, token, args })
+    msg({ t: 'gate', id, extensionId, token, args, nonce: loadNonce })
     // Parent enforces the 30s RPC timeout; safety net for a dropped channel.
     setTimeout(() => {
       if (pendingGates.has(id)) {
@@ -114,6 +117,109 @@ function matchTopic(topic: string, name: string): boolean {
   if (topic.endsWith('.**')) return name.startsWith(topic.slice(0, -3))
   if (topic.endsWith('.*')) return name.startsWith(topic.slice(0, -1))
   return name === topic
+}
+
+function unwrapObservation(obs: Record<string, unknown>): unknown {
+  if (obs && typeof obs === 'object' && obs.ok === false) {
+    const err = new Error(String(obs.message ?? 'capability denied')) as Error & { code?: string }
+    err.code = String(obs.denialCode ?? obs.code ?? 'denied')
+    throw err
+  }
+  return (obs as { data?: unknown })?.data
+}
+
+/**
+ * SDK facade (contract: packages/extension-sdk) — built on callGate so the
+ * scaffolded `ctx.storage / ctx.events / ctx.hooks / ctx.routes / ctx.log`
+ * surface works at runtime (closes the SDK contract gap).
+ */
+function buildContextFacade(
+  extensionId: string,
+  callGate: (token: string, args?: Record<string, unknown>) => Promise<Record<string, unknown>>,
+): Record<string, unknown> {
+  async function unwrap(p: Promise<Record<string, unknown>>): Promise<unknown> {
+    return unwrapObservation(await p)
+  }
+  return {
+    extensionId,
+    log: bridgedConsole(extensionId),
+    callGate,
+    storage: {
+      get: async (key: string) => {
+        const data = (await unwrap(
+          callGate('storage.get', { op: 'get', key }),
+        )) as { found?: boolean; value?: unknown } | undefined
+        return data?.found ? (data.value ?? null) : null
+      },
+      set: async (key: string, value: unknown) => {
+        await unwrap(callGate('storage.set', { op: 'set', key, value }))
+      },
+      delete: async (key: string) => {
+        await unwrap(callGate('storage.delete', { op: 'delete', key }))
+      },
+      list: async (prefix?: string) => {
+        const data = (await unwrap(
+          callGate('storage.list', { op: 'list', ...(prefix ? { prefix } : {}) }),
+        )) as { keys?: string[] } | undefined
+        return data?.keys ?? []
+      },
+      export: async () => {
+        const data = (await unwrap(callGate('storage.export', { op: 'export' }))) as {
+          kv?: Record<string, unknown>
+        }
+        return data?.kv ?? {}
+      },
+    },
+    events: {
+      subscribe: (topic: string, handler: (envelope: unknown) => void) => {
+        // Handler interception happens inside callGate; the parent records the
+        // declaration and dispatches matching events back via RPC.
+        void callGate('events.subscribe', { action: 'subscribe', topic, handler }).catch(() => {})
+      },
+      emit: (name: string, payload?: Record<string, unknown>) => {
+        void unwrap(callGate('events.emit', { action: 'emit', name, payload }))
+      },
+    },
+    hooks: {
+      register: async (
+        point: string,
+        handler: (payload: Record<string, unknown>) => Promise<unknown> | unknown,
+        opts?: { priority?: number; timeoutMs?: number },
+      ) => {
+        const data = (await unwrap(
+          callGate('hooks.register', {
+            point,
+            handler,
+            ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+            ...(opts?.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+          }),
+        )) as { id?: string }
+        return { id: data?.id ?? '' }
+      },
+      unregister: async (id: string) => {
+        await unwrap(callGate('hooks.unregister', { id }))
+      },
+    },
+    routes: {
+      register: async (
+        routePath: string,
+        handler: (req: Record<string, unknown>) => Promise<unknown> | unknown,
+        opts?: { methods?: string[] },
+      ) => {
+        const data = (await unwrap(
+          callGate('routes.register', {
+            path: routePath,
+            handler,
+            ...(opts?.methods ? { methods: opts.methods } : {}),
+          }),
+        )) as { id?: string; path?: string }
+        return { id: data?.id ?? '', path: data?.path ?? routePath }
+      },
+      unregister: async (id: string) => {
+        await unwrap(callGate('routes.unregister', { id }))
+      },
+    },
+  }
 }
 
 /**
@@ -190,12 +296,14 @@ async function runExtensionInVm(extensionId: string, source: string): Promise<{ 
     return askGate(extensionId, token, a)
   }
 
+  const ctx = buildContextFacade(extensionId, callGate)
   const sandbox: Record<string, unknown> = {
     module,
     exports: module.exports,
     extensionId,
     console: bridgedConsole(extensionId),
     callGate,
+    ctx,
   }
   vm.createContext(sandbox)
   vm.runInContext(source, sandbox, {
@@ -204,7 +312,12 @@ async function runExtensionInVm(extensionId: string, source: string): Promise<{ 
   })
   const exported = module.exports as { activate?: unknown }
   if (typeof exported.activate === 'function') {
-    await Promise.resolve((exported.activate as () => unknown | Promise<unknown>)())
+    // SDK contract: activate(ctx: ExtensionHostContext) — pass the facade as
+    // the first argument (the vm global is also present, but the parameter is
+    // the documented signature and must not be undefined).
+    await Promise.resolve(
+      (exported.activate as (c: unknown) => unknown | Promise<unknown>)(ctx),
+    )
   }
   return { hasResidentTouchpoint: e.hasResidentTouchpoint }
 }
@@ -258,6 +371,7 @@ function onMessage(raw: unknown): void {
       }
       case 'load': {
         const extensionId = String(m.extensionId ?? '')
+        loadNonce = String(m.nonce ?? '')
         try {
           const info = await runExtensionInVm(extensionId, String(m.source ?? ''))
           msg({ t: 'loadOk', id, hasResidentTouchpoint: info.hasResidentTouchpoint })

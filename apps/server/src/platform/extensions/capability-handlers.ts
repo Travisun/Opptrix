@@ -307,8 +307,12 @@ export function registerContributionHandlers(
     return { id: reg.id, ok: true }
   })
 
-  host.register('hooks.unregister', async (args) => {
+  host.register('hooks.unregister', async (args, ctx) => {
     const id = String(args.id ?? '')
+    const reg = hooks.list().find((h) => h.id === id)
+    if (reg && reg.pluginId !== ctx.pluginId) {
+      return { error: 'hook belongs to another extension', code: 'invalid_args' }
+    }
     hooks.unregister(id)
     return { ok: true }
   })
@@ -333,8 +337,12 @@ export function registerContributionHandlers(
     return { id: reg.id, path: reg.path, ok: true }
   })
 
-  host.register('routes.unregister', async (args) => {
+  host.register('routes.unregister', async (args, ctx) => {
     const id = String(args.id ?? '')
+    const reg = routes.list().find((r) => r.id === id)
+    if (reg && reg.pluginId !== ctx.pluginId) {
+      return { error: 'route belongs to another extension', code: 'invalid_args' }
+    }
     routes.unregister(id)
     return { ok: true }
   })

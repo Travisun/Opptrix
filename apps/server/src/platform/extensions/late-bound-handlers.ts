@@ -13,6 +13,7 @@
  */
 
 import type { CapabilityHost, CapabilityHandler } from './capability-host.js'
+import { getMarketPlane } from '../../market-data-plane.js'
 
 export type LateBoundHub = {
   dispatch: (feature: string, params: unknown) => Promise<unknown>
@@ -116,6 +117,24 @@ const shellRunHandler: CapabilityHandler = async (_args, ctx) => {
  * later via bindLateBoundServices().
  */
 export function registerLateBoundHandlers(host: CapabilityHost): void {
+  host.register('data.subscribe', async (args, ctx) => {
+    if (!getMarketPlane) {
+      return { error: 'market plane unavailable', code: 'service_unavailable' }
+    }
+    const instruments = Array.isArray(args.instruments) ? args.instruments : []
+    if (instruments.length === 0) {
+      return { error: 'instruments required', code: 'invalid_args' }
+    }
+    const plane = getMarketPlane()
+    const count = plane.subscribe(ctx.pluginId, instruments as never[])
+    return {
+      ok: true,
+      subscribed: count,
+      topic: 'market.quote.updated',
+      note: 'listen via events.subscribe topic market.quote.* (events.subscribe permission)',
+    }
+  })
+
   host.register('data.', dataQueryHandler)
   host.register('schedule.', scheduleHandler)
   host.register('llm.', llmChatHandler)

@@ -55,6 +55,7 @@ export const CAPABILITY_TOKEN_RULES: readonly CapabilityTokenRule[] = [
   // ── Research domain pack (pack: 'research', requires pack enabled) ────────
   { token: 'data.query', permission: 'data.query', pack: 'research', description: 'Query instrument data (quotes, profile)' },
   { token: 'data.search', permission: 'data.query', pack: 'research', description: 'Search instruments' },
+  { token: 'data.subscribe', permission: 'data.query', pack: 'research', description: 'Subscribe to market data plane quote updates' },
 ] as const
 
 /** All Phase A permissions. */

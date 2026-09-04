@@ -95,6 +95,7 @@ import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdow
 import { registerExtensionsHttp } from './extensions-http.js'
 import { registerStoreHttp } from './store-http.js'
 import { bindLateBoundServices } from './platform/extensions/late-bound-handlers.js'
+import { bindMarketPlane, getMarketPlane } from './market-data-plane.js'
 import {
   admitAndRememberJobWake,
   admitChatBestEffort,
@@ -419,6 +420,14 @@ const scheduleService = getScheduleService()
 bindLateBoundServices({
   hub: { dispatch: (feature, params) => hub.dispatch(feature, params as never) },
   schedule: { listJobs: () => scheduleService.listJobs() as unknown as Array<Record<string, unknown>> },
+})
+
+// Phase B market data plane — demand-driven quote stream for the whole system
+// (UI consumers, extensions via data.subscribe/events market.quote.*).
+bindMarketPlane({
+  events: platform.events,
+  dispatch: (feature, params) => hub.dispatch(feature, params as never),
+  log: { warn: (msg) => app.log.warn(msg) },
 })
 const workspaceService = getWorkspaceService()
 scheduleService.setExecutor(createJobExecutor({
@@ -3104,6 +3113,36 @@ async function bootstrap() {
     // R0: extension startup failure must not block bootstrap
   })
 
+  // 1GB VPS memory profile: lightweight sampler (60s, unref'd). Logs RSS/heap
+  // and emits a bus event when heap pressure crosses 80% of the configured
+  // cap. Disable with OPPTRIX_MEM_SAMPLE=0.
+  if (process.env.OPPTRIX_MEM_SAMPLE !== '0') {
+    const heapCapMiB =
+      Number(/--max-old-space-size=(\d+)/.exec(process.env.NODE_OPTIONS ?? '')?.[1] ?? 512) || 512
+    let lastPressureAt = 0
+    const sampler = setInterval(() => {
+      try {
+        const mu = process.memoryUsage()
+        const rssMiB = Math.round(mu.rss / 1048576)
+        const heapMiB = Math.round(mu.heapUsed / 1048576)
+        if (heapMiB > (heapCapMiB * 4) / 5 && Date.now() - lastPressureAt > 5 * 60_000) {
+          lastPressureAt = Date.now()
+          platform.events.emit(
+            'system.memory.pressure',
+            { rssMiB, heapMiB, heapCapMiB },
+            { kind: 'system', id: 'sidecar' },
+          )
+          app.log.warn({ rssMiB, heapMiB, heapCapMiB }, 'memory pressure: heap above 80% cap')
+        } else {
+          app.log.info({ rssMiB, heapMiB }, 'mem')
+        }
+      } catch {
+        // sampling must never throw
+      }
+    }, 60_000)
+    sampler.unref?.()
+  }
+
   // ── phaseB：listen 之后再跑调度/预热等非路由重活。
   // Fastify 5：listen 后路由树锁定，禁止再 app.register / app.get|post|… 注册新路由。
   startNewsFeedScheduler()
@@ -3210,6 +3249,8 @@ async function shutdown(signal: string) {
       } catch {
         // R1: best-effort; forceExit timer handles the hard bound
       }
+      // R1: stop the market data plane poll timer.
+      getMarketPlane().stop()
     },
     closeBrowsers: () => browserSessionManager.closeAll(),
     closeHttpApp: async () => {

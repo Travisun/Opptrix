@@ -56,6 +56,8 @@ export type SharedHostSupervisor = {
     source: string,
     timeoutMs?: number,
   ): Promise<{ ok: true; hasResidentTouchpoint: boolean } | { ok: false; error: string }>
+  /** Bound identity for a load nonce (anti-spoofing; audit P2-2). */
+  resolveNonce(nonce: string): string | null
   /** Drop the extension's vm context and local handlers. */
   unload(extensionId: string): Promise<void>
   dispatchHook(
@@ -98,7 +100,8 @@ function defaultEntryPath(): string {
 export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostSupervisor {
   const entryPath = opts.entryPath ?? defaultEntryPath()
   const timeoutMs = opts.requestTimeoutMs ?? 30_000
-  const maxOldSpace = opts.maxOldSpaceMiB ?? 256
+  const maxOldSpace =
+    opts.maxOldSpaceMiB ?? (Number(process.env.OPPTRIX_EXT_HOST_MAX_OLD_SPACE ?? 256) || 256)
 
   let child: ChildProcess | null = null
   let status: SharedHostStatus = 'stopped'
@@ -106,6 +109,10 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
   let startPromise: Promise<void> | null = null
   const pending = new Map<string, Pending>()
   const resident = new Set<string>()
+  /** nonce → extensionId. Parent derives gate identity from the nonce, never
+   * from the child's claim (audit P2-2: a compromised child cannot impersonate
+   * another extension's principal). */
+  const nonceToExtension = new Map<string, string>()
 
   function rejectAll(err: Error): void {
     for (const [, p] of pending) {
@@ -180,13 +187,21 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
         return
       }
       case 'gate': {
-        // REAL dispatch: capability host + gate with the extension's own
-        // principal. Never echo (audit P0-4).
+        // REAL dispatch: capability host + gate. Identity comes from the load
+        // nonce — the child's claimed extensionId is never trusted (P2-2).
         void (async () => {
+          const boundExtensionId = nonceToExtension.get(String(m.nonce ?? ''))
           let observation: Record<string, unknown>
+          if (!boundExtensionId) {
+            observation = {
+              ok: false,
+              denialCode: 'gate_identity_unknown',
+              message: 'gate nonce not bound to a loaded extension',
+            }
+          } else
           try {
             observation = await opts.execCapability(
-              String(m.extensionId ?? ''),
+              boundExtensionId,
               String(m.token ?? ''),
               (m.args && typeof m.args === 'object' ? m.args : {}) as Record<string, unknown>,
             )
@@ -314,6 +329,7 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
       child = null
       rejectAll(new Error('extension host stopped'))
       resident.clear()
+      nonceToExtension.clear()
       if (!c) {
         status = 'stopped'
         return
@@ -351,9 +367,11 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
       loadTimeoutMs = 10_000,
     ): Promise<{ ok: true; hasResidentTouchpoint: boolean } | { ok: false; error: string }> {
       const id = randomUUID()
+      const nonce = randomUUID()
+      nonceToExtension.set(nonce, extensionId)
       try {
         const m = await request<Record<string, unknown>>(
-          { t: 'load', id, extensionId, source },
+          { t: 'load', id, extensionId, source, nonce },
           'loadOk',
           'load',
           loadTimeoutMs,
@@ -379,6 +397,9 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
         // best-effort
       }
       resident.delete(extensionId)
+      for (const [n, ext] of nonceToExtension) {
+        if (ext === extensionId) nonceToExtension.delete(n)
+      }
     },
 
     async dispatchHook(
@@ -447,6 +468,10 @@ export function createSharedHostSupervisor(opts: SharedHostOptions): SharedHostS
 
     listResidentExtensions(): string[] {
       return [...resident]
+    },
+
+    resolveNonce(nonce: string): string | null {
+      return nonceToExtension.get(nonce) ?? null
     },
   }
 }

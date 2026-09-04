@@ -278,5 +278,12 @@ EXPOSE 8712
 
 VOLUME ["/opptrix"]
 
+# 1 GB VPS memory profile (see docs/SELF-HOSTING.md §内存画像):
+#   server heap ≤ 512 MiB; the extension host child caps itself at 256 MiB
+#   (OPPTRIX_EXT_HOST_MAX_OLD_SPACE, default 256). Heavy optional features
+#   (local LLM, deep OCR) stay lazy-loaded and off by default.
+ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV OPPTRIX_EXT_HOST_MAX_OLD_SPACE="256"
+
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/scripts/docker-entrypoint.sh"]
 CMD ["node", "apps/server/dist/index.js"]
