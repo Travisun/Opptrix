@@ -30,6 +30,7 @@
     "@opptrix/agent-workspace": "*",
     "@opptrix/article-enrichment": "*",
     "@opptrix/doc-library": "*",
+    "@opptrix/event-bus": "*",
     "@opptrix/local-inference": "*",
     "@opptrix/market-data-store": "*",
     "@opptrix/news-feed": "*",

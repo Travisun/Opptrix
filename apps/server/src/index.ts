@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, pruneOrphanChatAttachments, configureTurnWakeRuntime, setTurnWakeResumeHandler, onTurnWakeFired, scheduleTurnWake, clearSessionTurnWakes, listPendingTurnWakes, TURN_WAKE_BUSY_DEFER_SECONDS, registerDefaultJobAdapters, sessionResumeBus, clearSessionJobWaitsAndWatches, listPendingJobWatches, jobRegistry, watchRegistry, JOB_PROGRESS_THROTTLE_MS, userFacingJobLabel, userPromptAnswerFromApprovalDecision, type ChatProgressEvent, type SessionContextRef, type ResumeRequest } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore, PathEscapeError, DenyPathError, WorkspaceError, pruneOrphanSessionState, listMountRoots, emptyMountsReason, browseWorkspaceDirs } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { registerAuthRoutes } from './auth-routes.js'
@@ -93,6 +93,36 @@ import { fetchUserAgreementHtml } from './legal-document.js'
 import { startRetentionMaintenance, stopRetentionMaintenance } from './retention-maintenance.js'
 import { runSidecarShutdown, resolveSidecarForceExitMs } from './sidecar-shutdown.js'
 import {
+  admitAndRememberJobWake,
+  admitChatBestEffort,
+  admitAcknowledgeAlert,
+  admitCheckpointGet,
+  admitCheckpointLatest,
+  admitCheckpointList,
+  admitCheckpointRestore,
+  admitPlatformAlerts,
+  admitCancelSessionApprovals,
+  admitPlatformApprovals,
+  admitPlatformInfo,
+  admitPlatformJobs,
+  admitPlatformMemory,
+  admitPromoteMemory,
+  admitPlatformExtensions,
+  admitPlatformHostWorker,
+  admitPlatformHands,
+  admitRegisterExtension,
+  admitRegisterOpx,
+  admitActivateExtension,
+  admitDeactivateExtension,
+  OPX_ZIP_MAX_BYTES,
+  admitPlatformMeterDenials,
+  admitPlatformPacks,
+  admitResolveApproval,
+  createPlatformContext,
+  setPlatformPackEnabled,
+} from './platform/index.js'
+import { SystemEvents } from '@opptrix/event-bus'
+import {
   closeHttpsServer,
   ensureSelfSignedTlsMaterials,
   listenHttpsAlongsideHttp,
@@ -106,6 +136,8 @@ const require = createRequire(import.meta.url)
 const { cleanupStaleApiListeners } = require('../../../scripts/lib/resolve-ports.cjs') as {
   cleanupStaleApiListeners: (port: number, opts?: { aggressive?: boolean }) => Promise<boolean>
 }
+
+const platform = createPlatformContext()
 
 const HTTP_PORT = resolveHttpPort()
 const HTTPS_PORT = resolveHttpsPort()
@@ -151,6 +183,53 @@ agent = new AgentEngine(hub, {
   defaultScorecard: cfg.default_scorecard,
   defaultTopN: cfg.default_top_n,
   appContext: serverAppContext,
+  capabilityGate: platform.gate,
+  // Wave 56: approval queue owns ask_user; bridge is waiter (id ≡ promptId ≡ approval.id)
+  approvalTracker: {
+    track(input) {
+      platform.approval.request({
+        id: input.id,
+        sessionId: input.sessionId,
+        kind: input.kind,
+        title: input.title,
+        meta: { promptId: input.id },
+      })
+    },
+    resolve(id, decision) {
+      platform.approval.resolve(id, decision)
+    },
+    cancelSession(sessionId) {
+      platform.approval.cancelSession(sessionId)
+    },
+  },
+  turnCheckpoint: {
+    save(snapshot) {
+      platform.checkpoint.save(snapshot.sessionId, { ...snapshot })
+    },
+  },
+  usageMeter: {
+    record(usage) {
+      platform.meter.recordUsage(usage)
+    },
+  },
+})
+// Wave 51A: hard restore apply — checkpoint metadata → SessionStore
+platform.bindCheckpointApply({
+  apply(input) {
+    return agent.applyCheckpoint(input)
+  },
+})
+// Wave 50A: soft reverse mirror — approval.resolve → UserPromptBridge (id ≡ promptId)
+platform.approval.bindUserPromptResolve(({ id, sessionId, decision }) => {
+  agent.userPromptBridge.submit(
+    sessionId,
+    id,
+    userPromptAnswerFromApprovalDecision(decision),
+  )
+})
+platform.memory.bindWorkingSource((sessionId) => {
+  const s = agent.getSession(sessionId)
+  return s?.sessionMemory ?? null
 })
 agent.setApiBaseUrl(`${PUBLIC_PROTO}://${CONNECT_HOST}:${PUBLIC_PORT}/api`)
 
@@ -166,6 +245,19 @@ const COLLAB_SESSION_READONLY_ERROR = '该会话由系统代为推进，请在�
 configureTurnWakeRuntime({
   isSessionAlive: (sessionId) => Boolean(agent.getSession(sessionId)),
   isChatBusy: hasActiveSessionChat,
+})
+
+/** Best-effort job.wake Ingress envelope before TurnWake resume (observability only). */
+onTurnWakeFired((job) => {
+  try {
+    admitAndRememberJobWake(platform, {
+      sessionId: job.sessionId,
+      text: job.prompt,
+      jobId: job.id,
+    })
+  } catch {
+    /* admit must not gate resume */
+  }
 })
 
 registerDefaultJobAdapters()
@@ -221,6 +313,15 @@ sessionResumeBus.configureRuntime({
   isChatBusy: hasActiveSessionChat,
 })
 sessionResumeBus.setHandler(async (req: ResumeRequest, wakeMessage: string) => {
+  try {
+    admitAndRememberJobWake(platform, {
+      sessionId: req.sessionId,
+      text: req.prompt,
+      jobId: req.jobId,
+    })
+  } catch {
+    /* admit must not gate resume */
+  }
   await resumeSessionChat({
     sessionId: req.sessionId,
     wakeMessage,
@@ -392,6 +493,589 @@ app.get('/api/health', async (req) => {
     factors: REGISTRY.count(),
     core_models_required: coreModelsRequired,
     core_models_ready: coreModelsReady,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → platform.info(). Flat body for clients:
+ * `{ traceId, origin, abiVersion, packs, packEnforce, extensions, meter, jobsListed }`.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.get('/api/platform/info', async (_req, reply) => {
+  const result = admitPlatformInfo(platform)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    ...result.info,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → meter.listRecentDenials() + meter counters.
+ * Not attached to `/api/health`; subject to owner auth when claimed. No UI.
+ */
+app.get('/api/platform/meter/denials', async (_req, reply) => {
+  const result = admitPlatformMeterDenials(platform)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    denials: result.denials,
+    recentDenialCount: result.recentDenialCount,
+    denyCount: result.denyCount,
+    submitCount: result.submitCount,
+    errorCount: result.errorCount,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → jobs.list() + jobsListed.
+ * Query: optional sessionId (forwarded to admit; list filter if facade supports it).
+ * Not attached to `/api/health`; subject to owner auth when claimed. No cancel.
+ */
+app.get<{
+  Querystring: { sessionId?: string }
+}>('/api/platform/jobs', async (req, reply) => {
+  const rawSession = String(req.query.sessionId ?? '').trim()
+  const result = admitPlatformJobs(platform, {
+    sessionId: rawSession || undefined,
+  })
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    jobs: result.jobs,
+    jobsListed: result.jobsListed,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → approval.list() + approvalsPending.
+ * Query: optional sessionId (forwarded to admit and list filter).
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.get<{
+  Querystring: { sessionId?: string }
+}>('/api/platform/approvals', async (req, reply) => {
+  const rawSession = String(req.query.sessionId ?? '').trim()
+  const result = admitPlatformApprovals(platform, {
+    sessionId: rawSession || undefined,
+  })
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    approvals: result.approvals,
+    approvalsPending: result.approvalsPending,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → approval.resolve(id, decision) + approvalsPending.
+ * Body: { approved: boolean; note?: string }.
+ * Returns 200 with resolved boolean even when id unknown/already resolved (mirrors queue).
+ * Not attached to `/api/health`; subject to owner auth when claimed. No ask_user bridge.
+ */
+app.post<{
+  Params: { id: string }
+  Body: { approved?: boolean; note?: string }
+}>('/api/platform/approvals/:id/resolve', async (req, reply) => {
+  const body = req.body ?? {}
+  if (typeof body.approved !== 'boolean') {
+    return reply.code(400).send({ error: 'approved required' })
+  }
+  const result = admitResolveApproval(platform, req.params.id, {
+    approved: body.approved,
+    ...(typeof body.note === 'string' ? { note: body.note } : {}),
+  })
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    resolved: result.resolved,
+    approvalsPending: result.approvalsPending,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → approval.cancelSession(sessionId) + approvalsPending.
+ * Cancels all pending approvals for the session; returns cancelled count (0 if none).
+ * Not attached to `/api/health`; subject to owner auth when claimed. No ask_user bridge. No UI.
+ */
+app.post<{
+  Params: { sessionId: string }
+}>('/api/platform/sessions/:sessionId/approvals/cancel', async (req, reply) => {
+  const result = admitCancelSessionApprovals(platform, req.params.sessionId)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    cancelled: result.cancelled,
+    approvalsPending: result.approvalsPending,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → alerts.list() + alertsPending.
+ * Query: optional includeAcknowledged=1|true, limit=<number>.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.get<{
+  Querystring: { includeAcknowledged?: string; limit?: string }
+}>('/api/platform/alerts', async (req, reply) => {
+  const rawAck = String(req.query.includeAcknowledged ?? '').trim().toLowerCase()
+  const includeAcknowledged =
+    rawAck === '1' || rawAck === 'true'
+      ? true
+      : rawAck === '0' || rawAck === 'false'
+        ? false
+        : undefined
+  const rawLimit = req.query.limit
+  let limit: number | undefined
+  if (rawLimit !== undefined && String(rawLimit).trim() !== '') {
+    const n = Number(rawLimit)
+    if (Number.isFinite(n) && n >= 0) limit = Math.trunc(n)
+  }
+  const result = admitPlatformAlerts(platform, { includeAcknowledged, limit })
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    alerts: result.alerts,
+    alertsPending: result.alertsPending,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → alerts.acknowledge(id) + alertsPending.
+ * Returns 200 with acknowledged boolean even when id is unknown (mirrors facade).
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.post<{
+  Params: { id: string }
+}>('/api/platform/alerts/:id/acknowledge', async (req, reply) => {
+  const result = admitAcknowledgeAlert(platform, req.params.id)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    acknowledged: result.acknowledged,
+    alertsPending: result.alertsPending,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → checkpoint.list(sessionId).
+ * Returns 200 with checkpoints [{ id, at }, ...]; does not restore into chat.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.get<{
+  Params: { sessionId: string }
+}>('/api/platform/sessions/:sessionId/checkpoint', async (req, reply) => {
+  const result = admitCheckpointList(platform, req.params.sessionId)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    checkpoints: result.checkpoints,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → checkpoint.latest(sessionId).
+ * Returns 200 with latest null or { id, at, payload }; does not restore into chat.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.get<{
+  Params: { sessionId: string }
+}>('/api/platform/sessions/:sessionId/checkpoint/latest', async (req, reply) => {
+  const result = admitCheckpointLatest(platform, req.params.sessionId)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    latest: result.latest,
+  }
+})
+
+/**
+ * Soft/hard restore: Ingress admit → checkpoint payload (id or latest).
+ * Body: { checkpointId?, apply? } — omit apply / false → soft (applied false);
+ * apply:true → SessionStore mutation via bound hook (metadata + optional truncate).
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.post<{
+  Params: { sessionId: string }
+  Body: { checkpointId?: string; apply?: boolean }
+}>('/api/platform/sessions/:sessionId/checkpoint/restore', async (req, reply) => {
+  const body = req.body ?? {}
+  const result = admitCheckpointRestore(platform, {
+    sessionId: req.params.sessionId,
+    ...(typeof body.checkpointId === 'string' ? { checkpointId: body.checkpointId } : {}),
+    ...(body.apply === true ? { apply: true } : {}),
+  })
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    checkpoint: result.checkpoint,
+    applied: result.applied,
+    ...(result.truncated !== undefined ? { truncated: result.truncated } : {}),
+    note: result.note,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → checkpoint.get(id).
+ * Returns 200 with payload null|object; does not restore into chat.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.get<{
+  Params: { id: string }
+}>('/api/platform/checkpoint/:id', async (req, reply) => {
+  const result = admitCheckpointGet(platform, req.params.id)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    payload: result.payload,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → memory.getWorking + durable counts.
+ * Returns 200 with working null|snapshot; does not promote. Not on `/api/health`.
+ * Subject to owner auth when claimed.
+ */
+app.get<{
+  Params: { sessionId: string }
+}>('/api/platform/sessions/:sessionId/memory', async (req, reply) => {
+  const result = admitPlatformMemory(platform, {
+    sessionId: req.params.sessionId,
+  })
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    working: result.working,
+    durableCount: result.durableCount,
+    memoryDurable: result.memoryDurable,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → memory.promote (requires provenance).
+ * Body: { kind, content, provenance: { source, at?, ref? }, origin? }.
+ * Returns 200 with id + entry + memoryDurable; 400 on validation/admit/promote fail.
+ * Not on `/api/health`. No UI. No compact rewrite.
+ */
+app.post<{
+  Params: { sessionId: string }
+  Body: {
+    kind?: string
+    content?: string
+    provenance?: { source?: string; at?: string; ref?: string }
+    origin?: string
+  }
+}>('/api/platform/sessions/:sessionId/memory/promote', async (req, reply) => {
+  const body = req.body ?? {}
+  const provenance =
+    body.provenance && typeof body.provenance === 'object'
+      ? {
+          source:
+            typeof body.provenance.source === 'string'
+              ? body.provenance.source
+              : '',
+          ...(typeof body.provenance.at === 'string'
+            ? { at: body.provenance.at }
+            : {}),
+          ...(typeof body.provenance.ref === 'string'
+            ? { ref: body.provenance.ref }
+            : {}),
+        }
+      : undefined
+  const result = admitPromoteMemory(
+    platform,
+    {
+      sessionId: req.params.sessionId,
+      kind: typeof body.kind === 'string' ? body.kind : '',
+      content: typeof body.content === 'string' ? body.content : '',
+      provenance,
+    },
+    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
+  )
+  if (!result.ok) {
+    return reply.code(400).send({
+      error: result.error,
+      ...(result.denialCode ? { denialCode: result.denialCode } : {}),
+    })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    id: result.id,
+    entry: result.entry,
+    memoryDurable: result.memoryDurable,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → extensions.registerFromManifest (in-memory JSON only).
+ * Body: { id, name?, version?, capabilities?, origin? }.
+ * Rejects file-path fields; never loads/evals extension code. No UI. No .opx.
+ */
+app.post<{
+  Body: {
+    id?: string
+    name?: string
+    version?: string
+    capabilities?: string[]
+    origin?: string
+    sourcePath?: string
+    path?: string
+    [key: string]: unknown
+  }
+}>('/api/platform/extensions/register', async (req, reply) => {
+  const body = req.body ?? {}
+  const { origin, ...manifest } = body
+  const result = admitRegisterExtension(
+    platform,
+    manifest,
+    typeof origin === 'string' ? { origin } : undefined,
+  )
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    extension: result.extension,
+    extensions: result.extensions,
+    extensionsActive: result.extensionsActive,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → parse .opx zip → registerFromManifest (inactive).
+ * Body: `{ zipBase64: string, origin? }`.
+ * Limits: zip ≤ 2MB (`OPX_ZIP_MAX_BYTES`), manifest ≤ 64KB.
+ * Root `manifest.json` or `opx.manifest.json` only — never extracts/evals JS/CSS. No UI.
+ */
+app.post<{
+  Body: { zipBase64?: string; origin?: string }
+}>('/api/platform/extensions/register-opx', async (req, reply) => {
+  const body = req.body ?? {}
+  const zipBase64 = typeof body.zipBase64 === 'string' ? body.zipBase64.trim() : ''
+  if (!zipBase64) {
+    return reply.code(400).send({ error: 'zipBase64 required' })
+  }
+  let buffer: Buffer
+  try {
+    buffer = Buffer.from(zipBase64, 'base64')
+  } catch {
+    return reply.code(400).send({ error: 'zipBase64 is not valid base64' })
+  }
+  if (buffer.byteLength === 0) {
+    return reply.code(400).send({ error: 'empty zip' })
+  }
+  if (buffer.byteLength > OPX_ZIP_MAX_BYTES) {
+    return reply.code(400).send({
+      error: `zip exceeds ${OPX_ZIP_MAX_BYTES} bytes`,
+    })
+  }
+  const result = admitRegisterOpx(
+    platform,
+    buffer,
+    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
+  )
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    extension: result.extension,
+    extensions: result.extensions,
+    extensionsActive: result.extensionsActive,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → extensions.activate(id) for already-registered extensions.
+ * Body optional: `{ origin? }`. Never loads/evals .opx / filesystem code. No UI.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.post<{
+  Params: { id: string }
+  Body: { origin?: string }
+}>('/api/platform/extensions/:id/activate', async (req, reply) => {
+  const body = req.body ?? {}
+  const result = await admitActivateExtension(
+    platform,
+    req.params.id,
+    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
+  )
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    extension: result.extension,
+    extensionsActive: result.extensionsActive,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → extensions.deactivate(id); catalog kept, state → inactive.
+ * Body optional: `{ origin? }`. State flip only — no code unload. No UI.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ */
+app.post<{
+  Params: { id: string }
+  Body: { origin?: string }
+}>('/api/platform/extensions/:id/deactivate', async (req, reply) => {
+  const body = req.body ?? {}
+  const result = await admitDeactivateExtension(
+    platform,
+    req.params.id,
+    typeof body.origin === 'string' ? { origin: body.origin } : undefined,
+  )
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    extension: result.extension,
+    extensionsActive: result.extensionsActive,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → extensions.list() + extensionsActive + hostWorker.
+ * Not attached to `/api/health`; subject to owner auth when claimed. No UI.
+ * Does not activate extensions or load .opx.
+ */
+app.get('/api/platform/extensions', async (_req, reply) => {
+  const result = admitPlatformExtensions(platform)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    extensions: result.extensions,
+    extensionsActive: result.extensionsActive,
+    hostWorker: result.hostWorker,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → info().hostWorker status only.
+ * Not attached to `/api/health`; subject to owner auth when claimed. No UI.
+ * Does not start/stop/restart the worker or load .opx.
+ */
+app.get('/api/platform/host-worker', async (_req, reply) => {
+  const result = admitPlatformHostWorker(platform)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    hostWorker: result.hostWorker,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → handsTicketsPending + pendingCount (count only).
+ * Not attached to `/api/health`; subject to owner auth when claimed. No UI.
+ * Does not list ticket ids/tokens; does not issue/invoke.
+ */
+app.get('/api/platform/hands', async (_req, reply) => {
+  const result = admitPlatformHands(platform)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    handsTicketsPending: result.handsTicketsPending,
+    pendingCount: result.pendingCount,
+  }
+})
+
+/**
+ * Diagnostic: Ingress admit → packs.list() + packEnforce.
+ * Not attached to `/api/health`; subject to owner auth when claimed.
+ * Does not flip env OPPTRIX_PLATFORM_PACK_ENFORCE.
+ */
+app.get('/api/platform/packs', async (_req, reply) => {
+  const result = admitPlatformPacks(platform)
+  if (!result.ok) {
+    return reply.code(400).send({ error: result.error })
+  }
+  return {
+    traceId: result.traceId,
+    origin: result.origin,
+    packs: result.packs,
+    packEnforce: result.packEnforce,
+  }
+})
+
+/**
+ * Diagnostic: admit → enable/disable pack in registry only.
+ * Body: `{ enabled: boolean }`. Does not flip packEnforce env.
+ */
+app.post<{
+  Params: { id: string }
+  Body: { enabled?: boolean }
+}>('/api/platform/packs/:id', async (req, reply) => {
+  const setAdmit = platform.ingress.admit('web.diagnostic', {
+    text: 'platform.packs.set',
+  })
+  if (!setAdmit.ok) {
+    return reply.code(400).send({ error: setAdmit.error })
+  }
+  const enabled = req.body?.enabled
+  if (typeof enabled !== 'boolean') {
+    return reply.code(400).send({ error: 'enabled must be a boolean' })
+  }
+  const setResult = setPlatformPackEnabled(platform, req.params.id, enabled)
+  if (!setResult.ok) {
+    return reply.code(400).send({ error: setResult.error })
+  }
+  return {
+    ok: true,
+    packs: platform.packs.list(),
   }
 })
 
@@ -1973,6 +2657,13 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string; atta
       return reply.code(400).send({ error: 'message required' })
     }
 
+    // Best-effort Ingress admit (observability only; never gates chat).
+    admitChatBestEffort(platform, {
+      text: req.body.message ?? '',
+      sessionId: req.params.id,
+      origin: 'web.chat',
+    })
+
     reply.hijack()
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -2030,6 +2721,12 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string; atta
     if (!req.body?.message?.trim() && !hasAttachments) {
       return reply.code(400).send({ error: 'message required' })
     }
+    // Best-effort Ingress admit (observability only; never gates chat).
+    admitChatBestEffort(platform, {
+      text: req.body.message ?? '',
+      sessionId: req.params.id,
+      origin: 'web.chat',
+    })
     const result = await agent.chat(
       req.params.id,
       req.body.message ?? '',
@@ -2361,6 +3058,15 @@ async function bootstrap() {
   })
 
   await listenWithStaleCleanup()
+  platform.events.emit(
+    SystemEvents.app.startup,
+    {
+      httpPort: HTTP_PORT,
+      httpsPort: HTTPS_PORT,
+      at: new Date().toISOString(),
+    },
+    { kind: 'system', id: 'sidecar' },
+  )
   const bindNote = HOST !== CONNECT_HOST ? ` (bind ${HOST})` : ''
   if (HTTP_PORT != null) {
     console.log(`\n  Opptrix API → http://${CONNECT_HOST}:${HTTP_PORT}/api/health${bindNote}`)
@@ -2460,6 +3166,20 @@ async function shutdown(signal: string) {
     },
     forceExitMs: resolveSidecarForceExitMs(),
     exitCode: signal === 'uncaughtException' ? 1 : 0,
+    onShuttingDown: () => {
+      platform.events.emit(
+        SystemEvents.app.shuttingDown,
+        { signal, at: new Date().toISOString() },
+        { kind: 'system', id: 'sidecar' },
+      )
+    },
+    onShutdown: () => {
+      platform.events.emit(
+        SystemEvents.app.shutdown,
+        { signal, at: new Date().toISOString() },
+        { kind: 'system', id: 'sidecar' },
+      )
+    },
     stopSchedulers: () => {
       scheduleService.stop()
       stopRetentionMaintenance()

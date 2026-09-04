@@ -3587,6 +3587,150 @@ export const pythonSettings = {
     }),
 }
 
+// ─── Platform capability packs (read / optional enable) ───
+
+export type PlatformPackId = 'research' | 'coding'
+
+export interface PlatformPackInfo {
+  id: PlatformPackId | string
+  enabled: boolean
+  label: string
+}
+
+export interface PlatformPacksResult {
+  packs: PlatformPackInfo[]
+  packEnforce: boolean
+  traceId?: string
+  origin?: string
+}
+
+/** List domain capability packs + whether capability limits are enforced. */
+export async function fetchPlatformPacks(): Promise<PlatformPacksResult> {
+  const json = await jsonFetch<{
+    packs?: PlatformPackInfo[]
+    packEnforce?: boolean
+    traceId?: string
+    origin?: string
+    error?: string
+  }>('/platform/packs')
+  return {
+    packs: Array.isArray(json.packs) ? json.packs : [],
+    packEnforce: json.packEnforce === true,
+    traceId: typeof json.traceId === 'string' ? json.traceId : undefined,
+    origin: typeof json.origin === 'string' ? json.origin : undefined,
+  }
+}
+
+/** Enable or disable a single capability pack in the live registry. */
+export async function setPlatformPackEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<{ ok: true; packs: PlatformPackInfo[] }> {
+  const json = await jsonFetch<{
+    ok?: boolean
+    packs?: PlatformPackInfo[]
+    error?: string
+  }>(`/platform/packs/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+  return {
+    ok: true,
+    packs: Array.isArray(json.packs) ? json.packs : [],
+  }
+}
+
+// ─── Platform alerts (lightweight toast poll) ───
+
+export type PlatformAlert = {
+  id: string
+  at: string
+  kind: string
+  title: string
+  payload: Record<string, unknown>
+  acknowledged: boolean
+}
+
+export type PlatformAlertsResult = {
+  alerts: PlatformAlert[]
+  alertsPending: number
+  traceId?: string
+  origin?: string
+}
+
+function parsePlatformAlert(raw: unknown): PlatformAlert | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const row = raw as Record<string, unknown>
+  const id = typeof row.id === 'string' ? row.id.trim() : ''
+  if (!id) return null
+  const title = typeof row.title === 'string' ? row.title : ''
+  const kind = typeof row.kind === 'string' ? row.kind : ''
+  const at = typeof row.at === 'string' ? row.at : ''
+  const payload =
+    row.payload !== null && typeof row.payload === 'object' && !Array.isArray(row.payload)
+      ? { ...(row.payload as Record<string, unknown>) }
+      : {}
+  return {
+    id,
+    at,
+    kind,
+    title,
+    payload,
+    acknowledged: row.acknowledged === true,
+  }
+}
+
+/** List platform alerts. Default: unacked only (`includeAcknowledged=0`). */
+export async function fetchPlatformAlerts(opts?: {
+  includeAcknowledged?: boolean
+  limit?: number
+}): Promise<PlatformAlertsResult> {
+  const qs = new URLSearchParams()
+  const includeAck = opts?.includeAcknowledged === true
+  qs.set('includeAcknowledged', includeAck ? '1' : '0')
+  if (typeof opts?.limit === 'number' && Number.isFinite(opts.limit) && opts.limit >= 0) {
+    qs.set('limit', String(Math.trunc(opts.limit)))
+  }
+  const json = await jsonFetch<{
+    alerts?: unknown
+    alertsPending?: number
+    traceId?: string
+    origin?: string
+    error?: string
+  }>(`/platform/alerts?${qs.toString()}`)
+  const alerts = Array.isArray(json.alerts)
+    ? json.alerts.map(parsePlatformAlert).filter((a): a is PlatformAlert => a != null)
+    : []
+  return {
+    alerts,
+    alertsPending: typeof json.alertsPending === 'number' ? json.alertsPending : 0,
+    traceId: typeof json.traceId === 'string' ? json.traceId : undefined,
+    origin: typeof json.origin === 'string' ? json.origin : undefined,
+  }
+}
+
+/** Acknowledge one platform alert (fail-open callers should catch). */
+export async function acknowledgePlatformAlert(
+  id: string,
+): Promise<{ acknowledged: boolean; alertsPending: number }> {
+  const key = id.trim()
+  if (!key) {
+    return { acknowledged: false, alertsPending: 0 }
+  }
+  const json = await jsonFetch<{
+    acknowledged?: boolean
+    alertsPending?: number
+    error?: string
+  }>(`/platform/alerts/${encodeURIComponent(key)}/acknowledge`, {
+    method: 'POST',
+  })
+  return {
+    acknowledged: json.acknowledged === true,
+    alertsPending: typeof json.alertsPending === 'number' ? json.alertsPending : 0,
+  }
+}
+
 export type SemanticModelInstallPhase =
   | 'idle'
   | 'downloading'

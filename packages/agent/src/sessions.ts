@@ -20,6 +20,10 @@ import {
   normalizeReasoningSegments,
   type ReasoningSegment,
 } from './reasoning-timeline.js'
+import {
+  sanitizeCheckpointTurnsForApply,
+  type CheckpointApplyInput,
+} from './turn-checkpoint.js'
 
 export type { ReasoningSegment }
 
@@ -564,6 +568,101 @@ export class SessionStore {
     record.title = title.trim() || record.title
     this.save(record)
     return record
+  }
+
+  /**
+   * Hard checkpoint restore (Wave 51+): metadata + turns snapshot (W52) or turn truncate.
+   * When `turns` is present, it replaces transcript (precedence over turnCount).
+   */
+  applyCheckpoint(
+    input: CheckpointApplyInput,
+  ): { ok: true; truncated: boolean } | { ok: false; error: string } {
+    const sid = typeof input.sessionId === 'string' ? input.sessionId.trim() : ''
+    if (!sid) return { ok: false, error: 'sessionId required' }
+    const record = this.get(sid)
+    if (!record) return { ok: false, error: 'session not found' }
+
+    let truncated = false
+
+    if (typeof input.title === 'string') {
+      const title = input.title.trim()
+      if (title) record.title = title
+    }
+    if (typeof input.model === 'string') {
+      const model = input.model.trim()
+      if (model) record.model = model
+    }
+
+    if (input.turns !== undefined) {
+      if (!Array.isArray(input.turns)) {
+        return { ok: false, error: 'turns must be an array' }
+      }
+      const next = sanitizeCheckpointTurnsForApply(input.turns)
+      const now = new Date().toISOString()
+      record.turns = next.map((t) => ({
+        role: t.role === 'assistant' ? 'assistant' as const : 'user' as const,
+        content: t.content,
+        at: typeof t.at === 'string' && t.at.trim() ? t.at : now,
+      }))
+      record.messages = next.map((t) => ({
+        role: t.role === 'assistant' ? 'assistant' as const : 'user' as const,
+        content: t.content,
+      }))
+      record.sessionMemory = null
+      record.contextProjection = null
+      truncated = true
+    } else {
+      const target = input.turnCount
+      if (typeof target === 'number' && Number.isFinite(target) && target >= 0) {
+        const keep = Math.floor(target)
+        const turns = record.turns ?? []
+        if (turns.length > keep) {
+          truncated = true
+          record.turns = turns.slice(0, keep)
+
+          if (keep === 0) {
+            record.messages = []
+          } else {
+            let displayCount = 0
+            let messageCut = -1
+            for (let i = 0; i < record.messages.length; i++) {
+              const m = record.messages[i]!
+              const isDisplayMsg = m.role === 'user'
+                || (m.role === 'assistant' && !(m.tool_calls?.length))
+              if (!isDisplayMsg) continue
+              displayCount += 1
+              if (displayCount === keep) {
+                messageCut = i + 1
+                break
+              }
+            }
+            if (messageCut >= 0) {
+              record.messages = record.messages.slice(0, messageCut)
+            } else {
+              // Fallback: rebuild messages from remaining turns
+              record.messages = record.turns.map((t) => ({
+                role: t.role,
+                content: t.content,
+              }))
+            }
+          }
+
+          record.sessionMemory = null
+          record.contextProjection = null
+        }
+      }
+    }
+
+    record.updatedAt = new Date().toISOString()
+    try {
+      this.save(record)
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'checkpoint apply save failed',
+      }
+    }
+    return { ok: true, truncated }
   }
 
   /** 更新会话级技能专长（调用方须已消毒） */

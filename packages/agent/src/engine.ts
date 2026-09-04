@@ -8,6 +8,10 @@ import {
 import { stripDsmlToolMarkup } from './llm/dsml-tool-markup.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
+import {
+  createPassthroughGate,
+  type CapabilityGate,
+} from './capability-gate.js'
 import { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
 import { AggregatingToolBroker, buildDisabledMcpTurnTail, buildExternalMcpSourcingAppendix, clearMcpSessionQuarantine } from './mcp/external/index.js'
@@ -146,6 +150,18 @@ import {
   UserPromptCancelledError,
 } from './user-prompt.js'
 import {
+  allocateApprovalOwnedPromptId,
+  type ApprovalTracker,
+} from './approval-tracker.js'
+import {
+  boundCheckpointTurns,
+  type TurnCheckpointHooks,
+  type TurnCheckpointSnapshot,
+  type CheckpointApplyInput,
+} from './turn-checkpoint.js'
+import type { UsageMeterHooks } from './usage-meter.js'
+import { deriveApprovedFromUserPromptAnswer } from './approval-tracker.js'
+import {
   UNATTENDED_ASK_USER_RESULT,
   UNATTENDED_SECRET_RESULT,
   appendUnattendedTurnTail,
@@ -226,6 +242,17 @@ export interface AgentSettings {
   defaultScorecard: string
   defaultTopN: number
   appContext?: AgentAppContext
+  /** Optional capability Gate; defaults to passthrough (K2). */
+  capabilityGate?: CapabilityGate
+  /**
+   * Optional approval port (Wave 56): when set, ask_user creates `platform.approval`
+   * first (kind `'ask_user'`, id ≡ promptId). UserPromptBridge stays waiter/transport.
+   */
+  approvalTracker?: ApprovalTracker
+  /** Optional turn checkpoint mirror; when unset, chat path is unchanged (W11). */
+  turnCheckpoint?: TurnCheckpointHooks
+  /** Optional soft usage meter; when unset, chat path is unchanged (W48). */
+  usageMeter?: UsageMeterHooks
   /** @deprecated single llm */
   llm?: import('./llm/provider.js').LlmConfig
 }
@@ -318,6 +345,10 @@ export class AgentEngine {
   readonly sessions = new SessionStore()
   private registry = new ProviderRegistry()
   private settings: AgentSettings
+  private readonly capabilityGate: CapabilityGate
+  private readonly approvalTracker: ApprovalTracker | undefined
+  private readonly turnCheckpoint: TurnCheckpointHooks | undefined
+  private readonly usageMeter: UsageMeterHooks | undefined
   private readonly toolPackSessions = new ToolPackSessionStore()
   private readonly agentSkillSessions = new AgentSkillSessionStore()
   /** 当前 chat 回合解析出的 active pack ids（供 list_tool_packs / 可观测性） */
@@ -383,8 +414,12 @@ export class AgentEngine {
     settings: AgentSettings,
   ) {
     this.settings = settings
+    this.capabilityGate = settings.capabilityGate ?? createPassthroughGate()
+    this.approvalTracker = settings.approvalTracker
+    this.turnCheckpoint = settings.turnCheckpoint
+    this.usageMeter = settings.usageMeter
     this.tools = new ToolRegistry(hub, settings.appContext)
-    this.discover = new DiscoverRunner(hub, this.registry, this.tools)
+    this.discover = new DiscoverRunner(hub, this.registry, this.tools, this.capabilityGate)
     if (settings.providers?.length) {
       this.registry.setProviders(settings.providers, settings.defaultModel)
     }
@@ -676,6 +711,12 @@ export class AgentEngine {
           return { selected_ids: ['cancel'] }
         }
         const promptId = createUserPromptId()
+        this.safeApprovalTrack({
+          id: promptId,
+          sessionId,
+          kind: 'workspace_confirm',
+          title: payload.title,
+        })
         emit({
           type: 'user_prompt',
           prompt: {
@@ -709,7 +750,12 @@ export class AgentEngine {
             custom_text: blocked.error,
           }
         }
-        const promptId = createUserPromptId()
+        // Wave 56: approval owns ask_user; bridge waits on approval.id
+        const promptId = allocateApprovalOwnedPromptId(this.approvalTracker, {
+          sessionId,
+          kind: 'ask_user',
+          title: payload.title,
+        })
         emit({
           type: 'user_prompt',
           prompt: {
@@ -751,6 +797,12 @@ export class AgentEngine {
           }
         }
         const promptId = createUserPromptId()
+        this.safeApprovalTrack({
+          id: promptId,
+          sessionId,
+          kind: 'request_secret',
+          title: payload.title,
+        })
         emit({
           type: 'user_prompt',
           prompt: {
@@ -812,6 +864,7 @@ export class AgentEngine {
       cancelChildChat: (childId) => {
         this.chatAbortBySession.get(childId)?.abort()
         this.userPromptBridge.cancelSession(childId)
+        this.safeApprovalCancelSession(childId)
       },
       emit: bound?.emit,
     })
@@ -1283,10 +1336,12 @@ export class AgentEngine {
       cancelChildChat: (childId) => {
         this.chatAbortBySession.get(childId)?.abort()
         this.userPromptBridge.cancelSession(childId)
+        this.safeApprovalCancelSession(childId)
       },
       deleteChildSession: (childId) => {
         // 避免子再 cascade 回父：直接清旁路后删记录
         this.userPromptBridge.cancelSession(childId)
+        this.safeApprovalCancelSession(childId)
         this.clearLoopSessionState(childId)
         this.clearFrozenTools(childId)
         this.toolPackSessions.clear(childId)
@@ -1308,6 +1363,7 @@ export class AgentEngine {
     })
     this.chatAbortBySession.get(id)?.abort()
     this.userPromptBridge.cancelSession(id)
+    this.safeApprovalCancelSession(id)
     this.clearLoopSessionState(id)
     this.clearFrozenTools(id)
     this.toolPackSessions.clear(id)
@@ -1351,10 +1407,20 @@ export class AgentEngine {
   /** 截断会话至指定 user display turn 之前（编辑重发前调用） */
   truncateSession(sessionId: string, messageIndex: number) {
     this.userPromptBridge.cancelSession(sessionId)
+    this.safeApprovalCancelSession(sessionId)
     this.steerBridge.clear(sessionId)
     const updated = this.sessions.truncateFromDisplayIndex(sessionId, messageIndex)
     this.invalidateContextUsage(sessionId)
     return updated
+  }
+
+  /**
+   * Hard checkpoint restore (Wave 51+): metadata + turns snapshot (W52) or turn truncate.
+   */
+  applyCheckpoint(input: CheckpointApplyInput) {
+    const result = this.sessions.applyCheckpoint(input)
+    if (result.ok) this.invalidateContextUsage(input.sessionId)
+    return result
   }
 
   getSessionContextRef(sessionId: string): SessionContextRef | null {
@@ -1446,7 +1512,94 @@ export class AgentEngine {
   }
 
   resolveUserPrompt(sessionId: string, promptId: string, answer: UserPromptAnswer) {
-    return this.userPromptBridge.submit(sessionId, promptId, answer)
+    const ok = this.userPromptBridge.submit(sessionId, promptId, answer)
+    if (ok) {
+      const note =
+        typeof answer.custom_text === 'string' && answer.custom_text.trim()
+          ? answer.custom_text.trim()
+          : undefined
+      this.safeApprovalResolve(promptId, {
+        approved: deriveApprovedFromUserPromptAnswer(answer),
+        ...(note ? { note } : {}),
+      })
+    }
+    return ok
+  }
+
+  /** Best-effort: platform tracker must never break chat. */
+  private safeApprovalTrack(input: {
+    id: string
+    sessionId: string
+    kind: string
+    title?: string
+  }): void {
+    if (!this.approvalTracker) return
+    try {
+      this.approvalTracker.track(input)
+    } catch {
+      /* swallow */
+    }
+  }
+
+  /** Best-effort: platform checkpoint must never break chat. */
+  private safeCheckpointSave(snapshot: TurnCheckpointSnapshot): void {
+    if (!this.turnCheckpoint) return
+    try {
+      let toSave = snapshot
+      if (snapshot.turns === undefined) {
+        const record = this.sessions.get(snapshot.sessionId)
+        const turns = boundCheckpointTurns(record?.turns)
+        if (turns) toSave = { ...snapshot, turns }
+      } else {
+        const turns = boundCheckpointTurns(snapshot.turns)
+        toSave = turns ? { ...snapshot, turns } : { ...snapshot, turns: undefined }
+      }
+      this.turnCheckpoint.save(toSave)
+    } catch {
+      /* swallow */
+    }
+  }
+
+  /**
+   * Best-effort: soft meter must never break chat.
+   * Only when upstream reported `turn.usage` (not local estimates).
+   * Maps promptTokens → tokenIn, completionTokens → tokenOut.
+   */
+  private safeRecordUsage(
+    sessionId: string,
+    usage: TokenUsage | undefined,
+  ): void {
+    if (!this.usageMeter || !usage) return
+    try {
+      this.usageMeter.record({
+        tokenIn: usage.promptTokens,
+        tokenOut: usage.completionTokens,
+        sessionId,
+      })
+    } catch {
+      /* swallow */
+    }
+  }
+
+  private safeApprovalResolve(
+    id: string,
+    decision: { approved: boolean; note?: string },
+  ): void {
+    if (!this.approvalTracker) return
+    try {
+      this.approvalTracker.resolve(id, decision)
+    } catch {
+      /* swallow */
+    }
+  }
+
+  private safeApprovalCancelSession(sessionId: string): void {
+    if (!this.approvalTracker) return
+    try {
+      this.approvalTracker.cancelSession(sessionId)
+    } catch {
+      /* swallow */
+    }
   }
 
   async chat(
@@ -1603,6 +1756,15 @@ export class AgentEngine {
       record.title = await formatChatTitle(titleSeed, 28)
     }
     this.sessions.save(record)
+    this.safeCheckpointSave({
+      phase: 'user',
+      sessionId,
+      title: record.title,
+      model: record.model,
+      messageCount: record.messages.length,
+      turnCount: record.turns?.length ?? 0,
+      at: new Date().toISOString(),
+    })
     this.invalidateContextUsage(sessionId)
 
     const emit = (event: ChatProgressEvent) => {
@@ -1700,10 +1862,12 @@ export class AgentEngine {
         cancelChildChat: (childId) => {
           this.chatAbortBySession.get(childId)?.abort()
           this.userPromptBridge.cancelSession(childId)
+          this.safeApprovalCancelSession(childId)
         },
         emit: bound?.emit ?? progress?.onProgress,
       })
       this.userPromptBridge.cancelSession(sessionId)
+      this.safeApprovalCancelSession(sessionId)
       this.steerBridge.clear(sessionId)
       clearSessionTurnWakes(sessionId)
       clearSessionJobWaitsAndWatches(sessionId)
@@ -1978,6 +2142,7 @@ export class AgentEngine {
           lastRoundEstimatedTokens = undefined
         }
         chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, modelView))
+        this.safeRecordUsage(sessionId, turn.usage)
         return turn
       }
 
@@ -2150,8 +2315,17 @@ export class AgentEngine {
                 if (parsed.error || !parsed.payload) {
                   result = { error: parsed.error ?? 'ask_user 参数无效' }
                 } else {
-                  const promptId = createUserPromptId()
-                  const answerPromise = this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
+                  // Wave 56: approval owns ask_user — track before bridge wait; id ≡ promptId
+                  const promptId = allocateApprovalOwnedPromptId(this.approvalTracker, {
+                    sessionId,
+                    kind: 'ask_user',
+                    title: parsed.payload.title,
+                  })
+                  const answerPromise = this.userPromptBridge.waitForAnswer(
+                    sessionId,
+                    promptId,
+                    signal,
+                  )
                   emit({
                     type: 'user_prompt',
                     prompt: { id: promptId, ...parsed.payload },
@@ -2169,7 +2343,15 @@ export class AgentEngine {
             } else if (!activeSet.has(fn) && !parseNamespacedMcpTool(fn)) {
               result = { error: unloadedToolHint(fn) }
             } else {
-              result = await runInToolSession(sessionId, () => broker.call(fn, args, { signal }))
+              const obs = await this.capabilityGate.submit(
+                {
+                  token: fn,
+                  args,
+                  principal: { kind: 'session', sessionId },
+                },
+                () => runInToolSession(sessionId, () => broker.call(fn, args, { signal })),
+              )
+              result = obs.data
               // MCP 运维会改变外部 tools schema → 冷启动重建冻结集（accept cache miss）
               if (
                 fn === 'enable_mcp_server'
@@ -2483,6 +2665,15 @@ export class AgentEngine {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)
     }
     this.sessions.save(record)
+    this.safeCheckpointSave({
+      phase: 'assistant',
+      sessionId: record.id,
+      title: record.title,
+      model: record.model,
+      messageCount: record.messages.length,
+      turnCount: record.turns?.length ?? 0,
+      at: new Date().toISOString(),
+    })
     this.invalidateContextUsage(record.id)
   }
 }

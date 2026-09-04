@@ -21,6 +21,7 @@ import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
 import DocLibrarySettingsSection from './settings/DocLibrarySettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
+import CapabilityPacksSettingsSection from './settings/CapabilityPacksSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
 import SelfEvolveSettingsSection from './settings/SelfEvolveSettingsSection'
@@ -790,6 +791,9 @@ function SettingsPageView({
 
       case 'sandbox':
         return <SandboxSettingsSection />
+
+      case 'capability_packs':
+        return <CapabilityPacksSettingsSection />
 
       case 'schedule':
         return <ScheduleSettingsSection />

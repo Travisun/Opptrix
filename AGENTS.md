@@ -91,7 +91,6 @@ codegraph explore "<问题或符号>"
 | 修改 `queryInstrumentData` | `docs/ARCHITECTURE.md`、`docs/DATA-LAYER.md` |
 | 修改 UI 组件 | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
 | 修改 Schema | `docs/DATA-LAYER.md`、迁移测试 |
-| 修改 Electron | `docs/DESKTOP.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 修改 API 路由 | `docs/API.md` |
 | 修改 Agent tool | `docs/AGENT-GUIDE.md`；并遵循 `mcp-tool-pack-routing.mdc` |
 
@@ -111,7 +110,6 @@ codegraph explore "<问题或符号>"
 - ❌ 禁止 API Key/Token 写入代码或提交 Git
 - ❌ 禁止日志包含敏感信息
 - ✅ 所有外部输入必须校验
-- ✅ Electron：`nodeIntegration: false`、`contextIsolation: true`、`sandbox: true`
 - ✅ 网络请求必须有超时
 
 ### R6. 代码质量
@@ -260,7 +258,7 @@ Storage Layer (user-store, market-data)
 
 - 设计前读 `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；沿用 Fluent UI v9 + 项目 tokens / `Opptrix*` 封装
 - 禁止 `window.confirm` / `alert` / `prompt`；确认用 `OpptrixDialogAlert` / `useOpptrixDialogAlert`
-- Electron 始终 desktop 布局；小窗口侧栏全高浮层、无全屏遮罩
+- 宽屏始终 desktop 布局；小窗口侧栏全高浮层、无全屏遮罩
 - 面向投资者文案：日常中文，避免裸用 hydrate/MCP/F10
 
 改码后：
@@ -277,7 +275,7 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 
 **完整架构文档**：[`docs/ARCHITECTURE-COMPREHENSIVE.md`](./docs/ARCHITECTURE-COMPREHENSIVE.md)
 
-涵盖：数据库层、数据层、Provider 机制、模块化开发、UI 规范、Electron 安全、弹性模式、端口管理、翻译服务、测试基础设施、CI/CD、配置管理、发布打包、审计流程。
+涵盖：数据库层、数据层、Provider 机制、模块化开发、UI 规范、弹性模式、端口管理、翻译服务、测试基础设施、CI/CD、配置管理、发布打包、审计流程。
 
 ## 场景索引（动手前加载）
 
@@ -285,9 +283,7 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 |------|-------|---------|
 | 探索代码 / 定位符号 | `codegraph` | `~/.projects-rules/Opptrix/.mimocode/skills/codegraph/SKILL.md` |
 | 改 `client-ui` | `client-ui` | 本地 skill + `docs/UI-DESIGN-SYSTEM.md` |
-| 桌面发版 / 打标签 | `desktop-release`（**legacy**） | 本地 skill + `docs/DESKTOP-RELEASE.md` |
 | 自托管 / Docker 依赖 | — | **`docs/SELFHOST-RUNTIME-DEPS.md`**、`docs/SELF-HOSTING.md` |
-| macOS 签名 / 公证 / 防漏签清单 | —（Read 本地规则） | `~/.projects-rules/Opptrix/.cursor/rules/desktop-mac-signing.mdc` |
 | SQLite / 数据库 | `schema-migration` | 本地 skill + `backward-compatibility.mdc` |
 | 行情 / Hub / 研究 API | `data-layer` | 本地 skill + `docs/DATA-LAYER.md` |
 | Agent / MCP 工具接入 | —（Read 本地规则） | `~/.projects-rules/Opptrix/.cursor/rules/mcp-tool-pack-routing.mdc` |

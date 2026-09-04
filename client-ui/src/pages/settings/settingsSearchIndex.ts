@@ -45,6 +45,12 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: ['自进化', '进化', '合入', '更新记录', '关闭自进化', '分析习惯'],
   },
   { section: 'sandbox', title: '工作区隔离', desc: '查看命令保护与网络访问规则', keywords: ['沙盒', '沙盒环境', '命令隔离', '工作区隔离'] },
+  {
+    section: 'capability_packs',
+    title: '能力包',
+    desc: '查看投研与编程能力包的启用状态',
+    keywords: ['能力包', '投研能力包', '编程能力包', '能力限制'],
+  },
   { section: 'schedule', title: '计划任务', desc: '管理定时任务', keywords: ['定时', '自动执行'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
   { section: 'system_update', title: '系统更新', desc: '在线检查、离线导入与版本回退', keywords: ['版本', '升级', '热更新', '检查更新', '离线', '导入'] },
@@ -156,6 +162,29 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'sandbox', title: '永久允许的目标', desc: '出站访问白名单', keywords: ['白名单', '域名', '网络'] },
   { section: 'sandbox', title: '允许局域网访问', desc: '授权本地网络内的目标', keywords: ['局域网', '本地', '私网'] },
 
+  // 能力包
+  {
+    section: 'capability_packs',
+    group: '能力限制',
+    title: '能力限制',
+    desc: '未启用的能力包对应功能是否会受限',
+    keywords: ['能力限制', '限制已开启', '限制已关闭'],
+  },
+  {
+    section: 'capability_packs',
+    group: '能力包',
+    title: '投研能力包',
+    desc: '行情、资讯、财报与组合等投研相关能力',
+    keywords: ['投研', 'research'],
+  },
+  {
+    section: 'capability_packs',
+    group: '能力包',
+    title: '编程能力包',
+    desc: '编写与运行代码、处理本地文件等编程相关能力',
+    keywords: ['编程', 'coding', '代码'],
+  },
+
   // 计划任务
   { section: 'schedule', title: '启用计划任务', desc: '关闭后，任务不会自动执行', keywords: ['总开关', '执行'] },
   { section: 'schedule', title: '允许任务运行受控脚本', desc: '默认只跑智能体任务；开启后才可执行脚本类任务', keywords: ['脚本'] },
@@ -208,6 +237,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   agent_skills: '工作流技能',
   self_evolve: '自进化',
   sandbox: '工作区隔离',
+  capability_packs: '能力包',
   schedule: '计划任务',
   python: 'Python',
   portfolio_fees: '组合费率',

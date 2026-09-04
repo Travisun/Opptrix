@@ -11,6 +11,10 @@ import {
 } from '@opptrix/shared'
 import type { ResearchHub } from '@opptrix/research-hub'
 import type { ToolRegistry } from './tools.js'
+import {
+  createPassthroughGate,
+  type CapabilityGate,
+} from './capability-gate.js'
 import { McpToolBroker } from './mcp/broker.js'
 import type { ProviderRegistry } from './llm/providers.js'
 import type { ChatMessage } from './llm/provider.js'
@@ -315,11 +319,16 @@ type PrescreenCandidate = {
 }
 
 export class DiscoverRunner {
+  private readonly capabilityGate: CapabilityGate
+
   constructor(
     private hub: ResearchHub,
     private registry: ProviderRegistry,
     private tools: ToolRegistry,
-  ) {}
+    capabilityGate?: CapabilityGate,
+  ) {
+    this.capabilityGate = capabilityGate ?? createPassthroughGate()
+  }
 
   async runStrategy(
     strategyId: string,
@@ -911,7 +920,16 @@ export class DiscoverRunner {
             } catch { /* empty */ }
             let result: unknown
             try {
-              result = await broker.call(tc.function.name, args, { signal })
+              const toolName = tc.function.name
+              const obs = await this.capabilityGate.submit(
+                {
+                  token: toolName,
+                  args,
+                  principal: { kind: 'discover' },
+                },
+                () => broker.call(toolName, args, { signal }),
+              )
+              result = obs.data
             } catch (e) {
               result = { error: e instanceof Error ? e.message : String(e) }
             }

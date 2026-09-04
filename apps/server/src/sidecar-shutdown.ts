@@ -45,6 +45,16 @@ export type SidecarShutdownHooks = {
   closeMarketDuck: () => Promise<void>
   closeMarketStore: () => void
   closeUserStore: () => void
+  /**
+   * Optional: runs FIRST before stopSchedulers (e.g. emit app.shuttingDown).
+   * Best-effort — failures are logged and ignored.
+   */
+  onShuttingDown?: () => void | Promise<void>
+  /**
+   * Optional: after stores closed, before native settle / process.exit
+   * (e.g. emit app.shutdown). Best-effort.
+   */
+  onShutdown?: () => void | Promise<void>
   settleMs?: number
   forceExitMs?: number
   /** Final process exit code (default 0). */
@@ -94,6 +104,9 @@ export async function runSidecarShutdown(hooks: SidecarShutdownHooks): Promise<v
   }, forceExitMs)
 
   try {
+    if (hooks.onShuttingDown) {
+      await runStep(hooks.log, 'onShuttingDown', () => hooks.onShuttingDown?.())
+    }
     await runStep(hooks.log, 'stopSchedulers', () => {
       hooks.stopSchedulers()
     })
@@ -109,6 +122,9 @@ export async function runSidecarShutdown(hooks: SidecarShutdownHooks): Promise<v
     await runStep(hooks.log, 'closeUserStore', () => {
       hooks.closeUserStore()
     })
+    if (hooks.onShutdown) {
+      await runStep(hooks.log, 'onShutdown', () => hooks.onShutdown?.())
+    }
     if (settleMs > 0) {
       hooks.log.info(`shutdown: nativeSettle ${settleMs}ms`)
       await sleep(settleMs)

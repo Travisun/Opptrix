@@ -19,6 +19,7 @@ import {
   BookOpenRegular,
   CalculatorRegular,
   ArrowSyncRegular,
+  BoxMultipleRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
@@ -67,6 +68,7 @@ const NAV: NavItem[] = [
   { id: 'agent_skills', label: '工作流技能', icon: BookOpenRegular },
   { id: 'self_evolve', label: '自进化', icon: ArrowSyncRegular },
   { id: 'sandbox', label: '工作区隔离', icon: ShieldRegular },
+  { id: 'capability_packs', label: '能力包', icon: BoxMultipleRegular },
   { id: 'schedule', label: '计划任务', icon: CalendarClockRegular },
   { id: 'python', label: 'Python', icon: CodeRegular },
   { id: 'system_update', label: '系统更新', icon: ArrowSyncRegular },
@@ -496,6 +498,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '管理使用中自动优化分析习惯'
     case 'sandbox':
       return '查看工作区隔离状态与网络访问规则'
+    case 'capability_packs':
+      return '查看投研与编程能力包的启用状态'
     case 'schedule':
       return '管理定时智能体任务与受控脚本'
     case 'python':

@@ -8,6 +8,7 @@ export type SettingsSection =
   | 'self_evolve'
   | 'news_feed'
   | 'sandbox'
+  | 'capability_packs'
   | 'schedule'
   | 'python'
   | 'translation'
@@ -31,6 +32,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'agent_skills',
   'self_evolve',
   'sandbox',
+  'capability_packs',
   'schedule',
   'python',
   'system_update',

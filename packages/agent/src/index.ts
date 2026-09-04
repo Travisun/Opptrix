@@ -1,5 +1,33 @@
 export { AgentEngine, ChatCancelledError, type AgentSettings, type ChatResult, type SessionContextUsage } from './engine.js'
 export {
+  createPassthroughGate,
+  type CapabilityAction,
+  type CapabilityGate,
+  type CapabilityObservation,
+} from './capability-gate.js'
+export {
+  type ApprovalTracker,
+  allocateApprovalOwnedPromptId,
+  deriveApprovedFromUserPromptAnswer,
+  userPromptAnswerFromApprovalDecision,
+} from './approval-tracker.js'
+export {
+  boundCheckpointTurns,
+  sanitizeCheckpointTurnsForApply,
+  CHECKPOINT_TURNS_CAP,
+  CHECKPOINT_TURN_CONTENT_MAX,
+  type CheckpointApplyHooks,
+  type CheckpointApplyInput,
+  type CheckpointTurnSlice,
+  type TurnCheckpointHooks,
+  type TurnCheckpointPhase,
+  type TurnCheckpointSnapshot,
+} from './turn-checkpoint.js'
+export {
+  type UsageMeterHooks,
+  type UsageMeterRecordInput,
+} from './usage-meter.js'
+export {
   appendReasoningTimeline,
   appendReasoningSegment,
   beginReasoningSegment,
