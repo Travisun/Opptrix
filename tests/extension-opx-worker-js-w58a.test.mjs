@@ -258,7 +258,7 @@ module.exports = {
     assert.match(rpc, /node:vm|from 'node:vm'|from "node:vm"/)
   })
 
-  it('C-OPX-WORKER-JS + ABI 0.8.52-thin-a', async () => {
+  it('C-OPX-WORKER-JS + ABI 0.9.0-phase-a', async () => {
     const zip = buildStoredZip({
       'manifest.json': JSON.stringify({
         id: 'c-opx-w58',
@@ -276,8 +276,8 @@ module.exports = {
     if (!act.ok) throw new Error('expected ok')
     assert.equal(act.jsLoaded, true)
     assert.equal(act.experimental, true)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     assert.ok(platform.OPX_ENTRY_SOURCE_MAX_BYTES <= 256 * 1024)
   })
 })

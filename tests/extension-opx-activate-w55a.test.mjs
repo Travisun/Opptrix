@@ -251,7 +251,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
     assert.match(activateSlice, /hostBound/)
   })
 
-  it('C-OPX-ACTIVATE + ABI 0.8.52-thin-a', async () => {
+  it('C-OPX-ACTIVATE + ABI 0.9.0-phase-a', async () => {
     const ctx = platform.createPlatformContext()
     assert.equal(
       ctx.extensions.registerFromManifest({
@@ -265,7 +265,7 @@ describe('opx sandboxed activate (Wave 55A)', () => {
     if (!act.ok) throw new Error('expected ok')
     assert.equal(act.extension.state, 'active')
     assert.equal(act.hostBound, true)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 })

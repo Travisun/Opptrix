@@ -127,9 +127,9 @@ describe('ask_user approval-owned primary path (Wave 56A)', () => {
     assert.equal(row?.meta?.promptId, fixed)
   })
 
-  it('ABI 0.8.52-thin-a', () => {
+  it('ABI 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 })

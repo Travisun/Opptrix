@@ -130,7 +130,7 @@ describe('hands-port Wave 54A browser detect (no-launch)', () => {
     assert.equal(nav.ok, true)
   })
 
-  it('C-HANDS-BROWSER + ABI 0.8.52-thin-a', async () => {
+  it('C-HANDS-BROWSER + ABI 0.9.0-phase-a', async () => {
     const ctx = platform.createPlatformContext()
     const issued = ctx.hands.issue({ token: 'hands.browser.capabilities' })
     assert.equal(issued.ok, true)
@@ -151,7 +151,7 @@ describe('hands-port Wave 54A browser detect (no-launch)', () => {
     })
     assert.equal(screenshot.ok, false)
 
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 })

@@ -93,7 +93,7 @@ describe('extension manifest register (Wave 38A)', () => {
     assert.equal(ctx.extensions.list().length, 0)
   })
 
-  it('admitRegisterExtension → list; custom origin; ABI 0.8.52-thin-a', () => {
+  it('admitRegisterExtension → list; custom origin; ABI 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
     const result = platform.admitRegisterExtension(
       ctx,
@@ -114,8 +114,8 @@ describe('extension manifest register (Wave 38A)', () => {
     assert.equal(result.extension.name, 'Admit')
     assert.equal(result.extensions.length, 1)
     assert.equal(result.extensionsActive, 0)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('source has no eval/require/import of user code paths', () => {

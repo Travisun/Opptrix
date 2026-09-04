@@ -55,7 +55,7 @@ describe('admitPlatformHostWorker (Wave 41A)', () => {
     await ctx.extensions.host.stop()
   })
 
-  it('C-HOST-WORKER-DIAG + ABI 0.8.52-thin-a', async () => {
+  it('C-HOST-WORKER-DIAG + ABI 0.9.0-phase-a', async () => {
     const ctx = platform.createPlatformContext()
     const before = platform.admitPlatformHostWorker(ctx)
     assert.equal(before.ok, true)
@@ -76,7 +76,7 @@ describe('admitPlatformHostWorker (Wave 41A)', () => {
     if (!after.ok) throw new Error('expected ok')
     assert.equal(after.hostWorker, 'stopped')
 
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 })

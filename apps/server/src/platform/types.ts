@@ -12,8 +12,8 @@ import type { PlatformMeter } from './gate/types.js'
 import type { IngressRouter } from './ingress/types.js'
 import type { CheckpointStore } from './checkpoint/types.js'
 
-/** Platform ABI — thin-A: grant 内写删免确认；Hands=workspace 同策略（after SF4）. */
-export const PLATFORM_ABI_VERSION = '0.8.52-thin-a'
+/** Platform ABI — Phase A: shared worker + vm sandbox + 5-layer safety compensation (ADR-02 amendment). */
+export const PLATFORM_ABI_VERSION = '0.9.0-phase-a'
 
 /** Cap for in-memory job.wake observability ring (newest last). */
 export const JOB_WAKE_RING_CAP = 16

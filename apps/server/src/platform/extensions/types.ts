@@ -15,11 +15,47 @@ import type {
  */
 export type ExtensionActivationMode = 'catalog_only' | 'worker_stub' | 'worker_js'
 
+/**
+ * Phase A capability permissions.
+ * Each token maps to a required permission; the CapabilityGate enforces at callGate time.
+ */
+export type ExtensionPermission =
+  | 'storage'
+  | 'llm'
+  | 'sessions.read'
+  | 'data.query'
+  | 'shell'
+  | 'schedule'
+  | 'events.subscribe'
+  | 'events.emit'
+  | 'platform.info'
+
+/**
+ * Phase A contribution points.
+ * Extensions declare contributions in manifest; the manager registers/clears on activate/deactivate.
+ */
+export type ExtensionContributes = {
+  /** Read-only hooks (Phase A): observe without mutating. */
+  hooks?: Array<'session.messageCommitted' | 'agent.toolPreExecute'>
+  /** HTTP sub-routes proxied to extension Host RPC. */
+  routes?: string[]
+  /** UI contribution points (Phase A views; MF remote modules Phase B+). */
+  views?: Array<{
+    id: string
+    type: 'sidebar' | 'page' | 'settings'
+    title: string
+    module?: string
+  }>
+}
+
 /** In-memory manifest — Wave 49A zip parse; Wave 55A/58A optional activation. */
 export type ExtensionManifest = {
   id: string
   name?: string
   version?: string
+  /** Phase A: required permissions for capability tokens. Replaces `capabilities[]`. */
+  permissions?: ExtensionPermission[]
+  /** Legacy alias — kept for backward compat; mapped to permissions on register. */
   capabilities?: string[]
   /** Default `catalog_only` when omitted. */
   activation?: ExtensionActivationMode
@@ -29,6 +65,10 @@ export type ExtensionManifest = {
    * never `require()`'d on the host.
    */
   entry?: string
+  /** Phase A contribution points. */
+  contributes?: ExtensionContributes
+  /** Events that trigger activation (MVP: onStartup). */
+  activationEvents?: Array<'onStartup' | 'onCommand' | 'onView'>
 }
 
 export type ExtensionRecord = {

@@ -38,10 +38,10 @@ describe('hands ConfirmHandler SF2 → thin-A (no file confirm)', () => {
     }
   })
 
-  it('ABI is 0.8.52-thin-a', () => {
+  it('ABI is 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('overwrite without ConfirmHandler → ok (thin-A)', async () => {

@@ -21,10 +21,10 @@ describe('checkpoint-latest Wave 16A', () => {
     platform.resetPlatformContextForTests()
   })
 
-  it('ABI is 0.8.52-thin-a', () => {
+  it('ABI is 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('save 2 → latest is second (id+at+payload); get still payload-only', () => {

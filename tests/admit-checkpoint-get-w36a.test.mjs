@@ -54,7 +54,7 @@ describe('admitCheckpointGet helper (Wave 36A)', () => {
     assert.equal(blank.ok, false)
   })
 
-  it('custom origin passed through; ABI is 0.8.52-thin-a', () => {
+  it('custom origin passed through; ABI is 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
     const { id } = ctx.checkpoint.save('sess-origin', { ok: true })
     const result = platform.admitCheckpointGet(ctx, id, {
@@ -63,7 +63,7 @@ describe('admitCheckpointGet helper (Wave 36A)', () => {
     assert.equal(result.ok, true)
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.origin, 'cli.diagnostic')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 })

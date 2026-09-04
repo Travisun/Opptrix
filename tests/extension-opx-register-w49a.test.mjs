@@ -213,7 +213,7 @@ describe('opx zip register (Wave 49A)', () => {
     }
   })
 
-  it('C-OPX-REGISTER + ABI 0.8.52-thin-a', () => {
+  it('C-OPX-REGISTER + ABI 0.9.0-phase-a', () => {
     const zip = buildStoredZip({
       'manifest.json': JSON.stringify({ id: 'c-opx-register' }),
     })
@@ -223,8 +223,8 @@ describe('opx zip register (Wave 49A)', () => {
     if (!result.ok) throw new Error('expected ok')
     assert.equal(result.extension.id, 'c-opx-register')
     assert.equal(result.extension.state, 'inactive')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     assert.ok(platform.OPX_ZIP_MAX_BYTES <= 2 * 1024 * 1024)
     assert.ok(platform.OPX_MANIFEST_MAX_BYTES <= 64 * 1024)
   })

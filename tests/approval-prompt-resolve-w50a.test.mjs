@@ -131,7 +131,7 @@ describe('approval → UserPrompt soft resolve (Wave 50A)', () => {
     assert.equal(ctx.info().approvalsPending, 0)
   })
 
-  it('userPromptAnswerFromApprovalDecision + ABI 0.8.52-thin-a', () => {
+  it('userPromptAnswerFromApprovalDecision + ABI 0.9.0-phase-a', () => {
     const approved = userPromptAnswerFromApprovalDecision({ approved: true })
     assert.deepEqual(approved.selected_ids, ['approve'])
     assert.equal(deriveApprovedFromUserPromptAnswer(approved), true)
@@ -145,7 +145,7 @@ describe('approval → UserPrompt soft resolve (Wave 50A)', () => {
     assert.equal(deriveApprovedFromUserPromptAnswer(rejected), false)
 
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 })

@@ -78,7 +78,7 @@ describe('extension deactivate (Wave 40A)', () => {
     assert.equal(ctx.info().extensionsActive, 0)
   })
 
-  it('C-EXT-DEACTIVATE + ABI 0.8.52-thin-a', async () => {
+  it('C-EXT-DEACTIVATE + ABI 0.9.0-phase-a', async () => {
     const ctx = platform.createPlatformContext()
     assert.equal(
       ctx.extensions.registerFromManifest({ id: 'c-ext-deact' }, { trusted: true }).ok,
@@ -91,8 +91,8 @@ describe('extension deactivate (Wave 40A)', () => {
     if (!deact.ok) throw new Error('expected ok')
     assert.equal(deact.extension.state, 'inactive')
     assert.equal(deact.extensionsActive, 0)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('deactivate path has no eval/import/readFile of extension code', () => {

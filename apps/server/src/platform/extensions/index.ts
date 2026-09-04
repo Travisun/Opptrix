@@ -28,8 +28,18 @@ export {
   type HostWorkerParentMessage,
   type HostWorkerChildMessage,
 } from './host-worker-rpc.js'
+export {
+  CAPABILITY_TOKEN_RULES,
+  ALL_EXTENSION_PERMISSIONS,
+  resolveCapabilityRule,
+  permissionSatisfies,
+  mapLegacyCapabilities,
+  type CapabilityTokenRule,
+} from './capability-token-registry.js'
 export type {
   ExtensionActivationMode,
+  ExtensionPermission,
+  ExtensionContributes,
   ExtensionGatewayAction,
   ExtensionHostApi,
   ExtensionHostFacade,

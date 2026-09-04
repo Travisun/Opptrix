@@ -33,7 +33,7 @@ describe('platform-context K1', () => {
   it('createPlatformContext exposes abi + event bus stubs', () => {
     const ctx = platform.createPlatformContext()
     assert.equal(ctx.abiVersion, platform.PLATFORM_ABI_VERSION)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     assert.ok(ctx.extensions)
     assert.equal(typeof ctx.extensions.list, 'function')
     assert.equal(typeof ctx.extensions.register, 'function')

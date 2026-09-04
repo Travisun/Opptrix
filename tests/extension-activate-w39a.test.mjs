@@ -73,7 +73,7 @@ describe('extension activate (Wave 39A)', () => {
     assert.equal(ctx.info().extensionsActive, 0)
   })
 
-  it('C-EXT-ACTIVATE + ABI 0.8.52-thin-a', async () => {
+  it('C-EXT-ACTIVATE + ABI 0.9.0-phase-a', async () => {
     const ctx = platform.createPlatformContext()
     assert.equal(
       ctx.extensions.registerFromManifest({ id: 'c-ext-act' }, { trusted: true }).ok,
@@ -84,8 +84,8 @@ describe('extension activate (Wave 39A)', () => {
     if (!act.ok) throw new Error('expected ok')
     assert.equal(act.extension.state, 'active')
     assert.equal(act.extensionsActive, 1)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('activate path has no eval/import/readFile of extension code', () => {

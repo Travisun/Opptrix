@@ -192,10 +192,10 @@ describe('hands-port Wave 57A browser.navigate', () => {
     assert.equal(typeof data.title, 'string')
   })
 
-  it('C-HANDS-BROWSER-NAVIGATE + ABI 0.8.52-thin-a', async () => {
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+  it('C-HANDS-BROWSER-NAVIGATE + ABI 0.9.0-phase-a', async () => {
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
 
     const hands = platform.createHandsPort({
       gate: ctx.gate,

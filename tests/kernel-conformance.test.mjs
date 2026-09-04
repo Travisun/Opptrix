@@ -50,10 +50,10 @@ describe('kernel-conformance Wave 6A', () => {
     }
   })
 
-  it('C-ABI: abiVersion === 0.8.52-thin-a', () => {
+  it('C-ABI: abiVersion === 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
   })
 
   it('C-R0: extensions.activate missing returns ok:false without throw; bootScan never throws', async () => {
@@ -104,10 +104,10 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(ctx.meter.snapshot().tokenOutTotal, 20)
     assert.equal(ctx.info().meter.tokenInTotal, 51)
     assert.equal(ctx.info().meter.tokenOutTotal, 20)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
-  it('C-METER-USAGE-WIRE: usageMeter-shaped hook bumps meter; ABI 0.8.52-thin-a', () => {
+  it('C-METER-USAGE-WIRE: usageMeter-shaped hook bumps meter; ABI 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
     /** Server-shaped adapter (AgentSettings.usageMeter → platform.meter.recordUsage). */
     const record = (usage) => {
@@ -119,8 +119,8 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(ctx.meter.snapshot().tokenOutTotal, 40)
     assert.equal(ctx.info().meter.tokenInTotal, 100)
     assert.equal(ctx.info().meter.tokenOutTotal, 40)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-METER: denyCount stays 0 on success; pack deny bumps denyCount not errorCount', async () => {
@@ -233,7 +233,7 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(withSession.ok, true)
     if (!withSession.ok) throw new Error('expected admitPlatformJobs ok')
     assert.ok(Array.isArray(withSession.jobs))
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-METER-DENIALS-DIAG: admitPlatformMeterDenials → ok + denials + counters', async () => {
@@ -274,7 +274,7 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(listed.denyCount, 1)
     assert.equal(listed.submitCount, capped.meter.snapshot().submitCount)
     assert.equal(listed.errorCount, 0)
-    assert.equal(capped.abiVersion, '0.8.52-thin-a')
+    assert.equal(capped.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-APPROVAL-DIAG: admitPlatformApprovals → ok + approvals + approvalsPending', () => {
@@ -301,7 +301,7 @@ describe('kernel-conformance Wave 6A', () => {
     if (!listed.ok) throw new Error('expected admitPlatformApprovals ok')
     assert.equal(listed.approvals.length, 1)
     assert.equal(listed.approvalsPending, 1)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-APPROVAL-RESOLVE: admitResolveApproval → resolved + approvalsPending drop', () => {
@@ -336,7 +336,7 @@ describe('kernel-conformance Wave 6A', () => {
     const badId = platform.admitResolveApproval(ctx, '', { approved: true })
     assert.equal(badId.ok, false)
 
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-APPROVAL-PROMPT-RESOLVE: bindUserPromptResolve fires after pending→resolved', () => {
@@ -370,7 +370,7 @@ describe('kernel-conformance Wave 6A', () => {
       false,
     )
     assert.equal(seen.length, 1)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-ASK-USER-APPROVAL-OWNED: ask_user sim → pending → approval.resolve settles bridge', async () => {
@@ -434,7 +434,7 @@ describe('kernel-conformance Wave 6A', () => {
     const answer = await answerPromise
     assert.deepEqual(answer.selected_ids, ['reject'])
     assert.equal(deriveApprovedFromUserPromptAnswer(answer), false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-APPROVAL-CANCEL: admitCancelSessionApprovals → cancelled + approvalsPending drop', () => {
@@ -476,7 +476,7 @@ describe('kernel-conformance Wave 6A', () => {
     if (!none.ok) throw new Error('expected admitCancelSessionApprovals ok')
     assert.equal(none.cancelled, 0)
 
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-PACK: research enabled by default; enable coding; disable research; no deny when enforce off', async () => {
@@ -662,7 +662,7 @@ describe('kernel-conformance Wave 6A', () => {
   it('C-INFO: info() returns abi + packs + packEnforce', () => {
     const ctx = platform.createPlatformContext()
     const info = ctx.info()
-    assert.equal(info.abiVersion, '0.8.52-thin-a')
+    assert.equal(info.abiVersion, '0.9.0-phase-a')
     assert.equal(info.packEnforce, false)
     assert.ok(Array.isArray(info.packs))
     assert.ok(info.packs.some((p) => p.id === 'research' && p.enabled === true))
@@ -753,8 +753,8 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(after.ok, true)
     if (!after.ok) throw new Error('expected admitPlatformHostWorker ok')
     assert.equal(after.hostWorker, 'stopped')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-HANDS-DIAG: admitPlatformHands → pendingCount matches info(); count only; ABI', () => {
@@ -780,8 +780,8 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(listed.pendingCount, ctx.info().handsTicketsPending)
     assert.equal('ticket' in listed, false)
     assert.equal('tickets' in listed, false)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-HANDS: issue ping → invoke pong; one-shot; unsupported token; listGrants adapter', async () => {
@@ -1011,8 +1011,8 @@ describe('kernel-conformance Wave 6A', () => {
     const delData = /** @type {{ deleted?: string }} */ (okObs.data)
     assert.equal(delData.deleted, 'dir/a')
 
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
   })
 
   it('C-HANDS-SHELL: issue platform → invoke; restricted exec allowlisted; free-form run denied', async () => {
@@ -1057,8 +1057,8 @@ describe('kernel-conformance Wave 6A', () => {
     if (freeForm.ok) throw new Error('expected free-form deny')
     assert.match(freeForm.error, /unsupported hands token/)
 
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
   })
 
   it('C-HANDS-BROWSER: issue capabilities → package_present; navigate ok at issue; click/screenshot denied', async () => {
@@ -1108,8 +1108,8 @@ describe('kernel-conformance Wave 6A', () => {
       assert.match(freeForm.error, /unsupported hands token/)
     }
 
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
   })
 
   it('C-HANDS-BROWSER-NAVIGATE: injected adapter navigate; UrlPolicy rejects javascript:', async () => {
@@ -1145,8 +1145,8 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(badObs.ok, false)
     assert.match(String(badObs.error ?? ''), /not allowed|protocol/i)
 
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
   })
 
   it('C-INGRESS: empty text denied; non-empty ok with traceId', () => {
@@ -1177,7 +1177,7 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(typeof result.traceId, 'string')
     assert.ok(result.traceId.length > 0)
     assert.equal(result.origin, 'web.diagnostic')
-    assert.equal(result.info.abiVersion, '0.8.52-thin-a')
+    assert.equal(result.info.abiVersion, '0.9.0-phase-a')
     assert.equal(typeof result.info.meter.denyCount, 'number')
   })
 
@@ -1423,7 +1423,7 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = platform.admitCheckpointLatest(ctx, '')
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-CHECKPOINT-LIST: admitCheckpointList → id+at rows; empty fails', () => {
@@ -1449,7 +1449,7 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = platform.admitCheckpointList(ctx, '')
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-CHECKPOINT-GET: admitCheckpointGet → payload or null; empty fails', () => {
@@ -1470,7 +1470,7 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = platform.admitCheckpointGet(ctx, '')
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-CHECKPOINT-RESTORE: soft restore payload; applied false; empty fails', () => {
@@ -1517,10 +1517,10 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = platform.admitCheckpointRestore(ctx, { sessionId: '' })
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
-  it('C-CHECKPOINT-HARD-RESTORE: apply+confirm mutates; without confirm → confirm_required; ABI 0.8.52-thin-a', () => {
+  it('C-CHECKPOINT-HARD-RESTORE: apply+confirm mutates; without confirm → confirm_required; ABI 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
     /** @type {{ title?: string, model?: string, turnCount?: number, sessionId?: string, turns?: unknown }[]} */
     const seen = []
@@ -1586,11 +1586,11 @@ describe('kernel-conformance Wave 6A', () => {
     assert.match(noHook.error, /checkpoint apply not wired/)
     assert.equal(unwired.ok, true)
 
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
-  it('C-CHECKPOINT-TURNS: hard restore passes turns; soft unchanged; ABI 0.8.52-thin-a', () => {
+  it('C-CHECKPOINT-TURNS: hard restore passes turns; soft unchanged; ABI 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
     /** @type {{ turns?: unknown, turnCount?: number }[]} */
     const seen = []
@@ -1636,7 +1636,7 @@ describe('kernel-conformance Wave 6A', () => {
     assert.ok(Array.isArray(seen[0]?.turns))
     assert.equal(/** @type {unknown[]} */ (seen[0]?.turns).length, 2)
     assert.equal(seen[0]?.turnCount, 2)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-MEMORY-DIAG: admitPlatformMemory → working/durableCount; empty fails', () => {
@@ -1682,7 +1682,7 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = platform.admitPlatformMemory(ctx, { sessionId: '' })
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-MEMORY-PROMOTE: admitPromoteMemory → id/entry; provenance required', () => {
@@ -1720,7 +1720,7 @@ describe('kernel-conformance Wave 6A', () => {
       provenance: { source: 's' },
     })
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-TURN-CHECKPOINT: two phase snapshots via platform.checkpoint', () => {
@@ -1847,7 +1847,7 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(result.alerts.length, 1)
     assert.equal(result.alerts[0]?.id, id)
     assert.ok(result.alertsPending >= 1)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-ALERT-ACK: admitAcknowledgeAlert → ack true; unknown false; empty fails', () => {
@@ -1874,7 +1874,7 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = platform.admitAcknowledgeAlert(ctx, '')
     assert.equal(empty.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-PACK-DIAG: admitPlatformPacks → ok + packs + packEnforce; set enable roundtrip', () => {
@@ -1901,7 +1901,7 @@ describe('kernel-conformance Wave 6A', () => {
 
     const bad = platform.setPlatformPackEnabled(ctx, 'nope', true)
     assert.equal(bad.ok, false)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-EXT-DIAG: admitPlatformExtensions → ok + list + extensionsActive + hostWorker', async () => {
@@ -1929,7 +1929,7 @@ describe('kernel-conformance Wave 6A', () => {
     assert.equal(listed.extensions[0]?.state, 'active')
     assert.equal(listed.extensionsActive, 1)
     assert.equal(listed.hostWorker, ctx.info().hostWorker)
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-EXT-ACTIVATE: admitActivateExtension → active; unknown fails; ABI', async () => {
@@ -1963,14 +1963,14 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = await platform.admitActivateExtension(ctx, '  ')
     assert.equal(empty.ok, false)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   // Heavy opx zip + host-worker vm path lives in extension-opx-worker-js-w58a
   // (asserts experimental:true + ABI pin). Skip duplicate here.
   it.skip(
-    'C-EXT-WORKER-JS-EXPERIMENTAL: covered by extension-opx-worker-js-w58a (ABI 0.8.52-thin-a)',
+    'C-EXT-WORKER-JS-EXPERIMENTAL: covered by extension-opx-worker-js-w58a (ABI 0.9.0-phase-a)',
     () => {},
   )
 
@@ -1981,7 +1981,7 @@ describe('kernel-conformance Wave 6A', () => {
     const b = platform.createPackRegistry()
     assert.equal(b.isEnabled('coding'), true)
     platform.clearDomainPackPreferencesForTests()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
   })
 
   it('C-EXT-DEACTIVATE: admitDeactivateExtension → inactive; unknown fails; ABI', async () => {
@@ -2022,8 +2022,8 @@ describe('kernel-conformance Wave 6A', () => {
 
     const empty = await platform.admitDeactivateExtension(ctx, '  ')
     assert.equal(empty.ok, false)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C-JOB-EVENT: mock cancel true emits job.terminal', () => {

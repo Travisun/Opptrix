@@ -46,7 +46,7 @@ describe('extension-host Wave 9A', () => {
     const info = ctx.info()
     assert.equal(info.extensions, 1)
     assert.equal(info.extensionsActive, 1)
-    assert.equal(info.abiVersion, '0.8.52-thin-a')
+    assert.equal(info.abiVersion, '0.9.0-phase-a')
   })
 
   it('run while inactive → ok:false without throw', async () => {

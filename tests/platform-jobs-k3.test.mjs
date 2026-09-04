@@ -126,7 +126,7 @@ describe('platform-jobs K3', () => {
 
   it('createPlatformContext wires a real jobs facade', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     assert.ok(ctx.jobs)
     assert.equal(typeof ctx.jobs.list, 'function')
     assert.equal(typeof ctx.jobs.cancel, 'function')

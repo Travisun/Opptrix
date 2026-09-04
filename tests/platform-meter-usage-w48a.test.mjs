@@ -73,7 +73,7 @@ describe('platform meter usage wire (Wave 48A)', () => {
     assert.equal(ctx.meter.snapshot().tokenOutTotal, 3)
   })
 
-  it('C-METER-USAGE-WIRE + ABI 0.8.52-thin-a', () => {
+  it('C-METER-USAGE-WIRE + ABI 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
     /** @type {import('../packages/agent/dist/usage-meter.js').UsageMeterHooks} */
     const hooks = {
@@ -86,8 +86,8 @@ describe('platform meter usage wire (Wave 48A)', () => {
     assert.equal(ctx.meter.snapshot().tokenOutTotal, 9)
     assert.equal(ctx.info().meter.tokenInTotal, 11)
     assert.equal(ctx.info().meter.tokenOutTotal, 9)
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     assert.equal(typeof usageMeterMod, 'object')
   })
 })

@@ -262,7 +262,7 @@ describe('checkpoint turns snapshot (Wave 52A)', () => {
     })
   })
 
-  it('C-CHECKPOINT-TURNS + ABI 0.8.52-thin-a', async () => {
+  it('C-CHECKPOINT-TURNS + ABI 0.9.0-phase-a', async () => {
     await withTempStore(async () => {
       const ctx = platform.createPlatformContext()
       const store = new agentMod.SessionStore()
@@ -296,8 +296,8 @@ describe('checkpoint turns snapshot (Wave 52A)', () => {
       const updated = store.get(record.id)
       assert.ok(updated)
       assert.equal(updated.turns.length, 2)
-      assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-      assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+      assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+      assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     })
   })
 })

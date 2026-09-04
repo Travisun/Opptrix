@@ -268,7 +268,7 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
     })
   })
 
-  it('C-CHECKPOINT-HARD-RESTORE + ABI 0.8.52-thin-a', async () => {
+  it('C-CHECKPOINT-HARD-RESTORE + ABI 0.9.0-phase-a', async () => {
     await withTempStore(async () => {
       const ctx = platform.createPlatformContext()
       const store = new agentMod.SessionStore()
@@ -295,8 +295,8 @@ describe('admitCheckpointRestore hard apply (Wave 51A)', () => {
       assert.equal(result.ok, true)
       if (!result.ok) throw new Error('expected ok')
       assert.equal(result.applied, true)
-      assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-      assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+      assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+      assert.equal(ctx.abiVersion, '0.9.0-phase-a')
     })
   })
 })

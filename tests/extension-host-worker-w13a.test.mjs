@@ -30,7 +30,7 @@ describe('extension-host-worker Wave 13A', () => {
   it('real Worker: start → ping ok → callGateFromWorker increments meter → stop', async () => {
     const ctx = platform.createPlatformContext()
     assert.equal(ctx.info().hostWorker, 'stopped')
-    assert.equal(ctx.info().abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.info().abiVersion, '0.9.0-phase-a')
 
     const started = await ctx.extensions.host.start()
     assert.equal(started.ok, true, started.error)
@@ -71,7 +71,7 @@ describe('extension-host-worker Wave 13A', () => {
 
     // Parent process still healthy
     assert.equal(typeof ctx.meter.snapshot().submitCount, 'number')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
 
     // Soft restart path
     const again = await ctx.extensions.host.start()

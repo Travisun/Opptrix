@@ -66,10 +66,10 @@ describe('admitPlatformPacks helper (Wave 22A)', () => {
     assert.equal(ctx.packs.isEnabled('research'), true)
   })
 
-  it('ABI is 0.8.52-thin-a', () => {
+  it('ABI is 0.9.0-phase-a', () => {
     const ctx = platform.createPlatformContext()
-    assert.equal(platform.PLATFORM_ABI_VERSION, '0.8.52-thin-a')
-    assert.equal(ctx.abiVersion, '0.8.52-thin-a')
+    assert.equal(platform.PLATFORM_ABI_VERSION, '0.9.0-phase-a')
+    assert.equal(ctx.abiVersion, '0.9.0-phase-a')
   })
 
   it('C4: pack enablement persists across createPackRegistry via preference', () => {
