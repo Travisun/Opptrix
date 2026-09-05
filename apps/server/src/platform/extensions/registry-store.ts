@@ -51,6 +51,28 @@ CREATE TABLE IF NOT EXISTS extensions (
 CREATE INDEX IF NOT EXISTS idx_extensions_state ON extensions(state);
 `
 
+/** Idempotent column migrations for registry.db files created by older builds
+ * (CREATE TABLE IF NOT EXISTS never adds columns to an existing table — the
+ * INSERT/SELECT prepared statements would then fail on every boot). */
+function migrateSchema(db: Database.Database): void {
+  const existing = new Set(
+    (db.prepare('PRAGMA table_info(extensions)').all() as Array<{ name: string }>).map(
+      (c) => c.name,
+    ),
+  )
+  if (existing.size === 0) return // fresh table — SCHEMA already created it
+  const additions: Array<[string, string]> = [
+    ['permissions', `ALTER TABLE extensions ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]'`],
+    ['activation_events', `ALTER TABLE extensions ADD COLUMN activation_events TEXT NOT NULL DEFAULT '[]'`],
+    ['entry_path', 'ALTER TABLE extensions ADD COLUMN entry_path TEXT'],
+    ['contributes', "ALTER TABLE extensions ADD COLUMN contributes TEXT NOT NULL DEFAULT '{}'"],
+  ]
+  for (const [col, ddl] of additions) {
+    if (!existing.has(col)) db.exec(ddl)
+  }
+  db.pragma(`user_version = 1`)
+}
+
 function rowToRecord(row: Record<string, unknown>): ExtensionRecord {
   const rec: ExtensionRecord = {
     id: String(row.id),
@@ -103,6 +125,7 @@ export function createExtensionRegistryStore(dbPath?: string): ExtensionRegistry
   const db = new Database(file)
   db.pragma('journal_mode = WAL')
   db.exec(SCHEMA)
+  migrateSchema(db)
 
   const stmtInsert = db.prepare(`
     INSERT INTO extensions
