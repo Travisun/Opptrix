@@ -16,7 +16,7 @@
   },
   "type": "module",
   "scripts": {
-    "predev": "node scripts/ensure-native-bindings.mjs",
+    "predev": "node ../../scripts/ensure-native-bindings.mjs",
     "dev": "npm run build && concurrently -k -n tsc,api \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node scripts/dev.mjs\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
